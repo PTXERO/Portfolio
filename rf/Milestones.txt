@@ -1,0 +1,140 @@
+Perfect. Here's the roadmap:
+
+---
+
+**RF — Project Roadmap**
+
+---
+
+**MILESTONE 1 — Foundation & Visual Shell**
+- Create `rf/` folder with `rf.config.js`, `index.html`
+- Load `design-tokens.js`, `shared.css`, reference existing site design system
+- Page header with ← HOME button matching site standard
+- Dark canvas-based layout, full viewport, no scroll
+- Define RF-specific accent color scheme (dynamic, not locked to lime)
+- Add RF card to `site.config.js` homepage
+
+---
+
+**MILESTONE 2 — Spectrum Analyzer**
+- Canvas FFT-style display — frequency on X, amplitude (dBm) on Y
+- Simulated noise floor using ITU-R P.372 model
+- Pensacola-specific EM coloring — humidity, atmospheric, man-made
+- Animated waterfall display below the spectrum
+- Frequency band labels (AM, FM, VHF, UHF, etc)
+- Configurable center frequency and span
+Radio Browser API integration — query real stations by coordinate
+Station peaks on spectrum reflect real frequencies
+Tune by clicking or dragging on the spectrum — frequency cursor
+Match tuned frequency to nearest station, load stream
+Audio output via Web Audio API
+Hover over a peak to see station name and signal strength
+
+---
+
+**MILESTONE 3 — Oscilloscope**
+- Time domain canvas display — time on X, amplitude on Y
+- Switchable view between spectrum and oscilloscope (tab or toggle)
+- Triggering controls, timebase, voltage scale
+- Live waveform rendering from any signal source in the chain
+- Freeze / capture frame
+
+---
+
+**MILESTONE 4 — Signal Chain GUI**
+- Horizontal pedal board canvas — drag to reorder
+- Virtual cables — click output → click input to connect
+- Built-in module types: oscillator, noise generator, filter, amplifier, mixer, envelope, LFO
+- Synth module as a speaker endpoint — final output of chain
+- Signal flows left to right, output routes to oscilloscope and spectrum analyzer
+- All module parameters live-update the visualization
+
+---
+
+**MILESTONE 5 — Pedal System**
+- Each pedal has: name, color, custom art (uploaded or ASCII-generated), parameter knobs
+- Preset system — save/load via localStorage
+- Import / export pedal configs as JSON
+- Pedal gallery page — browse, share, import community pedals
+- Custom pedal builder — define your own parameters, ranges, labels
+
+---
+
+**MILESTONE 6 — Transmission Layer**
+- Define a transmission: frequency, power, modulation (AM/FM/SSB/CW/digital), antenna pattern, polarization
+- Place transmitter on a globe/map view (Three.js or canvas-based)
+- Signal propagation simulation — distance falloff, terrain, ionospheric skip
+- Receiver placement — tune to a frequency, see signal strength
+- Single-user fully functional before any multiplayer
+
+---
+
+**MILESTONE 7 — ASCII//RENDER Bridge**
+- Capture current waveform from oscilloscope as image data
+- Manual trigger — "RENDER AS ASCII" button sends to ASCII//RENDER pipeline
+- Live preview mode — waveform shape drives ASCII in real time
+- Shared gallery format — transmission metadata + resulting ASCII art
+- Export as standard ASCII//RENDER preset JSON
+- Import back — ASCII art re-drives signal chain parameters
+
+---
+
+**MILESTONE 8 — Multiplayer Foundation**
+- Supabase project setup — free tier
+- Transmitter positions and configs stored in database
+- Real-time subscriptions — other users' transmitters appear on your map
+- Signal events broadcast between clients via Supabase realtime
+- No audio streaming — JSON messages only, lightweight
+- Architecture designed so single-user mode works identically if offline
+
+---
+
+**MILESTONE 9 — Audio Transmission**
+- Synth output can be encoded and transmitted over the ecosystem
+- Receiver demodulates and plays audio through Web Audio API
+- Latency managed via buffering — not live streaming, slightly delayed
+- Transmission appears on other users' spectrum analyzers as a signal peak
+- Tune to frequency, receive, hear
+
+---
+
+**MILESTONE 10 — Polish & Gallery**
+- RF gallery — browse community transmissions, pedal chains, ASCII art generated from signals
+- Shareable URLs for pedal presets and transmission configs
+- Mobile-friendly oscilloscope and spectrum view
+- Full design system consistency — everything through shared.css
+- RF card on homepage upgraded from WIP to LIVE
+
+---
+
+M11 — Multiple Receivers
+
+Up to 5 receiver instances (R1–R5), each independently tunable
+Each receiver appears as a separate RF IN source node in the signal chain
+Independent frequency, antenna type, location per receiver
+All receivers visible simultaneously on the spectrum as colored cursors
+Receivers can be routed independently through the signal chain or merged
+Receiver tiles in the left column, collapsible
+
+
+M12 — Anonymous Accounts & Cloud Sync
+
+Account number field in header (short alphanumeric, user-chosen or generated)
+Click LOGIN — pulls all saved state from server for that account
+Saves: signal chain presets, command module setups, tuner history, receiver configs, listening stats
+No passwords, no email — account number is the key
+Anonymized by design — no PII collected
+Backend: lightweight Cloudflare Worker + KV storage (fits existing worker setup)
+Logout clears to local-only mode
+
+
+M13 — Listening Stats
+
+Per-station listen time tracked locally, synced to account on login
+Top stations by listen time, total hours, unique stations heard
+Heatmap of frequencies tuned over time
+Stats tile in the right column
+If account logged in, stats persist across devices
+Optional: leaderboard of most-listened stations globally (anonymized)
+
+Want to start on Milestone 1 now?
