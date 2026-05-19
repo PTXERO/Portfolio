@@ -1,0 +1,4221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RF</title>
+<script src="../design-tokens.js"></script>
+<script src="../site.config.js"></script>
+<script src="rf.config.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
+<link rel="stylesheet" href="../shared.css">
+<style>
+:root{
+  --bg:#07070a;--surface:#0d0d12;--panel:#101015;
+  --border:#1c1c24;--b2:#28282f;
+  --acc:#c8f542;--acc2:#42d4f5;--acc3:#f542a8;--acc4:#f5a542;
+  --txt:#d8d8e0;--dim:#5a5a70;--mut:#2e2e38;
+  --fmono:'Share Tech Mono',monospace;
+  --fdisp:'Bebas Neue',sans-serif;
+  --fbody:'DM Mono',monospace;
+  --rf-acc:#42d4f5;--rf-accB:#f542a8;--rf-accC:#f5a542;
+  --rf-grid:rgba(66,212,245,0.06);--rf-glow:rgba(66,212,245,0.18);
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:var(--fmono);font-size:12px;}
+
+/* ── Header ── */
+.rf-header{height:44px;display:flex;align-items:center;padding:0 16px;gap:10px;background:var(--surface);border-bottom:1px solid var(--border);position:relative;z-index:50;flex-shrink:0;}
+.rf-home{padding:4px 11px;border:1px solid var(--b2);border-radius:2px;background:transparent;color:var(--dim);font-family:var(--fmono);font-size:10px;cursor:pointer;transition:all .15s;letter-spacing:.07em;text-decoration:none;flex-shrink:0;}
+.rf-home:link,.rf-home:visited{color:var(--dim);}
+.rf-home:hover{border-color:var(--rf-acc);color:var(--rf-acc);}
+.rf-sep{width:1px;height:18px;background:var(--border);flex-shrink:0;}
+.rf-title{font-family:var(--fdisp);font-size:24px;letter-spacing:.12em;color:var(--rf-acc);line-height:1;flex-shrink:0;}
+.rf-ver{font-family:var(--fmono);font-size:9px;color:var(--dim);border:1px solid var(--b2);border-radius:2px;padding:2px 7px;letter-spacing:.1em;flex-shrink:0;}
+.rf-status{font-size:9px;color:var(--dim);letter-spacing:.1em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
+.rf-tuner-display{font-family:var(--fdisp);font-size:18px;color:var(--rf-acc);letter-spacing:.1em;flex-shrink:0;line-height:1;text-shadow:0 0 12px rgba(66,212,245,.4);}
+.rf-tuner-unit{font-family:var(--fmono);font-size:9px;color:var(--dim);letter-spacing:.1em;margin-left:2px;flex-shrink:0;}
+.rf-freq-display{font-family:var(--fmono);font-size:11px;color:var(--rf-acc);letter-spacing:.08em;flex-shrink:0;opacity:.8;}
+
+/* ── Location inputs in header ── */
+.rf-loc{display:flex;align-items:center;gap:5px;flex-shrink:0;}
+.rf-loc-input{
+  width:72px;background:var(--panel);border:1px solid var(--b2);
+  color:var(--txt);font-family:var(--fmono);font-size:9px;
+  letter-spacing:.05em;padding:3px 6px;border-radius:2px;outline:none;
+  transition:border-color .15s;
+}
+.rf-loc-input:focus{border-color:var(--rf-acc);}
+.rf-loc-btn{
+  padding:3px 8px;border:1px solid var(--b2);border-radius:2px;
+  background:transparent;color:var(--dim);font-family:var(--fmono);
+  font-size:9px;letter-spacing:.08em;cursor:pointer;transition:all .15s;
+  white-space:nowrap;flex-shrink:0;
+}
+.rf-loc-btn:hover{border-color:var(--rf-acc);color:var(--rf-acc);}
+.rf-loc-btn.loading{border-color:var(--rf-accC);color:var(--rf-accC);pointer-events:none;}
+.rf-loc-name{font-size:8px;color:var(--dim);letter-spacing:.08em;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;}
+
+
+/* ── Resume banner ── */
+#rfResumeBanner{
+  position:fixed;top:44px;left:50%;transform:translateX(-50%);
+  z-index:400;background:var(--surface);border:1px solid var(--rf-accC);
+  border-top:none;border-radius:0 0 3px 3px;
+  display:flex;align-items:center;gap:10px;
+  padding:6px 16px;cursor:pointer;
+  font-family:var(--fmono);font-size:9px;letter-spacing:.12em;
+  color:var(--rf-accC);transition:all .15s;
+  box-shadow:0 4px 16px rgba(245,165,66,.12);
+  animation:bannerDrop .25s ease;
+}
+@keyframes bannerDrop{from{opacity:0;transform:translateX(-50%) translateY(-8px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
+#rfResumeBanner:hover{background:rgba(245,165,66,.08);border-color:var(--rf-accC);}
+#rfResumeBanner.hidden{display:none;}
+.resume-play{font-size:11px;}
+
+#rfProg{position:fixed;top:44px;left:0;height:2px;background:var(--rf-acc);width:0;z-index:300;transition:width .3s;}
+
+/* ── Workspace ── */
+.rf-workspace{display:flex;height:calc(100vh - 44px);overflow:hidden;}
+.rf-col{display:flex;flex-direction:column;width:220px;flex-shrink:0;border-right:1px solid var(--border);background:var(--bg);}
+.rf-col--right{border-right:none;border-left:1px solid var(--border);}
+
+/* ── Tiles ── */
+.rf-tile{flex:1;position:relative;border-bottom:1px solid var(--border);cursor:pointer;overflow:hidden;transition:background .15s;display:flex;flex-direction:column;}
+.rf-tile:last-child{border-bottom:none;}
+.rf-tile:hover{background:rgba(66,212,245,.03);}
+.rf-tile:hover .tile-label{color:var(--rf-acc);}
+.rf-tile:hover .tile-corner{opacity:1;}
+.tile-label{font-family:var(--fmono);font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:var(--dim);padding:10px 12px 6px;transition:color .15s;flex-shrink:0;display:flex;align-items:center;gap:6px;}
+.tile-label::before{content:'';width:4px;height:4px;border-radius:50%;background:currentColor;flex-shrink:0;opacity:.6;}
+.tile-rule{height:1px;background:var(--border);margin:0 12px;flex-shrink:0;}
+.tile-content{flex:1;display:flex;align-items:center;justify-content:center;padding:12px;position:relative;}
+.tile-placeholder{font-size:9px;color:var(--mut);letter-spacing:.1em;text-align:center;line-height:1.8;}
+.tile-corner{position:absolute;font-family:var(--fmono);font-size:8px;color:var(--rf-acc);opacity:0;transition:opacity .15s;line-height:1;}
+.tile-corner--tl{top:6px;left:6px;}
+.tile-corner--br{bottom:6px;right:6px;}
+.tile-expand{position:absolute;bottom:8px;right:8px;font-size:8px;color:var(--dim);letter-spacing:.1em;opacity:0;transition:opacity .15s;}
+.rf-tile:hover .tile-expand{opacity:.6;}
+
+/* ── Center ── */
+.rf-center{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;background:#030508;min-height:0;}
+.spectrum-wrap{flex:1;position:relative;overflow:hidden;min-height:0;cursor:crosshair;}
+#spectrumCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+#spectrumGridCanvas{position:absolute;inset:0;pointer-events:none;z-index:1;}
+#tunerCanvas{position:absolute;inset:0;pointer-events:none;z-index:3;}
+#stationCanvas{position:absolute;inset:0;pointer-events:none;z-index:2;}
+
+/* ── Waterfall ── */
+.waterfall-wrap{height:120px;flex-shrink:0;position:relative;border-top:1px solid var(--border);overflow:hidden;}
+#waterfallCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+#tunerWfCanvas{position:absolute;inset:0;pointer-events:none;z-index:3;}
+
+
+/* ── Pan scrollbar ── */
+.spectrum-panbar{
+  height:14px;flex-shrink:0;position:relative;
+  background:var(--bg);border-top:1px solid var(--border);
+  cursor:pointer;user-select:none;
+}
+.spectrum-panbar-track{
+  position:absolute;top:4px;left:8px;right:8px;height:6px;
+  background:var(--mut);border-radius:3px;
+}
+.spectrum-panbar-thumb{
+  position:absolute;top:0;height:6px;
+  background:var(--b2);border-radius:3px;
+  transition:background .15s;cursor:grab;
+  min-width:20px;
+}
+.spectrum-panbar-thumb:hover,.spectrum-panbar-thumb.dragging{
+  background:var(--rf-acc);cursor:grabbing;
+}
+
+/* ── Scan line ── */
+.spectrum-scanline{position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.08) 2px,rgba(0,0,0,.08) 4px);z-index:2;}
+
+/* ── Ref drag ── */
+.ref-drag{position:absolute;left:0;right:0;height:8px;cursor:ns-resize;z-index:4;display:flex;align-items:center;}
+.ref-drag-line{position:absolute;left:0;right:0;height:1px;background:rgba(66,212,245,.25);transition:background .15s;}
+.ref-drag:hover .ref-drag-line{background:rgba(66,212,245,.6);}
+.ref-drag-label{position:absolute;right:6px;font-family:var(--fmono);font-size:8px;color:var(--dim);letter-spacing:.1em;background:var(--bg);padding:0 3px;pointer-events:none;}
+.ref-drag:hover .ref-drag-label{color:var(--rf-acc);}
+
+/* ── Controls ── */
+.spectrum-controls{height:36px;flex-shrink:0;display:flex;align-items:center;padding:0 12px;gap:10px;border-top:1px solid var(--border);background:var(--surface);}
+.spec-ctrl-label{font-size:8px;color:var(--dim);letter-spacing:.15em;text-transform:uppercase;flex-shrink:0;}
+.spec-ctrl-val{font-size:9px;color:var(--rf-acc);letter-spacing:.08em;flex-shrink:0;}
+.spec-divider{width:1px;height:14px;background:var(--border);flex-shrink:0;}
+.spec-band-pills{display:flex;gap:4px;flex:1;}
+.spec-band{font-family:var(--fmono);font-size:8px;letter-spacing:.08em;padding:2px 7px;border:1px solid var(--b2);border-radius:2px;color:var(--dim);cursor:pointer;transition:all .15s;white-space:nowrap;}
+.spec-band:hover{border-color:var(--rf-acc);color:var(--rf-acc);}
+.spec-band.on{border-color:var(--rf-acc);color:var(--rf-acc);background:rgba(66,212,245,.08);}
+.spec-zoom-hint{font-size:8px;color:var(--dim);letter-spacing:.08em;opacity:.5;flex-shrink:0;}
+.spec-hex-btn{width:22px;height:22px;border:1px solid var(--b2);border-radius:2px;background:transparent;color:var(--dim);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;padding:0;}
+.spec-hex-btn:hover{border-color:var(--rf-acc);color:var(--rf-acc);}
+.spec-hex-btn.on{border-color:var(--rf-acc);color:var(--rf-acc);background:rgba(66,212,245,.1);}
+.spec-hex-icon{width:13px;height:13px;display:block;fill:none;stroke:currentColor;stroke-linejoin:round;}
+.spec-hex-bar{transition:opacity .15s;}
+
+
+/* ── Audio tile internals ── */
+.audio-tile-body{
+  display:flex;flex-direction:column;
+  width:100%;height:100%;
+  padding:10px 12px;gap:0;overflow:hidden;
+}
+.audio-card{
+  display:flex;flex-direction:column;gap:5px;
+  flex:1;justify-content:center;overflow:hidden;
+}
+.audio-station-name{
+  font-family:var(--fdisp);font-size:15px;
+  letter-spacing:.08em;color:var(--rf-acc);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  line-height:1;
+}
+.audio-station-freq{
+  font-family:var(--fmono);font-size:9px;
+  color:var(--rf-accC);letter-spacing:.12em;
+}
+.audio-meta-row{
+  display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+}
+.audio-meta-pill{
+  font-family:var(--fmono);font-size:7px;letter-spacing:.1em;
+  padding:1px 5px;border:1px solid var(--b2);border-radius:2px;
+  color:var(--dim);white-space:nowrap;
+}
+.audio-meta-pill.hi{border-color:var(--rf-acc);color:var(--rf-acc);}
+.audio-tags{display:flex;gap:3px;flex-wrap:wrap;margin-top:1px;}
+.audio-tag{
+  font-family:var(--fmono);font-size:7px;letter-spacing:.08em;
+  padding:1px 5px;border:1px solid var(--b2);border-radius:2px;color:var(--mut);
+}
+.audio-divider{height:1px;background:var(--border);flex-shrink:0;margin:4px 0;}
+.audio-smeter{display:flex;flex-direction:column;gap:3px;flex-shrink:0;}
+.audio-smeter-label{
+  font-family:var(--fmono);font-size:7px;
+  color:var(--dim);letter-spacing:.2em;text-transform:uppercase;
+}
+.audio-smeter-track{
+  height:5px;background:var(--mut);border-radius:2px;overflow:hidden;
+}
+.audio-smeter-fill{
+  height:100%;width:0%;border-radius:2px;
+  background:linear-gradient(90deg,var(--rf-acc) 0%,var(--rf-accC) 70%,var(--rf-accB) 100%);
+  transition:width .08s;
+}
+.audio-smeter-marks{
+  display:flex;justify-content:space-between;
+  font-family:var(--fmono);font-size:6px;color:var(--mut);
+  letter-spacing:0;
+}
+.audio-status-playing .audio-station-name, .audio-station-name.audio-status-playing{color:var(--rf-acc);}
+.audio-station-name.audio-status-static{color:var(--dim);}
+.audio-station-name.audio-status-loading{color:var(--rf-accC);}
+.audio-station-name.audio-status-error{color:var(--rf-accB);}
+.audio-vol-row{
+  display:flex;align-items:center;gap:6px;flex-shrink:0;
+}
+.audio-vol-label{
+  font-family:var(--fmono);font-size:7px;
+  color:var(--dim);letter-spacing:.15em;flex-shrink:0;
+}
+.audio-vol-slider{
+  flex:1;height:2px;appearance:none;
+  background:var(--b2);border-radius:2px;outline:none;cursor:pointer;
+}
+.audio-vol-slider::-webkit-slider-thumb{
+  appearance:none;width:8px;height:8px;
+  border-radius:50%;background:var(--rf-acc);cursor:pointer;
+}
+
+
+
+/* ── Signal Chain overlay ── */
+#scOverlay{position:fixed;inset:0;z-index:200;background:rgba(3,5,8,.96);display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px);}
+#scOverlay.on{display:flex;}
+.sc-box{width:calc(100vw - 48px);height:calc(100vh - 80px);background:var(--surface);border:1px solid var(--rf-acc);box-shadow:0 0 40px rgba(66,212,245,.08);display:flex;flex-direction:column;animation:tileOpen .2s ease;}
+.sc-hd{height:44px;display:flex;align-items:center;padding:0 16px;gap:12px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.sc-title{font-family:var(--fdisp);font-size:22px;letter-spacing:.1em;color:var(--rf-acc);flex:1;}
+.sc-hd-actions{display:flex;align-items:center;gap:8px;}
+.sc-btn{font-family:var(--fmono);font-size:9px;letter-spacing:.1em;color:var(--dim);background:none;border:1px solid var(--b2);border-radius:2px;padding:3px 10px;cursor:pointer;transition:all .15s;white-space:nowrap;}
+.sc-btn:hover{border-color:var(--rf-acc);color:var(--rf-acc);}
+.sc-btn.on{border-color:var(--rf-acc);color:var(--rf-acc);background:rgba(66,212,245,.08);}
+.sc-body{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;position:relative;}
+/* Graph canvas */
+#scGraphCanvas{position:absolute;inset:0;pointer-events:none;z-index:1;cursor:default;}
+#scGraphCanvas.wiring{cursor:crosshair;}
+#scGraphNodes{position:absolute;inset:0;z-index:2;}
+/* Node cards */
+.sc-node{position:absolute;width:140px;background:var(--bg);border-radius:3px;border:1px solid var(--b2);user-select:none;z-index:3;}
+.sc-node.selected{box-shadow:0 0 0 1px var(--rf-acc);}
+.sc-node-hd{display:flex;align-items:center;gap:5px;padding:6px 7px 5px;border-bottom:1px solid var(--border);cursor:grab;flex-shrink:0;}
+.sc-node-hd:active{cursor:grabbing;}
+.sc-node-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.sc-node-name{font-family:var(--fmono);font-size:9px;letter-spacing:.12em;flex:1;text-transform:uppercase;}
+.sc-node-power{width:13px;height:13px;border-radius:2px;border:1px solid currentColor;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:7px;flex-shrink:0;transition:all .15s;padding:0;}
+.sc-node-remove{width:13px;height:13px;border-radius:2px;border:1px solid var(--b2);background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:7px;color:var(--dim);flex-shrink:0;transition:all .15s;padding:0;}
+.sc-node-remove:hover{border-color:#f54242;color:#f54242;}
+.sc-node-body{padding:7px;display:flex;flex-direction:column;gap:5px;}
+.sc-knob-row{display:flex;justify-content:space-around;gap:2px;flex-wrap:wrap;}
+.sc-knob-wrap{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.sc-knob{width:36px;height:36px;cursor:grab;flex-shrink:0;}
+.sc-knob:active{cursor:grabbing;}
+.sc-knob-label{font-family:var(--fmono);font-size:6px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase;text-align:center;}
+.sc-knob-val{font-family:var(--fmono);font-size:7px;text-align:center;}
+.sc-select{font-family:var(--fmono);font-size:7px;background:var(--panel);border:1px solid var(--b2);color:var(--dim);padding:2px 4px;border-radius:2px;outline:none;width:100%;letter-spacing:.05em;cursor:pointer;}
+/* Ports */
+.sc-ports{display:flex;justify-content:space-between;align-items:center;padding:0 0 5px;}
+.sc-port-in,.sc-port-out{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.sc-port-out{align-items:flex-end;}
+.sc-port{width:10px;height:10px;border-radius:50%;border:2px solid currentColor;background:var(--bg);cursor:crosshair;transition:all .15s;flex-shrink:0;}
+.sc-port:hover{filter:brightness(1.5);transform:scale(1.3);}
+.sc-port.active{filter:brightness(2);transform:scale(1.5);box-shadow:0 0 8px currentColor;background:currentColor;}
+.sc-port.connected{background:currentColor;}
+.sc-port.pending-cancel{border-color:#f54242!important;box-shadow:0 0 6px #f54242;}
+.sc-port-label{font-family:var(--fmono);font-size:6px;letter-spacing:.08em;color:var(--dim);}
+/* Source/Output fixed nodes */
+.sc-node-fixed{position:absolute;width:64px;background:var(--bg);border:1px solid var(--b2);border-radius:3px;z-index:3;display:flex;flex-direction:column;align-items:center;padding:8px 6px;gap:6px;}
+.sc-node-fixed-label{font-family:var(--fmono);font-size:8px;letter-spacing:.12em;color:var(--dim);text-transform:uppercase;text-align:center;}
+.sc-node-fixed .sc-port{border-color:var(--rf-acc);}
+.sc-node-fixed.out-node .sc-port{border-color:var(--rf-accC);}
+/* Picker */
+.sc-picker{
+  position:absolute;bottom:24px;left:24px;z-index:10;
+  display:flex;flex-direction:column;gap:4px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:3px;box-shadow:0 4px 24px rgba(0,0,0,.5);
+  cursor:default;user-select:none;overflow:hidden;
+  transition:width .2s ease, min-width .2s ease;
+  min-width:200px;
+}
+.sc-picker.collapsed{
+  min-width:0!important;width:40px!important;
+  border-color:transparent!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  padding:0!important;gap:0!important;
+}
+.sc-picker-hd{
+  display:flex;align-items:center;gap:8px;
+  padding:4px 8px;cursor:grab;flex-shrink:0;
+  border-bottom:1px solid var(--border);
+}
+.sc-picker.collapsed .sc-picker-hd{
+  border-bottom-color:transparent!important;padding:0!important;cursor:grab;
+}
+.sc-picker-hd:active{cursor:grabbing;}
+.sc-picker-title{font-family:var(--fmono);font-size:8px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;flex:1;}
+.sc-picker.collapsed .sc-picker-title{display:none;}
+.sc-picker-body{display:flex;flex-direction:column;gap:4px;padding:8px 12px 12px;}
+.sc-picker.collapsed .sc-picker-body{display:none;}
+.sc-picker-hex{width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
+.sc-pick-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:2px;}
+.sc-pick-cat{font-family:var(--fmono);font-size:7px;letter-spacing:.12em;color:var(--dim);text-transform:uppercase;flex-shrink:0;width:66px;text-align:right;padding-right:6px;border-right:1px solid var(--border);}
+.sc-pick-btn{font-family:var(--fmono);font-size:8px;letter-spacing:.08em;padding:3px 8px;border-radius:2px;cursor:pointer;border:1px solid currentColor;background:transparent;transition:all .15s;white-space:nowrap;}
+.sc-pick-btn:hover{filter:brightness(1.4);}
+/* Preset bar */
+.sc-preset-bar{display:flex;align-items:center;gap:8px;padding:6px 14px;border-top:1px solid var(--border);background:var(--bg);flex-shrink:0;flex-wrap:wrap;}
+.sc-preset-label{font-family:var(--fmono);font-size:8px;letter-spacing:.15em;color:var(--dim);flex-shrink:0;text-transform:uppercase;}
+.sc-preset-slots{display:flex;gap:5px;flex-wrap:wrap;flex:1;}
+.sc-preset-slot{font-family:var(--fmono);font-size:8px;letter-spacing:.08em;padding:3px 10px;border:1px solid var(--b2);border-radius:2px;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s;white-space:nowrap;position:relative;}
+.sc-preset-slot:hover{border-color:var(--rf-acc);color:var(--rf-acc);}
+.sc-preset-slot.filled{border-color:rgba(66,212,245,0.4);color:var(--txt);}
+.sc-preset-slot.filled:hover{border-color:var(--rf-accB);color:var(--rf-accB);}
+.sc-preset-slot .slot-name{max-width:80px;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:bottom;}
+.sc-preset-actions{display:flex;gap:5px;flex-shrink:0;}
+/* Mini tile */
+.sc-mini{width:100%;height:100%;display:flex;align-items:center;justify-content:center;gap:3px;padding:4px;}
+.sc-mini-mod{width:10px;height:28px;border-radius:2px;border:1px solid currentColor;}
+.sc-mini-cable{width:6px;height:1px;background:var(--b2);}
+
+/* ── Oscilloscope overlay ── */
+#oscOverlay{position:fixed;inset:0;z-index:200;background:rgba(3,5,8,.96);display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px);}
+#oscOverlay.on{display:flex;}
+.osc-box{width:calc(100vw - 48px);height:calc(100vh - 80px);background:var(--surface);border:1px solid var(--rf-acc);box-shadow:0 0 40px rgba(66,212,245,.08);display:flex;flex-direction:column;animation:tileOpen .2s ease;}
+.osc-hd{height:44px;display:flex;align-items:center;padding:0 16px;gap:12px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.osc-title{font-family:var(--fdisp);font-size:22px;letter-spacing:.1em;color:var(--rf-acc);flex:1;}
+.osc-close{font-family:var(--fmono);font-size:9px;letter-spacing:.1em;color:var(--dim);background:none;border:1px solid var(--b2);border-radius:2px;padding:3px 10px;cursor:pointer;transition:all .15s;}
+.osc-close:hover{border-color:var(--rf-acc);color:var(--rf-acc);}
+.osc-body{flex:1;display:flex;flex-direction:row;overflow:hidden;min-height:0;}
+.osc-canvas-wrap{flex:1;display:flex;align-items:center;justify-content:center;background:#030508;position:relative;}
+#oscBigCanvas{display:block;}
+.osc-knob-panel{width:200px;flex-shrink:0;border-left:1px solid var(--border);background:var(--bg);display:flex;flex-direction:column;gap:0;overflow-y:auto;padding:16px 12px;gap:14px;}
+.osc-knob-row{display:flex;flex-direction:column;align-items:center;gap:5px;}
+.osc-knob-label{font-family:var(--fmono);font-size:8px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;}
+.osc-knob-val{font-family:var(--fmono);font-size:9px;color:var(--rf-acc);letter-spacing:.08em;}
+.osc-knob{position:relative;width:54px;height:54px;cursor:grab;user-select:none;}
+.osc-knob:active{cursor:grabbing;}
+.osc-knob svg{display:block;}
+.osc-knob-divider{height:1px;background:var(--border);width:100%;flex-shrink:0;}
+
+/* ── Overlay ── */
+#tileOverlay{position:fixed;inset:0;z-index:100;background:rgba(3,5,8,.92);display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px);}
+#tileOverlay.on{display:flex;}
+.tile-overlay-box{width:calc(100vw - 48px);height:calc(100vh - 80px);background:var(--surface);border:1px solid var(--rf-acc);box-shadow:0 0 40px rgba(66,212,245,.08);display:flex;flex-direction:column;animation:tileOpen .2s ease;}
+@keyframes tileOpen{from{opacity:0;transform:scale(.97);}to{opacity:1;transform:scale(1);}}
+.tile-overlay-hd{height:44px;display:flex;align-items:center;padding:0 16px;gap:12px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.tile-overlay-title{font-family:var(--fdisp);font-size:22px;letter-spacing:.1em;color:var(--rf-acc);flex:1;}
+.tile-overlay-close{font-family:var(--fmono);font-size:9px;letter-spacing:.1em;color:var(--dim);background:none;border:1px solid var(--b2);border-radius:2px;padding:3px 10px;cursor:pointer;transition:all .15s;}
+.tile-overlay-close:hover{border-color:var(--rf-acc);color:var(--rf-acc);}
+.tile-overlay-body{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto;}
+.tile-overlay-placeholder{font-size:10px;color:var(--dim);letter-spacing:.15em;text-align:center;line-height:2;}
+.tile-overlay-placeholder span{display:block;font-family:var(--fdisp);font-size:48px;letter-spacing:.1em;color:var(--rf-acc);opacity:.15;margin-bottom:12px;}
+
+/* ── COMMAND modules ── */
+.sc-cmd-node{
+  position:absolute;width:160px;background:var(--bg);
+  border-radius:3px;border:1px solid var(--b2);
+  user-select:none;z-index:3;
+}
+.sc-cmd-node-hd{
+  display:flex;align-items:center;gap:5px;
+  padding:5px 7px;border-bottom:1px solid var(--border);
+  cursor:grab;flex-shrink:0;
+}
+.sc-cmd-node-hd:active{cursor:grabbing;}
+.sc-cmd-dot{width:6px;height:6px;flex-shrink:0;}/* square dot */
+.sc-cmd-name{font-family:var(--fmono);font-size:9px;letter-spacing:.12em;flex:1;text-transform:uppercase;}
+.sc-cmd-node-remove{width:13px;height:13px;border-radius:2px;border:1px solid var(--b2);background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:7px;color:var(--dim);flex-shrink:0;padding:0;}
+.sc-cmd-node-remove:hover{border-color:#f54242;color:#f54242;}
+/* CRT display */
+.sc-cmd-crt{
+  background:#020804;border:1px solid rgba(0,255,80,.15);
+  border-radius:2px;margin:6px 7px 4px;padding:5px 6px;
+  font-family:var(--fmono);font-size:10px;letter-spacing:.05em;
+  color:#00ff50;text-shadow:0 0 6px rgba(0,255,80,.8);
+  min-height:28px;display:flex;align-items:center;
+  position:relative;overflow:hidden;
+}
+.sc-cmd-crt::after{
+  content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.15) 2px,rgba(0,0,0,.15) 4px);
+  pointer-events:none;
+}
+.sc-cmd-crt-val{flex:1;word-break:break-all;line-height:1.3;}
+.sc-cmd-crt-cursor{animation:cmdBlink .7s step-end infinite;margin-left:1px;}
+@keyframes cmdBlink{50%{opacity:0;}}
+/* Button row */
+.sc-cmd-btns{display:flex;gap:3px;padding:0 7px 5px;flex-wrap:wrap;}
+.sc-cmd-btn{
+  font-family:var(--fmono);font-size:7px;letter-spacing:.05em;
+  padding:2px 6px;border-radius:2px;cursor:pointer;
+  border:1px solid var(--b2);background:var(--panel);
+  color:var(--dim);transition:all .12s;flex-shrink:0;
+}
+.sc-cmd-btn:hover{border-color:currentColor;filter:brightness(1.3);}
+.sc-cmd-btn.active{background:rgba(0,255,80,.12);border-color:rgba(0,255,80,.5);color:#00ff50;}
+/* Expression input */
+.sc-cmd-input{
+  font-family:var(--fmono);font-size:8px;background:#020804;
+  border:1px solid rgba(0,255,80,.2);color:#00ff50;
+  padding:3px 5px;margin:0 7px 6px;border-radius:2px;
+  outline:none;width:calc(100% - 14px);letter-spacing:.05em;
+  box-sizing:border-box;
+}
+.sc-cmd-input:focus{border-color:rgba(0,255,80,.6);box-shadow:0 0 4px rgba(0,255,80,.2);}
+/* Square ports */
+.sc-cmd-ports{display:flex;justify-content:space-between;align-items:center;padding:0 7px 6px;}
+.sc-sqport{
+  width:10px;height:10px;border:2px solid currentColor;
+  background:var(--bg);cursor:crosshair;transition:all .15s;
+  flex-shrink:0;border-radius:1px;
+}
+.sc-sqport:hover{filter:brightness(1.5);transform:scale(1.3);}
+.sc-sqport.active{background:currentColor;box-shadow:0 0 8px currentColor;}
+.sc-sqport.connected{background:currentColor;}
+.sc-sqport-label{font-family:var(--fmono);font-size:6px;letter-spacing:.08em;color:var(--dim);}
+.sc-cmd-port-in,.sc-cmd-port-out{display:flex;flex-direction:column;align-items:center;gap:2px;}
+/* Command picker — square button */
+.sc-cmd-picker{
+  position:absolute;bottom:24px;right:24px;z-index:10;
+  display:flex;flex-direction:column;gap:4px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:3px;box-shadow:0 4px 24px rgba(0,0,0,.5);
+  cursor:default;user-select:none;overflow:hidden;
+  min-width:180px;
+}
+.sc-cmd-picker.collapsed{
+  min-width:0!important;width:40px!important;
+  border-color:transparent!important;background:transparent!important;
+  box-shadow:none!important;padding:0!important;gap:0!important;
+}
+.sc-cmd-picker-hd{
+  display:flex;align-items:center;gap:8px;
+  padding:4px 8px;cursor:grab;flex-shrink:0;
+  border-bottom:1px solid var(--border);
+}
+.sc-cmd-picker.collapsed .sc-cmd-picker-hd{border-bottom-color:transparent!important;padding:0!important;}
+.sc-cmd-picker-sq{width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
+.sc-cmd-picker-title{font-family:var(--fmono);font-size:8px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;flex:1;}
+.sc-cmd-picker.collapsed .sc-cmd-picker-title{display:none;}
+.sc-cmd-picker-body{display:flex;flex-direction:column;gap:3px;padding:8px 10px 10px;}
+.sc-cmd-picker.collapsed .sc-cmd-picker-body{display:none;}
+.sc-cmd-pick-btn{
+  font-family:var(--fmono);font-size:8px;letter-spacing:.1em;
+  padding:4px 10px;border-radius:2px;cursor:pointer;
+  border:1px solid rgba(0,255,80,.3);background:transparent;
+  color:#00c840;transition:all .15s;text-align:left;
+}
+.sc-cmd-pick-btn:hover{border-color:rgba(0,255,80,.8);filter:brightness(1.3);}
+/* Control cables — dashed amber */
+.sc-ctrl-cable{stroke-dasharray:5,4;}
+
+/* ── Signal module square MOD ports ── */
+.sc-knob-sqport{
+  width:8px;height:8px;border:1px solid currentColor;
+  background:var(--bg);cursor:crosshair;transition:all .12s;
+  flex-shrink:0;border-radius:1px;margin-top:1px;
+}
+.sc-knob-sqport:hover{filter:brightness(1.5);transform:scale(1.3);}
+.sc-knob-sqport.active{background:currentColor;box-shadow:0 0 6px currentColor;}
+.sc-knob-sqport.connected{background:currentColor;}
+.sc-knob-sqport-label{font-family:var(--fmono);font-size:5px;letter-spacing:.06em;color:var(--mut);text-transform:uppercase;}
+</style>
+</head>
+<body>
+<div id="rfProg"></div>
+<div id="rfResumeBanner" class="hidden"><span class="resume-play">▶</span> CLICK TO RESUME LAST SESSION</div>
+
+<header class="rf-header">
+  <a href="../" class="rf-home">← HOME</a>
+  <div class="rf-sep"></div>
+  <div class="rf-title">RF</div>
+  <div class="rf-ver" id="rfVer">v0.3</div>
+  <div class="rf-sep"></div>
+  <div class="rf-status" id="rfStatus">NOISE FLOOR — SIMULATED</div>
+  <div class="rf-sep"></div>
+  <!-- Live location -->
+  <div class="rf-loc">
+    <input class="rf-loc-input" id="locLat" type="number" step="0.0001" placeholder="LAT" title="Latitude">
+    <input class="rf-loc-input" id="locLon" type="number" step="0.0001" placeholder="LON" title="Longitude">
+    <button class="rf-loc-btn" id="locGpsBtn" title="Use browser GPS">◎ GPS</button>
+    <button class="rf-loc-btn" id="locLoadBtn" title="Load stations at this location">LOAD</button>
+    <span class="rf-loc-name" id="locName"></span>
+    <select id="citySelect" style="font-family:var(--fmono);font-size:8px;background:var(--panel);border:1px solid var(--b2);color:var(--dim);padding:2px 6px;border-radius:2px;outline:none;letter-spacing:.05em;cursor:pointer;max-width:130px;">
+      <option value="">— CITY PRESET —</option>
+    </select>
+  </div>
+  <div class="rf-sep"></div>
+  <div class="rf-tuner-display" id="tunerReadout">—</div>
+  <div class="rf-tuner-unit">MHz</div>
+  <div class="rf-sep"></div>
+  <div class="rf-freq-display" id="rfFreqDisplay">88.0 — 108.0 MHz</div>
+</header>
+
+<div class="rf-workspace">
+  <!-- Left -->
+  <div class="rf-col">
+    <div class="rf-tile" data-tile="oscilloscope">
+      <div class="tile-label">Oscilloscope</div>
+      <div class="tile-rule"></div>
+      <div class="tile-content">
+        <canvas id="oscMiniCanvas" style="width:100%;height:100%;display:block;"></canvas>
+        <span class="tile-corner tile-corner--tl">╔</span>
+        <span class="tile-corner tile-corner--br">╝</span>
+        <span class="tile-expand">EXPAND ↗</span>
+      </div>
+    </div>
+    <div class="rf-tile" id="audioTile" data-tile="audio" style="cursor:default;">
+      <div class="tile-label">Audio</div>
+      <div class="tile-rule"></div>
+      <div class="tile-content" style="padding:0;">
+        <div class="audio-tile-body" id="audioTileBody">
+          <div class="audio-card" id="audioCard">
+            <div class="audio-station-name" id="audioName">NO SIGNAL</div>
+            <div class="audio-station-freq" id="audioFreq">— MHz</div>
+          </div>
+          <div class="audio-divider"></div>
+          <div class="audio-smeter">
+            <div class="audio-smeter-label">SIGNAL</div>
+            <div class="audio-smeter-track">
+              <div class="audio-smeter-fill" id="sMeterFill"></div>
+            </div>
+            <div class="audio-smeter-marks">
+              <span>S1</span><span>S3</span><span>S5</span><span>S7</span><span>S9</span><span>+20</span><span>+40</span>
+            </div>
+          </div>
+          <div class="audio-vol-row" style="margin-top:5px;">
+            <span class="audio-vol-label">VOL</span>
+            <input class="audio-vol-slider" id="audioVol" type="range" min="0" max="1" step="0.01" value="0.8">
+          </div>
+        </div>
+        <span class="tile-corner tile-corner--tl">╔</span>
+        <span class="tile-corner tile-corner--br">╝</span>
+      </div>
+    </div>
+    <div class="rf-tile" data-tile="signalchain">
+      <div class="tile-label">Signal Chain</div>
+      <div class="tile-rule"></div>
+      <div class="tile-content">
+        <div class="sc-mini" id="scMiniPreview"></div>
+        <span class="tile-corner tile-corner--tl">╔</span>
+        <span class="tile-corner tile-corner--br">╝</span>
+        <span class="tile-expand">EXPAND ↗</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Center -->
+  <div class="rf-center">
+    <div class="spectrum-with-ref" style="flex:1;display:flex;flex-direction:row;overflow:hidden;min-height:0;">
+      <div class="ref-sidebar" id="refSidebar" style="width:14px;flex-shrink:0;position:relative;background:var(--bg);border-right:1px solid var(--border);cursor:pointer;user-select:none;">
+        <div style="position:absolute;top:8px;bottom:8px;left:4px;width:6px;background:var(--mut);border-radius:3px;">
+          <div id="refThumb" style="position:absolute;left:0;width:6px;background:var(--b2);border-radius:3px;cursor:grab;min-height:20px;transition:background .15s;"></div>
+        </div>
+        <span id="refDragLabel" style="display:none;position:absolute;left:18px;font-family:var(--fmono);font-size:8px;color:var(--dim);letter-spacing:.1em;background:var(--bg);padding:0 3px;pointer-events:none;white-space:nowrap;z-index:10;">REF 0 dB</span>
+      </div>
+      <div class="spectrum-wrap" id="specWrap">
+        <canvas id="spectrumCanvas"></canvas>
+        <canvas id="spectrumGridCanvas"></canvas>
+        <canvas id="stationCanvas"></canvas>
+        <canvas id="tunerCanvas"></canvas>
+        <div class="spectrum-scanline"></div>
+      </div>
+    </div>
+    <div class="waterfall-wrap" style="margin-left:15px;">
+      <canvas id="waterfallCanvas"></canvas>
+      <canvas id="tunerWfCanvas"></canvas>
+    </div>
+    <div class="spectrum-panbar" id="panBar" style="margin-left:15px;"><div class="spectrum-panbar-track"><div class="spectrum-panbar-thumb" id="panThumb"></div></div></div>
+    <div class="spectrum-controls">
+      <span class="spec-ctrl-label">BAND</span>
+      <div class="spec-band-pills" id="bandPills"></div>
+      <div class="spec-divider"></div>
+      <span class="spec-ctrl-label">SPAN</span>
+      <span class="spec-ctrl-val" id="spanVal">20 MHz</span>
+      <div class="spec-divider"></div>
+      <span class="spec-ctrl-label">CTR</span>
+      <span class="spec-ctrl-val" id="ctrVal">98.0 MHz</span>
+      <div class="spec-divider"></div>
+      <span class="spec-ctrl-label">FLOOR</span>
+      <span class="spec-ctrl-val" id="floorVal">−120 dBm</span>
+      <div class="spec-divider"></div>
+      <button class="spec-hex-btn" id="peakHoldBtn" title="Peak hold">
+        <svg class="spec-hex-icon" viewBox="0 0 13 13"><polygon points="6.5,0.8 11.5,3.75 11.5,9.25 6.5,12.2 1.5,9.25 1.5,3.75" stroke-width="1.3"/><line id="peakHoldBar" class="spec-hex-bar" x1="3.5" y1="6.5" x2="9.5" y2="6.5" stroke-width="2" opacity="0"/></svg>
+      </button>
+      <span class="spec-ctrl-label">PEAK</span>
+      <div class="spec-divider"></div>
+      <button class="spec-hex-btn" id="autoFitBtn" title="Auto-fit">
+        <svg class="spec-hex-icon" viewBox="0 0 13 13"><polygon points="6.5,0.8 11.5,3.75 11.5,9.25 6.5,12.2 1.5,9.25 1.5,3.75" stroke-width="1.3"/><line id="autoFitBar" class="spec-hex-bar" x1="3.5" y1="6.5" x2="9.5" y2="6.5" stroke-width="2" opacity="0"/></svg>
+      </button>
+      <span class="spec-ctrl-label">AUTO FIT</span>
+      <div class="spec-divider"></div>
+      <span class="spec-ctrl-label">ANT</span>
+      <select id="antennaSelect" style="font-family:var(--fmono);font-size:8px;background:var(--panel);border:1px solid var(--b2);color:var(--dim);padding:2px 6px;border-radius:2px;outline:none;letter-spacing:.05em;cursor:pointer;">
+        <option value="whip">WHIP</option>
+        <option value="dipole" selected>DIPOLE</option>
+        <option value="yagi">YAGI</option>
+        <option value="logperiodic">LOG PERIODIC</option>
+        <option value="loop">LOOP</option>
+        <option value="sdr">SDR + LNA</option>
+      </select>
+      <div class="spec-divider"></div>
+      <span class="spec-zoom-hint">SCROLL TO ZOOM · DRAG TO TUNE</span>
+    </div>
+  </div>
+
+  <!-- Right -->
+  <div class="rf-col rf-col--right">
+    <div class="rf-tile" data-tile="transmitter">
+      <div class="tile-label">Transmitter</div>
+      <div class="tile-rule"></div>
+      <div class="tile-content">
+        <div class="tile-placeholder">MAP VIEW<br>COMING SOON</div>
+        <span class="tile-corner tile-corner--tl">╔</span>
+        <span class="tile-corner tile-corner--br">╝</span>
+        <span class="tile-expand">EXPAND ↗</span>
+      </div>
+    </div>
+    <div class="rf-tile" data-tile="ascii">
+      <div class="tile-label">ASCII Bridge</div>
+      <div class="tile-rule"></div>
+      <div class="tile-content">
+        <div class="tile-placeholder">WAVEFORM → ASCII<br>COMING SOON</div>
+        <span class="tile-corner tile-corner--tl">╔</span>
+        <span class="tile-corner tile-corner--br">╝</span>
+        <span class="tile-expand">EXPAND ↗</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Signal Chain Overlay -->
+<div id="scOverlay">
+  <div class="sc-box">
+    <div class="sc-hd">
+      <div class="sc-title">SIGNAL CHAIN</div>
+      <div class="sc-hd-actions">
+        <button class="sc-btn" id="scBypassAll">⬡ BYPASS ALL</button>
+        <button class="sc-btn danger" id="scClearAll">✕ CLEAR ALL</button>
+        <button class="sc-btn" id="scClose">✕ CLOSE</button>
+      </div>
+    </div>
+    <div class="sc-body" id="scBody">
+      <canvas id="scGraphCanvas"></canvas>
+      <div id="scGraphNodes"></div>
+      <div class="sc-cmd-picker" id="scCmdPicker">
+        <div class="sc-cmd-picker-hd" id="scCmdPickerHd">
+          <div class="sc-cmd-picker-sq" id="scCmdPickerSq">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              <rect id="scSqRect" x="3" y="3" width="22" height="22" rx="2" stroke-width="1.5" fill="none" stroke="#00ff50"/>
+              <text id="scSqGlyph" x="14" y="18" text-anchor="middle" font-family="Share Tech Mono,monospace" font-size="10" font-weight="bold" fill="#00ff50">⊡</text>
+            </svg>
+          </div>
+          <span class="sc-cmd-picker-title">COMMAND</span>
+        </div>
+        <div class="sc-cmd-picker-body" id="scCmdPickerBody"></div>
+      </div>
+      <div class="sc-picker" id="scPicker">
+        <div class="sc-picker-hd" id="scPickerHd">
+          <div class="sc-picker-hex" id="scPickerHex">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              <polygon id="scHexPoly" points="14,1.5 25,7.5 25,20.5 14,26.5 3,20.5 3,7.5" stroke-width="1.5" fill="none" stroke="#42d4f5"/>
+              <text id="scHexGlyph" x="14" y="18" text-anchor="middle" font-family="Share Tech Mono,monospace" font-size="10" font-weight="bold" fill="#42d4f5">⬡</text>
+            </svg>
+          </div>
+          <span class="sc-picker-title">SIGNAL</span>
+        </div>
+        <div class="sc-picker-body" id="scPickerBody"></div>
+      </div>
+    </div>
+    <div class="sc-preset-bar" id="scPresetBar">
+      <span class="sc-preset-label">PRESETS</span>
+      <div class="sc-preset-slots" id="scPresetSlots"></div>
+      <div class="sc-preset-actions">
+        <button class="sc-btn" id="scExportBtn">↓ EXPORT</button>
+        <button class="sc-btn" id="scImportBtn">↑ IMPORT</button>
+        <input type="file" id="scImportFile" accept=".json" style="display:none;">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Oscilloscope Overlay -->
+<div id="oscOverlay">
+  <div class="osc-box">
+    <div class="osc-hd">
+      <div class="osc-title">OSCILLOSCOPE — XY LISSAJOUS</div>
+      <button class="osc-close" id="oscClose">✕ CLOSE</button>
+    </div>
+    <div class="osc-body">
+      <div class="osc-canvas-wrap">
+        <canvas id="oscBigCanvas"></canvas>
+      </div>
+      <div class="osc-knob-panel">
+        <div class="osc-knob-row">
+          <div class="osc-knob-label">TIME / DIV</div>
+          <div class="osc-knob" id="knobTimediv" data-knob="timediv"></div>
+          <div class="osc-knob-val" id="valTimediv">512</div>
+        </div>
+        <div class="osc-knob-divider"></div>
+        <div class="osc-knob-row">
+          <div class="osc-knob-label">PERSISTENCE</div>
+          <div class="osc-knob" id="knobPersist" data-knob="persist"></div>
+          <div class="osc-knob-val" id="valPersist">0.85</div>
+        </div>
+        <div class="osc-knob-divider"></div>
+        <div class="osc-knob-row">
+          <div class="osc-knob-label">INTENSITY</div>
+          <div class="osc-knob" id="knobIntensity" data-knob="intensity"></div>
+          <div class="osc-knob-val" id="valIntensity">0.80</div>
+        </div>
+        <div class="osc-knob-divider"></div>
+        <div class="osc-knob-row">
+          <div class="osc-knob-label">X GAIN</div>
+          <div class="osc-knob" id="knobXgain" data-knob="xgain"></div>
+          <div class="osc-knob-val" id="valXgain">1.0×</div>
+        </div>
+        <div class="osc-knob-divider"></div>
+        <div class="osc-knob-row">
+          <div class="osc-knob-label">Y GAIN</div>
+          <div class="osc-knob" id="knobYgain" data-knob="ygain"></div>
+          <div class="osc-knob-val" id="valYgain">1.0×</div>
+        </div>
+        <div class="osc-knob-divider"></div>
+        <div class="osc-knob-row">
+          <div class="osc-knob-label">PHASE</div>
+          <div class="osc-knob" id="knobPhase" data-knob="phase"></div>
+          <div class="osc-knob-val" id="valPhase">0</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Overlay -->
+<div id="tileOverlay">
+  <div class="tile-overlay-box">
+    <div class="tile-overlay-hd">
+      <div class="tile-overlay-title" id="overlayTitle">TOOL</div>
+      <button class="tile-overlay-close" id="overlayClose">✕ CLOSE</button>
+    </div>
+    <div class="tile-overlay-body">
+      <div class="tile-overlay-placeholder">
+        <span id="overlayGlyph">░▒▓</span>
+        <div id="overlayMsg">COMING IN A FUTURE MILESTONE</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const C = RF;
+
+  // ── Helpers ──────────────────────────────────────────────────
+  function hexToRgb(hex){
+    return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
+  }
+  function setStatus(msg, color){
+    const el = document.getElementById('rfStatus');
+    el.textContent = msg;
+    el.style.color = color || 'var(--dim)';
+  }
+  function setProg(pct){
+    const p = document.getElementById('rfProg');
+    p.style.width = pct + '%';
+    if(pct >= 100) setTimeout(()=>p.style.width='0%', 400);
+  }
+  function disableAutoFit(){
+    if(!autoFit) return;
+    autoFit = false;
+    document.getElementById('autoFitBtn').classList.remove('on');
+    document.getElementById('autoFitBar').setAttribute('opacity','0');
+  }
+
+  // ── Accent ───────────────────────────────────────────────────
+  const r = document.documentElement;
+  r.style.setProperty('--rf-acc',  C.accent);
+  r.style.setProperty('--rf-accB', C.accentB);
+  r.style.setProperty('--rf-accC', C.accentC);
+  r.style.setProperty('--rf-glow', `rgba(${hexToRgb(C.accent)},.18)`);
+  r.style.setProperty('--rf-grid', `rgba(${hexToRgb(C.accent)},.06)`);
+  document.title = C.title;
+  document.getElementById('rfVer').textContent = `v${C.version}`;
+
+  // ── Location state ────────────────────────────────────────────
+  let userLat = C.location.lat;
+  let userLon = C.location.lon;
+  let userRadius = C.location.radius;
+
+  // Init inputs from config
+  document.getElementById('locLat').value = userLat.toFixed(4);
+  document.getElementById('locLon').value = userLon.toFixed(4);
+  document.getElementById('locName').textContent = C.location.name;
+
+  // ── Station state ─────────────────────────────────────────────
+  let stations = [];   // [{f, p, name, streamUrl, dist}]
+  let stationsLoaded = false;
+
+  // ── Radio Browser API ─────────────────────────────────────────
+  const RF_PROXY = 'https://rf-proxy.chapethan09.workers.dev';
+  function fetchGeocode(lat, lon){
+    return new Promise((resolve)=>{
+      const cbName = '_geocb_' + Date.now();
+      const script = document.createElement('script');
+      const timer = setTimeout(()=>{
+        delete window[cbName]; script.remove();
+        resolve(null);
+      }, 6000);
+      window[cbName] = (data)=>{
+        clearTimeout(timer); delete window[cbName]; script.remove();
+        resolve(data);
+      };
+      script.src = `${RF_PROXY}/geocode?lat=${lat}&lon=${lon}&callback=${cbName}`;
+      script.onerror = ()=>{ clearTimeout(timer); delete window[cbName]; resolve(null); };
+      document.head.appendChild(script);
+    });
+  }
+  function fetchStations(lat, lon, radius){
+    return new Promise((resolve)=>{
+      setStatus('FETCHING STATIONS…', 'var(--rf-accC)');
+      setProg(20);
+      const cbName = '_rbcb_' + Date.now();
+      const script = document.createElement('script');
+      const timer = setTimeout(()=>{
+        delete window[cbName];
+        script.remove();
+        resolve(null);
+      }, 10000);
+      window[cbName] = (data)=>{
+        clearTimeout(timer);
+        delete window[cbName];
+        script.remove();
+        setProg(60);
+        resolve(data && data.length ? data : null);
+      };
+      script.src = `${RF_PROXY}/stations?lat=${lat}&long=${lon}&radius=${radius}&callback=${cbName}`;
+      script.onerror = ()=>{
+        clearTimeout(timer);
+        delete window[cbName];
+        resolve(null);
+      };
+      document.head.appendChild(script);
+    });
+  }
+
+  // Haversine distance in km
+  function distKm(lat1, lon1, lat2, lon2){
+    const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
+    const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  }
+
+  // Antenna receive gain in dBi
+  const ANTENNA_GAIN = {
+    whip:        0,
+    dipole:      2.1,
+    yagi:        12,
+    logperiodic: 10,
+    loop:        4,
+    sdr:         18,
+  };
+
+  // Realistic receive radius per antenna type (km)
+  const ANTENNA_RADIUS = {
+    whip:        50,
+    dipole:      100,
+    yagi:        200,
+    logperiodic: 175,
+    loop:        80,
+    sdr:         300,
+  };
+
+  function getAntennaRadius(){
+    const ant = document.getElementById('antennaSelect')?.value || 'dipole';
+    return ANTENNA_RADIUS[ant] || 100;
+  }
+
+  // Free Space Path Loss model
+  // Returns signal power in dB above noise floor (0 = at noise floor, negative = below)
+  function calcSignalPower(km, freqMHz){
+    const antennaType = document.getElementById('antennaSelect')
+      ? document.getElementById('antennaSelect').value : 'dipole';
+    const rxGain = ANTENNA_GAIN[antennaType] || 2.1;
+
+    // Assumed transmitter ERP — 10kW typical FM = 40dBW = 70dBm
+    const txPower = 70; // dBm
+
+    // Free space path loss
+    const fspl = 20*Math.log10(Math.max(1,km)) + 20*Math.log10(freqMHz) + 32.44;
+
+    // Received signal
+    const rxSignal = txPower - fspl + rxGain;
+
+    // Noise floor reference (~-120 dBm)
+    const noiseFloor = C.noiseFloor.base;
+    const snr = rxSignal - noiseFloor;
+
+    // Return dB above noise, clamped
+    return Math.max(0, Math.min(60, snr));
+  }
+
+  async function loadStations(){
+    const lat = parseFloat(document.getElementById('locLat').value);
+    const lon = parseFloat(document.getElementById('locLon').value);
+    if(isNaN(lat)||isNaN(lon)){
+      setStatus('INVALID COORDINATES', 'var(--rf-accB)');
+      return;
+    }
+    userLat = lat; userLon = lon;
+
+    // Clear existing stations immediately on new load
+    stations = [];
+    stationsLoaded = false;
+    noiseData = null;
+    wfImageData = null;
+    peakArr = null;
+    drawSpectrum._p = null;
+    drawStationLabels();
+    userRadius = getAntennaRadius();
+    document.getElementById('locLoadBtn').classList.add('loading');
+    const raw = await fetchStations(lat, lon, userRadius);
+    document.getElementById('locLoadBtn').classList.remove('loading');
+
+    if(!raw){
+      setStatus('COULD NOT REACH RADIO BROWSER — SIMULATED DATA ACTIVE · CHECK CONSOLE', 'var(--rf-accB)');
+      stationsLoaded = false;
+      stations = [];
+      return;
+    }
+
+    // Parse and filter stations with valid frequency
+    const parsed = [];
+    for(const s of raw){
+      // frequency field can be empty, kHz, or MHz
+      let freq = parseFloat(s.frequency);
+      if(!freq || freq <= 0){
+        // Try to infer from name e.g. "WUWF 88.1"
+        const m = s.name.match(/(\d{2,3}\.\d)/);
+        if(m) freq = parseFloat(m[1]);
+      }
+      // If still no freq, skip
+      if(!freq || freq <= 0) continue;
+      // Normalize — if > 30000 assume Hz, if > 300 assume kHz
+      if(freq > 30000) freq = freq / 1000000;
+      else if(freq > 300) freq = freq / 1000;
+
+      const sLat = parseFloat(s.geo_lat);
+      const sLon = parseFloat(s.geo_long);
+      const dist = (sLat&&sLon) ? distKm(lat, lon, sLat, sLon) : userRadius * 0.7;
+      const power = calcSignalPower(dist, freq);
+
+      parsed.push({
+        f:        freq,
+        p:        power,
+        name:     (s.name||'').trim(),
+        streamUrl:s.url_resolved || '',
+        dist:     Math.round(dist),
+        country:  s.countrycode || '',
+        state:    s.state || '',
+        city:     s.city || '',
+        bitrate:  s.bitrate || 0,
+        codec:    s.codec || '',
+        homepage: s.homepage || '',
+        favicon:  s.favicon || '',
+        tags:     s.tags ? s.tags.split(',').map(t=>t.trim()).filter(Boolean).slice(0,5) : [],
+        votes:    s.votes || 0,
+        hls:      s.hls || 0,
+        lat:      sLat||null,
+        lon:      sLon||null,
+      });
+    }
+
+    if(!parsed.length){
+      fetchGeocode(lat, lon).then(geo=>{
+        const place = geo && geo.display ? geo.display : `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+        document.getElementById('locName').textContent = place;
+        setStatus(`NO STATIONS WITH FREQUENCY DATA WITHIN ${userRadius}km OF ${place}`, 'var(--rf-accB)');
+      });
+      stations = [];
+      stationsLoaded = false;
+      return;
+    }
+
+    stations = parsed;
+    stationsLoaded = true;
+    setProg(100);
+    setStatus(`${stations.length} STATIONS LOADED · ${lat.toFixed(2)}, ${lon.toFixed(2)}`, 'var(--rf-acc)');
+    document.getElementById('locName').textContent = `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+    // Reverse geocode to get place name
+    fetchGeocode(lat, lon).then(geo=>{
+      if(geo && geo.display){
+        document.getElementById('locName').textContent = geo.display;
+        setStatus(`${stations.length} STATIONS LOADED · ${geo.display}`, 'var(--rf-acc)');
+      }
+    });
+
+    // Reset spectrum
+    noiseData = null;
+    wfImageData = null;
+    peakArr = null;
+    drawSpectrum._p = null;
+    drawStationLabels();
+  }
+
+  // ── GPS ───────────────────────────────────────────────────────
+  document.getElementById('locGpsBtn').addEventListener('click',()=>{
+    if(!navigator.geolocation){
+      setStatus('GEOLOCATION NOT SUPPORTED', 'var(--rf-accB)');
+      return;
+    }
+    const btn = document.getElementById('locGpsBtn');
+    btn.classList.add('loading');
+    btn.textContent = '◎ …';
+    setStatus('ACQUIRING GPS…', 'var(--rf-accC)');
+    navigator.geolocation.getCurrentPosition(pos=>{
+      userLat = pos.coords.latitude;
+      userLon = pos.coords.longitude;
+      document.getElementById('locLat').value = userLat.toFixed(4);
+      document.getElementById('locLon').value = userLon.toFixed(4);
+      btn.classList.remove('loading');
+      btn.textContent = '◎ GPS';
+      loadStations();
+    }, err=>{
+      btn.classList.remove('loading');
+      btn.textContent = '◎ GPS';
+      setStatus('GPS FAILED — ' + err.message.toUpperCase(), 'var(--rf-accB)');
+    },{timeout:10000, maximumAge:60000});
+  });
+
+  document.getElementById('locLoadBtn').addEventListener('click', loadStations);
+  document.getElementById('locLat').addEventListener('keydown', e=>{ if(e.key==='Enter') loadStations(); });
+  document.getElementById('locLon').addEventListener('keydown', e=>{ if(e.key==='Enter') loadStations(); });
+
+  // ── State ────────────────────────────────────────────────────
+  let wfImageData  = null;
+  let noiseData    = null;
+  let noiseTime    = 0;
+  let tunerFreq    = null;
+  let tunerDragging = false;
+  let autoFit      = false;
+  let peakHold     = false;
+  let peakArr      = null;
+  let viewMin      = 88;
+  let viewMax      = 108;
+  let dbOffset     = 0;
+  let refDragging  = false;
+  let refDragStartY = 0;
+  let refDragStartOffset = 0;
+  let panDragging   = false;
+  let panDragStartX = 0;
+  let panDragStartMin = 0;
+
+  // ── Canvas refs ──────────────────────────────────────────────
+  const specCanvas    = document.getElementById('spectrumCanvas');
+  const specCtx       = specCanvas.getContext('2d');
+  const gridCanvas    = document.getElementById('spectrumGridCanvas');
+  const gridCtx       = gridCanvas.getContext('2d');
+  const stationCanvas = document.getElementById('stationCanvas');
+  const stationCtx    = stationCanvas.getContext('2d');
+  const tunerCanvas   = document.getElementById('tunerCanvas');
+  const tunerCtx      = tunerCanvas.getContext('2d');
+  const wfCanvas      = document.getElementById('waterfallCanvas');
+  const wfCtx         = wfCanvas.getContext('2d');
+  const tunerWfCv     = document.getElementById('tunerWfCanvas');
+  const tunerWfCtx    = tunerWfCv.getContext('2d');
+  const oscMini       = document.getElementById('oscMiniCanvas');
+  const oscMiniCtx    = oscMini.getContext('2d');
+
+  // ── Bands ────────────────────────────────────────────────────
+  const BANDS = [
+    { label:'AM',   min:0.53,  max:1.7,   unit:'MHz' },
+    { label:'FM',   min:88,    max:108,   unit:'MHz' },
+    { label:'VHF',  min:30,    max:300,   unit:'MHz' },
+    { label:'UHF',  min:300,   max:3000,  unit:'MHz' },
+    { label:'2.4G', min:2400,  max:2500,  unit:'MHz' },
+  ];
+  let currentBand = 1;
+
+  const bandPills = document.getElementById('bandPills');
+  BANDS.forEach((b,i)=>{
+    const el = document.createElement('div');
+    el.className = 'spec-band'+(i===currentBand?' on':'');
+    el.textContent = b.label;
+    el.addEventListener('click',()=>{
+      currentBand = i;
+      document.querySelectorAll('.spec-band').forEach(x=>x.classList.remove('on'));
+      el.classList.add('on');
+      const prevFreq = tunerFreq;
+      viewMin = BANDS[i].min;
+      viewMax = BANDS[i].max;
+      if(prevFreq !== null){
+        tunerFreq = Math.max(viewMin, Math.min(viewMax, prevFreq));
+        document.getElementById('tunerReadout').textContent = tunerFreq.toFixed(3);
+      }
+      noiseData = null; wfImageData = null;
+      drawGrid();
+      updateBand();
+      drawStationLabels();
+      updatePanBar();
+      if(autoFit && tunerFreq !== null) doAutoFit();
+    });
+    bandPills.appendChild(el);
+  });
+
+  function updateBand(){
+    peakArr = null; drawSpectrum._p = null;
+    const span = viewMax - viewMin;
+    const ctr  = (viewMin + viewMax) / 2;
+    document.getElementById('spanVal').textContent =
+      span>=1000?(span/1000).toFixed(2)+' GHz':span>=1?span.toFixed(2)+' MHz':(span*1000).toFixed(1)+' kHz';
+    document.getElementById('ctrVal').textContent =
+      ctr>=1000?(ctr/1000).toFixed(3)+' GHz':ctr.toFixed(3)+' MHz';
+    document.getElementById('rfFreqDisplay').textContent =
+      `${viewMin.toFixed(2)} — ${viewMax.toFixed(2)} MHz`;
+    document.getElementById('floorVal').textContent =
+      `${(C.noiseFloor.base+dbOffset).toFixed(0)} dBm`;
+    wfImageData = null; noiseData = null;
+    drawGrid();
+    updatePanBar();
+  }
+
+  viewMin = BANDS[currentBand].min;
+  viewMax = BANDS[currentBand].max;
+  updateBand();
+
+  // ── Resize ───────────────────────────────────────────────────
+  function resizeCanvases(){
+    const sr = specCanvas.parentElement.getBoundingClientRect();
+    const wr = wfCanvas.parentElement.getBoundingClientRect();
+    const or = oscMini.parentElement.getBoundingClientRect();
+    [specCanvas,gridCanvas,stationCanvas,tunerCanvas].forEach(cv=>{
+      cv.width=sr.width; cv.height=sr.height;
+    });
+    [wfCanvas,tunerWfCv].forEach(cv=>{cv.width=wr.width;cv.height=wr.height;});
+    oscMini.width  = or.width  || 180;
+    oscMini.height = or.height || 180;
+    noiseData = null; wfImageData = null;
+    drawGrid();
+    drawStationLabels();
+  }
+
+  // ── Noise ────────────────────────────────────────────────────
+  function initNoise(W){
+    const data = new Float32Array(W);
+    const base = C.noiseFloor.base;
+    for(let i=0;i<W;i++){
+      const freq = viewMin+(i/W)*(viewMax-viewMin);
+      const atm  = freq<30?(30/freq)*8:freq<100?4:0;
+      const hum  = (C.noiseFloor.humidityRH/100)*1.5;
+      data[i] = base + atm + 3 + hum;
+    }
+    return data;
+  }
+  function getNoiseSample(base,i,t){
+    const u=()=>{let a=0,b=0;while(!a)a=Math.random();while(!b)b=Math.random();return Math.sqrt(-2*Math.log(a))*Math.cos(2*Math.PI*b);};
+    return base[i]+Math.sin(t*0.001+i*0.05)*1.2+u()*2.5;
+  }
+
+  // ── Signal at frequency ───────────────────────────────────────
+  // Uses real stations if loaded, falls back to simulated FM
+  const SIM_STATIONS = [
+    {f:88.1,p:32},{f:89.1,p:38},{f:90.7,p:35},{f:92.3,p:40},
+    {f:94.1,p:36},{f:96.5,p:42},{f:99.1,p:38},{f:101.5,p:35},
+    {f:103.1,p:44},{f:105.1,p:36},{f:107.3,p:38},
+  ];
+
+  function getSignalAt(freq, t){
+    if(!stationsLoaded || !stations.length) return 0;
+    const src = stations;
+    let sig = 0;
+    for(const s of src){
+      const d = Math.abs(freq - s.f);
+      if(d < 0.25){
+        const peak = s.p * Math.exp(-(d*d)/(2*0.004));
+        const shimmer = Math.sin(t*0.003+s.f)*1.5;
+        sig = Math.max(sig, peak + shimmer);
+      }
+    }
+    return sig;
+  }
+
+  // ── Station label canvas ──────────────────────────────────────
+  function drawStationLabels(){
+    const W = stationCanvas.width, H = stationCanvas.height;
+    stationCtx.clearRect(0,0,W,H);
+    if(!W||!H) return;
+
+    if(!stationsLoaded || !stations.length) return;
+    const src = stations;
+    const dbMin = C.spectrum.dbMin+dbOffset;
+    const dbMax = C.spectrum.dbMax+dbOffset;
+    const dbRange = dbMax-dbMin;
+
+    // Get actual peak Y from spectrum data if available
+    const specData = drawSpectrum._p;
+    const dpr = window.devicePixelRatio || 1;
+
+    for(const s of src){
+      if(s.f < viewMin || s.f > viewMax) continue;
+      const x = ((s.f-viewMin)/(viewMax-viewMin))*W;
+
+      // Find actual peak Y from rendered spectrum data
+      let peakY;
+      if(specData && specData.length === W){
+        const xi = Math.round(x);
+        const dbMin2 = C.spectrum.dbMin+dbOffset, dbMax2 = C.spectrum.dbMax+dbOffset, dbRange2 = dbMax2-dbMin2;
+        // Sample a few pixels around the station frequency for true peak
+        let peakDb = -999;
+        for(let di=-3;di<=3;di++){
+          const ii = Math.max(0,Math.min(W-1,xi+di));
+          if(specData[ii] > peakDb) peakDb = specData[ii];
+        }
+        peakY = Math.max(6, H - ((peakDb-dbMin2)/dbRange2)*H);
+      } else {
+        peakY = Math.max(6, H - (s.p/60)*H*0.85);
+      }
+
+      // ▶ icon pinned just above the actual peak tip
+      if(s.streamUrl){
+        stationCtx.font = `bold ${Math.round(11*dpr)/dpr}px "Share Tech Mono", monospace`;
+        stationCtx.fillStyle = `rgba(${hexToRgb(C.accentC)},0.95)`;
+        stationCtx.fillText('▶', x - 5, peakY - 6);
+      }
+
+      // Station name label just below the icon
+      const label = s.name ? s.name.substring(0,10).toUpperCase() : s.f.toFixed(1);
+      const labelY = peakY + (s.streamUrl ? 8 : 2);
+      stationCtx.font = `${Math.round(8*dpr)/dpr}px "Share Tech Mono", monospace`;
+      const tw = stationCtx.measureText(label).width;
+      const lx = Math.max(2, Math.min(W-tw-4, x-tw/2));
+      stationCtx.fillStyle = 'rgba(3,5,8,0.75)';
+      stationCtx.fillRect(lx-1, labelY-9, tw+4, 10);
+      stationCtx.fillStyle = `rgba(${hexToRgb(C.accent)},0.6)`;
+      stationCtx.fillText(label, lx+1, labelY);
+
+      // Tick mark at station frequency
+      stationCtx.strokeStyle = `rgba(${hexToRgb(C.accent)},0.2)`;
+      stationCtx.lineWidth = 1;
+      stationCtx.setLineDash([2,3]);
+      stationCtx.beginPath();
+      stationCtx.moveTo(x, labelY+2);
+      stationCtx.lineTo(x, H);
+      stationCtx.stroke();
+      stationCtx.setLineDash([]);
+    }
+  }
+
+  // ── Draw spectrum ─────────────────────────────────────────────
+  function drawSpectrum(t){
+    const W=specCanvas.width, H=specCanvas.height;
+    if(!W||!H) return;
+    if(!noiseData||noiseData.length!==W) noiseData=initNoise(W);
+    const dbMin=C.spectrum.dbMin+dbOffset, dbMax=C.spectrum.dbMax+dbOffset, dbRange=dbMax-dbMin;
+    const frame=new Float32Array(W);
+    for(let i=0;i<W;i++){
+      const freq=viewMin+(i/W)*(viewMax-viewMin);
+      frame[i]=getNoiseSample(noiseData,i,t)+getSignalAt(freq,t);
+    }
+    if(!drawSpectrum._p||drawSpectrum._p.length!==W) drawSpectrum._p=new Float32Array(frame);
+    const sm=C.spectrum.smoothing;
+    for(let i=0;i<W;i++) drawSpectrum._p[i]=drawSpectrum._p[i]*sm+frame[i]*(1-sm);
+    const data=drawSpectrum._p;
+    specCtx.clearRect(0,0,W,H);
+    specCtx.beginPath();
+    specCtx.moveTo(0,H);
+    for(let i=0;i<W;i++){
+      const y=H-((data[i]-dbMin)/dbRange)*H;
+      i===0?specCtx.lineTo(0,y):specCtx.lineTo(i,y);
+    }
+    specCtx.lineTo(W,H);specCtx.closePath();
+    const g=specCtx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,`rgba(${hexToRgb(C.accent)},0.5)`);
+    g.addColorStop(0.4,`rgba(${hexToRgb(C.accent)},0.15)`);
+    g.addColorStop(1,`rgba(${hexToRgb(C.accent)},0.02)`);
+    specCtx.fillStyle=g; specCtx.fill();
+    specCtx.beginPath();
+    for(let i=0;i<W;i++){
+      const y=H-((data[i]-dbMin)/dbRange)*H;
+      i===0?specCtx.moveTo(0,y):specCtx.lineTo(i,y);
+    }
+    specCtx.strokeStyle=C.accent; specCtx.lineWidth=1.5;
+    specCtx.shadowColor=C.accent; specCtx.shadowBlur=6;
+    specCtx.stroke(); specCtx.shadowBlur=0;
+    if(peakHold){
+      if(!peakArr||peakArr.length!==W) peakArr=new Float32Array(data);
+      else for(let i=0;i<W;i++) if(data[i]>peakArr[i]) peakArr[i]=data[i];
+      drawPeakHold();
+    }
+    return data;
+  }
+
+  function drawPeakHold(){
+    if(!peakHold||!peakArr) return;
+    const W=specCanvas.width, H=specCanvas.height;
+    const dbMin=C.spectrum.dbMin+dbOffset, dbMax=C.spectrum.dbMax+dbOffset, dbRange=dbMax-dbMin;
+    specCtx.beginPath();
+    for(let i=0;i<W;i++){
+      const y=H-((peakArr[i]-dbMin)/dbRange)*H;
+      i===0?specCtx.moveTo(i,y):specCtx.lineTo(i,y);
+    }
+    specCtx.strokeStyle=`rgba(${hexToRgb(C.accentC)},0.7)`;
+    specCtx.lineWidth=1; specCtx.setLineDash([2,3]);
+    specCtx.stroke(); specCtx.setLineDash([]);
+  }
+
+
+  // ── Pan scrollbar ─────────────────────────────────────────────
+  function updatePanBar(){
+    const b = BANDS[currentBand];
+    const bSpan = b.max - b.min;
+    const vSpan = viewMax - viewMin;
+    const panBar = document.getElementById('panBar');
+    const thumb  = document.getElementById('panThumb');
+    if(!panBar||!thumb) return;
+    const trackW = panBar.offsetWidth - 16;
+    const thumbW = Math.max(20, (vSpan/bSpan)*trackW);
+    const thumbX = 8 + ((viewMin-b.min)/bSpan)*trackW;
+    thumb.style.width = thumbW + 'px';
+    thumb.style.left  = thumbX + 'px';
+  }
+
+  // ── Draw grid ─────────────────────────────────────────────────
+  function drawGrid(){
+    const W=gridCanvas.width, H=gridCanvas.height;
+    if(!W||!H) return;
+    gridCtx.clearRect(0,0,W,H);
+    const dbMin=C.spectrum.dbMin+dbOffset, dbMax=C.spectrum.dbMax+dbOffset, dbRange=dbMax-dbMin;
+    gridCtx.strokeStyle=`rgba(${hexToRgb(C.accent)},0.06)`;
+    gridCtx.lineWidth=1;
+    for(let db=Math.ceil(dbMin/10)*10;db<=dbMax;db+=10){
+      const y=H-((db-dbMin)/dbRange)*H;
+      gridCtx.beginPath(); gridCtx.moveTo(0,y); gridCtx.lineTo(W,y); gridCtx.stroke();
+      gridCtx.fillStyle=`rgba(${hexToRgb(C.accent)},0.3)`;
+      gridCtx.font='8px monospace';
+      gridCtx.fillText(`${db}`,4,y-2);
+    }
+    for(let i=0;i<=10;i++){
+      const x=(i/10)*W;
+      gridCtx.beginPath(); gridCtx.moveTo(x,0); gridCtx.lineTo(x,H); gridCtx.stroke();
+      const freq=viewMin+(i/10)*(viewMax-viewMin);
+      const lbl=freq>=1000?(freq/1000).toFixed(1)+'G':freq>=1?freq.toFixed(1)+'M':(freq*1000).toFixed(0)+'k';
+      gridCtx.fillStyle=`rgba(${hexToRgb(C.accent)},0.3)`;
+      gridCtx.font='8px monospace';
+      if(i<10) gridCtx.fillText(lbl,x+3,H-4);
+    }
+    
+  }
+
+  // ── Draw tuner ────────────────────────────────────────────────
+  function drawTuner(){
+    const W=tunerCanvas.width, H=tunerCanvas.height;
+    tunerCtx.clearRect(0,0,W,H);
+    if(tunerFreq===null) return;
+    const x=((tunerFreq-viewMin)/(viewMax-viewMin))*W;
+    if(x<0||x>W) return;
+
+    // Check if tuner is on a real station
+    const snap = getNearestStation(tunerFreq);
+    const lineColor = snap ? C.accentC : C.accentB;
+
+    tunerCtx.strokeStyle=lineColor; tunerCtx.lineWidth=1;
+    tunerCtx.setLineDash([4,3]);
+    tunerCtx.beginPath(); tunerCtx.moveTo(x,0); tunerCtx.lineTo(x,H); tunerCtx.stroke();
+    tunerCtx.setLineDash([]);
+    tunerCtx.fillStyle=lineColor;
+    tunerCtx.beginPath(); tunerCtx.moveTo(x,8); tunerCtx.lineTo(x-5,0); tunerCtx.lineTo(x+5,0);
+    tunerCtx.closePath(); tunerCtx.fill();
+
+    // Label — show station name if snapped
+    const label = snap
+      ? `${(snap.name||snap.f.toFixed(1)).substring(0,12)} · ${tunerFreq.toFixed(1)} MHz`
+      : `${tunerFreq.toFixed(3)} MHz`;
+    tunerCtx.font='bold 10px monospace';
+    const tw=tunerCtx.measureText(label).width;
+    const lx=Math.max(2,Math.min(W-tw-8,x-tw/2-4));
+    tunerCtx.fillStyle='rgba(3,5,8,0.88)';
+    tunerCtx.fillRect(lx-2,10,tw+8,16);
+    tunerCtx.strokeStyle=lineColor; tunerCtx.lineWidth=1;
+    tunerCtx.strokeRect(lx-2,10,tw+8,16);
+    tunerCtx.fillStyle=lineColor;
+    tunerCtx.fillText(label,lx+2,23);
+
+    const W2=tunerWfCv.width, H2=tunerWfCv.height;
+    tunerWfCtx.clearRect(0,0,W2,H2);
+    const x2=((tunerFreq-viewMin)/(viewMax-viewMin))*W2;
+    tunerWfCtx.strokeStyle=lineColor; tunerWfCtx.lineWidth=1;
+    tunerWfCtx.setLineDash([3,2]);
+    tunerWfCtx.beginPath(); tunerWfCtx.moveTo(x2,0); tunerWfCtx.lineTo(x2,H2); tunerWfCtx.stroke();
+    tunerWfCtx.setLineDash([]);
+  }
+
+  // Find nearest station within 0.2 MHz
+  function getNearestStation(freq){
+    if(!stationsLoaded || !stations.length) return null;
+    const src = stations;
+    let best = null, bestD = 0.2;
+    for(const s of src){
+      const d = Math.abs(s.f - freq);
+      if(d < bestD){ bestD=d; best=s; }
+    }
+    return best;
+  }
+
+  // ── Waterfall ─────────────────────────────────────────────────
+  function drawWaterfall(frameData){
+    const W=wfCanvas.width, H=wfCanvas.height;
+    if(!W||!H||!frameData) return;
+    if(!wfImageData||wfImageData.width!==W||wfImageData.height!==H) wfImageData=wfCtx.createImageData(W,H);
+    const d=wfImageData.data;
+    d.copyWithin(W*4,0,W*(H-1)*4);
+    const dbMin=C.spectrum.dbMin, dbMax=C.spectrum.dbMax, dbRange=dbMax-dbMin;
+    for(let i=0;i<W;i++){
+      const n=Math.max(0,Math.min(1,(frameData[i]-dbMin)/dbRange));
+      d[i*4]  =Math.round(n>0.7?(n-0.7)/0.3*255:0);
+      d[i*4+1]=Math.round(n>0.3?Math.min(1,(n-0.3)/0.4)*212:0);
+      d[i*4+2]=Math.round(n*245);
+      d[i*4+3]=255;
+    }
+    wfCtx.putImageData(wfImageData,0,0);
+  }
+
+  // ── Oscilloscope state ────────────────────────────────────────
+  let oscTimediv    = 512;
+  let oscPersist    = 0.85;
+  let oscIntensity  = 0.8;
+  let oscXgain      = 1.0;
+  let oscYgain      = 1.0;
+  let oscPhase      = 0;
+  let oscMiniPersistBuf = null;
+
+  function getLissajousData(){
+    // Returns {xArr, yArr} from analysers, or null if no audio
+    if(!analyserL || !analyserR) return null;
+    const N = analyserL.fftSize;
+    const xArr = new Float32Array(N);
+    const yArr = new Float32Array(N);
+    analyserL.getFloatTimeDomainData(xArr);
+    analyserR.getFloatTimeDomainData(yArr);
+    // Check if there's actually signal (not silence)
+    let rms = 0;
+    for(let i=0;i<N;i++) rms += xArr[i]*xArr[i];
+    rms = Math.sqrt(rms/N);
+    if(rms < 0.001) return null;
+    return {xArr, yArr};
+  }
+
+  function drawLissajous(ctx, W, H, data, samples, xgain, ygain, phase, alpha, lineW){
+    const cx=W/2, cy=H/2, r=Math.min(W,H)*0.44;
+    ctx.beginPath();
+    let first=true;
+    const len = Math.min(samples, data.xArr.length);
+    for(let i=0;i<len;i++){
+      const xi = i;
+      const yi = (i + phase) % data.xArr.length;
+      const x = cx + data.xArr[xi] * xgain * r;
+      const y = cy - data.yArr[yi] * ygain * r;
+      if(first){ ctx.moveTo(x,y); first=false; } else { ctx.lineTo(x,y); }
+    }
+    ctx.strokeStyle = `rgba(${hexToRgb(C.accent)},${alpha})`;
+    ctx.lineWidth = lineW;
+    ctx.shadowColor = C.accent;
+    ctx.shadowBlur = lineW > 1 ? 8 : 3;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  function drawNoiseBlob(ctx, W, H, t, alpha){
+    // Static noise = filled blob of dots
+    const cx=W/2, cy=H/2, r=Math.min(W,H)*0.3;
+    ctx.beginPath();
+    for(let i=0;i<80;i++){
+      const a=(i/80)*Math.PI*2+t*0.001;
+      const rr=r*(0.2+Math.random()*0.8);
+      const x=cx+Math.cos(a)*rr*(0.5+Math.random()*0.5);
+      const y=cy+Math.sin(a)*rr*(0.5+Math.random()*0.5);
+      ctx.moveTo(x+1,y); ctx.arc(x,y,0.8,0,Math.PI*2);
+    }
+    ctx.fillStyle=`rgba(${hexToRgb(C.accent)},${alpha*0.4})`;
+    ctx.fill();
+  }
+
+  // ── Oscilloscope mini ─────────────────────────────────────────
+  function drawOscMini(t){
+    const W=oscMini.width, H=oscMini.height;
+    if(!W||!H) return;
+
+    // Persistence — fade previous frame
+    if(!oscMiniPersistBuf){
+      oscMiniCtx.clearRect(0,0,W,H);
+    } else {
+      oscMiniCtx.fillStyle=`rgba(3,5,8,${1-oscPersist*0.3})`;
+      oscMiniCtx.fillRect(0,0,W,H);
+    }
+    oscMiniPersistBuf = true;
+
+    // Grid
+    oscMiniCtx.strokeStyle=`rgba(${hexToRgb(C.accent)},0.06)`;
+    oscMiniCtx.lineWidth=1;
+    oscMiniCtx.setLineDash([2,3]);
+    for(let i=1;i<4;i++){
+      oscMiniCtx.beginPath();oscMiniCtx.moveTo(0,H*i/4);oscMiniCtx.lineTo(W,H*i/4);oscMiniCtx.stroke();
+      oscMiniCtx.beginPath();oscMiniCtx.moveTo(W*i/4,0);oscMiniCtx.lineTo(W*i/4,H);oscMiniCtx.stroke();
+    }
+    oscMiniCtx.setLineDash([]);
+    // Crosshair
+    oscMiniCtx.strokeStyle=`rgba(${hexToRgb(C.accent)},0.12)`;
+    oscMiniCtx.beginPath();oscMiniCtx.moveTo(W/2,0);oscMiniCtx.lineTo(W/2,H);oscMiniCtx.stroke();
+    oscMiniCtx.beginPath();oscMiniCtx.moveTo(0,H/2);oscMiniCtx.lineTo(W,H/2);oscMiniCtx.stroke();
+
+    const data = getLissajousData();
+    if(data){
+      drawLissajous(oscMiniCtx, W, H, data, oscTimediv, oscXgain, oscYgain, oscPhase, oscIntensity*0.7, 1);
+    } else {
+      drawNoiseBlob(oscMiniCtx, W, H, t, 0.5);
+    }
+  }
+
+
+  // ── Audio Engine ──────────────────────────────────────────────
+  let audioCtx = null;
+  let staticNode = null;
+  let staticGain = null;
+  let streamSource = null;
+  let streamGain = null;
+  let streamAudio = null;
+  let currentStreamUrl = null;
+  let audioVolume = 0.8;
+  let signalStrength = 0; // 0-1
+  let analyserL = null;
+  let analyserR = null;
+  let splitter = null;
+  let masterGain = null;
+
+  function initAudio(){
+    if(audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Static noise generator
+    const bufferSize = audioCtx.sampleRate * 2;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for(let i=0;i<bufferSize;i++) data[i]=(Math.random()*2-1);
+    staticNode = audioCtx.createBufferSource();
+    staticNode.buffer = buffer;
+    staticNode.loop = true;
+
+    // Filter static to sound like RF noise — bandpass ~1-8kHz
+    const bpf = audioCtx.createBiquadFilter();
+    bpf.type = 'bandpass';
+    bpf.frequency.value = 3000;
+    bpf.Q.value = 0.5;
+
+    staticGain = audioCtx.createGain();
+    staticGain.gain.value = 0;
+
+    staticNode.connect(bpf);
+    bpf.connect(staticGain);
+    staticGain.connect(audioCtx.destination);
+    staticNode.start();
+
+    // Stream gain node — feeds into signal chain
+    streamGain = audioCtx.createGain();
+    streamGain.gain.value = 0;
+
+    // Master output gain — end of chain → destination
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 1;
+    masterGain.connect(audioCtx.destination);
+
+    // Analyser nodes for oscilloscope — tap from masterGain
+    splitter = audioCtx.createChannelSplitter(2);
+    analyserL = audioCtx.createAnalyser();
+    analyserR = audioCtx.createAnalyser();
+    analyserL.fftSize = 2048;
+    analyserR.fftSize = 2048;
+    analyserL.smoothingTimeConstant = 0;
+    analyserR.smoothingTimeConstant = 0;
+    masterGain.connect(splitter);
+    splitter.connect(analyserL, 0);
+    splitter.connect(analyserR, 1);
+
+    // Initial chain: streamGain → masterGain (no effects yet)
+    rebuildAudioChain();
+  }
+
+  function setAudioVolume(v){
+    audioVolume = v;
+    updateAudioMix();
+  }
+
+  function updateAudioMix(){
+    if(!audioCtx) return;
+    const sig = Math.max(0, Math.min(1, signalStrength));
+    // Squelch — below 0.4 signal strength, full static. Above 0.7, no static at all.
+    // Between 0.4 and 0.7, smooth crossfade.
+    const squelchLow  = 0.4;
+    const squelchHigh = 0.7;
+    const cleanSig = Math.max(0, Math.min(1, (sig - squelchLow) / (squelchHigh - squelchLow)));
+    const staticAmt = Math.max(0, 1 - cleanSig);
+    staticGain.gain.setTargetAtTime(staticAmt * audioVolume * 0.3, audioCtx.currentTime, 0.08);
+    streamGain.gain.setTargetAtTime(cleanSig, audioCtx.currentTime, 0.08);
+    if(masterGain) masterGain.gain.setTargetAtTime(audioVolume, audioCtx.currentTime, 0.08);
+  }
+
+  function calcSignalStrength(freq){
+    // Returns 0-1 based on how close tuner is to a station peak
+    const src = stationsLoaded ? stations : SIM_STATIONS;
+    let best = 0;
+    for(const s of src){
+      const d = Math.abs(freq - s.f);
+      if(d < 0.3){
+        // Bell curve — at center freq, strength = s.p normalized to 0-1
+        const match = Math.exp(-(d*d)/(2*0.005));
+        const strength = (s.p / 60) * match;
+        if(strength > best) best = strength;
+      }
+    }
+    return Math.min(1, best);
+  }
+
+  let tuneDebounceTimer = null;
+  let pendingNextAudio = null;   // preloading next stream
+  let pendingNextStation = null; // station being preloaded
+
+  async function tuneAudio(freq){
+    if(!audioCtx) initAudio();
+    if(audioCtx.state === 'suspended') await audioCtx.resume();
+
+    signalStrength = calcSignalStrength(freq);
+    updateAudioLcd(freq);
+    updateAudioMix();
+
+    const snap = getNearestStation(freq);
+    clearTimeout(tuneDebounceTimer);
+
+    if(snap && signalStrength > 0.3 && snap.streamUrl){
+      if(currentStreamUrl !== snap.streamUrl){
+        // Stop current stream — static takes over via updateAudioMix
+        stopStream();
+        preloadStream(snap);
+      }
+    } else {
+      abortPendingStream();
+      stopStream();
+    }
+  }
+
+  function preloadStream(station){
+    // Cancel any in-progress preload for a different station
+    if(pendingNextAudio && pendingNextStation?.streamUrl !== station.streamUrl){
+      pendingNextAudio.src = '';
+      pendingNextAudio = null;
+      pendingNextStation = null;
+    }
+    if(pendingNextStation?.streamUrl === station.streamUrl) return; // already preloading this one
+    currentStreamUrl = null; // ensure reload is never blocked
+
+    const next = new Audio();
+    next.crossOrigin = 'anonymous';
+    next.src = station.streamUrl;
+    next.volume = 1;
+    pendingNextAudio   = next;
+    pendingNextStation = station;
+
+    next.addEventListener('canplay', async ()=>{
+      // Only cut over if this is still the desired station
+      if(pendingNextAudio !== next) return;
+      try{
+        stopStream();
+        currentStreamUrl   = station.streamUrl;
+        pendingNextAudio   = null;
+        pendingNextStation = null;
+        streamAudio  = next;
+        streamSource = audioCtx.createMediaElementSource(streamAudio);
+        streamSource.connect(streamGain);
+        await streamAudio.play();
+        setAudioStatus('▶ ' + (station.name||station.f.toFixed(1)).substring(0,14).toUpperCase(), 'playing');
+      }catch(e){
+        setAudioStatus('STREAM ERROR', 'error');
+        currentStreamUrl = null;
+      }
+    },{once:true});
+
+    next.addEventListener('error', ()=>{
+      if(pendingNextAudio === next){ pendingNextAudio=null; pendingNextStation=null; }
+      setAudioStatus('STREAM UNAVAILABLE', 'error');
+    },{once:true});
+  }
+
+  function abortPendingStream(){
+    if(pendingNextAudio){
+      pendingNextAudio.src = '';
+      pendingNextAudio   = null;
+      pendingNextStation = null;
+    }
+  }
+
+  function loadStream(station){ preloadStream(station); }
+
+  function stopStream(){
+    if(streamAudio){
+      streamAudio.pause();
+      streamAudio.src = '';
+      streamAudio = null;
+    }
+    if(streamSource){
+      try{ streamSource.disconnect(); }catch(e){}
+      streamSource = null;
+    }
+    currentStreamUrl = null;
+    // Re-open static — let updateAudioMix handle levels based on signalStrength
+    updateAudioMix();
+  }
+
+  function updateAudioLcd(freq){
+    const snap = getNearestStation(freq);
+    const card = document.getElementById('audioCard');
+    const pct = Math.round(signalStrength * 100);
+    document.getElementById('sMeterFill').style.width = pct + '%';
+
+    if(!snap || signalStrength <= 0.15){
+      document.getElementById('audioName').textContent = 'NO SIGNAL';
+      document.getElementById('audioFreq').textContent = freq.toFixed(3) + ' MHz';
+      // Remove dynamic rows
+      card.querySelectorAll('.audio-meta-row,.audio-tags').forEach(el=>el.remove());
+      return;
+    }
+
+    document.getElementById('audioName').textContent =
+      (snap.name||snap.f.toFixed(1)).substring(0,18).toUpperCase();
+    document.getElementById('audioFreq').textContent = snap.f.toFixed(1) + ' MHz';
+
+    // Remove old dynamic rows
+    card.querySelectorAll('.audio-meta-row,.audio-tags').forEach(el=>el.remove());
+
+    // Meta pills row 1 — dist, country, bitrate/codec
+    const pills = [];
+    if(snap.dist) pills.push({label: snap.dist+'km', hi: false});
+    if(snap.country) pills.push({label: snap.country, hi: false});
+    if(snap.state) pills.push({label: snap.state.substring(0,12), hi: false});
+    if(snap.bitrate) pills.push({label: snap.bitrate+'kbps', hi: true});
+    if(snap.codec) pills.push({label: snap.codec, hi: true});
+    if(snap.hls) pills.push({label: 'HLS', hi: true});
+
+    if(pills.length){
+      const row = document.createElement('div');
+      row.className = 'audio-meta-row';
+      pills.forEach(p=>{
+        const el = document.createElement('span');
+        el.className = 'audio-meta-pill' + (p.hi ? ' hi' : '');
+        el.textContent = p.label;
+        row.appendChild(el);
+      });
+      card.appendChild(row);
+    }
+
+    // Tags row
+    if(snap.tags && snap.tags.length){
+      const row = document.createElement('div');
+      row.className = 'audio-tags';
+      snap.tags.forEach(t=>{
+        const el = document.createElement('span');
+        el.className = 'audio-tag';
+        el.textContent = t;
+        row.appendChild(el);
+      });
+      card.appendChild(row);
+    }
+  }
+
+  function setAudioStatus(msg, cls){
+    // Status reflected via audioName color class instead of separate element
+    const name = document.getElementById('audioName');
+    if(name){
+      name.className = 'audio-station-name audio-status-' + (cls||'static');
+    }
+  }
+
+  // S-meter animation loop
+  function updateSMeter(){
+    if(!tunerFreq) return;
+    // Add slight flicker to signal strength
+    const base = calcSignalStrength(tunerFreq);
+    const flicker = base > 0.1 ? base + (Math.random()-0.5)*0.04 : 0;
+    const pct = Math.round(Math.max(0,Math.min(1,flicker))*100);
+    document.getElementById('sMeterFill').style.width = pct + '%';
+  }
+
+  // Volume control
+  document.getElementById('audioVol').addEventListener('input', e=>{
+    setAudioVolume(parseFloat(e.target.value));
+  });
+
+  // ── Loop ─────────────────────────────────────────────────────
+  let frameCount=0;
+  function loop(t){
+    requestAnimationFrame(loop);
+    frameCount++; noiseTime=t;
+    const fd=drawSpectrum(t);
+    if(frameCount%2===0) drawWaterfall(fd);
+    drawTuner();
+    drawOscMini(t);
+    if(frameCount%4===0) updateSMeter();
+  }
+
+  // ── Tuner interaction ─────────────────────────────────────────
+  function freqFromX(x){ return viewMin+(x/specCanvas.width)*(viewMax-viewMin); }
+  function clampFreq(f){ return Math.max(viewMin,Math.min(viewMax,f)); }
+
+  function doAutoFit(){
+    if(tunerFreq===null) return;
+    const b=BANDS[currentBand];
+    const bSpan=b.max-b.min;
+    const fitSpan=Math.max(0.5,bSpan*0.2);
+    viewMin=tunerFreq-fitSpan/2; viewMax=tunerFreq+fitSpan/2;
+    if(viewMin<b.min){viewMin=b.min;viewMax=b.min+fitSpan;}
+    if(viewMax>b.max){viewMax=b.max;viewMin=b.max-fitSpan;}
+    if(drawSpectrum._p){
+      const W=specCanvas.width;
+      let peakDb=C.spectrum.dbMin;
+      const cx=Math.round(((tunerFreq-viewMin)/(viewMax-viewMin))*W);
+      const rad=Math.round(W*0.1);
+      for(let i=Math.max(0,cx-rad);i<Math.min(W,cx+rad);i++){
+        if(drawSpectrum._p[i]>peakDb) peakDb=drawSpectrum._p[i];
+      }
+      const targetDb=C.spectrum.dbMax-0.75*(C.spectrum.dbMax-C.spectrum.dbMin);
+      dbOffset=Math.max(-60,Math.min(60,targetDb-peakDb));
+      document.getElementById('refDragLabel').textContent=`REF ${dbOffset>=0?'+':''}${dbOffset.toFixed(0)} dB`;
+    }
+    noiseData=null; wfImageData=null;
+    drawGrid(); updateBand(); drawStationLabels();
+  }
+
+  function setTuner(freq){
+    tunerFreq=clampFreq(freq);
+    document.getElementById('tunerReadout').textContent=tunerFreq.toFixed(3);
+    if(autoFit) doAutoFit();
+    tuneAudio(tunerFreq);
+    // Debounced save so rapid dragging doesn't hammer localStorage
+    clearTimeout(setTuner._saveTimer);
+    setTuner._saveTimer = setTimeout(saveState, 800);
+  }
+
+  // ── Ref sidebar ───────────────────────────────────────────────
+  const refSidebar  = document.getElementById('refSidebar');
+  const refThumb    = document.getElementById('refThumb');
+  const refDragLabel = document.getElementById('refDragLabel');
+
+  function updateRefThumb(){
+    const trackH = refSidebar.offsetHeight - 16;
+    const thumbH = Math.max(20, trackH * 0.15);
+    const norm   = (dbOffset + 60) / 120;
+    const thumbY = 8 + (1 - norm) * (trackH - thumbH);
+    refThumb.style.height = thumbH + 'px';
+    refThumb.style.top    = thumbY + 'px';
+  }
+
+  refSidebar.addEventListener('mouseenter', ()=>{ refDragLabel.style.display='block'; });
+  refSidebar.addEventListener('mouseleave', ()=>{ if(!refDragging) refDragLabel.style.display='none'; });
+
+  refThumb.addEventListener('mousedown', e=>{
+    refDragging=true; refDragStartY=e.clientY; refDragStartOffset=dbOffset;
+    refThumb.style.background='var(--rf-acc)';
+    e.preventDefault(); e.stopPropagation();
+  });
+
+  window.addEventListener('mousemove', e=>{
+    if(!refDragging) return;
+    disableAutoFit();
+    const trackH = refSidebar.offsetHeight - 16;
+    const dbPerPx = 120 / trackH;
+    dbOffset = Math.max(-60, Math.min(60, refDragStartOffset + (refDragStartY - e.clientY) * dbPerPx));
+    refDragLabel.textContent = `REF ${dbOffset>=0?'+':''}${dbOffset.toFixed(0)} dB`;
+    document.getElementById('floorVal').textContent = `${(C.noiseFloor.base+dbOffset).toFixed(0)} dBm`;
+    updateRefThumb();
+    drawGrid(); peakArr=null; drawSpectrum._p=null;
+  });
+
+  window.addEventListener('mouseup', ()=>{
+    if(refDragging){
+      refDragging=false;
+      refThumb.style.background='var(--b2)';
+      refDragLabel.style.display='none';
+    }
+  });
+
+  // Click track to jump
+  refSidebar.addEventListener('click', e=>{
+    if(e.target===refThumb) return;
+    const rect = refSidebar.getBoundingClientRect();
+    const trackH = refSidebar.offsetHeight - 16;
+    const y = e.clientY - rect.top - 8;
+    const norm = 1 - (y / trackH);
+    dbOffset = Math.max(-60, Math.min(60, norm * 120 - 60));
+    refDragLabel.textContent = `REF ${dbOffset>=0?'+':''}${dbOffset.toFixed(0)} dB`;
+    document.getElementById('floorVal').textContent = `${(C.noiseFloor.base+dbOffset).toFixed(0)} dBm`;
+    updateRefThumb();
+    disableAutoFit();
+    drawGrid(); peakArr=null; drawSpectrum._p=null;
+  });
+
+  updateRefThumb();
+
+  // ── Spectrum mouse ────────────────────────────────────────────
+  document.getElementById('antennaSelect').addEventListener('change',()=>{
+    if(stationsLoaded && stations.length){
+      stations.forEach(s=>{ s.p = calcSignalPower(s.dist, s.f); });
+    }
+    noiseData=null; wfImageData=null; peakArr=null; drawSpectrum._p=null;
+    drawStationLabels();
+    loadStations();
+  });
+
+  // ── Spectrum mouse ────────────────────────────────────────────
+  const specWrap=document.getElementById('specWrap');
+  specWrap.addEventListener('mousedown',e=>{tunerDragging=true;setTuner(freqFromX(e.offsetX));});
+  specWrap.addEventListener('mousemove',e=>{if(tunerDragging)setTuner(freqFromX(e.offsetX));});
+  window.addEventListener('mouseup',()=>{tunerDragging=false;});
+  specWrap.addEventListener('click',e=>{setTuner(freqFromX(e.offsetX));});
+
+  // ── Scroll zoom ───────────────────────────────────────────────
+  specWrap.addEventListener('wheel',e=>{
+    e.preventDefault();
+    disableAutoFit();
+    const span=viewMax-viewMin;
+    const zoomFactor=e.deltaY>0?1.04:0.96;
+    const newSpan=Math.max(0.01,Math.min(BANDS[currentBand].max-BANDS[currentBand].min,span*zoomFactor));
+    const mouseFreq=freqFromX(e.offsetX);
+    const ratio=(mouseFreq-viewMin)/span;
+    viewMin=mouseFreq-ratio*newSpan; viewMax=viewMin+newSpan;
+    const bMin=BANDS[currentBand].min, bMax=BANDS[currentBand].max;
+    if(viewMin<bMin){viewMin=bMin;viewMax=bMin+newSpan;}
+    if(viewMax>bMax){viewMax=bMax;viewMin=bMax-newSpan;}
+    noiseData=null; wfImageData=null;
+    drawGrid(); updateBand(); drawStationLabels();
+  },{passive:false});
+
+
+  // ── Pan scrollbar interaction ─────────────────────────────────
+  const panBar   = document.getElementById('panBar');
+  const panThumb = document.getElementById('panThumb');
+
+  panThumb.addEventListener('mousedown',e=>{
+    panDragging=true;
+    panDragStartX=e.clientX;
+    panDragStartMin=viewMin;
+    panThumb.classList.add('dragging');
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove',e=>{
+    if(!panDragging) return;
+    const b=BANDS[currentBand];
+    const bSpan=b.max-b.min;
+    const vSpan=viewMax-viewMin;
+    const trackW=panBar.offsetWidth-16;
+    const freqPerPx=bSpan/trackW;
+    const delta=(e.clientX-panDragStartX)*freqPerPx;
+    viewMin=Math.max(b.min,Math.min(b.max-vSpan,panDragStartMin+delta));
+    viewMax=viewMin+vSpan;
+    noiseData=null; wfImageData=null; peakArr=null; drawSpectrum._p=null;
+    drawGrid(); updateBand(); drawStationLabels();
+  });
+
+  window.addEventListener('mouseup',()=>{
+    if(panDragging){ panDragging=false; panThumb.classList.remove('dragging'); }
+  });
+
+  panBar.addEventListener('click',e=>{
+    if(e.target===panThumb) return;
+    const b=BANDS[currentBand];
+    const bSpan=b.max-b.min;
+    const vSpan=viewMax-viewMin;
+    const rect=panBar.getBoundingClientRect();
+    const x=e.clientX-rect.left-8;
+    const trackW=panBar.offsetWidth-16;
+    const clickFreq=b.min+(x/trackW)*bSpan;
+    viewMin=Math.max(b.min,Math.min(b.max-vSpan,clickFreq-vSpan/2));
+    viewMax=viewMin+vSpan;
+    noiseData=null; wfImageData=null; peakArr=null; drawSpectrum._p=null;
+    drawGrid(); updateBand(); drawStationLabels();
+  });
+
+  // ── Toggles ───────────────────────────────────────────────────
+  document.getElementById('peakHoldBtn').addEventListener('click',()=>{
+    peakHold=!peakHold;
+    document.getElementById('peakHoldBtn').classList.toggle('on',peakHold);
+    document.getElementById('peakHoldBar').setAttribute('opacity',peakHold?'1':'0');
+    if(!peakHold) peakArr=null;
+  });
+  document.getElementById('autoFitBtn').addEventListener('click',()=>{
+    autoFit=!autoFit;
+    document.getElementById('autoFitBtn').classList.toggle('on',autoFit);
+    document.getElementById('autoFitBar').setAttribute('opacity',autoFit?'1':'0');
+    if(autoFit&&tunerFreq!==null) doAutoFit();
+  });
+
+  // ── Resize ───────────────────────────────────────────────────
+  window.addEventListener('resize',resizeCanvases);
+  const ro=new ResizeObserver(entries=>{
+    for(const e of entries){
+      if(e.contentRect.width>0&&e.contentRect.height>0){
+        ro.disconnect();
+        resizeCanvases();
+        requestAnimationFrame(loop);
+        break;
+      }
+    }
+  });
+  ro.observe(specCanvas.parentElement);
+
+
+  // ── Oscilloscope big canvas ───────────────────────────────────
+  const oscBig    = document.getElementById('oscBigCanvas');
+  const oscBigCtx = oscBig.getContext('2d');
+  let oscBigPersistBuf = null;
+  let oscBigAnimId = null;
+
+  function resizeOscBig(){
+    const wrap = oscBig.parentElement;
+    const sz = Math.min(wrap.offsetWidth - 32, wrap.offsetHeight - 32);
+    oscBig.width  = sz;
+    oscBig.height = sz;
+    oscBigPersistBuf = null;
+  }
+
+  function drawOscBig(t){
+    const W=oscBig.width, H=oscBig.height;
+    if(!W||!H) return;
+
+    // Persistence fade
+    if(!oscBigPersistBuf){
+      oscBigCtx.clearRect(0,0,W,H);
+    } else {
+      oscBigCtx.fillStyle=`rgba(3,5,8,${1-oscPersist*0.25})`;
+      oscBigCtx.fillRect(0,0,W,H);
+    }
+    oscBigPersistBuf = true;
+
+    // Grid
+    oscBigCtx.strokeStyle=`rgba(${hexToRgb(C.accent)},0.07)`;
+    oscBigCtx.lineWidth=1;
+    oscBigCtx.setLineDash([2,4]);
+    for(let i=1;i<8;i++){
+      oscBigCtx.beginPath();oscBigCtx.moveTo(0,H*i/8);oscBigCtx.lineTo(W,H*i/8);oscBigCtx.stroke();
+      oscBigCtx.beginPath();oscBigCtx.moveTo(W*i/8,0);oscBigCtx.lineTo(W*i/8,H);oscBigCtx.stroke();
+    }
+    oscBigCtx.setLineDash([]);
+    // Axes
+    oscBigCtx.strokeStyle=`rgba(${hexToRgb(C.accent)},0.2)`;
+    oscBigCtx.lineWidth=1;
+    oscBigCtx.beginPath();oscBigCtx.moveTo(W/2,0);oscBigCtx.lineTo(W/2,H);oscBigCtx.stroke();
+    oscBigCtx.beginPath();oscBigCtx.moveTo(0,H/2);oscBigCtx.lineTo(W,H/2);oscBigCtx.stroke();
+
+    const data = getLissajousData();
+    if(data){
+      drawLissajous(oscBigCtx, W, H, data, oscTimediv, oscXgain, oscYgain, oscPhase, oscIntensity, 1.5);
+    } else {
+      drawNoiseBlob(oscBigCtx, W, H, t, 0.8);
+    }
+
+    oscBigAnimId = requestAnimationFrame(drawOscBig);
+  }
+
+  // ── Knob system ───────────────────────────────────────────────
+  const KNOB_DEFS = {
+    timediv:  { min:64,   max:2048, step:1,    def:512,  log:true,  fmt:v=>`${Math.round(v)}` },
+    persist:  { min:0,    max:0.99, step:0.01, def:0.85, log:false, fmt:v=>v.toFixed(2) },
+    intensity:{ min:0.1,  max:1.0,  step:0.01, def:0.8,  log:false, fmt:v=>v.toFixed(2) },
+    xgain:    { min:0.1,  max:4.0,  step:0.01, def:1.0,  log:false, fmt:v=>v.toFixed(1)+'×' },
+    ygain:    { min:0.1,  max:4.0,  step:0.01, def:1.0,  log:false, fmt:v=>v.toFixed(1)+'×' },
+    phase:    { min:0,    max:256,  step:1,    def:0,    log:false, fmt:v=>`${Math.round(v)}` },
+  };
+  const knobVals = {
+    timediv: 512, persist: 0.85, intensity: 0.8,
+    xgain: 1.0, ygain: 1.0, phase: 0
+  };
+
+  function knobAngle(name){
+    const d = KNOB_DEFS[name];
+    const v = knobVals[name];
+    let norm;
+    if(d.log){
+      norm = (Math.log(v) - Math.log(d.min)) / (Math.log(d.max) - Math.log(d.min));
+    } else {
+      norm = (v - d.min) / (d.max - d.min);
+    }
+    // -135deg to +135deg
+    return -135 + norm * 270;
+  }
+
+  function renderKnob(name){
+    const el = document.getElementById('knob'+name.charAt(0).toUpperCase()+name.slice(1));
+    if(!el) return;
+    const ang = knobAngle(name);
+    const d = KNOB_DEFS[name];
+    const acc = hexToRgb(C.accent);
+    el.innerHTML = `<svg width="54" height="54" viewBox="0 0 54 54">
+      <!-- Track arc -->
+      <circle cx="27" cy="27" r="20" fill="none" stroke="rgba(${hexToRgb('#28282f')},1)" stroke-width="4"/>
+      <!-- Active arc — drawn as rotated line sweep -->
+      <path d="M27,27" fill="none"/>
+      <circle cx="27" cy="27" r="20" fill="none"
+        stroke="rgba(${acc},0.25)" stroke-width="4"
+        stroke-dasharray="${(ang+135)/270 * 125.66} 125.66"
+        transform="rotate(-225 27 27)"
+        stroke-linecap="round"/>
+      <!-- Body -->
+      <circle cx="27" cy="27" r="16" fill="#0d0d12" stroke="rgba(${acc},0.3)" stroke-width="1"/>
+      <!-- Tick marks -->
+      ${Array.from({length:11},(_,i)=>{
+        const a=(-135+i*27)*Math.PI/180;
+        const x1=27+18*Math.cos(a), y1=27+18*Math.sin(a);
+        const x2=27+21*Math.cos(a), y2=27+21*Math.sin(a);
+        return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="rgba(${acc},0.2)" stroke-width="1"/>`;
+      }).join('')}
+      <!-- Pointer -->
+      <line
+        x1="27" y1="27"
+        x2="${(27+13*Math.cos((ang-90)*Math.PI/180)).toFixed(1)}"
+        y2="${(27+13*Math.sin((ang-90)*Math.PI/180)).toFixed(1)}"
+        stroke="rgba(${acc},1)" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="27" cy="27" r="3" fill="rgba(${acc},0.8)"/>
+    </svg>`;
+
+    // Update val display
+    const valId = 'val'+name.charAt(0).toUpperCase()+name.slice(1);
+    const valEl = document.getElementById(valId);
+    if(valEl) valEl.textContent = d.fmt(knobVals[name]);
+  }
+
+  function applyKnobVal(name){
+    oscTimediv   = knobVals.timediv;
+    oscPersist   = knobVals.persist;
+    oscIntensity = knobVals.intensity;
+    oscXgain     = knobVals.xgain;
+    oscYgain     = knobVals.ygain;
+    oscPhase     = Math.round(knobVals.phase);
+    oscBigPersistBuf = null; // reset persistence buffer on change
+  }
+
+  function initKnobs(){
+    Object.keys(KNOB_DEFS).forEach(name=>{
+      renderKnob(name);
+      const el = document.getElementById('knob'+name.charAt(0).toUpperCase()+name.slice(1));
+      if(!el) return;
+      let dragStartY=0, dragStartVal=0;
+      el.addEventListener('mousedown', e=>{
+        dragStartY = e.clientY;
+        dragStartVal = knobVals[name];
+        e.preventDefault();
+        const d = KNOB_DEFS[name];
+        function onMove(ev){
+          const dy = dragStartY - ev.clientY; // up = increase
+          const range = d.max - d.min;
+          let delta;
+          if(d.log){
+            const logRange = Math.log(d.max) - Math.log(d.min);
+            const logStart = Math.log(dragStartVal);
+            const newLog = logStart + (dy/150)*logRange;
+            delta = Math.exp(Math.max(Math.log(d.min), Math.min(Math.log(d.max), newLog))) - dragStartVal;
+          } else {
+            delta = (dy/150)*range;
+          }
+          knobVals[name] = Math.max(d.min, Math.min(d.max, dragStartVal + delta));
+          renderKnob(name);
+          applyKnobVal(name);
+        }
+        function onUp(){ window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp); }
+        window.addEventListener('mousemove',onMove);
+        window.addEventListener('mouseup',onUp);
+      });
+
+      // Double-click to reset
+      el.addEventListener('dblclick', ()=>{
+        knobVals[name] = KNOB_DEFS[name].def;
+        renderKnob(name);
+        applyKnobVal(name);
+      });
+    });
+  }
+
+  // ── Oscilloscope overlay open/close ───────────────────────────
+  const oscOverlay = document.getElementById('oscOverlay');
+  document.getElementById('oscClose').addEventListener('click',()=>{
+    oscOverlay.classList.remove('on');
+    if(oscBigAnimId){ cancelAnimationFrame(oscBigAnimId); oscBigAnimId=null; }
+  });
+  oscOverlay.addEventListener('click',e=>{
+    if(e.target===oscOverlay){
+      oscOverlay.classList.remove('on');
+      if(oscBigAnimId){ cancelAnimationFrame(oscBigAnimId); oscBigAnimId=null; }
+    }
+  });
+
+  function openOscOverlay(){
+    oscOverlay.classList.add('on');
+    setTimeout(()=>{
+      resizeOscBig();
+      initKnobs();
+      oscBigPersistBuf = null;
+      if(oscBigAnimId) cancelAnimationFrame(oscBigAnimId);
+      oscBigAnimId = requestAnimationFrame(drawOscBig);
+    }, 50);
+  }
+
+  window.addEventListener('resize',()=>{ if(oscOverlay.classList.contains('on')) resizeOscBig(); });
+
+
+  // ── Signal Chain — Node Graph ────────────────────────────────
+
+  const MODULE_DEFS = {
+    // ── Utility ──
+    gain:        { label:'GAIN',    color:'#42d4f5', cat:'UTILITY', knobs:[
+      { id:'gain', label:'GAIN', min:0, max:4, def:1, log:false, fmt:v=>v.toFixed(2)+'×' },
+    ]},
+    clone:       { label:'CLONE',   color:'#f5f542', cat:'UTILITY', ports:{out:['OUT A','OUT B']}, knobs:[
+      { id:'gainA', label:'A VOL', min:0, max:2, def:1, log:false, fmt:v=>v.toFixed(2)+'×' },
+      { id:'gainB', label:'B VOL', min:0, max:2, def:1, log:false, fmt:v=>v.toFixed(2)+'×' },
+    ]},
+    panner:      { label:'PANNER',  color:'#42d4f5', cat:'UTILITY', knobs:[
+      { id:'pan', label:'PAN', min:-1, max:1, def:0, log:false, fmt:v=>v===0?'C':v>0?'R'+Math.round(v*100):'L'+Math.round(-v*100) },
+    ]},
+    // ── Dynamics ──
+    compressor:  { label:'COMP',    color:'#42f5a1', cat:'DYNAMICS', knobs:[
+      { id:'threshold', label:'THR',   min:-60, max:0,    def:-24, log:false, fmt:v=>v.toFixed(0)+'dB' },
+      { id:'ratio',     label:'RATIO', min:1,   max:20,   def:4,   log:true,  fmt:v=>v.toFixed(1)+':1' },
+      { id:'attack',    label:'ATK',   min:0.001,max:1,   def:0.01,log:true,  fmt:v=>Math.round(v*1000)+'ms' },
+      { id:'release',   label:'REL',   min:0.01, max:2,   def:0.25,log:true,  fmt:v=>Math.round(v*1000)+'ms' },
+    ]},
+    limiter:     { label:'LIMIT',   color:'#42f5a1', cat:'DYNAMICS', knobs:[
+      { id:'threshold', label:'CEIL', min:-30, max:0,  def:-1,  log:false, fmt:v=>v.toFixed(1)+'dB' },
+      { id:'release',   label:'REL',  min:0.01,max:1,  def:0.1, log:true,  fmt:v=>Math.round(v*1000)+'ms' },
+    ]},
+    gate:        { label:'GATE',    color:'#42f5a1', cat:'DYNAMICS', knobs:[
+      { id:'threshold', label:'THR', min:-80, max:0,   def:-40, log:false, fmt:v=>v.toFixed(0)+'dB' },
+      { id:'attack',    label:'ATK', min:0.001,max:0.5,def:0.01,log:true,  fmt:v=>Math.round(v*1000)+'ms' },
+      { id:'release',   label:'REL', min:0.01, max:2,  def:0.2, log:true,  fmt:v=>Math.round(v*1000)+'ms' },
+    ]},
+    // ── Filtering ──
+    filter:      { label:'FILTER',  color:'#f542a8', cat:'FILTER', knobs:[
+      { id:'freq', label:'CUTOFF', min:20, max:20000, def:2000, log:true, fmt:v=>v>=1000?(v/1000).toFixed(1)+'k':Math.round(v)+'Hz' },
+      { id:'q',    label:'RES',    min:0.1, max:20,   def:1,    log:true, fmt:v=>v.toFixed(1) },
+    ], select:{id:'type',options:['lowpass','highpass','bandpass','notch','allpass'],def:'lowpass',fmt:v=>({lowpass:'LP',highpass:'HP',bandpass:'BP',notch:'NOTCH',allpass:'AP'})[v]||v}},
+    eq:          { label:'EQ',      color:'#c8f542', cat:'FILTER', knobs:[
+      { id:'low',  label:'LOW',  min:-18, max:18, def:0, log:false, fmt:v=>(v>=0?'+':'')+v.toFixed(0)+'dB' },
+      { id:'mid',  label:'MID',  min:-18, max:18, def:0, log:false, fmt:v=>(v>=0?'+':'')+v.toFixed(0)+'dB' },
+      { id:'high', label:'HIGH', min:-18, max:18, def:0, log:false, fmt:v=>(v>=0?'+':'')+v.toFixed(0)+'dB' },
+    ]},
+    wah:         { label:'WAH',     color:'#f542a8', cat:'FILTER', knobs:[
+      { id:'freq', label:'FREQ', min:200,  max:4000, def:800,  log:true,  fmt:v=>v>=1000?(v/1000).toFixed(1)+'k':Math.round(v)+'Hz' },
+      { id:'q',    label:'Q',    min:1,    max:20,   def:8,    log:true,  fmt:v=>v.toFixed(1) },
+      { id:'wet',  label:'WET',  min:0,    max:1,    def:0.8,  log:false, fmt:v=>Math.round(v*100)+'%' },
+    ]},
+    combfilter:  { label:'COMB',    color:'#f542a8', cat:'FILTER', knobs:[
+      { id:'freq', label:'FREQ', min:50,  max:2000, def:200,  log:true,  fmt:v=>Math.round(v)+'Hz' },
+      { id:'fb',   label:'FDBK', min:0,  max:0.98, def:0.5,  log:false, fmt:v=>Math.round(v*100)+'%' },
+      { id:'wet',  label:'WET',  min:0,  max:1,    def:0.5,  log:false, fmt:v=>Math.round(v*100)+'%' },
+    ]},
+    // ── Distortion/Drive ──
+    distortion:  { label:'DIST',    color:'#f54242', cat:'DRIVE', knobs:[
+      { id:'drive', label:'DRIVE', min:0, max:1,    def:0.3,  log:false, fmt:v=>Math.round(v*100)+'%' },
+      { id:'tone',  label:'TONE',  min:200,max:8000,def:2000, log:true,  fmt:v=>v>=1000?(v/1000).toFixed(1)+'k':Math.round(v)+'Hz' },
+    ]},
+    overdrive:   { label:'OD',      color:'#f54242', cat:'DRIVE', knobs:[
+      { id:'drive', label:'DRIVE', min:0, max:1, def:0.3, log:false, fmt:v=>Math.round(v*100)+'%' },
+      { id:'tone',  label:'TONE',  min:0, max:1, def:0.5, log:false, fmt:v=>Math.round(v*100)+'%' },
+      { id:'level', label:'LEVEL', min:0, max:2, def:1,   log:false, fmt:v=>v.toFixed(2)+'×' },
+    ]},
+    fuzz:        { label:'FUZZ',    color:'#f54242', cat:'DRIVE', knobs:[
+      { id:'fuzz',  label:'FUZZ',  min:0, max:1, def:0.7, log:false, fmt:v=>Math.round(v*100)+'%' },
+      { id:'level', label:'LEVEL', min:0, max:2, def:1,   log:false, fmt:v=>v.toFixed(2)+'×' },
+    ]},
+    bitcrusher:  { label:'CRUSH',   color:'#f54242', cat:'DRIVE', knobs:[
+      { id:'bits',  label:'BITS',  min:1, max:16, def:8,   log:false, fmt:v=>Math.round(v)+'bit' },
+      { id:'rate',  label:'RATE',  min:0.01,max:1,def:1,   log:true,  fmt:v=>Math.round(v*100)+'%' },
+    ]},
+    // ── Modulation ──
+    chorus:      { label:'CHORUS',  color:'#42b4f5', cat:'MODULATION', knobs:[
+      { id:'rate',  label:'RATE',  min:0.1, max:10,  def:1.5, log:true,  fmt:v=>v.toFixed(1)+'Hz' },
+      { id:'depth', label:'DEPTH', min:0,   max:0.02,def:0.005,log:false,fmt:v=>Math.round(v*1000)+'ms' },
+      { id:'wet',   label:'WET',   min:0,   max:1,   def:0.5, log:false, fmt:v=>Math.round(v*100)+'%' },
+    ]},
+    flanger:     { label:'FLANGE',  color:'#42b4f5', cat:'MODULATION', knobs:[
+      { id:'rate',  label:'RATE',  min:0.05,max:5,   def:0.3, log:true,  fmt:v=>v.toFixed(2)+'Hz' },
+      { id:'depth', label:'DEPTH', min:0,   max:0.01,def:0.003,log:false,fmt:v=>Math.round(v*1000)+'ms' },
+      { id:'fb',    label:'FDBK',  min:-0.9,max:0.9, def:0.5, log:false, fmt:v=>(v>=0?'+':'')+Math.round(v*100)+'%' },
+      { id:'wet',   label:'WET',   min:0,   max:1,   def:0.5, log:false, fmt:v=>Math.round(v*100)+'%' },
+    ]},
+    phaser:      { label:'PHASER',  color:'#42b4f5', cat:'MODULATION', knobs:[
+      { id:'rate',  label:'RATE',  min:0.1, max:8,   def:1,   log:true,  fmt:v=>v.toFixed(1)+'Hz' },
+      { id:'depth', label:'DEPTH', min:0,   max:1,   def:0.8, log:false, fmt:v=>Math.round(v*100)+'%' },
+      { id:'wet',   label:'WET',   min:0,   max:1,   def:0.5, log:false, fmt:v=>Math.round(v*100)+'%' },
+    ]},
+    tremolo:     { label:'TREM',    color:'#42b4f5', cat:'MODULATION', knobs:[
+      { id:'rate',  label:'RATE',  min:0.5, max:20,  def:4,   log:true,  fmt:v=>v.toFixed(1)+'Hz' },
+      { id:'depth', label:'DEPTH', min:0,   max:1,   def:0.7, log:false, fmt:v=>Math.round(v*100)+'%' },
+    ]},
+    vibrato:     { label:'VIB',     color:'#42b4f5', cat:'MODULATION', knobs:[
+      { id:'rate',  label:'RATE',  min:0.5, max:10,  def:5,   log:true,  fmt:v=>v.toFixed(1)+'Hz' },
+      { id:'depth', label:'DEPTH', min:0,   max:0.02,def:0.005,log:false,fmt:v=>Math.round(v*1000)+'ms' },
+    ]},
+    ringmod:     { label:'RING',    color:'#42b4f5', cat:'MODULATION', knobs:[
+      { id:'freq',  label:'FREQ',  min:10,  max:2000,def:100, log:true,  fmt:v=>Math.round(v)+'Hz' },
+      { id:'wet',   label:'WET',   min:0,   max:1,   def:0.5, log:false, fmt:v=>Math.round(v*100)+'%' },
+    ]},
+    autopan:     { label:'AUTOPAN', color:'#42b4f5', cat:'MODULATION', knobs:[
+      { id:'rate',  label:'RATE',  min:0.1, max:10,  def:1,   log:true,  fmt:v=>v.toFixed(1)+'Hz' },
+      { id:'depth', label:'WIDTH', min:0,   max:1,   def:0.8, log:false, fmt:v=>Math.round(v*100)+'%' },
+    ]},
+    // ── Time-based ──
+    reverb:      { label:'REVERB',  color:'#a142f5', cat:'TIME', knobs:[
+      { id:'wet',   label:'WET',   min:0,   max:1,   def:0.3, log:false, fmt:v=>Math.round(v*100)+'%' },
+      { id:'decay', label:'DECAY', min:0.1, max:8,   def:2,   log:true,  fmt:v=>v.toFixed(1)+'s' },
+    ]},
+    delay:       { label:'DELAY',   color:'#f5a542', cat:'TIME', knobs:[
+      { id:'time',     label:'TIME', min:0.01,max:1,  def:0.25,log:true,  fmt:v=>Math.round(v*1000)+'ms' },
+      { id:'feedback', label:'FDBK', min:0,   max:0.95,def:0.3,log:false, fmt:v=>Math.round(v*100)+'%' },
+      { id:'wet',      label:'WET',  min:0,   max:1,  def:0.3, log:false, fmt:v=>Math.round(v*100)+'%' },
+    ]},
+    pingpong:    { label:'PING',    color:'#f5a542', cat:'TIME', knobs:[
+      { id:'time',     label:'TIME', min:0.01,max:1,  def:0.25,log:true,  fmt:v=>Math.round(v*1000)+'ms' },
+      { id:'feedback', label:'FDBK', min:0,   max:0.95,def:0.4,log:false, fmt:v=>Math.round(v*100)+'%' },
+      { id:'wet',      label:'WET',  min:0,   max:1,  def:0.4, log:false, fmt:v=>Math.round(v*100)+'%' },
+    ]},
+    // ── Spatial ──
+    widener:     { label:'WIDE',    color:'#5542f5', cat:'SPATIAL', knobs:[
+      { id:'width', label:'WIDTH', min:0, max:2, def:1, log:false, fmt:v=>Math.round(v*100)+'%' },
+    ]},
+    // ── Synthesis ──
+    oscillator:  { label:'OSC',     color:'#f542d4', cat:'SYNTH', knobs:[
+      { id:'freq',  label:'FREQ',  min:20,  max:2000,def:440, log:true,  fmt:v=>Math.round(v)+'Hz' },
+      { id:'level', label:'LEVEL', min:0,   max:1,   def:0.3, log:false, fmt:v=>Math.round(v*100)+'%' },
+    ], select:{id:'type',options:['sine','square','sawtooth','triangle'],def:'sine',fmt:v=>v.toUpperCase().slice(0,3)}},
+    noisegen:    { label:'NOISE',   color:'#f542d4', cat:'SYNTH', knobs:[
+      { id:'level', label:'LEVEL', min:0, max:1, def:0.3, log:false, fmt:v=>Math.round(v*100)+'%' },
+      { id:'freq',  label:'FILTER',min:200,max:10000,def:3000,log:true,fmt:v=>v>=1000?(v/1000).toFixed(1)+'k':Math.round(v)+'Hz' },
+    ]},
+    pitchshift:  { label:'PITCH',   color:'#f542d4', cat:'SYNTH', knobs:[
+      { id:'semitones', label:'SEMI', min:-12, max:12, def:0,   log:false, fmt:v=>(v>=0?'+':'')+Math.round(v) },
+      { id:'wet',       label:'WET',  min:0,   max:1,  def:0.5, log:false, fmt:v=>Math.round(v*100)+'%' },
+    ]},
+  };
+
+  // Graph state
+  let scNodes  = [];  // [{id, type, x, y, enabled, params, selectVal, audioNode}]
+  let scEdges  = [];  // [{fromId, fromPort, toId, toPort}]
+  let scBypassAllState = false;
+  let pendingPort = null; // {nodeId, port, isOut, el, x, y}
+
+  // Fixed node IDs
+  const SC_SOURCE_ID = '__source__';
+  const SC_OUTPUT_ID = '__output__';
+
+  function hexToRgbSc(hex){
+    return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
+  }
+
+  // ── Web Audio node factories ──────────────────────────────────
+  function makeModLFO(rate, depth){
+    const lfo=audioCtx.createOscillator(); lfo.frequency.value=rate;
+    const lfoGain=audioCtx.createGain(); lfoGain.gain.value=depth;
+    lfo.connect(lfoGain); lfo.start();
+    return {lfo,lfoGain};
+  }
+  function makeWetDry(wet){
+    const w=audioCtx.createGain(); w.gain.value=wet;
+    const d=audioCtx.createGain(); d.gain.value=1-wet;
+    return {wet:w,dry:d};
+  }
+
+  function makeWebAudioNode(type, params, selectVal){
+    if(!audioCtx) return null;
+    try {
+      // ── Utility ──
+      if(type==='gain'){
+        const n=audioCtx.createGain(); n.gain.value=params.gain??1;
+        return {input:n,output:n,nodes:[n]};
+      }
+      if(type==='panner'){
+        const n=audioCtx.createStereoPanner(); n.pan.value=params.pan??0;
+        return {input:n,output:n,nodes:[n]};
+      }
+      if(type==='clone'){
+        const inp=audioCtx.createGain();
+        const gainA=audioCtx.createGain(); gainA.gain.value=params.gainA??1;
+        const gainB=audioCtx.createGain(); gainB.gain.value=params.gainB??1;
+        inp.connect(gainA); inp.connect(gainB);
+        return {input:inp,output:gainA,outputA:gainA,outputB:gainB,nodes:[inp,gainA,gainB],gainA,gainB};
+      }
+      // ── Dynamics ──
+      if(type==='compressor'){
+        const n=audioCtx.createDynamicsCompressor();
+        n.threshold.value=params.threshold??-24; n.ratio.value=params.ratio??4;
+        n.attack.value=params.attack??0.01; n.release.value=params.release??0.25;
+        return {input:n,output:n,nodes:[n]};
+      }
+      if(type==='limiter'){
+        const n=audioCtx.createDynamicsCompressor();
+        n.threshold.value=params.threshold??-1; n.ratio.value=20;
+        n.attack.value=0.001; n.release.value=params.release??0.1; n.knee.value=0;
+        return {input:n,output:n,nodes:[n]};
+      }
+      if(type==='gate'){
+        // Noise gate via compressor with extreme ratio
+        const n=audioCtx.createDynamicsCompressor();
+        n.threshold.value=params.threshold??-40; n.ratio.value=20;
+        n.attack.value=params.attack??0.01; n.release.value=params.release??0.2;
+        n.knee.value=0;
+        return {input:n,output:n,nodes:[n]};
+      }
+      // ── Filter ──
+      if(type==='filter'){
+        const n=audioCtx.createBiquadFilter();
+        n.type=selectVal||'lowpass'; n.frequency.value=params.freq??2000; n.Q.value=params.q??1;
+        return {input:n,output:n,nodes:[n]};
+      }
+      if(type==='eq'){
+        const lo=audioCtx.createBiquadFilter(); lo.type='lowshelf';  lo.frequency.value=200;  lo.gain.value=params.low??0;
+        const mi=audioCtx.createBiquadFilter(); mi.type='peaking';   mi.frequency.value=1000; mi.gain.value=params.mid??0; mi.Q.value=1;
+        const hi=audioCtx.createBiquadFilter(); hi.type='highshelf'; hi.frequency.value=4000; hi.gain.value=params.high??0;
+        lo.connect(mi); mi.connect(hi);
+        return {input:lo,output:hi,nodes:[lo,mi,hi]};
+      }
+      if(type==='wah'){
+        const f=audioCtx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=params.freq??800; f.Q.value=params.q??8;
+        const {wet,dry}=makeWetDry(params.wet??0.8);
+        const inp=audioCtx.createGain(),out=audioCtx.createGain();
+        inp.connect(dry); dry.connect(out); inp.connect(f); f.connect(wet); wet.connect(out);
+        return {input:inp,output:out,nodes:[inp,out,f,wet,dry],f,wet,dry};
+      }
+      if(type==='combfilter'){
+        const dly=audioCtx.createDelay(0.1); dly.delayTime.value=1/(params.freq??200);
+        const fb=audioCtx.createGain(); fb.gain.value=params.fb??0.5;
+        const {wet,dry}=makeWetDry(params.wet??0.5);
+        const inp=audioCtx.createGain(),out=audioCtx.createGain();
+        inp.connect(dry); dry.connect(out);
+        inp.connect(dly); dly.connect(fb); fb.connect(dly); dly.connect(wet); wet.connect(out);
+        return {input:inp,output:out,nodes:[inp,out,dly,fb,wet,dry],dly,fb,wet,dry};
+      }
+      // ── Drive ──
+      function makeWaveShaper(amount, type='hard'){
+        const sz=512; const curve=new Float32Array(sz);
+        for(let i=0;i<sz;i++){
+          const x=i*2/sz-1;
+          if(type==='soft') curve[i]=Math.tanh(amount*3*x);
+          else { const k=amount*200+1; curve[i]=(Math.PI+k)*x/(Math.PI+k*Math.abs(x)); }
+        }
+        return curve;
+      }
+      if(type==='distortion'){
+        const ws=audioCtx.createWaveShaper();
+        ws.curve=makeWaveShaper(params.drive??0.3,'hard'); ws.oversample='4x';
+        const tone=audioCtx.createBiquadFilter(); tone.type='lowpass'; tone.frequency.value=params.tone??2000;
+        ws.connect(tone);
+        return {input:ws,output:tone,nodes:[ws,tone],ws,tone};
+      }
+      if(type==='overdrive'){
+        const ws=audioCtx.createWaveShaper();
+        ws.curve=makeWaveShaper(params.drive??0.3,'soft'); ws.oversample='4x';
+        const tone=audioCtx.createBiquadFilter(); tone.type='lowpass';
+        tone.frequency.value=500+params.tone*3500??2000;
+        const lvl=audioCtx.createGain(); lvl.gain.value=params.level??1;
+        ws.connect(tone); tone.connect(lvl);
+        return {input:ws,output:lvl,nodes:[ws,tone,lvl],ws,tone,lvl};
+      }
+      if(type==='fuzz'){
+        const ws=audioCtx.createWaveShaper();
+        const fuzz=params.fuzz??0.7; const sz=512; const curve=new Float32Array(sz);
+        for(let i=0;i<sz;i++){ const x=i*2/sz-1; curve[i]=x<0?-1:1; } // hard clip
+        ws.curve=curve; ws.oversample='4x';
+        const lvl=audioCtx.createGain(); lvl.gain.value=(params.level??1)*(1-fuzz*0.5);
+        ws.connect(lvl);
+        return {input:ws,output:lvl,nodes:[ws,lvl],ws,lvl};
+      }
+      if(type==='bitcrusher'){
+        // Bitcrusher via script processor (fallback to waveshaper approximation)
+        const bits=Math.round(params.bits??8);
+        const rate=params.rate??1;
+        const step=Math.pow(2,-(bits-1));
+        const ws=audioCtx.createWaveShaper();
+        const sz=4096; const curve=new Float32Array(sz);
+        for(let i=0;i<sz;i++){
+          const x=i*2/sz-1;
+          curve[i]=Math.round(x/step)*step;
+        }
+        ws.curve=curve; ws.oversample='none';
+        return {input:ws,output:ws,nodes:[ws],ws};
+      }
+      // ── Modulation ──
+      if(type==='chorus'){
+        const dly=audioCtx.createDelay(0.05); dly.delayTime.value=0.025;
+        const {lfo,lfoGain}=makeModLFO(params.rate??1.5, params.depth??0.005);
+        lfoGain.connect(dly.delayTime);
+        const {wet,dry}=makeWetDry(params.wet??0.5);
+        const inp=audioCtx.createGain(),out=audioCtx.createGain();
+        inp.connect(dry); dry.connect(out); inp.connect(dly); dly.connect(wet); wet.connect(out);
+        return {input:inp,output:out,nodes:[inp,out,dly,wet,dry,lfo,lfoGain],dly,wet,dry,lfo,lfoGain};
+      }
+      if(type==='flanger'){
+        const dly=audioCtx.createDelay(0.02); dly.delayTime.value=0.005;
+        const fb=audioCtx.createGain(); fb.gain.value=params.fb??0.5;
+        const {lfo,lfoGain}=makeModLFO(params.rate??0.3, params.depth??0.003);
+        lfoGain.connect(dly.delayTime); dly.connect(fb); fb.connect(dly);
+        const {wet,dry}=makeWetDry(params.wet??0.5);
+        const inp=audioCtx.createGain(),out=audioCtx.createGain();
+        inp.connect(dry); dry.connect(out); inp.connect(dly); dly.connect(wet); wet.connect(out);
+        return {input:inp,output:out,nodes:[inp,out,dly,fb,wet,dry,lfo,lfoGain],dly,fb,wet,dry,lfo,lfoGain};
+      }
+      if(type==='phaser'){
+        // 4-stage allpass phaser
+        const stages=[];
+        for(let i=0;i<4;i++){
+          const ap=audioCtx.createBiquadFilter(); ap.type='allpass'; ap.frequency.value=400*(i+1); ap.Q.value=10;
+          stages.push(ap);
+        }
+        stages.reduce((a,b)=>{a.connect(b);return b;});
+        const {lfo,lfoGain}=makeModLFO(params.rate??1, params.depth??0.8);
+        stages.forEach(s=>lfoGain.connect(s.frequency));
+        const {wet,dry}=makeWetDry(params.wet??0.5);
+        const inp=audioCtx.createGain(),out=audioCtx.createGain();
+        inp.connect(dry); dry.connect(out); inp.connect(stages[0]); stages[stages.length-1].connect(wet); wet.connect(out);
+        return {input:inp,output:out,nodes:[inp,out,...stages,wet,dry,lfo,lfoGain],stages,wet,dry,lfo,lfoGain};
+      }
+      if(type==='tremolo'){
+        const gain=audioCtx.createGain(); gain.gain.value=1;
+        const {lfo,lfoGain}=makeModLFO(params.rate??4, (params.depth??0.7)*0.5);
+        const dc=audioCtx.createConstantSource(); dc.offset.value=1-(params.depth??0.7)*0.5;
+        const mix=audioCtx.createGain(); mix.gain.value=1;
+        lfoGain.connect(gain.gain); dc.connect(gain.gain); dc.start();
+        return {input:gain,output:gain,nodes:[gain,lfo,lfoGain,dc],lfo,lfoGain,dc,gain};
+      }
+      if(type==='vibrato'){
+        const dly=audioCtx.createDelay(0.02); dly.delayTime.value=0.01;
+        const {lfo,lfoGain}=makeModLFO(params.rate??5, params.depth??0.005);
+        lfoGain.connect(dly.delayTime);
+        return {input:dly,output:dly,nodes:[dly,lfo,lfoGain],dly,lfo,lfoGain};
+      }
+      if(type==='ringmod'){
+        const osc=audioCtx.createOscillator(); osc.frequency.value=params.freq??100; osc.start();
+        const ring=audioCtx.createGain(); ring.gain.value=0;
+        osc.connect(ring.gain);
+        const {wet,dry}=makeWetDry(params.wet??0.5);
+        const inp=audioCtx.createGain(),out=audioCtx.createGain();
+        inp.connect(dry); dry.connect(out); inp.connect(ring); ring.connect(wet); wet.connect(out);
+        return {input:inp,output:out,nodes:[inp,out,ring,wet,dry,osc],osc,ring,wet,dry};
+      }
+      if(type==='autopan'){
+        const pan=audioCtx.createStereoPanner(); pan.pan.value=0;
+        const {lfo,lfoGain}=makeModLFO(params.rate??1, params.depth??0.8);
+        lfoGain.connect(pan.pan);
+        return {input:pan,output:pan,nodes:[pan,lfo,lfoGain],pan,lfo,lfoGain};
+      }
+      // ── Time ──
+      if(type==='reverb'){
+        const {wet,dry}=makeWetDry(params.wet??0.3);
+        const conv=audioCtx.createConvolver();
+        const decay=params.decay??2;
+        const buf=audioCtx.createBuffer(2,audioCtx.sampleRate*Math.min(decay,8),audioCtx.sampleRate);
+        for(let ch=0;ch<2;ch++){const d=buf.getChannelData(ch);for(let i=0;i<buf.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/buf.length,1.5);}
+        conv.buffer=buf;
+        const inp=audioCtx.createGain(),out=audioCtx.createGain();
+        inp.connect(dry); dry.connect(out); inp.connect(conv); conv.connect(wet); wet.connect(out);
+        return {input:inp,output:out,nodes:[inp,out,wet,dry,conv],wet,dry,conv};
+      }
+      if(type==='delay'){
+        const dly=audioCtx.createDelay(2); dly.delayTime.value=params.time??0.25;
+        const fb=audioCtx.createGain(); fb.gain.value=params.feedback??0.3;
+        const {wet,dry}=makeWetDry(params.wet??0.3);
+        const inp=audioCtx.createGain(),out=audioCtx.createGain();
+        inp.connect(dry); dry.connect(out); inp.connect(dly); dly.connect(wet); wet.connect(out); dly.connect(fb); fb.connect(dly);
+        return {input:inp,output:out,nodes:[inp,out,dly,fb,wet,dry],dly,fb,wet,dry};
+      }
+      if(type==='pingpong'){
+        const dlyL=audioCtx.createDelay(2); dlyL.delayTime.value=params.time??0.25;
+        const dlyR=audioCtx.createDelay(2); dlyR.delayTime.value=(params.time??0.25)*1.5;
+        const fb=audioCtx.createGain(); fb.gain.value=params.feedback??0.4;
+        const panL=audioCtx.createStereoPanner(); panL.pan.value=-1;
+        const panR=audioCtx.createStereoPanner(); panR.pan.value=1;
+        const {wet,dry}=makeWetDry(params.wet??0.4);
+        const inp=audioCtx.createGain(),out=audioCtx.createGain();
+        inp.connect(dry); dry.connect(out);
+        inp.connect(dlyL); dlyL.connect(panL); panL.connect(wet); wet.connect(out);
+        dlyL.connect(fb); fb.connect(dlyR); dlyR.connect(panR); panR.connect(wet);
+        return {input:inp,output:out,nodes:[inp,out,dlyL,dlyR,fb,panL,panR,wet,dry],dlyL,dlyR,fb,wet,dry};
+      }
+      // ── Spatial ──
+      if(type==='widener'){
+        // Mid-side widener
+        const inp=audioCtx.createGain(),out=audioCtx.createGain();
+        const split=audioCtx.createChannelSplitter(2);
+        const merge=audioCtx.createChannelMerger(2);
+        const gL=audioCtx.createGain(); const gR=audioCtx.createGain();
+        const width=params.width??1;
+        gL.gain.value=width; gR.gain.value=width;
+        inp.connect(split);
+        split.connect(gL,0); split.connect(gR,1);
+        gL.connect(merge,0,0); gR.connect(merge,0,1);
+        merge.connect(out);
+        return {input:inp,output:out,nodes:[inp,out,split,merge,gL,gR],gL,gR};
+      }
+      // ── Synth ──
+      if(type==='oscillator'){
+        const osc=audioCtx.createOscillator(); osc.type=selectVal||'sine'; osc.frequency.value=params.freq??440;
+        const lvl=audioCtx.createGain(); lvl.gain.value=params.level??0.3;
+        const inp=audioCtx.createGain(); // pass-through for input
+        osc.connect(lvl); osc.start();
+        // Mix oscillator with input
+        const mix=audioCtx.createGain();
+        inp.connect(mix); lvl.connect(mix);
+        return {input:inp,output:mix,nodes:[inp,mix,osc,lvl],osc,lvl};
+      }
+      if(type==='noisegen'){
+        const bufSz=audioCtx.sampleRate*2;
+        const buf=audioCtx.createBuffer(1,bufSz,audioCtx.sampleRate);
+        const d=buf.getChannelData(0); for(let i=0;i<bufSz;i++) d[i]=Math.random()*2-1;
+        const src=audioCtx.createBufferSource(); src.buffer=buf; src.loop=true; src.start();
+        const f=audioCtx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=params.freq??3000; f.Q.value=0.5;
+        const lvl=audioCtx.createGain(); lvl.gain.value=params.level??0.3;
+        src.connect(f); f.connect(lvl);
+        const inp=audioCtx.createGain();
+        const mix=audioCtx.createGain();
+        inp.connect(mix); lvl.connect(mix);
+        return {input:inp,output:mix,nodes:[inp,mix,src,f,lvl],src,f,lvl};
+      }
+      if(type==='pitchshift'){
+        // Approximate pitch shift via playback rate on buffer (simple version)
+        const inp=audioCtx.createGain(),out=audioCtx.createGain();
+        const semi=params.semitones??0;
+        const {wet,dry}=makeWetDry(params.wet??0.5);
+        // Without AudioWorklet, use a detune on a biquad as a placeholder
+        const det=audioCtx.createBiquadFilter(); det.type='allpass'; det.detune=semi*100;
+        inp.connect(dry); dry.connect(out); inp.connect(det); det.connect(wet); wet.connect(out);
+        return {input:inp,output:out,nodes:[inp,out,det,wet,dry],det,wet,dry};
+      }
+    } catch(e){ console.warn('SC node error',type,e); }
+    return null;
+  }
+
+  function updateNodeParams(node){
+    if(!node.audioNode||!audioCtx) return;
+    const p=node.params; const n=node.audioNode;
+    try {
+      if(node.type==='gain') n.nodes[0].gain.value=p.gain??1;
+      if(node.type==='panner') n.nodes[0].pan.value=p.pan??0;
+      if(node.type==='clone'){ n.gainA.gain.value=p.gainA??1; n.gainB.gain.value=p.gainB??1; }
+      if(node.type==='compressor'||node.type==='limiter'||node.type==='gate'){
+        n.nodes[0].threshold.value=p.threshold??-24;
+        if(p.ratio!==undefined) n.nodes[0].ratio.value=p.ratio;
+        if(p.attack!==undefined) n.nodes[0].attack.value=p.attack;
+        if(p.release!==undefined) n.nodes[0].release.value=p.release;
+      }
+      if(node.type==='filter'){ n.nodes[0].frequency.value=p.freq??2000; n.nodes[0].Q.value=p.q??1; n.nodes[0].type=node.selectVal||'lowpass'; }
+      if(node.type==='eq'){ n.nodes[0].gain.value=p.low??0; n.nodes[1].gain.value=p.mid??0; n.nodes[2].gain.value=p.high??0; }
+      if(node.type==='wah'){ n.f.frequency.value=p.freq??800; n.f.Q.value=p.q??8; n.wet.gain.value=p.wet??0.8; n.dry.gain.value=1-(p.wet??0.8); }
+      if(node.type==='combfilter'){ n.dly.delayTime.value=1/(p.freq??200); n.fb.gain.value=p.fb??0.5; n.wet.gain.value=p.wet??0.5; n.dry.gain.value=1-(p.wet??0.5); }
+      if(node.type==='distortion'){
+        const k=(p.drive??0.3)*100+1; const sz=256; const curve=new Float32Array(sz);
+        for(let i=0;i<sz;i++){const x=i*2/sz-1;curve[i]=(Math.PI+k)*x/(Math.PI+k*Math.abs(x));}
+        n.ws.curve=curve; n.tone.frequency.value=p.tone??2000;
+      }
+      if(node.type==='overdrive'){ n.lvl.gain.value=p.level??1; n.tone.frequency.value=500+(p.tone??0.5)*3500; }
+      if(node.type==='fuzz'){ n.lvl.gain.value=(p.level??1)*(1-(p.fuzz??0.7)*0.5); }
+      if(node.type==='reverb'){ n.wet.gain.value=p.wet??0.3; n.dry.gain.value=1-(p.wet??0.3); }
+      if(node.type==='delay'){ n.dly.delayTime.value=p.time??0.25; n.fb.gain.value=p.feedback??0.3; n.wet.gain.value=p.wet??0.3; n.dry.gain.value=1-(p.wet??0.3); }
+      if(node.type==='pingpong'){ n.dlyL.delayTime.value=p.time??0.25; n.dlyR.delayTime.value=(p.time??0.25)*1.5; n.fb.gain.value=p.feedback??0.4; n.wet.gain.value=p.wet??0.4; n.dry.gain.value=1-(p.wet??0.4); }
+      if(node.type==='chorus'||node.type==='flanger'){ n.lfo.frequency.value=p.rate??1.5; n.lfoGain.gain.value=p.depth??0.005; n.wet.gain.value=p.wet??0.5; n.dry.gain.value=1-(p.wet??0.5); }
+      if(node.type==='phaser'){ n.lfo.frequency.value=p.rate??1; n.lfoGain.gain.value=p.depth??0.8; n.wet.gain.value=p.wet??0.5; n.dry.gain.value=1-(p.wet??0.5); }
+      if(node.type==='tremolo'){ n.lfo.frequency.value=p.rate??4; n.lfoGain.gain.value=(p.depth??0.7)*0.5; }
+      if(node.type==='vibrato'){ n.lfo.frequency.value=p.rate??5; n.lfoGain.gain.value=p.depth??0.005; }
+      if(node.type==='ringmod'){ n.osc.frequency.value=p.freq??100; n.wet.gain.value=p.wet??0.5; n.dry.gain.value=1-(p.wet??0.5); }
+      if(node.type==='autopan'){ n.lfo.frequency.value=p.rate??1; n.lfoGain.gain.value=p.depth??0.8; }
+      if(node.type==='widener'){ n.gL.gain.value=p.width??1; n.gR.gain.value=p.width??1; }
+      if(node.type==='oscillator'){ n.osc.frequency.value=p.freq??440; n.lvl.gain.value=p.level??0.3; if(node.selectVal) n.osc.type=node.selectVal; }
+      if(node.type==='noisegen'){ n.f.frequency.value=p.freq??3000; n.lvl.gain.value=p.level??0.3; }
+      if(node.type==='pitchshift'){ n.det.detune=( p.semitones??0)*100; n.wet.gain.value=p.wet??0.5; n.dry.gain.value=1-(p.wet??0.5); }
+    } catch(e){}
+  }
+
+  // ── Audio graph rebuild from edge connections ─────────────────
+  function rebuildAudioChain(){
+    if(!audioCtx||!streamGain||!masterGain) return;
+
+    // Disconnect only outputs — never inputs (would break internal module routing)
+    // and never masterGain downstream
+    try{ streamGain.disconnect(); }catch(e){}
+    scNodes.forEach(n=>{ if(n.audioNode){
+      try{ n.audioNode.output.disconnect(); }catch(e){}
+      try{ n.audioNode.outputA?.disconnect(); }catch(e){}
+      try{ n.audioNode.outputB?.disconnect(); }catch(e){}
+    }});
+
+    // Bypass all or no edges — direct pass
+    if(scBypassAllState || !scEdges.length){
+      streamGain.connect(masterGain);
+      return;
+    }
+
+    // Connect each edge
+    scEdges.forEach(e=>{
+      let fromAudio;
+      if(e.fromId===SC_SOURCE_ID){
+        fromAudio = { output:streamGain, outputA:streamGain, outputB:streamGain };
+      } else {
+        const fromNode = scNodes.find(n=>n.id===e.fromId);
+        if(!fromNode?.audioNode) return;
+        if(!fromNode.enabled){
+          // Bypassed — signal passes through untouched (use input node as source)
+          fromAudio = { output:fromNode.audioNode.input, outputA:fromNode.audioNode.input, outputB:fromNode.audioNode.input };
+        } else {
+          fromAudio = fromNode.audioNode;
+        }
+      }
+
+      let toInput;
+      if(e.toId===SC_OUTPUT_ID){
+        toInput = masterGain;
+      } else {
+        const toNode = scNodes.find(n=>n.id===e.toId);
+        if(!toNode?.audioNode) return;
+        toInput = toNode.enabled ? toNode.audioNode.input : toNode.audioNode.input;
+      }
+
+      try{
+        let outNode;
+        if(e.fromPort==='OUT A')      outNode = fromAudio.outputA || fromAudio.output;
+        else if(e.fromPort==='OUT B') outNode = fromAudio.outputB || fromAudio.output;
+        else                          outNode = fromAudio.output;
+        outNode.connect(toInput);
+      }catch(ex){ console.warn('SC connect failed', e.fromId, '->', e.toId, ex); }
+    });
+
+    // If nothing reaches OUTPUT node, fall back to direct
+    if(!scEdges.some(e=>e.toId===SC_OUTPUT_ID)){
+      streamGain.connect(masterGain);
+    }
+  }
+
+  // ── Canvas cable drawing ──────────────────────────────────────
+  let scCanvas, scCanvasCtx;
+
+  function initScCanvas(){
+    scCanvas = document.getElementById('scGraphCanvas');
+    scCanvasCtx = scCanvas.getContext('2d');
+    const body = document.getElementById('scBody');
+    const r = body.getBoundingClientRect();
+    scCanvas.width  = r.width;
+    scCanvas.height = r.height;
+  }
+
+  function getPortCenter(nodeId, portName, isOut){
+    // Find the port DOM element and get its center relative to scBody
+    const body = document.getElementById('scBody');
+    const bodyRect = body.getBoundingClientRect();
+    const ports = body.querySelectorAll('.sc-port[data-node="'+nodeId+'"][data-port="'+portName+'"]');
+    for(const p of ports){
+      if(isOut && p.classList.contains('sc-port-out-dot')) continue;
+      const r = p.getBoundingClientRect();
+      return { x: r.left-bodyRect.left+r.width/2, y: r.top-bodyRect.top+r.height/2 };
+    }
+    return null;
+  }
+
+  function drawCables(){
+    if(!scCanvas||!scCanvasCtx) return;
+    const body = document.getElementById('scBody');
+    const W=scCanvas.width, H=scCanvas.height;
+    scCanvasCtx.clearRect(0,0,W,H);
+
+    scEdges.forEach((e,i)=>{
+      const fromPos = getPortPos(e.fromId, e.fromPort, true);
+      const toPos   = getPortPos(e.toId,   e.toPort,   false);
+      if(!fromPos||!toPos) return;
+      const def = e.fromId===SC_SOURCE_ID ? null : MODULE_DEFS[scNodes.find(n=>n.id===e.fromId)?.type];
+      const color = def ? def.color : '#42d4f5';
+      const isHovered = false;
+      const cp1x = fromPos.x + Math.abs(toPos.x-fromPos.x)*0.5;
+      const cp2x = toPos.x   - Math.abs(toPos.x-fromPos.x)*0.5;
+      scCanvasCtx.beginPath();
+      scCanvasCtx.moveTo(fromPos.x, fromPos.y);
+      scCanvasCtx.bezierCurveTo(cp1x, fromPos.y, cp2x, toPos.y, toPos.x, toPos.y);
+      scCanvasCtx.strokeStyle = isHovered ? 'rgba(245,66,66,0.9)' : `rgba(${hexToRgbSc(color)},0.65)`;
+      scCanvasCtx.lineWidth = isHovered ? 3 : 2;
+      scCanvasCtx.shadowColor = isHovered ? '#f54242' : color;
+      scCanvasCtx.shadowBlur = isHovered ? 8 : 4;
+      scCanvasCtx.stroke();
+      scCanvasCtx.shadowBlur = 0;
+      // Show ✕ label at midpoint of hovered cable
+      if(isHovered){
+        const mt=0.5;
+        const mx2=Math.pow(1-mt,3)*fromPos.x+3*Math.pow(1-mt,2)*mt*cp1x+3*(1-mt)*mt*mt*cp2x+mt*mt*mt*toPos.x;
+        const my2=Math.pow(1-mt,3)*fromPos.y+3*Math.pow(1-mt,2)*mt*fromPos.y+3*(1-mt)*mt*mt*toPos.y+mt*mt*mt*toPos.y;
+        scCanvasCtx.font='bold 11px monospace';
+        scCanvasCtx.fillStyle='rgba(245,66,66,0.9)';
+        scCanvasCtx.fillText('✕',mx2-5,my2+4);
+      }
+    });
+
+    // Command edges — dashed green
+    cmdEdges.forEach(e=>{
+      const fp = getPortPos(e.fromId, e.fromPort, true);
+      const tp = getPortPos(e.toId,   e.toPort,   false);
+      if(!fp||!tp) return;
+      scCanvasCtx.beginPath();
+      scCanvasCtx.moveTo(fp.x,fp.y);
+      const cp1x=fp.x+Math.abs(tp.x-fp.x)*0.5;
+      const cp2x=tp.x-Math.abs(tp.x-fp.x)*0.5;
+      scCanvasCtx.bezierCurveTo(cp1x,fp.y,cp2x,tp.y,tp.x,tp.y);
+      scCanvasCtx.strokeStyle='rgba(0,255,80,0.5)';
+      scCanvasCtx.lineWidth=1.5;
+      scCanvasCtx.setLineDash([5,4]);
+      scCanvasCtx.shadowColor='#00ff50';
+      scCanvasCtx.shadowBlur=3;
+      scCanvasCtx.stroke();
+      scCanvasCtx.setLineDash([]);
+      scCanvasCtx.shadowBlur=0;
+    });
+
+    // Ctrl edges — cmd OUT → knob MOD (thin dashed green)
+    ctrlEdges.forEach(e=>{
+      const fp=getPortPos(e.fromId,'OUT',true);
+      const tp=getKnobPortPos(e.toNodeId,e.toKnobId);
+      if(!fp||!tp) return;
+      const fx=fp.x,fy=fp.y,tx=tp.x,ty=tp.y;
+      {
+      scCanvasCtx.beginPath();
+      scCanvasCtx.moveTo(fx,fy);
+      scCanvasCtx.bezierCurveTo(fx+Math.abs(tx-fx)*0.5,fy,tx-Math.abs(tx-fx)*0.5,ty,tx,ty);
+      scCanvasCtx.strokeStyle='rgba(0,255,80,0.45)';
+      scCanvasCtx.lineWidth=1;
+      scCanvasCtx.setLineDash([3,3]);
+      scCanvasCtx.shadowColor='#00ff50';
+      scCanvasCtx.shadowBlur=2;
+      scCanvasCtx.stroke();
+      scCanvasCtx.setLineDash([]);
+      scCanvasCtx.shadowBlur=0;
+      }
+    });
+
+    // Pending cable from active port — draw from actual port position
+    if(pendingPort && scDragCablePos){
+      const isGreen = pendingPort.isCmd || pendingPort.isKnob;
+      const portPos = pendingPort.isKnob
+        ? getKnobPortPos(pendingPort.nodeId, pendingPort.knobId)
+        : getPortPos(pendingPort.nodeId, pendingPort.portName, pendingPort.isOut);
+      if(portPos){
+        const mx=scDragCablePos.x, my=scDragCablePos.y;
+        const cp1x = pendingPort.isOut ? portPos.x+60 : mx+60;
+        const cp2x = pendingPort.isOut ? mx-60 : portPos.x-60;
+        scCanvasCtx.beginPath();
+        scCanvasCtx.moveTo(portPos.x, portPos.y);
+        scCanvasCtx.bezierCurveTo(cp1x, portPos.y, cp2x, my, mx, my);
+        scCanvasCtx.strokeStyle = isGreen ? 'rgba(0,255,80,0.7)' : 'rgba(66,212,245,0.7)';
+        scCanvasCtx.lineWidth = 2;
+        scCanvasCtx.shadowColor = isGreen ? '#00ff50' : '#42d4f5';
+        scCanvasCtx.shadowBlur = 6;
+        scCanvasCtx.setLineDash([5,4]);
+        scCanvasCtx.stroke();
+        scCanvasCtx.setLineDash([]);
+        scCanvasCtx.shadowBlur = 0;
+        scCanvasCtx.beginPath();
+        scCanvasCtx.arc(mx,my,4,0,Math.PI*2);
+        scCanvasCtx.fillStyle=isGreen?'rgba(0,255,80,0.8)':'rgba(66,212,245,0.8)';
+        scCanvasCtx.fill();
+      }
+    }
+  }
+
+  function updatePortConnectedStates(){
+    document.querySelectorAll('.sc-port').forEach(p=>p.classList.remove('connected'));
+    document.querySelectorAll('.sc-sqport').forEach(p=>p.classList.remove('connected'));
+    scEdges.forEach(e=>{
+      const fp=document.querySelector(`.sc-port[data-node="${e.fromId}"][data-port="${e.fromPort}"]`);
+      const tp=document.querySelector(`.sc-port[data-node="${e.toId}"][data-port="${e.toPort}"]`);
+      if(fp) fp.classList.add('connected');
+      if(tp) tp.classList.add('connected');
+    });
+    cmdEdges.forEach(e=>{
+      const fp=document.querySelector(`.sc-sqport[data-node="${e.fromId}"][data-port="${e.fromPort}"]`);
+      const tp=document.querySelector(`.sc-sqport[data-node="${e.toId}"][data-port="${e.toPort}"]`);
+      if(fp) fp.classList.add('connected');
+      if(tp) tp.classList.add('connected');
+    });
+    ctrlEdges.forEach(e=>{
+      const fp=document.querySelector(`.sc-sqport[data-node="${e.fromId}"][data-port="OUT"]`);
+      const tp=document.querySelector(`.sc-knob-sqport[data-node="${e.toNodeId}"][data-knob="${e.toKnobId}"]`);
+      if(fp) fp.classList.add('connected');
+      if(tp) tp.classList.add('connected');
+    });
+  }
+
+  function getPortPos(nodeId, portName, isOut){
+    const body = document.getElementById('scBody');
+    if(!body) return null;
+    const bodyRect = body.getBoundingClientRect();
+    const el = body.querySelector(`.sc-port[data-node="${nodeId}"][data-port="${portName}"]`)
+            || body.querySelector(`.sc-sqport[data-node="${nodeId}"][data-port="${portName}"]`);
+    if(!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left-bodyRect.left+r.width/2, y: r.top-bodyRect.top+r.height/2 };
+  }
+  function getKnobPortPos(nodeId, knobId){
+    const body = document.getElementById('scBody');
+    if(!body) return null;
+    const el = body.querySelector(`.sc-knob-sqport[data-node="${nodeId}"][data-knob="${knobId}"]`);
+    if(!el) return null;
+    const br = body.getBoundingClientRect(), r = el.getBoundingClientRect();
+    return { x: r.left-br.left+r.width/2, y: r.top-br.top+r.height/2 };
+  }
+
+  let scDragCablePos = null;
+
+  // ── Knob rendering ────────────────────────────────────────────
+  function scKnobAngle(val, kd){
+    let norm;
+    if(kd.log){
+      const lo=Math.log(Math.max(kd.min,0.0001)), hi=Math.log(kd.max);
+      norm=(Math.log(Math.max(val,0.0001))-lo)/(hi-lo);
+    } else { norm=(val-kd.min)/(kd.max-kd.min); }
+    return -135+Math.max(0,Math.min(1,norm))*270;
+  }
+
+  function renderScKnob(kd, val, color){
+    const ang=scKnobAngle(val,kd);
+    const acc=hexToRgbSc(color);
+    const arcLen=((ang+135)/270)*125.66;
+    return `<svg width="36" height="36" viewBox="0 0 36 36">
+      <circle cx="18" cy="18" r="13" fill="none" stroke="rgba(40,40,47,1)" stroke-width="3"/>
+      <circle cx="18" cy="18" r="13" fill="none" stroke="rgba(${acc},0.3)" stroke-width="3"
+        stroke-dasharray="${arcLen} 125.66" transform="rotate(-225 18 18)" stroke-linecap="round"/>
+      <circle cx="18" cy="18" r="10" fill="#0d0d12" stroke="rgba(${acc},0.3)" stroke-width="1"/>
+      <line x1="18" y1="18" x2="${(18+8*Math.cos((ang-90)*Math.PI/180)).toFixed(1)}" y2="${(18+8*Math.sin((ang-90)*Math.PI/180)).toFixed(1)}"
+        stroke="rgba(${acc},1)" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="18" cy="18" r="2" fill="rgba(${acc},0.8)"/>
+    </svg>`;
+  }
+
+  // ── Node DOM creation ─────────────────────────────────────────
+  function createNodeEl(node){
+    const def = MODULE_DEFS[node.type];
+    const color = def.color;
+    const acc = hexToRgbSc(color);
+    const el = document.createElement('div');
+    el.className = 'sc-node';
+    el.id = 'scnode-'+node.id;
+    el.style.left = node.x+'px';
+    el.style.top  = node.y+'px';
+    el.style.borderColor = `rgba(${acc},0.35)`;
+
+    // Header
+    const hd = document.createElement('div');
+    hd.className = 'sc-node-hd';
+    const dot = document.createElement('div');
+    dot.className='sc-node-dot';
+    dot.style.background=color;
+    dot.style.boxShadow=node.enabled?`0 0 5px ${color}`:'none';
+    const name=document.createElement('div');
+    name.className='sc-node-name';
+    name.style.color=color;
+    name.textContent=def.label;
+    const power=document.createElement('button');
+    power.className='sc-node-power';
+    power.style.color=node.enabled?color:'var(--dim)';
+    power.innerHTML='⏻';
+    power.addEventListener('click',e=>{ e.stopPropagation(); node.enabled=!node.enabled; rebuildAudioChain(); refreshNodeEl(node); drawCables(); updatePortConnectedStates(); updateScMiniPreview(); });
+    const rm=document.createElement('button');
+    rm.className='sc-node-remove'; rm.innerHTML='✕';
+    rm.addEventListener('click',e=>{ e.stopPropagation();
+      scEdges=scEdges.filter(e=>e.fromId!==node.id&&e.toId!==node.id);
+      scNodes=scNodes.filter(n=>n.id!==node.id);
+      el.remove(); rebuildAudioChain(); drawCables(); updatePortConnectedStates(); updateScMiniPreview();
+    });
+    hd.append(dot,name,power,rm);
+    el.appendChild(hd);
+
+    // Body
+    const body=document.createElement('div');
+    body.className='sc-node-body';
+
+    if(def.select){
+      const sel=document.createElement('select');
+      sel.className='sc-select';
+      sel.style.borderColor=`rgba(${acc},0.3)`;
+      sel.style.color=color;
+      def.select.options.forEach(opt=>{
+        const o=document.createElement('option');
+        o.value=opt; o.textContent=def.select.fmt(opt);
+        if(opt===(node.selectVal||def.select.def)) o.selected=true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change',e=>{ node.selectVal=e.target.value; updateNodeParams(node); });
+      body.appendChild(sel);
+    }
+
+    const knobRow=document.createElement('div');
+    knobRow.className='sc-knob-row';
+    def.knobs.forEach(kd=>{
+      const val=node.params[kd.id]??kd.def;
+      const wrap=document.createElement('div'); wrap.className='sc-knob-wrap';
+      const knobEl=document.createElement('div'); knobEl.className='sc-knob';
+      knobEl.innerHTML=renderScKnob(kd,val,color);
+      const lbl=document.createElement('div'); lbl.className='sc-knob-label'; lbl.textContent=kd.label;
+      const valEl=document.createElement('div'); valEl.className='sc-knob-val'; valEl.style.color=color; valEl.textContent=kd.fmt(val);
+      let dy0=0,v0=0;
+      knobEl.addEventListener('mousedown',e=>{
+        dy0=e.clientY; v0=node.params[kd.id]??kd.def; e.preventDefault(); e.stopPropagation();
+        function onM(ev){
+          const dy=dy0-ev.clientY; const range=kd.max-kd.min;
+          let nv;
+          if(kd.log){const lr=Math.log(kd.max)-Math.log(Math.max(kd.min,1e-6));nv=Math.exp(Math.max(Math.log(Math.max(kd.min,1e-6)),Math.min(Math.log(kd.max),Math.log(Math.max(v0,1e-6))+(dy/120)*lr)));}
+          else nv=Math.max(kd.min,Math.min(kd.max,v0+(dy/120)*range));
+          node.params[kd.id]=nv;
+          knobEl.innerHTML=renderScKnob(kd,nv,color);
+          valEl.textContent=kd.fmt(nv);
+          updateNodeParams(node);
+        }
+        function onU(){ window.removeEventListener('mousemove',onM); window.removeEventListener('mouseup',onU); }
+        window.addEventListener('mousemove',onM); window.addEventListener('mouseup',onU);
+      });
+      knobEl.addEventListener('dblclick',()=>{ node.params[kd.id]=kd.def; knobEl.innerHTML=renderScKnob(kd,kd.def,color); valEl.textContent=kd.fmt(kd.def); updateNodeParams(node); });
+      // Square MOD port below each knob
+      const sqPortWrap=document.createElement('div'); sqPortWrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:1px;';
+      const sqP=document.createElement('div'); sqP.className='sc-knob-sqport';
+      sqP.style.borderColor=color; sqP.style.color=color;
+      sqP.dataset.node=node.id; sqP.dataset.knob=kd.id; sqP.dataset.sqmod='1';
+      sqP.addEventListener('mouseenter',()=>{
+        const isConn=ctrlEdges.some(e=>e.toNodeId===node.id&&e.toKnobId===kd.id);
+        if(isConn){ sqP.style.background='#f54242'; sqP.style.borderColor='#f54242'; sqP.title='Click to disconnect'; }
+      });
+      sqP.addEventListener('mouseleave',()=>{ sqP.style.background=''; sqP.style.borderColor=color; sqP.title=''; });
+      sqP.addEventListener('click',e=>{ e.stopPropagation(); handleKnobPortClick(node.id,kd.id,sqP,color); });
+      const sqLbl=document.createElement('div'); sqLbl.className='sc-knob-sqport-label'; sqLbl.textContent='MOD';
+      sqPortWrap.append(sqP,sqLbl);
+      wrap.append(knobEl,lbl,valEl,sqPortWrap); knobRow.appendChild(wrap);
+    });
+    body.appendChild(knobRow);
+
+    // Ports row
+    const portsRow=document.createElement('div');
+    portsRow.className='sc-ports';
+
+    // Input port (left)
+    const inWrap=document.createElement('div'); inWrap.className='sc-port-in';
+    const inPort=document.createElement('div'); inPort.className='sc-port';
+    inPort.style.borderColor=color; inPort.style.color=color;
+    inPort.dataset.node=node.id; inPort.dataset.port='IN';
+    inPort.addEventListener('mouseenter',()=>{ updatePortHoverState(node.id,'IN',false,inPort); });
+    inPort.addEventListener('mouseleave',()=>{ clearPortHover(inPort); });
+    inPort.addEventListener('click',e=>{ e.stopPropagation(); handlePortClick(node.id,'IN',false,inPort); });
+    const inLbl=document.createElement('div'); inLbl.className='sc-port-label'; inLbl.textContent='IN';
+    inWrap.append(inPort,inLbl);
+    portsRow.appendChild(inWrap);
+
+    // Output port(s) (right)
+    const outPorts = def.ports?.out || ['OUT'];
+    const outWrap=document.createElement('div'); outWrap.className='sc-port-out'; outWrap.style.flexDirection='column'; outWrap.style.gap='4px';
+    outPorts.forEach(portName=>{
+      const pw=document.createElement('div'); pw.style.display='flex'; pw.style.flexDirection='column'; pw.style.alignItems='flex-end'; pw.style.gap='2px';
+      const op=document.createElement('div'); op.className='sc-port';
+      op.style.borderColor=color; op.style.color=color;
+      op.dataset.node=node.id; op.dataset.port=portName;
+      op.addEventListener('mouseenter',()=>{ updatePortHoverState(node.id,portName,true,op); });
+      op.addEventListener('mouseleave',()=>{ clearPortHover(op); });
+      op.addEventListener('click',e=>{ e.stopPropagation(); handlePortClick(node.id,portName,true,op); });
+      const ol=document.createElement('div'); ol.className='sc-port-label'; ol.textContent=portName;
+      pw.append(ol,op); outWrap.appendChild(pw);
+    });
+    portsRow.appendChild(outWrap);
+    body.appendChild(portsRow);
+    el.appendChild(body);
+
+    // Drag to move
+    let dragging=false, dx=0, dy=0;
+    hd.addEventListener('mousedown',e=>{
+      if(e.target!==hd&&e.target!==dot&&e.target!==name) return;
+      dragging=true; dx=e.clientX-node.x; dy=e.clientY-node.y; e.preventDefault();
+      function onM(ev){ if(!dragging)return; node.x=ev.clientX-dx; node.y=ev.clientY-dy; el.style.left=node.x+'px'; el.style.top=node.y+'px'; drawCables(); updatePortConnectedStates(); }
+      function onU(){ dragging=false; window.removeEventListener('mousemove',onM); window.removeEventListener('mouseup',onU); }
+      window.addEventListener('mousemove',onM); window.addEventListener('mouseup',onU);
+    });
+
+    el.style.opacity = node.enabled ? '1' : '0.45';
+    return el;
+  }
+
+  function refreshNodeEl(node){
+    const el=document.getElementById('scnode-'+node.id);
+    if(el){ el.replaceWith(createNodeEl(node)); }
+  }
+
+  // ── Fixed source/output nodes ─────────────────────────────────
+  function createFixedNodes(){
+    const body=document.getElementById('scBody');
+    const W=body.offsetWidth, H=body.offsetHeight;
+
+    // Remove existing
+    body.querySelectorAll('.sc-node-fixed').forEach(e=>e.remove());
+
+    // RF IN
+    const src=document.createElement('div');
+    src.className='sc-node-fixed';
+    src.id='scnode-'+SC_SOURCE_ID;
+    src.style.left='24px'; src.style.top=(H/2-50)+'px';
+    const srcLbl=document.createElement('div'); srcLbl.className='sc-node-fixed-label'; srcLbl.textContent='RF IN';
+    const srcPort=document.createElement('div'); srcPort.className='sc-port';
+    srcPort.style.borderColor='var(--rf-acc)';
+    srcPort.dataset.node=SC_SOURCE_ID; srcPort.dataset.port='OUT';
+    srcPort.addEventListener('mouseenter',()=>{ updatePortHoverState(SC_SOURCE_ID,'OUT',true,srcPort); });
+    srcPort.addEventListener('mouseleave',()=>{ clearPortHover(srcPort); });
+    srcPort.addEventListener('click',e=>{ e.stopPropagation(); handlePortClick(SC_SOURCE_ID,'OUT',true,srcPort); });
+    src.append(srcLbl,srcPort);
+    body.appendChild(src);
+
+    // OUTPUT
+    const out=document.createElement('div');
+    out.className='sc-node-fixed out-node';
+    out.id='scnode-'+SC_OUTPUT_ID;
+    out.style.right='24px'; out.style.top=(H/2-50)+'px';
+    const outPort=document.createElement('div'); outPort.className='sc-port';
+    outPort.style.borderColor='var(--rf-accC)';
+    outPort.dataset.node=SC_OUTPUT_ID; outPort.dataset.port='IN';
+    outPort.addEventListener('mouseenter',()=>{ updatePortHoverState(SC_OUTPUT_ID,'IN',false,outPort); });
+    outPort.addEventListener('mouseleave',()=>{ clearPortHover(outPort); });
+    outPort.addEventListener('click',e=>{ e.stopPropagation(); handlePortClick(SC_OUTPUT_ID,'IN',false,outPort); });
+    const outLbl=document.createElement('div'); outLbl.className='sc-node-fixed-label'; outLbl.textContent='OUTPUT';
+    out.append(outPort,outLbl);
+    body.appendChild(out);
+  }
+
+  // ── Port hover — show ✕ if connected ────────────────────────
+  function isPortConnected(nodeId, portName, isOut){
+    return scEdges.some(e=>
+      isOut ? (e.fromId===nodeId && e.fromPort===portName)
+            : (e.toId===nodeId   && e.toPort===portName)
+    );
+  }
+
+  function updatePortHoverState(nodeId, portName, isOut, portEl){
+    if(pendingPort) return; // don't change state while wiring
+    if(isPortConnected(nodeId, portName, isOut)){
+      portEl.style.background = '#f54242';
+      portEl.style.borderColor = '#f54242';
+      portEl.title = 'Click to disconnect';
+    }
+  }
+
+  function clearPortHover(portEl){
+    portEl.style.background = '';
+    portEl.title = '';
+    // Restore border color from dataset
+    portEl.style.borderColor = portEl.dataset.color || '';
+  }
+
+  // ── Port click — cable connection ────────────────────────────
+  function cancelPendingCable(){
+    if(!pendingPort) return;
+    pendingPort.el.classList.remove('active');
+    pendingPort=null; scDragCablePos=null;
+    if(scCanvas) scCanvas.classList.remove('wiring');
+    drawCables(); updatePortConnectedStates();
+  }
+
+  function handlePortClick(nodeId, portName, isOut, portEl){
+    if(!pendingPort){
+      // If port already connected — clicking it removes the cable
+      if(isPortConnected(nodeId, portName, isOut)){
+        if(isOut){
+          scEdges=scEdges.filter(e=>!(e.fromId===nodeId&&e.fromPort===portName));
+        } else {
+          scEdges=scEdges.filter(e=>!(e.toId===nodeId&&e.toPort===portName));
+        }
+        clearPortHover(portEl);
+        rebuildAudioChain(); drawCables(); updatePortConnectedStates(); updateScMiniPreview();
+        return;
+      }
+      // Start cable — highlight port, show dashed preview following cursor
+      pendingPort={nodeId,portName,isOut,el:portEl, isCmd:true};
+      portEl.classList.add('active');
+      if(scCanvas) scCanvas.classList.add('wiring');
+      const body=document.getElementById('scBody');
+      const bodyRect=body.getBoundingClientRect();
+      function onMove(e){
+        scDragCablePos={x:e.clientX-bodyRect.left,y:e.clientY-bodyRect.top};
+        drawCables(); updatePortConnectedStates();
+      }
+      function onUp(){ window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp); }
+      window.addEventListener('mousemove',onMove);
+      window.addEventListener('mouseup',onUp);
+    } else {
+      const a=pendingPort;
+      // Clicking the same port cancels
+      if(a.nodeId===nodeId && a.portName===portName){ cancelPendingCable(); return; }
+      // Clicking same direction — cancel and restart from new port
+      if(a.isOut===isOut){ cancelPendingCable(); handlePortClick(nodeId,portName,isOut,portEl); return; }
+
+      cancelPendingCable();
+
+      const fromId   = a.isOut ? a.nodeId   : nodeId;
+      const fromPort = a.isOut ? a.portName : portName;
+      const toId     = a.isOut ? nodeId     : a.nodeId;
+      const toPort   = a.isOut ? portName   : a.portName;
+
+      // OUTPUT node accepts infinite inputs; all other inputs are exclusive
+      if(toId !== SC_OUTPUT_ID){
+        scEdges=scEdges.filter(e=>!(e.toId===toId&&e.toPort===toPort));
+      }
+      scEdges.push({fromId,fromPort,toId,toPort});
+      rebuildAudioChain(); drawCables(); updatePortConnectedStates(); updateScMiniPreview();
+    }
+  }
+
+  function scCanvasClick(e){
+    if(pendingPort){ cancelPendingCable(); }
+  }
+
+  // ── Knob MOD port click ──────────────────────────────────────
+  function handleKnobPortClick(nodeId, knobId, portEl, color){
+    if(!pendingPort){
+      // Disconnect if already connected
+      const existing=ctrlEdges.findIndex(e=>e.toNodeId===nodeId&&e.toKnobId===knobId);
+      if(existing>=0){
+        ctrlEdges.splice(existing,1);
+        portEl.style.background=''; portEl.style.borderColor=color;
+        drawCables(); updatePortConnectedStates(); return;
+      }
+      // Start pending from knob as destination
+      pendingPort={nodeId,portName:knobId,isOut:false,el:portEl,isKnob:true,knobId};
+      portEl.classList.add('active');
+      if(scCanvas) scCanvas.classList.add('wiring');
+      const body=document.getElementById('scBody');
+      const bodyRect=body.getBoundingClientRect();
+      function onMove(e){ scDragCablePos={x:e.clientX-bodyRect.left,y:e.clientY-bodyRect.top}; drawCables(); updatePortConnectedStates(); }
+      function onUp(){ window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp); }
+      window.addEventListener('mousemove',onMove); window.addEventListener('mouseup',onUp);
+    } else {
+      const a=pendingPort;
+      if(a.isKnob){ cancelPendingCable(); return; } // knob→knob not allowed
+      if(!a.isCmd){ cancelPendingCable(); return; }  // must come from cmd node
+      cancelPendingCable();
+      const idx=ctrlEdges.findIndex(e=>e.toNodeId===nodeId&&e.toKnobId===knobId);
+      if(idx>=0) ctrlEdges.splice(idx,1);
+      ctrlEdges.push({fromId:a.nodeId, toNodeId:nodeId, toKnobId:knobId});
+      drawCables(); updatePortConnectedStates();
+    }
+  }
+
+  // ── Add module ───────────────────────────────────────────────
+  function addScModule(type){
+    if(!audioCtx) initAudio();
+    const def=MODULE_DEFS[type];
+    const params={};
+    def.knobs.forEach(k=>{ params[k.id]=k.def; });
+    const body=document.getElementById('scBody');
+    const W=body.offsetWidth, H=body.offsetHeight;
+    const node={
+      id: Date.now()+'',
+      type, enabled:true, params,
+      selectVal:def.select?.def||null,
+      audioNode:makeWebAudioNode(type,params,def.select?.def),
+      x:Math.max(100,Math.random()*(W-200)),
+      y:Math.max(40, Math.random()*(H-180)),
+    };
+    scNodes.push(node);
+    const el=createNodeEl(node);
+    body.appendChild(el);
+    drawCables(); updatePortConnectedStates(); updateScMiniPreview();
+    buildScPicker(); // refresh picker (stays visible)
+  }
+
+  function buildScPicker(){
+    const body=document.getElementById('scPickerBody');
+    if(!body) return;
+    body.innerHTML='';
+    const cats={};
+    Object.entries(MODULE_DEFS).forEach(([type,def])=>{
+      const cat=def.cat||'OTHER';
+      if(!cats[cat]) cats[cat]=[];
+      cats[cat].push([type,def]);
+    });
+    Object.entries(cats).forEach(([cat,mods])=>{
+      const row=document.createElement('div');
+      row.className='sc-pick-row';
+      const lbl=document.createElement('span');
+      lbl.className='sc-pick-cat';
+      lbl.textContent=cat;
+      row.appendChild(lbl);
+      mods.forEach(([type,def])=>{
+        const btn=document.createElement('button');
+        btn.className='sc-pick-btn';
+        btn.style.color=def.color;
+        btn.style.borderColor=`rgba(${hexToRgbSc(def.color)},0.5)`;
+        btn.textContent=def.label;
+        btn.addEventListener('click',()=>addScModule(type));
+        row.appendChild(btn);
+      });
+      body.appendChild(row);
+    });
+  }
+
+  function updateScMiniPreview(){
+    const el=document.getElementById('scMiniPreview');
+    if(!el) return;
+    el.innerHTML='';
+    const tile=document.querySelector('[data-tile="signalchain"] .tile-label');
+    if(tile){
+      const count=scNodes.length;
+      tile.innerHTML=`<span style="width:4px;height:4px;border-radius:50%;background:currentColor;flex-shrink:0;opacity:.6;display:inline-block;margin-right:6px;"></span>Signal Chain${count>0?' · '+count:''}`;
+    }
+    const src=document.createElement('div'); src.style.cssText='width:8px;height:8px;border-radius:50%;border:1px solid var(--rf-acc);flex-shrink:0;'; el.appendChild(src);
+    scNodes.forEach(n=>{
+      const def=MODULE_DEFS[n.type];
+      const c=document.createElement('div'); c.className='sc-mini-cable'; el.appendChild(c);
+      const b=document.createElement('div'); b.className='sc-mini-mod'; b.style.borderColor=def.color; b.style.color=def.color; b.style.opacity=n.enabled?'0.8':'0.3'; el.appendChild(b);
+    });
+    const c2=document.createElement('div'); c2.className='sc-mini-cable'; el.appendChild(c2);
+    const out=document.createElement('div'); out.style.cssText='width:8px;height:8px;border-radius:50%;border:1px solid var(--rf-accC);flex-shrink:0;'; el.appendChild(out);
+  }
+
+  // ── Overlay open/close ────────────────────────────────────────
+  const scOverlay=document.getElementById('scOverlay');
+  document.getElementById('scClose').addEventListener('click',()=>scOverlay.classList.remove('on'));
+  scOverlay.addEventListener('click',e=>{ if(e.target===scOverlay) scOverlay.classList.remove('on'); });
+  document.getElementById('scClearAll').addEventListener('click',()=>{
+    if(!confirm('Clear all modules and cables?')) return;
+    scNodes.forEach(n=>{ const el=document.getElementById('scnode-'+n.id); if(el) el.remove(); });
+    cmdNodes.forEach(n=>{ const el=document.getElementById('scnode-'+n.id); if(el) el.remove(); });
+    scNodes=[]; scEdges=[]; cmdNodes=[]; cmdEdges=[]; ctrlEdges=[];
+    rebuildAudioChain(); drawCables(); updatePortConnectedStates(); updateScMiniPreview();
+  });
+
+  document.getElementById('scBypassAll').addEventListener('click',()=>{
+    scBypassAllState=!scBypassAllState;
+    document.getElementById('scBypassAll').classList.toggle('on',scBypassAllState);
+    rebuildAudioChain(); drawCables(); updatePortConnectedStates();
+  });
+
+
+  // ── Preset system ─────────────────────────────────────────────
+  const SC_PRESET_COUNT = 8;
+  const SC_STORAGE_KEY = 'rf_sc_presets';
+
+  function serializeChain(){
+    return {
+      nodes: scNodes.map(n=>({
+        id:n.id, type:n.type, x:n.x, y:n.y,
+        enabled:n.enabled, params:{...n.params},
+        selectVal:n.selectVal
+      })),
+      edges: scEdges.map(e=>({...e})),
+      bypass: scBypassAllState,
+    };
+  }
+
+  function deserializeChain(data){
+    if(!data||!data.nodes) return;
+    if(!audioCtx) initAudio();
+    // Clear existing
+    scNodes.forEach(n=>{ const el=document.getElementById('scnode-'+n.id); if(el)el.remove(); });
+    scNodes=[]; scEdges=[];
+    scBypassAllState = data.bypass || false;
+    document.getElementById('scBypassAll')?.classList.toggle('on', scBypassAllState);
+
+    data.nodes.forEach(saved=>{
+      const def=MODULE_DEFS[saved.type]; if(!def) return;
+      const params={...saved.params};
+      def.knobs.forEach(k=>{ if(params[k.id]===undefined) params[k.id]=k.def; });
+      const node={
+        id:saved.id, type:saved.type, x:saved.x||100, y:saved.y||100,
+        enabled:saved.enabled!==false, params, selectVal:saved.selectVal||null,
+        audioNode:makeWebAudioNode(saved.type,params,saved.selectVal),
+      };
+      scNodes.push(node);
+    });
+    scEdges = data.edges.map(e=>({...e}));
+    rebuildAudioChain();
+    // Re-render if overlay is open
+    if(document.getElementById('scOverlay').classList.contains('on')){
+      const body=document.getElementById('scBody');
+      body.querySelectorAll('.sc-node').forEach(e=>e.remove());
+      scNodes.forEach(n=>body.appendChild(createNodeEl(n)));
+      drawCables(); updatePortConnectedStates();
+    }
+    updateScMiniPreview();
+    renderPresetSlots();
+  }
+
+  function loadPresets(){
+    try{ return JSON.parse(localStorage.getItem(SC_STORAGE_KEY)||'{}'); }catch(e){ return {}; }
+  }
+  function savePresets(presets){ localStorage.setItem(SC_STORAGE_KEY, JSON.stringify(presets)); }
+
+  function renderPresetSlots(){
+    const slots=document.getElementById('scPresetSlots'); if(!slots) return;
+    const presets=loadPresets();
+    slots.innerHTML='';
+    for(let i=0;i<SC_PRESET_COUNT;i++){
+      const p=presets[i];
+      const btn=document.createElement('button');
+      btn.className='sc-preset-slot'+(p?' filled':'');
+      btn.title=p?`Load: ${p.name}
+Right-click to save here`:'Click to save here';
+      btn.innerHTML=`<span class="slot-name">${p?p.name:(i+1)}</span>`;
+      btn.addEventListener('click',()=>{
+        if(p){ if(confirm(`Load preset "${p.name}"?`)) deserializeChain(p.chain); }
+        else {
+          const name=prompt('Save preset as:','Preset '+(i+1));
+          if(!name) return;
+          const prs=loadPresets();
+          prs[i]={name, chain:serializeChain()};
+          savePresets(prs); renderPresetSlots();
+        }
+      });
+      btn.addEventListener('contextmenu',e=>{
+        e.preventDefault();
+        if(p){
+          const choice=confirm(`Overwrite "${p.name}" with current chain?
+
+OK = overwrite, Cancel = delete`);
+          const prs=loadPresets();
+          if(choice){ const name=prompt('Save as:',p.name)||p.name; prs[i]={name,chain:serializeChain()}; }
+          else delete prs[i];
+          savePresets(prs); renderPresetSlots();
+        } else {
+          const name=prompt('Save preset as:','Preset '+(i+1));
+          if(!name) return;
+          const prs=loadPresets();
+          prs[i]={name,chain:serializeChain()};
+          savePresets(prs); renderPresetSlots();
+        }
+      });
+      slots.appendChild(btn);
+    }
+  }
+
+  document.getElementById('scExportBtn').addEventListener('click',()=>{
+    const data=JSON.stringify({version:1, name:'RF Signal Chain', chain:serializeChain()},null,2);
+    const a=document.createElement('a');
+    a.href='data:application/json;charset=utf-8,'+encodeURIComponent(data);
+    a.download='rf-signal-chain.json';
+    a.click();
+  });
+
+  document.getElementById('scImportBtn').addEventListener('click',()=>{
+    document.getElementById('scImportFile').click();
+  });
+
+  document.getElementById('scImportFile').addEventListener('change',e=>{
+    const file=e.target.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        const data=JSON.parse(ev.target.result);
+        const chain=data.chain||data; // support both wrapped and raw
+        deserializeChain(chain);
+      }catch(err){ alert('Invalid signal chain file.'); }
+      e.target.value='';
+    };
+    reader.readAsText(file);
+  });
+
+  // ── Picker drag + collapse ────────────────────────────────────
+  (function(){
+    let pdx=0,pdy=0,pdragging=false,pmoved=false;
+    const hd=document.getElementById('scPickerHd');
+    if(!hd) return;
+
+    // ── Animated hex — outline + glyph color cycling ────────────
+    const hexPoly  = document.getElementById('scHexPoly');
+    const hexGlyph = document.getElementById('scHexGlyph');
+    const MODULE_COLORS=['#42d4f5','#f5f542','#42f5a1','#f54242','#c8f542','#f542a8','#a142f5','#f5a542','#42b4f5','#f542d4','#5542f5'];
+    function hexLerp(a,b,t){
+      const p=s=>parseInt(s.slice(1,3),16),q=s=>parseInt(s.slice(3,5),16),r=s=>parseInt(s.slice(5,7),16);
+      return `rgb(${Math.round(p(a)+(p(b)-p(a))*t)},${Math.round(q(a)+(q(b)-q(a))*t)},${Math.round(r(a)+(r(b)-r(a))*t)})`;
+    }
+    let hexAnimId=null;
+    function startHexAnim(){
+      if(hexAnimId) return;
+      let t=0;
+      function frame(){
+        t+=0.008;
+        const n=MODULE_COLORS.length;
+        const idx=Math.floor(t%n);
+        const col=hexLerp(MODULE_COLORS[idx%n],MODULE_COLORS[(idx+1)%n],t%1);
+        if(hexPoly)  hexPoly.setAttribute('stroke',col);
+        if(hexGlyph) hexGlyph.setAttribute('fill',col);
+        hexAnimId=requestAnimationFrame(frame);
+      }
+      hexAnimId=requestAnimationFrame(frame);
+    }
+    startHexAnim();
+
+    // ── Collapse toggle ───────────────────────────────────────────
+    let collapsed=false;
+    const hexEl=document.getElementById('scPickerHex');
+    function toggleCollapse(){
+      if(pmoved) return;
+      const picker=document.getElementById('scPicker');
+      collapsed=!collapsed;
+      picker.classList.toggle('collapsed',collapsed);
+    }
+    hexEl && hexEl.addEventListener('click',e=>{ e.stopPropagation(); pmoved=false; toggleCollapse(); });
+
+    // ── Drag — works collapsed or expanded ───────────────────────
+    hd.addEventListener('mousedown',e=>{
+      pdragging=true; pmoved=false;
+      const picker=document.getElementById('scPicker');
+      const r=picker.getBoundingClientRect();
+      pdx=e.clientX-r.left; pdy=e.clientY-r.top;
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove',e=>{
+      if(!pdragging) return;
+      pmoved=true;
+      const picker=document.getElementById('scPicker');
+      const body=document.getElementById('scBody');
+      const br=body.getBoundingClientRect();
+      const pr=picker.getBoundingClientRect();
+      let nx=e.clientX-br.left-pdx;
+      let ny=e.clientY-br.top-pdy;
+      nx=Math.max(0,Math.min(br.width-pr.width,nx));
+      ny=Math.max(0,Math.min(br.height-pr.height,ny));
+      picker.style.left=nx+'px';
+      picker.style.bottom='auto';
+      picker.style.top=ny+'px';
+    });
+    window.addEventListener('mouseup',()=>{ pdragging=false; });
+  })();
+
+  function openScOverlay(){
+    if(!audioCtx) initAudio();
+    scOverlay.classList.add('on');
+    buildScPicker();
+    buildCmdPicker();
+    renderPresetSlots();
+    setTimeout(()=>{
+      initScCanvas();
+      createFixedNodes();
+      // Re-render existing nodes
+      const body=document.getElementById('scBody');
+      scNodes.forEach(n=>{ if(!document.getElementById('scnode-'+n.id)) body.appendChild(createNodeEl(n)); });
+      drawCables(); updatePortConnectedStates();
+      // Canvas click to delete cables
+      scCanvas.style.pointerEvents='auto';
+      scCanvas.addEventListener('click',scCanvasClick);
+    },50);
+  }
+
+
+  // ── COMMAND Modules ──────────────────────────────────────────
+
+  const CMD_DEFS = {
+    lfo:  { label:'LFO',  color:'#00ff50', desc:'Low Freq Oscillator',
+            modes:['SINE','SQUARE','SAW','TRI','RAMP'],
+            params:{ shape:'SINE', rate:1, depth:1, min:0, max:1 } },
+    env:  { label:'ENV',  color:'#00e870', desc:'Envelope',
+            modes:['ATK','DCY','SUS','REL'],
+            params:{ attack:0.01, decay:0.3, sustain:0.7, release:0.5, threshold:-40 } },
+    seq:  { label:'SEQ',  color:'#00d060', desc:'Step Sequencer',
+            modes:['PLAY','PAUSE','RESET','EDIT'],
+            params:{ bpm:120, steps:8, gate:0.5,
+                     values:[0,0.25,0.5,0.75,1,0.75,0.5,0.25] } },
+    rand: { label:'RAND', color:'#00b850', desc:'Random',
+            modes:['S+H','GLIDE','BURST'],
+            params:{ rate:2, min:0, max:1, smooth:0 } },
+    math: { label:'MATH', color:'#00a040', desc:'Expression',
+            modes:['EXPR','MAP','SCALE','CLAMP'],
+            params:{ expr:'sin(t*2)*0.5+0.5', inMin:0, inMax:1, outMin:0, outMax:1 } },
+    ifnode: { label:'IF', color:'#009030', desc:'Conditional',
+            modes:['GT','LT','EQ','NEQ','BETWEEN'],
+            params:{ condition:'a > 0.5', trueVal:1, falseVal:0 } },
+    logic: { label:'GATE', color:'#008028', desc:'Logic Gate',
+            modes:['AND','OR','NOT','XOR','NAND','NOR'],
+            params:{ mode:'AND', threshold:0.5 } },
+  };
+
+  // Runtime state for command nodes
+  let cmdNodes = []; // [{id, type, x, y, enabled, params, mode, expr, audioNode:{output}}]
+  let cmdEdges = []; // [{fromId, fromPort, toId, toPort}] — ctrl cables
+  // Cross edges: cmd→signal (ctrl port on knob)
+  let ctrlEdges = []; // [{fromId, toNodeId, toKnobId}]
+
+  let cmdPendingPort = null;
+
+  function hexToRgbCmd(hex){
+    return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
+  }
+
+  // ── Command node runtime (runs every animation frame) ─────────
+  let cmdClock = 0; // seconds, updated in loop
+  let cmdLastTime = null;
+
+  function tickCmdNodes(ts){
+    const now = ts / 1000;
+    const dt = cmdLastTime ? Math.min(0.1, now - cmdLastTime) : 0;
+    cmdLastTime = now;
+    cmdClock += dt;
+
+    cmdNodes.forEach(cn=>{
+      if(!cn.enabled) return;
+      let val = 0;
+      const p = cn.params;
+      const t = cmdClock;
+
+      if(cn.type==='lfo'){
+        const phase = t * (p.rate||1) * Math.PI * 2;
+        const shape = cn.mode||'SINE';
+        let raw;
+        if(shape==='SINE')   raw = Math.sin(phase);
+        else if(shape==='SQUARE') raw = Math.sign(Math.sin(phase));
+        else if(shape==='SAW')    raw = ((phase/(Math.PI*2))%1)*2-1;
+        else if(shape==='TRI')    raw = Math.asin(Math.sin(phase))*2/Math.PI;
+        else if(shape==='RAMP')   raw = 1-((phase/(Math.PI*2))%1)*2;
+        else raw = Math.sin(phase);
+        val = ((raw+1)/2) * (p.depth||1);
+        val = (p.min||0) + val * ((p.max||1)-(p.min||0));
+      }
+      else if(cn.type==='rand'){
+        if(!cn._lastRand || t - cn._lastRand > 1/(p.rate||2)){
+          cn._randVal = (p.min||0) + Math.random()*((p.max||1)-(p.min||0));
+          cn._lastRand = t;
+        }
+        val = cn._randVal||0;
+      }
+      else if(cn.type==='math'){
+        try{
+          const expr = cn.expr || p.expr || 'sin(t*2)*0.5+0.5';
+          const a = cn._inputA||0, b = cn._inputB||0;
+          // Safe eval with math functions
+          val = Function('t','a','b','sin','cos','tan','abs','floor','ceil','round','min','max','pow','sqrt','PI',
+            `return ${expr}`
+          )(t,a,b,Math.sin,Math.cos,Math.tan,Math.abs,Math.floor,Math.ceil,Math.round,Math.min,Math.max,Math.pow,Math.sqrt,Math.PI);
+          val = isFinite(val) ? Math.max(-1,Math.min(2,val)) : 0;
+        }catch(e){ val = 0; }
+      }
+      else if(cn.type==='seq'){
+        const bpm = p.bpm||120;
+        const steps = Math.round(p.steps||8);
+        const stepDur = 60/bpm;
+        const stepIdx = Math.floor((t/stepDur) % steps);
+        val = (p.values||[])[stepIdx] ?? 0;
+        cn._step = stepIdx;
+      }
+      else if(cn.type==='logic'){
+        const a = cn._inputA||0, b = cn._inputB||0;
+        const thr = p.threshold||0.5;
+        const ai = a>thr, bi = b>thr;
+        const mode = cn.mode||'AND';
+        if(mode==='AND')  val = (ai&&bi)?1:0;
+        else if(mode==='OR')  val = (ai||bi)?1:0;
+        else if(mode==='NOT') val = ai?0:1;
+        else if(mode==='XOR') val = (ai!==bi)?1:0;
+        else if(mode==='NAND') val = !(ai&&bi)?1:0;
+        else if(mode==='NOR')  val = !(ai||bi)?1:0;
+      }
+      else if(cn.type==='ifnode'){
+        const a = cn._inputA||0;
+        const mode = cn.mode||'GT';
+        const thr = p.threshold||0.5;
+        let test = false;
+        if(mode==='GT') test = a > thr;
+        else if(mode==='LT') test = a < thr;
+        else if(mode==='EQ') test = Math.abs(a-thr)<0.05;
+        else if(mode==='NEQ') test = Math.abs(a-thr)>=0.05;
+        val = test ? (p.trueVal??1) : (p.falseVal??0);
+      }
+      else if(cn.type==='env'){
+        // Auto-cycling envelope
+        const total = (p.attack||0.01)+(p.decay||0.3)+(p.sustain||0.7)+(p.release||0.5);
+        const phase = t % total;
+        const atk = p.attack||0.01, dcy = p.decay||0.3, sus = p.sustain||0.7, rel = p.release||0.5;
+        if(phase < atk) val = phase/atk;
+        else if(phase < atk+dcy) val = 1-(phase-atk)/dcy*(1-sus);
+        else if(phase < atk+dcy+rel) val = sus;
+        else val = sus*(1-(phase-atk-dcy-rel)/rel);
+        val = Math.max(0,Math.min(1,val));
+      }
+
+      cn._output = val;
+
+      // Apply to connected knobs
+      ctrlEdges.filter(e=>e.fromId===cn.id).forEach(e=>{
+        const targetNode = scNodes.find(n=>n.id===e.toNodeId);
+        if(!targetNode) return;
+        const kd = MODULE_DEFS[targetNode.type]?.knobs?.find(k=>k.id===e.toKnobId);
+        if(!kd) return;
+        // Add to base param value, clamped
+        const base = targetNode.params[e.toKnobId] ?? kd.def;
+        const modulated = Math.max(kd.min, Math.min(kd.max, base + val * (kd.max - kd.min) * 0.5));
+        // Apply without saving to params
+        if(targetNode.audioNode) updateNodeParamDirect(targetNode, e.toKnobId, modulated);
+      });
+
+      // Update CRT display
+      const crtEl = document.getElementById('cmd-crt-'+cn.id);
+      if(crtEl){
+        const valEl = crtEl.querySelector('.sc-cmd-crt-val');
+        if(valEl) valEl.textContent = formatCmdVal(cn, val);
+      }
+    });
+  }
+
+  function formatCmdVal(cn, val){
+    if(cn.type==='lfo') return `${cn.mode||'SINE'} ${val.toFixed(3)}`;
+    if(cn.type==='seq') return `STEP ${(cn._step||0)+1} · ${val.toFixed(2)}`;
+    if(cn.type==='math') return `= ${val.toFixed(4)}`;
+    if(cn.type==='logic') return `${cn.mode||'AND'} → ${val>0.5?'TRUE':'FALSE'}`;
+    if(cn.type==='ifnode') return `${cn.mode||'GT'} → ${val.toFixed(2)}`;
+    if(cn.type==='env') return `ENV ${val.toFixed(3)}`;
+    if(cn.type==='rand') return `RND ${val.toFixed(3)}`;
+    return val.toFixed(3);
+  }
+
+  function updateNodeParamDirect(node,knobId,val){
+    if(!node.audioNode||!audioCtx)return;
+    const n=node.audioNode,ct=audioCtx.currentTime,tc=0.008;
+    try{switch(knobId){
+      case 'gain':if(n.nodes?.[0]?.gain)n.nodes[0].gain.setTargetAtTime(val,ct,tc);break;
+      case 'gainA':if(n.gainA)n.gainA.gain.setTargetAtTime(val,ct,tc);break;
+      case 'gainB':if(n.gainB)n.gainB.gain.setTargetAtTime(val,ct,tc);break;
+      case 'pan':if(n.nodes?.[0]?.pan)n.nodes[0].pan.setTargetAtTime(val,ct,tc);else if(n.pan?.pan)n.pan.pan.setTargetAtTime(val,ct,tc);break;
+      case 'freq':if(n.f?.frequency)n.f.frequency.setTargetAtTime(val,ct,tc);else if(n.nodes?.[0]?.frequency)n.nodes[0].frequency.setTargetAtTime(val,ct,tc);break;
+      case 'q':if(n.nodes?.[0]?.Q)n.nodes[0].Q.setTargetAtTime(val,ct,tc);break;
+      case 'wet':if(n.wet?.gain){n.wet.gain.setTargetAtTime(val,ct,tc);if(n.dry?.gain)n.dry.gain.setTargetAtTime(1-val,ct,tc);}break;
+      case 'drive':if(n.ws){const k=val*200+1,c=new Float32Array(256);for(let i=0;i<256;i++){const x=i*2/256-1;c[i]=(Math.PI+k)*x/(Math.PI+k*Math.abs(x));}n.ws.curve=c;}break;
+      case 'tone':if(n.tone?.frequency)n.tone.frequency.setTargetAtTime(val,ct,tc);break;
+      case 'time':if(n.dly?.delayTime)n.dly.delayTime.setTargetAtTime(val,ct,tc);else if(n.dlyL?.delayTime){n.dlyL.delayTime.setTargetAtTime(val,ct,tc);n.dlyR.delayTime.setTargetAtTime(val*1.5,ct,tc);}break;
+      case 'feedback':if(n.fb?.gain)n.fb.gain.setTargetAtTime(val,ct,tc);break;
+      case 'rate':if(n.lfo?.frequency)n.lfo.frequency.setTargetAtTime(val,ct,tc);break;
+      case 'depth':if(n.lfoGain?.gain)n.lfoGain.gain.setTargetAtTime(val,ct,tc);break;
+      case 'threshold':if(n.nodes?.[0]?.threshold)n.nodes[0].threshold.setTargetAtTime(val,ct,tc);break;
+      case 'ratio':if(n.nodes?.[0]?.ratio)n.nodes[0].ratio.setTargetAtTime(val,ct,tc);break;
+      case 'attack':if(n.nodes?.[0]?.attack)n.nodes[0].attack.setTargetAtTime(val,ct,tc);break;
+      case 'release':if(n.nodes?.[0]?.release)n.nodes[0].release.setTargetAtTime(val,ct,tc);break;
+      case 'width':if(n.gL?.gain){n.gL.gain.setTargetAtTime(val,ct,tc);n.gR.gain.setTargetAtTime(val,ct,tc);}break;
+      case 'level':if(n.lvl?.gain)n.lvl.gain.setTargetAtTime(val,ct,tc);break;
+      case 'fb':if(n.fb?.gain)n.fb.gain.setTargetAtTime(val,ct,tc);break;
+      case 'low':if(n.nodes?.[0]?.gain)n.nodes[0].gain.setTargetAtTime(val,ct,tc);break;
+      case 'mid':if(n.nodes?.[1]?.gain)n.nodes[1].gain.setTargetAtTime(val,ct,tc);break;
+      case 'high':if(n.nodes?.[2]?.gain)n.nodes[2].gain.setTargetAtTime(val,ct,tc);break;
+    }}catch(e){}
+  }
+
+  // ── Create command node element ───────────────────────────────
+  function createCmdNodeEl(cn){
+    const def = CMD_DEFS[cn.type];
+    const color = def.color;
+    const el = document.createElement('div');
+    el.className = 'sc-cmd-node';
+    el.id = 'scnode-'+cn.id;
+    el.style.left = cn.x+'px';
+    el.style.top  = cn.y+'px';
+    el.style.borderColor = `rgba(${hexToRgbCmd(color)},0.4)`;
+
+    // Header
+    const hd = document.createElement('div');
+    hd.className = 'sc-cmd-node-hd';
+    const dot = document.createElement('div');
+    dot.className = 'sc-cmd-dot';
+    dot.style.cssText = `width:6px;height:6px;background:${color};box-shadow:0 0 4px ${color};flex-shrink:0;`;
+    const name = document.createElement('div');
+    name.className = 'sc-cmd-name';
+    name.style.color = color;
+    name.textContent = def.label;
+    const rm = document.createElement('button');
+    rm.className = 'sc-cmd-node-remove'; rm.innerHTML='✕';
+    rm.addEventListener('click', e=>{ e.stopPropagation();
+      cmdNodes = cmdNodes.filter(n=>n.id!==cn.id);
+      ctrlEdges = ctrlEdges.filter(e=>e.fromId!==cn.id);
+      cmdEdges = cmdEdges.filter(e=>e.fromId!==cn.id&&e.toId!==cn.id);
+      el.remove(); drawCables(); updatePortConnectedStates();
+    });
+    hd.append(dot,name,rm);
+    el.appendChild(hd);
+
+    // CRT display
+    const crt = document.createElement('div');
+    crt.className = 'sc-cmd-crt';
+    crt.id = 'cmd-crt-'+cn.id;
+    const crtVal = document.createElement('span');
+    crtVal.className = 'sc-cmd-crt-val';
+    crtVal.textContent = def.label+' READY';
+    const cursor = document.createElement('span');
+    cursor.className = 'sc-cmd-crt-cursor';
+    cursor.textContent = '█';
+    crt.append(crtVal, cursor);
+    el.appendChild(crt);
+
+    // Mode buttons
+    const btns = document.createElement('div');
+    btns.className = 'sc-cmd-btns';
+    def.modes.forEach(mode=>{
+      const b = document.createElement('button');
+      b.className = 'sc-cmd-btn' + (cn.mode===mode?' active':'');
+      b.textContent = mode;
+      b.style.color = color;
+      b.style.borderColor = cn.mode===mode ? color : 'var(--b2)';
+      b.addEventListener('click', e=>{ e.stopPropagation();
+        cn.mode = mode;
+        btns.querySelectorAll('.sc-cmd-btn').forEach(x=>{ x.classList.remove('active'); x.style.borderColor='var(--b2)'; });
+        b.classList.add('active'); b.style.borderColor = color;
+      });
+      btns.appendChild(b);
+    });
+    el.appendChild(btns);
+
+    // Expression / value input
+    const inp = document.createElement('input');
+    inp.className = 'sc-cmd-input';
+    inp.type = 'text';
+    inp.placeholder = def.type==='math'?'sin(t*2)*0.5+0.5':'value...';
+    inp.value = cn.expr || (cn.type==='math'?cn.params.expr:'') || '';
+    inp.addEventListener('input', e=>{ e.stopPropagation(); cn.expr=e.target.value; if(cn.type==='math') cn.params.expr=e.target.value; });
+    inp.addEventListener('mousedown', e=>e.stopPropagation());
+    inp.addEventListener('keydown', e=>e.stopPropagation());
+    el.appendChild(inp);
+
+    const portsRow=document.createElement('div');portsRow.className='sc-cmd-ports';
+    function mkSP(pName,isOut){
+      const w=document.createElement('div');w.className=isOut?'sc-cmd-port-out':'sc-cmd-port-in';
+      const p2=document.createElement('div');p2.className='sc-sqport';p2.style.borderColor=color;p2.style.color=color;
+      p2.dataset.node=cn.id;p2.dataset.port=pName;p2.dataset.cmd='1';
+      p2.addEventListener('mouseenter',()=>{if(isCmdPortConnected(cn.id,pName,isOut)){p2.style.background='#f54242';p2.style.borderColor='#f54242';}});
+      p2.addEventListener('mouseleave',()=>{p2.style.background='';p2.style.borderColor=color;});
+      p2.addEventListener('click',e=>{e.stopPropagation();handleCmdPortClick(cn.id,pName,isOut,p2);});
+      const l2=document.createElement('div');l2.className='sc-sqport-label';l2.textContent=pName;
+      if(isOut)w.append(l2,p2);else w.append(p2,l2);return w;
+    }
+    const pi=def.portsIn||0;
+    if(pi===0){portsRow.appendChild(document.createElement('div'));portsRow.appendChild(mkSP('OUT',true));}
+    else if(pi===1){portsRow.appendChild(mkSP('IN',false));portsRow.appendChild(mkSP('OUT',true));}
+    else{const ig=document.createElement('div');ig.style.cssText='display:flex;flex-direction:column;gap:3px;';ig.appendChild(mkSP('IN A',false));ig.appendChild(mkSP('IN B',false));portsRow.appendChild(ig);portsRow.appendChild(mkSP('OUT',true));}
+    el.appendChild(portsRow);
+
+    // Drag
+    let dragging=false,dx=0,dy=0;
+    hd.addEventListener('mousedown',e=>{
+      if(e.target!==hd&&e.target!==dot&&e.target!==name) return;
+      dragging=true; dx=e.clientX-cn.x; dy=e.clientY-cn.y; e.preventDefault();
+      function onM(ev){ if(!dragging)return; cn.x=ev.clientX-dx; cn.y=ev.clientY-dy; el.style.left=cn.x+'px'; el.style.top=cn.y+'px'; drawCables(); updatePortConnectedStates(); }
+      function onU(){ dragging=false; window.removeEventListener('mousemove',onM); window.removeEventListener('mouseup',onU); }
+      window.addEventListener('mousemove',onM); window.addEventListener('mouseup',onU);
+    });
+
+    return el;
+  }
+
+  function isCmdPortConnected(nodeId, portName, isOut){
+    return cmdEdges.some(e=> isOut ? (e.fromId===nodeId&&e.fromPort===portName) : (e.toId===nodeId&&e.toPort===portName));
+  }
+
+  function handleCmdPortClick(nodeId, portName, isOut, portEl){
+    if(!pendingPort){
+      pendingPort = {nodeId, portName, isOut, el:portEl, isCmd:true};
+      portEl.classList.add('active');
+      if(scCanvas) scCanvas.classList.add('wiring');
+      const body=document.getElementById('scBody');
+      const bodyRect=body.getBoundingClientRect();
+      function onMove(e){ scDragCablePos={x:e.clientX-bodyRect.left,y:e.clientY-bodyRect.top}; drawCables(); updatePortConnectedStates(); }
+      function onUp(){ window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp); }
+      window.addEventListener('mousemove',onMove); window.addEventListener('mouseup',onUp);
+    } else {
+      const a = pendingPort;
+      if(a.nodeId===nodeId&&a.portName===portName){ cancelPendingCable(); return; }
+      if(a.isOut===isOut){ cancelPendingCable(); handleCmdPortClick(nodeId,portName,isOut,portEl); return; }
+      // If pending is a knob MOD port, create ctrl edge
+      if(a.isKnob && isOut){
+        cancelPendingCable();
+        const idx=ctrlEdges.findIndex(e=>e.toNodeId===a.nodeId&&e.toKnobId===a.knobId);
+        if(idx>=0) ctrlEdges.splice(idx,1);
+        ctrlEdges.push({fromId:nodeId, toNodeId:a.nodeId, toKnobId:a.knobId});
+        drawCables(); updatePortConnectedStates(); return;
+      }
+      cancelPendingCable();
+      const fromId = a.isOut ? a.nodeId : nodeId;
+      const fromPort = a.isOut ? a.portName : portName;
+      const toId = a.isOut ? nodeId : a.nodeId;
+      const toPort = a.isOut ? portName : a.portName;
+      cmdEdges.push({fromId,fromPort,toId,toPort});
+      drawCables(); updatePortConnectedStates();
+    }
+  }
+
+  function addCmdModule(type){
+    const def = CMD_DEFS[type];
+    const body = document.getElementById('scBody');
+    const W=body.offsetWidth, H=body.offsetHeight;
+    const cn = {
+      id: 'cmd_'+Date.now(),
+      type, enabled:true,
+      mode: def.modes[0],
+      params: {...def.params},
+      expr: def.params.expr||'',
+      x: Math.max(100,Math.random()*(W-200)),
+      y: Math.max(40, Math.random()*(H-180)),
+      _output: 0,
+    };
+    cmdNodes.push(cn);
+    body.appendChild(createCmdNodeEl(cn));
+    drawCables(); updatePortConnectedStates();
+    buildCmdPicker();
+  }
+
+  function buildCmdPicker(){
+    const body = document.getElementById('scCmdPickerBody');
+    if(!body) return;
+    body.innerHTML='';
+    Object.entries(CMD_DEFS).forEach(([type,def])=>{
+      const btn = document.createElement('button');
+      btn.className = 'sc-cmd-pick-btn';
+      btn.innerHTML = `<span style="color:${def.color}">${def.label}</span> <span style="color:var(--dim);font-size:7px;">${def.desc}</span>`;
+      btn.addEventListener('click', ()=>addCmdModule(type));
+      body.appendChild(btn);
+    });
+  }
+
+  // ── Square port picker collapse/drag ──────────────────────────
+  (function(){
+    let pdx=0,pdy=0,pdragging=false,pmoved=false;
+    const hd = document.getElementById('scCmdPickerHd');
+    if(!hd) return;
+
+    // Animated square — color cycles
+    const sqRect  = document.getElementById('scSqRect');
+    const sqGlyph = document.getElementById('scSqGlyph');
+    const CMD_COLORS = ['#00ff50','#00e870','#00d060','#00b850','#00a040','#009030','#00ff80'];
+    function sqLerp(a,b,t){
+      const p=s=>parseInt(s.slice(1,3),16),q=s=>parseInt(s.slice(3,5),16),r=s=>parseInt(s.slice(5,7),16);
+      return `rgb(${Math.round(p(a)+(p(b)-p(a))*t)},${Math.round(q(a)+(q(b)-q(a))*t)},${Math.round(r(a)+(r(b)-r(a))*t)})`;
+    }
+    let sqAnimId=null;
+    function startSqAnim(){
+      if(sqAnimId) return;
+      let t=0;
+      function frame(){
+        t+=0.006;
+        const n=CMD_COLORS.length;
+        const idx=Math.floor(t%n);
+        const col=sqLerp(CMD_COLORS[idx%n],CMD_COLORS[(idx+1)%n],t%1);
+        if(sqRect)  sqRect.setAttribute('stroke',col);
+        if(sqGlyph) sqGlyph.setAttribute('fill',col);
+        sqAnimId=requestAnimationFrame(frame);
+      }
+      sqAnimId=requestAnimationFrame(frame);
+    }
+    startSqAnim();
+
+    let collapsed=false;
+    const sqEl = document.getElementById('scCmdPickerSq');
+    function toggleCollapse(){
+      if(pmoved) return;
+      const picker = document.getElementById('scCmdPicker');
+      collapsed=!collapsed;
+      picker.classList.toggle('collapsed',collapsed);
+    }
+    sqEl && sqEl.addEventListener('click',e=>{ e.stopPropagation(); if(!pmoved) toggleCollapse(); });
+
+    hd.addEventListener('mousedown',e=>{
+      pdragging=true; pmoved=false;
+      const picker = document.getElementById('scCmdPicker');
+      const r = picker.getBoundingClientRect();
+      pdx=e.clientX-r.left; pdy=e.clientY-r.top;
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove',e=>{
+      if(!pdragging) return;
+      pmoved=true;
+      const picker = document.getElementById('scCmdPicker');
+      const body = document.getElementById('scBody');
+      const br = body.getBoundingClientRect();
+      const pr = picker.getBoundingClientRect();
+      let nx=Math.max(0,Math.min(br.width-pr.width,e.clientX-br.left-pdx));
+      let ny=Math.max(0,Math.min(br.height-pr.height,e.clientY-br.top-pdy));
+      picker.style.right='auto'; picker.style.left=nx+'px';
+      picker.style.bottom='auto'; picker.style.top=ny+'px';
+    });
+    window.addEventListener('mouseup',()=>{ pdragging=false; });
+  })();
+
+  // ── Tile overlay ──────────────────────────────────────────────
+  const overlay=document.getElementById('tileOverlay');
+  const tileNames={transmitter:'TRANSMITTER',ascii:'ASCII BRIDGE'};
+  const tileGlyphs={oscilloscope:'⌇⌇⌇',signalchain:'⊡—⊡—⊡',transmitter:'◉',ascii:'░▒▓'};
+  document.querySelectorAll('.rf-tile').forEach(tile=>{
+    if(tile.dataset.tile === 'audio') return;
+    if(tile.dataset.tile === 'oscilloscope'){
+      tile.addEventListener('click', e=>{
+        if(e.target.closest('input,button,select,a')) return;
+        openOscOverlay();
+      });
+      return;
+    }
+    if(tile.dataset.tile === 'signalchain'){
+      tile.addEventListener('click', e=>{
+        if(e.target.closest('input,button,select,a')) return;
+        openScOverlay();
+      });
+      return;
+    }
+    tile.addEventListener('click', e=>{
+      if(e.target.closest('input,button,select,a')) return;
+      const id=tile.dataset.tile;
+      document.getElementById('overlayTitle').textContent=tileNames[id]||id.toUpperCase();
+      document.getElementById('overlayGlyph').textContent=tileGlyphs[id]||'░▒▓';
+      document.getElementById('overlayMsg').textContent='COMING IN A FUTURE MILESTONE';
+      overlay.classList.add('on');
+    });
+  });
+
+  // Audio tile expand button only
+  document.querySelector('[data-tile="audio"] .tile-expand') &&
+  document.querySelector('[data-tile="audio"]').addEventListener('click', e=>{
+    if(!e.target.classList.contains('tile-expand')) return;
+    document.getElementById('overlayTitle').textContent = 'AUDIO';
+    document.getElementById('overlayGlyph').textContent = '◉';
+    document.getElementById('overlayMsg').textContent = 'EXPANDED AUDIO VIEW COMING SOON';
+    overlay.classList.add('on');
+  });
+  document.getElementById('overlayClose').addEventListener('click',()=>overlay.classList.remove('on'));
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.classList.remove('on');});
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){
+      if(pendingPort){ cancelPendingCable(); return; }
+      overlay.classList.remove('on');
+      document.getElementById('oscOverlay').classList.remove('on');
+      document.getElementById('scOverlay').classList.remove('on');
+      if(oscBigAnimId){ cancelAnimationFrame(oscBigAnimId); oscBigAnimId=null; }
+    }
+  });
+
+  // ── City presets ──────────────────────────────────────────────
+  const citySelect = document.getElementById('citySelect');
+  const regionLabels = {NA:'── North America',EU:'── Europe',AS:'── Asia',ME:'── Middle East',AF:'── Africa',SA:'── South America',OC:'── Oceania'};
+  let lastRegion = '';
+  (C.cities||[]).forEach(city=>{
+    if(city.region !== lastRegion){
+      const og = document.createElement('optgroup');
+      og.label = regionLabels[city.region] || city.region;
+      citySelect.appendChild(og);
+      lastRegion = city.region;
+    }
+    const opt = document.createElement('option');
+    opt.value = JSON.stringify({lat:city.lat, lon:city.lon, name:city.name});
+    opt.textContent = city.name;
+    citySelect.appendChild(opt);
+  });
+  citySelect.addEventListener('change', ()=>{
+    if(!citySelect.value) return;
+    const c = JSON.parse(citySelect.value);
+    document.getElementById('locLat').value = c.lat.toFixed(4);
+    document.getElementById('locLon').value = c.lon.toFixed(4);
+    document.getElementById('locName').textContent = c.name;
+    citySelect.value = '';
+    loadStations();
+  });
+
+  // ── Persistence ───────────────────────────────────────────────
+  const PERSIST_KEY = 'ptxero_rf_state';
+
+  function saveState(){
+    try{
+      const state = {
+        lat:    parseFloat(document.getElementById('locLat').value)||C.location.lat,
+        lon:    parseFloat(document.getElementById('locLon').value)||C.location.lon,
+        locName:document.getElementById('locName').textContent||'',
+        viewMin, viewMax, dbOffset, currentBand,
+        tunerFreq, autoFit, peakHold,
+        antenna: document.getElementById('antennaSelect').value,
+        volume:  parseFloat(document.getElementById('audioVol').value),
+        scChain: serializeChain(),
+        scBypass: scBypassAllState,
+      };
+      localStorage.setItem(PERSIST_KEY, JSON.stringify(state));
+    }catch(e){}
+  }
+
+  function restoreState(){
+    try{
+      const raw = localStorage.getItem(PERSIST_KEY);
+      if(!raw) return false;
+      const s = JSON.parse(raw);
+
+      // Location
+      if(s.lat && s.lon){
+        document.getElementById('locLat').value = parseFloat(s.lat).toFixed(4);
+        document.getElementById('locLon').value = parseFloat(s.lon).toFixed(4);
+        userLat = s.lat; userLon = s.lon;
+      }
+      if(s.locName) document.getElementById('locName').textContent = s.locName;
+
+      // Spectrum view
+      if(s.currentBand !== undefined){
+        currentBand = s.currentBand;
+        document.querySelectorAll('.spec-band').forEach((el,i)=>el.classList.toggle('on',i===currentBand));
+      }
+      if(s.viewMin !== undefined) viewMin = s.viewMin;
+      if(s.viewMax !== undefined) viewMax = s.viewMax;
+      if(s.dbOffset !== undefined){
+        dbOffset = s.dbOffset;
+        document.getElementById('refDragLabel').textContent = `REF ${dbOffset>=0?'+':''}${dbOffset.toFixed(0)} dB`;
+        updateRefThumb();
+      }
+      if(s.tunerFreq !== null && s.tunerFreq !== undefined){
+        tunerFreq = s.tunerFreq;
+        document.getElementById('tunerReadout').textContent = tunerFreq.toFixed(3);
+      }
+
+      // Toggles
+      if(s.autoFit){
+        autoFit = true;
+        document.getElementById('autoFitBtn').classList.add('on');
+        document.getElementById('autoFitBar').setAttribute('opacity','1');
+      }
+      if(s.peakHold){
+        peakHold = true;
+        document.getElementById('peakHoldBtn').classList.add('on');
+        document.getElementById('peakHoldBar').setAttribute('opacity','1');
+      }
+
+      // Antenna
+      if(s.antenna){
+        document.getElementById('antennaSelect').value = s.antenna;
+      }
+
+      // Volume
+      if(s.volume !== undefined){
+        document.getElementById('audioVol').value = s.volume;
+        audioVolume = s.volume;
+      }
+
+      // Signal chain
+      if(s.scChain && s.scChain.nodes && s.scChain.nodes.length){
+        scBypassAllState = s.scBypass || false;
+        document.getElementById('scBypassAll')?.classList.toggle('on', scBypassAllState);
+        // Defer chain restore until after audio init
+        window._pendingScRestore = s.scChain;
+      }
+
+      return true;
+    }catch(e){ console.warn('state restore failed', e); return false; }
+  }
+
+  // Auto-save state on any meaningful change
+  function setupAutosave(){
+    // Save on spectrum interaction
+    ['mouseup','wheel'].forEach(ev=>
+      document.getElementById('specWrap').addEventListener(ev, ()=>setTimeout(saveState,200))
+    );
+    document.getElementById('antennaSelect').addEventListener('change', saveState);
+    document.getElementById('audioVol').addEventListener('change', saveState);
+    document.getElementById('peakHoldBtn').addEventListener('click', saveState);
+    document.getElementById('autoFitBtn').addEventListener('click', saveState);
+    document.getElementById('locLoadBtn').addEventListener('click', ()=>setTimeout(saveState,500));
+    document.getElementById('locGpsBtn').addEventListener('click', ()=>setTimeout(saveState,500));
+    // Save on band change
+    document.querySelectorAll('.spec-band').forEach(el=>el.addEventListener('click', saveState));
+    // Periodic save every 10s
+    setInterval(saveState, 10000);
+  }
+
+  // ── Initial load ──────────────────────────────────────────────
+  const hadState = restoreState();
+
+  // Restore band view properly
+  updateBand();
+  drawGrid();
+
+  setStatus(hadState ? 'RESTORING SESSION…' : 'NOISE FLOOR — SIMULATED · ENTER COORDINATES AND HIT LOAD FOR REAL STATIONS');
+
+  setupAutosave();
+  updateScMiniPreview();
+
+  // ── Resume banner ─────────────────────────────────────────────
+  const resumeBanner = document.getElementById('rfResumeBanner');
+  if(hadState){
+    resumeBanner.classList.remove('hidden');
+    function doResume(){
+      resumeBanner.classList.add('hidden');
+      document.removeEventListener('click', onAnyClick);
+      document.removeEventListener('keydown', onAnyClick);
+      if(tunerFreq !== null) tuneAudio(tunerFreq);
+    }
+    function onAnyClick(e){
+      // Don't intercept clicks on the banner itself (handled separately)
+      if(e.target.closest && e.target.closest('#rfResumeBanner')) return;
+      doResume();
+    }
+    resumeBanner.addEventListener('click', doResume);
+    setTimeout(()=>{
+      document.addEventListener('click', onAnyClick);
+      document.addEventListener('keydown', onAnyClick);
+    }, 100);
+  }
+
+  // Load stations from restored coords (or default)
+  setTimeout(()=>{
+    // Restore signal chain before audio init
+    if(window._pendingScRestore){
+      deserializeChain(window._pendingScRestore);
+      delete window._pendingScRestore;
+    }
+    loadStations();
+  }, 300);
+
+})();
+</script>
+</body>
+</html>

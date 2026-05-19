@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EXPOSED</title>
+<script src="../site.config.js"></script>
+<script src="exposed.config.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
+<style>
+.dossier-returning{
+  font-family:var(--fmono);font-size:9px;letter-spacing:.2em;
+  color:var(--acc);margin-bottom:8px;
+  padding:8px 14px;border:1px solid var(--acc);
+  display:inline-block;margin-bottom:16px;
+  animation:pulse 2s ease infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.dossier-composite{
+  font-family:var(--fmono);font-size:9px;letter-spacing:.15em;
+  color:var(--dim);margin-bottom:40px;
+}
+.dossier-composite span{color:var(--acc);}
+.composite-score{
+  font-family:var(--fdisp);font-size:28px;letter-spacing:.1em;
+  color:var(--acc);margin-top:4px;
+}
+:root{
+  --bg:#07070a;--surface:#0d0d12;--panel:#101015;
+  --border:#1c1c24;--b2:#28282f;
+  --acc:#ff2233;--acc2:#ff6644;
+  --txt:#d8d8e0;--dim:#5a5a70;--mut:#2e2e38;
+  --fmono:'Share Tech Mono',monospace;
+  --fdisp:'Bebas Neue',sans-serif;
+  --fbody:'DM Mono',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  min-height:100%;background:var(--bg);color:var(--txt);
+  font-family:var(--fmono);font-size:12px;overflow-x:hidden;
+}
+.tracker-field{
+  border-bottom:1px solid var(--border);
+  padding:12px 0;opacity:0;transition:opacity .3s;
+}
+.tracker-field.visible{opacity:1;}
+.tracker-header{
+  display:grid;grid-template-columns:220px 1fr auto;
+  gap:0;margin-bottom:6px;
+}
+.tracker-key{
+  font-size:11px;color:var(--acc);letter-spacing:.05em;
+  word-break:break-all;
+}
+.tracker-owner{
+  font-size:9px;color:var(--dim);letter-spacing:.1em;
+  text-transform:uppercase;padding-top:2px;
+}
+.tracker-risk{
+  font-size:8px;letter-spacing:.15em;
+  padding:2px 8px;border-radius:2px;align-self:start;
+}
+.risk-LOW{border:1px solid var(--b2);color:var(--dim);}
+.risk-MEDIUM{border:1px solid #f5a542;color:#f5a542;}
+.risk-HIGH{border:1px solid var(--acc);color:var(--acc);}
+.tracker-value{
+  font-size:9px;color:var(--mut);letter-spacing:.04em;
+  word-break:break-all;margin-bottom:4px;
+  font-family:var(--fmono);
+}
+.tracker-desc{
+  font-size:9px;color:var(--dim);letter-spacing:.04em;
+  line-height:1.7;padding-left:220px;
+}
+.tracker-none{
+  font-size:9px;color:var(--dim);letter-spacing:.15em;
+  padding:12px 0;opacity:0;transition:opacity .3s;
+}
+.tracker-none.visible{opacity:1;}
+@media(max-width:600px){
+  .tracker-header{grid-template-columns:1fr auto;}
+  .tracker-desc{padding-left:0;}
+}
+
+/* ── Scan overlay ───────────────────────────────────────────── */
+#scanOverlay{
+  position:fixed;inset:0;z-index:100;
+  background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:24px;transition:opacity .8s ease;
+}
+#scanOverlay.done{opacity:0;pointer-events:none;}
+#scanTitle{
+  font-family:var(--fdisp);font-size:clamp(48px,10vw,96px);
+  letter-spacing:.1em;color:var(--acc);
+}
+#scanBar{
+  width:260px;height:1px;background:var(--b2);position:relative;overflow:hidden;
+}
+#scanBar::after{
+  content:'';position:absolute;left:-100%;top:0;
+  width:100%;height:100%;background:var(--acc);
+  animation:scan var(--scan-duration, 3s) ease forwards;
+}
+@keyframes scan{from{left:-100%}to{left:0%}}
+#scanStatus{
+  font-size:9px;letter-spacing:.25em;color:var(--dim);
+  text-transform:uppercase;
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+.exp-header{
+  display:flex;align-items:center;gap:16px;
+  height:44px;padding:0 24px;
+  background:var(--surface);border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:50;
+}
+.exp-back{
+  font-family:var(--fmono);font-size:9px;color:var(--dim);
+  text-decoration:none;letter-spacing:.15em;transition:color .15s;
+}
+.exp-back:hover{color:var(--acc)}
+.exp-title{
+  font-family:var(--fdisp);font-size:20px;letter-spacing:.12em;color:var(--acc);flex:1;
+}
+.exp-tagline{
+  font-family:var(--fmono);font-size:9px;color:var(--dim);letter-spacing:.15em;
+}
+
+/* ── Body ───────────────────────────────────────────────────── */
+.exp-body{max-width:860px;margin:0 auto;padding:48px 24px 80px;}
+
+/* ── Dossier header ─────────────────────────────────────────── */
+.dossier-stamp{
+  font-family:var(--fdisp);font-size:clamp(36px,6vw,64px);
+  letter-spacing:.1em;color:var(--acc);
+  border:2px solid var(--acc);
+  display:inline-block;padding:4px 20px;
+  margin-bottom:8px;opacity:.9;
+  transform:rotate(-1.5deg);
+}
+.dossier-id{
+  font-size:9px;color:var(--dim);letter-spacing:.2em;margin-bottom:48px;
+}
+
+/* ── Field ──────────────────────────────────────────────────── */
+.field{
+  display:grid;grid-template-columns:220px 1fr;
+  gap:0;border-bottom:1px solid var(--border);
+  padding:10px 0;opacity:0;
+  transition:opacity .3s;
+}
+.field.visible{opacity:1;}
+.field-label{
+  font-size:9px;letter-spacing:.2em;color:var(--dim);
+  text-transform:uppercase;padding-right:20px;padding-top:1px;
+}
+.field-value{
+  font-size:11px;color:var(--txt);letter-spacing:.05em;
+  word-break:break-all;
+}
+.field-value.redacted{
+  background:var(--txt);color:transparent;
+  cursor:pointer;transition:all .3s;border-radius:1px;
+  user-select:none;
+}
+.field-value.redacted:hover{background:var(--mut);color:var(--txt);}
+
+/* ── Section divider ────────────────────────────────────────── */
+.exp-section{
+  font-size:9px;letter-spacing:.25em;color:var(--acc);
+  text-transform:uppercase;margin:36px 0 4px;
+  display:flex;align-items:center;gap:10px;
+}
+.exp-section::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* ── Permission fields ──────────────────────────────────────── */
+.perm-field{
+  display:grid;grid-template-columns:220px 1fr auto;
+  gap:0;border-bottom:1px solid var(--border);
+  padding:10px 0;
+}
+.perm-btn{
+  font-family:var(--fmono);font-size:8px;letter-spacing:.15em;
+  padding:3px 10px;border:1px solid var(--b2);border-radius:2px;
+  background:none;color:var(--dim);cursor:pointer;transition:all .15s;
+  white-space:nowrap;align-self:center;
+}
+.perm-btn:hover{border-color:var(--acc);color:var(--acc);}
+.perm-btn.granted{border-color:#44ff88;color:#44ff88;}
+.perm-btn.denied{border-color:var(--acc);color:var(--acc);}
+
+/* ── Canvas fingerprint (hidden) ────────────────────────────── */
+#fpCanvas{display:none;}
+
+/* HIBP Email Checker */
+.hibp-section{padding:12px 0 24px;}
+.hibp-desc{font-size:9px;color:var(--dim);letter-spacing:.06em;line-height:1.8;margin-bottom:16px;}
+.hibp-desc span{color:var(--acc);}
+.hibp-input-row{display:flex;gap:8px;margin-bottom:16px;}
+.hibp-input{
+  flex:1;background:var(--panel);border:1px solid var(--b2);
+  color:var(--txt);font-family:var(--fmono);font-size:11px;
+  letter-spacing:.08em;padding:8px 12px;outline:none;transition:border-color .15s;
+}
+.hibp-input:focus{border-color:var(--acc);}
+.hibp-btn{
+  font-family:var(--fmono);font-size:9px;letter-spacing:.15em;
+  padding:8px 20px;border:1px solid var(--b2);background:none;
+  color:var(--dim);cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.hibp-btn:hover{border-color:var(--acc);color:var(--acc);}
+.hibp-btn:disabled{opacity:.4;cursor:not-allowed;}
+.hibp-breach{border:1px solid var(--border);padding:12px 16px;margin-bottom:8px;}
+.hibp-breach-header{display:flex;align-items:baseline;gap:12px;margin-bottom:6px;}
+.hibp-breach-name{font-family:var(--fdisp);font-size:18px;letter-spacing:.08em;color:var(--acc);}
+.hibp-breach-date{font-size:8px;color:var(--dim);letter-spacing:.15em;}
+.hibp-breach-count{font-size:8px;color:var(--dim);letter-spacing:.1em;margin-bottom:6px;}
+.hibp-breach-types{display:flex;gap:4px;flex-wrap:wrap;}
+.hibp-breach-type{font-size:8px;letter-spacing:.1em;padding:2px 7px;border-radius:2px;border:1px solid var(--b2);color:var(--dim);}
+.hibp-breach-type.sensitive{border-color:var(--acc);color:var(--acc);}
+.hibp-status{font-size:9px;letter-spacing:.15em;padding:8px 0;}
+.hibp-status.clean{color:#44ff88;}
+.hibp-status.breached{color:var(--acc);}
+.hibp-status.error{color:var(--dim);}
+
+
+/* ── Footer note ────────────────────────────────────────────── */
+.exp-note{
+  margin-top:56px;padding:16px;
+  border:1px solid var(--border);
+  font-size:9px;color:var(--dim);letter-spacing:.08em;line-height:1.8;
+}
+.exp-note span{color:var(--acc);}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media(max-width:600px){
+  .field,.perm-field{grid-template-columns:1fr;gap:4px;}
+  .exp-body{padding:32px 14px 60px;}
+}
+</style>
+</head>
+<body>
+
+<!-- Scan overlay -->
+<div id="scanOverlay">
+  <div id="scanTitle">EXPOSED</div>
+  <div id="scanBar"></div>
+  <div id="scanStatus">COLLECTING DATA</div>
+</div>
+
+<!-- Header -->
+<header class="exp-header">
+  <a href="../" class="exp-back">← HOME</a>
+  <div class="exp-title">EXPOSED</div>
+  <div class="exp-tagline" id="expTagline"></div>
+</header>
+
+<!-- Body -->
+<div class="exp-body" id="expBody" style="visibility:hidden">
+
+  <div class="dossier-stamp">DOSSIER</div>
+  <div class="dossier-id" id="dossierId"></div>
+  <div class="dossier-returning" id="dossierReturning" style="display:none"></div>
+  <div class="dossier-composite" id="dossierComposite" style="display:none"></div>
+
+  <div class="exp-section">Device</div>
+  <div id="fieldsDevice"></div>
+
+  <div class="exp-section">Network</div>
+  <div id="fieldsNetwork"></div>
+
+  <div class="exp-section">Environment</div>
+  <div id="fieldsEnv"></div>
+
+  <div class="exp-section">Fingerprint</div>
+  <div id="fieldsFingerprint"></div>
+
+  <div class="exp-section">WebRTC Leak</div>
+  <div id="fieldsWebrtc"></div>
+
+  <div class="exp-section">Tracker Signatures</div>
+  <div id="fieldsTrackers"></div>
+
+  <div class="exp-section">Request Access</div>
+  <div id="fieldsPermission"></div>
+
+  <div class="exp-section">Breach Check</div>
+  <div class="hibp-section" id="hibpSection">
+    <div class="hibp-desc">Enter an email address. Checked against <span>Have I Been Pwned</span> — a database of 14+ billion records from known data breaches. Your email is sent directly to the HIBP API. This site does not store it.</div>
+    <div class="hibp-input-row">
+      <input type="email" id="hibpEmail" class="hibp-input" placeholder="EMAIL ADDRESS" autocomplete="off" spellcheck="false">
+      <button id="hibpBtn" class="hibp-btn">CHECK</button>
+    </div>
+    <div id="hibpResult"></div>
+  </div>
+
+  <div class="exp-note" id="expNote"></div>
+
+</div>
+
+<canvas id="fpCanvas" width="200" height="50"></canvas>
+
+<script>
+(function(){
+  const C = EXPOSED;
+  const t0 = performance.now();
+
+  if(typeof SITE !== 'undefined'){
+    const t=SITE.theme, f=SITE.fonts, r=document.documentElement;
+    [['--bg',t.bg],['--surface',t.surface],['--panel',t.panel],
+     ['--border',t.border],['--b2',t.b2],
+     ['--txt',t.txt],['--dim',t.dim],['--mut',t.mut],
+     ['--fmono',`'${f.mono}',monospace`],
+     ['--fdisp',`'${f.display}',sans-serif`],
+     ['--fbody',`'${f.body}',monospace`],
+    ].forEach(([k,v])=>r.style.setProperty(k,v));
+  }
+
+  document.title = C.title;
+  document.getElementById('expTagline').textContent = C.tagline;
+  document.getElementById('expNote').innerHTML =
+    C.note.replace('No prompts.','<span>No prompts.</span>')
+          .replace('No warnings.','<span>No warnings.</span>');
+  document.getElementById('scanBar').style.setProperty(
+    '--scan-duration', (C.scanDuration/1000)+'s'
+  );
+
+  // ── UA parsing ───────────────────────────────────────────────
+  function parseUA(){
+    const ua = navigator.userAgent;
+    let browser = 'UNKNOWN', os = 'UNKNOWN';
+    if(/Firefox\/([0-9.]+)/.test(ua))      browser='Firefox '+ua.match(/Firefox\/([0-9.]+)/)[1];
+    else if(/Edg\/([0-9.]+)/.test(ua))     browser='Edge '+ua.match(/Edg\/([0-9.]+)/)[1];
+    else if(/Chrome\/([0-9.]+)/.test(ua))  browser='Chrome '+ua.match(/Chrome\/([0-9.]+)/)[1];
+    else if(/Safari\/([0-9.]+)/.test(ua))  browser='Safari '+(ua.match(/Version\/([0-9.]+)/)?.[1]||'');
+    if(/Windows NT ([0-9.]+)/.test(ua)){
+      const v={'10.0':'10/11','6.3':'8.1','6.2':'8','6.1':'7'}[ua.match(/Windows NT ([0-9.]+)/)[1]]||ua.match(/Windows NT ([0-9.]+)/)[1];
+      os='Windows '+v;
+    }
+    else if(/Mac OS X ([0-9_]+)/.test(ua)) os='macOS '+ua.match(/Mac OS X ([0-9_]+)/)[1].replace(/_/g,'.');
+    else if(/Android ([0-9.]+)/.test(ua))  os='Android '+ua.match(/Android ([0-9.]+)/)[1];
+    else if(/iPhone OS ([0-9_]+)/.test(ua))os='iOS '+ua.match(/iPhone OS ([0-9_]+)/)[1].replace(/_/g,'.');
+    else if(/Linux/.test(ua))              os='Linux';
+    return { browser, os };
+  }
+
+  // ── Canvas fingerprint ───────────────────────────────────────
+  function getCanvasFingerprint(){
+    const cv=document.getElementById('fpCanvas');
+    const ctx=cv.getContext('2d');
+    ctx.textBaseline='top';
+    ctx.font='14px Arial';
+    ctx.fillStyle='#f60';ctx.fillRect(125,1,62,20);
+    ctx.fillStyle='#069';ctx.fillText('EXPOSED',2,15);
+    ctx.fillStyle='rgba(102,204,0,0.7)';ctx.fillText('EXPOSED',4,17);
+    const d=cv.toDataURL();
+    let h=0;for(let i=0;i<d.length;i++){h=((h<<5)-h)+d.charCodeAt(i);h|=0;}
+    return '0x'+Math.abs(h).toString(16).toUpperCase().padStart(8,'0');
+  }
+
+  // ── WebGL ────────────────────────────────────────────────────
+  function getWebGL(){
+    try{
+      const cv=document.createElement('canvas');
+      const gl=cv.getContext('webgl')||cv.getContext('experimental-webgl');
+      if(!gl) return { renderer:'UNAVAILABLE', vendor:'UNAVAILABLE', maxTex:'UNAVAILABLE', extensions:'UNAVAILABLE' };
+      const ext=gl.getExtension('WEBGL_debug_renderer_info');
+      const renderer=ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):'BLOCKED BY BROWSER';
+      const vendor=ext?gl.getParameter(ext.UNMASKED_VENDOR_WEBGL):'BLOCKED BY BROWSER';
+      const maxTex=gl.getParameter(gl.MAX_TEXTURE_SIZE)+'px';
+      const extensions=(gl.getSupportedExtensions()||[]).length+' EXTENSIONS AVAILABLE';
+      return { renderer, vendor, maxTex, extensions };
+    }catch(e){ return { renderer:'UNAVAILABLE', vendor:'UNAVAILABLE', maxTex:'UNAVAILABLE', extensions:'UNAVAILABLE' }; }
+  }
+
+  // ── Audio fingerprint ────────────────────────────────────────
+  function getAudioFingerprint(){
+    return new Promise(resolve=>{
+      try{
+        const ctx=new OfflineAudioContext(1,44100,44100);
+        const osc=ctx.createOscillator();
+        const cmp=ctx.createDynamicsCompressor();
+        osc.type='triangle';osc.frequency.value=10000;
+        osc.connect(cmp);cmp.connect(ctx.destination);
+        osc.start(0);
+        ctx.startRendering().then(buf=>{
+          const data=buf.getChannelData(0);
+          let sum=0;for(let i=0;i<data.length;i++) sum+=Math.abs(data[i]);
+          let h=0;const s=sum.toString();
+          for(let i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;}
+          resolve('0x'+Math.abs(h).toString(16).toUpperCase().padStart(8,'0'));
+        }).catch(()=>resolve('UNAVAILABLE'));
+      }catch(e){ resolve('NOT SUPPORTED'); }
+    });
+  }
+
+  // ── Font detection ───────────────────────────────────────────
+  function detectFonts(){
+    const test=['Arial','Helvetica','Times New Roman','Courier New','Georgia',
+      'Verdana','Trebuchet MS','Impact','Comic Sans MS','Palatino',
+      'Garamond','Bookman','Tahoma','Geneva','Calibri','Cambria',
+      'Consolas','Lucida Console','Monaco','Courier'];
+    const cv=document.createElement('canvas');
+    const ctx=cv.getContext('2d');
+    ctx.font='72px monospace';
+    const baseW=ctx.measureText('mmmmmmmmmmlli').width;
+    const found=test.filter(f=>{
+      ctx.font=`72px '${f}',monospace`;
+      return ctx.measureText('mmmmmmmmmmlli').width!==baseW;
+    });
+    return found.length ? found.join(' · ') : 'NONE DETECTED';
+  }
+
+  // ── Battery ──────────────────────────────────────────────────
+  function getBattery(){
+    if(!navigator.getBattery) return Promise.resolve('NOT SUPPORTED');
+    return navigator.getBattery().then(b=>{
+      return Math.round(b.level*100)+'% · '+(b.charging?'CHARGING':'DISCHARGING');
+    }).catch(()=>'UNAVAILABLE');
+  }
+
+  // ── Connection ───────────────────────────────────────────────
+  function getConnection(){
+    const c=navigator.connection||navigator.mozConnection||navigator.webkitConnection;
+    if(!c) return 'NOT EXPOSED BY THIS BROWSER';
+    return [
+      c.effectiveType?c.effectiveType.toUpperCase():null,
+      c.downlink?c.downlink+'Mbps':null,
+      c.rtt?'RTT '+c.rtt+'ms':null,
+      c.saveData?'DATA SAVER ON':null,
+    ].filter(Boolean).join(' · ');
+  }
+
+  // ── WebRTC IP leak ───────────────────────────────────────────
+  function getWebRTCIPs(){
+    return new Promise(resolve=>{
+      try{
+        const ips=new Set();
+        const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+        pc.createDataChannel('');
+        pc.onicecandidate=e=>{
+          if(!e.candidate){ pc.close(); resolve(ips.size?[...ips].join(' · '):'NO LEAK DETECTED'); return; }
+          const m=e.candidate.candidate.match(/(\d+\.\d+\.\d+\.\d+)/g);
+          if(m) m.forEach(ip=>ips.add(ip));
+        };
+        pc.createOffer().then(o=>pc.setLocalDescription(o));
+        setTimeout(()=>{ pc.close(); resolve(ips.size?[...ips].join(' · '):'NO LEAK DETECTED'); },3000);
+      }catch(e){ resolve('NOT SUPPORTED'); }
+    });
+  }
+
+  // ── Plugins ──────────────────────────────────────────────────
+  function getPlugins(){
+    const p=navigator.plugins;
+    if(!p||!p.length) return 'NONE DETECTED';
+    return Array.from(p).map(x=>x.name).join(' · ');
+  }
+
+  // ── Collect synchronous data ─────────────────────────────────
+  const { browser, os } = parseUA();
+  const wgl = getWebGL();
+
+  const data = {
+    browser,
+    os,
+    screen:        `${screen.width}×${screen.height} · ${screen.colorDepth}BIT COLOR`,
+    pixelratio:    Math.round(window.devicePixelRatio*100)/100+'x ('+(window.devicePixelRatio>1?'HIGH DPI / RETINA':'STANDARD')+')',
+    viewport:      `${window.innerWidth}×${window.innerHeight}`,
+    cores:         (navigator.hardwareConcurrency||'UNKNOWN')+' LOGICAL CORES',
+    memory:        navigator.deviceMemory?'≥'+navigator.deviceMemory+'GB (CAPPED BY SPEC)':'NOT EXPOSED BY THIS BROWSER',
+    touchscreen:   navigator.maxTouchPoints>0?'TOUCH · '+navigator.maxTouchPoints+' POINTS':'MOUSE/TRACKPAD',
+    battery:       'READING...',
+    gamepad:       Array.from(navigator.getGamepads?navigator.getGamepads():[]).filter(Boolean).length+' DETECTED',
+    connection:    getConnection(),
+    referrer:      document.referrer||'DIRECT — NO REFERRER',
+    webrtc:        'READING...',
+    timezone:      Intl.DateTimeFormat().resolvedOptions().timeZone+' (UTC'+(-(new Date().getTimezoneOffset()/60)>=0?'+':'')+-(new Date().getTimezoneOffset()/60)+')',
+    locale:        navigator.language+' · '+(navigator.languages||[navigator.language]).join(', '),
+    dnt:           navigator.doNotTrack==='1'?'ENABLED — IGNORED BY MOST SITES':'NOT SET',
+    cookies:       navigator.cookieEnabled?'ENABLED':'DISABLED',
+    localstorage:  (()=>{try{localStorage.setItem('_t','1');localStorage.removeItem('_t');return'AVAILABLE';}catch(e){return'BLOCKED';}})(),
+    indexeddb:     window.indexedDB?'AVAILABLE':'UNAVAILABLE',
+    serviceworker: 'serviceWorker' in navigator?'SUPPORTED':'NOT SUPPORTED',
+    wasm:          typeof WebAssembly==='object'?'SUPPORTED':'NOT SUPPORTED',
+    pdf:           navigator.pdfViewerEnabled?'ENABLED':'DISABLED',
+    plugins:       getPlugins(),
+    loadtime:      'READING...',
+    canvas:        getCanvasFingerprint(),
+    webgl:         wgl.renderer,
+    webglvendor:   wgl.vendor,
+    webglmax:      wgl.maxTex,
+    webglext:      wgl.extensions,
+    audio:         'READING...',
+    fonts:         detectFonts(),
+  };
+
+  // ── Async data ───────────────────────────────────────────────
+  getBattery().then(v=>{ data.battery=v; updateField('battery',v); asyncCheck(); });
+  getWebRTCIPs().then(v=>{ data.webrtc=v; updateField('webrtc',v); asyncCheck(); });
+  getAudioFingerprint().then(v=>{ data.audio=v; updateField('audio',v); asyncCheck(); });
+  window.addEventListener('load',()=>{
+    const ms=Math.round(performance.now())+'ms';
+    data.loadtime=ms; updateField('loadtime',ms);
+  });
+
+  function updateField(id, value){
+    const el=document.getElementById('val-'+id);
+    if(el) el.textContent=value;
+  }
+
+  // ── Dossier ID ───────────────────────────────────────────────
+  const rawId=data.canvas+data.browser+data.screen+data.timezone;
+  let idHash=0;
+  for(let i=0;i<rawId.length;i++){idHash=((idHash<<5)-idHash)+rawId.charCodeAt(i);idHash|=0;}
+  const dossierId='FILE-'+Math.abs(idHash).toString(16).toUpperCase().padStart(12,'0');
+  document.getElementById('dossierId').textContent=
+    dossierId+' · COMPILED '+new Date().toISOString().replace('T',' ').split('.')[0]+' UTC';
+
+  // ── Composite fingerprint (built after async data resolves) ───
+  function buildComposite(){
+    const raw=data.canvas+(data.audio||'')+(data.webgl||'')+data.screen+data.cores+data.timezone+data.fonts;
+    let h=0;for(let i=0;i<raw.length;i++){h=((h<<5)-h)+raw.charCodeAt(i);h|=0;}
+    const composite='FP-'+Math.abs(h).toString(16).toUpperCase().padStart(16,'0');
+
+    const el=document.getElementById('dossierComposite');
+    el.style.display='block';
+    el.innerHTML=
+      `COMPOSITE FINGERPRINT — CANVAS + AUDIO + GPU + DISPLAY + SYSTEM<br>`+
+      `<div class="composite-score">${composite}</div>`;
+
+    // ── Persistence check ─────────────────────────────────────
+    const STORE_KEY='_exposed_fp';
+    try{
+      const prev=localStorage.getItem(STORE_KEY);
+      const now=new Date().toISOString().replace('T',' ').split('.')[0]+' UTC';
+      const ret=document.getElementById('dossierReturning');
+
+      if(prev){
+        const p=JSON.parse(prev);
+        const visits=((p.visits||0)+1);
+        const firstSeen=p.firstSeen||now;
+        ret.style.display='inline-block';
+        ret.innerHTML=
+          `⚠ SUBJECT PREVIOUSLY IDENTIFIED<br>`+
+          `<span style="font-size:8px;color:var(--dim)">`+
+          `FIRST SEEN ${firstSeen} · VISIT ${visits} · FINGERPRINT ${p.fp===composite?'<span style="color:#44ff88">UNCHANGED</span>':'<span style="color:var(--acc)">MODIFIED</span>'}`+
+          `</span>`;
+        localStorage.setItem(STORE_KEY,JSON.stringify({fp:composite,firstSeen,visits,lastSeen:now}));
+      } else {
+        localStorage.setItem(STORE_KEY,JSON.stringify({fp:composite,firstSeen:now,visits:1,lastSeen:now}));
+      }
+    }catch(e){}
+  }
+
+  // Build composite once async fingerprints resolve
+  let asyncDone=0;
+  function asyncCheck(){
+    asyncDone++;
+    if(asyncDone>=3) buildComposite();
+  }
+
+  // ── Field groups ─────────────────────────────────────────────
+  const groups = {
+    fieldsDevice:      ['browser','os','screen','pixelratio','viewport','cores','memory','touchscreen','battery','gamepad'],
+    fieldsNetwork:     ['connection','referrer'],
+    fieldsWebrtc:      ['webrtc'],
+    fieldsEnv:         ['timezone','locale','dnt','cookies','localstorage','indexeddb','serviceworker','wasm','pdf','plugins','loadtime'],
+    fieldsFingerprint: ['canvas','webgl','webglvendor','webglmax','webglext','audio','fonts'],
+  };
+
+  const redactedFields = new Set(['canvas','webgl','webglvendor','webglext','audio','fonts']);
+
+  function makeField(id, value){
+    const cfg=C.fields.find(f=>f.id===id);
+    if(!cfg||!cfg.enabled) return null;
+    const div=document.createElement('div');
+    div.className='field';
+    div.id='field-'+id;
+    const isRedacted=redactedFields.has(id);
+    div.innerHTML=
+      `<div class="field-label">${cfg.label}</div>`+
+      `<div class="field-value${isRedacted?' redacted':''}" id="val-${id}">${value}</div>`;
+    if(isRedacted){
+      div.querySelector('.field-value').addEventListener('click',function(){
+        this.classList.remove('redacted');
+      });
+    }
+    return div;
+  }
+
+  Object.entries(groups).forEach(([containerId,fieldIds])=>{
+    const container=document.getElementById(containerId);
+    if(!container) return;
+    fieldIds.forEach(id=>{
+      const el=makeField(id,data[id]);
+      if(el) container.appendChild(el);
+    });
+  });
+
+  // ── Permission fields ─────────────────────────────────────────
+  const permContainer=document.getElementById('fieldsPermission');
+  C.permissionFields.forEach(pf=>{
+    const div=document.createElement('div');
+    div.className='perm-field';
+    const valId='val-perm-'+pf.id;
+    div.innerHTML=
+      `<div class="field-label">${pf.label}</div>`+
+      `<div class="field-value" id="${valId}">STANDING BY</div>`+
+      `<button class="perm-btn" id="btn-perm-${pf.id}">${pf.prompt}</button>`;
+    permContainer.appendChild(div);
+
+    document.getElementById('btn-perm-'+pf.id).addEventListener('click',function(){
+      const btn=this;
+      const val=document.getElementById(valId);
+      btn.textContent='REQUESTING...';
+      if(pf.id==='location'){
+        navigator.geolocation.getCurrentPosition(
+          pos=>{
+            val.textContent=pos.coords.latitude.toFixed(5)+'°N · '+pos.coords.longitude.toFixed(5)+'°E · ACC ±'+Math.round(pos.coords.accuracy)+'m';
+            btn.textContent='ACCESSED';btn.classList.add('granted');
+          },
+          err=>{ val.textContent='DENIED — '+err.message.toUpperCase(); btn.textContent='DENIED';btn.classList.add('denied'); },
+          {enableHighAccuracy:true,timeout:8000}
+        );
+      } else if(pf.id==='camera'||pf.id==='microphone'){
+        navigator.mediaDevices.getUserMedia(pf.id==='camera'?{video:true}:{audio:true}).then(stream=>{
+          stream.getTracks().forEach(t=>t.stop());
+          val.textContent='ACCESS GRANTED — DEVICE REACHABLE';
+          btn.textContent='ACCESSED';btn.classList.add('granted');
+        }).catch(err=>{
+          val.textContent='DENIED — '+err.message.toUpperCase();
+          btn.textContent='DENIED';btn.classList.add('denied');
+        });
+      }
+    });
+  });
+  // ── Tracker scanner ───────────────────────────────────────────
+  (function(){
+    const container = document.getElementById('fieldsTrackers');
+    if(!container) return;
+
+    // Collect everything readable
+    const found = [];
+
+    // Scan localStorage
+    try{
+      for(let i=0;i<localStorage.length;i++){
+        const k=localStorage.key(i);
+        const v=localStorage.getItem(k);
+        found.push({ key:k, value:v, source:'localStorage' });
+      }
+    }catch(e){}
+
+    // Scan sessionStorage
+    try{
+      for(let i=0;i<sessionStorage.length;i++){
+        const k=sessionStorage.key(i);
+        const v=sessionStorage.getItem(k);
+        found.push({ key:k, value:v, source:'sessionStorage' });
+      }
+    }catch(e){}
+
+    // Scan cookies
+    try{
+      document.cookie.split(';').forEach(c=>{
+        const [k,...rest]=c.trim().split('=');
+        if(k) found.push({ key:k.trim(), value:rest.join('='), source:'cookie' });
+      });
+    }catch(e){}
+
+    // Match against known tracker signatures
+    const trackers = C.trackers||[];
+    const matched = [];
+    const unmatched = [];
+
+    found.forEach(entry=>{
+      const sig = trackers.find(t=>
+        entry.key===t.key ||
+        entry.key.startsWith(t.key) ||
+        entry.key.toLowerCase().includes(t.key.toLowerCase())
+      );
+      if(sig) matched.push({ ...entry, sig });
+      else unmatched.push(entry);
+    });
+
+    // Show matched trackers first
+    if(matched.length===0 && unmatched.length===0){
+      const none = document.createElement('div');
+      none.className='tracker-none';
+      none.textContent='NO READABLE STORAGE FOUND — STORAGE MAY BE CLEARED OR BLOCKED';
+      container.appendChild(none);
+      setTimeout(()=>none.classList.add('visible'),100);
+      return;
+    }
+
+    // Matched — known trackers
+    matched.forEach(({key,value,source,sig})=>{
+      const div=document.createElement('div');
+      div.className='tracker-field';
+      div.innerHTML=
+        `<div class="tracker-header">` +
+          `<div class="tracker-key">${key}</div>` +
+          `<div class="tracker-owner">${sig.owner} · ${source}</div>` +
+          `<div class="tracker-risk risk-${sig.risk}">${sig.risk}</div>` +
+        `</div>` +
+        `<div class="tracker-value">${value.length>120?value.slice(0,120)+'…':value}</div>` +
+        `<div class="tracker-desc">${sig.desc}</div>`;
+      container.appendChild(div);
+    });
+
+    // Unmatched — unknown storage entries
+    if(unmatched.length){
+      const hdr=document.createElement('div');
+      hdr.style.cssText='font-size:9px;color:var(--dim);letter-spacing:.2em;padding:16px 0 4px;text-transform:uppercase;';
+      hdr.textContent='UNIDENTIFIED STORAGE ENTRIES';
+      container.appendChild(hdr);
+
+      unmatched.forEach(({key,value,source})=>{
+        const div=document.createElement('div');
+        div.className='tracker-field';
+        div.innerHTML=
+          `<div class="tracker-header">` +
+            `<div class="tracker-key">${key}</div>` +
+            `<div class="tracker-owner">UNKNOWN · ${source}</div>` +
+            `<div class="tracker-risk risk-MEDIUM">UNKNOWN</div>` +
+          `</div>` +
+          `<div class="tracker-value">${value.length>120?value.slice(0,120)+'…':value}</div>` +
+          `<div class="tracker-desc">No known signature. May be site-specific data, a third-party SDK, or an unrecognized tracker.</div>`;
+        container.appendChild(div);
+      });
+    }
+
+  })();
+
+  // ── Reveal sequence ───────────────────────────────────────────
+  const overlay=document.getElementById('scanOverlay');
+  const statusEl=document.getElementById('scanStatus');
+  const statusMessages=['COLLECTING DATA','PROFILING DEVICE','MAPPING NETWORK','SCANNING STORAGE','FINGERPRINTING BROWSER','COMPILING DOSSIER','COMPLETE'];
+  let msgIdx=0;
+  const msgInterval=setInterval(()=>{
+    msgIdx++;
+    if(msgIdx<statusMessages.length) statusEl.textContent=statusMessages[msgIdx];
+    else clearInterval(msgInterval);
+  },C.scanDuration/statusMessages.length);
+
+  setTimeout(()=>{
+    overlay.classList.add('done');
+    document.getElementById('expBody').style.visibility='visible';
+    // Query after DOM is fully built including tracker fields
+    setTimeout(()=>{
+      const allFields=document.querySelectorAll('.field,.tracker-field,.tracker-none');
+      let i=0;
+      function revealNext(){
+        if(i>=allFields.length) return;
+        allFields[i].classList.add('visible');
+        i++;
+        setTimeout(revealNext,C.typeDelay);
+      }
+      revealNext();
+    },400);
+  },C.scanDuration);
+
+  // ── HIBP breach checker ───────────────────────────────────────
+  const HIBP_KEY = C.hibpApiKey || '';
+  const sensitiveTypes = new Set(['Passwords','Credit cards','Bank account numbers',
+    'Social security numbers','Passport numbers','Phone numbers','Physical addresses']);
+
+  document.getElementById('hibpBtn').addEventListener('click', async function(){
+    const email = document.getElementById('hibpEmail').value.trim();
+    if(!email) return;
+    const result = document.getElementById('hibpResult');
+    const btn = this;
+    btn.disabled=true; btn.textContent='CHECKING...';
+    result.innerHTML='';
+
+    if(!HIBP_KEY){
+      result.innerHTML='<div class="hibp-status error">API KEY NOT CONFIGURED — ADD HIBP KEY TO exposed.config.js</div>';
+      btn.disabled=false; btn.textContent='CHECK'; return;
+    }
+
+    try{
+      const res = await fetch(
+        `https://haveibeenpwned.com/api/v3/breachedaccount/${encodeURIComponent(email)}?truncateResponse=false`,
+        { headers:{ 'hibp-api-key': HIBP_KEY, 'user-agent':'EXPOSED-ptxero' } }
+      );
+      if(res.status===404){
+        result.innerHTML='<div class="hibp-status clean">✓ NO BREACHES FOUND FOR THIS ADDRESS</div>';
+      } else if(res.status===200){
+        const breaches = await res.json();
+        result.innerHTML=`<div class="hibp-status breached">⚠ FOUND IN ${breaches.length} BREACH${breaches.length!==1?'ES':''}</div>`;
+        breaches.forEach(b=>{
+          const div=document.createElement('div');
+          div.className='hibp-breach';
+          div.innerHTML=
+            `<div class="hibp-breach-header">`+
+              `<div class="hibp-breach-name">${b.Name}</div>`+
+              `<div class="hibp-breach-date">${b.BreachDate}</div>`+
+            `</div>`+
+            `<div class="hibp-breach-count">${b.PwnCount.toLocaleString()} ACCOUNTS EXPOSED</div>`+
+            `<div class="hibp-breach-types">`+
+              (b.DataClasses||[]).map(t=>`<span class="hibp-breach-type${sensitiveTypes.has(t)?' sensitive':''}">${t.toUpperCase()}</span>`).join('')+
+            `</div>`;
+          result.appendChild(div);
+        });
+      } else if(res.status===401){
+        result.innerHTML='<div class="hibp-status error">INVALID API KEY</div>';
+      } else if(res.status===429){
+        result.innerHTML='<div class="hibp-status error">RATE LIMITED — TRY AGAIN IN A MOMENT</div>';
+      }
+    }catch(e){
+      result.innerHTML='<div class="hibp-status error">REQUEST FAILED — '+e.message.toUpperCase()+'</div>';
+    }
+    btn.disabled=false; btn.textContent='CHECK';
+  });
+
+  document.getElementById('hibpEmail').addEventListener('keydown',e=>{
+    if(e.key==='Enter') document.getElementById('hibpBtn').click();
+  });
+
+})();
+</script>
+</body>
+</html>

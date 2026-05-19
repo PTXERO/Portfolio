@@ -1,0 +1,242 @@
+:root{
+  --bg:#07070a;--surface:#0d0d12;--panel:#101015;
+  --border:#1c1c24;--b2:#28282f;
+  --acc:#c8f542;--acc2:#42d4f5;--acc3:#f542a8;--acc4:#f5a542;
+  --txt:#d8d8e0;--dim:#5a5a70;--mut:#2e2e38;
+  --fmono:'Share Tech Mono',monospace;
+  --fdisp:'Bebas Neue',sans-serif;
+  --fbody:'DM Mono',monospace;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   shared.css — site shared component styles
+   Loaded by every sub-page alongside site.css.
+   Covers: page shell, header, back nav, section dividers,
+   buttons, pills, tags, inputs, footer, lightbox, responsive.
+   ───────────────────────────────────────────────────────────────── */
+
+/* ── Reset & base ─────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  min-height:100%;
+  background:var(--bg);
+  color:var(--txt);
+  font-family:var(--fbody);
+  font-size:12px;
+  overflow-x:hidden;
+}
+
+/* ── Sticky sub-page header ───────────────────────────────────── */
+/* Used by: about, gallery, exposed, any future sub-page */
+.page-header{
+  display:flex;align-items:center;gap:16px;
+  height:44px;padding:0 24px;
+  background:var(--surface);border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:50;
+  flex-shrink:0;
+}
+.page-back{
+  font-family:var(--fmono);font-size:9px;color:var(--dim);
+  text-decoration:none;letter-spacing:.15em;
+  transition:color .15s;flex-shrink:0;
+}
+.page-back:hover{color:var(--acc)}
+.btn-back{
+  padding:4px 11px;border:1px solid var(--b2);border-radius:2px;
+  background:transparent;transition:all .15s;
+}
+.btn-back:link,.btn-back:visited{color:var(--dim);}
+.btn-back:hover{border-color:var(--acc);color:var(--acc);}
+.page-title{
+  font-family:var(--fdisp);font-size:20px;
+  letter-spacing:.12em;color:var(--acc);
+  flex:1;
+}
+.page-subtitle{
+  font-family:var(--fmono);font-size:9px;
+  color:var(--dim);letter-spacing:.15em;
+  flex-shrink:0;
+}
+
+/* ── Page body wrapper ────────────────────────────────────────── */
+.page-body{
+  max-width:860px;
+  margin:0 auto;
+  padding:48px 24px 80px;
+}
+.page-body--narrow{max-width:720px;}
+.page-body--wide{max-width:1100px;}
+
+/* ── Section divider ──────────────────────────────────────────── */
+/* Flex row label + full-width rule line */
+.section-rule{
+  font-family:var(--fmono);font-size:9px;
+  letter-spacing:.25em;text-transform:uppercase;
+  color:var(--acc);
+  display:flex;align-items:center;gap:10px;
+  margin:36px 0 4px;
+}
+.section-rule::after{
+  content:'';flex:1;height:1px;background:var(--border);
+}
+/* Dim variant — used on homepage */
+.section-rule--dim{color:var(--dim);}
+.section-rule--dim::after{background:var(--border);}
+
+/* ── Buttons ──────────────────────────────────────────────────── */
+.btn{
+  font-family:var(--fmono);font-size:9px;letter-spacing:.15em;
+  padding:4px 14px;
+  border:1px solid var(--b2);border-radius:2px;
+  background:none;color:var(--dim);
+  cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.btn:hover{border-color:var(--acc);color:var(--acc)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn--sm{padding:3px 10px;}
+.btn--lg{padding:8px 20px;}
+.btn--granted{border-color:#44ff88;color:#44ff88;}
+.btn--denied{border-color:var(--acc);color:var(--acc);}
+
+/* ── Pill links ───────────────────────────────────────────────── */
+/* Bordered rounded pill — socials, contact, nav tabs */
+.pill{
+  font-family:var(--fmono);font-size:9px;letter-spacing:.1em;
+  padding:4px 12px;
+  border:1px solid var(--b2);border-radius:2px;
+  color:var(--dim);text-decoration:none;
+  transition:all .15s;display:inline-block;
+}
+.pill:hover{
+  border-color:var(--acc);color:var(--acc);
+  background:rgba(200,245,66,.04);
+}
+.pill.on{border-color:var(--acc);color:var(--acc);}
+
+/* ── Tags ─────────────────────────────────────────────────────── */
+.tag{
+  font-family:var(--fmono);font-size:8px;letter-spacing:.1em;
+  padding:2px 6px;
+  border:1px solid var(--b2);border-radius:2px;
+  color:var(--dim);display:inline-block;
+}
+
+/* ── Text input ───────────────────────────────────────────────── */
+.input{
+  font-family:var(--fmono);font-size:11px;letter-spacing:.08em;
+  padding:8px 12px;
+  background:var(--panel);
+  border:1px solid var(--b2);
+  color:var(--txt);
+  outline:none;
+  transition:border-color .15s;
+}
+.input:focus{border-color:var(--acc);}
+
+/* ── Status badges ────────────────────────────────────────────── */
+.badge{
+  font-family:var(--fmono);font-size:8px;letter-spacing:.12em;
+  padding:2px 6px;border-radius:2px;
+}
+.badge--live{
+  background:rgba(200,245,66,.1);color:var(--acc);
+  border:1px solid rgba(200,245,66,.3);
+}
+.badge--wip{
+  background:rgba(245,165,66,.08);color:var(--acc4);
+  border:1px solid rgba(245,165,66,.25);
+}
+.badge--soon{
+  background:rgba(90,90,112,.12);color:var(--dim);
+  border:1px solid var(--b2);
+}
+
+/* ── Card ─────────────────────────────────────────────────────── */
+.card{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:3px;
+  transition:border-color .15s,background .15s;
+}
+.card:hover{
+  border-color:var(--acc);
+  background:rgba(200,245,66,.02);
+}
+
+/* ── Collapsible body ─────────────────────────────────────────── */
+/* Toggle .shut to collapse */
+.collapsible{
+  overflow:hidden;
+  transition:max-height .35s ease;
+}
+.collapsible.shut{max-height:0!important;}
+
+/* ── Lightbox ─────────────────────────────────────────────────── */
+.lightbox{
+  display:none;position:fixed;inset:0;z-index:200;
+  background:rgba(7,7,10,.95);
+  flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;
+}
+.lightbox.on{display:flex;}
+.lightbox__img{
+  max-width:88vw;max-height:78vh;
+  object-fit:contain;
+  border:1px dashed var(--acc);
+  box-shadow:6px 6px 0 #1a1a22;
+}
+.lightbox__meta{
+  display:flex;align-items:center;gap:16px;
+  font-family:var(--fmono);font-size:9px;
+  color:var(--dim);letter-spacing:.1em;
+}
+.lightbox__close{
+  position:fixed;top:16px;right:20px;
+  font-family:var(--fmono);font-size:10px;letter-spacing:.1em;
+  color:var(--dim);background:none;border:none;
+  cursor:pointer;transition:color .15s;
+}
+.lightbox__close:hover{color:var(--acc)}
+.lightbox__counter{
+  font-family:var(--fmono);font-size:8px;
+  color:var(--dim);letter-spacing:.15em;opacity:.4;
+}
+.lightbox__nav button{
+  font-family:var(--fmono);font-size:9px;letter-spacing:.1em;
+  color:var(--dim);background:none;
+  border:1px solid var(--b2);border-radius:2px;
+  padding:4px 14px;cursor:pointer;transition:all .15s;
+}
+.lightbox__nav button:hover{border-color:var(--acc);color:var(--acc)}
+
+/* ── Footer ───────────────────────────────────────────────────── */
+.page-footer{
+  text-align:center;padding:20px 24px;
+  border-top:1px solid var(--border);
+  font-family:var(--fmono);font-size:9px;
+  color:var(--dim);letter-spacing:.15em;
+}
+
+/* ── Toast notification ───────────────────────────────────────── */
+.toast{
+  position:fixed;bottom:20px;left:50%;
+  transform:translateX(-50%) translateY(8px);
+  background:var(--surface);border:1px solid var(--b2);
+  border-radius:2px;
+  font-family:var(--fmono);font-size:9px;letter-spacing:.1em;
+  color:var(--dim);padding:6px 16px;
+  opacity:0;transition:opacity .2s,transform .2s;
+  pointer-events:none;z-index:300;white-space:nowrap;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ── Responsive ───────────────────────────────────────────────── */
+@media(max-width:600px){
+  .page-header{padding:0 14px;}
+  .page-body{padding:32px 14px 60px;}
+  .page-body--narrow{padding:32px 14px 60px;}
+  .lightbox__meta{flex-wrap:wrap;gap:8px;justify-content:center;}
+}
+@media(max-width:480px){
+  .page-body--wide{padding:28px 14px 48px;}
+}

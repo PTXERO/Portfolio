@@ -1,0 +1,136 @@
+/* site.css — Homepage styles. Theme vars injected at runtime from site.config.js */
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap');
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%;background:var(--bg);color:var(--txt);font-family:var(--fbody);font-size:12px;overflow-x:hidden}
+
+/* ── Header ─────────────────────────────────────────────────── */
+header{
+  position:sticky;top:0;z-index:50;
+  height:44px;display:flex;align-items:center;padding:0 24px;gap:16px;
+  background:var(--surface);border-bottom:1px solid var(--border);
+}
+.site-logo{font-family:var(--fdisp);font-size:22px;letter-spacing:.12em;color:var(--acc);line-height:1;flex-shrink:0}
+.site-logo em{color:var(--dim);font-style:normal}
+.site-handle{font-family:var(--fmono);font-size:10px;color:var(--dim);flex:1;user-select:none;}
+.site-socials{display:none}
+.social-btn{
+  width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--b2);border-radius:2px;background:transparent;
+  color:var(--dim);font-size:13px;text-decoration:none;
+  transition:all .15s;cursor:pointer;
+}
+.social-btn:hover{border-color:var(--acc);color:var(--acc);background:rgba(200,245,66,.04)}
+
+/* ── Hero ───────────────────────────────────────────────────── */
+.hero{
+  padding:72px 24px 56px;text-align:center;
+  border-bottom:1px solid var(--border);
+  position:relative;overflow:hidden;
+}
+.hero-bg{
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--fmono);font-size:11px;line-height:1.6;
+  color:var(--border);letter-spacing:.05em;
+  pointer-events:none;user-select:none;word-break:break-all;
+  padding:16px;
+}
+.hero-title{
+  font-family:var(--fdisp);font-size:clamp(42px,8vw,88px);
+  letter-spacing:.08em;color:var(--acc);line-height:1;
+  position:relative;z-index:1;
+}
+.hero-title em{color:var(--dim);font-style:normal}
+.hero-tagline{
+  font-family:var(--fmono);font-size:11px;color:var(--dim);
+  letter-spacing:.2em;text-transform:uppercase;margin-top:12px;
+  position:relative;z-index:1;
+}
+
+/* ── Socials Tab Bar ─────────────────────────────────────────── */
+.socials-bar{
+  display:flex;align-items:center;gap:12px;
+  padding:16px 24px;border-bottom:1px solid var(--border);
+  max-width:1100px;margin:0 auto;width:100%;
+}
+.socials-bar-label{
+  font-family:var(--fmono);font-size:9px;color:var(--dim);
+  letter-spacing:.25em;text-transform:uppercase;flex-shrink:0;
+}
+.socials-bar-links{display:flex;gap:6px;flex-wrap:wrap}
+.socials-tab{
+  font-family:var(--fmono);font-size:9px;letter-spacing:.1em;
+  padding:4px 12px;border:1px solid var(--b2);border-radius:2px;
+  color:var(--dim);text-decoration:none;
+  transition:all .15s;
+}
+.socials-tab:hover{border-color:var(--acc);color:var(--acc);background:rgba(200,245,66,.04)}
+
+/* ── Projects Grid ──────────────────────────────────────────── */
+.projects-section{padding:40px 24px 64px;max-width:1100px;margin:0 auto}
+.section-label{
+  font-family:var(--fmono);font-size:9px;color:var(--dim);
+  letter-spacing:.25em;text-transform:uppercase;
+  margin-bottom:20px;display:flex;align-items:center;gap:10px;
+}
+.section-label::after{content:'';flex:1;height:1px;background:var(--border)}
+.projects-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:12px;
+}
+
+/* ── Project Card ───────────────────────────────────────────── */
+.project-card{
+  display:flex;flex-direction:column;
+  background:var(--panel);border:1px solid var(--border);border-radius:3px;
+  text-decoration:none;color:inherit;
+  transition:border-color .15s,background .15s;
+  position:relative;overflow:hidden;
+}
+.project-card:hover{border-color:var(--acc);background:rgba(200,245,66,.02)}
+.project-card:hover .card-arrow{color:var(--acc)}
+.card-header{padding:18px 18px 10px;display:flex;align-items:baseline;gap:10px}
+.card-title{font-family:var(--fdisp);font-size:26px;letter-spacing:.08em;color:var(--acc);line-height:1}
+.card-sub{font-family:var(--fmono);font-size:9px;color:var(--dim);letter-spacing:.1em}
+.card-body{padding:0 18px 14px;flex:1}
+.card-desc{font-size:10px;color:var(--txt);line-height:1.7;opacity:.8}
+.card-footer{padding:10px 18px 14px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);margin-top:auto}
+.card-tags{display:flex;gap:4px;flex-wrap:wrap}
+.card-tag{
+  font-family:var(--fmono);font-size:8px;letter-spacing:.1em;
+  padding:2px 6px;border:1px solid var(--b2);border-radius:2px;color:var(--dim);
+}
+.card-arrow{color:var(--dim);font-size:14px;transition:color .15s;flex-shrink:0}
+
+/* ── Status Badge ───────────────────────────────────────────── */
+.card-status{
+  position:absolute;top:12px;right:12px;
+  font-family:var(--fmono);font-size:8px;letter-spacing:.12em;
+  padding:2px 6px;border-radius:2px;
+}
+.status-live{background:rgba(200,245,66,.1);color:var(--acc);border:1px solid rgba(200,245,66,.3)}
+.status-wip{background:rgba(245,165,66,.08);color:var(--acc4);border:1px solid rgba(245,165,66,.25)}
+.status-soon{background:rgba(90,90,112,.12);color:var(--dim);border:1px solid var(--b2)}
+
+/* ── Empty slot (coming soon placeholder) ───────────────────── */
+.project-card.placeholder{opacity:.35;pointer-events:none;border-style:dashed}
+.placeholder .card-title{color:var(--dim)}
+
+/* ── Footer ─────────────────────────────────────────────────── */
+footer{
+  text-align:center;padding:20px 24px;border-top:1px solid var(--border);
+  font-family:var(--fmono);font-size:9px;color:var(--dim);letter-spacing:.15em;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media(max-width:480px){
+  header{padding:0 14px}
+  .hero{padding:48px 16px 40px}
+  .projects-section{padding:28px 14px 48px}
+  .projects-grid{grid-template-columns:1fr}
+  .site-handle{display:none}
+}
+
+header,main,.socials-bar,footer{position:relative;z-index:2;}

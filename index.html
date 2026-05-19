@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loading…</title>
+<script src="design-tokens.js"></script>
+<script src="site.config.js"></script>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<header>
+  <div class="site-logo">░▒▓<em>//</em>░▒▓</div>
+  <div class="site-handle" id="siteHandle"></div>
+</header>
+
+<section class="hero">
+  <div class="hero-bg" id="heroBg" aria-hidden="true"></div>
+  <div class="hero-title" id="heroTitle"></div>
+  <div class="hero-tagline" id="heroTagline"></div>
+</section>
+
+<div class="socials-bar" id="socialsBar">
+    <span class="socials-bar-label">Socials</span>
+    <div class="socials-bar-links" id="socialsBarLinks"></div>
+</div>
+
+<main class="projects-section">
+  <div class="section-label">Projects</div>
+  <div class="projects-grid" id="projectsGrid"></div>
+</main>
+
+<footer id="siteFooter"></footer>
+
+<script>
+//Lowkey craving a burger rn... :|
+(function(){
+  const S=SITE;
+
+  
+
+  // ── Title ────────────────────────────────────────────────────
+  document.title=S.handle+' // '+S.tagline;
+
+  // ── Header ───────────────────────────────────────────────────
+  document.getElementById('siteHandle').textContent='@'+S.handle;
+
+  // Socials
+  const socialsBarLinks=document.getElementById('socialsBarLinks');
+  S.socials.filter(s=>s.url).forEach(s=>{
+  const a=document.createElement('a');
+  a.className='socials-tab';a.href=s.url;a.title=s.label;
+  a.textContent=s.icon+' '+s.label;
+  a.target='_blank';a.rel='noopener';
+  socialsBarLinks.appendChild(a);
+  });
+
+  // ── Hero ─────────────────────────────────────────────────────
+  document.getElementById('heroTitle').innerHTML=
+    S.handle.toUpperCase().replace('//',`<em>//</em>`);
+  document.getElementById('heroTagline').textContent=S.tagline;
+
+  // Animated ASCII background — scrolling columns left to right
+const heroBg = document.getElementById('heroBg');
+heroBg.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;user-select:none;';
+
+const COLS   = S.heroBg.highlight;
+const GLYPHS = S.heroBg.glyphs;
+const COL_W  = S.heroBg.colWidth;
+const ROW_H  = S.heroBg.rowHeight;
+const SPEED  = S.heroBg.speed;
+const COLOR  = S.heroBg.color || 'var(--border)';
+const HIGHLIGHT_CHANCE = S.heroBg.highlightChance;
+
+let cols = [];
+let animFrame;
+
+function initCols() {
+  heroBg.innerHTML = '';
+  const W = heroBg.offsetWidth;
+  const H = heroBg.offsetHeight;
+  const numRows = Math.floor(H / ROW_H);
+  const numCols = Math.ceil(W / COL_W) + 4;
+
+  cols = [];
+  for (let i = 0; i < numCols; i++) {
+    const col = document.createElement('div');
+    col.style.cssText = `position:absolute;top:0;bottom:0;width:${COL_W}px;left:${i*COL_W}px;display:flex;flex-direction:column;gap:0;`;
+    col.style.color = COLOR;
+    col.style.fontFamily = 'var(--fmono)';
+    col.style.fontSize = '11px';
+    col.style.lineHeight = ROW_H + 'px';
+    col.style.letterSpacing = '0';
+
+    const cells = [];
+    for (let r = 0; r < numRows; r++) {
+      const span = document.createElement('span');
+      // Randomly use a COLS character or a glyph
+      span.textContent = Math.random() < HIGHLIGHT_CHANCE
+        ? COLS[Math.floor(Math.random() * COLS.length)]
+        : GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
+      col.appendChild(span);
+      cells.push(span);
+    }
+
+    heroBg.appendChild(col);
+    cols.push({ el: col, x: i * COL_W, cells, numRows });
+  }
+}
+
+function tickCols() {
+  const W = heroBg.offsetWidth;
+  const totalW = cols.length * COL_W;
+
+  cols.forEach(c => {
+    c.x -= SPEED;
+    // When a column exits left, wrap it to the right and regenerate
+    if (c.x < -COL_W) {
+      c.x = totalW - COL_W;
+      c.cells.forEach(span => {
+        span.textContent = Math.random() < HIGHLIGHT_CHANCE
+          ? COLS[Math.floor(Math.random() * COLS.length)]
+          : GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
+      });
+    }
+    c.el.style.left = Math.round(c.x) + 'px';
+  });
+
+  animFrame = requestAnimationFrame(tickCols);
+}
+
+initCols();
+animFrame = requestAnimationFrame(tickCols);
+
+// Re-init on resize
+window.addEventListener('resize', () => {
+  cancelAnimationFrame(animFrame);
+  initCols();
+  animFrame = requestAnimationFrame(tickCols);
+});
+
+  // ── Projects Grid ────────────────────────────────────────────
+  const grid=document.getElementById('projectsGrid');
+
+  S.projects.forEach(p=>{
+    const a=document.createElement('a');
+    a.className='project-card';
+    a.href=p.url;
+    if(p.status!=='live') a.target='_self';
+
+    const statusLabel={live:'LIVE',wip:'WIP',soon:'SOON'}[p.status]||p.status;
+    const statusClass={live:'status-live',wip:'status-wip',soon:'status-soon'}[p.status]||'status-soon';
+
+    a.innerHTML=`
+      <div class="card-status ${statusClass}">${statusLabel}</div>
+      <div class="card-header">
+        <div class="card-title">${p.title}</div>
+        <div class="card-sub">${p.sub||''}</div>
+      </div>
+      <div class="card-body">
+        <div class="card-desc">${p.desc}</div>
+      </div>
+      <div class="card-footer">
+        <div class="card-tags">
+          ${(p.tags||[]).map(tag=>`<span class="card-tag">${tag}</span>`).join('')}
+        </div>
+        <div class="card-arrow">→</div>
+      </div>
+    `;
+
+    if(p.status==='soon') a.classList.add('placeholder');
+    grid.appendChild(a);
+  });
+
+  // ── Footer ───────────────────────────────────────────────────
+  document.getElementById('siteFooter').textContent=S.footer||'';
+})();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
+<script>
+(function(){
+  const { Engine, Render, Runner, Bodies, Body, World, Events } = Matter;
+
+  // ── Canvas setup ─────────────────────────────────────────────
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;';
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+
+  function resize(){
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // ── Physics engine ───────────────────────────────────────────
+  const engine = Engine.create({ gravity:{ y:1.8 } });
+  const world  = engine.world;
+
+  // Walls: floor + left + right
+  let floor, wallL, wallR;
+  const THICK = 60;
+
+  function makeWalls(){
+    const W = window.innerWidth, H = window.innerHeight;
+    if(floor) World.remove(world,[floor,wallL,wallR]);
+    floor = Bodies.rectangle(W/2, H+THICK/2, W*3, THICK, { isStatic:true });
+    wallL = Bodies.rectangle(-THICK/2, H/2, THICK, H*3, { isStatic:true });
+    wallR = Bodies.rectangle(W+THICK/2, H/2, THICK, H*3, { isStatic:true });
+    World.add(world,[floor,wallL,wallR]);
+  }
+  makeWalls();
+  window.addEventListener('resize', makeWalls);
+
+  // ── Word bodies ───────────────────────────────────────────────
+  const FONT    = '\'Share Tech Mono\',monospace';
+  const FONT_SZ = 13;
+  const PAD     = { x:10, y:6 };
+  const wordBodies = []; // { body, text }
+
+  function spawnWord(text, x, y){
+    // Measure text width
+    ctx.font = `${FONT_SZ}px ${FONT}`;
+    const tw = ctx.measureText(text).width;
+    const bw = tw + PAD.x*2;
+    const bh = FONT_SZ + PAD.y*2;
+
+    const body = Bodies.rectangle(x, y, bw, bh, {
+      restitution: 0.35,
+      friction:    0.6,
+      frictionAir: 0.01,
+      chamfer:     { radius: 2 },
+    });
+    // Random small spin on spawn
+    Body.setAngularVelocity(body, (Math.random()-0.5)*0.3);
+    Body.setVelocity(body, {
+      x: (Math.random()-0.5)*8,
+      y: -(Math.random()*6+3)
+    });
+    World.add(world, body);
+    wordBodies.push({ body, text, bw, bh });
+  }
+
+  // ── Render loop ───────────────────────────────────────────────
+  const ACC = SITE.theme.acc;
+  const DIM = SITE.theme.dim;
+
+  function drawLoop(){
+    requestAnimationFrame(drawLoop);
+    Engine.update(engine, 1000/60);
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.font = `${FONT_SZ}px ${FONT}`;
+    ctx.textBaseline = 'middle';
+
+    wordBodies.forEach(({ body, text, bw, bh }) => {
+      const { x, y } = body.position;
+      const angle    = body.angle;
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+
+      // Box
+      ctx.strokeStyle = ACC;
+      ctx.lineWidth   = 1;
+      ctx.setLineDash([3,3]);
+      ctx.strokeRect(-bw/2, -bh/2, bw, bh);
+      ctx.setLineDash([]);
+
+      // Fill
+      ctx.fillStyle = 'rgba(7,7,10,0.82)';
+      ctx.fillRect(-bw/2, -bh/2, bw, bh);
+
+      // Text
+      ctx.fillStyle = ACC;
+      ctx.fillText(text, -bw/2+PAD.x, 0);
+
+      ctx.restore();
+    });
+  }
+  drawLoop();
+
+  // ── Click handler on handle ───────────────────────────────────
+  const handle = document.getElementById('heroTitle');
+  handle.style.cursor = 'pointer';
+  handle.addEventListener('click', ()=>{
+    const words = SITE.clickWords || ['PTXERO'];
+    const word  = words[Math.floor(Math.random()*words.length)];
+    const rect  = handle.getBoundingClientRect();
+    const x = rect.left + rect.width/2 + (Math.random()-0.5)*40;
+    const y = rect.bottom + 10;
+    spawnWord(word, x, y);
+  });
+
+})();
+</script>
+
+</body>
+</html>

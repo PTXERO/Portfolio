@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About</title>
+<script src="../design-tokens.js"></script>
+<script src="../site.config.js"></script>
+<script src="about.config.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
+<link rel="stylesheet" href="../site.css">
+<link rel="stylesheet" href="../shared.css">
+<style>
+:root{
+  --bg:#07070a;--surface:#0d0d12;--panel:#101015;
+  --border:#1c1c24;--b2:#28282f;
+  --acc:#c8f542;--acc2:#42d4f5;--acc3:#f542a8;--acc4:#f5a542;
+  --txt:#d8d8e0;--dim:#5a5a70;--mut:#2e2e38;
+  --fmono:'Share Tech Mono',monospace;
+  --fdisp:'Bebas Neue',sans-serif;
+  --fbody:'DM Mono',monospace;
+}
+.about-header{
+  display:flex;align-items:center;gap:16px;
+  height:44px;padding:0 24px;
+  background:var(--surface);border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:50;
+}
+.about-back{
+  font-family:var(--fmono);font-size:9px;color:var(--dim);
+  text-decoration:none;letter-spacing:.15em;transition:color .15s;
+}
+.about-back:hover{color:var(--acc)}
+.about-title{font-family:var(--fdisp);font-size:20px;letter-spacing:.12em;color:var(--acc);}
+.about-body{max-width:720px;margin:0 auto;padding:48px 24px 80px;}
+.about-name{
+  font-family:var(--fdisp);font-size:clamp(48px,8vw,80px);
+  letter-spacing:.08em;color:var(--acc);line-height:1;margin-bottom:6px;
+}
+.about-handle{
+  font-family:var(--fmono);font-size:10px;color:var(--dim);
+  letter-spacing:.2em;margin-bottom:48px;
+}
+.about-section{margin-bottom:40px;}
+.about-section-label{
+  font-family:var(--fmono);font-size:9px;color:var(--acc);
+  letter-spacing:.25em;text-transform:uppercase;
+  margin-bottom:14px;display:flex;align-items:center;gap:10px;
+}
+.about-section-label::after{content:'';flex:1;height:1px;background:var(--border);}
+.about-text{
+  font-family:var(--fbody);font-size:12px;color:var(--txt);
+  line-height:1.9;opacity:.85;
+}
+.about-contact{display:flex;gap:12px;flex-wrap:wrap;}
+.about-contact a{
+  font-family:var(--fmono);font-size:9px;letter-spacing:.1em;
+  padding:4px 12px;border:1px solid var(--b2);border-radius:2px;
+  color:var(--dim);text-decoration:none;transition:all .15s;
+}
+.about-contact a:hover{border-color:var(--acc);color:var(--acc);}
+</style>
+</head>
+<body>
+
+<header class="about-header">
+  <a href="../" class="page-back btn-back">← HOME</a>
+  <div class="about-title">ABOUT</div>
+</header>
+
+<div class="about-body" id="aboutBody"></div>
+
+<script>
+(function(){
+  const S=SITE, A=ABOUT;
+  const t=S.theme, f=S.fonts, r=document.documentElement;
+  [['--bg',t.bg],['--surface',t.surface],['--panel',t.panel],
+   ['--border',t.border],['--b2',t.b2],
+   ['--acc',t.acc],['--acc2',t.acc2],['--acc3',t.acc3],['--acc4',t.acc4],
+   ['--txt',t.txt],['--dim',t.dim],['--mut',t.mut],
+   ['--fmono',`'${f.mono}',monospace`],
+   ['--fdisp',`'${f.display}',sans-serif`],
+   ['--fbody',`'${f.body}',monospace`],
+  ].forEach(([k,v])=>r.style.setProperty(k,v));
+
+  document.title = 'About · ' + A.handle;
+
+  const body = document.getElementById('aboutBody');
+
+  // Name + handle
+  body.innerHTML =
+    `<div class="about-name">${A.name}</div>` +
+    `<div class="about-handle">${A.handle} · ${A.location}</div>`;
+
+  // Sections
+  A.sections.forEach(sec => {
+    const div = document.createElement('div');
+    div.className = 'about-section';
+    div.innerHTML =
+      `<div class="about-section-label">${sec.label}</div>` +
+      `<div class="about-text">${sec.text}</div>`;
+    body.appendChild(div);
+  });
+
+  // Contact
+  const contact = document.createElement('div');
+  contact.className = 'about-section';
+  contact.innerHTML = `<div class="about-section-label">Contact</div>`;
+  const links = document.createElement('div');
+  links.className = 'about-contact';
+  A.contact.forEach(c => {
+    const a = document.createElement('a');
+    a.href = c.url;
+    a.textContent = c.label;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    links.appendChild(a);
+  });
+  contact.appendChild(links);
+  body.appendChild(contact);
+})();
+</script>
+
+</body>
+</html>

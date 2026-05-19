@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASCII//RENDER</title>
+<script src="../design-tokens.js"></script>
+<script src="config.js"></script>
+<link rel="stylesheet" href="ascii_render.css">
+</head>
+<body>
+<div id="prog"></div>
+<div id="toast"></div>
+
+<!-- EXPORT MODAL -->
+<div id="exportModal" style="position:fixed;inset:0;background:rgba(3,3,5,.85);z-index:700;display:none;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--b2);border-radius:4px;width:340px;max-width:calc(100vw - 32px)">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="font-family:var(--fdisp);font-size:22px;color:var(--acc);letter-spacing:.1em">EXPORT</div>
+      <button id="exportModalClose" style="background:none;border:none;color:var(--dim);font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <div style="padding:14px 16px">
+      <div class="slabel" style="margin-bottom:8px">FILE FORMAT</div>
+      <select id="exportFmt" style="width:100%;background:var(--bg);border:1px solid var(--b2);color:var(--txt);font-family:var(--fmono);font-size:10px;padding:5px 7px;border-radius:2px;outline:none">
+        <option value="png">PNG — lossless</option>
+        <option value="jpg-100">JPG 100% — near lossless</option>
+        <option value="jpg-90">JPG 90% — high quality</option>
+        <option value="jpg-80">JPG 80%</option>
+        <option value="jpg-70">JPG 70%</option>
+        <option value="jpg-50">JPG 50% — medium</option>
+        <option value="jpg-25">JPG 25% — small file</option>
+        <option value="jpg-10">JPG 10% — tiny</option>
+        <option value="webp">WebP — modern &amp; efficient</option>
+        <option value="txt">TXT — plain ASCII text only</option>
+        <option value="svg">SVG — vector, scalable</option>
+        <option value="gif">Animated GIF (GIF/video input only)</option>
+        <option value="webm">WebM Video (video input only)</option>
+      </select>
+      <div class="rhint" style="margin-top:6px">PNG or WebP for colored output. TXT exports characters only (no color).</div>
+    </div>
+    <div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px">
+      <button id="exportModalCancel" style="flex:1;padding:7px;border:1px solid var(--b2);border-radius:2px;background:transparent;color:var(--dim);font-family:var(--fmono);font-size:10px;cursor:pointer">CANCEL</button>
+      <button id="exportModalGo" style="flex:2;padding:7px;background:var(--acc);border:none;border-radius:2px;color:#000;font-family:var(--fdisp);font-size:15px;letter-spacing:.08em;cursor:pointer">⬇ EXPORT</button>
+    </div>
+  </div>
+</div>
+<div id="presetModal">
+  <div class="pm-box">
+    <div class="pm-head"><div class="pm-title">PRESETS</div><button class="pm-close" id="pmClose">✕</button></div>
+    <div class="pm-body" id="pmBody"></div>
+    <div class="pm-save-row">
+      <input class="pm-input" id="pmNameInput" type="text" placeholder="Preset name…" maxlength="48">
+      <button class="pm-save-btn" id="pmSaveBtn">SAVE</button>
+    </div>
+  </div>
+</div>
+
+<div id="crashOv">
+  <div class="crash-icon">⚠</div>
+  <div class="crash-head">RENDER STALLED</div>
+  <div class="crash-msg" id="crashMsg">Renderer exceeded time limit. Image is still loaded. Try a smaller output size or larger block size.</div>
+  <button class="crash-btn" id="crashBtn">RESET &amp; RETRY</button>
+</div>
+
+<div id="settingsOv">
+  <div class="sp-drawer">
+    <div class="sphd"><div class="sptitle">SETTINGS</div><button class="spclose" id="spClose">✕</button></div>
+    <div class="sp-body">
+      <div class="sp-group">
+        <div class="sp-gtitle">Settings File</div>
+        <div style="font-size:9px;color:var(--dim);line-height:1.7">Save all settings to JSON, or load a preset file.</div>
+        <div class="ei-row">
+          <button class="ei-btn" id="exportSettingsBtn">⬇ EXPORT JSON</button>
+          <button class="ei-btn" id="importSettingsBtn">⬆ IMPORT JSON</button>
+        </div>
+        <input type="file" id="settingsFile" accept=".json" style="display:none">
+      </div>
+      <div class="sp-group">
+        <div class="sp-gtitle">Memory &amp; Performance</div>
+        <div class="trow"><span class="tname">Cap source image size</span><div class="tgl on" id="tgl-memlimit"></div></div>
+        <div id="memBody" style="margin-top:8px">
+          <div class="row">
+            <div class="rlabel"><span class="rname">Max source megapixels</span><input class="rval" id="maxMpVal" type="number" value="8" min="1" max="64"></div>
+            <input type="range" id="maxMpSlider" min="1" max="64" value="8">
+            <div class="rhint">Images bigger than this are downsampled before processing. 8MP ≈ 3264×2448.</div>
+          </div>
+          <div class="row">
+            <div class="rlabel"><span class="rname">Max output dimension (px)</span><input class="rval" id="maxOutVal" type="number" value="4000" min="200" max="16000" step="100"></div>
+            <input type="range" id="maxOutSlider" min="200" max="16000" value="4000" step="100">
+            <div class="rhint">Clamps canvas size to prevent tab crashes.</div>
+          </div>
+        </div>
+        <div class="trow" style="margin-top:6px"><span class="tname">Chunked render (prevents freeze)</span><div class="tgl on" id="tgl-chunk"></div></div>
+        <div id="chunkBody" style="margin-top:8px">
+          <div class="row">
+            <div class="rlabel"><span class="rname">Rows per chunk</span><input class="rval" id="chunkVal" type="number" value="6" min="1" max="64"></div>
+            <input type="range" id="chunkSlider" min="1" max="64" value="6">
+            <div class="rhint">Renders N rows then yields to the browser. Lower = smoother but slower.</div>
+          </div>
+        </div>
+        <div class="trow"><span class="tname">Watchdog auto-restart</span><div class="tgl on" id="tgl-watchdog"></div></div>
+        <div class="row" style="margin-top:8px">
+          <div class="rlabel"><span class="rname">Timeout (seconds)</span><input class="rval" id="wdogVal" type="number" value="20" min="5" max="120"></div>
+          <input type="range" id="wdogSlider" min="5" max="120" value="20">
+        </div>
+      </div>
+      <div class="sp-group">
+        <div class="sp-gtitle">Behavior</div>
+        <div class="trow"><span class="tname">Re-render on any change</span><div class="tgl on" id="tgl-auto"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VIDEO FORMAT MODAL -->
+<div id="videoModal">
+  <div class="vmodal-box">
+    <div class="vmodal-title">VIDEO DETECTED</div>
+    <div class="vmodal-sub" id="vmodalInfo">Loading video info…</div>
+    <div class="vmodal-cards">
+      <div class="vcard" id="vcardGif" onclick="selectVFormat('gif')">
+        <div class="vcard-title">ANIMATED GIF</div>
+        <div class="vcard-body">
+          <span class="vcard-pro">✓ Universal — plays everywhere<br>✓ No codec required<br>✓ Loops automatically<br></span>
+          <span class="vcard-con">✗ 256 color limit (dithered)<br>✗ Large file size<br>✗ No audio</span>
+        </div>
+      </div>
+      <div class="vcard selected" id="vcardWebm" onclick="selectVFormat('webm')">
+        <div class="vcard-title">WEBM VIDEO</div>
+        <div class="vcard-body">
+          <span class="vcard-pro">✓ Full color, small file<br>✓ Plays in all modern browsers<br>✓ Audio preserved<br></span>
+          <span class="vcard-con">✗ Not supported on older iOS<br>✗ Convert to MP4 for wide use</span>
+        </div>
+      </div>
+    </div>
+    <div class="vmodal-est on" id="vmodalEst">Estimating render time…</div>
+    <div class="vmodal-actions">
+      <button class="vmbtn" id="vmodalCancel">CANCEL</button>
+      <button class="vmbtn go" id="vmodalConfirm" disabled>▶ START RENDER</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <a href="../" class="hdr-home">← HOME</a>
+  <div class="hdr-sep"></div>
+  <div class="logo">ASCII<em>//</em>RENDER</div>
+  <div class="ver-tag">v—</div>
+  <div class="hdr-sep"></div>
+  <div class="hdr-info" id="hdrInfo">No image loaded</div>
+  <div class="hdr-badge" id="hdrBadge">IDLE</div>
+  <div class="hdr-btns">
+    <button class="hbtn icon" id="btnUndo" title="Undo (Ctrl+Z)" disabled>↩</button>
+    <button class="hbtn icon" id="btnRedo" title="Redo (Ctrl+Y)" disabled>↪</button>
+    <div class="hdr-sep"></div>
+    <button class="hbtn icon" id="btnBgInvert" title="Toggle background black ↔ white">◑</button>
+    <div class="hdr-sep"></div>
+    <button class="hbtn" id="btnSettings">⚙ SETTINGS</button>
+    <button class="hbtn" id="btnPresets">☰ PRESETS</button>
+    <button class="hbtn" id="btnCopy" disabled title="Copy canvas to clipboard">⎘ COPY</button>
+    <button class="hbtn" id="btnExport" disabled>⬇ EXPORT</button>
+    <button class="hbtn go" id="btnRender" disabled>▶ RENDER</button>
+  </div>
+</header>
+
+<div class="workspace">
+<aside class="sidebar">
+  <div class="sidebar-resizer" id="sidebarResizer"><div class="sidebar-pull"></div></div>
+  <div class="stabs">
+    <div class="stab on" data-sp="image">IMAGE</div>
+    <div class="stab" data-sp="process">PROCESS</div>
+    <div class="stab" data-sp="chars">CHARS</div>
+    <div class="stab" data-sp="color">COLOR</div>
+  </div>
+
+  <!-- IMAGE PANEL -->
+  <div class="spanel on" id="sp-image">
+    <div class="sec">
+      <div class="sec-hd"><span class="sec-name">Load Image</span><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <div class="dropzone" id="dropZone">
+          <input type="file" id="fileInput" accept="image/*,.arw,.cr2,.cr3,.nef,.nrw,.orf,.raf,.rw2,.dng,.pef,.srw,.x3f,.raw,video/mp4,video/webm,video/quicktime,video/x-msvideo,.mp4,.webm,.mov,.avi">
+          <span class="dz-icon">⬡</span>
+          <div class="dz-text">DROP FILE HERE · click to browse<br>IMAGE: JPG · PNG · WEBP · BMP · GIF<br>VIDEO: MP4 · WEBM · MOV · AVI<br>RAW: ARW · CR2 · NEF · DNG</div>
+        </div>
+        <div class="url-row">
+          <input class="url-inp" type="text" id="urlInput" placeholder="…or paste image URL">
+          <button class="url-btn" id="urlLoad">LOAD</button>
+        </div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd"><span class="sec-name">Output Resolution</span><button class="sec-reset" data-reset="resolution" title="Reset">↺</button><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <div class="row">
+          <div class="slabel">QUICK PRESET</div>
+          <select id="resPreset">
+            <option value="source">Match source image exactly</option>
+            <option value="custom">Custom (use sliders)</option>
+            <option value="320x240">320 × 240</option>
+            <option value="640x480">640 × 480</option>
+            <option value="1280x720">1280 × 720 HD</option>
+            <option value="1920x1080">1920 × 1080 Full HD</option>
+            <option value="3840x2160">3840 × 2160 4K</option>
+          </select>
+          <div class="rhint">Sets the pixel resolution the source image is sampled at before ASCII conversion.</div>
+        </div>
+        <div class="row">
+          <div class="rlabel" style="margin-bottom:6px">
+            <span class="rname">Width (px)</span>
+            <button class="hex-btn on" id="arLockBtn" title="Lock aspect ratio — click to toggle">
+              <svg class="hex-icon" viewBox="0 0 13 13"><polygon id="arHexPoly" points="6.5,0.8 11.5,3.75 11.5,9.25 6.5,12.2 1.5,9.25 1.5,3.75" stroke-width="1.3"/><line id="arHexBar" class="hex-bar" x1="3.5" y1="6.5" x2="9.5" y2="6.5" stroke-width="2" opacity="1"/></svg>
+            </button>
+            <span class="rname">Height (px)</span>
+          </div>
+          <div class="dim-pair">
+            <input class="rval" id="outWVal" type="number" value="800" min="10">
+            <input type="range" id="outWSlider" min="10" max="3840" value="800" step="10">
+          </div>
+          <div class="dim-pair">
+            <input class="rval" id="outHVal" type="number" value="600" min="10">
+            <input type="range" id="outHSlider" min="10" max="2160" value="600" step="10">
+          </div>
+          <div class="rhint" style="margin-top:5px">Click ⬡ to lock the current W:H ratio. Sliders set the sampling resolution — smaller = faster render.</div>
+        </div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd"><span class="sec-name">Block &amp; Scale</span><button class="sec-reset" data-reset="block" title="Reset">↺</button><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <div class="row">
+          <div class="rlabel"><span class="rname">Block size (px)</span><input class="rval" id="blockVal" type="number" value="8" min="1"></div>
+          <input type="range" id="blockSlider" min="1" max="80" value="8">
+        </div>
+        <div class="bf-lock-row">
+          <button class="hex-btn on" id="bfLockBtn" title="Lock block size to font size">
+            <svg class="hex-icon" viewBox="0 0 13 13"><polygon points="6.5,0.8 11.5,3.75 11.5,9.25 6.5,12.2 1.5,9.25 1.5,3.75" stroke-width="1.3"/><line id="bfHexBar" class="hex-bar" x1="3.5" y1="6.5" x2="9.5" y2="6.5" stroke-width="2" opacity="1"/></svg>
+          </button>
+          <span class="bf-lock-label" id="bfLockLabel">Block locked to font</span>
+        </div>
+        <div class="row">
+          <div class="rlabel"><span class="rname">Font size (px)</span><input class="rval" id="fontVal" type="number" value="8" min="2"></div>
+          <input type="range" id="fontSlider" min="2" max="48" value="8">
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div class="slabel">CELL MODE</div>
+          <div class="pills" id="cellModePills" style="margin-top:4px">
+            <div class="pill on" data-cell="fit">Fit to output</div>
+            <div class="pill" data-cell="square">Square blocks</div>
+          </div>
+          <div class="rhint" style="margin-top:5px" id="cellModeHint">Each cell fills the canvas exactly — output canvas matches the W×H resolution set above.</div>
+        </div>
+        <div class="row">
+          <div class="rlabel"><span class="rname">Scale multiplier ×</span><input class="rval" id="scaleVal" type="number" value="1" min="0.1" step="0.1"></div>
+          <input type="range" id="scaleSlider" min="0.1" max="4" value="1" step="0.1">
+          <div class="rhint">Scales the final canvas. 2× = double output resolution.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROCESS PANEL -->
+  <div class="spanel" id="sp-process">
+    <div class="sec">
+      <div class="sec-hd"><span class="sec-name">Exposure &amp; Tone</span><button class="sec-reset" data-reset="exposure" title="Reset">↺</button><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <div class="row">
+          <div class="rlabel"><span class="rname">Exposure</span><input class="rval" id="ppExposure" type="number" value="0" min="-2" max="2" step="0.05"></div>
+          <input type="range" id="ppExposureSlider" min="-200" max="200" value="0">
+          <div class="rhint">Brightens or darkens the whole image before rendering. −2 to +2 EV.</div>
+        </div>
+        <div class="row">
+          <div class="rlabel"><span class="rname">Contrast</span><input class="rval" id="ppContrast" type="number" value="0" min="-100" max="100" step="1"></div>
+          <input type="range" id="ppContrastSlider" min="-100" max="100" value="0">
+        </div>
+        <div class="row">
+          <div class="rlabel"><span class="rname">Highlights</span><input class="rval" id="ppHighlights" type="number" value="0" min="-100" max="100" step="1"></div>
+          <input type="range" id="ppHighlightsSlider" min="-100" max="100" value="0">
+          <div class="rhint">Pulls bright areas up or down without touching midtones.</div>
+        </div>
+        <div class="row">
+          <div class="rlabel"><span class="rname">Shadows</span><input class="rval" id="ppShadows" type="number" value="0" min="-100" max="100" step="1"></div>
+          <input type="range" id="ppShadowsSlider" min="-100" max="100" value="0">
+          <div class="rhint">Lifts or crushes dark areas without touching highlights.</div>
+        </div>
+        <div class="row">
+          <div class="rlabel"><span class="rname">Whites</span><input class="rval" id="ppWhites" type="number" value="0" min="-100" max="100" step="1"></div>
+          <input type="range" id="ppWhitesSlider" min="-100" max="100" value="0">
+        </div>
+        <div class="row">
+          <div class="rlabel"><span class="rname">Blacks</span><input class="rval" id="ppBlacks" type="number" value="0" min="-100" max="100" step="1"></div>
+          <input type="range" id="ppBlacksSlider" min="-100" max="100" value="0">
+        </div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd"><span class="sec-name">Color</span><button class="sec-reset" data-reset="ppcolor" title="Reset">↺</button><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <div class="row">
+          <div class="rlabel"><span class="rname">Saturation</span><input class="rval" id="ppSaturation" type="number" value="0" min="-100" max="100" step="1"></div>
+          <input type="range" id="ppSaturationSlider" min="-100" max="100" value="0">
+        </div>
+        <div class="row">
+          <div class="rlabel"><span class="rname">Vibrance</span><input class="rval" id="ppVibrance" type="number" value="0" min="-100" max="100" step="1"></div>
+          <input type="range" id="ppVibranceSlider" min="-100" max="100" value="0">
+          <div class="rhint">Boosts muted colours more than already-saturated ones.</div>
+        </div>
+        <div class="row">
+          <div class="rlabel"><span class="rname">Temperature (K)</span><input class="rval" id="ppTemp" type="number" value="0" min="-100" max="100" step="1"></div>
+          <input type="range" id="ppTempSlider" min="-100" max="100" value="0">
+          <div class="rhint">Negative = cooler/blue, Positive = warmer/orange.</div>
+        </div>
+        <div class="row">
+          <div class="rlabel"><span class="rname">Tint</span><input class="rval" id="ppTint" type="number" value="0" min="-100" max="100" step="1"></div>
+          <input type="range" id="ppTintSlider" min="-100" max="100" value="0">
+          <div class="rhint">Negative = green shift, Positive = magenta shift.</div>
+        </div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd"><span class="sec-name">Detail</span><button class="sec-reset" data-reset="detail" title="Reset">↺</button><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <div class="row">
+          <div class="rlabel"><span class="rname">Sharpness</span><input class="rval" id="ppSharpness" type="number" value="0" min="0" max="100" step="1"></div>
+          <input type="range" id="ppSharpnessSlider" min="0" max="100" value="0">
+        </div>
+        <div class="row">
+          <div class="rlabel"><span class="rname">Clarity</span><input class="rval" id="ppClarity" type="number" value="0" min="-100" max="100" step="1"></div>
+          <input type="range" id="ppClaritySlider" min="-100" max="100" value="0">
+          <div class="rhint">Enhances midtone contrast / local edges.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHARS PANEL -->
+  <div class="spanel" id="sp-chars">
+    <div class="sec">
+      <div class="sec-hd"><span class="sec-name">Character Set</span><button class="sec-reset" data-reset="charset" title="Reset">↺</button><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <div class="csopts" id="csopts">
+          <div class="csopt" data-cs="standard"><span class="csdot"></span>Standard · : - = + * # % @</div>
+          <div class="csopt" data-cs="blocks"><span class="csdot"></span>Block chars ░ ▒ ▓ ▌ ▐ ▀ ▄ █</div>
+          <div class="csopt" data-cs="minimal"><span class="csdot"></span>Minimal · . o O @</div>
+          <div class="csopt on" data-cs="dense"><span class="csdot"></span>Dense (70 chars)</div>
+          <div class="csopt" data-cs="binary"><span class="csdot"></span>Binary 0 1</div>
+          <div class="csopt" data-cs="braille"><span class="csdot"></span>Braille ⠀ ⠁ ⠂ ⠿</div>
+          <div class="csopt" data-cs="halfblock"><span class="csdot"></span>Unicode ▀▄ half-blocks</div>
+          <div class="csopt" data-cs="custom"><span class="csdot"></span>Custom ↓</div>
+        </div>
+        <input type="text" id="customCharsInput" placeholder="dark→light  e.g. @#*+:. " style="width:100%;margin-top:8px;background:var(--bg);border:1px solid var(--b2);color:var(--txt);font-family:var(--fmono);font-size:10px;padding:5px 7px;border-radius:2px;outline:none;display:none">
+        <div class="rhint" style="margin-top:6px">Chars ordered darkest→lightest. Block brightness picks the character index.</div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd"><span class="sec-name">Render Font</span><button class="sec-reset" data-reset="font" title="Reset">↺</button><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <div class="slabel" style="margin-bottom:4px">MONOSPACE FONT</div>
+        <select id="renderFont">
+          <option value="Share Tech Mono">Share Tech Mono (default)</option>
+          <option value="Courier New">Courier New</option>
+          <option value="Lucida Console">Lucida Console</option>
+          <option value="DM Mono">DM Mono</option>
+          <option value="IBM Plex Mono">IBM Plex Mono</option>
+          <option value="Fira Code">Fira Code</option>
+          <option value="JetBrains Mono">JetBrains Mono</option>
+          <option value="monospace">System Monospace</option>
+        </select>
+        <div class="font-preview" id="fontPreview">AaBbCc 0Oo Ii1l ░▒▓█ @#$%</div>
+        <div class="rhint">Font affects glyph shape and density. Variable-width fonts may misalign.</div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd"><span class="sec-name">Color Mode</span><button class="sec-reset" data-reset="colormode" title="Reset">↺</button><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <div class="pills" id="colorModePills">
+          <div class="pill" data-cm="bg">BG only</div>
+          <div class="pill on" data-cm="char">Char only</div>
+          <div class="pill" data-cm="both">BG + Char</div>
+          <div class="pill" data-cm="bw">B&amp;W</div>
+          <div class="pill" data-cm="transparent">Transparent</div>
+        </div>
+        <div class="rhint" style="margin-top:8px">
+          <b style="color:var(--acc)">BG only</b> — solid color block per cell, no text.<br>
+          <b style="color:var(--acc)">Char only</b> — colored text on the canvas background, no cell fill.<br>
+          <b style="color:var(--acc)">BG + Char</b> — colored cell fill with contrasting text on top.<br>
+          <b style="color:var(--acc)">B&amp;W</b> — grayscale cell fill with black/white text.<br>
+          <b style="color:var(--acc)">Transparent</b> — char only, cell background is fully transparent (no fill).
+        </div>
+        <!-- BG + Char options — shown only when 'both' is active -->
+        <div id="bothOpts" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <div class="slabel">CHAR STYLE (BG + CHAR MODE)</div>
+          <div class="pills" id="bothModePills" style="margin-top:5px">
+            <div class="pill on" data-bm="invert">Invert</div>
+            <div class="pill" data-bm="complement">Complement</div>
+            <div class="pill" data-bm="bw">B/W Text</div>
+          </div>
+          <div class="rhint" style="margin-top:6px" id="bothHint">
+            Char color is the exact RGB inverse of the background.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd"><span class="sec-name">Dithering</span><button class="sec-reset" data-reset="dither" title="Reset">↺</button><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <select id="ditherMode">
+          <option value="none">No Dithering</option>
+          <option value="nearest">Nearest Color</option>
+          <option value="floyd">Floyd-Steinberg</option>
+          <option value="stucki">Stucki</option>
+          <option value="sierra">Sierra</option>
+          <option value="sierra2">Sierra Two-Row</option>
+          <option value="sierralite">Sierra Lite</option>
+          <option value="jarvis">Jarvis, Judice &amp; Ninke</option>
+          <option value="stevenson">Stevenson &amp; Arce</option>
+          <option value="burkes">Burkes</option>
+          <option value="atkinson">Atkinson</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-hd"><span class="sec-name">Render Region</span><button class="sec-reset" data-reset="region" title="Reset">↺</button><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <div class="slabel" style="margin-bottom:6px">APPLY CHARS TO</div>
+        <div class="pills" id="regionPills">
+          <div class="pill on" data-region="all">All</div>
+          <div class="pill" data-region="shadows">Shadows</div>
+          <div class="pill" data-region="midtones">Midtones</div>
+          <div class="pill" data-region="highlights">Highlights</div>
+          <div class="pill" data-region="whites">Whites</div>
+          <div class="pill" data-region="blacks">Blacks</div>
+          <div class="pill" data-region="edges">Edges</div>
+          <div class="pill" data-region="color">Color Range</div>
+          <div class="pill" data-region="subject" id="regionSubjectPill">Subject</div>
+          <div class="pill" data-region="manual">Manual Box</div>
+          <div class="pill" data-region="brush">Brush</div>
+        </div>
+        <div class="rhint" style="margin-top:6px" id="regionHint">ASCII applied to the full image.</div>
+        <div id="edgeOpts" style="display:none;margin-top:10px">
+          <div class="row">
+            <div class="rlabel"><span class="rname">Edge sensitivity</span><input class="rval" id="edgeThresh" type="number" value="20" min="1" max="100" step="1"></div>
+            <input type="range" id="edgeThreshSlider" min="1" max="100" value="20">
+            <div class="rhint">Lower = finer edges. Higher = only strong edges.</div>
+          </div>
+        </div>
+        <div id="colorRangeOpts" style="display:none;margin-top:10px">
+          <div class="slabel" style="margin-bottom:5px">TARGET COLORS</div>
+          <div class="sw-row" style="align-items:center;gap:6px">
+            <div class="sw-box" id="regionColorSwatch" style="background:#ff0000"><input type="color" id="regionColor" value="#ff0000"></div>
+            <input class="sw-hex" type="text" id="regionColorHex" value="#ff0000" maxlength="7">
+            <button class="dropper-btn" id="dropperBtn" title="Pick color (Shift+click to add)">🔬</button>
+            <button class="dropper-btn" id="addColorBtn" title="Add current color to list">+</button>
+          </div>
+          <div id="colorList" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"></div>
+          <div class="row" style="margin-top:8px">
+            <div class="rlabel"><span class="rname">Hue tolerance (°)</span><input class="rval" id="regionHueTol" type="number" value="30" min="1" max="180" step="1"></div>
+            <input type="range" id="regionHueTolSlider" min="1" max="180" value="30">
+          </div>
+          <div class="rhint" style="margin-top:4px">Shift+click dropper to add colors. Click swatch to remove.</div>
+        </div>
+        <div id="subjectOpts" style="display:none;margin-top:10px">
+          <div class="rhint" id="subjectStatusHint">Detects objects using COCO-SSD (80 classes: people, birds, cats, cars…)</div>
+          <div class="pills" id="detectModePills" style="margin-top:6px">
+            <div class="pill on" data-dmode="object">Objects (COCO)</div>
+            <div class="pill" data-dmode="face">Faces</div>
+          </div>
+          <button class="sw-add" id="detectSubjectBtn" style="margin-top:6px;padding:6px">⬡ DETECT</button>
+          <div id="subjectResults" style="display:none;margin-top:8px">
+            <div class="slabel" style="margin-bottom:5px">DETECTED — click to toggle</div>
+            <div id="subjectList" style="display:flex;flex-direction:column;gap:3px"></div>
+          </div>
+          <div class="row" style="margin-top:8px" id="subjectPaddingRow">
+            <div class="rlabel"><span class="rname">Padding %</span><input class="rval" id="subjectPadding" type="number" value="10" min="0" max="100" step="1"></div>
+            <input type="range" id="subjectPaddingSlider" min="0" max="100" value="10">
+            <div class="rhint">Expand each bounding box outward.</div>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <div class="rlabel"><span class="rname">Min confidence %</span><input class="rval" id="subjectConf" type="number" value="50" min="1" max="99" step="1"></div>
+            <input type="range" id="subjectConfSlider" min="1" max="99" value="50">
+          </div>
+        </div>
+        <div id="manualBoxOpts" style="display:none;margin-top:10px">
+          <div class="rhint">Set two corners to define a box. Click points on the <b>Original</b> tab, or type percentages.</div>
+          <button class="sw-add" id="drawBoxBtn" style="margin-top:6px;padding:6px;width:100%">✛ SET POINTS ON IMAGE</button>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <div style="flex:1">
+              <div class="slabel" style="margin-bottom:3px">POINT 1 (x%, y%)</div>
+              <div style="display:flex;gap:4px">
+                <input type="number" id="boxP1x" min="0" max="100" value="25" style="width:100%;background:var(--bg);border:1px solid var(--b2);color:var(--txt);font-family:var(--fmono);font-size:9px;padding:3px 5px;border-radius:2px;outline:none">
+                <input type="number" id="boxP1y" min="0" max="100" value="25" style="width:100%;background:var(--bg);border:1px solid var(--b2);color:var(--txt);font-family:var(--fmono);font-size:9px;padding:3px 5px;border-radius:2px;outline:none">
+              </div>
+            </div>
+            <div style="flex:1">
+              <div class="slabel" style="margin-bottom:3px">POINT 2 (x%, y%)</div>
+              <div style="display:flex;gap:4px">
+                <input type="number" id="boxP2x" min="0" max="100" value="75" style="width:100%;background:var(--bg);border:1px solid var(--b2);color:var(--txt);font-family:var(--fmono);font-size:9px;padding:3px 5px;border-radius:2px;outline:none">
+                <input type="number" id="boxP2y" min="0" max="100" value="75" style="width:100%;background:var(--bg);border:1px solid var(--b2);color:var(--txt);font-family:var(--fmono);font-size:9px;padding:3px 5px;border-radius:2px;outline:none">
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <button class="sw-add" id="applyBoxBtn" style="flex:1;padding:5px">✓ APPLY BOX</button>
+            <button class="sw-add" id="addBoxBtn" style="flex:1;padding:5px">+ ADD ANOTHER</button>
+          </div>
+          <div id="manualBoxList" style="display:flex;flex-direction:column;gap:3px;margin-top:8px"></div>
+          <button class="sw-add" id="clearBoxesBtn" style="margin-top:6px;padding:4px 8px;font-size:9px;display:none">✕ CLEAR ALL BOXES</button>
+        </div>
+        <div id="brushOpts" style="display:none;margin-top:10px">
+          <div class="rhint">Paint the region on the Original tab. Use Erase mode to remove.</div>
+          <div style="display:flex;gap:5px;margin-top:6px">
+            <button class="sw-add" id="brushPaintBtn" style="flex:1;padding:5px">✎ PAINT</button>
+            <button class="sw-add" id="brushEraseBtn" style="flex:1;padding:5px">◻ ERASE</button>
+            <button class="sw-add" id="brushClearBtn" style="flex:1;padding:5px">✕ CLEAR</button>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <div class="rlabel"><span class="rname">Brush size</span><input class="rval" id="brushSize" type="number" value="20" min="1" max="200" step="1"></div>
+            <input type="range" id="brushSizeSlider" min="1" max="200" value="20">
+          </div>
+        </div>
+        <div id="regionLeniencyOpts" style="display:none;margin-top:10px">
+          <div class="row">
+            <div class="rlabel"><span class="rname">Leniency</span><input class="rval" id="regionLeniency" type="number" value="30" min="0" max="100" step="1"></div>
+            <input type="range" id="regionLeniencySlider" min="0" max="100" value="30">
+            <div class="rhint">0 = hard boundary. 100 = gradual fade.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec" id="regionOverrideSec" style="display:none">
+      <div class="sec-hd"><span class="sec-name">Region Char Settings</span><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <div class="rhint" style="margin-bottom:8px">Override char settings <b style="color:var(--acc)">inside</b> the selected region. Leave toggles off to inherit global settings.</div>
+
+        <div class="trow"><span class="tname">Override charset</span><div class="tgl" id="tgl-ro-charset"></div></div>
+        <div id="ro-charset-body" style="display:none;margin-top:6px">
+          <div class="csopts" id="ro-csopts">
+            <div class="csopt on" data-ro-cs="standard"><span class="csdot"></span>Standard</div>
+            <div class="csopt" data-ro-cs="blocks"><span class="csdot"></span>Block chars</div>
+            <div class="csopt" data-ro-cs="minimal"><span class="csdot"></span>Minimal</div>
+            <div class="csopt" data-ro-cs="dense"><span class="csdot"></span>Dense</div>
+            <div class="csopt" data-ro-cs="binary"><span class="csdot"></span>Binary 0 1</div>
+            <div class="csopt" data-ro-cs="braille"><span class="csdot"></span>Braille</div>
+            <div class="csopt" data-ro-cs="halfblock"><span class="csdot"></span>Half-blocks</div>
+          </div>
+        </div>
+
+        <div class="trow" style="margin-top:8px"><span class="tname">Override color mode</span><div class="tgl" id="tgl-ro-colormode"></div></div>
+        <div id="ro-colormode-body" style="display:none;margin-top:6px">
+          <div class="pills" id="ro-colorModePills">
+            <div class="pill on" data-ro-cm="bg">BG only</div>
+            <div class="pill" data-ro-cm="char">Char only</div>
+            <div class="pill" data-ro-cm="both">BG + Char</div>
+            <div class="pill" data-ro-cm="bw">B&amp;W</div>
+          </div>
+        </div>
+
+        <div class="trow" style="margin-top:8px"><span class="tname">Override invert threshold</span><div class="tgl" id="tgl-ro-invert"></div></div>
+        <div id="ro-invert-body" style="display:none;margin-top:6px">
+          <div class="rlabel"><span class="rname">Threshold (0-255)</span><input class="rval" id="ro-invertVal" type="number" value="150" min="0" max="255"></div>
+          <input type="range" id="ro-invertSlider" min="0" max="255" value="150">
+        </div>
+
+        <div class="trow" style="margin-top:8px"><span class="tname">Override palette mode</span><div class="tgl" id="tgl-ro-palette"></div></div>
+        <div id="ro-palette-body" style="display:none;margin-top:6px">
+          <select id="ro-palMode">
+            <option value="average">Average Block</option>
+            <option value="bw">Grayscale</option>
+            <option value="hex">Closest Hex</option>
+            <option value="lock">Palette Lock</option>
+          </select>
+        </div>
+
+        <div class="trow" style="margin-top:8px"><span class="tname">Invert background</span><div class="tgl" id="tgl-ro-bginvert"></div></div>
+      </div>
+    </div>
+
+    <div class="sec" id="outsideRegionSec" style="display:none">
+      <div class="sec-hd"><span class="sec-name">Outside Region</span><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <div class="pills" id="regionFillPills">
+          <div class="pill on" data-fill="transparent">Pass-through</div>
+          <div class="pill" data-fill="black">Black</div>
+          <div class="pill" data-fill="white">White</div>
+          <div class="pill" data-fill="blur">Color only</div>
+        </div>
+        <div class="rhint" style="margin-top:5px">Outside the region always shows the original image pixels unchanged.</div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <div class="slabel" style="margin-bottom:6px">REGION OUTLINE</div>
+          <div class="trow">
+            <span class="tname">Show outline</span>
+            <div class="tgl" id="tgl-outline"></div>
+          </div>
+          <div id="outlineOpts" style="display:none;margin-top:8px">
+            <div class="row">
+              <div class="slabel" style="margin-bottom:4px">STYLE</div>
+              <div class="pills" id="outlineStylePills">
+                <div class="pill on" data-ols="solid">Solid</div>
+                <div class="pill" data-ols="dashed">Dashed</div>
+                <div class="pill" data-ols="dotted">Dotted</div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="rlabel"><span class="rname">Width (px)</span><input class="rval" id="outlineWidth" type="number" value="2" min="1" max="20"></div>
+              <input type="range" id="outlineWidthSlider" min="1" max="20" value="2">
+            </div>
+            <div class="row">
+              <div class="slabel" style="margin-bottom:4px">COLOR</div>
+              <div class="sw-row" style="align-items:center;gap:6px">
+                <div class="sw-box" id="outlineColorSwatch" style="background:#c8f542"><input type="color" id="outlineColor" value="#c8f542"></div>
+                <input class="sw-hex" type="text" id="outlineColorHex" value="#c8f542" maxlength="7">
+                <button class="dropper-btn" id="outlineDropperBtn" title="Pick color from image">🔬</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end sp-chars -->
+
+  <!-- COLOR PANEL -->
+  <div class="spanel" id="sp-color">
+    <div class="sec">
+      <div class="sec-hd"><span class="sec-name">Canvas Background</span><button class="sec-reset" data-reset="bg" title="Reset">↺</button><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <div class="pills" id="bgStylePills">
+          <div class="pill on" data-bg="black">Black</div>
+          <div class="pill" data-bg="white">White</div>
+          <div class="pill" data-bg="custom">Custom</div>
+        </div>
+        <div id="bgColorRow">
+          <div class="sw-row" style="margin-top:6px;align-items:center;gap:6px">
+            <div class="sw-box" id="bgColorSwatch" style="background:#07070a"><input type="color" id="bgColorPicker" value="#07070a"></div>
+            <input class="sw-hex" type="text" id="bgColorHex" value="#07070a" maxlength="7">
+            <button class="dropper-btn" id="bgDropperBtn" title="Pick color from image">🔬</button>
+          </div>
+        </div>
+        <div class="rhint" style="margin-top:5px">Canvas fill color — visible behind characters in Char Only mode.</div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd"><span class="sec-name">Brightness</span><button class="sec-reset" data-reset="brightness" title="Reset">↺</button><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <div class="row">
+          <div class="rlabel"><span class="rname">Invert threshold (0-255)</span><input class="rval" id="invertVal" type="number" value="150" min="0" max="255"></div>
+          <input type="range" id="invertSlider" min="0" max="255" value="150">
+          <div class="rhint">Blocks brighter than this get a dark char; darker blocks get a light char.</div>
+        </div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd"><span class="sec-name">Color Palette</span><button class="sec-reset" data-reset="palette" title="Reset">↺</button><span class="sec-arr">▾</span></div>
+      <div class="sec-body">
+        <div class="row">
+          <div class="slabel">PALETTE MODE</div>
+          <select id="palMode">
+            <option value="average">Average Block — full color from image</option>
+            <option value="bw">Grayscale — desaturate colors</option>
+            <option value="hex">Closest Hex — snap to your list</option>
+            <option value="lock">Palette Lock — reduce to N colors</option>
+          </select>
+        </div>
+        <div id="lockBody" style="display:none" class="row">
+          <div class="rlabel"><span class="rname">Max colors (N)</span><input class="rval" id="lockVal" type="number" value="16" min="2" max="256"></div>
+          <input type="range" id="lockSlider" min="2" max="256" value="16">
+        </div>
+        <div id="hexBody" style="display:none;margin-top:6px">
+          <div id="hexSwatches"></div>
+          <button class="sw-add" id="addSwatch" style="margin-top:4px">+ ADD COLOR</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sfoot">
+    <button class="sfbtn pri" id="sfRender" disabled>▶ RENDER</button>
+    <button class="sfbtn" id="sfExport" disabled>⬇ EXPORT</button>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="vtbar">
+    <div class="vtab on" data-vt="ascii">ASCII Output</div>
+    <div class="vtab" id="origTab" data-vt="orig">Original</div>
+    <div class="vtab" id="animTab" data-vt="anim" style="display:none">Animated Output</div>
+    <div class="vinfo" id="vinfo">—</div>
+    <div id="gifControls" style="display:none;gap:6px;align-items:center;margin-left:8px;flex-shrink:0">
+      <button class="vtab" id="gifPlayBtn">▶ PLAY</button>
+      <button class="vtab" id="gifPrevBtn">⏮</button>
+      <button class="vtab" id="gifNextBtn">⏭</button>
+      <span style="font-family:var(--fmono);font-size:9px;color:var(--dim)" id="gifFrameLabel">0/0</span>
+    </div>
+  </div>
+  <div class="viewer">
+    <div class="vpane on" id="vp-ascii">
+      <div class="empty" id="emptyMsg"><span class="empty-g">░▒▓█</span>Load an image, then hit RENDER</div>
+      <div class="awrap" id="awrap" style="display:none"><canvas id="asciiCanvas"></canvas></div>
+    </div>
+    <div class="vpane" id="vp-orig">
+      <!-- Unified original pane: shows origCanvas for images/GIFs, video element for videos -->
+      <div class="owrap" id="owrap" style="position:relative">
+        <canvas id="origCanvas"></canvas>
+        <canvas id="boxDrawCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;display:none;cursor:crosshair"></canvas>
+      </div>
+      <video id="videoPreview" style="max-width:100%;max-height:100%;object-fit:contain;display:none" controls></video>
+      <div id="dropperOverlay">
+        <div id="dropperMag"><canvas id="dropperMagCanvas" width="80" height="80"></canvas><div id="dropperCross"></div></div>
+      </div>
+    </div>
+    <div class="vpane" id="vp-anim">
+      <div class="empty" id="animEmptyMsg"><span class="empty-g">▶</span>Render a GIF or video to see animation</div>
+      <div class="awrap" id="animWrap" style="display:none"><canvas id="animCanvas"></canvas></div>
+    </div>
+    <div id="chunkInfo"></div>
+    <div id="statsBar">
+      <div class="stat-pill"><span id="statChars">—</span> chars</div>
+      <div class="stat-pill"><span id="statDims">—</span></div>
+      <div class="stat-pill"><span id="statTime">—</span></div>
+    </div>
+    <div id="etaBar">
+      <div class="eta-pill">Frame <span class="eta-acc" id="etaFrame">0</span> / <span class="eta-acc" id="etaTotal">0</span></div>
+      <div class="eta-pill">Elapsed <span class="eta-acc" id="etaElapsed">0:00</span></div>
+      <div class="eta-pill">Remaining <span class="eta-acc" id="etaRemaining">—</span></div>
+    </div>
+    <div class="zbar">
+      <button class="zbtn" id="zOut">−</button>
+      <div class="zdsp" id="zdsp">100%</div>
+      <button class="zbtn" id="zIn">+</button>
+      <button class="zbtn" id="zFit">⊡</button>
+    </div>
+  </div>
+</main>
+</div>
+<canvas id="workCanvas" style="display:none"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/omggif@1.0.10/omggif.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+<script src="ascii_render.js"></script>
+</body>
+</html>
