@@ -1,0 +1,117 @@
+PTXERO RF – Systems Architecture & Documentation
+1. Project Overview
+PTXERO RF is a high-performance, browser-based Radio Frequency simulation and signal processing environment. It features a real-time Spectrum Analyzer, an Oscilloscope, a Modular Signal Chain (Web Audio API), and logic-driven Command Modules.
+
+Design Philosophy:
+
+Tactical Aesthetic: High-contrast dark UI utilizing specific accent colors defined in the global configuration (Cyan --rf-acc, Magenta --rf-accB, Amber --rf-accC).
+
+Mission Protocol: Modifications must be surgical. No full-file rewrites. Use Find/Replace blocks for updates.
+
+2. Global Configuration (rf.config.js)
+The application relies on a globally accessible constant, RF (aliased as C within the application logic), which acts as the source of truth for base state, simulation parameters, and UI defaults.
+
+Current Config Structure:
+
+JavaScript
+const RF = {
+  title: 'RF',
+  version: '0.3',
+  accent: '#42d4f5', accentB: '#f542a8', accentC: '#f5a542',
+  location: { name: 'Pensacola, Florida', lat: 30.4213, lon: -87.2169, radius: 150 },
+  noiseFloor: { base: -120, tempK: 305, bandwidth: 1e6, humidityRH: 85 },
+  spectrum: { freqMin: 88, freqMax: 108, dbMin: -140, dbMax: -40, speed: 2, smoothing: 0.8 },
+  cities: [ /* Array of preset location objects {name, lat, lon, region} */ ],
+  tiles: [ /* Array defining UI column layout for modules */ ],
+};
+LLM Directive: When modifying physics or default UI states, reference C.[Property] rather than hardcoding values.
+
+3. The CORE Orchestration Object
+The application is governed by a central orchestration object called CORE. This object manages the lifecycle, state, and inter-process communication of all sub-systems. Never hardcode logic into the main animation loop.
+
+3.1 Core Lifecycle Methods
+When developing new features, they must be encapsulated into modules and pushed to CORE.modules. A standard module should implement the following methods:
+
+init(): Called once during system boot. Ideal for establishing DOM references or initial data fetching.
+
+resize(): Called whenever the window resizes or UI columns collapse/expand. Used to recalculate canvas dimensions.
+
+update(t): The 60fps heartbeat. All visual rendering and high-frequency math (e.g., LFO calculations) must occur here. t represents the system clock.
+
+sync(): Called when global parameters change (e.g., Band switching, Tuning, Config loads). Triggers data propagation across the UI.
+
+3.2 Core Sub-Systems
+The CORE object provides standardized APIs for system-level operations. LLMs must utilize these APIs rather than writing standalone logic.
+
+Sub-System	Purpose & Key Methods
+CORE.state	Handles localStorage persistence. Use CORE.state.save() to serialize current parameters and CORE.state.load() to retrieve them during init().
+CORE.audio	Manages the AudioContext. Use CORE.audio.tune(freq) to command the tuner, and CORE.audio.resumeAll() to bypass browser autoplay policies upon user interaction.
+CORE.patchbay	Governs the Web Audio routing graph. CORE.patchbay.rebuild() forces a recalculation of all active signal chain connections.
+CORE.pedals	Manages the logical state of Signal Chain nodes. CORE.pedals.toggle(id) handles power state changes and triggers UI/Audio refreshes.
+CORE.ui	Centralizes DOM interactions. Use CORE.ui.notify(msg, color) for status updates and CORE.ui.refreshNode(id) for targeted DOM updates without full repaints.
+ 
+4. Data Flow & Physics
+4.1 Frequency and Tuning
+The system operates within predefined BANDS (e.g., FM: 88-108 MHz).
+
+viewMin & viewMax: Global variables defining the visible spectrum on the canvas.
+
+tunerFreq: The current active frequency.
+
+setTuner(freq): The primary function for changing the active frequency. It sanitizes the input, triggers audio tuning, and debounces state saving.
+
+4.2 Signal Simulation & Radio Browser API
+The application bridges simulated noise with real-world data:
+
+Noise Floor: Generated via initNoise(), utilizing an ITU-R P.372 approximation based on the RF.noiseFloor config (factors in humidity and temperature for atmospheric haze).
+
+Station Data: Fetched from radio-browser.info via a Cloudflare worker proxy (RF_PROXY).
+
+Signal Strength: Calculated by calcSignalPower(km, freqMHz), simulating Free Space Path Loss (FSPL) combined with user-selected antenna gain.
+
+5. The Signal Chain (Web Audio API)
+5.1 Node Architecture
+The Signal Chain is a modular graph. Each node exists in two states:
+
+Logical Object (scNodes array): Contains id, type, parameters, and references to the instantiated Web Audio nodes.
+
+DOM Element (.sc-node): The visual representation managed by createNodeEl().
+
+5.2 Module Definitions (MODULE_DEFS)
+New signal processing pedals must be defined in MODULE_DEFS. A definition requires:
+
+label, color, cat (Category).
+
+knobs: An array defining parameters (min, max, step, log scaling, string formatting).
+
+ports: Defines I/O (default is one IN, one OUT).
+
+5.3 Web Audio Factory (makeWebAudioNode)
+Translates a MODULE_DEFS entry into functional Web Audio nodes. It must return an object containing input and output properties for the patchbay to route connections properly.
+
+6. Command Modules (cmdNodes)
+Command Modules generate control signals (0.0 to 1.0) to modulate parameters in the Signal Chain.
+
+Execution: Handled in tickCmdNodes(t), evaluated every frame within CORE.update().
+
+Routing: Connections between Command Modules and Signal Chain Knobs are stored in ctrlEdges.
+
+Evaluation: CORE iterates through ctrlEdges and directly applies the calculated offset to the target Web Audio node parameter (updateNodeParamDirect()), bypassing standard UI state to maintain audio performance.
+
+7. Development Directives for LLMs
+When tasked with updating or expanding PTXERO RF, adhere to the following rules:
+
+No God Functions: Do not append long lists of operations to the loop(). Create a module and attach its update() method to CORE.
+
+State Synchronization: If you introduce a new variable (e.g., filterResonance), it must be read inside CORE.state.load() and written inside CORE.state.save().
+
+DOM Efficiency: Avoid innerHTML rebuilds for live data. Use targeted textContent updates or CORE.ui.refreshNode().
+
+Audio Context Safety: Never instantiate audio nodes automatically. They must be gated behind user interaction (the Resume Banner or an explicit click) and routed through CORE.audio.
+
+How to use this document:
+When you start a new conversation with an LLM, paste your prompt:
+
+"I am working on the PTXERO RF project. Here is the architecture document outlining the system rules:"
+[Paste Whitepaper]
+"Based on this, I want to add a [New Feature]. Please provide the code using Find/Replace blocks."

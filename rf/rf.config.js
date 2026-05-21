@@ -86,7 +86,12 @@ const RF = {
     { name:'Melbourne, Australia',lat:-37.8136,lon: 144.9631, region:'OC' },
     { name:'Auckland, NZ',       lat:-36.8485, lon: 174.7633, region:'OC' },
   ],
-
+  // ── Naming Scheme ─────────────────────────────────────────────
+  naming: {
+    adj1: ['TACTICAL','ORBITAL','QUANTUM','VOID','NEON','CRIMSON','STEALTH','ECHO','GHOST','PLASMA','SOLAR','LUNAR','ASTRAL','CHRONO','CYBER','FLUX','FROST','GRAV','HYPER','ION'],
+    adj2: ['HEAVY','BLIND','FRACTURED','LIQUID','STATIC','DEEP','COLD','PHASE','IRON','DARK','BRIGHT','HOLLOW','BROKEN','TWISTED','SILENT','BLAZING','FROZEN','RADIANT','RESONANT','SHIFTING'],
+    nouns: ['PULSAR','REPEATER','MATRIX','OVERDRIVE','CHAMBER','BEACON','CASCADE','SHADOW','STORM','ENGINE','RELAY','NEXUS','VORTEX','CORE','WAVE','SIGNAL','PULSE','SPIKE','DRIFT','ECHO']
+  },
   // ── Tiles ─────────────────────────────────────────────────────
   tiles: [
     { id: 'oscilloscope', label: 'OSCILLOSCOPE', side: 'left',  order: 1 },

@@ -138,3 +138,124 @@ If account logged in, stats persist across devices
 Optional: leaderboard of most-listened stations globally (anonymized)
 
 Want to start on Milestone 1 now?
+
+These are fantastic additions. You're taking the signal chain from a simple effects rack and turning it into a full-blown Digital Audio Workstation (DAW) and modular synth ecosystem.
+
+Adding live inputs and MIDI transforms this from a passive listening tool into an active performance instrument. Designing the toggle board with heavy-duty, tactile switches—perhaps incorporating clean, geometric Art Deco lines or rugged hardware details—would give it a distinct visual identity within your existing hex-grid UI.
+
+Here is how we can flesh out and integrate these new features into your existing project roadmap.
+
+---
+
+### **Revised Milestones: The Modular Ecosystem**
+
+We can inject these ideas directly into the **Milestone 4 (Signal Chain)** and **Milestone 5 (Pedal System)** phases, and expand the **Milestone 10 (Gallery)** phase to support the new export types.
+
+#### **MILESTONE 4.5 — Advanced I/O & Control Routing**
+
+* **Hardware Audio Inputs:** Implement Web Audio API `getUserMedia` to allow users to route their microphone or a USB interface (like a plugged-in guitar) directly into the `__source__` node or a dedicated "Live In" module.
+* **Auxiliary Radio Modules:** Create mini, self-contained "Tuner" nodes. These bypass the main global tuner and lock onto a specific station preset, allowing users to mix multiple live radio broadcasts simultaneously.
+* **The Control Board (Toggle Module):** A dedicated command module acting as a macro-controller. It features large, clickable toggle switches with outward control ports. Wiring these to the "MOD" ports of audio/command modules allows users to remotely activate, bypass, or mute specific parts of the chain.
+
+#### **MILESTONE 5.5 — Sequencing & Synthesis**
+
+* **MIDI Controller Integration:** Utilize the Web MIDI API to allow external MIDI keyboards to trigger oscillator pitches, envelope gates, and mapped knob parameters.
+* **Virtual Keyboard & Looper:** A new UI overlay or large node featuring a playable keyboard.
+* **Audio Buffering/Recording:** Implement functionality within the looper to record small clips of audio (either from the live stream, mic, or synth output) into memory buffers for triggered playback and looping.
+* **Expanded Synth Ecosystem:** Flesh out the existing synth nodes (VCO, VCA, Envelopes, LFOs) to ensure they can communicate via virtual Control Voltage (CV) cables, creating a true modular synthesizer inside the RF shell.
+
+#### **MILESTONE 5.6 — Sample Persistence**
+
+*Problem:* An `AudioBuffer` is raw PCM (megabytes per clip) and cannot fit in `localStorage` (~5MB total app cap). Sampler audio must persist out-of-band, decoupled from the chain-state JSON.
+
+* **IndexedDB buffer store:** Persist each sampler `AudioBuffer` in IndexedDB, keyed by a per-buffer ID. This is local, large, and free — no practical size limit for a handful of samples.
+* **Lightweight chain references:** `serializeChain` stores each sampler node's buffer **ID + metadata** (duration, sampleRate, channels, crop selection) — never the PCM itself. The `localStorage` chain state stays small.
+* **Rehydrate on restore:** On refresh, preset-load, or import, sampler nodes reload their buffer from IndexedDB by ID after the first user gesture (audio-policy gate). A missing ID degrades gracefully to an empty buffer (current behavior).
+* **Garbage collection:** Periodically drop IndexedDB buffers no longer referenced by any node, so storage doesn't grow unbounded.
+* **Portable exports (audio embedded):** Exported chain JSON **embeds** the sample audio (base64-encoded WAV) so a patch is fully self-contained and shareable — load it on any machine and the samples come with it.
+* *Open decision:* embed encoding (WAV vs. raw Float32 + header) and whether to compress large embeds.
+* *M12 tie-in:* design the IndexedDB layer so cloud sync can later mirror buffers to the backend, keyed identically.
+
+#### **MILESTONE 5.7 — Signal Chain Quality of Life**
+
+*Scope:* Editor-wide usability upgrades for the node graph — not new audio features, but the things that make a large board fast and safe to work in.
+
+* **Undo / redo:** History stack for add, delete, and wire operations (and ideally param changes). Highest-value safety net for experimentation — currently a mis-delete is unrecoverable.
+* **Marquee multi-select:** Box-select multiple nodes, then move / delete / duplicate them as a group. Today every operation is one node at a time.
+* **Global clock / tap tempo:** A shared transport that SEQ step timing, LFO rate, and delay times can sync to, so the whole chain locks to one tempo. Turns independent modulators into a coherent rhythmic system.
+* **Per-node solo:** Hear one node's output in isolation for debugging a chain (complements the existing bypass-all).
+* **Rename nodes:** Let a node carry a custom label so a board with five filters stays readable.
+* **SEQ transport:** Wire the SEQ PLAY / PAUSE / RESET / EDIT mode buttons to real behavior (currently inert — the evaluator ignores SEQ mode). PAUSE freezes the step clock, RESET returns to step 1, EDIT exposes per-step editing.
+* *Persistence:* custom names and per-node state must round-trip through serializeChain / presets / export.
+
+#### **MILESTONE 5.8 — Trigger System & Pad Instruments**
+
+*Why this is its own milestone:* RF currently has no general "trigger" signal — control cables carry continuous values (0..1), not discrete "fire now" events. KEYS fakes a gate for the sampler as a special case. An MPC-style pad grid and a step drum sequencer both NEED real triggers to feel right; built on the current value-only system they'd be pads that push numbers, not pads that fire sounds. So the trigger engine comes first, then the two UIs fall out of it.
+
+* **Trigger/gate signal type:** A new edge/signal kind meaning "fire" (and optionally "release"), distinct from the continuous control value. Validation + rendering like the existing port-type system (audio = circle, command = square — triggers get their own visual).
+* **Trigger targets:** Sampler (fire playback from start / from seek), oscillator-as-voice (note on/off), envelope (gate). Generalizes the KEYS→sampler gate hack into a reusable system.
+* **MPC PAD GRID (the goal):** A grid of tappable pads (e.g. 4×4). Each pad fires an assigned trigger target — tap to play a sample, hold for sustain. Velocity-by-position optional. This is the headline feature.
+* **STEP DRUM GRID:** rows = trigger targets (samples/voices), columns = steps. Toggle cells on/off to program a rhythm; runs off the global clock (M5.7) so it locks to tempo. Essentially SEQ's sibling, but firing triggers instead of ramping a value.
+* **TOGGLE (done in 5.7-era):** the single on/off lightswitch already exists and drives knobs/bypass via control cable — it's the simple cousin of this milestone, not part of it.
+* *Tie-ins:* pad layouts, drum patterns, and pad→sample assignments persist through serializeChain / export, and ride the IndexedDB sample store (M5.6) for the audio.
+
+#### **MILESTONE 10 — Polish, Gallery & Ecosystem Sharing**
+
+* 
+*Expanded Scope:* The gallery is no longer just for ASCII art and static pedal chains.
+
+
+* **Shareable Workspaces:** Users can export their entire ecosystem as a JSON payload. This includes the pedal board state, saved radio station tuners, MIDI mappings, and recorded looper buffers.
+* **Track Publishing:** Users can publish "Tracks" or "Patches" to the community gallery, allowing others to load up their exact instrument configuration and jam with it.
+
+---
+
+### **Technical Implementation Notes**
+
+* **Multiple Audio Inputs:** You already have a great structure in `makeWebAudioNode`. You'll need to add a new `navigator.mediaDevices.getUserMedia({ audio: true })` call. Once permission is granted, you can pipe that stream into a `MediaStreamAudioSourceNode`, which acts exactly like your current radio `streamGain` node.
+* **Toggle Board Logic:** Your current control cables (`ctrlEdges`) update parameters based on math/LFOs. You can easily adapt this so a Toggle Board node outputs a strict `0` or `1`. If wired to a module's bypass/power state, `0` disables the node and routes audio cleanly through, while `1` activates it.
+* **Looper/Sampler:** Web Audio's `AudioBuffer` and `AudioBufferSourceNode` are perfect for this. You can record incoming signal data directly into a Float32Array, save it to a buffer, and then trigger it via your sequencer or a MIDI keypress.
+
+How do you envision the UI for the MIDI looper/keyboard—should it be a traditional piano roll overlay that pops up like the Oscilloscope, or something built directly into the node graph as a draggable block? your sequencer or a MIDI keypress.
+
+---
+
+### **FIELD NOTES — captured 2026-05 (from live use, to be triaged)**
+
+*Source: user notes written away from the machine. Grouped by effort/risk. Items marked ⚠ need live testing to verify.*
+
+#### **MILESTONE 5.9 — Defaults, Onboarding & Quick Fixes**
+
+Small, mostly-self-contained fixes and default-state changes:
+
+* **New-user default state:** Whip antenna + Chicago location + tuned to **95.5 FM** as the out-of-the-box defaults for first-time users (no saved state). ⚠ verify against current default/boot logic.
+* **Safer resume on load:** the boot "resume" affordance is too easy to mis-click into an accidental retune. Replace it with a more deliberate/covered loading gesture (e.g. a distinct "RESUME SESSION" panel that can't be confused with the tuner), so clicking to resume never accidentally retunes.
+* **Oscilloscope view toggle:** add a toggle to swap the oscilloscope into a **waveform view** (the scope already does time-domain; this is an explicit mode switch in its UI).
+* **Remove band options** from the bottom-left (the AM/FM/VHF/UHF band selector) — no longer wanted there.
+* **Move antenna options to the top** — they belong with location/GPS-affecting controls, not at the bottom; group them logically since antenna affects location-dependent behavior.
+* **Remove the PEAK (peak-hold) button.**
+* **SEQ CRT word-wrap bug:** ⚠ the step-sequencer CRT display wraps and cuts a number in half. Fix the layout so the value never wraps mid-character (nowrap / ellipsis / wider field).
+* **Filter-still-active-when-disabled bug:** ⚠ the FILTER node keeps affecting audio even after being disabled (power off). Disabling should fully bypass it. (Likely the disabled/bypass path in rebuildAudioChain not covering this node type.)
+* **Version bump:** update the version number → **RF v1.01** (in rf.config / wherever the version string lives).
+
+#### **MILESTONE 5.10 — Realistic RF Simulation (location-aware)**
+
+Make the spectrum genuinely reflect physics + real data:
+
+* **GPS-dependent noise floor:** compute the noise floor from the user's actual coordinates so it's realistic for that location (urban vs rural man-made noise differs significantly). Builds on the existing ITU-R P.372 model + Pensacola coloring — generalize it to any coords.
+* **Data-driven spectrum peaks:** now that real station data is available, make peaks reflect real **power, distance, and resulting signal strength** — peak height/width derived from transmitter power and distance falloff, not cosmetic.
+
+#### **MILESTONE 5.11 — Visual Nodes in the Signal Chain**
+
+* **Oscilloscope node:** an oscilloscope *inside* the signal chain (a node you wire signal into) so you get a live visual at any point in the chain — not just the global scope overlay.
+* **"Visual nodes" category:** a dedicated menu/category for visual-only nodes (scope, spectrum, meters, etc.) — a cool way to inspect signal anywhere on the board.
+
+#### **MILESTONE 5.12 — Radio Scan / Seek**
+
+* **Scan feature:** Next-station / previous-station seek (like a car radio's seek button) — step the tuner to the next real station up or down the band.
+
+#### **Future / bigger-scope ideas (parking lot)**
+
+* **Mobile view:** ⚠ fix the site's mobile layout so the radio is usable / listenable on a phone (oscilloscope + spectrum + tuner responsive).
+* **Per-station IRC-style chat:** when tuned to a station, listeners can talk to each other in a chat tied to that station. (Needs backend — pairs with the M8 multiplayer / Supabase or Cloudflare work.)
+* **End-to-end encryption:** investigate whether the chat / transmissions can be E2E encrypted. (Open research question — feasibility TBD given the relay-through-backend architecture.)
