@@ -1195,6 +1195,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 
   // ── Station label canvas ──────────────────────────────────────
   function drawStationLabels(){
+    // Milestone 2 labels - AM/FM/VHF/UHF bands
+    const bandLabel = BANDS[currentBand].label;
+    stationCtx.font = '9px "Share Tech Mono"';
+    stationCtx.fillStyle = 'rgba(255,255,255,0.1)';
+    stationCtx.fillText(`BAND: ${bandLabel}`, 10, 20);
     const W = stationCanvas.width, H = stationCanvas.height;
     stationCtx.clearRect(0,0,W,H);
     if(!W||!H) return;
@@ -1293,8 +1298,19 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
       i===0?specCtx.moveTo(0,y):specCtx.lineTo(i,y);
     }
     specCtx.strokeStyle=C.accent; specCtx.lineWidth=1.5;
-    specCtx.shadowColor=C.accent; specCtx.shadowBlur=6;
+    specCtx.shadowColor=C.accent; specCtx.shadowBlur=8;
     specCtx.stroke(); specCtx.shadowBlur=0;
+
+    // Pensacola Haze - Humidity-driven Magenta shift (RF.accentB)
+    const humidity = RF.noiseFloor.humidityRH; 
+    if (humidity > 70) {
+      const hazeG = specCtx.createLinearGradient(0, 0, 0, H);
+      const alpha = (humidity / 100) * 0.15;
+      hazeG.addColorStop(0, `rgba(${hexToRgb(C.accentB)}, ${alpha})`);
+      hazeG.addColorStop(1, 'transparent');
+      specCtx.fillStyle = hazeG;
+      specCtx.fill();
+    }r=0;
     if(peakHold){
       if(!peakArr||peakArr.length!==W) peakArr=new Float32Array(data);
       else for(let i=0;i<W;i++) if(data[i]>peakArr[i]) peakArr[i]=data[i];
@@ -1423,13 +1439,19 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
     const d=wfImageData.data;
     d.copyWithin(W*4,0,W*(H-1)*4);
     const dbMin=C.spectrum.dbMin, dbMax=C.spectrum.dbMax, dbRange=dbMax-dbMin;
-    for(let i=0;i<W;i++){
-      const n=Math.max(0,Math.min(1,(frameData[i]-dbMin)/dbRange));
-      d[i*4]  =Math.round(n>0.7?(n-0.7)/0.3*255:0);
-      d[i*4+1]=Math.round(n>0.3?Math.min(1,(n-0.3)/0.4)*212:0);
-      d[i*4+2]=Math.round(n*245);
-      d[i*4+3]=255;
+    for (let i=0; i<W; i++){
+      const n=Math.max(0, Math.min(1, (frameData[i]-dbMin)/dbRange));
+      // Tactical Coloring: Floor (Dark Blue) -> Mid (Cyan) -> Peaks (Magenta/White)
+      if (n > 0.8) { // Peak (White/Magenta shift)
+          d[i*4] = 245; d[i*4+1] = 165; d[i*4+2] = 245; 
+      } else if (n > 0.4) { // Signal (Cyan)
+          d[i*4] = 66; d[i*4+1] = 212; d[i*4+2] = 245;
+      } else { // Noise Floor (Deep Indigo)
+          d[i*4] = 13; d[i*4+1] = 13; d[i*4+2] = 25;
+      }
+      d[i*4+3] = 255;
     }
+
     wfCtx.putImageData(wfImageData,0,0);
   }
 
@@ -1806,6 +1828,13 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
   });
 
   // ── Loop ─────────────────────────────────────────────────────
+  // ── Command module state (declared early so loop can reference) ──
+  let cmdNodes  = [];
+  let cmdEdges  = [];
+  let ctrlEdges = [];
+  let cmdClock  = 0;
+  let cmdLastTime = null;
+
   let frameCount=0;
   function loop(t){
     requestAnimationFrame(loop);
@@ -1814,7 +1843,12 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
     if(frameCount%2===0) drawWaterfall(fd);
     drawTuner();
     drawOscMini(t);
-    if(frameCount%4===0) updateSMeter();
+    tickCmdNodes(t);
+    if(frameCount%4===0){
+      updateSMeter();
+      if(isMobile && typeof mobSyncAudio==='function') mobSyncAudio();
+    }
+    if(isMobile && typeof drawMobScopeFrame==='function') drawMobScopeFrame(t);
   }
 
   // ── Tuner interaction ─────────────────────────────────────────
@@ -2981,6 +3015,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
     rm.className='sc-node-remove'; rm.innerHTML='✕';
     rm.addEventListener('click',e=>{ e.stopPropagation();
       scEdges=scEdges.filter(e=>e.fromId!==node.id&&e.toId!==node.id);
+      ctrlEdges=ctrlEdges.filter(e=>e.toNodeId!==node.id);
       scNodes=scNodes.filter(n=>n.id!==node.id);
       el.remove(); rebuildAudioChain(); drawCables(); updatePortConnectedStates(); updateScMiniPreview();
     });
@@ -3587,12 +3622,7 @@ OK = overwrite, Cancel = delete`);
             params:{ mode:'AND', threshold:0.5 } },
   };
 
-  // Runtime state for command nodes
-  let cmdNodes = []; // [{id, type, x, y, enabled, params, mode, expr, audioNode:{output}}]
-  let cmdEdges = []; // [{fromId, fromPort, toId, toPort}] — ctrl cables
-  // Cross edges: cmd→signal (ctrl port on knob)
-  let ctrlEdges = []; // [{fromId, toNodeId, toKnobId}]
-
+  // (cmdNodes, cmdEdges, ctrlEdges declared early near loop)
   let cmdPendingPort = null;
 
   function hexToRgbCmd(hex){
@@ -3600,9 +3630,6 @@ OK = overwrite, Cancel = delete`);
   }
 
   // ── Command node runtime (runs every animation frame) ─────────
-  let cmdClock = 0; // seconds, updated in loop
-  let cmdLastTime = null;
-
   function tickCmdNodes(ts){
     const now = ts / 1000;
     const dt = cmdLastTime ? Math.min(0.1, now - cmdLastTime) : 0;
@@ -3697,18 +3724,28 @@ OK = overwrite, Cancel = delete`);
         if(!targetNode) return;
         const kd = MODULE_DEFS[targetNode.type]?.knobs?.find(k=>k.id===e.toKnobId);
         if(!kd) return;
-        // Add to base param value, clamped
-        const base = targetNode.params[e.toKnobId] ?? kd.def;
-        const modulated = Math.max(kd.min, Math.min(kd.max, base + val * (kd.max - kd.min) * 0.5));
-        // Apply without saving to params
-        if(targetNode.audioNode) updateNodeParamDirect(targetNode, e.toKnobId, modulated);
+        let mv;
+        if(kd.log){ const lmin=Math.log(kd.min||0.0001),lmax=Math.log(kd.max); mv=Math.exp(lmin+val*(lmax-lmin)); }
+        else mv=kd.min+val*(kd.max-kd.min);
+        mv=Math.max(kd.min,Math.min(kd.max,mv));
+        updateNodeParamDirect(targetNode, e.toKnobId, mv);
       });
 
-      // Update CRT display
+      // CRT display — scroll instructions if not connected, show value if connected
       const crtEl = document.getElementById('cmd-crt-'+cn.id);
       if(crtEl){
         const valEl = crtEl.querySelector('.sc-cmd-crt-val');
-        if(valEl) valEl.textContent = formatCmdVal(cn, val);
+        if(valEl){
+          const hasTarget = ctrlEdges.some(e=>e.fromId===cn.id);
+          if(hasTarget){
+            valEl.textContent = formatCmdVal(cn, val);
+          } else {
+            if(!cn._msgT) cn._msgT=0; cn._msgT+=0.012;
+            const msg = 'CONNECT OUT■ TO MOD■ ON A KNOB · ';
+            const pos = Math.floor(cn._msgT*6) % msg.length;
+            valEl.textContent = (msg+msg).slice(pos, pos+20);
+          }
+        }
       }
     });
   }
@@ -3781,7 +3818,11 @@ OK = overwrite, Cancel = delete`);
       cmdNodes = cmdNodes.filter(n=>n.id!==cn.id);
       ctrlEdges = ctrlEdges.filter(e=>e.fromId!==cn.id);
       cmdEdges = cmdEdges.filter(e=>e.fromId!==cn.id&&e.toId!==cn.id);
-      el.remove(); drawCables(); updatePortConnectedStates();
+      el.remove();
+      // Refresh audio nodes to clear sq port connected state
+      const bodyEl=document.getElementById('scBody');
+      scNodes.forEach(n=>{ const nel=document.getElementById('scnode-'+n.id); if(nel&&bodyEl){ const fresh=createNodeEl(n); nel.replaceWith(fresh); }});
+      drawCables(); updatePortConnectedStates();
     });
     hd.append(dot,name,rm);
     el.appendChild(hd);
@@ -3817,16 +3858,61 @@ OK = overwrite, Cancel = delete`);
     });
     el.appendChild(btns);
 
-    // Expression / value input
-    const inp = document.createElement('input');
-    inp.className = 'sc-cmd-input';
-    inp.type = 'text';
-    inp.placeholder = def.type==='math'?'sin(t*2)*0.5+0.5':'value...';
-    inp.value = cn.expr || (cn.type==='math'?cn.params.expr:'') || '';
-    inp.addEventListener('input', e=>{ e.stopPropagation(); cn.expr=e.target.value; if(cn.type==='math') cn.params.expr=e.target.value; });
-    inp.addEventListener('mousedown', e=>e.stopPropagation());
-    inp.addEventListener('keydown', e=>e.stopPropagation());
-    el.appendChild(inp);
+    // Per-type input fields
+    function mkInput(ph, val, onchange){
+      const i=document.createElement('input'); i.className='sc-cmd-input'; i.type='text';
+      i.placeholder=ph; i.value=val||'';
+      i.addEventListener('input',e=>{e.stopPropagation();onchange(e.target.value);});
+      i.addEventListener('mousedown',e=>e.stopPropagation());
+      i.addEventListener('keydown',e=>e.stopPropagation());
+      return i;
+    }
+    function mkNumInput(ph, val, min, max, onchange){
+      const i=document.createElement('input'); i.className='sc-cmd-input'; i.type='number';
+      i.placeholder=ph; i.value=val??''; i.min=min; i.max=max;
+      i.style.width='calc(50% - 10px)'; i.style.display='inline-block';
+      i.addEventListener('input',e=>{e.stopPropagation();onchange(parseFloat(e.target.value));});
+      i.addEventListener('mousedown',e=>e.stopPropagation());
+      i.addEventListener('keydown',e=>e.stopPropagation());
+      return i;
+    }
+
+    if(cn.type==='env'){
+      // A,D,S,R editable as text
+      const i=mkInput('A,D,S,R  e.g. 0.05,0.2,0.6,0.4',
+        [cn.params.attack,cn.params.decay,cn.params.sustain,cn.params.release].join(','),
+        v=>{ const parts=v.split(',').map(Number); if(parts.length===4&&parts.every(isFinite)){cn.params.attack=parts[0];cn.params.decay=parts[1];cn.params.sustain=parts[2];cn.params.release=parts[3];} });
+      el.appendChild(i);
+    } else if(cn.type==='seq'){
+      // Step values as comma-separated
+      const i=mkInput('steps: 0,0.5,1,0.75...',
+        (cn.params.values||[]).join(','),
+        v=>{ const vals=v.split(',').map(Number).filter(n=>isFinite(n)); if(vals.length) cn.params.values=vals; });
+      el.appendChild(i);
+    } else if(cn.type==='rand'){
+      // MIN and MAX side by side
+      const row=document.createElement('div'); row.style.cssText='display:flex;gap:4px;padding:0 7px 6px;';
+      const mn=mkNumInput('MIN',cn.params.min,-2,2,v=>{ if(isFinite(v)) cn.params.min=v; });
+      const mx=mkNumInput('MAX',cn.params.max,-2,2,v=>{ if(isFinite(v)) cn.params.max=v; });
+      mn.style.cssText+='flex:1;width:auto;';
+      mx.style.cssText+='flex:1;width:auto;';
+      // label them
+      const ml=document.createElement('span'); ml.style.cssText='font-family:var(--fmono);font-size:6px;color:var(--mut);align-self:center;'; ml.textContent='MIN';
+      const mxl=document.createElement('span'); mxl.style.cssText='font-family:var(--fmono);font-size:6px;color:var(--mut);align-self:center;'; mxl.textContent='MAX';
+      row.append(ml,mn,mxl,mx);
+      el.appendChild(row);
+    } else if(cn.type==='math'){
+      const i=mkInput('sin(t*2)*0.5+0.5', cn.expr||cn.params.expr||'sin(t*2)*0.5+0.5',
+        v=>{ cn.expr=v; cn.params.expr=v; });
+      el.appendChild(i);
+    } else if(cn.type==='ifnode'){
+      const i=mkNumInput('threshold',cn.params.threshold,0,1,
+        v=>{ if(isFinite(v)) cn.params.threshold=Math.max(0,Math.min(1,v)); });
+      i.style.width=''; i.style.display='block';
+      i.style.cssText='font-family:var(--fmono);font-size:8px;background:#020804;border:1px solid rgba(0,255,80,.2);color:#00ff50;padding:3px 5px;margin:0 7px 6px;border-radius:2px;outline:none;width:calc(100% - 14px);box-sizing:border-box;';
+      el.appendChild(i);
+    }
+    // lfo and logic: no input field needed
 
     const portsRow=document.createElement('div');portsRow.className='sc-cmd-ports';
     function mkSP(pName,isOut){
