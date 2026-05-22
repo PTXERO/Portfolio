@@ -7,6 +7,7 @@
 <script src="../design-tokens.js"></script>
 <script src="../site.config.js"></script>
 <script src="rf.config.js?v=5"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
 <link rel="stylesheet" href="../shared.css">
 <style>
@@ -399,7 +400,60 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .sc-mini-cable{width:6px;height:1px;background:var(--b2);}
 
 /* ── Oscilloscope overlay ── */
+#rfOnAirBanner{
+  position:fixed;top:10px;left:50%;transform:translateX(-50%);
+  z-index:600;background:rgba(245,66,66,.12);border:1px solid #f54242;
+  border-radius:3px;padding:5px 16px;
+  font-family:var(--fmono);font-size:11px;letter-spacing:.22em;font-weight:bold;
+  color:#ff6b6b;text-shadow:0 0 8px rgba(245,66,66,.8);
+  box-shadow:0 0 18px rgba(245,66,66,.3);
+  animation:onAirPulse 1.3s ease-in-out infinite;pointer-events:none;
+}
+#rfOnAirBanner.hidden{display:none;}
+@keyframes onAirPulse{0%,100%{opacity:.65;}50%{opacity:1;}}
 #oscOverlay{position:fixed;inset:0;z-index:500;background:rgba(3,5,8,.96);display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px);}
+#globeOverlay{position:fixed;inset:0;z-index:500;background:rgba(2,4,7,.97);display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px);}
+#globeOverlay.on{display:flex;}
+.globe-box{width:calc(100vw - 48px);height:calc(100vh - 80px);background:#020407;border:1px solid var(--rf-acc);box-shadow:0 0 40px rgba(66,212,245,.1);display:flex;flex-direction:column;animation:tileOpen .2s ease;}
+.globe-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.globe-title{font-family:var(--fmono);font-size:13px;letter-spacing:.14em;color:var(--rf-acc);text-shadow:0 0 8px rgba(66,212,245,.5);}
+.globe-body{flex:1;position:relative;display:flex;flex-direction:column;min-height:0;}
+.globe-canvas-wrap{flex:1;position:relative;min-height:0;cursor:grab;overflow:hidden;}
+.globe-canvas-wrap:active{cursor:grabbing;}
+.globe-canvas-wrap canvas{display:block;width:100%!important;height:100%!important;}
+.globe-loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-family:var(--fmono);font-size:12px;letter-spacing:.16em;color:var(--rf-acc);text-shadow:0 0 10px rgba(66,212,245,.6);animation:globePulse 1.4s ease-in-out infinite;}
+@keyframes globePulse{0%,100%{opacity:.4;}50%{opacity:1;}}
+.globe-hint{flex-shrink:0;text-align:center;padding:7px;font-family:var(--fmono);font-size:9px;letter-spacing:.18em;color:var(--mut);border-top:1px solid var(--border);}
+#txConfigPanel{position:absolute;top:16px;left:16px;width:212px;background:rgba(2,8,12,.88);border:1px solid var(--rf-acc);border-radius:4px;backdrop-filter:blur(4px);box-shadow:0 0 24px rgba(66,212,245,.15);z-index:6;}
+#txConfigPanel.collapsed{display:none;}
+.txc-hd{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:1px solid var(--border);cursor:move;font-family:var(--fmono);font-size:11px;letter-spacing:.12em;color:var(--rf-acc);text-shadow:0 0 6px rgba(66,212,245,.5);user-select:none;}
+.txc-hd button{background:none;border:none;color:var(--dim);cursor:pointer;font-size:12px;padding:0 2px;line-height:1;}
+.txc-hd button:hover{color:var(--rf-acc);}
+.txc-body{padding:9px 11px;display:flex;flex-direction:column;gap:8px;}
+.txc-section{font-family:var(--fmono);font-size:8px;letter-spacing:.18em;color:var(--mut);border-bottom:1px solid var(--border);padding-bottom:3px;}
+.txc-row{display:flex;align-items:center;gap:6px;font-family:var(--fmono);font-size:10px;color:var(--dim);}
+.txc-row label{width:42px;flex-shrink:0;letter-spacing:.06em;}
+.txc-row input[type=number]{width:54px;background:#020804;border:1px solid var(--b2);color:var(--rf-acc);font-family:var(--fmono);font-size:10px;padding:2px 4px;border-radius:2px;}
+.txc-row input[type=range]{flex:1;min-width:0;accent-color:var(--rf-acc);height:3px;}
+.txc-row select{flex:1;background:#020804;border:1px solid var(--b2);color:var(--rf-acc);font-family:var(--fmono);font-size:10px;padding:2px 4px;border-radius:2px;}
+.txc-unit{font-size:9px;color:var(--mut);flex-shrink:0;}
+.txc-status{font-family:var(--fmono);font-size:9px;letter-spacing:.04em;color:var(--mut);padding-top:3px;border-top:1px solid var(--border);}
+.txc-lock{flex:1;background:#020804;border:1px solid var(--b2);color:var(--dim);font-family:var(--fmono);font-size:9px;letter-spacing:.06em;padding:3px 4px;border-radius:2px;cursor:pointer;}
+.txc-lock:hover{border-color:var(--rf-acc);color:var(--rf-acc);}
+.txc-lock.on{border-color:var(--rf-accC);color:var(--rf-accC);background:rgba(255,176,59,.08);}
+.txc-warn{font-family:var(--fmono);font-size:8.5px;line-height:1.35;letter-spacing:.03em;color:#ffb03b;}
+.txc-warn:empty{display:none;}
+#radioToggle{position:absolute;top:16px;left:16px;width:38px;height:38px;background:rgba(2,8,12,.88);border:1px solid var(--rf-acc);border-radius:4px;cursor:pointer;font-size:18px;line-height:1;z-index:6;box-shadow:0 0 18px rgba(66,212,245,.15);display:none;}
+#radioToggle:hover{background:rgba(66,212,245,.12);}
+#radioToggle.show{display:block;}
+.txc-hd{font-family:var(--fmono);font-size:10px;letter-spacing:.16em;color:var(--rf-acc);text-shadow:0 0 6px rgba(66,212,245,.5);margin-bottom:8px;}
+.txc-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+.txc-row label{font-family:var(--fmono);font-size:9px;letter-spacing:.1em;color:var(--mut);width:40px;flex-shrink:0;}
+.txc-row input[type=number],.txc-row select{flex:1;min-width:0;background:#020804;border:1px solid var(--b2);color:var(--rf-acc);font-family:var(--fmono);font-size:10px;padding:2px 4px;border-radius:2px;outline:none;}
+.txc-row input[type=range]{flex:1;min-width:0;accent-color:var(--rf-acc);height:3px;cursor:pointer;}
+.txc-unit{font-family:var(--fmono);font-size:8px;color:var(--mut);width:34px;flex-shrink:0;text-align:right;}
+.txc-status{font-family:var(--fmono);font-size:8px;letter-spacing:.08em;color:var(--mut);margin-top:7px;padding-top:6px;border-top:1px solid var(--border);}
+.txc-status.live{color:#ff6b6b;text-shadow:0 0 6px rgba(245,66,66,.7);}
 #oscOverlay.on{display:flex;}
 .osc-box{width:calc(100vw - 48px);height:calc(100vh - 80px);background:var(--surface);border:1px solid var(--rf-acc);box-shadow:0 0 40px rgba(66,212,245,.08);display:flex;flex-direction:column;animation:tileOpen .2s ease;}
 .osc-hd{height:44px;display:flex;align-items:center;padding:0 16px;gap:12px;border-bottom:1px solid var(--border);flex-shrink:0;}
@@ -585,6 +639,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 </head>
 <body>
 <div id="rfProg"></div>
+<div id="rfOnAirBanner" class="hidden">● ON AIR</div>
 <div id="rfResumeBanner" class="hidden"><div class="resume-card"><span class="resume-play">▶</span> CLICK TO RESUME LAST SESSION</div></div>
 
 <header class="rf-header">
@@ -729,7 +784,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
       <div class="tile-label">Transmitter</div>
       <div class="tile-rule"></div>
       <div class="tile-content">
-        <div class="tile-placeholder">MAP VIEW<br>COMING SOON</div>
+        <div class="tile-placeholder">◉ ORBITAL VIEW<br>CLICK TO OPEN</div>
         <span class="tile-corner tile-corner--tl">╔</span>
         <span class="tile-corner tile-corner--br">╝</span>
         <span class="tile-expand">EXPAND ↗</span>
@@ -823,7 +878,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 <div id="oscOverlay">
   <div class="osc-box">
     <div class="osc-hd">
-      <div class="osc-title">OSCILLOSCOPE — XY LISSAJOUS</div>
+      <div class="osc-title" id="oscTitle">OSCILLOSCOPE — XY LISSAJOUS</div>
+      <button class="osc-close" id="oscModeToggle" style="margin-right:8px;">◰ WAVEFORM</button>
       <button class="osc-close" id="oscClose">✕ CLOSE</button>
     </div>
     <div class="osc-body">
@@ -870,6 +926,64 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
     </div>
   </div>
 </div>
+<!-- Transmission globe overlay (M6) -->
+<div id="globeOverlay">
+  <div class="globe-box">
+    <div class="globe-hd">
+      <div class="globe-title" id="globeTitle">TRANSMISSION — ORBITAL VIEW</div>
+      <button class="osc-close" id="globeRecenter" style="margin-right:8px;">◎ MY LOCATION</button>
+      <button class="osc-close" id="globeClose">✕ CLOSE</button>
+    </div>
+    <div class="globe-body">
+      <div class="globe-canvas-wrap" id="globeCanvasWrap">
+        <div class="globe-loading" id="globeLoading">INITIALIZING ORBITAL UPLINK…</div>
+        <div id="globeLabels" style="position:absolute;inset:0;pointer-events:none;overflow:hidden;"></div>
+        <!-- Collapsed radio icon (click to expand the floating panel) -->
+        <button id="radioToggle" title="Radio config">((•))</button>
+        <!-- Floating, draggable, collapsible RADIO panel -->
+        <div id="txConfigPanel">
+          <div class="txc-hd" id="txcDragHandle"><span>((•)) RADIO <span id="rfHandle" style="color:var(--mut);font-size:8px;letter-spacing:.1em;"></span></span><button id="radioCollapse" title="Collapse">▁</button></div>
+          <div class="txc-body">
+            <div class="txc-section">TRANSMIT</div>
+            <div class="txc-row"><label>FREQ</label><input type="number" id="txFreq" step="0.1" min="0.1" max="1000"><span class="txc-unit">MHz</span></div>
+            <div class="txc-row"><label>POWER</label><input type="range" id="txPower" min="0" max="100" step="1"><span class="txc-unit" id="txPowerVal">50%</span></div>
+            <div class="txc-row"><label>MOD</label>
+              <select id="txMod">
+                <option value="FM">FM</option>
+                <option value="AM">AM</option>
+                <option value="SSB">SSB</option>
+                <option value="CW">CW</option>
+                <option value="DIG">DIGITAL</option>
+              </select>
+            </div>
+            <div class="txc-section">RECEIVE</div>
+            <div class="txc-row"><label>TUNED</label><input type="number" id="rxFreqPanel" step="0.1" min="0.1" max="1000"><span class="txc-unit">MHz</span></div>
+            <div class="txc-row"><label>LOCK</label><button id="rxtxLock" class="txc-lock" title="Lock RX to TX (transceiver mode — won't monitor your own signal)">▢ RX/TX UNLOCKED</button></div>
+            <div class="txc-section">ANTENNA</div>
+            <div class="txc-row"><label>TYPE</label>
+              <select id="antennaSelectPanel">
+                <option value="whip">WHIP</option>
+                <option value="dipole">DIPOLE</option>
+                <option value="yagi">YAGI</option>
+                <option value="logperiodic">LOG PERIODIC</option>
+                <option value="loop">LOOP</option>
+                <option value="sdr">SDR + LNA</option>
+              </select>
+            </div>
+            <div class="txc-warn" id="txFreqWarn"></div>
+            <div class="txc-section">STATION</div>
+            <div class="txc-row" style="gap:5px;">
+              <button id="stationExport" class="txc-lock" title="Download your full station profile (anonymous — no personal data)">▼ EXPORT</button>
+              <button id="stationImport" class="txc-lock" title="Restore a station profile from a file">▲ IMPORT</button>
+            </div>
+            <div class="txc-status" id="txConfigStatus">○ STANDBY · route audio to TX OUT</div>
+          </div>
+        </div>
+      </div>
+      <div class="globe-hint"><span id="globeStatus">—</span> · DRAG TO ROTATE · SCROLL TO ZOOM</div>
+    </div>
+  </div>
+</div>
 <!-- Overlay -->
 <div id="tileOverlay">
   <div class="tile-overlay-box">
@@ -897,6 +1011,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
     modules: [], 
 
     init: () => {
+      // 0. Ensure an anonymous player identity exists (random UUID, no PII).
+      try { if(window.RFNet) { RFNet.getPlayerId(); } } catch(e){}
       // 1. Load State (restores lat, lon, antenna, volume)
       const hadState = CORE.state.load();
       // New-user defaults: Whip antenna, Chicago, tuned to 95.5 FM.
@@ -925,22 +1041,34 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
       
       const resumeBanner = document.getElementById('rfResumeBanner');
       if (hadState && resumeBanner) {
-        resumeBanner.classList.remove('hidden');
+        let resumed=false;
         const doResume = () => {
+          if(resumed) return; resumed=true;
           resumeBanner.classList.add('hidden');
           document.removeEventListener('keydown', onKey);
+          document.removeEventListener('click', onClick, true);
           if (tunerFreq !== null) CORE.audio.tune(tunerFreq);
           CORE.audio.resumeAll();
-          // Restore the saved signal chain now that audio is available.
           restorePendingChain();
         };
         const onKey = () => doResume();
-        // The full-screen overlay captures the click itself, so clicking
-        // anywhere resumes WITHOUT the click falling through to the spectrum
-        // (which previously caused an accidental retune).
-        resumeBanner.addEventListener('click', doResume);
-        // A keypress also resumes (overlay can't catch those).
-        setTimeout(() => { document.addEventListener('keydown', onKey); }, 100);
+        const onClick = () => doResume();
+        // Only SHOW the prompt if the user is on the main screen — if an overlay
+        // (signal chain / globe / scope) was reopened, the prompt would float
+        // over it confusingly. The resume LOGIC still arms either way, so the
+        // first click/keypress restores the session even when the prompt is hidden.
+        const anyOverlayOpen = ['scOverlay','globeOverlay','oscOverlay']
+          .some(id=>document.getElementById(id)?.classList.contains('on'));
+        if(!anyOverlayOpen){
+          resumeBanner.classList.remove('hidden');
+          resumeBanner.addEventListener('click', doResume);
+        }
+        // Logic always arms — a global capture-phase click or any keypress resumes,
+        // regardless of whether the visible prompt was shown.
+        setTimeout(() => {
+          document.addEventListener('keydown', onKey);
+          document.addEventListener('click', onClick, true);
+        }, 100);
       }
     },
 
@@ -1062,6 +1190,18 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
         staticGain.connect(rfSourceGain); streamGain.connect(rfSourceGain);
         masterGain = audioCtx.createGain(); masterGain.gain.value = 1;
         masterGain.connect(audioCtx.destination);
+        // TX broadcast tap — what's routed to OUTPUT's TX port feeds here (in
+        // addition to being heard). An analyser lets the globe show "on-air"
+        // activity. The actual transmit→propagate→receive loop is M6.5/6.6.
+        txTapGain = audioCtx.createGain(); txTapGain.gain.value = 1;
+        txAnalyser = audioCtx.createAnalyser(); txAnalyser.fftSize = 512;
+        txTapGain.connect(txAnalyser);
+        // Self-monitor: lets your TX audio route back into the receive path so
+        // you hear your own broadcast when tuned to your TX frequency (M6.6).
+        // Starts silent; tune() opens it when RX≈TX and you're on-air.
+        selfMonitorGain = audioCtx.createGain(); selfMonitorGain.gain.value = 0;
+        txTapGain.connect(selfMonitorGain);
+        selfMonitorGain.connect(rfSourceGain);
         splitter = audioCtx.createChannelSplitter(2);
         analyserL = audioCtx.createAnalyser(); analyserR = audioCtx.createAnalyser();
         analyserL.fftSize = 2048; analyserR.fftSize = 2048;
@@ -1073,6 +1213,24 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
       tune: async (freq) => {
         if (!audioCtx) CORE.audio.init();
         if (audioCtx.state === 'suspended') await audioCtx.resume();
+        // Self-monitor: if you're on-air and tuned to your own TX frequency,
+        // you receive your own broadcast (M6.6). In single-user you're at zero
+        // distance, so it comes in clean. (Multiplayer: same path receives others.)
+        const tx = window._txConfig;
+        // Locked transceiver mode does NOT monitor its own signal (realistic).
+        const selfRx = (!window._rxtxLocked && window._rfOnAir && tx && Math.abs(freq - tx.freq) < 0.15);
+        if(selfMonitorGain){
+          selfMonitorGain.gain.setTargetAtTime(selfRx ? 1 : 0, audioCtx.currentTime, 0.05);
+        }
+        if(selfRx){
+          // Receiving your own strong signal — full strength, no static, no stream.
+          signalStrength = 1;
+          updateAudioLcd(freq);
+          updateAudioMix();
+          abortPendingStream(); stopStream();
+          setAudioStatus('▶ SELF · MONITORING TX', 'playing');
+          return;
+        }
         signalStrength = calcSignalStrength(freq);
         updateAudioLcd(freq);
         updateAudioMix();
@@ -1402,6 +1560,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
     setProg(100);
     setStatus(`${stations.length} STATIONS LOADED · ${lat.toFixed(2)}, ${lon.toFixed(2)}`, 'var(--rf-acc)');
     document.getElementById('locName').textContent = `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+    // Update the transmission globe's dots if it exists.
+    try{ if(typeof Globe!=='undefined' && Globe.refreshMarkers) Globe.refreshMarkers(); }catch(e){}
+    try{ if(typeof updateTxFreqWarning==='function') updateTxFreqWarning(); }catch(e){}
     // Reverse geocode to get place name
     fetchGeocode(lat, lon).then(geo=>{
       if(geo && geo.display){
@@ -1606,9 +1767,27 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
   ];
 
   function getSignalAt(freq, t){
-    if(!stationsLoaded || !stations.length) return 0;
-    const src = stations;
     let sig = 0;
+    // Your own transmission — appears as a peak at your TX frequency when on-air
+    // (you receive yourself in single-user; in multiplayer others see this too).
+    if(window._rfOnAir && window._txConfig){
+      const df=Math.abs(freq - window._txConfig.freq);
+      if(df < 0.3){
+        // Strength from configured power + live transmitted audio level.
+        let lvl=0;
+        if(typeof txAnalyser!=='undefined' && txAnalyser){
+          const buf=new Uint8Array(txAnalyser.frequencyBinCount);
+          txAnalyser.getByteFrequencyData(buf);
+          let sum=0; for(let i=0;i<buf.length;i++) sum+=buf[i];
+          lvl=Math.min(1,(sum/buf.length)/90);
+        }
+        const txStrength = (window._txConfig.power/100)*45 + lvl*15; // dB-ish above noise
+        const peak = txStrength * Math.exp(-(df*df)/(2*0.004));
+        sig = Math.max(sig, peak);
+      }
+    }
+    if(!stationsLoaded || !stations.length) return sig;
+    const src = stations;
     for(const s of src){
       const d = Math.abs(freq - s.f);
       if(d < 0.25){
@@ -1965,7 +2144,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 
     const data = getLissajousData();
     if(data){
-      drawLissajous(oscMiniCtx, W, H, data, oscTimediv, oscXgain, oscYgain, oscPhase, oscIntensity*0.7, 1);
+      if(oscViewMode==='wave'){
+        drawOscWaveform(oscMiniCtx, W, H, data, oscYgain, oscIntensity*0.7);
+      } else {
+        drawLissajous(oscMiniCtx, W, H, data, oscTimediv, oscXgain, oscYgain, oscPhase, oscIntensity*0.7, 1);
+      }
     } else {
       drawNoiseBlob(oscMiniCtx, W, H, t, 0.5);
     }
@@ -1989,6 +2172,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
   let analyserR = null;
   let splitter = null;
   let masterGain = null;
+  let txTapGain = null, txAnalyser = null;  // TX broadcast tap (M6.3)
+  let selfMonitorGain = null;               // TX→receive self-monitor (M6.6)
   let tuneDebounceTimer = null;
   let pendingNextAudio = null;
   let pendingNextStation = null;
@@ -2209,6 +2394,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
            sigEl.textContent = `${simPower.toFixed(1)} dBm`;
         }
       }
+      if(n.type==='scope' && n.audioNode && typeof n._redrawWave === 'function'){
+        n._redrawWave(); // live waveform, every frame
+      }
       if(n.type==='sampler' && n.audioNode && n.audioNode.isPlaying){
         // Redraw the waveform so the playhead tracks position live.
         // Throttled to every other frame — smooth enough, cheap.
@@ -2226,19 +2414,25 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
     if(tunerFreq===null) return;
     const b=BANDS[currentBand];
     const bSpan=b.max-b.min;
-    const fitSpan=Math.max(0.5,bSpan*0.2);
+    // Tighter zoom so the tuned station sits clearly in the middle.
+    const fitSpan=Math.max(0.4, bSpan*0.12);
+    // Center horizontally on the tuned frequency. Only clamp the window to the
+    // band edges if the tuner is genuinely within half-a-window of an edge;
+    // otherwise keep it dead-centered.
     viewMin=tunerFreq-fitSpan/2; viewMax=tunerFreq+fitSpan/2;
-    if(viewMin<b.min){viewMin=b.min;viewMax=b.min+fitSpan;}
-    if(viewMax>b.max){viewMax=b.max;viewMin=b.max-fitSpan;}
+    if(viewMin<b.min){ viewMin=b.min; viewMax=b.min+fitSpan; }
+    if(viewMax>b.max){ viewMax=b.max; viewMin=b.max-fitSpan; }
     if(drawSpectrum._p){
       const W=specCanvas.width;
       let peakDb=C.spectrum.dbMin;
       const cx=Math.round(((tunerFreq-viewMin)/(viewMax-viewMin))*W);
-      const rad=Math.round(W*0.1);
+      const rad=Math.round(W*0.10);
       for(let i=Math.max(0,cx-rad);i<Math.min(W,cx+rad);i++){
         if(drawSpectrum._p[i]>peakDb) peakDb=drawSpectrum._p[i];
       }
-      const targetDb=C.spectrum.dbMax-0.75*(C.spectrum.dbMax-C.spectrum.dbMin);
+      // Put the peak ~60% up the display so its TOP has clear headroom and
+      // can't clip off the top of the analyzer.
+      const targetDb=C.spectrum.dbMax-0.40*(C.spectrum.dbMax-C.spectrum.dbMin);
       dbOffset=Math.max(-60,Math.min(60,targetDb-peakDb));
       document.getElementById('refDragLabel').textContent=`REF ${dbOffset>=0?'+':''}${dbOffset.toFixed(0)} dB`;
     }
@@ -2251,6 +2445,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
     document.getElementById('tunerReadout').textContent=tunerFreq.toFixed(3);
     if(autoFit) doAutoFit();
     CORE.audio.tune(tunerFreq);
+    if(typeof window._syncRxPanel==='function') window._syncRxPanel();
     // Debounced save so rapid dragging doesn't hammer localStorage
     clearTimeout(setTuner._saveTimer);
     setTuner._saveTimer = setTimeout(saveState, 800);
@@ -2475,12 +2670,44 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 
     const data = getLissajousData();
     if(data){
-      drawLissajous(oscBigCtx, W, H, data, oscTimediv, oscXgain, oscYgain, oscPhase, oscIntensity, 1.5);
+      if(oscViewMode==='wave'){
+        drawOscWaveform(oscBigCtx, W, H, data, oscYgain, oscIntensity);
+      } else {
+        drawLissajous(oscBigCtx, W, H, data, oscTimediv, oscXgain, oscYgain, oscPhase, oscIntensity, 1.5);
+      }
     } else {
       drawNoiseBlob(oscBigCtx, W, H, t, 0.8);
     }
 
     oscBigAnimId = requestAnimationFrame(drawOscBig);
+  }
+
+  // Mode: 'xy' (Lissajous, default) or 'wave' (time-domain).
+  let oscViewMode = 'xy';
+
+  // Time-domain waveform draw: L and R channels stacked across the screen.
+  function drawOscWaveform(ctx, W, H, data, ygain, intensity){
+    const xArr=data.xArr, yArr=data.yArr;
+    const N=Math.min(xArr.length, yArr.length);
+    if(!N) return;
+    const step=N/W;
+    const acc=hexToRgb(C.accent), accB=hexToRgb(C.accentB||C.accent);
+    // Left channel (top half)
+    ctx.strokeStyle=`rgba(${acc},${0.85*intensity})`; ctx.lineWidth=1.6; ctx.beginPath();
+    for(let x=0;x<W;x++){
+      const v=(xArr[Math.floor(x*step)]||0)*ygain;
+      const y=H*0.27 - v*(H*0.22);
+      if(x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    // Right channel (bottom half)
+    ctx.strokeStyle=`rgba(${accB},${0.85*intensity})`; ctx.lineWidth=1.6; ctx.beginPath();
+    for(let x=0;x<W;x++){
+      const v=(yArr[Math.floor(x*step)]||0)*ygain;
+      const y=H*0.73 - v*(H*0.22);
+      if(x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
   }
 
   // ── Knob system ───────────────────────────────────────────────
@@ -2603,10 +2830,16 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 
   // ── Oscilloscope overlay open/close ───────────────────────────
   const oscOverlay = document.getElementById('oscOverlay');
-  document.getElementById('oscClose').addEventListener('click',()=>{
+  document.getElementById('oscClose')?.addEventListener('click',()=>{
     oscOverlay.classList.remove('on');
     if(oscBigAnimId){ cancelAnimationFrame(oscBigAnimId); oscBigAnimId=null; }
     try{ localStorage.removeItem('rf_last_overlay'); }catch(e){}
+  });
+  document.getElementById('oscModeToggle')?.addEventListener('click',()=>{
+    oscViewMode = (oscViewMode==='xy') ? 'wave' : 'xy';
+    const t=document.getElementById('oscTitle'); if(t) t.textContent = oscViewMode==='wave' ? 'OSCILLOSCOPE — WAVEFORM' : 'OSCILLOSCOPE — XY LISSAJOUS';
+    const b=document.getElementById('oscModeToggle'); if(b) b.textContent = oscViewMode==='wave' ? '◳ XY MODE' : '◰ WAVEFORM';
+    oscBigPersistBuf = null; // clear the persistence buffer on mode switch
   });
   oscOverlay.addEventListener('click',e=>{
     if(e.target===oscOverlay){
@@ -2627,6 +2860,678 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
       oscBigAnimId = requestAnimationFrame(drawOscBig);
     }, 50);
   }
+
+  // ════════════════════════════════════════════════════════════════
+  // M6.1 — TRANSMISSION GLOBE (Three.js)
+  // Glowing-blue wireframe Earth. This pass = render + interaction only;
+  // no data/markers/propagation yet (those are M6.2+).
+  // ════════════════════════════════════════════════════════════════
+  const Globe = (()=>{
+    let scene, camera, renderer, raf=null;
+    let globeGroup;                 // holds sphere + continents; we rotate THIS
+    let inited=false, ready=false;
+    let dragging=false, lastX=0, lastY=0;
+    let rotVel={x:0,y:0};           // inertia after drag
+    let camDist=3.2;                // zoom (camera distance from origin)
+    const R=1;                      // globe radius in scene units
+    const ACC=0x42d4f5;             // RF cyan accent
+
+    function latLonToVec3(lat, lon, r){
+      // Standard spherical → cartesian (lat/lon in degrees).
+      const phi=(90-lat)*Math.PI/180, theta=(lon+180)*Math.PI/180;
+      return new THREE.Vector3(
+        -r*Math.sin(phi)*Math.cos(theta),
+         r*Math.cos(phi),
+         r*Math.sin(phi)*Math.sin(theta)
+      );
+    }
+
+    function buildBaseSphere(){
+      // Faint wireframe sphere as the "grid" under the continents.
+      const geo=new THREE.SphereGeometry(R, 36, 24);
+      const wire=new THREE.WireframeGeometry(geo);
+      const mat=new THREE.LineBasicMaterial({ color:ACC, transparent:true, opacity:0.07 });
+      const lines=new THREE.LineSegments(wire, mat);
+      globeGroup.add(lines);
+      // Solid dark inner sphere so back-side lines are occluded (reads as a globe).
+      const fill=new THREE.Mesh(
+        new THREE.SphereGeometry(R*0.985, 36, 24),
+        new THREE.MeshBasicMaterial({ color:0x020407 })
+      );
+      globeGroup.add(fill);
+      // Glow halo (slightly larger, additive).
+      const halo=new THREE.Mesh(
+        new THREE.SphereGeometry(R*1.02, 36, 24),
+        new THREE.MeshBasicMaterial({ color:ACC, transparent:true, opacity:0.04, side:THREE.BackSide, blending:THREE.AdditiveBlending })
+      );
+      globeGroup.add(halo);
+    }
+
+    function drawContinents(geojson, opacity){
+      // Draw coastline/continent outlines as glowing line loops on the sphere.
+      const mat=new THREE.LineBasicMaterial({ color:ACC, transparent:true, opacity:(opacity!=null?opacity:0.85) });
+      const addRing=(coords)=>{
+        const pts=[];
+        for(const [lon,lat] of coords){
+          if(typeof lon!=='number'||typeof lat!=='number') continue;
+          pts.push(latLonToVec3(lat, lon, R*1.002));
+        }
+        if(pts.length<2) return;
+        const g=new THREE.BufferGeometry().setFromPoints(pts);
+        globeGroup.add(new THREE.Line(g, mat));
+      };
+      const handleGeom=(geom)=>{
+        if(!geom) return;
+        if(geom.type==='Polygon'){ geom.coordinates.forEach(addRing); }
+        else if(geom.type==='MultiPolygon'){ geom.coordinates.forEach(poly=>poly.forEach(addRing)); }
+        else if(geom.type==='LineString'){ addRing(geom.coordinates); }
+        else if(geom.type==='MultiLineString'){ geom.coordinates.forEach(addRing); }
+      };
+      if(geojson.type==='FeatureCollection'){ geojson.features.forEach(f=>handleGeom(f.geometry)); }
+      else if(geojson.type==='Feature'){ handleGeom(geojson.geometry); }
+      else handleGeom(geojson);
+    }
+
+    // Minimal fallback: a few lat/lon graticule rings so the globe still reads
+    // as a globe if the coastline data fails to load.
+    function drawGraticuleFallback(){
+      const mat=new THREE.LineBasicMaterial({ color:ACC, transparent:true, opacity:0.25 });
+      for(let lat=-60; lat<=60; lat+=30){
+        const pts=[]; for(let lon=-180; lon<=180; lon+=6) pts.push(latLonToVec3(lat,lon,R*1.002));
+        globeGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
+      }
+      for(let lon=-180; lon<180; lon+=30){
+        const pts=[]; for(let lat=-90; lat<=90; lat+=6) pts.push(latLonToVec3(lat,lon,R*1.002));
+        globeGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
+      }
+    }
+
+    async function loadContinents(){
+      // Fetch low-res world coastline GeoJSON at runtime (CDN). Low-res is
+      // actually better for the glowing-wireframe look (clean lines).
+      let any=false;
+      try{
+        const r=await fetch('https://raw.githubusercontent.com/martynafford/natural-earth-geojson/master/110m/physical/ne_110m_coastline.json');
+        if(r.ok){ drawContinents(await r.json()); any=true; }
+      }catch(e){}
+      // Major lakes (Great Lakes, etc.) — slightly dimmer outline.
+      try{
+        const r=await fetch('https://raw.githubusercontent.com/martynafford/natural-earth-geojson/master/110m/physical/ne_110m_lakes.json');
+        if(r.ok){ drawContinents(await r.json(), 0.5); }
+      }catch(e){}
+      return any;
+    }
+
+    function onResize(){
+      if(!renderer) return;
+      const wrap=document.getElementById('globeCanvasWrap');
+      if(!wrap) return;
+      const w=wrap.clientWidth, h=wrap.clientHeight;
+      if(w<2||h<2) return;
+      camera.aspect=w/h; camera.updateProjectionMatrix();
+      renderer.setSize(w,h,false);
+    }
+
+    function bindInteraction(wrap){
+      wrap.addEventListener('mousedown',e=>{
+        // Don't rotate the globe when interacting with the floating radio panel.
+        if(e.target.closest && e.target.closest('#txConfigPanel, #radioToggle')) return;
+        dragging=true; lastX=e.clientX; lastY=e.clientY; rotVel={x:0,y:0};
+      });
+      window.addEventListener('mousemove',e=>{
+        if(!dragging) return;
+        const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY;
+        // Rotation scales with zoom: a drag should move roughly the same screen
+        // distance regardless of zoom, so zoomed-in = much slower rotation.
+        const k = 0.005 * ((camDist-1.08)/(3.2-1.08));   // ~0 when close, ~1 at default
+        const rot = Math.max(0.0006, k);
+        globeGroup.rotation.y += dx*rot;
+        globeGroup.rotation.x += dy*rot;
+        globeGroup.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, globeGroup.rotation.x));
+        rotVel={x:dy*rot, y:dx*rot};
+      });
+      window.addEventListener('mouseup',()=>{ dragging=false; });
+      wrap.addEventListener('wheel',e=>{
+        e.preventDefault();
+        // Zoom speed scales hard with distance: very fine up close, faster far out.
+        const closeness = Math.max(0, (camDist - 1.08) / (6 - 1.08)); // 0 near → 1 far
+        const speed = 0.0003 + closeness*closeness*0.004; // quadratic → gentle when near
+        camDist += e.deltaY*speed;
+        camDist = Math.max(1.08, Math.min(6, camDist));
+      },{passive:false});
+    }
+
+    // Project city world-positions to 2D screen labels. Only when zoomed in
+    // (avoids clutter at full-globe view) and only for front-facing cities.
+    let _labelPool=[];
+    function updateCityLabels(){
+      const host=document.getElementById('globeLabels');
+      if(!host) return;
+      const show = camDist < 2.2 && cityLabelData.length;
+      if(!show){ if(_labelPool.length){ _labelPool.forEach(el=>el.style.display='none'); } return; }
+      const wrap=document.getElementById('globeCanvasWrap');
+      const W=wrap.clientWidth, H=wrap.clientHeight;
+      // Ensure enough label elements.
+      while(_labelPool.length < cityLabelData.length){
+        const el=document.createElement('div');
+        el.style.cssText='position:absolute;transform:translate(-50%,-140%);font-family:var(--fmono);font-size:9px;letter-spacing:.08em;color:#9fe4ff;text-shadow:0 0 6px rgba(66,212,245,.7);white-space:nowrap;pointer-events:none;';
+        host.appendChild(el); _labelPool.push(el);
+      }
+      const cam=camera.position.clone();
+      const tmp=new THREE.Vector3();
+      cityLabelData.forEach((c,i)=>{
+        const el=_labelPool[i];
+        // World position = local point transformed by the globe's rotation.
+        tmp.copy(c.local).applyEuler(globeGroup.rotation);
+        // Front-facing test: is the point on the camera side of the globe?
+        const facing = tmp.z > 0.15;
+        if(!facing){ el.style.display='none'; return; }
+        tmp.project(camera);
+        if(tmp.x<-1||tmp.x>1||tmp.y<-1||tmp.y>1){ el.style.display='none'; return; }
+        const sx=(tmp.x*0.5+0.5)*W, sy=(-tmp.y*0.5+0.5)*H;
+        el.style.left=sx+'px'; el.style.top=sy+'px';
+        el.textContent='● '+c.name;
+        // Fade in as you zoom closer.
+        el.style.opacity = String(Math.max(0, Math.min(1, (2.2-camDist)/0.8)));
+        el.style.display='block';
+      });
+      // Hide any surplus pooled labels.
+      for(let i=cityLabelData.length;i<_labelPool.length;i++) _labelPool[i].style.display='none';
+    }
+
+    function animate(){
+      raf=requestAnimationFrame(animate);
+      if(!ready) return;
+      if(!dragging){
+        // No auto-spin — stay pinned where the user left it (defaults to their
+        // own location). Only apply decaying inertia from a recent drag.
+        globeGroup.rotation.y += rotVel.y;
+        globeGroup.rotation.x += rotVel.x;
+        globeGroup.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, globeGroup.rotation.x));
+        rotVel.x*=0.92; rotVel.y*=0.92;
+      }
+      camera.position.set(0,0,camDist);
+      camera.lookAt(0,0,0);
+      // Pulse the user marker halo. When ON AIR, drive it from the live TX
+      // audio level and tint toward broadcast-red; otherwise gentle cyan idle.
+      if(userMarker && userMarker.ring){
+        userPulse += 0.05;
+        let level=0;
+        if(onAir && typeof txAnalyser!=='undefined' && txAnalyser){
+          const buf=new Uint8Array(txAnalyser.frequencyBinCount);
+          txAnalyser.getByteFrequencyData(buf);
+          let sum=0; for(let i=0;i<buf.length;i++) sum+=buf[i];
+          level=Math.min(1, (sum/buf.length)/90);
+        }
+        const base=1 + Math.sin(userPulse)*0.35;
+        const s = onAir ? (base + level*1.6) : base;
+        userMarker.ring.scale.set(s,s,s);
+        userMarker.ring.material.opacity = onAir
+          ? (0.3 + level*0.5)
+          : (0.18 + (Math.sin(userPulse)*0.5+0.5)*0.22);
+        userMarker.ring.material.color.setHex(onAir ? RED : ACC);
+        userMarker.core.material.color.setHex(onAir ? RED : ACC);
+      }
+      // Spin both range rings about the user's location axis (stylish).
+      if(rxRing && rxRing._spinCenter){ rxRing.rotateOnAxis(rxRing._spinCenter, 0.009); }
+      if(txRing && txRing._spinCenter){
+        txRing.rotateOnAxis(txRing._spinCenter, -0.014); // opposite direction = livelier
+        if(txRing.material){ txRing.material.opacity = onAir ? 0.95 : 0.55; }
+      }
+      // Flowing pulse along reach arcs — opacity wave suggests signal streaming
+      // toward you. (r128's LineDashedMaterial has no dashOffset, so we animate
+      // brightness rather than scroll the dashes.)
+      arcPhase += 0.04;
+      arcGroup.forEach((a,i)=>{
+        if(!a.line.material) return;
+        if(a.hf){
+          // HF skip: intermittent on/off bounce — the "cut stream" look.
+          const onoff = Math.pow(Math.sin(arcPhase*1.2 + i)*0.5+0.5, 2);
+          a.line.material.opacity = 0.1 + onoff*0.8;
+        } else {
+          // VHF: gentle steady shimmer toward the user.
+          const base = a._baseOp != null ? a._baseOp : (a._baseOp=a.line.material.opacity);
+          a.line.material.opacity = base * (0.6 + 0.4*(Math.sin(arcPhase*0.8 + i*0.7)*0.5+0.5));
+        }
+      });
+      renderer.render(scene,camera);
+      updateCityLabels();
+    }
+
+    async function init(){
+      if(inited) return;
+      if(typeof THREE==='undefined'){
+        const l=document.getElementById('globeLoading');
+        if(l) l.textContent='⚠ 3D ENGINE FAILED TO LOAD — CHECK CONNECTION';
+        return;
+      }
+      inited=true;
+      const wrap=document.getElementById('globeCanvasWrap');
+      scene=new THREE.Scene();
+      camera=new THREE.PerspectiveCamera(45, 1, 0.01, 100);
+      camera.position.set(0,0,camDist);
+      renderer=new THREE.WebGLRenderer({ antialias:true, alpha:true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+      renderer.setClearColor(0x000000, 0);
+      wrap.appendChild(renderer.domElement);
+      globeGroup=new THREE.Group();
+      scene.add(globeGroup);
+      buildBaseSphere();
+      onResize();
+      bindInteraction(wrap);
+      animate();
+      // Load continents async; reveal once ready.
+      const ok=await loadContinents();
+      if(!ok) drawGraticuleFallback();
+      const l=document.getElementById('globeLoading'); if(l) l.style.display='none';
+      ready=true;
+      refreshMarkers();
+    }
+
+    // ── M6.2 markers ──────────────────────────────────────────────
+    let markerGroup=null;       // holds station dots + user marker (rotates w/ globe)
+    let userMarker=null, userPulse=0;
+    let rxRing=null, txRing=null;  // RX (receive) + TX (broadcast) range rings
+    let arcGroup=[];            // animated reach arcs {line, pts, hf}
+    let arcPhase=0;
+    let _didInitialFace=false;  // face user location only on first build
+    let cityLabelData=[];       // [{name, vec3}] projected to HTML labels each frame
+    let onAir=false;            // is the user broadcasting (TX port active)?
+    const RED=0xf54242;
+
+    function setOnAir(v){ onAir=!!v; const s=document.getElementById('globeStatus'); }
+
+    function ensureMarkerGroup(){
+      if(!markerGroup){ markerGroup=new THREE.Group(); globeGroup.add(markerGroup); }
+    }
+
+    // Orient the globe so the given lat/lon faces the camera (at +Z). Uses a
+    // quaternion from the point's direction → +Z, which is exact (the old
+    // Euler approximation with *0.6 was wrong, so recenter never landed).
+    function faceLatLon(lat, lon){
+      if(!globeGroup) return;
+      const dir=latLonToVec3(lat, lon, 1).normalize();
+      const q=new THREE.Quaternion().setFromUnitVectors(dir, new THREE.Vector3(0,0,1));
+      globeGroup.quaternion.copy(q);
+      globeGroup.rotation.setFromQuaternion(q); // keep euler in sync for drag deltas
+    }
+
+    // Build a great-circle arc between two lat/lon points, bowed above the
+    // surface. Returns {line, pts} — pts reused for flow animation.
+    function buildArc(lat1, lon1, lat2, lon2, lift, material, segments){
+      const a=latLonToVec3(lat1,lon1,1).normalize();
+      const b=latLonToVec3(lat2,lon2,1).normalize();
+      const seg=segments||48;
+      const ang=a.angleTo(b);
+      const pts=[];
+      for(let i=0;i<=seg;i++){
+        const t=i/seg;
+        const sinAng=Math.sin(ang)||1e-6;
+        const wa=Math.sin((1-t)*ang)/sinAng, wb=Math.sin(t*ang)/sinAng;
+        const p=new THREE.Vector3().addScaledVector(a,wa).addScaledVector(b,wb).normalize();
+        const h=R + lift*Math.sin(Math.PI*t);
+        pts.push(p.multiplyScalar(h));
+      }
+      const g=new THREE.BufferGeometry().setFromPoints(pts);
+      return { line:new THREE.Line(g, material), pts };
+    }
+
+    // Build an HF multi-hop "skip" path: signal bounces off the ionosphere in
+    // several hops. DORMANT until HF signals exist (all current stations VHF) —
+    // multiplayer-era feature.
+    function buildSkipPath(lat1, lon1, lat2, lon2, hops, material){
+      const a=latLonToVec3(lat1,lon1,1).normalize();
+      const b=latLonToVec3(lat2,lon2,1).normalize();
+      const ang=a.angleTo(b), sinAng=Math.sin(ang)||1e-6;
+      const pts=[]; const seg=24*hops;
+      for(let i=0;i<=seg;i++){
+        const t=i/seg;
+        const wa=Math.sin((1-t)*ang)/sinAng, wb=Math.sin(t*ang)/sinAng;
+        const p=new THREE.Vector3().addScaledVector(a,wa).addScaledVector(b,wb).normalize();
+        const hopPhase=Math.abs(Math.sin(Math.PI*t*hops));
+        const h=R + 0.06*hopPhase;
+        pts.push(p.multiplyScalar(h));
+      }
+      const g=new THREE.BufferGeometry().setFromPoints(pts);
+      const line=new THREE.Line(g, material); line.computeLineDistances();
+      return { line, pts };
+    }
+
+    // Build a small circle on the sphere surface around (lat,lon) of angular
+    // radius `radDeg` degrees — used for the antenna coverage ring.
+    function buildSurfaceRing(lat, lon, radDeg, material, dashed){
+      const center=latLonToVec3(lat, lon, 1).normalize();
+      // Build an orthonormal basis around the center point.
+      const up=Math.abs(center.y)>0.99 ? new THREE.Vector3(1,0,0) : new THREE.Vector3(0,1,0);
+      const tx=new THREE.Vector3().crossVectors(up, center).normalize();
+      const ty=new THREE.Vector3().crossVectors(center, tx).normalize();
+      const ang=radDeg*Math.PI/180, sinA=Math.sin(ang), cosA=Math.cos(ang);
+      const pts=[];
+      for(let i=0;i<=90;i++){
+        const th=(i/90)*Math.PI*2;
+        const p=new THREE.Vector3()
+          .addScaledVector(center, cosA)
+          .addScaledVector(tx, sinA*Math.cos(th))
+          .addScaledVector(ty, sinA*Math.sin(th))
+          .multiplyScalar(R*1.004);
+        pts.push(p);
+      }
+      const g=new THREE.BufferGeometry().setFromPoints(pts);
+      const line=new THREE.Line(g, material);
+      if(dashed){ line.computeLineDistances(); }
+      return line;
+    }
+
+    function refreshMarkers(){
+      if(!ready || !globeGroup) return;
+      ensureMarkerGroup();
+      // Clear existing markers.
+      while(markerGroup.children.length){ const c=markerGroup.children.pop(); markerGroup.remove(c); if(c.geometry)c.geometry.dispose(); if(c.material)c.material.dispose(); }
+      userMarker=null; rxRing=null; txRing=null; cityLabelData=[];
+
+      const DOT=0.0014;  // one shared dot size for ALL markers (color = the difference)
+      const uLat0=(typeof userLat!=='undefined')?userLat:null;
+      const uLon0=(typeof userLon!=='undefined')?userLon:null;
+      arcGroup=[];  // reset animated arcs (player connections only)
+
+      // Real radio stations → red dots; in-range ones glow brighter/larger.
+      // (Stations are RECEIVED, not "connected to" — no arcs to stations.)
+      const sgeo=new THREE.SphereGeometry(DOT, 8, 8);
+      let plotted=0;
+      (typeof stations!=='undefined'?stations:[]).forEach(s=>{
+        if(s.lat==null||s.lon==null) return;
+        const strength = Math.max(0, Math.min(1, (s.p||0)/40));
+        const inRange = (s.p||0) > 3;
+        const mat=new THREE.MeshBasicMaterial({ color:RED, transparent:true, opacity: inRange ? (0.5+strength*0.5) : 0.25 });
+        const m=new THREE.Mesh(sgeo, mat);
+        m.position.copy(latLonToVec3(s.lat, s.lon, R*1.002));
+        // All dots are the SAME physical size — strength shows via brightness only.
+        markerGroup.add(m);
+        plotted++;
+      });
+
+      // ── Player connection arcs (multiplayer framework) ──────────────
+      // Arcs represent links between PEOPLE (you ↔ another transmitting user),
+      // NOT radio stations. No other players exist in single-user mode, so this
+      // is empty now; multiplayer (M8+) will populate `_rfPlayers` and these
+      // arcs will appear. HF-band players get the ionospheric skip path.
+      if(uLat0!=null){
+        const players = (typeof window!=='undefined' && Array.isArray(window._rfPlayers)) ? window._rfPlayers : [];
+        players.slice(0,12).forEach((pl,i)=>{
+          if(pl.lat==null||pl.lon==null) return;
+          const isHF = pl.freq>=3 && pl.freq<=30;
+          if(isHF){
+            const mat=new THREE.LineDashedMaterial({ color:0xffc24b, transparent:true, opacity:0.8, dashSize:0.03, gapSize:0.04 });
+            const arc=buildSkipPath(uLat0,uLon0, pl.lat,pl.lon, 3, mat);
+            markerGroup.add(arc.line); arcGroup.push({ ...arc, hf:true });
+          } else {
+            const mat=new THREE.LineBasicMaterial({ color:ACC, transparent:true, opacity:0.5 });
+            const arc=buildArc(uLat0,uLon0, pl.lat,pl.lon, 0.04, mat, 48);
+            markerGroup.add(arc.line); arcGroup.push({ ...arc, hf:false });
+          }
+        });
+      }
+
+      // Major cities → faint dots + (HTML) labels for orientation.
+      const cmat=new THREE.MeshBasicMaterial({ color:0x6fd8ff, transparent:true, opacity:0.55 });
+      const cgeo=new THREE.SphereGeometry(DOT, 8, 8);
+      (typeof C!=='undefined' && C.cities ? C.cities : []).forEach(city=>{
+        if(city.lat==null||city.lon==null) return;
+        const v=latLonToVec3(city.lat, city.lon, R*1.002);
+        const m=new THREE.Mesh(cgeo, cmat); m.position.copy(v); markerGroup.add(m);
+        cityLabelData.push({ name:city.name, local:v.clone() });
+      });
+
+      // The user's GPS location → cyan dot, SAME size as the others (color = you).
+      const uLat=(typeof userLat!=='undefined')?userLat:null;
+      const uLon=(typeof userLon!=='undefined')?userLon:null;
+      if(uLat!=null && uLon!=null){
+        const um=new THREE.Mesh(
+          new THREE.SphereGeometry(DOT, 8, 8),
+          new THREE.MeshBasicMaterial({ color:ACC, transparent:true, opacity:1 })
+        );
+        um.position.copy(latLonToVec3(uLat, uLon, R*1.004));
+        markerGroup.add(um);
+        const ring=new THREE.Mesh(
+          new THREE.SphereGeometry(DOT*1.9, 14, 14),
+          new THREE.MeshBasicMaterial({ color:ACC, transparent:true, opacity:0.25, blending:THREE.AdditiveBlending })
+        );
+        ring.position.copy(um.position);
+        markerGroup.add(ring);
+        userMarker={ core:um, ring };
+
+        const km0=(typeof userRadius!=='undefined' && userRadius) ? userRadius : 100;
+        const axis=latLonToVec3(uLat,uLon,1).normalize();
+
+        // RX ring (blue/cyan) — how far you can RECEIVE (antenna range).
+        const rxDeg=Math.min(70, (km0/6371)*180/Math.PI);
+        const rxMat=new THREE.LineDashedMaterial({ color:0x42a8ff, transparent:true, opacity:0.6, dashSize:0.01, gapSize:0.014 });
+        rxRing=buildSurfaceRing(uLat, uLon, rxDeg, rxMat, true);
+        rxRing._spinCenter=axis;
+        markerGroup.add(rxRing);
+
+        // TX ring (amber) — how far you BROADCAST (antenna range × TX power).
+        const pwr=(window._txConfig && window._txConfig.power!=null) ? window._txConfig.power : 50;
+        const txKm=km0 * (0.5 + (pwr/100)*1.7); // power 0→0.5×, 50→1.35×, 100→2.2×
+        const txDeg=Math.min(75, (txKm/6371)*180/Math.PI);
+        const txMat=new THREE.LineDashedMaterial({ color:0xffa53d, transparent:true, opacity:0.75, dashSize:0.016, gapSize:0.012 });
+        txRing=buildSurfaceRing(uLat, uLon, txDeg, txMat, true);
+        txRing._spinCenter=axis;
+        markerGroup.add(txRing);
+
+        // Face the user's location only on the FIRST build — not on every refresh
+        // (otherwise touching the power slider would snap the globe back).
+        if(!_didInitialFace){ faceLatLon(uLat, uLon); _didInitialFace=true; }
+      }
+
+      const cnt=document.getElementById('globeStatus');
+      if(cnt) cnt.textContent = (window._rfOnAir?'● ON AIR · ':'')+plotted+' STATIONS · '+(uLat!=null?'BLUE=RX  AMBER=TX':'NO GPS');
+    }
+
+    // Snap the globe so the user's location faces the camera, and zoom in close.
+    function recenter(zoomIn){
+      const uLat=(typeof userLat!=='undefined')?userLat:null;
+      const uLon=(typeof userLon!=='undefined')?userLon:null;
+      if(uLat==null||uLon==null||!globeGroup) return;
+      faceLatLon(uLat, uLon);
+      rotVel={x:0,y:0};
+      if(zoomIn) camDist = 1.25;
+    }
+
+    function open(){
+      const ov=document.getElementById('globeOverlay');
+      ov.classList.add('on');
+      try{ localStorage.setItem('rf_last_overlay','transmitter'); }catch(e){}
+      // Init after the overlay is visible, then re-measure a couple of times as
+      // layout settles (flex sizing isn't final on the first frame → off-center).
+      setTimeout(()=>{ init(); onResize(); refreshMarkers(); }, 50);
+      setTimeout(onResize, 180);
+      setTimeout(()=>{ onResize(); refreshMarkers(); }, 400);
+    }
+    function close(){
+      const ov=document.getElementById('globeOverlay');
+      ov.classList.remove('on');
+      try{ localStorage.removeItem('rf_last_overlay'); }catch(e){}
+    }
+
+    window.addEventListener('resize', ()=>{ if(document.getElementById('globeOverlay')?.classList.contains('on')) onResize(); });
+
+    return { open, close, init, onResize, refreshMarkers, recenter, setOnAir };
+  })();
+
+  document.getElementById('globeClose')?.addEventListener('click', ()=>Globe.close());
+  document.getElementById('globeRecenter')?.addEventListener('click', ()=>Globe.recenter(true));
+
+  // ── TX configuration (M6.5) — realistic transmit settings ──────────
+  // Frequency, power (ERP %), and modulation. Independent of the receiver tuner
+  // so you can broadcast on one freq while listening on another (and so other
+  // players can tune to YOUR freq). Persisted with the rest of the state later.
+  window._txConfig = window._txConfig || { freq: 95.5, power: 50, mod: 'FM' };
+  function syncTxConfigUI(){
+    const f=document.getElementById('txFreq'); if(f) f.value=window._txConfig.freq;
+    const p=document.getElementById('txPower'); if(p) p.value=window._txConfig.power;
+    const pv=document.getElementById('txPowerVal'); if(pv) pv.textContent=window._txConfig.power+'%';
+    const m=document.getElementById('txMod'); if(m) m.value=window._txConfig.mod;
+  }
+  document.getElementById('txFreq')?.addEventListener('input',e=>{ const v=parseFloat(e.target.value); if(isFinite(v)){ window._txConfig.freq=v; if(window._rxtxLocked){ setRxFreqShared(v); } updateTxFreqWarning(); try{ if(typeof tunerFreq==='number') CORE.audio.tune(tunerFreq); }catch(e2){} } });
+  document.getElementById('txPower')?.addEventListener('input',e=>{ window._txConfig.power=parseInt(e.target.value)||0; const pv=document.getElementById('txPowerVal'); if(pv) pv.textContent=window._txConfig.power+'%'; try{ if(typeof Globe!=='undefined' && Globe.refreshMarkers) Globe.refreshMarkers(); }catch(e2){} });
+  document.getElementById('txMod')?.addEventListener('change',e=>{ window._txConfig.mod=e.target.value; });
+  // Default TX freq follows the tuner the FIRST time only (then independent).
+  if(typeof tunerFreq!=='undefined' && tunerFreq!=null && !window._txConfigInit){ window._txConfig.freq = tunerFreq; window._txConfigInit=true; }
+  syncTxConfigUI();
+  document.getElementById('globeOverlay')?.addEventListener('click', e=>{ if(e.target.id==='globeOverlay') Globe.close(); });
+
+  // Floating RADIO panel — collapse to an icon, expand back, and drag by header.
+  (function(){
+    const panel=document.getElementById('txConfigPanel');
+    const icon=document.getElementById('radioToggle');
+    const collapseBtn=document.getElementById('radioCollapse');
+    const handle=document.getElementById('txcDragHandle');
+    if(!panel||!icon) return;
+    const collapse=()=>{ panel.classList.add('collapsed'); icon.classList.add('show'); };
+    const expand=()=>{ panel.classList.remove('collapsed'); icon.classList.remove('show'); };
+    collapseBtn?.addEventListener('click',e=>{ e.stopPropagation(); collapse(); });
+    icon?.addEventListener('click',e=>{ e.stopPropagation(); expand(); });
+    // Drag by the header.
+    let dragging=false, ox=0, oy=0;
+    handle?.addEventListener('mousedown',e=>{
+      if(e.target.tagName==='BUTTON') return;
+      dragging=true;
+      const r=panel.getBoundingClientRect();
+      ox=e.clientX-r.left; oy=e.clientY-r.top;
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove',e=>{
+      if(!dragging) return;
+      const wrap=document.getElementById('globeCanvasWrap'); if(!wrap) return;
+      const wr=wrap.getBoundingClientRect();
+      let x=e.clientX-wr.left-ox, y=e.clientY-wr.top-oy;
+      x=Math.max(0, Math.min(wr.width-panel.offsetWidth, x));
+      y=Math.max(0, Math.min(wr.height-40, y));
+      panel.style.left=x+'px'; panel.style.top=y+'px';
+    });
+    window.addEventListener('mouseup',()=>{ dragging=false; });
+  })();
+
+  // ── Bidirectional binding: radio panel ↔ main-view controls ──────
+  // One source of truth; editing either place updates the other.
+  function setAntennaShared(val, fromPanel){
+    const main=document.getElementById('antennaSelect');
+    const panel=document.getElementById('antennaSelectPanel');
+    if(main && main.value!==val) main.value=val;
+    if(panel && panel.value!==val) panel.value=val;
+    userRadius = getAntennaRadius();
+    if(stationsLoaded && stations.length) stations.forEach(s=>{ s.p=calcSignalPower(s.dist,s.f); });
+    noiseData=null; wfImageData=null; peakArr=null; drawSpectrum._p=null;
+    drawStationLabels();
+    try{ if(typeof Globe!=='undefined' && Globe.refreshMarkers) Globe.refreshMarkers(); }catch(e){}
+    loadStations();
+  }
+  function setRxFreqShared(freq){
+    if(!isFinite(freq)) return;
+    setTuner(freq);                          // updates main tuner readout + audio
+    const p=document.getElementById('rxFreqPanel');
+    if(p && document.activeElement!==p) p.value = (typeof tunerFreq==='number'?tunerFreq:freq).toFixed(1);
+  }
+  // Panel → main
+  document.getElementById('antennaSelectPanel')?.addEventListener('change',e=>setAntennaShared(e.target.value,true));
+  document.getElementById('rxFreqPanel')?.addEventListener('change',e=>setRxFreqShared(parseFloat(e.target.value)));
+  // Main → panel (mirror the existing main-view antenna select)
+  document.getElementById('antennaSelect')?.addEventListener('change',e=>{
+    const panel=document.getElementById('antennaSelectPanel');
+    if(panel) panel.value=e.target.value;
+    try{ if(typeof Globe!=='undefined' && Globe.refreshMarkers) Globe.refreshMarkers(); }catch(err){}
+  });
+  // Keep the panel's RX field in sync whenever the tuner changes.
+  window._syncRxPanel = ()=>{ const p=document.getElementById('rxFreqPanel'); if(p && document.activeElement!==p && typeof tunerFreq==='number') p.value=tunerFreq.toFixed(1); };
+
+  // ── RX/TX lock + frequency-in-use warning (realistic transceiver behavior) ──
+  window._rxtxLocked = false;
+  function updateLockBtn(){
+    const b=document.getElementById('rxtxLock'); if(!b) return;
+    b.classList.toggle('on', window._rxtxLocked);
+    b.textContent = window._rxtxLocked ? '▣ RX/TX LOCKED' : '▢ RX/TX UNLOCKED';
+  }
+  document.getElementById('rxtxLock')?.addEventListener('click',()=>{
+    window._rxtxLocked = !window._rxtxLocked;
+    updateLockBtn();
+    if(window._rxtxLocked && window._txConfig){
+      // Locking snaps RX to the TX frequency (one-frequency transceiver).
+      setRxFreqShared(window._txConfig.freq);
+    }
+    // Re-evaluate self-monitor (locked mode disables hearing your own TX).
+    try{ if(typeof tunerFreq==='number') CORE.audio.tune(tunerFreq); }catch(e){}
+    updateTxFreqWarning();
+  });
+  updateLockBtn();
+
+  // Warn if the TX frequency overlaps a real station: listeners on that freq
+  // will hear BOTH the station and your transmission. Does NOT block it.
+  function updateTxFreqWarning(){
+    const el=document.getElementById('txFreqWarn'); if(!el) return;
+    const tx=window._txConfig;
+    if(!tx){ el.textContent=''; return; }
+    let clash=null;
+    if(typeof stations!=='undefined' && stations.length){
+      for(const s of stations){ if(Math.abs(s.f - tx.freq) < 0.2){ clash=s; break; } }
+    }
+    if(clash){
+      const nm=(clash.name||clash.f.toFixed(1)).substring(0,18);
+      el.textContent='⚠ '+tx.freq.toFixed(1)+' MHz is in use by '+nm+'. Listeners here will hear BOTH it and your transmission.';
+    } else {
+      el.textContent='';
+    }
+  }
+  // Initialize panel values from current state.
+  (function(){
+    const a=document.getElementById('antennaSelect');
+    const ap=document.getElementById('antennaSelectPanel');
+    if(a && ap) ap.value=a.value;
+    if(typeof window._syncRxPanel==='function') window._syncRxPanel();
+    if(typeof updateTxFreqWarning==='function') updateTxFreqWarning();
+    try{ const h=document.getElementById('rfHandle'); if(h && window.RFNet) h.textContent=RFNet.getHandle(); }catch(e){}
+
+    // STATION export/import — download/restore the full anonymous profile.
+    document.getElementById('stationExport')?.addEventListener('click',()=>{
+      try{
+        const prof = RFNet.exportProfile({includeLocation:true});
+        const blob = new Blob([JSON.stringify(prof,null,2)], {type:'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'ptxero-station-'+RFNet.getHandle()+'.json';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url), 1000);
+      }catch(e){ console.warn('export failed', e); }
+    });
+    document.getElementById('stationImport')?.addEventListener('click',()=>{
+      const inp = document.createElement('input');
+      inp.type='file'; inp.accept='application/json,.json';
+      inp.addEventListener('change',()=>{
+        const f = inp.files && inp.files[0]; if(!f) return;
+        const r = new FileReader();
+        r.onload = ()=>{
+          try{
+            const prof = JSON.parse(r.result);
+            if(!prof || !prof.radio){ alert('Not a valid station profile.'); return; }
+            // Restore radio config.
+            if(prof.radio.tx){ window._txConfig = {...prof.radio.tx}; }
+            const aSel=document.getElementById('antennaSelect');
+            if(aSel && prof.radio.antenna){ setAntennaShared(prof.radio.antenna,false); }
+            if(typeof prof.radio.rxFreq==='number'){ setRxFreqShared(prof.radio.rxFreq); }
+            window._rxtxLocked = !!prof.radio.locked; updateLockBtn();
+            // Restore signal chain.
+            if(prof.chain && typeof deserializeChain==='function'){ deserializeChain(prof.chain); }
+            if(typeof syncTxConfigUI==='function') syncTxConfigUI();
+            updateTxFreqWarning();
+            alert('Station profile restored.');
+          }catch(e){ alert('Could not read that profile file.'); }
+        };
+        r.readAsText(f);
+      });
+      inp.click();
+    });
+  })();
+
 
   window.addEventListener('resize',()=>{ if(oscOverlay.classList.contains('on')) resizeOscBig(); });
   // Browser zoom fires resize in most engines; redraw cables so they re-track ports.
@@ -2650,6 +3555,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
       { id:'gain', label:'GAIN', min:0, max:4, def:1, log:false, fmt:v=>v.toFixed(2)+'×' },
     ]},
     clone:       { label:'CLONE',   color:'#f5f542', cat:'UTILITY', knobs:[] },
+    scope:       { label:'SCOPE',   color:'#42f5d4', cat:'VISUAL', knobs:[] },
     panner:      { label:'PANNER',  color:'#42d4f5', cat:'UTILITY', knobs:[
       { id:'pan', label:'PAN', min:-1, max:1, def:0, log:false, fmt:v=>v===0?'C':v>0?'R'+Math.round(v*100):'L'+Math.round(-v*100) },
     ]},
@@ -2884,6 +3790,17 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
         return {input:n,output:n,nodes:[n]};
       }
       // ── Filter ──
+      if(type==='scope'){
+        // Visual-only pass-through. Distinct input/output gains so the rebuild's
+        // output.disconnect() doesn't sever the analyser tap. The analyser reads
+        // the signal AT THIS POINT in the chain (post any upstream pedals).
+        const inp=audioCtx.createGain();
+        const out=audioCtx.createGain();
+        const an=audioCtx.createAnalyser(); an.fftSize=1024; an.smoothingTimeConstant=0;
+        inp.connect(out);                // pass audio through unchanged
+        inp.connect(an);                 // tap for the waveform (analyser has no output)
+        return {input:inp, output:out, analyser:an, scopeIn:inp, nodes:[inp,out,an]};
+      }
       if(type==='filter'){
         const n=audioCtx.createBiquadFilter();
         n.type=selectVal||'lowpass'; n.frequency.value=params.freq??2000; n.Q.value=params.q??1;
@@ -3192,8 +4109,13 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
     if(!an) return;
     // Stop the active looper/sampler source if present
     if(an.activeSource){ try{ an.activeSource.stop(); }catch(e){} }
+    // Stop the radio stream element (auxtuner / hardwarein / tuner nodes).
+    // Disconnect its MediaElementSource too, then fully detach the element so
+    // it can't keep buffering/playing after the node is gone.
+    if(an.src && typeof an.src.disconnect==='function'){ try{ an.src.disconnect(); }catch(e){} }
+    if(an.audioEl){ try{ an.audioEl.pause(); an.audioEl.muted=true; an.audioEl.src=''; an.audioEl.srcObject=null; an.audioEl.load(); }catch(e){} an.audioEl=null; }
     // Stop any aux radio element/stream
-    if(an._auxAudio){ try{ an._auxAudio.pause(); an._auxAudio.src=''; }catch(e){} }
+    if(an._auxAudio){ try{ an._auxAudio.pause(); an._auxAudio.src=''; an._auxAudio.load(); }catch(e){} an._auxAudio=null; }
     if(an._auxSource){ try{ an._auxSource.disconnect(); }catch(e){} }
     if(an.stream){ try{ an.stream.getTracks().forEach(t=>t.stop()); }catch(e){} }
     if(an.micSource){ try{ an.micSource.disconnect(); }catch(e){} }
@@ -3289,8 +4211,15 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
       }
 
       let toInput;
+      let alsoTx = false;
       if(e.toId===SC_OUTPUT_ID){
-        toInput = masterGain;
+        if(e.toPort==='TX'){
+          // On-air: heard AND broadcast. Connect to masterGain below, plus tap.
+          toInput = masterGain;
+          alsoTx = true;
+        } else {
+          toInput = masterGain; // IN = monitor only
+        }
       } else {
         const toNode = scNodes.find(n=>n.id===e.toId);
         if(!toNode?.audioNode) return;
@@ -3322,6 +4251,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
         else if(e.fromPort==='OUT B') outNode = fromAudio.outputB || fromAudio.output;
         else                          outNode = fromAudio.output;
         outNode.connect(toInput);
+        if(alsoTx && txTapGain){ try{ outNode.connect(txTapGain); }catch(e2){} }
       }catch(ex){ console.warn('SC connect failed', e.fromId, '->', e.toId, ex); }
     });
 
@@ -3329,6 +4259,12 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
     if(!scEdges.some(e=>e.toId===SC_OUTPUT_ID)){
       rfSourceGain.connect(masterGain);
     }
+    // On-air status: is anything routed to the TX port?
+    window._rfOnAir = scEdges.some(e=>e.toId===SC_OUTPUT_ID && e.toPort==='TX');
+    const oab=document.getElementById('rfOnAirBanner'); if(oab) oab.classList.toggle('hidden', !window._rfOnAir);
+    try{ if(typeof Globe!=='undefined' && Globe.setOnAir) Globe.setOnAir(window._rfOnAir); }catch(e){}
+    // Re-evaluate the self-monitor (M6.6) now that on-air state may have changed.
+    try{ if(typeof tunerFreq==='number') CORE.audio.tune(tunerFreq); }catch(e){}
   }
 
   // ── Canvas cable drawing ──────────────────────────────────────
@@ -3990,6 +4926,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
     el.style.borderColor = `rgba(${acc},0.35)`;
     // The sampler needs extra width for its waveform + crop controls.
     if(node.type==='sampler') el.style.width = '220px';
+    if(node.type==='scope')   el.style.width = '200px';
 
     // Header
     const hd = document.createElement('div');
@@ -4120,6 +5057,37 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
       const meter=document.createElement('div'); meter.className='audio-smeter'; meter.style.marginBottom='8px';
       meter.innerHTML=`<div class="audio-smeter-track"><div class="audio-smeter-fill" id="meter-${node.id}" style="background:${color}; width:0%;"></div></div>`;
       body.appendChild(meter);
+    }
+    if(node.type==='scope'){
+      const hint=document.createElement('div');
+      hint.style.cssText='font-family:var(--fmono);font-size:9px;color:var(--mut);margin-bottom:4px;letter-spacing:.06em;';
+      hint.textContent='LIVE WAVEFORM — PASS-THROUGH';
+      body.appendChild(hint);
+      const cv=document.createElement('canvas');
+      cv.width=186; cv.height=70;  // 200px node minus 14px padding
+      cv.style.cssText='width:100%;height:70px;background:#020806;border:1px solid '+color+'33;border-radius:2px;margin-bottom:4px;display:block;';
+      body.appendChild(cv);
+      const ctx=cv.getContext('2d');
+      node._redrawWave = ()=>{
+        const an=node.audioNode && node.audioNode.analyser;
+        if(!an){ return; }
+        const N=an.fftSize; const buf=new Float32Array(N);
+        an.getFloatTimeDomainData(buf);
+        ctx.clearRect(0,0,cv.width,cv.height);
+        // Centre line
+        ctx.strokeStyle=color+'22'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(0,cv.height/2); ctx.lineTo(cv.width,cv.height/2); ctx.stroke();
+        // Waveform
+        ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.beginPath();
+        const step=N/cv.width;
+        for(let x=0;x<cv.width;x++){
+          const v=buf[Math.floor(x*step)]||0;
+          const y=cv.height/2 - v*(cv.height/2)*0.95;
+          if(x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        }
+        ctx.stroke();
+      };
+      node._redrawWave();
     }
     if(node.type==='sampler'){
       const recordBtn = document.createElement('button');
@@ -4716,19 +5684,35 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
     src.append(srcLbl,srcPort);
     body.appendChild(src);
 
-    // OUTPUT
+    // OUTPUT — now a dual-port box: IN (monitor/hear) + TX (broadcast on-air).
     const out=document.createElement('div');
     out.className='sc-node-fixed out-node';
     out.id='scnode-'+SC_OUTPUT_ID;
-    out.style.right='24px'; out.style.top=(H/2-50)+'px';
+    out.style.right='24px'; out.style.top=(H/2-60)+'px';
+
+    // IN port — monitor only (hear without broadcasting).
+    const inRow=document.createElement('div'); inRow.style.cssText='display:flex;align-items:center;gap:5px;margin-bottom:9px;';
     const outPort=document.createElement('div'); outPort.className='sc-port';
     outPort.style.borderColor='var(--rf-accC)';
     outPort.dataset.node=SC_OUTPUT_ID; outPort.dataset.port='IN';
     outPort.addEventListener('mouseenter',()=>{ updatePortHoverState(SC_OUTPUT_ID,'IN',false,outPort); });
     outPort.addEventListener('mouseleave',()=>{ clearPortHover(outPort); });
     outPort.addEventListener('click',e=>{ e.stopPropagation(); handlePortClick(SC_OUTPUT_ID,'IN',false,outPort); });
-    const outLbl=document.createElement('div'); outLbl.className='sc-node-fixed-label'; outLbl.textContent='OUTPUT';
-    out.append(outPort,outLbl);
+    const inLbl=document.createElement('div'); inLbl.className='sc-node-fixed-label'; inLbl.textContent='OUTPUT'; inLbl.style.cssText='margin:0;';
+    inRow.append(outPort,inLbl);
+
+    // TX port — broadcast (on-air): heard AND transmitted from your location.
+    const txRow=document.createElement('div'); txRow.style.cssText='display:flex;align-items:center;gap:5px;';
+    const txPort=document.createElement('div'); txPort.className='sc-port';
+    txPort.style.borderColor='#f54242';
+    txPort.dataset.node=SC_OUTPUT_ID; txPort.dataset.port='TX';
+    txPort.addEventListener('mouseenter',()=>{ updatePortHoverState(SC_OUTPUT_ID,'TX',false,txPort); });
+    txPort.addEventListener('mouseleave',()=>{ clearPortHover(txPort); });
+    txPort.addEventListener('click',e=>{ e.stopPropagation(); handlePortClick(SC_OUTPUT_ID,'TX',false,txPort); });
+    const txLbl=document.createElement('div'); txLbl.className='sc-node-fixed-label'; txLbl.textContent='TX OUT'; txLbl.style.cssText='margin:0;color:#f54242;';
+    txRow.append(txPort,txLbl);
+
+    out.append(inRow,txRow);
     body.appendChild(out);
   }
 
@@ -5020,10 +6004,20 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
   scOverlay.addEventListener('click',e=>{ if(e.target===scOverlay){ scOverlay.classList.remove('on'); try{ localStorage.removeItem('rf_last_overlay'); }catch(e){} } });
   document.getElementById('scClearAll').addEventListener('click',()=>{
     if(!confirm('Clear all modules and cables?')) return;
-    scNodes.forEach(n=>{ const el=document.getElementById('scnode-'+n.id); if(el) el.remove(); });
-    cmdNodes.forEach(n=>{ const el=document.getElementById('scnode-'+n.id); if(el) el.remove(); });
+    pushUndo();
+    // Stop audio on every node first — otherwise radio streams / oscillators
+    // keep playing after their nodes are removed.
+    scNodes.forEach(n=>{ stopAudioNode(n); const el=document.getElementById('scnode-'+n.id); if(el) el.remove(); });
+    cmdNodes.forEach(n=>{ stopAudioNode(n); const el=document.getElementById('scnode-'+n.id); if(el) el.remove(); });
     scNodes=[]; scEdges=[]; cmdNodes=[]; cmdEdges=[]; ctrlEdges=[];
     rebuildAudioChain(); drawCables(); updatePortConnectedStates(); updateScMiniPreview();
+    // Safety net: a node's stream audio can be held by an <audio> element that
+    // outlives the node teardown. Pause + detach any that are still playing so
+    // a cleared radio node doesn't keep sounding until refresh.
+    document.querySelectorAll('audio').forEach(a=>{
+      if(a.id==='rfAudio' || a.classList.contains('rf-main-audio')) return; // keep the main tuner
+      try{ a.pause(); a.src=''; a.load(); }catch(e){}
+    });
   });
 
   document.getElementById('scBypassAll').addEventListener('click',()=>{
@@ -5147,9 +6141,119 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
     };
   }
 
-  // Restore a chain that's waiting in _pendingScRestore. Idempotent and safe
-  // to call from any entry point (first gesture, banner dismiss, overlay open).
-  // Must run after a user gesture because deserializeChain builds audio nodes.
+  // ── RFNet — multiplayer foundation (privacy-first) ───────────────
+  // Identity is a RANDOM per-browser UUID. No name, email, IP, or device
+  // fingerprint is ever collected. The ID is opaque and ties to nothing
+  // personal — that's the anonymization. Stored data exists only to restore
+  // the user's own work and (later) power multiplayer. No analytics/telemetry.
+  const RFNet = (() => {
+    const ID_KEY = 'ptxero_rf_player_id';
+    const PROFILE_KEY = 'ptxero_rf_profile';
+
+    // Stable anonymous identity — generated once, then remembered locally.
+    function getPlayerId(){
+      let id = null;
+      try { id = localStorage.getItem(ID_KEY); } catch(e){}
+      if(!id){
+        id = (crypto && crypto.randomUUID) ? crypto.randomUUID()
+           : 'rf-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,10);
+        try { localStorage.setItem(ID_KEY, id); } catch(e){}
+      }
+      return id;
+    }
+
+    // A short, friendly anonymous handle derived from the ID (e.g. "RF-7A3F").
+    // Purely cosmetic for multiplayer display; reveals nothing personal.
+    function getHandle(){
+      const id = getPlayerId();
+      let h = 0; for(let i=0;i<id.length;i++){ h=(h*31 + id.charCodeAt(i))>>>0; }
+      return 'RF-' + h.toString(16).toUpperCase().slice(0,4).padStart(4,'0');
+    }
+
+    // Full portable profile: everything needed to restore THIS user's station.
+    // `includeLocation` is opt-in — location is the one sensitive field, so it's
+    // excluded by default from anything that might leave the device.
+    function exportProfile(opts){
+      opts = opts || {};
+      const p = {
+        v: 1,
+        id: getPlayerId(),
+        handle: getHandle(),
+        updated: Date.now(),
+        radio: {
+          tx: (window._txConfig ? {...window._txConfig} : null),
+          rxFreq: (typeof tunerFreq==='number' ? tunerFreq : null),
+          antenna: document.getElementById('antennaSelect')?.value || 'dipole',
+          locked: !!window._rxtxLocked,
+        },
+        chain: (typeof serializeChain==='function' ? serializeChain() : null),
+        // Sample audio is large/binary — referenced by id, not embedded here.
+        // (Samples live in IndexedDB; a backend sync would handle them separately.)
+      };
+      if(opts.includeLocation){
+        p.location = {
+          lat: (typeof userLat==='number') ? userLat : null,
+          lon: (typeof userLon==='number') ? userLon : null,
+        };
+      }
+      return p;
+    }
+
+    function saveProfileLocal(){
+      try { localStorage.setItem(PROFILE_KEY, JSON.stringify(exportProfile({includeLocation:true}))); }
+      catch(e){ console.warn('profile save failed', e); }
+    }
+    function loadProfileLocal(){
+      try { const raw=localStorage.getItem(PROFILE_KEY); return raw?JSON.parse(raw):null; }
+      catch(e){ return null; }
+    }
+
+    // ── Storage adapter ──────────────────────────────────────────
+    // Pluggable so a real backend (e.g. Supabase) can replace `local` later
+    // WITHOUT touching the rest of the app. Each adapter implements the same
+    // async interface: put(profile) / get(id) / listPlayers().
+    const adapters = {
+      // Local-only adapter — works fully offline, used now and as a fallback.
+      local: {
+        name: 'local',
+        async put(profile){ saveProfileLocal(); return { ok:true, local:true }; },
+        async get(id){ const p=loadProfileLocal(); return (p && p.id===id)?p:null; },
+        async listPlayers(){ return []; }, // no other players without a backend
+      },
+      // Backend adapter — INERT until configured with a real endpoint + keys
+      // (done OUTSIDE this environment). Structured so the integration code has
+      // a clear contract to fill in. Anonymized: sends only id/handle/radio,
+      // and location ONLY if the user has opted in.
+      backend: {
+        name: 'backend',
+        config: null, // { url, anonKey } — set via RFNet.configureBackend()
+        async put(profile){
+          if(!this.config) return { ok:false, reason:'backend not configured' };
+          // Intentionally not implemented here — requires a live backend to test.
+          // Contract: POST anonymized profile keyed by profile.id.
+          return { ok:false, reason:'not implemented in this environment' };
+        },
+        async get(id){ return null; },
+        async listPlayers(){ return []; },
+      },
+    };
+    let active = adapters.local;
+    function useAdapter(name){ if(adapters[name]) active=adapters[name]; }
+    function configureBackend(cfg){ adapters.backend.config = cfg || null; }
+
+    // Public sync calls route through the active adapter.
+    async function sync(){ try { return await active.put(exportProfile({includeLocation:true})); } catch(e){ return {ok:false,reason:String(e)}; } }
+
+    return {
+      getPlayerId, getHandle,
+      exportProfile, saveProfileLocal, loadProfileLocal,
+      useAdapter, configureBackend, sync,
+      get adapterName(){ return active.name; },
+    };
+  })();
+  window.RFNet = RFNet;
+
+
   function restorePendingChain(){
     if(!window._pendingScRestore) return;
     const pending = window._pendingScRestore;
@@ -5449,7 +6553,14 @@ Right-click to save here`:'Click to save here';
       const body=document.getElementById('scBody');
       scNodes.forEach(n=>{ if(!document.getElementById('scnode-'+n.id)) body.appendChild(createNodeEl(n)); });
       cmdNodes.forEach(n=>{ if(!document.getElementById('scnode-'+n.id)) body.appendChild(createCmdNodeEl(n)); });
+      // Resync the audio graph to the current edges — without this, stale
+      // connections from a previous session can keep audio flowing even when
+      // nothing is wired to OUTPUT/TX.
+      rebuildAudioChain();
       drawCables(); updatePortConnectedStates();
+      // Redraw once more after layout fully settles so cable endpoints line up
+      // with the (re)created fixed nodes' ports.
+      setTimeout(()=>{ drawCables(); updatePortConnectedStates(); }, 120);
       // Canvas click to delete cables
       scCanvas.style.pointerEvents='none';
       scCanvas.addEventListener('click',scCanvasClick);
@@ -6781,6 +7892,13 @@ Right-click to save here`:'Click to save here';
       });
       return;
     }
+    if(tile.dataset.tile === 'transmitter'){
+      tile.addEventListener('click', e=>{
+        if(e.target.closest('input,button,select,a')) return;
+        Globe.open();
+      });
+      return;
+    }
     tile.addEventListener('click', e=>{
       if(e.target.closest('input,button,select,a')) return;
       const id=tile.dataset.tile;
@@ -6840,7 +7958,7 @@ Right-click to save here`:'Click to save here';
 
 // ── Persistence is now managed by CORE.state ─────────────────
   // Re-map old global functions to CORE methods to prevent immediate breakage
-  function saveState() { CORE.state.save(); }
+  function saveState() { CORE.state.save(); try{ if(window.RFNet) RFNet.saveProfileLocal(); }catch(e){} }
   function restoreState() { return CORE.state.load(); }
 
   // ── Startup Sequence ─────────────────────────────────────────
@@ -6866,6 +7984,7 @@ Right-click to save here`:'Click to save here';
     let last=null; try{ last=localStorage.getItem('rf_last_overlay'); }catch(e){}
     if(last==='oscilloscope') setTimeout(()=>openOscOverlay(), 60);
     else if(last==='signalchain') setTimeout(()=>openScOverlay(), 60);
+    else if(last==='transmitter') setTimeout(()=>Globe.open(), 60);
   })();
 
   // ── Collapsible / resizable columns ─────────────────────────

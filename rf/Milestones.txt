@@ -119,10 +119,22 @@ Receiver tiles in the left column, collapsible
 
 M12 — Anonymous Accounts & Cloud Sync
 
+** FOUNDATION BUILT (client-side, testable now) — `RFNet` module in index.html: **
+- Anonymous identity: random per-browser UUID (`crypto.randomUUID`), persisted in localStorage as `ptxero_rf_player_id`. NO name/email/IP/fingerprint — the opaque ID is the anonymization.
+- Friendly handle "RF-XXXX" derived from the ID (cosmetic display only), shown in the radio panel header.
+- `exportProfile()`: portable full-user state (id, handle, radio TX/RX/antenna/lock, full signal chain). Location is OPT-IN only (`includeLocation`), excluded by default from anything that could leave the device. Sample audio referenced by id, not embedded (lives in IndexedDB).
+- Pluggable storage ADAPTER interface (`local` works now; `backend` is inert until configured OUTSIDE this env with url+anonKey). Swappable without touching the rest of the app. `RFNet.sync()` routes through the active adapter.
+- Profile saved locally alongside existing state autosave.
+- STATION EXPORT/IMPORT UI built in radio panel: downloads/restores the full anonymous profile as JSON (proves serialization end-to-end + gives users a real local backup). Same data shape the backend will sync.
+- PRIVACY STANCE (user directive): no data collection, no telemetry, no analytics. Storage exists only to restore the user's own work + power multiplayer. Anonymized by design.
+
+** STILL NEEDS A REAL BACKEND (cannot build/test in this container — no network, no DB, no 2nd client): **
+- Stand up backend OUTSIDE here (Supabase or Cloudflare KV). Then fill in `adapters.backend.put/get/listPlayers` against it; test in the real browser environment.
+- Original plan below still applies:
 Account number field in header (short alphanumeric, user-chosen or generated)
 Click LOGIN — pulls all saved state from server for that account
 Saves: signal chain presets, command module setups, tuner history, receiver configs, listening stats
-No passwords, no email — account number is the key
+No passwords, no email — account number is the key (the UUID/handle already implements this)
 Anonymized by design — no PII collected
 Backend: lightweight Cloudflare Worker + KV storage (fits existing worker setup)
 Logout clears to local-only mode
@@ -259,3 +271,41 @@ Make the spectrum genuinely reflect physics + real data:
 * **Mobile view:** ⚠ fix the site's mobile layout so the radio is usable / listenable on a phone (oscilloscope + spectrum + tuner responsive).
 * **Per-station IRC-style chat:** when tuned to a station, listeners can talk to each other in a chat tied to that station. (Needs backend — pairs with the M8 multiplayer / Supabase or Cloudflare work.)
 * **End-to-end encryption:** investigate whether the chat / transmissions can be E2E encrypted. (Open research question — feasibility TBD given the relay-through-backend architecture.)
+
+---
+
+### **MILESTONE 6 — TRANSMISSION LAYER (single-user sandbox) — SCOPING**
+
+*Locked decisions (this session):*
+- **View: 3D globe (Three.js).** Chosen for immersion + to make ionospheric skip meaningful (long-distance HF bouncing around the planet is inherently global).
+- **Globe aesthetic: glowing-blue WIREFRAME VECTOR OUTLINES of continents** (line borders, not dot-cloud), dark tactical background matching the program's identity. Zoom in → stylized local map of the user's area. Continent geometry from STANDARD OPEN WORLD GEO DATA (GeoJSON/TopoJSON world-atlas, the kind D3 uses) — NOT a live ArcGIS call (can't fetch live GIS at runtime; static open data does exactly this and is the well-trodden path).
+- **Propagation: plausible & simple.** Distance falloff + a couple of frequency-band behaviors (ground-wave vs skip). NOT a physics engine. (Same lesson as scrapped M5.10.)
+- **Integration: YES — and deeper than first scoped.** THE TRANSMITTER IS THE USER'S SIGNAL CHAIN OUTPUT. The OUTPUT node gets a companion **TX OUT port in the SAME box** (one seamless output box, two ports): whatever the user routes there is BOTH heard (like audio out now) AND broadcast to the world from their GPS location. So the whole instrument the user built becomes their transmitter. Placed transmitters appear as peaks on the EXISTING spectrum; tuning to a signal feeds its audio into the EXISTING signal chain.
+- **Dots on globe:** RED dots = real radio stations (from existing Radio Browser station data — populates the world immediately, not an empty planet). USER'S OWN TX = distinct color (cyan/accent), pulsing, clearly "you." Multiplayer transmitters slot in as a third category later. (Caveat: Radio Browser geo is patchy/community-entered; show stations with good coords, accept imperfection.)
+- **Receiver/Transmitter location = user's GPS location.** You are a point on the globe; you transmit from there and receive there.
+- **Range: graceful fade** (no hard cutoff).
+- **Single-user only.** NO networking/Supabase — that's M8+. Architecture designed so multiplayer transmitters can later drop in as a third dot category without a rewrite (transmitters as data objects that could sync).
+
+*Staged build plan (each pass independently testable):*
+
+**M6.1 — Globe render & overlay shell.** Three.js scene in a new overlay (like the oscilloscope overlay): glowing-blue wireframe-outline Earth from world-atlas geo data, on dark tactical background. Drag to rotate, scroll to zoom. No data yet — just a beautiful spinnable globe. *Verify: globe renders, performs smoothly, continents recognizable, matches RF identity. THIS IS THE RISKIEST TECHNICAL PIECE — prove it first.*
+
+**M6.2 — User position & real stations.** Plot the user's GPS location as the distinct "you" marker. Plot real radio stations (with valid coords) as red dots. Zoom-to-local view. *Verify: your location is correct; nearby stations appear as red dots in the right places.*
+
+**M6.3 — TX OUT port (the seamless output box).** Add TX OUT to the OUTPUT node's box alongside audio out. Whatever's routed there is both heard AND tagged as the user's broadcast. User's TX dot pulses on the globe at their GPS. *Verify: route audio to TX OUT, still hear it, see your TX marker active on the globe.*
+
+**M6.4 — Receiver & distance + propagation (plausible-simple).** Great-circle distance from user to each station/transmitter. Received strength = power − path loss(distance, frequency); HF skips farther than VHF. Visualize propagation (arcs/rings) on the globe. *Verify: distant signals weaker; HF reaches farther; visualization reads clearly.*
+
+**M6.5 — Spectrum integration.** Signals within range appear as peaks on the EXISTING spectrum analyzer at their frequency, height = received strength, graceful fade with distance. *Verify: a transmitter's peak appears at the right freq/height on the real spectrum; moving farther shrinks it.*
+
+**M6.6 — Audio/receive integration.** Tuning the existing tuner to a signal receives it — pipes audio into the existing signal chain via the SOURCE node; strength affects quality (noise/dropout when weak). *Verify: tune to a signal, hear it through the chain; weak signal = degraded.*
+
+*Resolved open questions:* what transmits = signal-chain output via TX OUT (M6.3); globe = wireframe outlines from open geo data (M6.1); receiver = GPS location; range = graceful fade. Remaining: exact propagation tuning constants (dial in at M6.4); how TX OUT audio is represented for the spectrum/receive path in single-user (you transmitting + receiving yourself — confirm the self-monitor loop at M6.5/6.6).
+
+*M6.4 notes (propagation viz):*
+- REUSES existing `calcSignalPower(km, freqMHz)` — already does real FSPL (20log d + 20log f + 32.44), antenna gain, ERP, SNR. NOT building propagation from scratch; M6.4 = VISUALIZING it on the globe.
+- VHF reach (active now): in-range stations brighter/larger dots (NO arcs to stations — stations are received, not "connected to"). Drawn from existing `s.p`/`s.dist`.
+- ARCS = PLAYER CONNECTIONS ONLY (you ↔ another transmitting user), NOT stations. Framework built (`window._rfPlayers` array, drawn in refreshMarkers); empty in single-user, populated by multiplayer (M8+). Arc heights kept low/flat.
+- HF skip flourish (BUILT now, DORMANT until HF players exist): for player links on HF (~3–30 MHz), animated multi-hop "skipping" arc — flowing dashes bouncing like an intermittent stream (ionospheric skip). Multiplayer cross-world talk feature.
+- RX antenna == TX antenna for now (one `antennaSelect` both transmits + receives).
+- FUTURE RULE (multiplayer-era): HF antennas operate only on HF bands, VHF antennas only on VHF — antenna type should gate which bands you can transmit/receive. Not enforced yet (all VHF currently). Don't forget when HF becomes usable.
