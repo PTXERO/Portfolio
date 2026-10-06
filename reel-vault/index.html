@@ -616,6 +616,15 @@ body.noscroll-max{overflow:hidden}
     <span class="note">Dossier on a name: what's publicly findable about you or your family, in one place.</span>
   </div>
   <div class="card pad" id="ntPerson" hidden style="margin-bottom:12px">
+    <div class="chips" style="padding:0 0 10px"><button type="button" class="chip on" data-pmode="name">BY NAME</button><button type="button" class="chip" data-pmode="account">FROM ONE @ACCOUNT</button></div>
+    <div id="ntPAcct" hidden>
+      <div class="grid2">
+        <label class="field"><span>Handle</span><input id="ntHandle" placeholder="@username" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+        <label class="field"><span>Network</span><select id="ntNet"><option value="x">X / Twitter</option><option value="mastodon">Mastodon (user@server)</option><option value="bluesky">Bluesky</option><option value="youtube">YouTube</option><option value="reddit">Reddit</option><option value="tiktok">TikTok</option><option value="instagram">Instagram</option></select></label>
+      </div>
+      <p class="note" style="margin:0">Starts from this one account only: its own posts are pulled in, and from there it builds outward through <b>real links</b> — who it follows / mentions, and other accounts it links to in its own posts. It does <b>not</b> guess the same username on other networks.</p>
+    </div>
+    <div id="ntPName">
     <div class="grid2">
       <label class="field"><span>First name</span><input id="ntFirst" placeholder="Ethan" autocapitalize="words" autocorrect="off"></label>
       <label class="field"><span>Last name</span><input id="ntLast" placeholder="Chapman" autocapitalize="words" autocorrect="off"></label>
@@ -625,6 +634,7 @@ body.noscroll-max{overflow:hidden}
       <label class="field"><span>Known handles <small class="note">(optional, comma-separated)</small></span><input id="ntHandles" placeholder="@ethan.chapman, @echapman" autocapitalize="off" autocorrect="off"></label>
     </div>
     <p class="note" style="margin:0">It searches the name (in quotes, with the state), any handles you give, and links out to the public people-search sites so you can see what's exposed. Nothing is scraped from those sites, and no home addresses are stored — only links. Everything stays on this device.</p>
+    </div>
   </div>
   <details class="more">
     <summary>▸ MORE OPTIONS</summary>
@@ -1119,14 +1129,20 @@ async function runTopic(id){
 $('#ntBreadth').oninput = e => $('#ntBreadthL').textContent = BREADTH[e.target.value];
 $('#ntPersonBtn').onclick = () => { const on = $('#ntPerson').hidden; $('#ntPerson').hidden = !on; $('#ntPersonBtn').classList.toggle('on', on); if (on) $('#ntFirst').focus(); };
 // a person = first/last (+state, +handles) → quoted-name searches, handle searches, and a PERSON card in the dossier
+$$('[data-pmode]').forEach(b => b.onclick = () => { $$('[data-pmode]').forEach(x => x.classList.toggle('on', x === b)); const acct = b.dataset.pmode === 'account'; $('#ntPAcct').hidden = !acct; $('#ntPName').hidden = acct; (acct ? $('#ntHandle') : $('#ntFirst')).focus(); });
 function personFromForm(){
   if ($('#ntPerson').hidden) return null;
+  if (!$('#ntPAcct').hidden){
+    const handle = $('#ntHandle').value.trim().replace(/^@/, ''); if (!handle) return null;
+    return { mode: 'account', handle, platform: $('#ntNet').value, handles: [] };
+  }
   const first = $('#ntFirst').value.trim(), last = $('#ntLast').value.trim(), state = $('#ntState').value.trim();
   const handles = $('#ntHandles').value.split(/[,\s]+/).map(h => h.trim().replace(/^@/, '')).filter(Boolean);
   if (!first && !last) return null;
   return { first, last, state, handles };
 }
 function personSeeds(p){
+  if (p.mode === 'account') return [(p.platform === 'x' || p.platform === 'bluesky' ? 'from:' : '@') + p.handle];   // this account's own posts, nowhere else
   const full = [p.first, p.last].filter(Boolean).join(' ');
   const out = [`"${full}"`]; if (p.state) out.push(`"${full}" ${p.state}`); out.push(full);
   p.handles.forEach(h => out.push('@' + h));
@@ -1135,17 +1151,26 @@ function personSeeds(p){
 $('#newTopicForm').onsubmit = async e => {
   e.preventDefault();
   const person = personFromForm();
-  const name = person ? [person.first, person.last].filter(Boolean).join(' ') : $('#ntName').value.trim();
-  if (!name) return (person ? $('#ntFirst') : $('#ntName')).focus();
+  const name = person ? (person.mode === 'account' ? '@' + person.handle : [person.first, person.last].filter(Boolean).join(' ')) : $('#ntName').value.trim();
+  if (!name) return (person ? (!$('#ntPAcct').hidden ? $('#ntHandle') : $('#ntFirst')) : $('#ntName')).focus();
   if (!ready()) return toast('Topics need the server, see SETUP', 3500);
   const seeds = [...(person ? personSeeds(person) : [name]), ...$('#ntSeeds').value.split('\n').map(s => s.trim()).filter(Boolean)];
   try{
     const soft = $('#ntSoft').value.split(/[,\n]/).map(x => x.trim()).filter(Boolean);
-    const settings = { breadth: +$('#ntBreadth').value, media: person ? 'everything' : $('#ntMedia').value, refresh_hours: +$('#ntRefresh').value, soft };
+    const settings = { breadth: person ? 1 : +$('#ntBreadth').value, media: person ? 'everything' : $('#ntMedia').value, refresh_hours: +$('#ntRefresh').value, soft };
     if (person) settings.person = person;
-    const t = await api('/api/topics', { method: 'POST', body: { name, seeds, settings } });
+    const body = { name, seeds, settings };
+    if (person && person.mode === 'account'){           // only the sources of that one network, nothing cross-site
+      try{ const srcs = (await api('/api/sources')).sources || []; const mine = srcs.filter(x => [x.kind, x.source, x.preset, x.platform].some(v => String(v || '').toLowerCase() === person.platform)).map(x => x.id); if (mine.length) body.sources = mine; else body.run = false; }catch(e){}
+    }
+    const t = await api('/api/topics', { method: 'POST', body });
+    if (person && person.mode === 'account'){           // their own posts straight in, plus follow lists where public
+      const pid = person.handle + '|' + person.platform;
+      api('/api/people/' + encodeURIComponent(pid) + '/more', { method: 'POST', body: { limit: 50, media: 'all' } }).catch(() => {});
+      if (['mastodon', 'bluesky'].includes(person.platform)) api('/api/people/' + encodeURIComponent(pid) + '/follows', { method: 'POST', body: {} }).catch(() => {});
+    }
     $('#ntName').value = ''; $('#ntSeeds').value = ''; $('#ntName').blur();
-    if (person){ ['ntFirst', 'ntLast', 'ntState', 'ntHandles'].forEach(id => $('#' + id).value = ''); $('#ntPerson').hidden = true; $('#ntPersonBtn').classList.remove('on'); }
+    if (person){ ['ntFirst', 'ntLast', 'ntState', 'ntHandles', 'ntHandle'].forEach(id => $('#' + id).value = ''); $('#ntPerson').hidden = true; $('#ntPersonBtn').classList.remove('on'); }
     toast('Searching for "' + name + '"…'); pollJobs();
     go('topic/' + t.id + '/dossier');
   }catch(err){ toast(err.message); }
@@ -1452,9 +1477,96 @@ function communitiesOf(graph){
   return comms;
 }
 let integrateRun = null;
+let crawlRun = null;
+// CRAWL (snowball sampling): starting at one account, read its follow lists, pick the relation you care
+// about (mutuals / following / followers), then do the same for each of those, out to N hops. Every
+// account touched gets its follows logged (white links in the web); optionally its posts too.
+async function openCrawl(id){
+  const who = id.split('|')[0];
+  openSheet(`<h3>⟲ CRAWL · @${esc(who)}</h3>
+    <p class="note" style="margin-bottom:10px">Walks the follow graph outward from this account and logs what it finds, so the web shows real links beyond the first circle. Mastodon and Bluesky only (the networks that publish follow lists).</p>
+    <div class="grid2">
+      <label class="field"><span>Relation to follow</span><select id="crMode"><option value="mutuals">Mutuals (follow each other)</option><option value="following">Who they follow</option><option value="followers">Who follows them</option></select></label>
+      <label class="field"><span>Hops</span><select id="crHops"><option value="1">1 · their circle</option><option value="2" selected>2 · friends of friends</option><option value="3">3 · three degrees</option></select></label>
+    </div>
+    <div class="grid2">
+      <label class="field"><span>Max accounts to touch</span><select id="crCap"><option value="15">15 · quick</option><option value="40" selected>40</option><option value="100">100 · slow</option></select></label>
+      <label class="field"><span>Also pull their posts</span><select id="crPosts"><option value="0">No · follows only</option><option value="1" selected>Yes · 20 recent posts each</option></select></label>
+    </div>
+    <p class="note">Mutuals is the industry-standard choice for a tight community (both sides chose each other); "who they follow" finds influences; "who follows them" finds audience. Each hop multiplies the work, so the cap stops it from running away.</p>
+    <div class="row" style="margin-top:10px;gap:8px"><button class="btn pri" id="crGo">▶ START</button><span class="note grow" id="crMsg"></span></div>
+    <div class="jlog" id="crLog" style="margin-top:10px;max-height:180px;overflow:auto"></div>`);
+  $('#crGo').onclick = () => crawlFollows(id, { mode: $('#crMode').value, hops: +$('#crHops').value, cap: +$('#crCap').value, posts: $('#crPosts').value === '1' });
+}
+async function crawlFollows(startId, o){
+  if (crawlRun){ crawlRun.cancel = true; return; }
+  const run = crawlRun = { cancel: false }; const btn = $('#crGo'), msg = $('#crMsg'), log = $('#crLog');
+  const say = t => { if (log && log.isConnected){ log.textContent += t + '\n'; log.scrollTop = log.scrollHeight; } };
+  if (btn) btn.textContent = '■ STOP';
+  const waitJob = async j => { let r = j; for (let i = 0; i < 60 && r && r.id && ['queued', 'running'].includes(r.state); i++){ await new Promise(x => setTimeout(x, 700)); r = await api('/api/jobs/' + j.id); } return r; };
+  const low = s => String(s || '').toLowerCase();
+  const seen = new Set([low(startId)]); let frontier = [startId], touched = 0, links = 0, posts = 0;
+  try{
+    for (let hop = 1; hop <= o.hops && frontier.length && !run.cancel; hop++){
+      const next = [];
+      say(`— hop ${hop}: ${frontier.length} account${frontier.length === 1 ? '' : 's'}`);
+      for (const id of frontier){
+        if (run.cancel || touched >= o.cap) break;
+        touched++; if (msg) msg.innerHTML = `<span class="spinner"></span> hop ${hop} · ${touched}/${o.cap} · @${esc(id.split('|')[0])}`;
+        let f; try{ f = await waitJob(await api('/api/people/' + encodeURIComponent(id) + '/follows', { method: 'POST', body: {} })); }catch(e){ say('  ✕ @' + id.split('|')[0] + ': ' + e.message); continue; }
+        if (!f || f.error || f.state === 'error'){ say('  ✕ @' + id.split('|')[0] + ': ' + ((f && (f.error || (f.log || []).slice(-1)[0])) || 'failed')); continue; }
+        if (o.posts){ try{ const m = await waitJob(await api('/api/people/' + encodeURIComponent(id) + '/more', { method: 'POST', body: { limit: 20, media: 'all' } })); posts += (m && m.stats && m.stats.new) || 0; }catch(e){} }
+        let p; try{ p = await api('/api/people/' + encodeURIComponent(id)); }catch(e){ continue; }
+        if (!p || p.error || !p.follows) continue;
+        const fo = [...p.follows.known, ...p.follows.unknown], fb = [...p.followed_by.known, ...p.followed_by.unknown];
+        const fbSet = new Set(fb.map(x => low(x.id)));
+        const pick = o.mode === 'following' ? fo : o.mode === 'followers' ? fb : fo.filter(x => fbSet.has(low(x.id)));
+        links += pick.length;
+        say(`  @${id.split('|')[0]}: follows ${p.follows.n} · followed by ${p.followed_by.n} · ${o.mode} ${pick.length}`);
+        pick.sort((a, b) => (b.n || b.posts || 0) - (a.n || a.posts || 0)).forEach(x => { if (!seen.has(low(x.id))){ seen.add(low(x.id)); next.push(x.id); } });
+      }
+      frontier = next;
+    }
+  } finally {
+    crawlRun = null;
+    const done = `Crawled ${touched} account${touched === 1 ? '' : 's'} · ${fmtN(links)} ${o.mode} links logged${o.posts ? ' · +' + fmtN(posts) + ' posts' : ''}${run.cancel ? ' · stopped' : ''}`;
+    say(done); if (msg) msg.textContent = done; if (btn) btn.textContent = '▶ START';
+    toast(done, 5000);
+    if (route.view === 'network') renderNetwork();
+  }
+}
 // PERSON card: where a name shows up online — handle guesses per network, name searches, people-search sites.
 // Links only: nothing is scraped from these, no addresses are stored. Built so you (or family) can see what's exposed.
-function personCardHTML(p, T){
+const PROFILE_URL = { x: h => `https://x.com/${h}`, mastodon: h => h.includes('@') ? `https://${h.split('@')[1]}/@${h.split('@')[0]}` : `https://mastodon.social/@${h}`, bluesky: h => `https://bsky.app/profile/${h}`, youtube: h => `https://www.youtube.com/@${h}`, reddit: h => `https://www.reddit.com/user/${h}`, tiktok: h => `https://www.tiktok.com/@${h}`, instagram: h => `https://www.instagram.com/${h}/`, threads: h => `https://www.threads.net/@${h}` };
+// links to other networks found in the account's OWN posts — the only cross-site evidence we accept
+const LINK_RE = /https?:\/\/(?:www\.|m\.)?(x\.com|twitter\.com|instagram\.com|tiktok\.com|youtube\.com|bsky\.app\/profile|threads\.net|reddit\.com\/user|github\.com|twitch\.tv|linktr\.ee|onlyfans\.com|patreon\.com|facebook\.com|linkedin\.com\/in|[a-z0-9-]+(?:\.[a-z0-9-]+)+(?=\/@))\/@?([A-Za-z0-9_.-]{2,})(?=[\/?#\s)]|$)/gi;
+function linkedAccounts(items){
+  const out = {}; items.forEach(it => { for (const m of String(it.text || '').matchAll(LINK_RE)){ const key = (m[1] + '/' + m[2]).toLowerCase().replace(/\/$/, ''); if (/\/(status|watch|p|reel|post|shorts|search|hashtag|explore|i|intent)$/.test(key)) continue; out[key] = out[key] || { url: m[0].replace(/[).,]+$/, ''), site: m[1].toLowerCase().replace(/\/.*/, ''), handle: m[2].replace(/^@/, ''), n: 0 }; out[key].n++; } });
+  return Object.values(out).sort((a, b) => b.n - a.n).slice(0, 20);
+}
+function personAccountCardHTML(p, items){
+  const pid = p.handle + '|' + p.platform, url = (PROFILE_URL[p.platform] || (h => '#'))(p.handle);
+  const own = items.filter(it => (it.author || '').toLowerCase() === p.handle.toLowerCase() && it.platform === p.platform);
+  const linked = linkedAccounts(own);
+  const tagged = {}; own.forEach(it => (String(it.text || '').replace(/https?:\/\/\S+/g, ' ').match(/(?:^|[^\w@])@([a-z0-9_.]{2,})/gi) || []).forEach(m => { const h = m.replace(/.*@/, '').toLowerCase().replace(/[.]+$/, ''); if (h !== p.handle.toLowerCase()) tagged[h] = (tagged[h] || 0) + 1; }));
+  const tags = Object.entries(tagged).sort((a, b) => b[1] - a[1]).slice(0, 20);
+  return `<div class="dcard span2 person">
+    <div class="dh">◉ @${esc(p.handle)} <span class="note">· ${esc(p.platform)} · built outward from this one account through real links only</span></div>
+    <div class="row wrap" style="gap:8px;margin:6px 0 10px">
+      <a class="btn sm" href="${esc(url)}" target="_blank" rel="noreferrer noopener">↗ OPEN PROFILE</a>
+      <button class="btn sm" data-prof="${esc(pid)}">◉ DOSSIER PROFILE</button>
+      <button class="btn sm" id="paPull">⬇ PULL 50 POSTS</button>
+      ${['mastodon', 'bluesky'].includes(p.platform) ? `<button class="btn sm" id="paFollows">↔ LOAD FOLLOWS</button><button class="btn sm" id="paCrawl">⟲ CRAWL HOPS</button>` : `<span class="note">${esc(p.platform)} publishes no follow list — links come from mentions and what they post.</span>`}
+      <span class="note grow" id="paMsg">${fmtN(own.length)} of their posts in the library</span>
+    </div>
+    <div class="note" style="margin-bottom:4px">Who they tag <small>(in their own posts · times tagged)</small></div>
+    <div class="meta">${tags.length ? tags.map(([h, n]) => `<button class="pill" data-focus="@${esc(h)}">@${esc(h)} ×${n}</button>`).join('') : '<span class="note">nothing yet — pull their posts first</span>'}</div>
+    <div class="note" style="margin:10px 0 4px">Linked elsewhere <small>(URLs they posted themselves — the only cross-network evidence used)</small></div>
+    <div class="meta">${linked.length ? linked.map(l => `<a class="pill a" href="${esc(l.url)}" target="_blank" rel="noreferrer noopener">${esc(l.site)} · ${esc(l.handle)}${l.n > 1 ? ' ×' + l.n : ''}</a>`).join('') : '<span class="note">no links to other networks in their posts so far</span>'}</div>
+  </div>`;
+}
+function personCardHTML(p, T, items){
+  if (p.mode === 'account') return personAccountCardHTML(p, items || []);
   const first = (p.first || '').toLowerCase().replace(/[^a-z0-9]/g, ''), last = (p.last || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const full = [p.first, p.last].filter(Boolean).join(' '), q = encodeURIComponent(`"${full}"${p.state ? ' ' + p.state : ''}`);
   const guesses = [...new Set([...(p.handles || []), first + last, first + '.' + last, first + '_' + last, first && last ? first[0] + last : '', first + last.slice(0, 1)].filter(h => h && h.length > 2))].slice(0, 8);
@@ -1506,8 +1618,12 @@ async function renderDossier(){
   const bars = (arr, max, cls) => `<div class="spark ${cls || ''}">${arr.map(v => `<i style="height:${Math.max(2, Math.round(100 * v / max))}%" title="${v}"></i>`).join('')}</div>`;
   const pct = v => Math.round(100 * v / Math.max(1, n));
   const person = (T.settings || {}).person || null;
+  let ownItems = items;
+  if (person && person.mode === 'account'){           // their own pulled posts live in the library, not only in this topic
+    try{ const r = await api('/api/search?' + new URLSearchParams({ q: '@' + person.handle, limit: 500, fuzzy: '0', synonyms: '0' })); ownItems = [...items, ...(r.items || [])]; }catch(e){}
+  }
   body.innerHTML = `<div class="dossier">
-    ${person ? personCardHTML(person, T) : ''}
+    ${person ? personCardHTML(person, T, ownItems) : ''}
     <div class="dcard span2">
       <div class="dh">${esc(name)} <span class="note">${fmtN(n)} posts · ${fmtN(who.length)} accounts · ${plats.length} sites${T.counts && (T.counts.pos || T.counts.neg) ? ' · you rated ' + fmtN(T.counts.pos + T.counts.neg) : ''}</span></div>
       ${wiki ? `<div class="wiki">${wiki.thumb ? `<img src="${esc(wiki.thumb)}" alt="" referrerpolicy="no-referrer">` : ''}<div><p>${esc(wiki.extract)}</p><a class="note" href="${esc(wiki.url)}" target="_blank" rel="noreferrer">Wikipedia · ${esc(wiki.title)} →</a></div></div>`
@@ -1531,6 +1647,13 @@ async function renderDossier(){
   </div>`;
   $$('[data-prof]', body).forEach(b => b.onclick = () => openProfile(b.dataset.prof));
   $$('[data-focus]', body).forEach(b => b.onclick = () => go('network?' + new URLSearchParams({ topic: T.id, focus: b.dataset.focus })));
+  if (person && person.mode === 'account'){
+    const pid = person.handle + '|' + person.platform, m = $('#paMsg', body);
+    const job = async (path, body2, label) => { m.innerHTML = `<span class="spinner"></span> ${label}…`; try{ let r = await api('/api/people/' + encodeURIComponent(pid) + path, { method: 'POST', body: body2 }); if (r.error) throw new Error(r.error); for (let i = 0; i < 60 && r.id && ['queued', 'running'].includes(r.state); i++){ await new Promise(x => setTimeout(x, 900)); r = await api('/api/jobs/' + r.id); } if (r.state === 'error') throw new Error((r.log || []).slice(-1)[0] || 'failed'); toast(label + ' done', 3000); renderDossier(); }catch(e){ m.textContent = e.message; } };
+    $('#paPull', body).onclick = () => job('/more', { limit: 50, media: 'all' }, 'Pulling posts');
+    const pf = $('#paFollows', body); if (pf) pf.onclick = () => job('/follows', {}, 'Reading follow lists');
+    const pc = $('#paCrawl', body); if (pc) pc.onclick = () => openCrawl(pid);
+  }
   const addH = $('#pAddHandle', body); if (addH) addH.onclick = async () => {
     const h = prompt('Handle to add as a search (without @):'); if (!h) return;
     const clean = h.trim().replace(/^@/, ''); const P = Object.assign({ handles: [] }, person); P.handles = [...new Set([...(P.handles || []), clean])];
@@ -2069,6 +2192,9 @@ async function bulk(action){
 //  NETWORK / WEB  — account profiles + connection spiderweb
 // ══════════════════════════════════════════════════════
 let nwSel = '';
+// ego network depth around a focused node (1 / 2 / 3 hops, or 6 = everything reachable)
+function webHops(){ return +store.get('webHops', 2) || 2; }
+function hopVia(q){ const W = pullWeights(); const via = ['m', 'f', 'h', 's'].filter(k => W[k] > 0); if (q && !/^[@#]/.test(q) && !via.includes('s')) via.push('s'); return via.join(','); }
 async function renderNetwork(){
   const web = $('#nwWeb'), listEl = $('#nwList');
   if (!ready()){
@@ -2091,7 +2217,7 @@ async function renderNetwork(){
   const extra = Object.assign(topic ? { topic } : {}, platform ? { platform } : {});
   try{
     [graph, people] = await Promise.all([
-      api('/api/graph?' + new URLSearchParams(Object.assign({ max: 80, focus: q, kinds }, extra))),
+      api('/api/graph?' + new URLSearchParams(Object.assign({ max: 80, focus: q, kinds }, q ? { hops: webHops(), via: hopVia(q) } : {}, extra))),
       api('/api/people?' + new URLSearchParams(Object.assign(sort ? { sort } : {}, extra, listQ ? { q: listQ } : {}))),
     ]);
   }catch(e){ web.innerHTML = `<div class="empty">${esc(e.message)}</div>`; listEl.innerHTML = ''; return; }
@@ -2170,8 +2296,15 @@ function drawWeb(box, graph){
   // layout targets: a disk. angle = community arc (members spread by rank), radius = connection rank (hubs inside)
   const total = nodes.length, R = 170;
   const rankByDeg = new Array(total); order.forEach((i, r) => rankByDeg[i] = r);
+  // ego view: concentric shells by hop (1 hop inner … N outer); inside a shell, more pull sits further in
+  const maxHop = graph.hops || 0; let hopRing = null;
+  if (focus && maxHop > 0 && nodes.some(n => n.hop > 0)){
+    const shell = {}; order.forEach(i => { const h = nodes[i].hop; if (h > 0) (shell[h] = shell[h] || []).push(i); });
+    const posIn = {}; Object.values(shell).forEach(arr => arr.forEach((i, k) => posIn[i] = arr.length > 1 ? k / (arr.length - 1) : 0));
+    hopRing = i => { const h = nodes[i].hop || maxHop; return 38 + R * ((h - 1 + 0.15 + 0.7 * (posIn[i] || 0)) / maxHop); };
+  }
   let ang = 0; const gap = 0.18;
-  comms.forEach(c => { const span = Math.max(0.25, 2 * Math.PI * (c.ids.length / total)) - gap; c.a0 = ang; c.a1 = ang + span; c.ids.sort((x, y) => deg[y] - deg[x]); c.ids.forEach((i, k) => { const t = c.ids.length > 1 ? k / (c.ids.length - 1) : .5; nodes[i].ta = c.a0 + t * span; nodes[i].tr = focus && nodes[i].id === focus ? 0 : 38 + R * Math.pow(rankByDeg[i] / Math.max(1, total - 1), .7); }); ang += span + gap; });
+  comms.forEach(c => { const span = Math.max(0.25, 2 * Math.PI * (c.ids.length / total)) - gap; c.a0 = ang; c.a1 = ang + span; c.ids.sort((x, y) => deg[y] - deg[x]); c.ids.forEach((i, k) => { const t = c.ids.length > 1 ? k / (c.ids.length - 1) : .5; nodes[i].ta = c.a0 + t * span; nodes[i].tr = focus && nodes[i].id === focus ? 0 : hopRing ? hopRing(i) : 38 + R * Math.pow(rankByDeg[i] / Math.max(1, total - 1), .7); }); ang += span + gap; });
   // influence = betweenness centrality (Brandes): the nodes that bridge different parts of the web
   const between = (() => { const bc = new Array(total).fill(0); for (let sIdx = 0; sIdx < total; sIdx++){ const S = [], P2 = nodes.map(() => []), sig = new Array(total).fill(0), dist = new Array(total).fill(-1); sig[sIdx] = 1; dist[sIdx] = 0; const Q = [sIdx]; while (Q.length){ const v = Q.shift(); S.push(v); for (const [w] of nb[v]){ if (dist[w] < 0){ dist[w] = dist[v] + 1; Q.push(w); } if (dist[w] === dist[v] + 1){ sig[w] += sig[v]; P2[w].push(v); } } } const delta = new Array(total).fill(0); while (S.length){ const w = S.pop(); for (const v of P2[w]) delta[v] += sig[v] / sig[w] * (1 + delta[w]); if (w !== sIdx) bc[w] += delta[w]; } } return bc; })();
   const maxN = Math.max(1, ...nodes.map(n => n.n)), maxB = Math.max(1e-9, ...between);
@@ -2195,9 +2328,10 @@ function drawWeb(box, graph){
   const legendHTML = () => (st.color === 'kind'
     ? ['account', 'hashtag', 'word'].map(k => `<span><i style="background:${KIND_COLOR[k]}"></i>${k === 'account' ? '@ accounts' : k === 'hashtag' ? '# tags' : 'words'} <em>${nodes.filter(n => n.kind === k).length}</em></span>`).join('')
     : comms.map((c, ci) => `<span><i style="background:${COMM[ci % COMM.length]}"></i>${esc(c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name)} <em>${c.ids.length}</em></span>`).join('')) + '<span class="shapes">● account &nbsp;■ tag &nbsp;○ word</span><span class="shapes"><b class="l1">━</b> mentions / follows &nbsp;<b class="l2">━</b> shared tags &nbsp;<b class="l3">━</b> shared words</span>';
-  const hintHTML = () => 'size = ' + (st.sizeBy === 'influence' ? 'influence' : 'posts') + ' · colour = ' + (st.color === 'kind' ? 'kind' : 'community') + (st.mode === '2d' ? ' · inner = more pull · drag to move around' : ' · drag to spin') + ' · pull @' + PW.m + ' ↔' + PW.f + ' #' + PW.h + ' w' + PW.s + ' · wheel to zoom · tap a node';
+  const hintHTML = () => 'size = ' + (st.sizeBy === 'influence' ? 'influence' : 'posts') + ' · colour = ' + (st.color === 'kind' ? 'kind' : 'community') + (st.mode === '2d' ? (focus && hopRing ? ' · rings = hops from the centre' : ' · inner = more pull') + ' · drag to move around' : ' · drag to spin') + ' · pull @' + PW.m + ' ↔' + PW.f + ' #' + PW.h + ' w' + PW.s + ' · wheel to zoom · tap a node';
   nwFocusNode = focus ? nodes[idx[focus]] : null;
-  const fb = nwFocusNode ? `<div class="focus">◎ ${nwFocusNode.kind === 'account' ? '@' : ''}${esc(nwFocusNode.label)}${nwFocusNode.kind === 'account' && nwFocusNode.person_id ? ' <button class="hbtn" data-fprof>PROFILE</button>' : ''} <button class="hbtn" data-fclear title="Show everything again">✕</button></div>` : '';
+  const H = webHops();
+  const fb = nwFocusNode ? `<div class="focus">◎ ${nwFocusNode.kind === 'account' ? '@' : ''}${esc(nwFocusNode.label)} <button class="hbtn" data-fhops title="How far from the centre to show: 1 hop = direct links, 2 = friends of friends, 3 = the classic three degrees, ALL = everything reachable. Only links that pull (see WEIGHTS) count as a hop.">${H >= 6 ? 'ALL' : H + ' HOP' + (H > 1 ? 'S' : '')} ▾</button>${nwFocusNode.kind === 'account' && nwFocusNode.person_id ? ' <button class="hbtn" data-fprof>PROFILE</button> <button class="hbtn" data-fcrawl title="Log this account\'s follows / followers / mutuals outward, hop by hop">CRAWL</button>' : ''} <button class="hbtn" data-fclear title="Show everything again">✕</button></div>` : '';
   box.innerHTML = `<canvas></canvas><div class="legend" id="webLegend"></div>${fb}
     <div class="strip"><div class="wtb"><button data-wm="3d" title="3-D: the floating web you can spin">3D</button><button data-wm="2d" title="2-D: the organized map — rings by connection, arcs by community — you can drag around">2D</button><span class="sep"></span><button data-wc="community" title="Colour by community (clusters found from the links)">COMMUNITY</button><button data-wc="kind" title="Colour by kind: account / tag / word">KIND</button><span class="sep"></span><button data-ws="posts" title="Size by number of posts">POSTS</button><button data-ws="influence" title="Size by influence: terms and accounts that bridge different parts of the web (betweenness centrality)">INFLUENCE</button><span class="sep"></span><button data-ww title="How hard each kind of connection pulls (mentions / follows / shared tags / shared words)">WEIGHTS</button><span class="sep"></span><button data-wf title="Full screen">⛶</button></div><div class="hint" id="webHint"></div></div>
     <div class="wpop" id="webWeights" hidden><div class="t">PULL STRENGTH <small>0 = drawn, but doesn't move or rank anything</small></div>${['m', 'f', 'h', 's'].map(k => `<label><span><b class="l${k === 'm' || k === 'f' ? 1 : k === 'h' ? 2 : 3}">━</b> ${PULL_NAMES[k]}</span><input type="range" min="0" max="10" step="1" data-pw="${k}" value="${PW[k]}"><em>${PW[k]}</em></label>`).join('')}<div class="row" style="justify-content:flex-end;gap:8px;margin-top:6px"><button class="hbtn" data-pwreset>DEFAULTS</button><button class="hbtn" data-pwclose>DONE</button></div></div>`;
@@ -2289,6 +2423,8 @@ function drawWeb(box, graph){
   cv.onwheel = e => { e.preventDefault(); st.zoom = Math.max(.6, Math.min(3.5, st.zoom * (e.deltaY < 0 ? 1.1 : 0.9))); };
   cv.ondblclick = () => { if (st.mode === '2d'){ st.panX = st.panY = 0; st.zoom = 1; } else st.auto = !st.auto; };
   const fp = $('[data-fprof]', box); if (fp) fp.onclick = () => openProfile(nwFocusNode.person_id);
+  const fh = $('[data-fhops]', box); if (fh) fh.onclick = () => { const seq = [1, 2, 3, 6]; store.set('webHops', seq[(seq.indexOf(webHops()) + 1) % seq.length]); renderNetwork(); };
+  const fcr = $('[data-fcrawl]', box); if (fcr) fcr.onclick = () => openCrawl(nwFocusNode.person_id);
   const fc = $('[data-fclear]', box); if (fc) fc.onclick = () => { $('#nwQ').value = ''; renderNetwork(); };
   $$('[data-wm]', box).forEach(b => b.onclick = () => { st.mode = b.dataset.wm; store.set('webMode', st.mode); if (st.mode === '2d'){ st.panX = st.panY = 0; } syncChrome(); draw(); });
   $$('[data-wc]', box).forEach(b => b.onclick = () => { st.color = b.dataset.wc; store.set('webColor', st.color); syncChrome(); draw(); });
@@ -2350,7 +2486,7 @@ async function openProfile(id){
       <button class="btn pri sm" id="pSave">SAVE NOTES</button>
       <button class="btn sm" id="pPosts">▦ THEIR POSTS</button>
       <button class="btn sm" id="pMore" title="Pull this account's recent posts into your library — no rating needed. They show in LIBRARY and the WEB right away.">⬇ LOAD 50 MORE POSTS</button>
-      ${p.follows_supported ? `<button class="btn sm" id="pFollows" title="Read the account's public follow lists so the web can draw real follow links">↔ ${p.follows_loaded ? 'RELOAD' : 'LOAD'} FOLLOWS</button>` : ''}
+      ${p.follows_supported ? `<button class="btn sm" id="pFollows" title="Read the account's public follow lists so the web can draw real follow links">↔ ${p.follows_loaded ? 'RELOAD' : 'LOAD'} FOLLOWS</button> <button class="btn sm" id="pCrawl" title="Log their mutuals / follows / followers outward, hop by hop">⟲ CRAWL HOPS</button>` : ''}
     </div>
     <p class="note" style="margin-top:8px">LOAD MORE pulls their recent posts straight in — nothing to rate. More of an account at once makes its patterns show up in the WEB.</p>`);
   $('#pMore').onclick = async () => {
@@ -2370,6 +2506,7 @@ async function openProfile(id){
       wait().catch(e => { toast(e.message); b.disabled = false; b.textContent = '⬇ LOAD 50 MORE POSTS'; });
     }catch(e){ toast(e.message); b.disabled = false; b.textContent = '⬇ LOAD 50 MORE POSTS'; }
   };
+  const pc = $('#pCrawl'); if (pc) pc.onclick = () => { closeSheet(); openCrawl(id); };
   const pf = $('#pFollows'); if (pf) pf.onclick = async () => {
     pf.disabled = true; pf.textContent = '⏳ READING…';
     try{

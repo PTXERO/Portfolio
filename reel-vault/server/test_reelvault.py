@@ -653,7 +653,11 @@ class TestPeopleMore(Base):
         j = people.handle(self.v, "POST", ["people", "ana|x", "more"], {}, {"limit": 10})
         self.assertEqual(j.get("kind"), "collect")
         self.assertIn("ana", j.get("title", ""))
-        self.assertEqual(people.handle(self.v, "POST", ["people", "nobody|x", "more"], {}, {}).get("error"), "no account")
+        # an X handle we have nothing from yet still works: start from one @account and build outward
+        j2 = people.handle(self.v, "POST", ["people", "nobody|x", "more"], {}, {})
+        self.assertEqual(j2.get("kind"), "collect")
+        self.assertEqual(self.v.jobs[j2["id"]].params["urls"], ["https://x.com/nobody/media"])
+        self.assertEqual(people.handle(self.v, "POST", ["people", "nobody|weirdsite", "more"], {}, {}).get("error"), "no account")
 
 
 class TestWordWebWeights(Base):

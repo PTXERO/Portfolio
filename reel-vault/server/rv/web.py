@@ -133,9 +133,13 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *args):
-        line = args[0] if args else ""
-        if "/api/jobs" not in line and "/media/" not in line:
-            sys.stderr.write("%s %s\n" % (self.log_date_time_string(), fmt % args))
+        # called with a request line for normal hits, but with (HTTPStatus, message) from send_error
+        try:
+            text = fmt % args if args else str(fmt)
+        except (TypeError, ValueError):
+            text = " ".join(str(x) for x in (fmt, *args))
+        if "/api/jobs" not in text and "/media/" not in text:
+            sys.stderr.write("%s %s\n" % (self.log_date_time_string(), text))
 
     # ── auth ────────────────────────────────────────────────────
     def _host(self):

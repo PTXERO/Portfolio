@@ -295,11 +295,21 @@
     let ids;
     const focusId = focus ? (focus.kind === 'account' ? Object.keys(kindOf).find((k) => k.startsWith('@' + focus.key + '|')) : focus.kind === 'hashtag' ? '#' + focus.key : 'w:' + focus.key) : null;
     const nb = (id) => { const out = []; for (const k in edgeW) { const [x, y] = k.split('\u0001'); if (x === id) out.push([y, edgeW[k], edgeT[k]]); else if (y === id) out.push([x, edgeW[k], edgeT[k]]); } return out.sort((p, q) => (p[2] - q[2]) || (q[1] - p[1])); };
+    // ego network: everything within `hops` of the focus, walking only links of the kinds in `via`
+    // (default: mentions, follows, shared tags — a shared word is not a hop). Nearer hops fill first,
+    // strongest links first inside a hop, so the cap trims the far edge, never the inner circle.
+    const hopOf = {};
     if (focusId && (kindOf[focusId] || nodeW[focusId])) {
-      const first = nb(focusId).filter(([k]) => kinds.has(kindOf[k])).slice(0, Math.floor(cap * 0.6));
-      const seen = new Set([focusId, ...first.map((p) => p[0])]);
-      for (const [k] of first) { for (const [k2] of nb(k).slice(0, 4)) { if (seen.size >= cap) break; if (kinds.has(kindOf[k2])) seen.add(k2); } }
-      ids = [...seen];
+      // a word's own relationships ARE shared words, so a word focus walks them too unless told otherwise
+      const hops = Math.max(1, Math.min(6, +opts.hops || 2)), via = new Set((opts.via || (kindOf[focusId] === 'word' ? 'm,f,h,s' : 'm,f,h')).split(',').filter(Boolean));
+      const steps = (k) => { const P = edgeP[k]; return P ? [...via].some((v) => P[v] > 0) : (edgeT[k] || 3) <= 2; };
+      const nbVia = (id) => { const out = []; for (const k in edgeW) { if (!steps(k)) continue; const [x, y] = k.split('\u0001'); if (x === id) out.push([y, edgeW[k], edgeT[k]]); else if (y === id) out.push([x, edgeW[k], edgeT[k]]); } return out.sort((p, q) => (q[1] - p[1]) || (p[2] - q[2])); };
+      hopOf[focusId] = 0; ids = [focusId]; let frontier = [focusId];
+      for (let h = 1; h <= hops && ids.length < cap; h++) {
+        const next = [];
+        for (const id of frontier) for (const [k] of nbVia(id)) { if (ids.length >= cap) break; if (hopOf[k] !== undefined || !kinds.has(kindOf[k])) continue; hopOf[k] = h; ids.push(k); next.push(k); }
+        frontier = next; if (!frontier.length) break;
+      }
     } else {
       const per = { account: Math.round(cap * 0.4), hashtag: Math.round(cap * 0.3), word: Math.round(cap * 0.3) };
       ids = [];
@@ -316,16 +326,17 @@
     const deg = {}; E.forEach((e) => { deg[e.a] = (deg[e.a] || 0) + e.w; deg[e.b] = (deg[e.b] || 0) + e.w; });
     const meta = await allMeta();
     const nodes = ids.map((id) => { const kind = kindOf[id] || 'word'; const label = kind === 'account' ? id.slice(1).split('|')[0] : kind === 'hashtag' ? id : id.slice(2);
-      return { id, kind, label, n: nodeN[id] || 0, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), person_id: kind === 'account' ? [...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id || null : null, attrs: kind === 'account' ? ((meta[[...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id]?.attrs) || []).slice(0, 3) : [] }; });
-    return { nodes, edges: E, focus: focusId && idset.has(focusId) ? focusId : null, focus_asked: opts.focus || '', kinds: [...kinds], generated: now() };
+      return { id, kind, label, n: nodeN[id] || 0, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), hop: hopOf[id] === undefined ? null : hopOf[id], person_id: kind === 'account' ? [...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id || null : null, attrs: kind === 'account' ? ((meta[[...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id]?.attrs) || []).slice(0, 3) : [] }; });
+    return { nodes, edges: E, focus: focusId && idset.has(focusId) ? focusId : null, focus_asked: opts.focus || '', kinds: [...kinds], hops: focusId ? Math.max(0, ...Object.values(hopOf)) : null, generated: now() };
   }
 
   // ── "load more posts": pull an account's own recent posts into the library, no rating needed.
   //    They show up in LIBRARY and the WEB straight away — the point is seeing an account en masse.
   // an id we only know from a follow list ("name@host|mastodon", "name.bsky.social|bluesky") → enough to ask the Worker
   function stub(id) {
-    const [author, platform] = String(id || '').replace(/^@/, '').split('|'); if (!author || !['mastodon', 'bluesky'].includes(platform)) return null;
-    const url = platform === 'bluesky' ? 'https://bsky.app/profile/' + author : platform === 'mastodon' && author.includes('@') ? 'https://' + author.split('@')[1] + '/@' + author.split('@')[0] : '';
+    const [author, platform] = String(id || '').replace(/^@/, '').split('|'); if (!author || !['mastodon', 'bluesky', 'reddit', 'youtube', 'lemmy'].includes(platform)) return null;   // what the Worker can read by handle
+    const url = platform === 'bluesky' ? 'https://bsky.app/profile/' + author : platform === 'mastodon' && author.includes('@') ? 'https://' + author.split('@')[1] + '/@' + author.split('@')[0]
+      : platform === 'reddit' ? 'https://www.reddit.com/user/' + author : platform === 'youtube' ? 'https://www.youtube.com/@' + author : '';
     return { id: author + '|' + platform, author, platform, author_url: url, items: [] };
   }
   // the instance the app searches the fediverse from (a remote account is best read through it)
@@ -386,7 +397,7 @@
       const P = Object.fromEntries(new URLSearchParams(qs || ''));
       const id = parts[1] ? decodeURIComponent(parts[1]) : null;
       if (parts[0] === 'graph') {
-        if (P.focus !== undefined || P.kinds !== undefined) return wordGraph({ focus: P.focus || '', kinds: P.kinds || 'account,hashtag,word', max: +P.max || 80, platform: P.platform || '', topic: P.topic || '' });
+        if (P.focus !== undefined || P.kinds !== undefined) return wordGraph({ focus: P.focus || '', kinds: P.kinds || 'account,hashtag,word', max: +P.max || 80, platform: P.platform || '', topic: P.topic || '', hops: P.hops, via: P.via });
         return graph({ topic: P.topic || null, max: +P.max || 60, min: +P.min || 1.5, platform: P.platform || '' });
       }
       if (!id) return list({ topic: P.topic || null, q: P.q || '', sort: P.sort || '', platform: P.platform || '' });

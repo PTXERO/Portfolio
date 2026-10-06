@@ -391,7 +391,7 @@ def _parse_focus(f):
     return {"kind": "word", "key": txt, "phrase": " " in txt}
 
 
-def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform="", topic=""):
+def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform="", topic="", hops=2, via=""):
     by, idf, h_df, w_df = _build(v)
     if platform:
         by = {k: a for k, a in by.items() if a.platform == platform}
@@ -538,18 +538,42 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
             focus_id = "#" + fz["key"]
         else:
             focus_id = "w:" + fz["key"]
+    # ego network: everything within `hops` of the focus, walking only links of the kinds in `via`
+    # (default: mentions, follows, shared tags — a shared word is not a hop). Nearer hops fill first,
+    # strongest links first inside a hop, so the cap trims the far edge, never the inner circle.
+    hop_of = {}
     if focus_id and (focus_id in kind_of or focus_id in node_w):
-        first = [p for p in nb(focus_id) if kind_of.get(p[0]) in kinds][:int(cap * 0.6)]
-        seen = [focus_id] + [p[0] for p in first]
-        sset = set(seen)
-        for k, *_ in first:
-            for k2, *_ in nb(k)[:4]:
-                if len(sset) >= cap:
-                    break
-                if kind_of.get(k2) in kinds and k2 not in sset:
-                    sset.add(k2)
-                    seen.append(k2)
-        ids = seen
+        hops = max(1, min(6, int(hops or 2)))
+        # a word's own relationships ARE shared words, so a word focus walks them too unless told otherwise
+        via_set = {x for x in str(via or ("m,f,h,s" if kind_of.get(focus_id) == "word" else "m,f,h")).split(",") if x}
+
+        def steps(k):
+            p = edge_p.get(k)
+            return any(p[x] > 0 for x in via_set if x in p) if p else edge_t.get(k, 3) <= 2
+
+        def nb_via(nid):
+            out = [(y if x == nid else x, w, edge_t.get((x, y), 3)) for (x, y), w in edge_w.items()
+                   if nid in (x, y) and steps((x, y))]
+            return sorted(out, key=lambda p: (-p[1], p[2]))
+
+        hop_of[focus_id] = 0
+        ids, frontier = [focus_id], [focus_id]
+        for h in range(1, hops + 1):
+            if len(ids) >= cap:
+                break
+            nxt = []
+            for nid in frontier:
+                for k, *_ in nb_via(nid):
+                    if len(ids) >= cap:
+                        break
+                    if k in hop_of or kind_of.get(k) not in kinds:
+                        continue
+                    hop_of[k] = h
+                    ids.append(k)
+                    nxt.append(k)
+            frontier = nxt
+            if not frontier:
+                break
     else:
         per = {"account": round(cap * 0.4), "hashtag": round(cap * 0.3), "word": round(cap * 0.3)}
         ids = []
@@ -583,21 +607,23 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
         label = nid[1:].split("|")[0] if kind == "account" else nid if kind == "hashtag" else nid[2:]
         pid = acct_key.get(nid) if kind == "account" else None
         nodes.append({"id": nid, "kind": kind, "label": label, "n": node_n[nid], "w": round(node_w[nid], 2),
-                      "strength": round(deg[nid], 1),
+                      "strength": round(deg[nid], 1), "hop": hop_of.get(nid),
                       "person_id": pid, "attrs": ((meta.get(pid) or {}).get("attrs", [])[:3] if pid else [])})
     return {"nodes": nodes, "edges": edges, "focus": focus_id if focus_id in idset else None,
-            "focus_asked": focus or "", "kinds": sorted(kinds), "generated": _now()}
+            "focus_asked": focus or "", "kinds": sorted(kinds), "hops": max(hop_of.values()) if hop_of else None,
+            "generated": _now()}
 
 
 def _stub(pid):
     """An account we only know from a follow list ("name@host|mastodon", "x.bsky.social|bluesky")."""
     author, _, platform = str(pid or "").lstrip("@").partition("|")
-    if not author or platform not in ("mastodon", "bluesky"):   # only networks we can read by handle alone
+    urls = {"bluesky": "https://bsky.app/profile/{h}", "x": "https://x.com/{h}/media", "youtube": "https://www.youtube.com/@{h}/videos",
+            "reddit": "https://www.reddit.com/user/{h}/submitted/", "tiktok": "https://www.tiktok.com/@{h}",
+            "instagram": "https://www.instagram.com/{h}/", "threads": "https://www.threads.net/@{h}"}
+    if not author or (platform not in urls and platform != "mastodon"):   # networks a profile page can be walked for
         return None
-    url = ""
-    if platform == "bluesky":
-        url = f"https://bsky.app/profile/{author}"
-    elif platform == "mastodon" and "@" in author:
+    url = urls.get(platform, "").format(h=author)
+    if platform == "mastodon" and "@" in author:
         user, host = author.split("@", 1)
         url = f"https://{host}/@{user}"
     a = _Acct(f"{author}|{platform}", {"author": author, "platform": platform, "author_url": url})
@@ -724,7 +750,8 @@ def handle(v, method, parts, params, body):
     if parts[0] == "graph":
         if "focus" in params or "kinds" in params:
             return word_graph(v, params.get("focus") or "", params.get("kinds") or "account,hashtag,word",
-                              int(params.get("max") or 80), params.get("platform") or "", params.get("topic") or "")
+                              int(params.get("max") or 80), params.get("platform") or "", params.get("topic") or "",
+                              params.get("hops") or 2, params.get("via") or "")
         return graph(v, params.get("topic") or None, int(params.get("max") or 60), float(params.get("min") or 1.5),
                      params.get("platform") or "")
     pid = parts[1] if len(parts) > 1 else None
