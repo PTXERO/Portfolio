@@ -18,6 +18,7 @@
 <script src="demo-data.js"></script>
 <script src="searchnet-local.js"></script>
 <script src="searchnet-learn.js"></script>
+<script src="searchnet-graph.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
 <style>
 :root{
@@ -343,6 +344,31 @@ pre.cmd i{color:var(--dim);font-style:normal}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 @media(max-width:899px){.brand small{display:none}}
 @media(max-width:360px){.brand{font-size:21px}}
+/* network / web */
+.web{position:relative;width:100%;height:60vh;min-height:320px;max-height:560px;border:1px solid var(--border);border-radius:12px;background:radial-gradient(circle at 50% 40%,rgba(66,212,245,.05),transparent 70%),var(--surface);overflow:hidden;touch-action:none;margin-bottom:14px}
+.web svg{width:100%;height:100%;display:block}
+.web .edge{stroke:var(--b2);stroke-linecap:round}
+.web .edge.you{stroke:var(--acc3);stroke-dasharray:3 3}
+.web .edge.ment{stroke:var(--acc2);opacity:.5}
+.web .node{cursor:pointer}
+.web .node circle{fill:var(--panel2);stroke:var(--acc);stroke-width:1.5px;transition:fill .15s}
+.web .node.sel circle{fill:var(--acc);stroke:var(--acc)}
+.web .node text{fill:var(--dim);font-family:var(--fmono);font-size:10px;pointer-events:none}
+.web .node.sel text{fill:var(--txt)}
+.web .hint{position:absolute;left:10px;bottom:8px;font-size:11px;color:var(--mut);pointer-events:none}
+.web .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:var(--dim)}
+.pcard{border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;background:var(--panel)}
+.pcard .top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.pcard .top b{font-size:15px}
+.pcard .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.pcard .pill{font-size:11px;padding:3px 8px;border:1px solid var(--b2);border-radius:12px;color:var(--dim)}
+.pcard .pill.t{color:var(--acc);border-color:rgba(200,245,66,.35)}
+.pcard .pill.a{color:var(--acc3);border-color:rgba(245,66,168,.35)}
+.spark{display:flex;align-items:flex-end;gap:2px;height:34px;margin-top:4px}
+.spark i{flex:1;background:var(--acc2);opacity:.6;border-radius:1px;min-height:1px}
+.wd{display:flex;gap:3px;margin-top:4px}
+.wd i{flex:1;text-align:center;font-size:9px;color:var(--mut);padding-top:2px}
+.wd b{display:block;background:var(--acc);opacity:.7;border-radius:1px;min-height:1px;margin-bottom:2px}
 </style>
 </head>
 <body>
@@ -436,6 +462,19 @@ pre.cmd i{color:var(--dim);font-style:normal}
   <div class="sentinel" id="sentinel"></div>
 </section>
 
+<!-- ══════════ NETWORK / WEB ══════════ -->
+<section class="view" id="vNetwork">
+  <h2 class="h">WEB</h2>
+  <p class="note" style="margin:6px 0 10px">Accounts you've collected and how they connect through shared content — follow the links to related creators. Built only from public posts on this device. It never guesses who anyone is; any label is one you add yourself.</p>
+  <div class="row wrap" style="gap:8px;margin-bottom:10px">
+    <select id="nwTopic" class="sel"><option value="">All topics</option></select>
+    <select id="nwSort" class="sel"><option value="">Most posts</option><option value="active">Recently active</option><option value="cadence">Posts most often</option><option value="name">Name</option></select>
+    <input id="nwQ" placeholder="find an account" autocapitalize="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:120px">
+  </div>
+  <div id="nwWeb" class="web"></div>
+  <div id="nwList"></div>
+</section>
+
 <!-- ══════════ SOURCES ══════════ -->
 <section class="view" id="vSources">
   <h2 class="h">SOURCES</h2>
@@ -523,6 +562,7 @@ python reel-vault/server/reelvault.py
 <nav class="bottom" aria-label="Main"><div class="in" id="nav">
   <button data-go="topics"><span class="i">◎</span><span class="l">TOPICS</span></button>
   <button data-go="library"><span class="i">▦</span><span class="l">LIBRARY</span></button>
+  <button data-go="network"><span class="i">◕</span><span class="l">WEB</span></button>
   <button data-go="sources"><span class="i">⊕</span><span class="l">SOURCES</span></button>
   <button data-go="jobs"><span class="i">⟳</span><span class="l">ACTIVITY</span><span class="badge" id="jobBadge" hidden></span></button>
   <button data-go="setup"><span class="i">⚙</span><span class="l">SETUP</span></button>
@@ -772,13 +812,13 @@ function parseHash(){
 function render(){
   route = parseHash();
   if (typeof hideReasons === 'function') hideReasons();
-  const map = { topics: 'vTopics', topic: 'vTopic', library: 'vLibrary', sources: 'vSources', jobs: 'vJobs', setup: 'vSetup' };
+  const map = { topics: 'vTopics', topic: 'vTopic', library: 'vLibrary', network: 'vNetwork', sources: 'vSources', jobs: 'vJobs', setup: 'vSetup' };
   if (!map[route.view]) route.view = 'topics';
   $$('.view').forEach(v => v.classList.toggle('on', v.id === map[route.view]));
   const navKey = route.view === 'topic' ? 'topics' : route.view;
   $$('#nav button').forEach(b => b.classList.toggle('on', b.dataset.go === navKey));
   updateBulk();
-  ({ topics: renderTopics, topic: renderTopic, library: enterLibrary, sources: renderSources, jobs: () => pollJobs(), setup: renderSetup })[route.view]();
+  ({ topics: renderTopics, topic: renderTopic, library: enterLibrary, network: renderNetwork, sources: renderSources, jobs: () => pollJobs(), setup: renderSetup })[route.view]();
   window.scrollTo(0, 0);
 }
 
@@ -1573,6 +1613,106 @@ async function bulk(action){
     runSearch();
   }catch(e){ toast(e.message); }
 }
+
+// ══════════════════════════════════════════════════════
+//  NETWORK / WEB  — account profiles + connection spiderweb
+// ══════════════════════════════════════════════════════
+let nwSel = '';
+async function renderNetwork(){
+  const web = $('#nwWeb'), listEl = $('#nwList');
+  if (!ready()){
+    web.innerHTML = '<div class="empty">The web is built from the accounts you collect. ' + (LOCAL ? 'Add a Worker in <a href="#sources">SOURCES</a> and run a topic.' : '<a href="#setup">Connect a server</a> or turn on browser mode.') + '</div>';
+    listEl.innerHTML = ''; return;
+  }
+  if (LIVE && !LOCAL){
+    web.innerHTML = '<div class="empty">The connection web runs in <b>browser mode</b> today. On the PC server it\'s coming soon — for now, switch to browser mode (CONNECT → Use this browser only) to explore account profiles and how they link.</div>';
+    listEl.innerHTML = ''; return;
+  }
+  // topic filter options (once)
+  const tsel = $('#nwTopic');
+  if (tsel.options.length <= 1){ try{ const ts = (await api('/api/topics')).topics || []; ts.forEach(t => { const o = document.createElement('option'); o.value = t.id; o.textContent = t.name; tsel.appendChild(o); }); }catch(e){} }
+  const topic = tsel.value, sort = $('#nwSort').value, q = $('#nwQ').value.trim();
+  web.innerHTML = '<div class="empty"><span class="spinner"></span></div>';
+  let graph, people;
+  try{
+    [graph, people] = await Promise.all([
+      api('/api/graph?' + new URLSearchParams(Object.assign({ max: 60 }, topic ? { topic } : {}))),
+      api('/api/people?' + new URLSearchParams(Object.assign(sort ? { sort } : {}, topic ? { topic } : {}, q ? { q } : {}))),
+    ]);
+  }catch(e){ web.innerHTML = `<div class="empty">${esc(e.message)}</div>`; listEl.innerHTML = ''; return; }
+  drawWeb(web, graph);
+  const P = people.people || [];
+  listEl.innerHTML = `<h3 class="s">${fmtN(people.total)} account${people.total === 1 ? '' : 's'}${topic ? ' in this topic' : ''}</h3>` + (P.length ? P.map(p => peopleCard(p)).join('') : '<div class="empty">No accounts yet — collect some posts first.</div>');
+  $$('[data-person]', listEl).forEach(el => el.onclick = () => openProfile(el.dataset.person));
+}
+function peopleCard(p){
+  const freq = p.per_week ? p.per_week + '/wk' : '';
+  const mediaBits = Object.entries(p.media || {}).map(([k, v]) => v + ' ' + k).join(' · ');
+  return `<div class="pcard" data-person="${esc(p.id)}">
+    <div class="top"><b>@${esc(p.author)}</b><span class="note">${esc(p.platform || '')}${p.author_name ? ' · ' + esc(p.author_name) : ''}</span><span class="grow"></span>${p.has_notes ? '<span class="pill a">✎ your notes</span>' : ''}</div>
+    <div class="note" style="margin-top:4px">${fmtN(p.n)} posts${freq ? ' · ' + freq : ''}${p.last ? ' · last ' + ago(p.last) : ''}${mediaBits ? ' · ' + esc(mediaBits) : ''}</div>
+    <div class="meta">${(p.topics || []).map(t => `<span class="pill t">${esc(t)}</span>`).join('')}${(p.hashtags || []).slice(0, 3).map(h => `<span class="pill">#${esc(h)}</span>`).join('')}${(p.attrs || []).map(a => `<span class="pill a">${esc(a)}</span>`).join('')}</div>
+  </div>`;
+}
+// tiny force-directed layout → SVG spiderweb
+function drawWeb(box, graph){
+  const nodes = (graph.nodes || []).map(n => Object.assign({}, n));
+  if (!nodes.length){ box.innerHTML = '<div class="empty">No connections yet. Collect more posts, or widen a topic — accounts link up when they share hashtags, words or mentions.</div>'; return; }
+  const W = box.clientWidth || 340, H = box.clientHeight || 360;
+  const idx = {}; nodes.forEach((n, i) => { idx[n.id] = i; n.x = W/2 + Math.cos(i) * (40 + i*3); n.y = H/2 + Math.sin(i*1.3) * (40 + i*2); n.vx = 0; n.vy = 0; });
+  const edges = (graph.edges || []).filter(e => idx[e.a] != null && idx[e.b] != null);
+  const maxW = Math.max(1, ...edges.map(e => e.w));
+  const maxS = Math.max(1, ...nodes.map(n => n.strength));
+  // simulate
+  for (let step = 0; step < 160; step++){
+    for (let i = 0; i < nodes.length; i++) for (let j = i+1; j < nodes.length; j++){
+      const a = nodes[i], b = nodes[j]; let dx = a.x-b.x, dy = a.y-b.y, d2 = dx*dx+dy*dy || 1; const f = 1400/d2; const d = Math.sqrt(d2);
+      a.vx += f*dx/d; a.vy += f*dy/d; b.vx -= f*dx/d; b.vy -= f*dy/d;
+    }
+    edges.forEach(e => { const a = nodes[idx[e.a]], b = nodes[idx[e.b]]; let dx = b.x-a.x, dy = b.y-a.y; const d = Math.sqrt(dx*dx+dy*dy) || 1; const k = 0.008 * (e.w/maxW + 0.2) * (d - 60); a.vx += k*dx/d; a.vy += k*dy/d; b.vx -= k*dx/d; b.vy -= k*dy/d; });
+    nodes.forEach(n => { n.vx += (W/2 - n.x)*0.004; n.vy += (H/2 - n.y)*0.004; n.x += Math.max(-8, Math.min(8, n.vx)); n.y += Math.max(-8, Math.min(8, n.vy)); n.vx *= 0.82; n.vy *= 0.82; n.x = Math.max(16, Math.min(W-16, n.x)); n.y = Math.max(16, Math.min(H-16, n.y)); });
+  }
+  const svg = ['<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">'];
+  edges.forEach(e => { const a = nodes[idx[e.a]], b = nodes[idx[e.b]]; const cls = e.you ? 'edge you' : e.m ? 'edge ment' : 'edge'; svg.push(`<line class="${cls}" x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke-width="${(0.6 + 2.4*e.w/maxW).toFixed(2)}"/>`); });
+  nodes.forEach(n => { const r = 5 + 9*Math.sqrt(n.strength/maxS); const lbl = n.author.length > 11 ? n.author.slice(0, 10) + '…' : n.author; svg.push(`<g class="node${n.id === nwSel ? ' sel' : ''}" data-node="${esc(n.id)}"><circle r="${r.toFixed(1)}" cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}"/><text x="${n.x.toFixed(1)}" y="${(n.y + r + 10).toFixed(1)}" text-anchor="middle">@${esc(lbl)}</text></g>`); });
+  svg.push('</svg><div class="hint">● bigger = more connected · line = shared content · tap a node</div>');
+  box.innerHTML = svg.join('');
+  $$('[data-node]', box).forEach(g => g.onclick = () => { nwSel = g.dataset.node; openProfile(nwSel); });
+}
+async function openProfile(id){
+  let p; try{ p = await api('/api/people/' + encodeURIComponent(id)); }catch(e){ return toast(e.message); }
+  if (!p || p.error) return toast('No profile');
+  const hmax = Math.max(1, ...(p.hours || [1]));
+  const wd = ['S','M','T','W','T','F','S']; const wmax = Math.max(1, ...(p.weekdays || [1]));
+  const media = Object.entries(p.media || {}).map(([k, v]) => `${v} ${k}`).join(' · ');
+  openSheet(`<h3>@${esc(p.author)} <span class="note" style="font-weight:400">· ${esc(p.platform || '')}</span></h3>
+    ${p.author_url ? `<a class="note" href="${esc(p.author_url)}" target="_blank" rel="noreferrer" style="word-break:break-all">${esc(p.author_url)}</a>` : ''}
+    <div class="note" style="margin:8px 0">${fmtN(p.n)} posts${p.per_week ? ' · ~' + p.per_week + '/week' : ''}${p.span_days ? ' · over ' + fmtN(p.span_days) + 'd' : ''}${media ? ' · ' + esc(media) : ''}${p.likes_median ? ' · ♥ ' + fmtN(p.likes_median) + ' typ.' : ''}</div>
+    ${p.hours && p.hours.some(x => x) ? `<div class="note" style="margin-top:8px">When they post (UTC)</div><div class="spark">${p.hours.map(h => `<i style="height:${Math.round(100*h/hmax)}%" title="${h}"></i>`).join('')}</div>
+      <div class="wd">${p.weekdays.map((d, i) => `<i><b style="height:${Math.round(22*d/wmax)}px"></b>${wd[i]}</i>`).join('')}</div>` : ''}
+    ${p.topics && p.topics.length ? `<h3 class="s">Topics</h3><div class="meta">${p.topics.map(t => `<span class="pill t">${esc(t.name)} · ${t.matched}${t.liked ? ' 👍' + t.liked : ''}</span>`).join('')}</div>` : ''}
+    ${p.hashtags && p.hashtags.length ? `<h3 class="s">Posts about</h3><div class="meta">${p.hashtags.slice(0, 10).map(h => `<span class="pill">#${esc(h.value)} ${h.count}</span>`).join('')}${p.words.slice(0, 8).map(w => `<span class="pill">${esc(w.value)}</span>`).join('')}</div>` : ''}
+    ${p.connected && p.connected.length ? `<h3 class="s">Connected accounts</h3><div class="meta" id="pConn">${p.connected.map(c => `<span class="pill" data-open="${esc(c.id)}" style="cursor:pointer">@${esc(c.author)}${c.shared_hashtags ? ' · ' + c.shared_hashtags + ' #' : ''}${c.why.some(w => w.kind === 'mentions') ? ' · @' : ''}</span>`).join('')}</div>` : ''}
+    ${p.mentions_out && p.mentions_out.length ? `<h3 class="s">Mentions</h3><div class="meta">${p.mentions_out.map(m => `<span class="pill${m.known ? ' a' : ''}" ${m.known ? `data-open="${esc(m.handle + '|' + p.platform)}" style="cursor:pointer"` : ''}>@${esc(m.handle)} ${m.count}</span>`).join('')}</div>` : ''}
+    <h3 class="s">Your notes <small class="note">(private to this device)</small></h3>
+    <p class="note" style="margin-bottom:6px">Labels and notes you add here are your own — the app never guesses them. Use them to shape your searches.</p>
+    <input id="pAttrs" placeholder="your labels, comma-separated (e.g. artist, favourite)" value="${esc((p.meta.attrs || []).join(', '))}" autocapitalize="none">
+    <textarea id="pNotes" rows="3" placeholder="notes…" style="margin-top:8px">${esc(p.meta.notes || '')}</textarea>
+    <div class="row wrap" style="margin-top:10px">
+      <button class="btn pri sm" id="pSave">SAVE NOTES</button>
+      <button class="btn sm" id="pPosts">▦ THEIR POSTS</button>
+    </div>`);
+  $$('[data-open]').forEach(el => el.onclick = () => { closeSheet(); nwSel = el.dataset.open; openProfile(el.dataset.open); });
+  $('#pSave').onclick = async () => {
+    const attrs = $('#pAttrs').value.split(',').map(s => s.trim()).filter(Boolean);
+    try{ await api('/api/people/' + encodeURIComponent(id), { method: 'PATCH', body: { attrs, notes: $('#pNotes').value } }); toast('Saved'); closeSheet(); if (route.view === 'network') renderNetwork(); }
+    catch(e){ toast(e.message); }
+  };
+  $('#pPosts').onclick = () => { closeSheet(); go('library?q=' + encodeURIComponent('@' + p.author)); };
+}
+$('#nwTopic').onchange = renderNetwork;
+$('#nwSort').onchange = renderNetwork;
+let nwQT; $('#nwQ').oninput = () => { clearTimeout(nwQT); nwQT = setTimeout(() => { if (route.view === 'network') renderNetwork(); }, 300); };
 
 // ══════════════════════════════════════════════════════
 //  SOURCES

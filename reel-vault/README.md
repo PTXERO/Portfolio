@@ -92,6 +92,32 @@ transcription, on-screen-text OCR, semantic meaning-matching, and sites that req
 login (X, Instagram). It plays videos straight from their source URL instead of proxying
 them.
 
+## The web — accounts and how they connect
+
+**WEB** turns the accounts you've collected into a map for finding related
+creators. For each account it summarises, from their **public posts only**:
+what they post about (topics, hashtags, distinctive words), their media mix,
+how often and when they post, and typical engagement. The spiderweb links
+accounts that share content — shared hashtags, shared vocabulary, or
+mentions — and the more they share, the stronger (and thicker) the link, so
+you can hop from one creator to related ones. Tap a node for the profile;
+tap a connected account to jump to theirs; **▦ THEIR POSTS** opens everything
+of theirs in your library.
+
+This is built for **content discovery, not surveillance of people**, and it's
+deliberately limited:
+
+- Only accounts **you** collected, only from their own public posts, all on
+  your device.
+- It **never guesses** who someone is or any sensitive trait (sexuality,
+  politics, religion, health, identity). Any label on a profile is one **you**
+  typed, kept locally, and shown as your own note — it just helps shape your
+  searches.
+- **No cross-platform de-anonymising.** Each account is profiled on its own;
+  "same person" is only ever a link you add by hand.
+
+(Available in browser mode today; coming to the PC server.)
+
 ## Start fresh (wipe)
 
 Erase the whole library — every collected video, topic, vote and download — and start over:

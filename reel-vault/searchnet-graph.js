@@ -1,0 +1,199 @@
+/* ─────────────────────────────────────────────────────────────────
+ *  SearchNet — account profiles & the connection web (spiderweb).
+ *
+ *  PURPOSE: find related content. For every account whose PUBLIC posts
+ *  you've already collected, this summarises WHAT they post (topics,
+ *  hashtags, media, cadence) and how accounts connect to each other
+ *  through SHARED CONTENT — so you can hop from one creator to related
+ *  ones. More shared signal = a stronger link in the web.
+ *
+ *  ETHICS (enforced here, by design):
+ *   • Only accounts YOU collected, only from their own public posts.
+ *   • It never guesses sensitive traits (sexuality, politics, religion,
+ *     health, ethnicity, real identity). Any such label is one YOU type
+ *     in, kept on your device, and shown as your own note — never inferred.
+ *   • No cross-platform de-anonymisation. Each account is profiled on its
+ *     own; "same person" is only ever a link you add by hand.
+ *   • Everything stays on this device. Nothing is published or tracked.
+ *
+ *  Attaches to window.SearchNetLocal as .people.
+ * ───────────────────────────────────────────────────────────────── */
+(function () {
+  'use strict';
+  const L = window.SearchNetLocal;
+  if (!L) return;
+  const idb = L.idb;
+  const now = () => Math.floor(Date.now() / 1000);
+  const STOP = new Set('a an and are as at be but by for from has have he her his i in into is it its just me my no not of on or our so that the their them then there these they this to too up us was we were what when which who will with you your rt via amp http https www com de la el en que un the and for'.split(' '));
+  const stem = (w) => w.replace(/(ings?|edly|ed|es|s|ly)$/, '') || w;
+  const tokens = (t) => (String(t || '').toLowerCase().replace(/https?:\/\/\S+/g, ' ').match(/[\p{L}\p{N}]+/gu) || []);
+  const mentionsIn = (t) => [...new Set((String(t || '').match(/(?:^|[^\w@])@([a-z0-9_.]{2,})/gi) || []).map((m) => m.replace(/.*@/, '').toLowerCase().replace(/[.]+$/, '')))];
+  const hashSet = (it) => new Set((it.hashtags || '').toLowerCase().split(/\s+/).filter(Boolean));
+  const pid = (it) => (it.author || '?') + '|' + (it.platform || '?');
+  const median = (xs) => { if (!xs.length) return 0; const s = xs.slice().sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); };
+
+  // ── user-added meta (notes / your own labels / hand links), kept local ──
+  async function allMeta() { const row = await idb.get('kv', 'people_meta'); return (row && row.v) || {}; }
+  async function getMeta(id) { return (await allMeta())[id] || { notes: '', attrs: [], links: [] }; }
+  async function setMeta(id, patch) {
+    const all = await allMeta(); const m = Object.assign({ notes: '', attrs: [], links: [] }, all[id] || {});
+    if ('notes' in patch) m.notes = String(patch.notes || '').slice(0, 4000);
+    if ('attrs' in patch) m.attrs = [...new Set((patch.attrs || []).map((a) => String(a).trim()).filter(Boolean))].slice(0, 40);
+    if ('links' in patch) m.links = [...new Set((patch.links || []).map(String).filter(Boolean))].slice(0, 40);
+    all[id] = m; await idb.put('kv', { k: 'people_meta', v: all }); return m;
+  }
+
+  // ── build per-account aggregates from collected items ──
+  async function build() {
+    const items = await idb.all('items');
+    const by = new Map();                      // id -> {author, platform, author_url, author_name, items:[]}
+    for (const it of items) {
+      if (!it.author) continue;
+      const id = pid(it);
+      let a = by.get(id);
+      if (!a) by.set(id, a = { id, author: it.author, platform: it.platform, author_url: it.author_url || '', author_name: it.author_name || '', items: [] });
+      a.items.push(it);
+      if (!a.author_url && it.author_url) a.author_url = it.author_url;
+      if (!a.author_name && it.author_name) a.author_name = it.author_name;
+    }
+    // document frequency across accounts for rarity weighting
+    const hDF = {}, wDF = {};
+    for (const a of by.values()) {
+      const H = new Set(), Wd = new Set();
+      a.items.forEach((it) => { hashSet(it).forEach((h) => H.add(h)); new Set(tokens(it.text).filter((w) => w.length > 3 && !STOP.has(w))).forEach((w) => Wd.add(w)); });
+      H.forEach((h) => hDF[h] = (hDF[h] || 0) + 1); Wd.forEach((w) => wDF[w] = (wDF[w] || 0) + 1);
+      a._H = H; a._W = Wd;
+      a._mentions = new Set(); a.items.forEach((it) => mentionsIn(it.text).forEach((m) => a._mentions.add(m)));
+    }
+    const N = by.size || 1;
+    const idf = (df) => Math.log((N + 1) / ((df || 0) + 1)) + 1;
+    return { by, N, hDF, wDF, idf };
+  }
+
+  // votes → which topics an account's items sit in
+  async function voteIndex() {
+    const votes = await idb.all('votes'); const byItem = new Map();
+    votes.forEach((v) => { (byItem.get(v.item_id) || byItem.set(v.item_id, []).get(v.item_id)).push(v); });
+    const topics = {}; (await idb.all('topics')).forEach((t) => topics[t.id] = t.name);
+    return { byItem, topics };
+  }
+
+  function cadence(items) {
+    const hours = Array(24).fill(0), weekdays = Array(7).fill(0); let lo = Infinity, hi = 0;
+    items.forEach((it) => { const ts = it.posted_at; if (!ts) return; const d = new Date(ts * 1000); hours[d.getUTCHours()]++; weekdays[d.getUTCDay()]++; lo = Math.min(lo, ts); hi = Math.max(hi, ts); });
+    const span = isFinite(lo) ? Math.max(1, (hi - lo) / 86400) : 0;
+    return { hours, weekdays, first: isFinite(lo) ? lo : null, last: hi || null, span_days: Math.round(span), per_week: span ? +(items.filter((i) => i.posted_at).length / (span / 7)).toFixed(1) : 0 };
+  }
+  function topCount(items, pick, n = 12) { const c = {}; items.forEach((it) => pick(it).forEach((v) => v && (c[v] = (c[v] || 0) + 1))); return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, n).map(([value, count]) => ({ value, count })); }
+
+  // ── a single account's profile ──
+  async function profile(id) {
+    const { by, idf, hDF, wDF } = await build();
+    const a = by.get(id); if (!a) return { error: 'no account' };
+    const { byItem, topics } = await voteIndex();
+    const items = a.items;
+    const cad = cadence(items);
+    const media = {}; items.forEach((it) => { const m = it.media || 'video'; media[m] = (media[m] || 0) + 1; });
+    const durs = items.filter((it) => it.duration > 0).map((it) => it.duration);
+    const words = topCount(items, (it) => tokens(it.text).filter((w) => w.length > 3 && !STOP.has(w))).map((x) => Object.assign(x, { w: +(x.count * idf(wDF[x.value])).toFixed(1) })).sort((a, b) => b.w - a.w).slice(0, 12);
+    // topic membership from votes
+    const tstat = {};
+    items.forEach((it) => (byItem.get(it.id) || []).forEach((v) => { const s = tstat[v.topic_id] || (tstat[v.topic_id] = { topic_id: v.topic_id, name: topics[v.topic_id] || '?', matched: 0, liked: 0, disliked: 0, score: 0 }); s.matched++; if (v.label > 0) s.liked++; else if (v.label < 0) s.disliked++; s.score += v.score || 0; }));
+    const topicRows = Object.values(tstat).map((s) => ({ ...s, score: +(s.score / s.matched).toFixed(3) })).sort((a, b) => b.matched - a.matched);
+    // connections (this account vs others)
+    const edges = edgesFor(a, by, idf, hDF, wDF).slice(0, 12);
+    const recent = items.filter((it) => it.media_url || it.thumbnail || it.url).sort((x, y) => (y.posted_at || 0) - (x.posted_at || 0)).slice(0, 8)
+      .map((it) => ({ id: it.id, text: (it.text || '').slice(0, 160), media: it.media, thumbnail: it.thumbnail, url: it.url, posted_at: it.posted_at, likes: it.likes }));
+    const mentions = {}; items.forEach((it) => mentionsIn(it.text).forEach((m) => { if (m !== a.author.toLowerCase()) mentions[m] = (mentions[m] || 0) + 1; }));
+    return {
+      id, author: a.author, author_name: a.author_name, platform: a.platform, author_url: a.author_url,
+      n: items.length, ...cad, media, dur_median: median(durs), likes_median: median(items.map((i) => i.likes || 0)), views_median: median(items.map((i) => i.views || 0)),
+      langs: topCount(items, (it) => it.lang ? [it.lang] : [], 6), hashtags: topCount(items, (it) => [...hashSet(it)]), words,
+      topics: topicRows, connected: edges,
+      mentions_out: Object.entries(mentions).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([handle, count]) => ({ handle, count, known: by.has(handle + '|' + a.platform) })),
+      meta: await getMeta(id),
+    };
+  }
+
+  // ── connection strength between one account and the rest ──
+  function edgesFor(a, by, idf, hDF, wDF) {
+    const out = [];
+    for (const b of by.values()) {
+      if (b.id === a.id) continue;
+      const why = [];
+      let w = 0;
+      // shared hashtags, rarity-weighted
+      let hs = 0, hn = 0; a._H.forEach((h) => { if (b._H.has(h)) { hs += idf(hDF[h]); hn++; } });
+      if (hn) { w += hs; why.push({ kind: 'hashtags', n: hn }); }
+      // shared distinctive words
+      let ws = 0, wn = 0; a._W.forEach((x) => { if (b._W.has(x)) { ws += 0.5 * idf(wDF[x]); wn++; } });
+      if (wn) { w += ws; }
+      // mentions (either direction)
+      const mAB = a._mentions.has(b.author.toLowerCase()), mBA = b._mentions.has(a.author.toLowerCase());
+      if (mAB || mBA) { w += 3; why.push({ kind: 'mentions' }); }
+      if (w > 0) out.push({ id: b.id, author: b.author, platform: b.platform, author_url: b.author_url, w: +w.toFixed(2), why, shared_hashtags: hn, shared_words: wn });
+    }
+    return out.sort((x, y) => y.w - x.w);
+  }
+
+  // ── the whole web, capped to the most active accounts ──
+  async function graph(opts = {}) {
+    const { by, idf, hDF, wDF } = await build();
+    const { byItem } = await voteIndex();
+    let accounts = [...by.values()];
+    if (opts.topic) accounts = accounts.filter((a) => a.items.some((it) => (byItem.get(it.id) || []).some((v) => v.topic_id === opts.topic)));
+    accounts.sort((a, b) => b.items.length - a.items.length);
+    const cap = Math.min(opts.max || 60, 120);
+    const top = accounts.slice(0, cap);
+    const topSet = new Set(top.map((a) => a.id));
+    const meta = await allMeta();
+    const strength = {}; const edges = [];
+    for (let i = 0; i < top.length; i++) {
+      for (let j = i + 1; j < top.length; j++) {
+        const a = top[i], b = top[j]; let w = 0, hn = 0;
+        a._H.forEach((h) => { if (b._H.has(h)) { w += idf(hDF[h]); hn++; } });
+        let wn = 0; a._W.forEach((x) => { if (b._W.has(x)) { w += 0.5 * idf(wDF[x]); wn++; } });
+        const ment = a._mentions.has(b.author.toLowerCase()) || b._mentions.has(a.author.toLowerCase());
+        if (ment) w += 3;
+        if (w >= (opts.min || 1.5) || ment) { edges.push({ a: a.id, b: b.id, w: +w.toFixed(2), h: hn, m: ment ? 1 : 0 }); strength[a.id] = (strength[a.id] || 0) + w; strength[b.id] = (strength[b.id] || 0) + w; }
+      }
+    }
+    // hand-added links always show
+    for (const a of top) (meta[a.id]?.links || []).forEach((lid) => { if (topSet.has(lid) && !edges.some((e) => (e.a === a.id && e.b === lid) || (e.a === lid && e.b === a.id))) edges.push({ a: a.id, b: lid, w: 2, h: 0, m: 0, you: 1 }); });
+    const nodes = top.map((a) => ({ id: a.id, author: a.author, platform: a.platform, n: a.items.length, strength: +(strength[a.id] || 0).toFixed(1), attrs: (meta[a.id]?.attrs || []).slice(0, 4), topics: [...new Set(a.items.flatMap((it) => (byItem.get(it.id) || []).map((v) => v.topic_id)))].length }));
+    return { nodes, edges, total_accounts: by.size, shown: nodes.length, generated: now() };
+  }
+
+  // ── people list (ranked), for the NETWORK view's side list ──
+  async function list(opts = {}) {
+    const { by, idf, hDF, wDF } = await build();
+    const { byItem, topics } = await voteIndex();
+    const meta = await allMeta();
+    let rows = [...by.values()];
+    if (opts.topic) rows = rows.filter((a) => a.items.some((it) => (byItem.get(it.id) || []).some((v) => v.topic_id === opts.topic)));
+    if (opts.q) { const q = opts.q.toLowerCase(); rows = rows.filter((a) => (a.author + ' ' + a.author_name).toLowerCase().includes(q)); }
+    const out = rows.map((a) => {
+      const cad = cadence(a.items);
+      const tset = new Set(); a.items.forEach((it) => (byItem.get(it.id) || []).forEach((v) => tset.add(topics[v.topic_id])));
+      const media = {}; a.items.forEach((it) => { const m = it.media || 'video'; media[m] = (media[m] || 0) + 1; });
+      return { id: a.id, author: a.author, author_name: a.author_name, platform: a.platform, author_url: a.author_url, n: a.items.length, per_week: cad.per_week, last: cad.last, topics: [...tset].filter(Boolean).slice(0, 4), media, hashtags: topCount(a.items, (it) => [...hashSet(it)], 4).map((x) => x.value), attrs: (meta[a.id]?.attrs || []).slice(0, 4), has_notes: !!(meta[a.id]?.notes) };
+    });
+    const SO = { active: (x, y) => (y.last || 0) - (x.last || 0), cadence: (x, y) => y.per_week - x.per_week, name: (x, y) => x.author.localeCompare(y.author) };
+    out.sort(SO[opts.sort] || ((x, y) => y.n - x.n));
+    return { people: out, total: out.length };
+  }
+
+  // ── router (mirrors the server-style API the app calls) ──
+  L.people = {
+    profile, graph, list, setMeta, getMeta,
+    async request(method, parts, qs, body) {
+      const P = Object.fromEntries(new URLSearchParams(qs || ''));
+      const id = parts[1] ? decodeURIComponent(parts[1]) : null;
+      if (parts[0] === 'graph') return graph({ topic: P.topic || null, max: +P.max || 60, min: +P.min || 1.5 });
+      if (!id) return list({ topic: P.topic || null, q: P.q || '', sort: P.sort || '' });
+      if (method === 'GET') return profile(id);
+      if (method === 'PATCH') return setMeta(id, body || {});
+      return { error: 'people route not available: ' + parts.join('/') };
+    },
+  };
+})();

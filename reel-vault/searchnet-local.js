@@ -203,6 +203,7 @@
   const Local = {
     enabled: false,
     learn: null,                 // set by searchnet-learn.js
+    people: null,                // set by searchnet-graph.js
     async init() { await settings(); await loadSyn(); this.enabled = true; },
 
     async request(path, opts = {}) {
@@ -271,6 +272,8 @@
 
       // topics are handled by the learn module when present
       if (route === 'topics' && this.learn) return this.learn.request(method, parts, qs || '', body);
+      // account profiles + connection web (searchnet-graph.js)
+      if ((route === 'people' || route === 'graph') && this.people) return this.people.request(method, parts, qs || '', body);
 
       return { error: 'not available in browser mode: ' + path };
     },
