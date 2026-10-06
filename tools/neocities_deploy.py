@@ -24,8 +24,7 @@ API = os.environ.get("NEOCITIES_API_URL", "https://neocities.org/api")
 # never published: tooling, the local server's code, private data
 SKIP_DIRS = {".git", ".github", ".claude", "tools", "node_modules", "__pycache__", "data", "models"}
 SKIP_FILES = {".gitignore", ".DS_Store", "Thumbs.db"}
-SKIP_PATTERNS = ("reel-vault/server/rv/", "reel-vault/server/test_", "reel-vault/server/reelvault.py",
-                 "reel-vault/server/requirements.txt")
+SKIP_PATTERNS = ("reel-vault/server/",)   # server code runs on the PC, never on the static host
 # Neocities (free plan) accepts these; anything else is skipped with a note
 ALLOWED = set("""apng asc atom avif bin cjs css csv dae eot epub geojson gif glb glsl gltf gpg htm html
 ico jpeg jpg js json jxl key kml knowl less manifest map markdown md mf mid midi mjs mtl obj opml osdx
