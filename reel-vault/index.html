@@ -138,6 +138,8 @@ h3.s{font-family:var(--fmono);font-size:11px;letter-spacing:.2em;color:var(--dim
 .badge-l{left:6px;bottom:6px;color:var(--acc2);text-transform:uppercase}
 .badge-r{right:6px;bottom:6px}
 .badge-tl{left:6px;top:6px;color:var(--acc)}
+.fsbtn{position:absolute;right:8px;top:8px;width:40px;height:40px;border-radius:10px;background:rgba(0,0,0,.6);color:#fff;font-size:18px;z-index:5;display:flex;align-items:center;justify-content:center}
+.rmedia .badge-tl{top:8px}
 .badge-tr{right:6px;top:6px}
 .selmark{position:absolute;right:6px;top:6px;width:28px;height:28px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;color:#0b0b0f;font-size:15px;z-index:3}
 .selecting .selmark{display:flex}
@@ -830,6 +832,7 @@ function showCard(){
         ${it.t_score ? `<span class="badge-tl"><span class="score">${pct}%</span> match</span>` : '<span class="badge-tl">NEW</span>'}
         ${it.duration ? `<span class="badge-r">${fmtDur(it.duration)}</span>` : ''}
         <span class="badge-l">${esc(it.platform || '')}</span>
+        ${media !== 'image' ? '<button class="fsbtn" id="fsBtn" aria-label="Full screen / scrub">⛶</button>' : ''}
       </div>
       <div class="rinfo">
         <div class="who"><b>@${esc(it.author || '?')}</b><span>· ${ago(it.posted_at)}</span>${it.likes ? `<span>· ♥ ${fmtN(it.likes)}</span>` : ''}${it.views ? `<span>· ▶ ${fmtN(it.views)}</span>` : ''}</div>
@@ -862,10 +865,24 @@ function attachDeckVideo(v){
   v.muted = true;
   const p = v.play(); if (p) p.catch(() => { if (hint()) hint().textContent = '▶ tap to play'; });
   v.addEventListener('error', () => { if (hint()) hint().textContent = 'can\'t preview here: OPEN or ⬇ save'; }, { once: true });
-  $('#rmedia').onclick = () => {
+  $('#rmedia').onclick = e => {
+    if (e.target.closest('#fsBtn')) return;
     if (v.paused){ v.play(); } else { v.muted = !v.muted; }
     if (hint()) hint().textContent = v.paused ? '▶ tap to play' : v.muted ? '🔇 tap for sound' : '🔊 tap to mute';
   };
+  const fs = $('#fsBtn'); if (fs) fs.onclick = e => { e.stopPropagation(); goFullscreen(v); };
+}
+// Full screen gives the native player — scrub bar, unmute, proper controls.
+// On iPhone that's webkitEnterFullscreen on the <video> itself.
+function goFullscreen(v){
+  if (!v) return;
+  v.muted = false;
+  try{
+    if (typeof v.webkitEnterFullscreen === 'function'){ if (v.readyState < 1){ v.load(); v.addEventListener('loadedmetadata', () => { try{ v.webkitEnterFullscreen(); }catch(e){} }, { once: true }); } else v.webkitEnterFullscreen(); return; }
+    if (v.requestFullscreen) return v.requestFullscreen().catch(() => {});
+    if (v.webkitRequestFullscreen) return v.webkitRequestFullscreen();
+    if (v.parentElement && v.parentElement.requestFullscreen) v.parentElement.requestFullscreen().catch(() => {});
+  }catch(e){ toast('Full screen not available here'); }
 }
 async function lazyPlay(it){
   try{
