@@ -521,7 +521,11 @@ pre.cmd i{color:var(--dim);font-style:normal}
 /* network / web */
 .web{position:relative;width:100%;height:60vh;min-height:320px;max-height:560px;border:1px solid var(--border);border-radius:12px;background:radial-gradient(circle at 50% 40%,rgba(66,212,245,.05),transparent 70%),var(--surface);overflow:hidden;touch-action:none;margin-bottom:14px}
 .web svg{width:100%;height:100%;display:block}
-.web canvas{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+.web{--strip:44px}
+.web canvas{width:100%;height:calc(100% - var(--strip));display:block;cursor:grab;touch-action:none}
+.web .strip{position:absolute;left:0;right:0;bottom:0;height:var(--strip);display:flex;align-items:center;gap:10px;padding:0 10px;border-top:1px solid var(--border);background:var(--surface)}
+.web .strip .hint{position:static;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;color:var(--mut)}
+@media(max-width:1023px){.web .strip .hint{display:none}.web .strip{overflow-x:auto;scrollbar-width:none}.web .strip::-webkit-scrollbar{display:none}}
 .web canvas.drag{cursor:grabbing}
 .web .legend{position:absolute;right:10px;top:8px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px 12px;max-width:62%;font-family:var(--fmono);font-size:10px;letter-spacing:.08em;color:var(--dim);pointer-events:none}
 .web .legend em{font-style:normal;color:var(--mut)}
@@ -529,16 +533,17 @@ pre.cmd i{color:var(--dim);font-style:normal}
 .web .legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:-1px}
 .web .focus{position:absolute;left:10px;top:8px;display:flex;align-items:center;gap:8px;font-family:var(--fmono);font-size:11px;color:var(--acc);background:rgba(13,13,18,.85);padding:4px 6px 4px 8px;border:1px solid rgba(var(--acc-rgb),.35);border-radius:var(--r,2px)}
 .web .focus .hbtn{padding:3px 8px;font-size:9px}
-.web .wtb{position:absolute;left:10px;bottom:30px;display:flex;align-items:center;gap:4px;padding:4px;background:rgba(13,13,18,.85);border:1px solid var(--b2);border-radius:var(--r,2px)}
+.web .wtb{position:static;display:flex;align-items:center;gap:4px;padding:0;flex-shrink:0}
 .web .wtb button{font-family:var(--fmono);font-size:10px;letter-spacing:.1em;padding:6px 9px;border-radius:var(--r,2px);color:var(--dim);border:1px solid transparent;min-height:30px}
 .web .wtb button:hover{color:var(--txt)}
 .web .wtb button.on{color:var(--acc);border-color:rgba(var(--acc-rgb),.45);background:rgba(var(--acc-rgb),.08)}
 .web .wtb .sep{width:1px;height:16px;background:var(--b2);margin:0 2px}
-.web:fullscreen,.web.max{position:fixed;inset:0;z-index:600;width:100vw;height:100vh;max-height:none;border-radius:0;margin:0;background:var(--bg)}
-.web:fullscreen .wtb,.web.max .wtb{bottom:calc(16px + var(--sab))}
-.web:fullscreen .hint,.web.max .hint{bottom:calc(6px + var(--sab))}
+.web:fullscreen,.web.max{position:fixed;top:0;left:0;right:0;bottom:0;width:auto;height:auto;max-height:none;z-index:600;border-radius:0;border:none;margin:0;background:var(--bg)}
+.web:fullscreen .strip,.web.max .strip{height:calc(var(--strip) + var(--sab));padding-bottom:var(--sab)}
+.web:fullscreen canvas,.web.max canvas{height:calc(100% - var(--strip) - var(--sab))}
+.web:fullscreen .legend,.web.max .legend{top:calc(8px + var(--sat))}
 body.noscroll-max{overflow:hidden}
-@media(max-width:1023px){.web .wtb{bottom:26px}.web .wtb button{padding:6px 7px;font-size:9px}}
+@media(max-width:1023px){.web .wtb button{padding:6px 7px;font-size:9px}}
 .web .edge{stroke:var(--b2);stroke-linecap:round}
 .web .edge.you{stroke:var(--acc3);stroke-dasharray:3 3}
 .web .edge.ment{stroke:var(--acc2);opacity:.5}
@@ -2094,14 +2099,13 @@ function drawWeb(box, graph){
   nwFocusNode = focus ? nodes[idx[focus]] : null;
   const fb = nwFocusNode ? `<div class="focus">◎ ${nwFocusNode.kind === 'account' ? '@' : ''}${esc(nwFocusNode.label)}${nwFocusNode.kind === 'account' && nwFocusNode.person_id ? ' <button class="hbtn" data-fprof>PROFILE</button>' : ''} <button class="hbtn" data-fclear title="Show everything again">✕</button></div>` : '';
   box.innerHTML = `<canvas></canvas><div class="legend" id="webLegend"></div>${fb}
-    <div class="wtb"><button data-wm="3d" title="3-D: the floating web you can spin">3D</button><button data-wm="2d" title="2-D: the organized map — rings by connection, arcs by community — you can drag around">2D</button><span class="sep"></span><button data-wc="community" title="Colour by community (clusters found from the links)">COMMUNITY</button><button data-wc="kind" title="Colour by kind: account / tag / word">KIND</button><span class="sep"></span><button data-ws="posts" title="Size by number of posts">POSTS</button><button data-ws="influence" title="Size by influence: terms and accounts that bridge different parts of the web (betweenness centrality)">INFLUENCE</button><span class="sep"></span><button data-wf title="Full screen">⛶</button></div>
-    <div class="hint" id="webHint"></div>`;
+    <div class="strip"><div class="wtb"><button data-wm="3d" title="3-D: the floating web you can spin">3D</button><button data-wm="2d" title="2-D: the organized map — rings by connection, arcs by community — you can drag around">2D</button><span class="sep"></span><button data-wc="community" title="Colour by community (clusters found from the links)">COMMUNITY</button><button data-wc="kind" title="Colour by kind: account / tag / word">KIND</button><span class="sep"></span><button data-ws="posts" title="Size by number of posts">POSTS</button><button data-ws="influence" title="Size by influence: terms and accounts that bridge different parts of the web (betweenness centrality)">INFLUENCE</button><span class="sep"></span><button data-wf title="Full screen">⛶</button></div><div class="hint" id="webHint"></div></div>`;
   const syncChrome = () => { $('#webLegend', box).innerHTML = legendHTML(); $('#webHint', box).textContent = hintHTML(); $$('[data-wm]', box).forEach(b => b.classList.toggle('on', b.dataset.wm === st.mode)); $$('[data-wc]', box).forEach(b => b.classList.toggle('on', b.dataset.wc === st.color)); $$('[data-ws]', box).forEach(b => b.classList.toggle('on', b.dataset.ws === st.sizeBy)); };
   const cv = $('canvas', box), ctx = cv.getContext('2d');
   const st = { ry: 0, rx: 0.25, zoom: 1, auto: true, last: 0, dragging: false, px: 0, py: 0, moved: 0, W: 0, H: 0, dpr: Math.min(2, devicePixelRatio || 1), proj: [], frame: 0, hover: -1, settle: 170,
     mode: store.get('webMode', '3d'), color: store.get('webColor', 'community'), sizeBy: store.get('webSize', 'posts'), panX: 0, panY: 0 };
   const colorOf = i => st.color === 'kind' ? (KIND_COLOR[nodes[i].kind] || '#999') : COMM[commOf[i] % COMM.length];
-  const size = () => { st.W = box.clientWidth; st.H = box.clientHeight; cv.width = st.W * st.dpr; cv.height = st.H * st.dpr; ctx.setTransform(st.dpr, 0, 0, st.dpr, 0, 0); };
+  const size = () => { st.W = cv.clientWidth || box.clientWidth; st.H = cv.clientHeight || (box.clientHeight - 44); cv.width = st.W * st.dpr; cv.height = st.H * st.dpr; ctx.setTransform(st.dpr, 0, 0, st.dpr, 0, 0); };
   size(); sizeNodes(); syncChrome();
   // one untangling step: pull to ring/arc target, push apart (collision), springs along strong links
   const step = () => {
@@ -2147,8 +2151,8 @@ function drawWeb(box, graph){
     // labels: by priority, skip any that would overlap one already placed
     labels.sort((a, b) => b.pri - a.pri); const placed = [];
     ctx.textAlign = 'center';
-    for (const L of labels){ const n = L.q.n, txt = (n.kind === 'account' ? '@' : '') + (n.label.length > 18 ? n.label.slice(0, 17) + '…' : n.label); const fs = Math.round(Math.min(13, 9 + 3 * L.q.p)); ctx.font = `${fs}px 'Share Tech Mono', monospace`; const w = ctx.measureText(txt).width + 8, h = fs + 4, x = L.q.X, y = L.q.Y + L.r + 4; if (placed.some(b => Math.abs(b.x - x) < (b.w + w) / 2 && Math.abs(b.y - y) < h)) continue; placed.push({ x, y, w }); ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(7,7,10,.72)'; ctx.fillRect(x - w / 2, y, w, h); ctx.fillStyle = L.i === hi || L.i === fi ? '#fff' : '#c9c9d6'; ctx.fillText(txt, x, y + fs); if (placed.length > 70) break; }
-    box.dataset.labels = placed.length; box.dataset.edges = drawn.size;   // (read by tests / debugging)
+    for (const L of labels){ const n = L.q.n, txt = (n.kind === 'account' ? '@' : '') + (n.label.length > 18 ? n.label.slice(0, 17) + '…' : n.label); const fs = Math.round(Math.min(13, 9 + 3 * L.q.p)); ctx.font = `${fs}px 'Share Tech Mono', monospace`; const w = ctx.measureText(txt).width + 8, h = fs + 4, x = L.q.X, y = L.q.Y + L.r + 4; if (placed.some(b => Math.abs(b.x - x) < (b.w + w) / 2 && Math.abs(b.y - y) < h)) continue; placed.push({ x, y, w }); ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(7,7,10,.72)'; ctx.fillRect(x - w / 2, y, w, h); ctx.fillStyle = L.i === hi || L.i === fi ? '#fff' : '#c9c9d6'; ctx.fillText(txt, x, y + fs); if (placed.length >= Math.max(12, Math.min(80, Math.floor(st.W * st.H / 9000)))) break; }
+    box.dataset.labels = placed.length; box.dataset.edges = drawn.size; box.dataset.zoom = st.zoom.toFixed(2);   // (read by tests / debugging)
     // hover card
     if (hv >= 0){ const q = P[hv], n = q.n; const lines = [(n.kind === 'account' ? '@' : n.kind === 'hashtag' ? '' : '"') + n.label + (n.kind === 'word' ? '"' : ''), `${n.n} post${n.n === 1 ? '' : 's'} · ${nb[hv].length} link${nb[hv].length === 1 ? '' : 's'} · ${comms[commOf[hv]].name}`]; ctx.font = `12px 'Share Tech Mono', monospace`; const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16, x = Math.min(st.W - w - 6, Math.max(6, q.X + 14)), y = Math.max(6, q.Y - 44); ctx.globalAlpha = 1; ctx.fillStyle = '#15151b'; ctx.fillRect(x, y, w, 40); ctx.strokeStyle = colorOf(hv); ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, w - 1, 39); ctx.textAlign = 'left'; ctx.fillStyle = '#e2e2ea'; ctx.fillText(lines[0], x + 8, y + 16); ctx.fillStyle = '#9a9ab0'; ctx.fillText(lines[1], x + 8, y + 32); }
     ctx.globalAlpha = 1;
@@ -2157,10 +2161,23 @@ function drawWeb(box, graph){
   webAnim = { raf: requestAnimationFrame(loop), ro: window.ResizeObserver ? new ResizeObserver(() => { size(); draw(); }) : null }; webAnim.ro && webAnim.ro.observe(box);
   const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   const hit = (x, y) => { let best = -1, bd = 18 * 18; st.proj.forEach((q, i) => { const d = (q.X - x) ** 2 + (q.Y - y) ** 2, rr = Math.max(bd, (q.n.r * q.p + 6) ** 2); if (d < rr && (best < 0 || d < bd)){ bd = d; best = i; } }); return best; };
-  cv.onpointerdown = e => { st.dragging = true; st.moved = 0; [st.px, st.py] = pos(e); cv.classList.add('drag'); cv.setPointerCapture(e.pointerId); };
-  cv.onpointermove = e => { const [x, y] = pos(e); if (st.dragging){ if (st.mode === '2d'){ const sc = Math.min(st.W, st.H) / 440 * st.zoom; st.panX += (x - st.px) / sc; st.panY += (y - st.py) / sc; } else { st.ry += (x - st.px) * 0.008; st.rx = Math.max(-1.4, Math.min(1.4, st.rx + (y - st.py) * 0.006)); st.auto = false; } st.moved += Math.abs(x - st.px) + Math.abs(y - st.py); st.px = x; st.py = y; } else { st.hover = hit(x, y); cv.style.cursor = st.hover >= 0 ? 'pointer' : 'grab'; } };
+  const touches = new Map(); let pinch = null;
+  const pinchState = () => { const [a, b] = [...touches.values()]; return { d: Math.hypot(a[0] - b[0], a[1] - b[1]), mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2 }; };
+  cv.onpointerdown = e => {
+    touches.set(e.pointerId, pos(e)); cv.setPointerCapture(e.pointerId);
+    if (touches.size === 2){ st.dragging = false; pinch = Object.assign(pinchState(), { zoom: st.zoom, panX: st.panX, panY: st.panY }); return; }
+    st.dragging = true; st.moved = 0; [st.px, st.py] = pos(e); cv.classList.add('drag');
+  };
+  cv.onpointermove = e => { const [x, y] = pos(e);
+    if (touches.has(e.pointerId)) touches.set(e.pointerId, [x, y]);
+    if (pinch && touches.size === 2){
+      const now = pinchState(); st.zoom = Math.max(.5, Math.min(4, pinch.zoom * now.d / Math.max(1, pinch.d)));
+      if (st.mode === '2d'){ const sc = Math.min(st.W, st.H) / 440 * st.zoom; st.panX = pinch.panX + (now.mx - pinch.mx) / sc; st.panY = pinch.panY + (now.my - pinch.my) / sc; }
+      st.moved = 99; return;
+    }
+    if (st.dragging){ if (st.mode === '2d'){ const sc = Math.min(st.W, st.H) / 440 * st.zoom; st.panX += (x - st.px) / sc; st.panY += (y - st.py) / sc; } else { st.ry += (x - st.px) * 0.008; st.rx = Math.max(-1.4, Math.min(1.4, st.rx + (y - st.py) * 0.006)); st.auto = false; } st.moved += Math.abs(x - st.px) + Math.abs(y - st.py); st.px = x; st.py = y; } else { st.hover = hit(x, y); cv.style.cursor = st.hover >= 0 ? 'pointer' : 'grab'; } };
   cv.onpointerleave = () => { st.hover = -1; };
-  cv.onpointerup = e => { st.dragging = false; cv.classList.remove('drag'); if (st.moved > 6) return; const [x, y] = pos(e); const i = hit(x, y); if (i >= 0) webNodeTap(nodes[i]); };
+  cv.onpointerup = cv.onpointercancel = e => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; if (e.type === 'pointercancel'){ st.dragging = false; cv.classList.remove('drag'); return; } st.dragging = false; cv.classList.remove('drag'); if (st.moved > 6) return; const [x, y] = pos(e); const i = hit(x, y); if (i >= 0) webNodeTap(nodes[i]); };
   cv.onwheel = e => { e.preventDefault(); st.zoom = Math.max(.6, Math.min(3.5, st.zoom * (e.deltaY < 0 ? 1.1 : 0.9))); };
   cv.ondblclick = () => { if (st.mode === '2d'){ st.panX = st.panY = 0; st.zoom = 1; } else st.auto = !st.auto; };
   const fp = $('[data-fprof]', box); if (fp) fp.onclick = () => openProfile(nwFocusNode.person_id);
