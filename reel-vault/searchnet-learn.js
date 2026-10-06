@@ -212,7 +212,10 @@
     const r = await fetch(base + '/search?' + params + (s.worker_key ? '&key=' + encodeURIComponent(s.worker_key) : ''), { headers: s.worker_key ? { 'X-SN-Key': s.worker_key } : {} });
     const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j;
   }
+  async function notThem(tid) { const t = await getTopic(tid); const p = (t && t.settings && t.settings.person) || {}; return new Set((p.not_them || []).map((x) => String(x).toLowerCase())); }
   async function link(tid, iid, query, sid) {
+    const bad = await notThem(tid);
+    if (bad.size) { const it = await idb.get('items', iid); if (it && bad.has(String(it.author || '').toLowerCase() + '|' + (it.platform || ''))) return; }   // a namesake: never into this dossier
     const k = voteKey(tid, iid); let v = await idb.get('votes', k);
     if (!v) { v = { k, topic_id: tid, item_id: iid, label: 0, score: 0, why: {}, added: now(), found_by: [] }; }
     if (query && !(v.found_by || []).some((f) => f.query === query && f.source === sid)) (v.found_by = v.found_by || []).push({ query, source: sid });
@@ -342,12 +345,30 @@
       if (sub === 'insights') return await insights(arg);
       if (sub === 'queries' && method === 'POST') { const act = body.action, q = String(body.query || '').trim(); t.queries = t.queries || []; if (act === 'add') { if (!t.queries.some((x) => x.query.toLowerCase() === q.toLowerCase())) t.queries.push({ query: q, origin: 'user', enabled: true, locked: true, runs: 0, found: 0, pos: 0, neg: 0 }); } else { const row = t.queries.find((x) => x.query === q); if (row) { if (act === 'delete') t.queries = t.queries.filter((x) => x !== row); else { row.enabled = act === 'enable'; row.locked = true; } } } await saveTopic(t); await rescore(arg); return { ok: true }; }
       if (sub === 'reason' && method === 'DELETE') { const P = Object.fromEntries(new URLSearchParams(qs)); if (P.anti) t.settings.anti = (t.settings.anti || []).filter((w) => w !== P.anti); if (P.pref) delete (t.settings.prefs || {})[P.pref]; await saveTopic(t); await rescore(arg); return { ok: true }; }
+      if (sub === 'person' && method === 'POST') return personVerdict(t, body || {});
       if (sub === 'creator' && method === 'POST') return creator(t, body || {});
       if (sub === 'creator' && method === 'DELETE') { const P = Object.fromEntries(new URLSearchParams(qs)); const c = Object.assign({}, t.settings.creators || {}); delete c[String(P.handle || '').toLowerCase()]; t.settings.creators = c; await saveTopic(t); return { ok: true }; }
       if (sub === 'follow' || sub === 'more') return { error: 'this needs the local PC server' };
       return { error: 'topic route not available in browser: ' + parts.join('/') };
     },
   };
+  // ── person dossiers: 'not them' drops an account (and all its posts) from the dossier for good;
+  //    'them' confirms an account as the person; 'restore' undoes a 'not them'.
+  async function personVerdict(t, body) {
+    const p = Object.assign({}, t.settings.person || {}); const account = String(body.account || '').replace(/^@/, ''); const key = account.toLowerCase();
+    let bad = (p.not_them || []).map(String); let removed = 0;
+    if (body.action === 'not_them') {
+      if (!bad.some((b) => b.toLowerCase() === key)) bad.push(account);
+      const [author, plat] = account.split('|');
+      for (const v of await topicItems(t.id)) { const it = await idb.get('items', v.item_id); if (it && String(it.author || '').toLowerCase() === (author || '').toLowerCase() && (it.platform || '') === (plat || '')) { await idb.del('votes', v.k); removed++; } }
+      p.not_them = bad;
+    } else if (body.action === 'restore') { p.not_them = bad.filter((b) => b.toLowerCase() !== key); }
+    else if (body.action === 'them') { p.not_them = bad.filter((b) => b.toLowerCase() !== key); if (body.item_id) await voteItem(t.id, String(body.item_id), 1); }
+    else return { error: 'unknown verdict' };
+    t.settings.person = p; await saveTopic(t); await rescore(t.id);
+    return { ok: true, action: body.action, account, removed, not_them: p.not_them || [], counts: counts(await topicItems(t.id)) };
+  }
+
   // ── a creator for this topic: one @account on one network. Their own posts are pulled through the
   //    Worker (/account) and linked to the topic; what they post about becomes soft signal + searches.
   //    X / Instagram / TikTok need a login, so they're PC-server only.

@@ -1163,14 +1163,16 @@ $('#newTopicForm').onsubmit = async e => {
     if (person && person.mode === 'account'){           // only the sources of that one network, nothing cross-site
       try{ const srcs = (await api('/api/sources')).sources || []; const mine = srcs.filter(x => [x.kind, x.source, x.preset, x.platform].some(v => String(v || '').toLowerCase() === person.platform)).map(x => x.id); if (mine.length) body.sources = mine; else body.run = false; }catch(e){}
     }
-    const t = await api('/api/topics', { method: 'POST', body });
-    if (person){                                        // the dossier's person: one identity, its accounts tied under the name
-      try{
+    let ident = null;
+    if (person){                                        // the dossier's person: one identity, its accounts tied under the name.
+      try{                                              // Made BEFORE the topic so its id rides in the first save (a running topic would overwrite a later patch)
         const accts = person.mode === 'account' ? [{ id: person.handle + '|' + person.platform, how: 'you' }] : (person.handles || []).map(h => accountIdFromText(h)).filter(Boolean).map(id => ({ id, how: 'you' }));
-        const I = await api('/api/identities', { method: 'POST', body: { name, topic_id: t.id, accounts: accts } });
-        if (I && I.id){ person.identity_id = I.id; await api('/api/topics/' + t.id, { method: 'PATCH', body: { settings: { person } } }); }
-      }catch(e){}
+        ident = await api('/api/identities', { method: 'POST', body: { name, accounts: accts } });
+        if (ident && ident.id) person.identity_id = ident.id;
+      }catch(e){ ident = null; }
     }
+    const t = await api('/api/topics', { method: 'POST', body });
+    if (ident && ident.id) api('/api/identities/' + encodeURIComponent(ident.id), { method: 'PATCH', body: { topic_id: t.id } }).catch(() => {});
     if (person && person.mode !== 'account' && (person.handles || []).length){   // known accounts → their own feeds, scoped to this topic
       for (const h of person.handles){ try{ const c = await api('/api/topics/' + t.id + '/creator', { method: 'POST', body: { handle: h } }); if (c.error) throw new Error(c.error); }catch(e){ toast(h + ': ' + e.message, 6000); } }
     }
@@ -1280,9 +1282,9 @@ function showCard(){
         ${it.why?.lower && it.why.lower.length ? `<div class="whynot"><b>you tend to 👎:</b>${it.why.lower.map(w => `<span>${esc(w)}</span>`).join('')}</div>` : ''}
       </div>
       <div class="ractions">
-        <button class="big no" id="vNo" aria-label="Not relevant (comma key)" title="Not relevant — press ,"><span class="emo">👎</span><span class="key"><kbd>,</kbd><small>NOPE</small></span></button>
+        <button class="big no" id="vNo" aria-label="${isPersonTopic() ? 'Not this person (comma key)' : 'Not relevant (comma key)'}" title="${isPersonTopic() ? 'Not them — drops this account and all its posts from the dossier · press ,' : 'Not relevant — press ,'}"><span class="emo">${isPersonTopic() ? '✕' : '👎'}</span><span class="key"><kbd>,</kbd><small>${isPersonTopic() ? 'NOT THEM' : 'NOPE'}</small></span></button>
         <div class="mid"><button class="btn sm" id="vSkip" title="Skip — press ↓">SKIP</button><button class="btn sm" id="vOpen">OPEN</button></div>
-        <button class="big yes" id="vYes" aria-label="Relevant (period key)" title="Relevant — press ."><span class="emo">👍</span><span class="key"><kbd>.</kbd><small>YES</small></span></button>
+        <button class="big yes" id="vYes" aria-label="${isPersonTopic() ? 'That is them (period key)' : 'Relevant (period key)'}" title="${isPersonTopic() ? 'That\'s them — confirms this account as the person · press .' : 'Relevant — press .'}"><span class="emo">${isPersonTopic() ? '◉' : '👍'}</span><span class="key"><kbd>.</kbd><small>${isPersonTopic() ? "THAT'S THEM" : 'YES'}</small></span></button>
       </div>
     </div></div>
     <div class="deckbar"><span class="grow">${fmtN(T.counts.unrated)} to review · learned from ${fmtN(T.counts.pos + T.counts.neg)} votes</span>${lastVote ? '<button class="btn sm" id="vUndo">↺ UNDO</button>' : ''}</div>`;
@@ -1370,12 +1372,38 @@ function bindSwipe(card, onSwipe){
   };
   card.addEventListener('pointerup', end); card.addEventListener('pointercancel', end);
 }
+function isPersonTopic(){ return !!(T && T.settings && T.settings.person); }
+// person dossiers: a verdict is about the ACCOUNT, not the post. "Not them" drops every post by that
+// account from the dossier and keeps future ones out; "that's them" confirms the account as the person
+// (tied under the name, its own feed becomes a source).
+async function personVerdict(it, label){
+  const account = (it.author || '') + '|' + (it.platform || '');
+  try{
+    const r = await api('/api/topics/' + T.id + '/person', { method: 'POST', body: { action: label < 0 ? 'not_them' : 'them', account, item_id: it.id } });
+    if (r.error) throw new Error(r.error);
+    if (label < 0){
+      deck = deck.filter(x => (x.author || '') + '|' + (x.platform || '') !== account); showCard();   // the rest of their posts go too (and the card on screen must not be one of them)
+      T.settings.person = Object.assign({}, T.settings.person, { not_them: r.not_them });
+      toast(`✕ @${it.author} is not ${T.name} · ${fmtN(r.removed)} post${r.removed === 1 ? '' : 's'} dropped`, 4500);
+    } else {
+      const person = T.settings.person || {};
+      if (person.identity_id){ try{ await linkAccount(account, person.identity_id, 'name match'); }catch(e){} }
+      else { try{ const I = await api('/api/identities', { method: 'POST', body: { name: T.name.replace(/^@/, ''), topic_id: T.id, accounts: [{ id: account, how: 'name match' }] } }); if (I.id){ person.identity_id = I.id; T = await api('/api/topics/' + T.id, { method: 'PATCH', body: { settings: { person } } }); } }catch(e){} }
+      api('/api/topics/' + T.id + '/creator', { method: 'POST', body: { handle: it.author, platform: it.platform } }).catch(() => {});
+      toast(`◉ @${it.author} confirmed as ${T.name} — their posts are being pulled in`, 4500);
+    }
+    if (r.counts){ T.counts.pos = r.counts.pos || 0; T.counts.neg = r.counts.neg || 0; T.counts.unrated = Math.max(0, (r.counts.n || 0) - T.counts.pos - T.counts.neg); }
+    const bar = $('.deckbar .grow'); if (bar) bar.textContent = fmtN(T.counts.unrated) + ' to review';
+    updateSegs('review');
+  }catch(e){ toast(e.message); }
+}
 async function vote(label){
   const it = deck.shift(); if (!it) return;
   deckSeen.push(it.id);
   lastVote = { id: it.id, item: it };
   buzz();
   showCard();
+  if (isPersonTopic()){ hideReasons(); await personVerdict(it, label); if (deck.length < 4) setTimeout(loadDeck, 1200); return; }
   if (label < 0) offerReasons(it); else hideReasons();
   try{
     const r = await api('/api/topics/' + T.id + '/vote', { method: 'POST', body: { item_id: it.id, label } });
@@ -1578,9 +1606,15 @@ function personAccountCardHTML(p, items, I){
     <div class="note" style="margin:10px 0 4px">Linked elsewhere <small>(URLs they posted themselves — the only cross-network evidence used)</small></div>
     <div class="meta">${linked.length ? linked.map(l => { const aid = l.handle.replace(/^@/, '') + '|' + siteToPlatform(l.site); const have = identAccts.has(aid.toLowerCase()); return `<span class="pill${have ? ' a' : ''}"><a class="lnk" href="${esc(l.url)}" target="_blank" rel="noreferrer noopener">${esc(l.site)} · ${esc(l.handle)}${l.n > 1 ? ' ×' + l.n : ''}</a>${have ? ' ✓' : ` <button class="lnk" data-idlink="${esc(aid)}" title="They linked this themselves — tie it to this person">+ same person</button>`}</span>`; }).join('') : '<span class="note">no links to other networks in their posts so far</span>'}</div>
     ${identCard}
+    ${notThemHTML(p)}
   </div>`;
 }
 // the accounts tied to this dossier's person (identity), for the PERSON card
+function notThemHTML(p){
+  const bad = (p && p.not_them) || []; if (!bad.length) return '';
+  return `<div class="note" style="margin:10px 0 4px">Not this person <small>(accounts you ruled out in REVIEW · their posts are kept out of this dossier)</small></div>
+    <div class="meta">${bad.map(a => `<span class="pill"><s>@${esc(String(a).split('|')[0])}</s> · ${esc(String(a).split('|')[1] || '')} <button class="lnk" data-restore="${esc(a)}" title="Let this account back in">↺</button></span>`).join('')}</div>`;
+}
 function identityCardHTML(I){
   if (!I) return '';
   return `<div class="note" style="margin:10px 0 4px">This person's accounts <small>(you tied these together · dashed line in the web · MERGE shows them as one)</small></div>
@@ -1607,6 +1641,7 @@ function personCardHTML(p, T, items, I){
     <div class="row wrap" style="gap:8px;margin:6px 0 10px"><button class="btn sm" id="pAddHandle">+ ADD A KNOWN ACCOUNT</button><span class="note">Paste a profile link (any network) or an @handle (X). Only that account's own posts are pulled in — nothing is searched by name elsewhere.</span></div>
     <div class="note" style="margin-bottom:4px">Name searches</div><div class="meta">${searches.map(([n, u]) => a(n, u)).join('')}</div>
     ${identityCardHTML(I)}
+    ${notThemHTML(p)}
     <div class="note" style="margin:10px 0 4px">People-search &amp; records sites <small>(show addresses, relatives, phone numbers — open them to see what's public and use each site's opt-out)</small></div><div class="meta">${people.map(([n, u]) => a(n, u, 'a')).join('')}</div>
   </div>`;
 }
@@ -1676,6 +1711,7 @@ async function renderDossier(){
   $$('[data-prof]', body).forEach(b => b.onclick = () => openProfile(b.dataset.prof));
   $$('[data-focus]', body).forEach(b => b.onclick = () => go('network?' + new URLSearchParams({ topic: T.id, focus: b.dataset.focus })));
   const pIdBtn = $('#paIdent', body); if (pIdBtn) pIdBtn.onclick = () => openIdentity(person.identity_id);
+  $$('[data-restore]', body).forEach(b => b.onclick = async () => { try{ const r = await api('/api/topics/' + T.id + '/person', { method: 'POST', body: { action: 'restore', account: b.dataset.restore } }); T.settings.person = Object.assign({}, T.settings.person, { not_them: r.not_them }); toast('Restored @' + b.dataset.restore.split('|')[0] + ' — found again on the next FIND MORE', 4000); renderDossier(); }catch(e){ toast(e.message); } });
   $$('[data-idlink]', body).forEach(b => b.onclick = async () => {
     try{
       if (!person.identity_id){ const I = await api('/api/identities', { method: 'POST', body: { name: T.name.replace(/^@/, ''), topic_id: T.id, accounts: person.mode === 'account' ? [{ id: person.handle + '|' + person.platform, how: 'you' }] : [] } }); person.identity_id = I.id; T = await api('/api/topics/' + T.id, { method: 'PATCH', body: { settings: { person } } }); }

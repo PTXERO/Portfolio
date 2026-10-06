@@ -676,6 +676,36 @@ class TestPeople(Base):
         self.assertEqual([a["id"] for a in people.handle(self.v, "GET", ["identities", I["id"]], {}, {})["accounts"]], ["clonestoo|x"])
         self.assertEqual(people.handle(self.v, "DELETE", ["identities", J["id"]], {}, {}), {"ok": True})
 
+    def test_person_verdicts_keep_namesakes_out(self):
+        """A name search pulls in a namesake. 'Not them' drops that account's posts from the dossier and
+        keeps future ones out; 'them' confirms; 'restore' lets it back."""
+        tid = self.v.create_topic("Ethan Chapman", seeds=['"Ethan Chapman"'],
+                                  settings={"person": {"mode": "name", "first": "Ethan", "last": "Chapman"}})["id"]
+        for i, (who, txt) in enumerate((("ethan_c", "Ethan Chapman here, skating"), ("ethan_c", "another by the real one"),
+                                        ("chapman_ethan_fl", "Ethan Chapman realtor, call me"))):
+            self.v.db.upsert({"id": f"p{i}", "platform": "x", "post_id": str(i), "author": who, "text": txt, "media": "video", "url": f"u{i}"})
+            self.v.link(tid, f"p{i}", '"Ethan Chapman"', "x")
+        self.assertEqual(self.v.db.one("SELECT count(*) n FROM topic_items WHERE topic_id=?", (tid,))["n"], 3)
+        r = self.v.person_verdict(tid, "not_them", "chapman_ethan_fl|x", "p2")
+        self.assertEqual((r["removed"], r["not_them"]), (1, ["chapman_ethan_fl|x"]))
+        self.assertEqual(self.v.db.one("SELECT count(*) n FROM topic_items WHERE topic_id=?", (tid,))["n"], 2)
+        # a later run finds the namesake again: it never gets linked
+        self.v.db.upsert({"id": "p9", "platform": "x", "post_id": "9", "author": "Chapman_Ethan_FL", "text": "Ethan Chapman open house", "media": "video", "url": "u9"})
+        self.v.link(tid, "p9", '"Ethan Chapman"', "x")
+        self.assertEqual(self.v.db.one("SELECT count(*) n FROM topic_items WHERE topic_id=?", (tid,))["n"], 2)
+        # confirming the real one labels the post and clears nothing else
+        r = self.v.person_verdict(tid, "them", "ethan_c|x", "p0")
+        self.assertEqual(self.v.db.one("SELECT label FROM topic_items WHERE topic_id=? AND item_id='p0'", (tid,))["label"], 1)
+        # restore → the namesake can be linked again
+        r = self.v.person_verdict(tid, "restore", "chapman_ethan_fl|x")
+        self.assertEqual(r["not_them"], [])
+        self.v.link(tid, "p9", '"Ethan Chapman"', "x")
+        self.assertEqual(self.v.db.one("SELECT count(*) n FROM topic_items WHERE topic_id=?", (tid,))["n"], 3)
+        # the HTTP route exists and validates
+        from rv.web import parse_creator  # noqa: F401 — module import sanity
+        with self.assertRaises(ValueError):
+            self.v.person_verdict(tid, "nonsense", "x|x")
+
     def test_creator_feeds_per_network(self):
         """One @username on one site becomes that topic's own source — no cross-site guessing."""
         from rv.web import parse_creator

@@ -566,7 +566,18 @@ class Vault:
                          (1 if enabled else 0, tid, query))
         self.relearn(tid, delay=0.2)
 
+    def not_them(self, tid):
+        """Accounts the user said are NOT the person a dossier is about (lower-case 'author|platform')."""
+        t = self.topic(tid)
+        p = (t or {}).get("settings", {}).get("person") or {}
+        return {str(x).lower() for x in p.get("not_them") or []}
+
     def link(self, tid, item_id, query, source_id):
+        bad = self.not_them(tid)
+        if bad:
+            it = self.db.get(item_id)
+            if it and f"{(it.get('author') or '').lower()}|{it.get('platform') or ''}" in bad:
+                return                                  # a namesake: never into this dossier
         self.db.exec("INSERT OR IGNORE INTO topic_items(topic_id, item_id, added) VALUES (?,?,?)",
                      (tid, item_id, now()))
         self.db.exec("INSERT OR IGNORE INTO topic_hits(topic_id, item_id, query, source_id) VALUES (?,?,?,?)",
@@ -669,6 +680,43 @@ class Vault:
                 (tid, dl))]
             self._download_many(job, ids)
         job.result = {"topic_id": tid, "new": len(set(new)), "queries": queries}
+
+    def person_verdict(self, tid, action, account, item_id=None):
+        """Person dossiers: 'not them' drops an account (and all its posts) from the dossier for good;
+        'them' confirms an account as the person; 'restore' undoes a 'not them'."""
+        t = self.topic(tid)
+        if not t:
+            raise ValueError("no such topic")
+        p = dict(t["settings"].get("person") or {})
+        account = str(account or "").lstrip("@")
+        key = account.lower()
+        bad = [str(x) for x in p.get("not_them") or []]
+        removed = 0
+        if action == "not_them":
+            if key not in {b.lower() for b in bad}:
+                bad.append(account)
+            author, _, plat = account.partition("|")
+            rows = self.db.q("SELECT ti.item_id FROM topic_items ti JOIN items i ON i.id=ti.item_id "
+                             "WHERE ti.topic_id=? AND lower(i.author)=? AND i.platform=?", (tid, author.lower(), plat))
+            for r in rows:
+                self.db.exec("DELETE FROM topic_items WHERE topic_id=? AND item_id=?", (tid, r["item_id"]))
+                self.db.exec("DELETE FROM topic_hits WHERE topic_id=? AND item_id=?", (tid, r["item_id"]))
+            removed = len(rows)
+            p["not_them"] = bad
+        elif action == "restore":
+            p["not_them"] = [b for b in bad if b.lower() != key]
+        elif action == "them":
+            p["not_them"] = [b for b in bad if b.lower() != key]
+            if item_id:
+                self.vote(tid, item_id, 1)
+        else:
+            raise ValueError("unknown verdict")
+        self.update_topic(tid, {"settings": {"person": p}})
+        self.relearn(tid)
+        return {"ok": True, "action": action, "account": account, "removed": removed,
+                "not_them": p.get("not_them") or [],
+                "counts": self.db.one("SELECT count(*) n, sum(label=1) pos, sum(label=-1) neg FROM topic_items "
+                                      "WHERE topic_id=?", (tid,))}
 
     def vote(self, tid, item_id, label):
         label = 1 if label > 0 else -1 if label < 0 else 0

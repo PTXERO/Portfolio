@@ -536,6 +536,12 @@ class Handler(BaseHTTPRequestHandler):
                 return ok(v.submit("topic", {"topic_id": arg, "title": f"topic · {t['name']}"}).to_dict())
             if sub == "feed":
                 return ok(v.topic_feed(arg, params))
+            if sub == "person" and method == "POST":          # person dossiers: that's them / not them
+                b = self._body()
+                try:
+                    return ok(v.person_verdict(arg, b.get("action") or "", b.get("account") or "", b.get("item_id")))
+                except ValueError as e:
+                    return self._send(400, {"error": str(e)})
             if sub == "vote" and method == "POST":
                 b = self._body()
                 if b.get("reasons"):
