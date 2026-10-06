@@ -71,6 +71,27 @@ browser on the computer where you're logged in, or point to an exported `cookies
 A source can also have its own cookies. Use a spare account: heavy scraping can get
 accounts limited and is against those sites' terms. Keep it personal.
 
+## Browser mode (no computer, nothing tracked)
+
+Don't want to leave a computer running? Open the page and choose
+**CONNECT → 📱 Use this browser only**. Everything then runs on the device you're
+holding:
+
+- Your whole library lives in the browser (IndexedDB) — no server, no account, nothing
+  sent anywhere.
+- Collecting runs through **your own** [Cloudflare Worker](worker/README.md) (free tier is
+  plenty). Deploy it once, paste its URL in SOURCES, and it fetches from Mastodon, Lemmy,
+  Reddit, Bluesky, YouTube and any RSS/channel feed at the edge.
+- The same self-learning topics, 👍/👎 training, soft/anti keywords, 👎-reasons and review
+  deck work here — the relevance engine is ported to run in the page.
+- To go back to the PC server later, SETUP → **Use a computer instead**. Your browser
+  library stays saved.
+
+What browser mode can't do (these need the PC server): downloading videos to disk, speech
+transcription, on-screen-text OCR, semantic meaning-matching, and sites that require a
+login (X, Instagram). It plays videos straight from their source URL instead of proxying
+them.
+
 ## Start fresh (wipe)
 
 Erase the whole library — every collected video, topic, vote and download — and start over:

@@ -16,6 +16,8 @@
 <link rel="icon" type="image/png" href="icon-192.png">
 <script src="reelvault.config.js"></script>
 <script src="demo-data.js"></script>
+<script src="searchnet-local.js"></script>
+<script src="searchnet-learn.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
 <style>
 :root{
@@ -437,6 +439,7 @@ pre.cmd i{color:var(--dim);font-style:normal}
 <!-- ══════════ SOURCES ══════════ -->
 <section class="view" id="vSources">
   <h2 class="h">SOURCES</h2>
+  <div id="workerBox"></div>
   <p class="note" style="margin:6px 0 12px">Where your topics search. Add any site: type a domain, a profile link or a feed and it works out how to search or follow it.</p>
   <form class="bigform" id="probeForm" autocomplete="off">
     <input id="probeIn" placeholder="vimeo.com, a profile link, a feed…" enterkeyhint="search" autocapitalize="off" autocorrect="off" inputmode="url" aria-label="Add a source">
@@ -593,12 +596,18 @@ function snippet(text, re, w=60){
 // ══════════════════════════════════════════════════════
 //  CONNECTION
 // ══════════════════════════════════════════════════════
-let API = '', LIVE = false, STATUS = null, SYN = [], NEEDKEY = false;
+let API = '', LIVE = false, LOCAL = false, STATUS = null, SYN = [], NEEDKEY = false;
 let KEY = store.get('key', '');       // access key sent as a header (works cross-origin, unlike cookies)
-const ready = () => LIVE && !NEEDKEY;
+const BK = window.SearchNetLocal;     // browser-local backend (IndexedDB + your Cloudflare Worker)
+const ready = () => LOCAL || (LIVE && !NEEDKEY);
 function authHeaders(h={}){ if (KEY) h['X-RV-Key'] = KEY; return h; }
 function setKey(k){ KEY = k || ''; store.set('key', KEY); }
 async function api(path, opts={}){
+  if (LOCAL){                          // handled entirely in this browser — no network, nothing tracked
+    const j = await BK.request(path, opts);
+    if (j && j.error && /not available in browser/.test(j.error)) throw new Error(j.error);
+    return j;
+  }
   const o = { method: opts.method || 'GET', headers: authHeaders({}), credentials: 'include' };
   if (opts.body !== undefined){ o.body = JSON.stringify(opts.body); o.headers['Content-Type'] = 'application/json'; }
   let r;
@@ -635,6 +644,23 @@ const mediaUrl = rel => rel ? API + '/media/' + rel.split(/[\\/]/).map(encodeURI
 async function connect(){
   // allow a one-time setup link:  ?server=https://rv.example.com&key=XXXX
   const qp = new URLSearchParams(location.search);
+  if (qp.get('mode') === 'browser') store.set('localMode', true);
+  // Browser mode: everything runs here — IndexedDB + your own Cloudflare Worker. No PC server.
+  if (BK && store.get('localMode', false)){
+    try{
+      await BK.init();
+      LOCAL = true; LIVE = false; NEEDKEY = false;
+      STATUS = await BK.request('/api/status');
+      SYN = (await BK.request('/api/synonyms')).groups || [];
+      const st = $('#status'); st.textContent = '◆ ' + fmtN(STATUS.counts?.n || 0); st.className = 'chip-status live';
+      if (!STATUS.worker_url){
+        const b = $('#banner');
+        b.innerHTML = 'BROWSER MODE: add your Cloudflare Worker URL in <a href="#sources">SOURCES</a> to start collecting. Everything stays on this device.';
+        b.classList.add('on');
+      }
+      return;
+    }catch(e){ LOCAL = false; }   // fall through to server/demo if IndexedDB is unavailable
+  }
   if (qp.get('server')){ store.set('serverUrl', qp.get('server').replace(/\/$/, '')); }
   if (qp.get('key')){ setKey(qp.get('key')); }
   if (qp.get('server') || qp.get('key')) history.replaceState(null, '', location.pathname + location.hash);
@@ -677,7 +703,11 @@ function showPair(){
       ${remote ? '<input id="pairUrl" placeholder="https://your-server-address" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url" style="margin-bottom:8px">' : ''}
       <input id="pairKey" placeholder="access key" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
       <button class="btn pri" style="width:100%;margin-top:10px">CONNECT</button>
-    </form>`, false);
+    </form>
+    <div class="note" style="margin:16px 0 8px;text-align:center">— or —</div>
+    <button class="btn" style="width:100%" id="useBrowser">📱 USE THIS BROWSER ONLY</button>
+    <p class="note" style="margin-top:8px">No computer needed. Searches run through your own Cloudflare Worker and everything is saved on this device. Nothing is tracked.</p>`, false);
+  const ub = $('#useBrowser'); if (ub) ub.onclick = () => { store.set('localMode', true); toast('Browser mode on ✓'); setTimeout(() => location.reload(), 400); };
   $('#pairF').onsubmit = async e => {
     e.preventDefault();
     let base = API, key = $('#pairKey').value.trim();
@@ -853,7 +883,7 @@ async function loadDeck(){
 }
 const streamUrl = it => API + '/api/items/' + encodeURIComponent(it.id) + '/stream';
 // downloaded → local file; live video → stream through the PC (plays X etc. the phone can't fetch); demo → raw url
-const itemSrc = it => it.file && LIVE ? mediaUrl(it.file) : (ready() && (it.media || 'video') === 'video') ? streamUrl(it) : it.media_url;
+const itemSrc = it => it.file && LIVE ? mediaUrl(it.file) : (LIVE && !NEEDKEY && (it.media || 'video') === 'video') ? streamUrl(it) : it.media_url;
 const posterOf = it => it.thumb_file && LIVE ? mediaUrl(it.thumb_file) : (it.thumbnail || '');
 function showCard(){
   const body = $('#tBody');
@@ -901,10 +931,10 @@ function showCard(){
   if ($('#vUndo')) $('#vUndo').onclick = undoVote;
   const v = $('#rmedia video');
   if (v) attachDeckVideo(v);
-  else if (media !== 'image' && LIVE) lazyPlay(it);
+  else if (media !== 'image' && ready()) lazyPlay(it);
   bindSwipe($('#rcard'), dir => vote(dir));
   const nx = deck[1];
-  if (nx && !nx.file && (nx.media || 'video') === 'video') api('/api/items/' + encodeURIComponent(nx.id) + '/play').catch(() => {});   // warm the proxy's resolve cache
+  if (nx && !nx.file && !nx.media_url && (nx.media || 'video') === 'video' && ready()) api('/api/items/' + encodeURIComponent(nx.id) + '/play').catch(() => {});   // warm the resolve cache
 }
 function attachDeckVideo(v){
   const hint = () => $('#tapHint');
@@ -1549,6 +1579,7 @@ async function bulk(action){
 // ══════════════════════════════════════════════════════
 let presetsCache = null;
 async function renderSources(){
+  renderWorkerBox();
   if (!ready()){
     $('#srcList').innerHTML = '<div class="empty">SOURCES LIVE ON THE SERVER. <a href="#setup">SET IT UP</a>.</div>';
     $('#presets').innerHTML = ''; return;
@@ -1578,6 +1609,31 @@ async function renderSources(){
     $$('[data-login]').forEach(b => b.onclick = () => { go('setup'); setTimeout(() => { const el = $('#sCookiesBrowser'); if (el){ el.scrollIntoView({ block: 'center' }); el.focus(); } }, 400); });
     $$('[data-edit]').forEach(b => b.onclick = () => editSource(srcs.find(s => s.id === b.dataset.edit)));
   }catch(e){ $('#srcList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function renderWorkerBox(){
+  const box = $('#workerBox'); if (!box) return;
+  if (!LOCAL){ box.innerHTML = ''; return; }
+  const st = STATUS?.settings || {};
+  const set = !!st.worker_url;
+  box.innerHTML = `<div class="card pad" style="margin:6px 0 14px">
+    <b>${set ? '◆ Browser mode' : '◆ Set up browser mode'}</b>
+    <p class="note" style="margin:6px 0 10px">Everything stays on this device. Collecting runs through <b>your own</b> Cloudflare Worker — paste its URL. Nothing is sent anywhere else. <a href="worker/README.md" target="_blank" rel="noreferrer">How to deploy one →</a></p>
+    <label class="field"><span>Your Worker URL</span><input id="wkUrl" value="${esc(st.worker_url || '')}" placeholder="https://searchnet.you.workers.dev" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"></label>
+    <label class="field"><span>Shared secret (optional, if you set one)</span><input id="wkKey" value="${esc(st.worker_key || '')}" placeholder="leave blank if none" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+    <div class="row wrap" style="margin-top:8px"><button class="btn pri sm" id="wkSave">SAVE</button>${set ? '<button class="btn sm" id="wkTest">TEST</button>' : ''}</div></div>`;
+  $('#wkSave').onclick = async () => {
+    const worker_url = $('#wkUrl').value.trim().replace(/\/$/, ''), worker_key = $('#wkKey').value.trim();
+    try{ STATUS.settings = await api('/api/settings', { method: 'PUT', body: { worker_url, worker_key } }); toast('Saved'); renderSources(); const b = $('#banner'); if (worker_url) b.classList.remove('on'); }
+    catch(e){ toast(e.message); }
+  };
+  if ($('#wkTest')) $('#wkTest').onclick = async () => {
+    try{ const params = new URLSearchParams({ source: 'mastodon', q: 'cat', limit: 3, instance: 'mastodon.social' });
+      const base = st.worker_url.replace(/\/$/, '');
+      const res = await fetch(base + '/search?' + params + (st.worker_key ? '&key=' + encodeURIComponent(st.worker_key) : ''), { headers: st.worker_key ? { 'X-SN-Key': st.worker_key } : {} });
+      const j = await res.json().catch(() => ({}));
+      toast(res.ok ? '✓ Worker reachable · ' + ((j.items || []).length) + ' test items' : ('✕ ' + (j.error || ('HTTP ' + res.status))), 5000);
+    }catch(e){ toast('✕ Could not reach your Worker: ' + e.message, 5000); }
+  };
 }
 function sourceInfo(s, p){
   openSheet(`<h3>${esc(s.name)}</h3>
@@ -1704,6 +1760,17 @@ async function refreshStatusChip(){
 }
 async function renderSetup(){
   const pb = $('#pairBox');
+  if (LOCAL){
+    const s = STATUS || {}; const st = s.settings || {};
+    pb.innerHTML = `<div class="card pad"><b>◆ Browser mode</b>
+      <p class="note" style="margin:6px 0 10px">This device is your whole library — stored in your browser (IndexedDB), nothing on any server, nothing tracked. Collecting runs through ${st.worker_url ? 'your Worker <b>' + esc(st.worker_url) + '</b>' : 'a Cloudflare Worker you add in <a href="#sources">SOURCES</a>'}.</p>
+      <div class="note">Library: <b>${fmtN(s.counts?.n || 0)}</b> items · <b>${fmtN(s.topics || 0)}</b> topics · ${s.counts?.speech || 0} with speech</div>
+      <p class="note" style="margin-top:10px">Add this page to your home screen (Firefox ⋯ → Share → Add to Home Screen) to use it like an app.</p>
+      <div class="row wrap" style="margin-top:10px"><button class="btn sm" id="switchServer">USE A COMPUTER INSTEAD</button></div></div>`;
+    $('#switchServer').onclick = async () => { if (!await confirmSheet('Switch to a PC server?', 'Your browser library stays saved here. You can switch back anytime.', 'SWITCH')) return; store.set('localMode', false); location.reload(); };
+    $('#tools').innerHTML = ''; $('#dataDir').textContent = '';
+    $('#sSyn').value = SYN.map(g => g.join(', ')).join('\n'); $('#sSynN').textContent = SYN.length + ' groups'; return;
+  }
   if (!LIVE){
     pb.innerHTML = `<div class="card pad"><b>No server found.</b><p class="note" style="margin-top:6px">REEL//VAULT does the searching and downloading on a computer you own (Mac, Windows or Linux). You use it from your iPhone over Wi-Fi. Follow <b>RUN IT</b> below, then scan the QR code it shows.</p></div>`;
     $('#tools').innerHTML = ''; $('#dataDir').textContent = '';
