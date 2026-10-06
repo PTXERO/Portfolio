@@ -346,8 +346,8 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
         acct_df.update({w for it in a.items for w in _tokens(it.get("text"))})
     n_acc = max(1, len(by))
     generic = lambda w: (w not in focus_words and w not in tag_words and  # noqa: E731
-                         (w in BOILER or (n_posts >= 20 and n_acc >= 5 and post_df[w] / n_posts > 0.6
-                                          and acct_df[w] / n_acc > 0.8)))
+                         (w in BOILER or (n_posts >= 50 and n_acc >= 20 and post_df[w] / n_posts > 0.7
+                                          and acct_df[w] / n_acc > 0.9)))
     for a in by.values():
         aid = f"@{a.author.lower()}|{a.platform}"
         for it in a.items:

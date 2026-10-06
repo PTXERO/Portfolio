@@ -217,7 +217,7 @@
     // account AND in most posts (a single-topic library's own key words legitimately run high)
     const acctDF = {}; for (const a of by.values()) { const seen = new Set(); a.items.forEach((it) => tokens(it.text).forEach((w) => seen.add(w))); seen.forEach((w) => acctDF[w] = (acctDF[w] || 0) + 1); }
     const nAcc = Math.max(1, by.size);
-    const generic = (w) => !focusWords.has(w) && !tagWords.has(w) && (BOILER.has(w) || (nPosts >= 20 && nAcc >= 5 && postDF[w] / nPosts > 0.6 && acctDF[w] / nAcc > 0.8));
+    const generic = (w) => !focusWords.has(w) && !tagWords.has(w) && (BOILER.has(w) || (nPosts >= 50 && nAcc >= 20 && postDF[w] / nPosts > 0.7 && acctDF[w] / nAcc > 0.9));
     for (const it of items) {
       if (!it.author) continue;
       const A = acctId(it); kindOf[A] = 'account';
