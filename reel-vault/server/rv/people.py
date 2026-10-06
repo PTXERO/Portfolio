@@ -857,18 +857,39 @@ def more_mastodon(v, a, limit=50, media="all"):
     from .sources import items_from_mastodon
     from .util import http_json
     instance = next((s.get("template") for s in v.list_sources() if s.get("kind") == "mastodon" and s.get("enabled")), "")
+    everything = media == "everything"
     try:
         host, acc = masto_lookup(a.author, a.author_url, instance or "")
         statuses = http_json(f"https://{host}/api/v1/accounts/{acc['id']}/statuses?limit={min(limit, 40)}"
-                             "&only_media=true&exclude_replies=true&exclude_reblogs=true")
+                             f"&only_media={'false' if everything else 'true'}&exclude_replies={'false' if everything else 'true'}&exclude_reblogs=true")
     except Exception as e:  # noqa: BLE001
         return {"error": str(e)}
     found = new = 0
     for st in statuses:
-        for it in items_from_mastodon(st, host, "more", include_images=(media == "all")):
+        for it in items_from_mastodon(st, host, "more", include_images=media in ("all", "everything"), include_text=everything):
             found += 1
             if v.db.upsert(it) == "new":
                 new += 1
+    return {"id": f"more-{_now()}", "kind": "collect", "title": f"more from @{a.author}", "state": "done",
+            "stats": {"found": found, "new": new}, "result": {"found": found, "new": new, "author": a.author}}
+
+
+def more_reddit(v, a, limit=50):
+    """LOAD MORE for a Reddit account with 'everything': their submissions and their comments."""
+    from .sources import item_from_reddit
+    from .util import http_json
+    found = new = 0
+    try:
+        for path in ("submitted", "comments"):
+            d = http_json(f"https://www.reddit.com/user/{urllib.parse.quote(a.author)}/{path}.json?limit={min(limit, 100)}&sort=new")
+            for c in (d.get("data") or {}).get("children") or []:
+                it = item_from_reddit(c.get("data") or {}, "more", include_images=True, include_text=True)
+                if it:
+                    found += 1
+                    if v.db.upsert(it) == "new":
+                        new += 1
+    except Exception as e:  # noqa: BLE001
+        return {"error": str(e)}
     return {"id": f"more-{_now()}", "kind": "collect", "title": f"more from @{a.author}", "state": "done",
             "stats": {"found": found, "new": new}, "result": {"found": found, "new": new, "author": a.author}}
 
@@ -937,6 +958,8 @@ def handle(v, method, parts, params, body):
         limit = max(1, min(int((body or {}).get("limit") or 50), 500))
         if a.platform == "mastodon":            # the fediverse has an open API: read the account directly
             return more_mastodon(v, a, limit, (body or {}).get("media") or "all")
+        if a.platform == "reddit" and ((body or {}).get("media") or "all") == "everything":   # posts AND comments
+            return more_reddit(v, a, limit)
         url = a.author_url or next((it.get("url") for it in a.items if it.get("url")), None)
         if not url:
             return {"error": "no profile link known for this account"}

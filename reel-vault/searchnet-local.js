@@ -138,7 +138,20 @@
     { preset: 'bluesky', name: 'Bluesky search', source: 'bluesky', searchable: true },
     { preset: 'youtube', name: 'YouTube search', source: 'youtube', searchable: true },
     { preset: 'rss', name: 'RSS / channel feed', source: 'rss', param: 'url', searchable: false },
+    { preset: 'html', name: 'Any site (its search page)', source: 'html', param: 'url', searchable: true, note: "The site's search URL with {q} where the word goes, e.g. https://site.com/search?q={q}" },
   ];
+  // 'https://site/search?q=cats' (or '?q=') → 'https://site/search?q={q}'; also /search/cats → /search/{q}
+  const Q_PARAMS = new Set(['q', 's', 'search', 'query', 'term', 'keyword', 'keywords', 'k', 'text', 'search_query', 'wd', 'p']);
+  function searchUrlToTemplate(url) {
+    try {
+      const u = new URL(url); let hit = false;
+      for (const k of [...u.searchParams.keys()]) if (Q_PARAMS.has(k.toLowerCase())) { u.searchParams.set(k, '__Q__'); hit = true; break; }
+      if (hit) return u.toString().replace('__Q__', '{q}');
+      const m = u.pathname.match(/^(.*\/(?:search|s|tag|tags|find|results|hashtag)\/)([^/]+)\/?$/);
+      if (m) { u.pathname = m[1] + '{q}'; return u.toString().replace('%7Bq%7D', '{q}'); }
+    } catch (e) { /* not a URL */ }
+    return null;
+  }
   async function workerCall(path) {
     const s = await settings();
     if (!s.worker_url) throw new Error('Set your Cloudflare Worker URL in SOURCES first');
@@ -314,6 +327,10 @@
     text = (text || '').trim(); const out = [];
     if (/\.(xml|rss|atom)(\?|$)|\/feed|feeds\//.test(text)) out.push({ name: text, kind: 'rss', source: 'rss', template: text, value: text, searchable: false, why: 'feed URL' });
     const dom = text.replace(/^https?:\/\//, '').replace(/\/.*/, '');
+    if (/^https?:\/\//.test(text)) {                       // a search URL from any site: the word you typed becomes {q}
+      const tpl = text.includes('{q}') ? text : searchUrlToTemplate(text);
+      if (tpl) out.push({ name: dom, source: 'html', param: 'url', value: tpl, searchable: true, why: "your search URL — the word you typed becomes {q}" });
+    }
     if (/mastodon|social|\.art$|fediverse/.test(dom)) out.push({ name: 'Mastodon · ' + dom, source: 'mastodon', param: 'instance', value: dom, searchable: true, why: 'looks like a Mastodon server' });
     if (/lemmy/.test(dom)) out.push({ name: 'Lemmy · ' + dom, source: 'lemmy', param: 'instance', value: dom, searchable: true, why: 'Lemmy instance' });
     return out;

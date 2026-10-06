@@ -196,6 +196,9 @@ details.more[open] summary{color:var(--acc)}
 .rcard.drag{transition:none}
 .rmedia{position:relative;background:#000;height:52vh;height:min(52dvh,560px);display:flex;align-items:center;justify-content:center;overflow:hidden}
 .rmedia video,.rmedia img{width:100%;height:100%;object-fit:contain;display:block;position:relative}
+.rmedia .ph.post{display:flex;flex-direction:column;justify-content:center;padding:28px 32px;background:radial-gradient(circle at 30% 20%,hsla(var(--h),60%,30%,.35),transparent 60%),var(--surface)}
+.rmedia .ph.post .ptxt{font-family:var(--fbody);font-size:clamp(15px,1.6vw,22px);line-height:1.5;color:var(--txt);white-space:pre-wrap;word-break:break-word;max-height:100%;overflow:hidden}
+.rmedia .ph.post .g{position:absolute;right:14px;bottom:52px;opacity:.15;font-size:48px}
 .tap-hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.65);padding:6px 12px;border-radius:14px;font-family:var(--fmono);font-size:11px;color:var(--txt);white-space:nowrap;z-index:2;pointer-events:none}
 .stamp{position:absolute;top:22px;padding:6px 14px;border:3px solid;border-radius:10px;font-family:var(--fdisp);font-size:34px;letter-spacing:.08em;opacity:0;pointer-events:none;z-index:4}
 .stamp.yes{left:18px;color:var(--good);border-color:var(--good);transform:rotate(-12deg)}
@@ -645,7 +648,7 @@ body.noscroll-max{overflow:hidden}
       <div class="note" style="margin:-6px 0 12px">Main searches above decide what's pulled in. Soft keywords get searched too and <b>boost</b> a video's score when they show up, but are never required.</div>
       <label class="field"><span>How wide to search · <b id="ntBreadthL" style="color:var(--acc);font-weight:normal">WIDE</b></span><input type="range" id="ntBreadth" min="1" max="5" value="3"></label>
       <div class="grid2">
-        <label class="field"><span>Collect</span><select id="ntMedia"><option value="video">Videos</option><option value="all">Videos + images</option><option value="everything">Everything</option></select></label>
+        <label class="field"><span>Collect</span><select id="ntMedia"><option value="video">Videos</option><option value="all">Videos + images</option><option value="everything">Everything · posts, replies, comments, media</option></select></label>
         <label class="field"><span>Auto-update · keeps collecting new posts on this topic</span><select id="ntRefresh"><option value="0">Off</option><option value="1">Hourly</option><option value="3">Every 3 h</option><option value="6">Every 6 h</option><option value="12">Every 12 h</option><option value="24">Daily</option></select></label>
       </div>
       <div class="note">Searches all your enabled SOURCES. Change per topic later with ⋯.</div>
@@ -1266,14 +1269,15 @@ function showCard(){
     <div class="deck"><div class="rcard" id="rcard">
       <div class="stamp yes">YES</div><div class="stamp no">NOPE</div>
       <div class="rmedia" id="rmedia" style="--h:${hue(it.author || it.id)}">
-        ${media === 'image' ? `<img src="${esc(src || poster)}" alt="" referrerpolicy="no-referrer">` :
+        ${media === 'post' ? `<div class="ph post" style="--h:${hue(it.author || it.id)}"><div class="ptxt">${esc((it.text || '').slice(0, 600))}</div><div class="g">${esc(glyph(it))}</div></div>` :
+          media === 'image' ? `<img src="${esc(src || poster)}" alt="" referrerpolicy="no-referrer">` :
           src ? `<video src="${esc(src)}" ${poster ? `poster="${esc(poster)}"` : ''} playsinline muted loop autoplay preload="auto"></video><div class="tap-hint" id="tapHint">🔇 tap for sound</div>` :
           poster ? `<img src="${esc(poster)}" alt="" referrerpolicy="no-referrer"><div class="tap-hint" id="tapHint"><span class="spinner"></span> loading video…</div>` :
           `<div class="ph" style="--h:${hue(it.id)}"><div class="g">${esc(glyph(it))}</div></div><div class="tap-hint" id="tapHint"><span class="spinner"></span> loading video…</div>`}
         ${it.t_score ? `<span class="badge-tl"><span class="score">${pct}%</span> match</span>` : '<span class="badge-tl">NEW</span>'}
         ${it.duration ? `<span class="badge-r">${fmtDur(it.duration)}</span>` : ''}
         <span class="badge-l">${esc(it.platform || '')}</span>
-        ${media !== 'image' ? '<button class="fsbtn" id="fsBtn" aria-label="Full screen / scrub">⛶</button>' : ''}
+        ${media !== 'image' && media !== 'post' ? '<button class="fsbtn" id="fsBtn" aria-label="Full screen / scrub">⛶</button>' : ''}
       </div>
       <div class="rinfo">
         <div class="who"><b>@${esc(it.author || '?')}</b><span>· ${ago(it.posted_at)}</span>${it.likes ? `<span>· ♥ ${fmtN(it.likes)}</span>` : ''}${it.views ? `<span>· ▶ ${fmtN(it.views)}</span>` : ''}</div>
@@ -1880,7 +1884,7 @@ async function topicSettings(){
     <label class="field"><span>Soft keywords — related, boost but not required</span><textarea id="tsSoft" rows="2" placeholder="street, night, slow motion">${esc((s.soft || []).join(', '))}</textarea></label>
     <label class="field"><span>How wide · <b id="tsBL" style="color:var(--acc);font-weight:normal">${BREADTH[s.breadth]}</b></span><input type="range" id="tsB" min="1" max="5" value="${s.breadth}"></label>
     <div class="grid2">
-      <label class="field"><span>Collect</span><select id="tsMedia"><option value="video">Videos</option><option value="all">Videos + images</option><option value="everything">Everything</option></select></label>
+      <label class="field"><span>Collect</span><select id="tsMedia"><option value="video">Videos</option><option value="all">Videos + images</option><option value="everything">Everything · posts, replies, comments, media</option></select></label>
       <label class="field"><span>Auto-update (new posts)</span><select id="tsRef"><option value="0">Off</option><option value="1">Hourly</option><option value="3">3 h</option><option value="6">6 h</option><option value="12">12 h</option><option value="24">Daily</option></select></label>
       <label class="field"><span>Results per search</span><input id="tsPer" type="number" min="1" max="200" value="${s.per_query}" inputmode="numeric"></label>
       <label class="field"><span>Auto-save top N</span><input id="tsDl" type="number" min="0" max="500" value="${s.auto_download || 0}" inputmode="numeric"></label>

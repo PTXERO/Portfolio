@@ -38,6 +38,9 @@ It fetches from open APIs and returns everything in one shape:
 | `bluesky` | – | public post search |
 | `youtube` | – | via public Invidious instances (best-effort) |
 | `rss` | `url` | any RSS/Atom, incl. `youtube.com/feeds/videos.xml?channel_id=UC…` |
+| `html` | `url` with `{q}` | any site's search-results page: JSON-LD entries, result links, plain media (best effort) |
+
+Pass `media=everything` to get text posts, replies and comments as well as media (default is media only).
 
 It **cannot** run yt-dlp or ffmpeg, so it returns metadata and direct media
 links where sites expose them — not downloaded/merged video files. For the full

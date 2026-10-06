@@ -21,7 +21,7 @@
  *  the way the optional local PC server does.
  * ───────────────────────────────────────────────────────────────── */
 
-const VERSION = "1.2";
+const VERSION = "1.3";
 const UA = "SearchNetWorker/1.0 (+https://github.com/)";
 const INVIDIOUS = ["https://yewtu.be", "https://invidious.nerdvpn.de", "https://invidious.jing.rocks"];
 
@@ -102,6 +102,7 @@ const stripHtml = (s) => (s || "").replace(/<br\s*\/?>(?=)|<\/p>\s*<p[^>]*>/gi, 
 const toTs = (v) => { if (!v) return null; if (typeof v === "number") return v > 1e12 ? Math.floor(v / 1000) : v;
   const t = Date.parse(v); return isNaN(t) ? null : Math.floor(t / 1000); };
 const tag = (s) => (s || "").toLowerCase().replace(/[^a-z0-9_]+/g, "");
+const wantText = (q) => (q.media || "") === "everything";   // 'everything' = posts, replies, comments too — not only media
 const vidExt = /\.(mp4|webm|mov|m4v|mkv|gifv)(\?|$)/i;
 const imgExt = /\.(jpe?g|png|gif|webp|avif)(\?|$)/i;
 
@@ -115,7 +116,7 @@ const SOURCES = {
     const out = [];
     for (const t of tags) {
       if (out.length >= limit) break;
-      const arr = await getJSON(`https://${inst}/api/v1/timelines/tag/${encodeURIComponent(t)}?limit=40&only_media=true`);
+      const arr = await getJSON(`https://${inst}/api/v1/timelines/tag/${encodeURIComponent(t)}?limit=40&only_media=${wantText(q) ? "false" : "true"}`);
       out.push(...mastoItems(arr, q));
     }
     return out.slice(0, limit);
@@ -130,7 +131,7 @@ const SOURCES = {
       const u = po.url || "";
       const media = vidExt.test(u) || /\/videos\/|v\.redd|streamable|youtu/.test(u) ? "video"
         : imgExt.test(u) ? "image" : po.thumbnail_url ? "image" : "post";
-      if (media === "post") return null;
+      if (media === "post" && !wantText(q)) return null;
       return item({
         id: "lemmy:" + po.id, platform: "lemmy", media,
         url: po.ap_id || u, media_url: vidExt.test(u) || imgExt.test(u) ? u : null,
@@ -180,7 +181,45 @@ const SOURCES = {
   //   https://www.youtube.com/feeds/videos.xml?channel_id=UC...
   async rss(q, limit) {
     const xml = await getText(q.url);
-    return parseFeed(xml, limit, q.media === "all");
+    return parseFeed(xml, limit, q.media === "all" || wantText(q));
+  },
+
+  // Any site with a search-results page: read the page itself (JSON-LD entries, result links, plain media).
+  // q.url = the site's search URL with {q} where the word goes. Best effort — it is a page, not an API.
+  async html(q, limit) {
+    const u = (q.url || "").replace(/\{q\}/g, encodeURIComponent(q.q || "")).replace(/\{q_raw\}/g, q.q || "");
+    if (!/^https?:\/\//.test(u)) throw new Error("html source needs a url with {q}");
+    const r = await fetch(u, { headers: { "User-Agent": UA, "Accept-Language": "en" } });
+    const body = await r.text();
+    const dom = new URL(u).hostname.replace(/^www\./, "");
+    const abs = (h) => { try { return new URL(h, u).href; } catch (e) { return null; } };
+    const seen = new Set(), out = [];
+    const push = (o) => { if (!o.url || seen.has(o.url) || out.length >= limit * 2) return; seen.add(o.url); out.push(item(o)); };
+    const LD = { VideoObject: "video", ImageObject: "image", Article: "post", NewsArticle: "post", BlogPosting: "post", SocialMediaPosting: "post", DiscussionForumPosting: "post", Product: "post" };
+    for (const m of body.matchAll(/<script[^>]+ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+      let data; try { data = JSON.parse(m[1]); } catch (e) { continue; }
+      const stack = Array.isArray(data) ? [...data] : [data];
+      while (stack.length) {
+        const n = stack.pop(); if (!n || typeof n !== "object") continue;
+        for (const k of ["itemListElement", "@graph", "mainEntity", "hasPart", "item"]) { const v = n[k]; if (Array.isArray(v)) stack.push(...v); else if (v && typeof v === "object") stack.push(v); }
+        const t = Array.isArray(n["@type"]) ? n["@type"][0] : n["@type"]; if (!LD[t]) continue;
+        const link = abs(n.url || (n.mainEntityOfPage && n.mainEntityOfPage["@id"])); if (!link) continue;
+        const au = Array.isArray(n.author) ? n.author[0] : n.author; let th = Array.isArray(n.thumbnailUrl) ? n.thumbnailUrl[0] : (n.thumbnailUrl || (Array.isArray(n.image) ? n.image[0] : n.image)); if (th && typeof th === "object") th = th.url;
+        push({ id: "web:" + dom + ":" + hash(link), platform: dom, media: LD[t], url: link, media_url: LD[t] !== "post" ? n.contentUrl || null : null,
+          author: (au && (au.name || au)) || dom, author_url: (au && au.url) || "", text: [n.name || n.headline, n.description].filter(Boolean).join("\n"),
+          posted_at: toTs(n.datePublished || n.uploadDate), thumbnail: typeof th === "string" ? th : null });
+      }
+    }
+    if (out.length < limit) for (const m of body.matchAll(/<a\s[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+      const text = stripHtml(m[2]).trim(); if (text.length < 12 || /(login|signup|register|privacy|terms|cookie|about|contact|\/tag\/|\/page\/\d|javascript:|mailto:)/i.test(m[1])) continue;
+      const link = abs(m[1]); if (!link || !link.startsWith("http") || link.replace(/\/$/, "") === u.replace(/\/$/, "")) continue;
+      const img = m[2].match(/<img[^>]+src=["']([^"']+)/i);
+      push({ id: "web:" + dom + ":" + hash(link), platform: dom, media: "post", url: link, media_url: null, author: dom, author_url: u, text: text.slice(0, 400), thumbnail: img ? abs(img[1]) : null });
+    }
+    if (out.length < limit) for (const m of body.matchAll(/<(?:video|source)[^>]+src=["']([^"']+\.(?:mp4|webm|m3u8)[^"']*)/gi)) {
+      const link = abs(m[1]); push({ id: "web:" + dom + ":" + hash(link), platform: dom, media: "video", url: u, media_url: link, author: dom, author_url: u, text: "" });
+    }
+    return out.slice(0, limit);
   },
 };
 
@@ -190,6 +229,13 @@ function mastoItems(statuses, q) {
   for (const st of statuses || []) {
     const s = st.reblog || st;
     const acc = s.account || {};
+    if (!(s.media_attachments || []).length && wantText(q)) {       // a plain post / reply: still something the account did
+      out.push(item({ id: "mastodon:" + s.id, platform: "mastodon", media: "post", url: s.url || s.uri, media_url: null,
+        author: acc.acct, author_name: acc.display_name, author_url: acc.url, text: stripHtml(s.content),
+        hashtags: (s.tags || []).map((x) => x.name).join(" "), posted_at: toTs(s.created_at),
+        likes: s.favourites_count, reposts: s.reblogs_count, replies: s.replies_count, thumbnail: null }));
+      continue;
+    }
     for (const m of (s.media_attachments || [])) {
       const kind = { video: "video", gifv: "video", image: "image" }[m.type] || "post";
       if (kind === "image" && q.media && q.media !== "all") continue;
@@ -213,8 +259,8 @@ function bskyItem(p, q) {
   const embed = p.embed || {};
   const media = embed.$type && /video/.test(embed.$type) ? "video"
     : embed.images ? "image" : embed.media && embed.media.images ? "image" : "post";
-  if (media === "post") return null;
-  if (media === "image" && q.media && q.media !== "all") return null;
+  if (media === "post" && !wantText(q)) return null;
+  if (media === "image" && q.media && q.media !== "all" && !wantText(q)) return null;
   const handle = (p.author || {}).handle;
   return item({
     id: "bluesky:" + (p.cid || p.uri), platform: "bluesky", media,
@@ -234,12 +280,17 @@ function redditItem(o, q) {
   const rv = ((o.secure_media || o.media || {}) || {}).reddit_video || {};
   const isVid = o.is_video || /hosted:video|rich:video/.test(o.post_hint || "") || /(v\.redd|youtu|streamable|tiktok)/.test(o.domain || "");
   const isImg = o.post_hint === "image" || imgExt.test(o.url || "");
-  if (!isVid && !(isImg && q.media === "all")) return null;
+  if (o.body != null && !o.title) {                                   // a comment
+    if (!wantText(q)) return null;
+    return item({ id: "reddit:" + o.id, platform: "reddit", media: "post", url: "https://www.reddit.com" + (o.permalink || ""), media_url: null,
+      author: o.author, author_name: "r/" + o.subreddit, text: "↩ " + (o.body || ""), hashtags: tag(o.subreddit), posted_at: toTs(o.created_utc), likes: o.score, thumbnail: null });
+  }
+  if (!isVid && !(isImg && (q.media === "all" || wantText(q))) && !wantText(q)) return null;
   const prev = (((o.preview || {}).images || [{}])[0].source || {}).url || "";
   return item({
-    id: "reddit:" + o.id, platform: "reddit", media: isVid ? "video" : "image",
+    id: "reddit:" + o.id, platform: "reddit", media: isVid ? "video" : isImg ? "image" : "post",
     url: "https://www.reddit.com" + o.permalink,
-    media_url: isVid ? null : o.url,
+    media_url: isVid || !isImg ? null : o.url,
     author: o.author, author_name: "r/" + o.subreddit,
     text: [o.title, o.selftext].filter(Boolean).join("\n"), hashtags: tag(o.subreddit),
     posted_at: toTs(o.created_utc), duration: rv.duration, width: rv.width, height: rv.height,
@@ -275,16 +326,21 @@ async function accountPosts(q, limit) {
   if (!handle && !url) throw new Error("handle or url required");
   if (plat === "mastodon") {
     const { host, acc } = await mastoLookup(handle, url, q.instance);
-    const arr = await getJSON(`https://${host}/api/v1/accounts/${acc.id}/statuses?limit=${Math.min(limit, 40)}&only_media=true&exclude_replies=true&exclude_reblogs=true`);
+    const arr = await getJSON(`https://${host}/api/v1/accounts/${acc.id}/statuses?limit=${Math.min(limit, 40)}&only_media=${wantText(q) ? "false" : "true"}&exclude_replies=${wantText(q) ? "false" : "true"}&exclude_reblogs=true`);
     return mastoItems(arr, q).slice(0, limit);
   }
   if (plat === "bluesky") {
-    const d = await getJSON(`https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(handle)}&limit=${Math.min(limit, 100)}&filter=posts_with_media`);
+    const d = await getJSON(`https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(handle)}&limit=${Math.min(limit, 100)}&filter=${wantText(q) ? "posts_with_replies" : "posts_with_media"}`);
     return (d.feed || []).map((f) => bskyItem(f.post || {}, q)).filter(Boolean).slice(0, limit);
   }
   if (plat === "reddit") {
     const d = await getJSON(`https://www.reddit.com/user/${encodeURIComponent(handle)}/submitted.json?limit=${Math.min(limit, 100)}&sort=new`);
-    return ((d.data || {}).children || []).map((c) => redditItem(c.data || {}, q)).filter(Boolean).slice(0, limit);
+    let rows = ((d.data || {}).children || []).map((c) => redditItem(c.data || {}, q)).filter(Boolean);
+    if (wantText(q)) {                                                     // their comments are things they did too
+      const c = await getJSON(`https://www.reddit.com/user/${encodeURIComponent(handle)}/comments.json?limit=${Math.min(limit, 100)}&sort=new`);
+      rows = rows.concat(((c.data || {}).children || []).map((x) => redditItem(x.data || {}, q)).filter(Boolean));
+    }
+    return rows.sort((a, b) => (b.posted_at || 0) - (a.posted_at || 0)).slice(0, limit);
   }
   if (plat === "lemmy") {
     const inst = (url.match(/^https?:\/\/([^/]+)/) || [])[1] || q.instance || "lemmy.world";

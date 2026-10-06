@@ -98,6 +98,9 @@ class Ctx:
     def log(self, msg):
         self.job.log(msg)
 
+    def ytdlp_supports(self, url):
+        return self.v.ytdlp_supports(url)
+
     def gdl_supports(self, url):
         return self.v.gdl_supports(url)
 
@@ -106,6 +109,7 @@ class Ctx:
         if not v.tools.gallery_dl:
             raise RuntimeError("gallery-dl is not installed (pip install gallery-dl)")
         cmd = v.tools.gallery_dl + ["-J", "-o", "output.jsonl=true", "-o", "videos=true",
+                                    *(["-o", "text-tweets=true", "-o", "replies=true"] if (self.opts or {}).get("media") == "everything" else []),
                                     *v.cookie_args(self.src), url]
         got = 0
         for line in v.stream(self.job, cmd):
@@ -119,6 +123,10 @@ class Ctx:
             if isinstance(msg, list) and len(msg) >= 3 and msg[0] == 3:
                 got += 1
                 yield msg[1], msg[2]
+            elif isinstance(msg, list) and len(msg) >= 2 and msg[0] == 2 and isinstance(msg[-1], dict) \
+                    and (self.opts or {}).get("media") == "everything" and not to_int(msg[-1].get("count"), 1):
+                got += 1                                 # a text-only tweet (text-tweets=true): no file, still a post
+                yield "text:", msg[-1]
                 if got >= limit * 3:     # files ≠ posts; leave room for filtering
                     break
         if not got:
@@ -910,7 +918,7 @@ class Vault:
         tpl, engine, kind = author_url, "auto", "url"
         author = author.lstrip("@")
         if platform == "x":
-            tpl, engine = f"https://x.com/{author}/media", "gallery-dl"
+            tpl, engine = f"https://x.com/{author}/with_replies", "gallery-dl"   # everything they post, replies included
         elif platform == "mastodon":
             if author_url:
                 tpl, kind = author_url.rstrip("/") + ".rss", "rss"

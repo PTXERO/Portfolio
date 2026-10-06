@@ -189,6 +189,7 @@
         try {
           const params = new URLSearchParams({ source: s.source, q, limit: t.settings.per_query || 20, media: t.settings.media || 'video' });
           if (s.value && s.param === 'instance') params.set('instance', s.value);
+          if (s.value && s.param === 'url') params.set('url', s.value);          // feeds and 'Any site' templates carry their URL
           const r = await workerSearch(params);
           const q2 = (t.queries || []).find((x) => x.query === q);
           let found = 0;

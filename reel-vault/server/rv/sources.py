@@ -114,12 +114,15 @@ def item_from_x(url: str, kw: dict, source: str):
     author = kw.get("author") or kw.get("user") or {}
     num = to_int(kw.get("num"), 1)
     handle = author.get("name") or "i"
-    mk = media_kind(url, kw.get("extension"), kw.get("type"))
+    text_only = (url or "").startswith("text:") or not to_int(kw.get("count"), 1)
+    mk = "post" if text_only else media_kind(url, kw.get("extension"), kw.get("type"))
+    if text_only:
+        url = ""
     return {
         "id": f"x:{tid}" + (f"_{num}" if num > 1 else ""),
         "platform": "x", "post_id": tid, "media": mk,
         "url": f"https://x.com/{handle}/status/{tid}",
-        "media_url": None if url.startswith("ytdl:") else url,
+        "media_url": None if (not url or url.startswith("ytdl:")) else url,
         "author": handle, "author_name": author.get("nick") or "",
         "author_url": f"https://x.com/{handle}",
         "text": kw.get("content") or "", "hashtags": " ".join(kw.get("hashtags") or []),
@@ -220,11 +223,23 @@ def item_from_ytdlp(info: dict, source: str):
     }
 
 
-def items_from_mastodon(status: dict, instance: str, source: str, include_images=True):
+def items_from_mastodon(status: dict, instance: str, source: str, include_images=True, include_text=False):
     s = status.get("reblog") or status
     acc = s.get("account") or {}
     out = []
     medias = s.get("media_attachments") or []
+    if not medias and include_text:                   # a plain post / reply: still something the account did
+        return [{
+            "id": f"mastodon:{s['id']}", "platform": "mastodon", "post_id": str(s["id"]), "media": "post",
+            "url": s.get("url") or s.get("uri"), "media_url": None,
+            "author": acc.get("acct") or "", "author_name": acc.get("display_name") or "",
+            "author_url": acc.get("url"), "text": strip_html(s.get("content") or ""),
+            "hashtags": " ".join(t.get("name", "") for t in s.get("tags") or []),
+            "lang": s.get("language"), "posted_at": parse_date(s.get("created_at")),
+            "duration": None, "width": None, "height": None,
+            "likes": to_int(s.get("favourites_count")), "reposts": to_int(s.get("reblogs_count")),
+            "replies": to_int(s.get("replies_count")), "views": 0, "thumbnail": None, "source": source,
+        }]
     for n, m in enumerate(medias, 1):
         mk = {"video": "video", "gifv": "video", "image": "image"}.get(m.get("type"), "post")
         if mk == "image" and not include_images:
@@ -250,21 +265,31 @@ def items_from_mastodon(status: dict, instance: str, source: str, include_images
     return out
 
 
-def item_from_reddit(d: dict, source: str, include_images=True):
+def item_from_reddit(d: dict, source: str, include_images=True, include_text=False):
+    if d.get("body") is not None and not d.get("title"):     # a comment
+        if not include_text:
+            return None
+        link = "https://www.reddit.com" + (d.get("permalink") or "")
+        return {"id": f"reddit:{d.get('id')}", "platform": "reddit", "post_id": d.get("id"), "media": "post",
+                "url": link, "media_url": None, "author": d.get("author") or "",
+                "author_name": "r/" + (d.get("subreddit") or ""), "author_url": f"https://www.reddit.com/user/{d.get('author')}",
+                "text": "↩ " + (d.get("body") or ""), "hashtags": hashtag_form(d.get("subreddit") or ""), "lang": None,
+                "posted_at": parse_date(d.get("created_utc")), "duration": None, "width": None, "height": None,
+                "likes": to_int(d.get("score")), "reposts": 0, "replies": 0, "views": 0, "thumbnail": None, "source": source}
     hint = d.get("post_hint") or ""
     is_video = d.get("is_video") or hint in ("hosted:video", "rich:video") or \
         any(h in (d.get("domain") or "") for h in VIDEO_HOSTS)
     is_image = hint == "image" or media_kind(d.get("url", "")) == "image"
-    if not is_video and not (is_image and include_images):
+    if not is_video and not (is_image and include_images) and not include_text:
         return None
     rv = ((d.get("secure_media") or d.get("media") or {}) or {}).get("reddit_video") or {}
     prev = (((d.get("preview") or {}).get("images") or [{}])[0].get("source") or {}).get("url")
     link = "https://www.reddit.com" + d.get("permalink", "")
     return {
         "id": f"reddit:{d.get('id')}", "platform": "reddit", "post_id": d.get("id"),
-        "media": "video" if is_video else "image",
+        "media": "video" if is_video else "image" if is_image else "post",
         "url": link if (d.get("is_video") or not is_video) else d.get("url") or link,
-        "media_url": None if is_video else d.get("url"),
+        "media_url": None if (is_video or not is_image) else d.get("url"),
         "author": d.get("author") or "", "author_name": "r/" + (d.get("subreddit") or ""),
         "author_url": f"https://www.reddit.com/user/{d.get('author')}",
         "text": "\n".join(x for x in (d.get("title"), d.get("selftext")) if x),
@@ -338,9 +363,10 @@ def items_from_feed(xml_text: str, feed_url: str, source: str, all_entries=False
 
 def build_x_search(q: str, opt: dict) -> str:
     parts = [q.strip()]
-    if opt.get("media", "video") == "video":
+    mode = opt.get("media", "video")
+    if mode == "video":
         parts.append("filter:videos")
-    else:
+    elif mode != "everything":
         parts.append("filter:media")
     if to_int(opt.get("min_likes")):
         parts.append(f"min_faves:{to_int(opt['min_likes'])}")
@@ -348,7 +374,7 @@ def build_x_search(q: str, opt: dict) -> str:
         parts.append(f"since:{opt['since']}")
     if opt.get("lang"):
         parts.append(f"lang:{opt['lang']}")
-    if opt.get("exclude_replies", True):
+    if opt.get("exclude_replies", mode != "everything"):
         parts.append("-filter:replies")
     return " ".join(p for p in parts if p)
 
@@ -371,13 +397,106 @@ def fetch_ytsearch(ctx, src, query, limit):
 
 def _engine_fetch(ctx, url, limit, engine):
     if engine == "auto":
-        engine = "gallery-dl" if ctx.gdl_supports(url) else "yt-dlp"
+        if ctx.gdl_supports(url):
+            engine = "gallery-dl"
+        elif ctx.ytdlp_supports(url):
+            engine = "yt-dlp"
+        else:
+            engine = "html"                              # no downloader knows this site: read the page itself
+    if engine == "html":
+        yield from fetch_html_page(ctx, url, limit)
+        return
     if engine == "gallery-dl":
         for murl, kw in ctx.gdl(url, limit):
             yield item_from_gdl(murl, kw, ctx.label)
     else:
         for info in ctx.ytdlp(url, limit, flat=False):
             yield item_from_ytdlp(info, ctx.label)
+
+
+_HTML_SKIP = re.compile(r"(login|signup|register|privacy|terms|cookie|about|contact|/tag/|/page/\d|javascript:|mailto:)", re.I)
+_LD_KINDS = {"VideoObject": "video", "ImageObject": "image", "Article": "post", "NewsArticle": "post",
+             "BlogPosting": "post", "SocialMediaPosting": "post", "DiscussionForumPosting": "post", "Product": "post"}
+
+
+def _web_item(ctx, dom, link, media, text, **kw):
+    it = {"id": f"web:{dom}:{abs(hash(link))}", "platform": dom, "post_id": link, "media": media, "url": link,
+          "media_url": None, "author": dom, "author_name": "", "author_url": "", "text": text or "", "hashtags": "",
+          "lang": None, "posted_at": None, "duration": None, "width": None, "height": None, "likes": 0, "reposts": 0,
+          "replies": 0, "views": 0, "thumbnail": None, "source": ctx.label}
+    it.update(kw)
+    return it
+
+
+def fetch_html_page(ctx, url, limit):
+    """Any site whose search-results page we can read: JSON-LD entries first (best), then result links
+    with their text, then plain media on the page. Best effort — it is a page, not an API."""
+    body, _, final = http_get(url, timeout=20, max_bytes=3_000_000)
+    base = final or url
+    dom = domain_of(base)
+    seen, out = set(), []
+
+    def push(it):
+        if it["url"] and it["url"] not in seen and len(out) < limit * 2:
+            seen.add(it["url"])
+            out.append(it)
+
+    for m in re.finditer(r"<script[^>]+ld\+json[^>]*>(.*?)</script>", body, re.S | re.I):
+        try:
+            data = json.loads(m.group(1))
+        except ValueError:
+            continue
+        stack = list(data) if isinstance(data, list) else [data]
+        while stack:
+            n = stack.pop()
+            if not isinstance(n, dict):
+                continue
+            for k in ("itemListElement", "@graph", "mainEntity", "hasPart", "item"):
+                v = n.get(k)
+                if isinstance(v, list):
+                    stack.extend(v)
+                elif isinstance(v, dict):
+                    stack.append(v)
+            t = n.get("@type")
+            t = t[0] if isinstance(t, list) and t else t
+            if t not in _LD_KINDS:
+                continue
+            mep = n.get("mainEntityOfPage")
+            link = n.get("url") or (mep.get("@id") if isinstance(mep, dict) else mep)
+            if not isinstance(link, str) or not link:
+                continue
+            link = urllib.parse.urljoin(base, link)
+            au = n.get("author")
+            au = au[0] if isinstance(au, list) and au else au
+            thumb = n.get("thumbnailUrl") or n.get("image")
+            thumb = thumb[0] if isinstance(thumb, list) and thumb else thumb
+            thumb = thumb.get("url") if isinstance(thumb, dict) else thumb
+            push(_web_item(ctx, dom, link, _LD_KINDS[t],
+                           "\n".join(x for x in (n.get("name") or n.get("headline"), n.get("description")) if isinstance(x, str)),
+                           media_url=n.get("contentUrl") if _LD_KINDS[t] != "post" else None,
+                           author=(au.get("name") if isinstance(au, dict) else au if isinstance(au, str) else "") or dom,
+                           author_url=(au.get("url") if isinstance(au, dict) else "") or "",
+                           posted_at=parse_date(n.get("datePublished") or n.get("uploadDate")),
+                           thumbnail=thumb if isinstance(thumb, str) else None))
+    if len(out) < limit:
+        for m in re.finditer(r"<a\s[^>]*href=[\"']([^\"'#]+)[\"'][^>]*>(.*?)</a>", body, re.S | re.I):
+            href, inner = m.group(1), m.group(2)
+            text = strip_html(inner).strip()
+            if len(text) < 12 or _HTML_SKIP.search(href):
+                continue
+            link = urllib.parse.urljoin(base, href)
+            if not link.startswith("http") or link.rstrip("/") == base.rstrip("/"):
+                continue
+            img = re.search(r"<img[^>]+src=[\"']([^\"']+)", inner, re.I)
+            push(_web_item(ctx, dom, link, "post", text[:400], author_url=base,
+                           thumbnail=urllib.parse.urljoin(base, img.group(1)) if img else None))
+    if len(out) < limit:
+        for m in re.finditer(r"<(?:video|source)[^>]+src=[\"']([^\"']+\.(?:mp4|webm|m3u8)[^\"']*)", body, re.I):
+            link = urllib.parse.urljoin(base, m.group(1))
+            push(_web_item(ctx, dom, base + "#" + str(abs(hash(link))), "video", "", media_url=link, author_url=base))
+    ctx.log(f"  page read: {len(out)} entries from {dom}")
+    for it in out[:limit]:
+        yield it
 
 
 def fetch_template(ctx, src, query, limit):
@@ -391,7 +510,8 @@ def fetch_url(ctx, src, query, limit):
 
 def fetch_mastodon(ctx, src, query, limit):
     instance = domain_of(src.get("template") or "mastodon.social") or "mastodon.social"
-    images = ctx.opts.get("media") == "all"
+    mode = ctx.opts.get("media") or "video"
+    images, text = mode in ("all", "everything"), mode == "everything"
     words = [w for w in re.split(r"\s+", (query or "").replace("#", " ")) if w]
     tags = list(dict.fromkeys([hashtag_form("".join(words))] + [hashtag_form(w) for w in words]))
     got = 0
@@ -399,7 +519,7 @@ def fetch_mastodon(ctx, src, query, limit):
         max_id = None
         while got < limit:
             url = (f"https://{instance}/api/v1/timelines/tag/{urllib.parse.quote(tag)}"
-                   f"?limit=40&only_media=true" + (f"&max_id={max_id}" if max_id else ""))
+                   f"?limit=40&only_media={'false' if text else 'true'}" + (f"&max_id={max_id}" if max_id else ""))
             try:
                 page = http_json(url, timeout=20)
             except Exception as e:      # noqa: BLE001 — network errors are reported, not fatal
@@ -408,7 +528,7 @@ def fetch_mastodon(ctx, src, query, limit):
             if not page:
                 break
             for st in page:
-                for it in items_from_mastodon(st, instance, ctx.label, images):
+                for it in items_from_mastodon(st, instance, ctx.label, images, text):
                     got += 1
                     yield it
             max_id = page[-1]["id"]
@@ -420,7 +540,8 @@ def fetch_reddit(ctx, src, query, limit):
     sub = (src.get("template") or "").strip().strip("/")
     sub = sub[2:] if sub.startswith("r/") else sub
     base = f"https://www.reddit.com/r/{sub}/search.json" if sub else "https://www.reddit.com/search.json"
-    images = ctx.opts.get("media") == "all"
+    images = ctx.opts.get("media") in ("all", "everything")
+    text = ctx.opts.get("media") == "everything"
     after, got = None, 0
     while got < limit:
         url = (f"{base}?q={urllib.parse.quote(query or '')}&limit=100&sort=relevance&type=link"
@@ -432,7 +553,7 @@ def fetch_reddit(ctx, src, query, limit):
             return
         children = (data.get("data") or {}).get("children") or []
         for c in children:
-            it = item_from_reddit(c.get("data") or {}, ctx.label, images)
+            it = item_from_reddit(c.get("data") or {}, ctx.label, images, text)
             if it:
                 got += 1
                 yield it
@@ -444,7 +565,7 @@ def fetch_reddit(ctx, src, query, limit):
 def fetch_rss(ctx, src, query, limit):
     url = fill_template(src["template"], query or "")
     body, _, _ = http_get(url, timeout=20)
-    for it in items_from_feed(body, url, ctx.label, ctx.opts.get("media") == "all")[:limit]:
+    for it in items_from_feed(body, url, ctx.label, ctx.opts.get("media") in ("all", "everything"))[:limit]:
         yield it
 
 
@@ -469,6 +590,27 @@ def source_from_preset(key, param=""):
 SEARCH_PATTERNS = ["/search?q={q}", "/search/{q}", "/search?query={q}", "/search?search_query={q}",
                    "/tag/{tag}", "/tags/{tag}", "/tagged/{tag}", "/hashtag/{tag}",
                    "/explore/tags/{tag}/", "/?s={q}"]
+
+
+_Q_PARAMS = ("q", "s", "search", "query", "term", "keyword", "keywords", "k", "text", "search_query", "wd", "p")
+
+
+def search_url_to_template(url: str):
+    """'https://site/search?q=cats' → 'https://site/search?q={q}'. Accepts the usual query parameter
+    names (even empty: '?q='), or a last path segment after /search/ … /tag/."""
+    try:
+        u = urllib.parse.urlparse(url)
+    except ValueError:
+        return None
+    qs = urllib.parse.parse_qsl(u.query, keep_blank_values=True)
+    for i, (k, v) in enumerate(qs):
+        if k.lower() in _Q_PARAMS:
+            qs[i] = (k, "{q}")
+            return urllib.parse.urlunparse(u._replace(query=urllib.parse.urlencode(qs, safe="{}")))
+    m = re.match(r"^(.*/(?:search|s|tag|tags|find|results|hashtag)/)([^/]+)/?$", u.path)
+    if m:
+        return urllib.parse.urlunparse(u._replace(path=m.group(1) + "{q}"))
+    return None
 
 
 def probe(text: str, gdl_supports=None, ytdlp_supports=None):
@@ -497,6 +639,11 @@ def probe(text: str, gdl_supports=None, ytdlp_supports=None):
 
     if "{q" in text or "{tag}" in text:
         add({"name": dom, "kind": "template", "template": url}, "your search URL")
+    else:
+        tpl = search_url_to_template(url)
+        if tpl:
+            add({"name": dom, "kind": "template", "template": tpl, "engine": "auto"},
+                "your search URL — the word you typed becomes {q}")
 
     body, ctype = "", ""
     try:

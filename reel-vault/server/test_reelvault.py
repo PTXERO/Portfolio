@@ -706,13 +706,54 @@ class TestPeople(Base):
         with self.assertRaises(ValueError):
             self.v.person_verdict(tid, "nonsense", "x|x")
 
+    def test_everything_means_every_post(self):
+        """'everything' collects text posts, replies and comments — not only media — and reads any site's
+        search page when no downloader knows it."""
+        from rv import sources as S
+        from rv.vault import Vault
+        # X: no media filter, replies allowed, and a text-only tweet from gallery-dl becomes a post
+        self.assertNotIn("filter:", S.build_x_search("cat", {"media": "everything"}))
+        self.assertIn("filter:media", S.build_x_search("cat", {"media": "all"}))
+        self.assertIn("-filter:replies", S.build_x_search("cat", {"media": "all"}))
+        it = S.item_from_x("text:", {"tweet_id": "77", "content": "just words", "count": 0, "author": {"name": "someone"}}, "t")
+        self.assertEqual((it["media"], it["media_url"], it["text"]), ("post", None, "just words"))
+        # Mastodon: a status without attachments is a post when text is wanted, nothing otherwise
+        st = {"id": "5", "content": "<p>hello <b>there</b></p>", "account": {"acct": "a@m", "url": "u"}, "tags": [], "media_attachments": []}
+        self.assertEqual(S.items_from_mastodon(st, "m", "t", True, True)[0]["media"], "post")
+        self.assertEqual(S.items_from_mastodon(st, "m", "t", True, False), [])
+        # Reddit: a comment is a post, a text submission too
+        com = {"id": "c1", "body": "nice one", "permalink": "/r/x/comments/c1", "author": "bob", "subreddit": "x", "created_utc": 1700000000}
+        self.assertEqual(S.item_from_reddit(com, "t", True, True)["text"], "↩ nice one")
+        self.assertIsNone(S.item_from_reddit(com, "t", True, False))
+        sub = {"id": "s1", "title": "a question", "selftext": "why?", "permalink": "/r/x/comments/s1", "author": "bob", "subreddit": "x", "url": "https://www.reddit.com/r/x/comments/s1"}
+        self.assertEqual(S.item_from_reddit(sub, "t", True, True)["media"], "post")
+        self.assertIsNone(S.item_from_reddit(sub, "t", True, False))
+        # the vault accepts posts only under 'everything'
+        self.assertTrue(self.v.accept({"id": "x", "media": "post"}, {"media": "everything"}))
+        self.assertFalse(self.v.accept({"id": "x", "media": "post"}, {"media": "all"}))
+        # any site: the page reader pulls JSON-LD entries and result links out of a search page
+        html = ("""<html><body><script type="application/ld+json">{"@type":"ItemList","itemListElement":[{"@type":"ListItem","item":"""
+                """{"@type":"VideoObject","name":"Skate clip","url":"/v/1","contentUrl":"/v/1.mp4","thumbnailUrl":"/t/1.jpg","uploadDate":"2025-03-01"}}]}</script>"""
+                """<a href="/post/2">A longer result about skating</a><a href="/login">log in here please</a></body></html>""")
+        orig = S.http_get
+        S.http_get = lambda url, **k: (html, "text/html", url)
+        try:
+            class C:  # noqa: D401 — minimal ctx
+                label, opts = "t", {}
+                def log(self, m): pass
+            got = list(S.fetch_html_page(C(), "https://example.org/search?q=skate", 10))
+        finally:
+            S.http_get = orig
+        self.assertEqual([(g["media"], g["url"]) for g in got], [("video", "https://example.org/v/1"), ("post", "https://example.org/post/2")])
+        self.assertEqual(got[0]["media_url"], "/v/1.mp4")
+
     def test_creator_feeds_per_network(self):
         """One @username on one site becomes that topic's own source — no cross-site guessing."""
         from rv.web import parse_creator
         tid = self.v.create_topic("me")["id"]
         feeds = {plat: self.v.follow_author(tid, "someone", plat)["template"]
                  for plat in ("x", "youtube", "reddit", "bluesky", "tiktok", "instagram", "threads")}
-        self.assertEqual(feeds["x"], "https://x.com/someone/media")
+        self.assertEqual(feeds["x"], "https://x.com/someone/with_replies")       # everything they post, replies too
         self.assertEqual(feeds["youtube"], "https://www.youtube.com/@someone/videos")
         self.assertEqual(feeds["bluesky"], "https://bsky.app/profile/someone")
         self.assertEqual(feeds["tiktok"], "https://www.tiktok.com/@someone")
