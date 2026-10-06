@@ -213,6 +213,10 @@ details.more[open] summary{color:var(--acc)}
 .origin.web{color:var(--acc2);border-color:rgba(66,212,245,.4)}
 .origin.learned,.origin.cooccur{color:var(--acc4);border-color:rgba(245,165,66,.4)}
 .origin.author{color:var(--acc3);border-color:rgba(245,66,168,.4)}
+.origin.soft,.origin.profile{color:var(--acc2);border-color:rgba(66,212,245,.35)}
+.whynot{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.whynot b{font-style:normal;color:var(--bad);font-weight:normal;font-family:var(--fmono);font-size:11px;margin-right:2px}
+.whynot span{font-family:var(--fmono);font-size:11px;padding:2px 7px;border-radius:9px;border:1px solid rgba(255,77,109,.35);color:var(--bad)}
 .prec{width:54px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;display:inline-block}
 .prec i{display:block;height:100%;background:var(--good)}
 .fchip{display:inline-flex;align-items:center;gap:6px;margin:0 6px 8px 0;padding:7px 12px;border-radius:16px;border:1px solid var(--b2);font-family:var(--fmono);font-size:12px;background:var(--panel);min-height:36px}
@@ -339,6 +343,8 @@ pre.cmd i{color:var(--dim);font-style:normal}
     <summary>▸ MORE OPTIONS</summary>
     <div class="card pad" style="margin-top:4px">
       <label class="field"><span>Extra starting searches (one per line)</span><textarea id="ntSeeds" rows="3" placeholder="kickflip&#10;skatepark&#10;#skatelife"></textarea></label>
+      <label class="field"><span>Soft keywords — related, nice-to-have (comma or line separated)</span><textarea id="ntSoft" rows="2" placeholder="street, night, slow motion"></textarea></label>
+      <div class="note" style="margin:-6px 0 12px">Main searches above decide what's pulled in. Soft keywords get searched too and <b>boost</b> a video's score when they show up, but are never required.</div>
       <label class="field"><span>How wide to search · <b id="ntBreadthL" style="color:var(--acc);font-weight:normal">WIDE</b></span><input type="range" id="ntBreadth" min="1" max="5" value="3"></label>
       <div class="grid2">
         <label class="field"><span>Collect</span><select id="ntMedia"><option value="video">Videos</option><option value="all">Videos + images</option><option value="everything">Everything</option></select></label>
@@ -396,7 +402,7 @@ pre.cmd i{color:var(--dim);font-style:normal}
   <div class="resbar">
     <div class="total grow" id="total">—</div>
     <select id="sort" aria-label="Sort">
-      <option value="relevance">Best match</option><option value="newest">Newest</option><option value="oldest">Oldest</option>
+      <option value="relevance">Best match</option><option value="topic" id="sortTopicOpt" hidden>Topic match</option><option value="newest">Newest</option><option value="oldest">Oldest</option>
       <option value="likes">Most liked</option><option value="views">Most viewed</option><option value="engagement">Engagement</option>
       <option value="longest">Longest</option><option value="shortest">Shortest</option><option value="collected">Recently added</option>
     </select>
@@ -700,7 +706,8 @@ $('#newTopicForm').onsubmit = async e => {
   if (!ready()) return toast('Topics need the server, see SETUP', 3500);
   const seeds = [name, ...$('#ntSeeds').value.split('\n').map(s => s.trim()).filter(Boolean)];
   try{
-    const t = await api('/api/topics', { method: 'POST', body: { name, seeds, settings: { breadth: +$('#ntBreadth').value, media: $('#ntMedia').value, refresh_hours: +$('#ntRefresh').value } } });
+    const soft = $('#ntSoft').value.split(/[,\n]/).map(x => x.trim()).filter(Boolean);
+    const t = await api('/api/topics', { method: 'POST', body: { name, seeds, settings: { breadth: +$('#ntBreadth').value, media: $('#ntMedia').value, refresh_hours: +$('#ntRefresh').value, soft } } });
     $('#ntName').value = ''; $('#ntSeeds').value = ''; $('#ntName').blur();
     toast('Searching for "' + name + '"…'); pollJobs();
     go('topic/' + t.id + '/review');
@@ -763,7 +770,9 @@ async function loadDeck(){
   deckLoading = false;
   if (route.view === 'topic' && (route.seg || 'review') === 'review' && !$('#rcard')) showCard();
 }
-const itemSrc = it => it.file && LIVE ? mediaUrl(it.file) : it.media_url;
+const streamUrl = it => API + '/api/items/' + encodeURIComponent(it.id) + '/stream';
+// downloaded → local file; live video → stream through the PC (plays X etc. the phone can't fetch); demo → raw url
+const itemSrc = it => it.file && LIVE ? mediaUrl(it.file) : (ready() && (it.media || 'video') === 'video') ? streamUrl(it) : it.media_url;
 const posterOf = it => it.thumb_file && LIVE ? mediaUrl(it.thumb_file) : (it.thumbnail || '');
 function showCard(){
   const body = $('#tBody');
@@ -793,6 +802,7 @@ function showCard(){
         <div class="who"><b>@${esc(it.author || '?')}</b><span>· ${ago(it.posted_at)}</span>${it.likes ? `<span>· ♥ ${fmtN(it.likes)}</span>` : ''}${it.views ? `<span>· ▶ ${fmtN(it.views)}</span>` : ''}</div>
         <div class="txt" id="rtxt" style="margin-top:6px">${hl(it.text || '(no caption)', re)}</div>
         <div class="why">${found}${it.why?.meaning != null ? `<span>meaning <b>${Math.round(it.why.meaning*100)}%</b></span>` : ''}${it.why?.taste != null ? `<span>your taste <b>${Math.round(it.why.taste*100)}%</b></span>` : ''}</div>
+        ${it.why?.lower && it.why.lower.length ? `<div class="whynot"><b>you tend to 👎:</b>${it.why.lower.map(w => `<span>${esc(w)}</span>`).join('')}</div>` : ''}
       </div>
       <div class="ractions">
         <button class="big no" id="vNo" aria-label="Not relevant">👎</button>
@@ -812,7 +822,7 @@ function showCard(){
   else if (media !== 'image' && LIVE) lazyPlay(it);
   bindSwipe($('#rcard'), dir => vote(dir));
   const nx = deck[1];
-  if (nx && !itemSrc(nx) && (nx.media || 'video') === 'video') api('/api/items/' + encodeURIComponent(nx.id) + '/play').then(r => { if (r.url) nx.media_url = nx.media_url || r.url; }).catch(() => {});
+  if (nx && !nx.file && (nx.media || 'video') === 'video') api('/api/items/' + encodeURIComponent(nx.id) + '/play').catch(() => {});   // warm the proxy's resolve cache
 }
 function attachDeckVideo(v){
   const hint = () => $('#tapHint');
@@ -934,8 +944,12 @@ async function renderBrain(){
     <div>${ins.likes.length ? ins.likes.map(f => `<button class="fchip good" data-addq="${esc(f.label.replace(/^search: /, ''))}">${esc(f.label)} ＋</button>`).join('') : '<p class="note">Give a few 👍 to teach it.</p>'}</div>
     <h3 class="s">It ranks lower</h3>
     <div>${ins.dislikes.length ? ins.dislikes.map(f => `<span class="fchip bad">${esc(f.label)}</span>`).join('') : '<p class="note">Give a few 👎 to show what you don\'t want.</p>'}</div>
-    ${ins.authors.length ? `<h3 class="s">Creators you keep liking</h3>${ins.authors.map((a, i) => `<div class="qrow"><div class="grow"><div class="q">@${esc(a.author)}</div><div class="meta2"><span>${esc(a.platform)}</span><span>👍${a.pos}${a.neg ? ' 👎' + a.neg : ''}</span></div></div>
-      <button class="btn sm" data-follow="${i}">FOLLOW</button></div>`).join('')}` : ''}
+    <h3 class="s">Creators in this topic</h3>
+    <p class="note" style="margin-bottom:8px">Add a username or profile link. It pulls their posts, learns what and when they post, and feeds that in.</p>
+    <form class="row" id="addCreator" style="margin-bottom:8px"><input id="addCreatorIn" placeholder="@username or profile link" autocapitalize="off" autocorrect="off" enterkeyhint="done" aria-label="Add a creator"><button class="btn pri">ADD</button></form>
+    <div id="creatorList">${creatorsHTML(ins.creators)}</div>
+    ${ins.authors.length ? `<p class="note" style="margin-top:10px">You keep liking:</p>${ins.authors.map((a, i) => `<div class="qrow"><div class="grow"><div class="q">@${esc(a.author)}</div><div class="meta2"><span>${esc(a.platform)}</span><span>👍${a.pos}${a.neg ? ' 👎' + a.neg : ''}</span></div></div>
+      <button class="btn sm" data-follow="${i}">+ ADD</button></div>`).join('')}` : ''}
     <h3 class="s">Searches it runs (${on.length})</h3>
     <form class="row" id="addQ" style="margin-bottom:6px"><input id="addQIn" placeholder="add a search…" autocapitalize="off" enterkeyhint="done" aria-label="Add a search"><button class="btn">ADD</button></form>
     <div>${on.map(qrow).join('')}</div>
@@ -945,9 +959,40 @@ async function renderBrain(){
   $$('[data-addq]', body).forEach(b => b.onclick = async () => { await setQ(b.dataset.addq, 'add'); toast('Added "' + b.dataset.addq + '"'); renderBrain(); });
   $$('[data-follow]', body).forEach(b => b.onclick = async () => {
     const a = ins.authors[+b.dataset.follow];
-    try{ await api('/api/topics/' + T.id + '/follow', { method: 'POST', body: { author: a.author, platform: a.platform, author_url: a.author_url } }); toast('Following: added to SOURCES'); b.disabled = true; b.textContent = '✓'; }catch(e){ toast(e.message); }
+    b.disabled = true; b.textContent = '…';
+    await addCreator(a.author_url || a.author);
   });
   $('#addQ').onsubmit = async e => { e.preventDefault(); const q = $('#addQIn').value.trim(); if (!q) return; await setQ(q, 'add'); renderBrain(); };
+  $('#addCreator').onsubmit = async e => { e.preventDefault(); const h = $('#addCreatorIn').value.trim(); if (!h) return; await addCreator(h); };
+  $$('[data-delc]', body).forEach(b => b.onclick = async () => { if (!await confirmSheet('Remove creator?', 'Removes their profile and feed from this topic. Collected posts stay.', 'REMOVE')) return; await api('/api/topics/' + T.id + '/creator?handle=' + encodeURIComponent(b.dataset.delc), { method: 'DELETE' }); renderBrain(); });
+  $$('[data-cnotes]', body).forEach(t => t.onchange = async () => { try{ await api('/api/topics/' + T.id + '/creator', { method: 'PATCH', body: { handle: t.dataset.cnotes, notes: t.value } }); toast('Notes saved'); }catch(e){ toast(e.message); } });
+}
+function creatorsHTML(creators){
+  if (!creators || !creators.length) return '';
+  const when = p => { const parts = []; if (p.per_week) parts.push(p.per_week + '/week'); if (p.active_days && p.active_days.length) parts.push(p.active_days.join(' ')); if (p.active_hours_utc && p.active_hours_utc.length) parts.push(p.active_hours_utc.map(h => h + ':00').join(', ') + ' UTC'); return parts.join(' · '); };
+  return creators.map(p => `<div class="card pad" style="margin-bottom:8px">
+    <div class="row"><div class="grow"><b style="color:var(--acc2)">@${esc(p.handle)}</b> <span class="kind">${esc(p.platform || '')}</span></div><button class="btn sm danger" data-delc="${esc(p.handle)}" aria-label="Remove">✕</button></div>
+    <div class="note" style="margin-top:6px">${p.posts || 0} posts · ${p.span_days ? 'over ' + p.span_days + ' days' : ''}${p.avg_duration ? ' · ~' + fmtDur(p.avg_duration) + ' each' : ''}${p.median_likes ? ' · ♥ ~' + fmtN(p.median_likes) : ''}</div>
+    ${when(p) ? `<div class="note">posts ${when(p)}</div>` : ''}
+    ${p.languages && p.languages.length ? `<div class="note">language: ${p.languages.map(esc).join(', ')}</div>` : ''}
+    ${p.top_hashtags && p.top_hashtags.length ? `<div class="why" style="margin-top:6px">${p.top_hashtags.slice(0, 6).map(h => `<span>#${esc(h)}</span>`).join('')}</div>` : ''}
+    <label class="field" style="margin:8px 0 0"><span>Your notes / labels (whatever you want to record)</span><textarea data-cnotes="${esc(p.handle)}" rows="2" placeholder="e.g. interviews, west coast, posts weekends">${esc(p.notes || '')}</textarea></label>
+  </div>`).join('');
+}
+async function addCreator(handle){
+  toast('Learning @' + handle.replace(/^@/, '') + '… (see ACTIVITY)', 3500);
+  try{
+    const j = await api('/api/topics/' + T.id + '/creator', { method: 'POST', body: { handle } });
+    pollJobs();
+    const wait = async () => {
+      let r; try{ r = await api('/api/jobs/' + j.id); }catch(e){ return; }
+      if (['queued', 'running'].includes(r.state)) return setTimeout(wait, 1500);
+      if (r.state === 'done' && r.result){ toast('Added @' + r.result.handle + ': ' + r.result.collected + ' posts learned'); }
+      else toast('Could not profile that creator (check ACTIVITY log)', 4000);
+      if (route.view === 'topic' && route.seg === 'brain') renderBrain();
+    };
+    wait();
+  }catch(e){ toast(e.message); }
 }
 async function setQ(query, action){ try{ await api('/api/topics/' + T.id + '/queries', { method: 'POST', body: { query, action } }); }catch(e){ toast(e.message); } }
 
@@ -957,7 +1002,8 @@ async function topicSettings(){
   try{ srcs = (await api('/api/sources')).sources.filter(x => x.searchable); }catch(e){}
   openSheet(`<h3>${esc(T.name)}</h3>
     <label class="field"><span>Name</span><input id="tsName" value="${esc(T.name)}"></label>
-    <label class="field"><span>Starting searches (one per line)</span><textarea id="tsSeeds" rows="3">${esc(T.seeds.join('\n'))}</textarea></label>
+    <label class="field"><span>Main keywords / searches (one per line)</span><textarea id="tsSeeds" rows="3">${esc(T.seeds.join('\n'))}</textarea></label>
+    <label class="field"><span>Soft keywords — related, boost but not required</span><textarea id="tsSoft" rows="2" placeholder="street, night, slow motion">${esc((s.soft || []).join(', '))}</textarea></label>
     <label class="field"><span>How wide · <b id="tsBL" style="color:var(--acc);font-weight:normal">${BREADTH[s.breadth]}</b></span><input type="range" id="tsB" min="1" max="5" value="${s.breadth}"></label>
     <div class="grid2">
       <label class="field"><span>Collect</span><select id="tsMedia"><option value="video">Videos</option><option value="all">Videos + images</option><option value="everything">Everything</option></select></label>
@@ -974,7 +1020,7 @@ async function topicSettings(){
     try{
       T = await api('/api/topics/' + T.id, { method: 'PATCH', body: { name: $('#tsName').value, seeds: $('#tsSeeds').value.split('\n'),
         sources: $$('[data-src]').filter(c => c.checked).map(c => c.dataset.src),
-        settings: { breadth: +$('#tsB').value, media: $('#tsMedia').value, refresh_hours: +$('#tsRef').value, per_query: +$('#tsPer').value || 15, auto_download: +$('#tsDl').value || 0 } } });
+        settings: { breadth: +$('#tsB').value, media: $('#tsMedia').value, refresh_hours: +$('#tsRef').value, per_query: +$('#tsPer').value || 15, auto_download: +$('#tsDl').value || 0, soft: $('#tsSoft').value.split(/[,\n]/).map(x => x.trim()).filter(Boolean) } } });
       closeSheet(); toast('Saved'); renderTopic();
     }catch(e){ toast(e.message); }
   };
@@ -1062,7 +1108,8 @@ async function openViewer(id, list, ctx={}){
   if (V.id !== id) return;
   if (ready()){
     api('/api/items/' + encodeURIComponent(id) + '/topics').then(r => { if (V.id === id) renderItemTopics(it, r.topics); }).catch(() => {});
-    if (!itemSrc(it) && (it.media || 'video') === 'video') api('/api/items/' + encodeURIComponent(id) + '/play').then(r => { if (r.url && V.id === id){ it.media_url = it.media_url || r.url; renderViewer(it); } else if (V.id === id && !r.url){ const m = $('#vmedia .note'); if (m) m.innerHTML = 'No in-app preview for this one.<br>Use ↗ ORIGINAL or ⬇ SAVE.'; } }).catch(() => {});
+    const vv = $('#viewer .vmedia video');
+    if (vv) vv.addEventListener('error', () => { const m = $('#vmedia'); if (m && V.id === id) m.innerHTML = '<div class="note" style="text-align:center;padding:24px">Couldn\'t stream this one here.<br>Use ↗ ORIGINAL or ⬇ SAVE.</div>'; }, { once: true });
     api('/api/items/' + encodeURIComponent(id) + '/related').then(r => { if (V.id === id) renderRelated(r.items); }).catch(() => renderRelated([]));
   } else renderRelated(Demo.similar(id));
 }
@@ -1191,7 +1238,7 @@ function refreshCurrent(){ if (route.view === 'library') runSearch(); else if (r
 // ══════════════════════════════════════════════════════
 //  LIBRARY
 // ══════════════════════════════════════════════════════
-const DEF = { q:'', mode:'all', synonyms:'1', fuzzy:'1', partial:'1', meaning:'0', fields:'', platform:'', media:'', author:'', tag:'', hashtag:'', topic:'',
+const DEF = { q:'', mode:'all', synonyms:'1', fuzzy:'1', partial:'1', meaning:'0', fields:'', platform:'', media:'', author:'', tag:'', hashtag:'', topic:'', topic_all:'',
   date_from:'', date_to:'', dur_min:'', dur_max:'', likes_min:'', views_min:'', has_file:'', has_speech:'', starred:'', shape:'', sort:'relevance' };
 let S = Object.assign({}, DEF), LR = { items: [], total: 0, facets: {} }, lseq = 0, lloading = false, lre = null;
 let selecting = false; const selected = new Set();
@@ -1212,6 +1259,7 @@ function syncLib(){
   $$('[data-field]').forEach(b => b.classList.toggle('on', listOf('fields').includes(b.dataset.field)));
   $('#sort').value = S.sort;
   $('[data-opt="meaning"]').hidden = !(ready() && STATUS && STATUS.semantic);
+  $('#sortTopicOpt').hidden = !S.topic;
   $('#selBtn').textContent = selecting ? 'DONE' : 'SELECT';
   $('#selBtn').classList.toggle('pri', selecting);
   $('#grid').classList.toggle('selecting', selecting);
@@ -1279,7 +1327,8 @@ $('#filterBtn').onclick = async () => {
   const F = LR.facets || {};
   const facet = (key, arr, label=v=>v, single=false) => (arr || []).map(f => `<button class="facet${(single ? S[key] === f.value : listOf(key).includes(f.value)) ? ' on' : ''}" data-fk="${key}" data-fv="${esc(f.value)}" data-single="${single ? 1 : ''}"><span class="box"></span><span class="v">${esc(label(f.value))}</span><span class="n">${fmtN(f.count)}</span></button>`).join('') || '<p class="note">—</p>';
   openSheet(`<h3>FILTERS</h3>
-    ${topicsCache.length ? `<label class="field"><span>Topic</span><select id="fTopic"><option value="">Any</option>${topicsCache.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label>` : ''}
+    ${topicsCache.length ? `<label class="field"><span>Topic</span><select id="fTopic"><option value="">Any</option>${topicsCache.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label>
+    <label class="row note" style="margin:-4px 0 12px"><input type="checkbox" id="fTopicAll" ${S.topic_all === '1' ? 'checked' : ''}> include loosely-related (things you 👎'd or it scored low)</label>` : ''}
     <div class="grid2">
       <label class="field"><span>Type</span><select id="fMedia"><option value="">Any</option><option value="video">Videos</option><option value="image">Images</option></select></label>
       <label class="field"><span>Saved</span><select id="fFile"><option value="">Any</option><option value="1">Yes</option><option value="0">No</option></select></label>
@@ -1303,7 +1352,9 @@ $('#filterBtn').onclick = async () => {
   $$('#sheet [data-fk]').forEach(b => b.onclick = () => { const k = b.dataset.fk, v = b.dataset.fv; if (b.dataset.single){ S[k] = S[k] === v ? '' : v; $$(`#sheet [data-fk="${k}"]`).forEach(x => x.classList.toggle('on', S[k] === x.dataset.fv)); } else { toggleList(k, v); b.classList.toggle('on'); } });
   $('#fReset').onclick = () => { const q = S.q; S = Object.assign({}, DEF, { q }); closeSheet(); libChanged(); };
   $('#fApply').onclick = () => {
-    if ($('#fTopic')) S.topic = $('#fTopic').value;
+    if ($('#fTopic')){ const wasTopic = S.topic; S.topic = $('#fTopic').value; S.topic_all = ($('#fTopicAll') && $('#fTopicAll').checked) ? '1' : '';
+      if (S.topic && !wasTopic && S.sort === 'relevance') S.sort = 'topic';   // default to topic relevance
+      if (!S.topic) S.topic_all = ''; }
     S.media = $('#fMedia').value; S.has_file = $('#fFile').value; S.shape = $('#fShape').value;
     const o = $('#fOther').value; S.starred = o === 'starred' ? '1' : ''; S.has_speech = o === 'speech' ? '1' : '';
     S.date_from = $('#fFrom').value; S.date_to = $('#fTo').value; S.dur_min = $('#fDmin').value; S.dur_max = $('#fDmax').value;

@@ -181,6 +181,15 @@ def refresh_expansions(vault, topic_id, web=True):
                 add(r["word"], "web", i < max(1, breadth["web"] // 3) or (seen and i < breadth["web"] * 2),
                     weight=(0.5 + 0.5 * r["score"]) * (1.2 if seen else 1.0))
 
+    # soft keywords: search each on its own, and combined with the top main word,
+    # so related content comes in — but they never gate what's kept (see TopicScorer)
+    soft = [s.strip() for s in (st.get("soft") or []) if s and s.strip()]
+    main = seeds[0] if seeds else ""
+    for i, sk in enumerate(soft):
+        add(sk, "soft", i < 2)
+        if main and sk.lower() not in main.lower():
+            add(f"{main} {sk}", "soft", True)
+
     for i, q in enumerate(cooccurring(db, topic_id)):
         add(q, "cooccur", i < breadth["cooccur"])
 

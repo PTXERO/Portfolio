@@ -201,6 +201,12 @@ def search(db, store, p: dict, semantic=None):
         if p.get("topic_label") not in (None, ""):
             where.append("ti.label = ?")
             params.append(to_int(p["topic_label"]))
+        else:
+            # scope to what the topic actually considers relevant: drop items you
+            # 👎'd, and loosely-swept items the model scored low — unless asked for all
+            if p.get("topic_all") != "1":
+                where.append("(ti.label = 1 OR (ti.label = 0 AND ti.score >= ?))")
+                params.append(to_float(p.get("topic_min"), 0.35))
 
     w = (" AND " + " AND ".join(where)) if where else ""
     light = ("i.id, i.platform, i.author, i.hashtags, i.tags, i.media, i.posted_at, i.likes, "

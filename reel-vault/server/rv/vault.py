@@ -12,6 +12,7 @@ import tempfile
 import threading
 import time
 import traceback
+import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
@@ -480,7 +481,7 @@ class Vault:
 
     # ═════════ topics ═════════
     TOPIC_DEFAULTS = {"breadth": 3, "media": "video", "refresh_hours": 0, "per_query": 15,
-                      "queries_per_run": 0, "auto_download": 0, "web": True}
+                      "queries_per_run": 0, "auto_download": 0, "web": True, "soft": [], "creators": {}}
 
     def topic(self, tid):
         t = self.db.one("SELECT * FROM topics WHERE id=?", (tid,))
@@ -774,6 +775,7 @@ class Vault:
         pos, neg = sc.top_features(20)
         return {"queries": query_stats(self.db, tid), "likes": pos, "dislikes": neg,
                 "authors": liked_authors(self.db, tid), "n_pos": sc.n_pos, "n_neg": sc.n_neg,
+                "creators": list((self.topic(tid)["settings"].get("creators") or {}).values()),
                 "model": "classifier + profile" if sc.w else "profile" if sc.n_pos + sc.n_neg else
                 "matching only", "semantic": bool(sc.sem)}
 
@@ -793,30 +795,163 @@ class Vault:
         return self.add_source({"name": f"@{author} ({platform})", "kind": kind, "template": tpl,
                                 "engine": engine, "options": {"topic": tid}, "limit_per": 30})
 
+    @staticmethod
+    def _creator_profile(items):
+        """Everything we can measure about a creator from their collected posts,
+        to improve the topic: what they post about, cadence, timing, length…"""
+        import datetime
+        import statistics
+        from collections import Counter
+        from .util import light_stem, tokens
+        posts = [it for it in items if it]
+        n = len(posts)
+        if not n:
+            return {"posts": 0}
+        tags, words, hours, dows, langs, plats = (Counter() for _ in range(6))
+        durs, times, likes, views = [], [], [], []
+        for it in posts:
+            for h in (it.get("hashtags") or "").split():
+                tags[h.lower()] += 1
+            for w in tokens(it.get("text")):
+                if len(w) > 2 and not w.isdigit():
+                    words[light_stem(w)] += 1
+            if it.get("lang"):
+                langs[it["lang"]] += 1
+            if it.get("platform"):
+                plats[it["platform"]] += 1
+            if it.get("posted_at"):
+                d = datetime.datetime.utcfromtimestamp(it["posted_at"])
+                times.append(it["posted_at"])
+                hours[d.hour] += 1
+                dows[d.strftime("%a")] += 1
+            if it.get("duration"):
+                durs.append(it["duration"])
+            likes.append(it.get("likes") or 0)
+            if it.get("views"):
+                views.append(it["views"])
+        span = (max(times) - min(times)) / 86400 if len(times) > 1 else 0
+        DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        return {
+            "posts": n,
+            "top_hashtags": [h for h, _ in tags.most_common(8)],
+            "top_words": [w for w, _ in words.most_common(12)],
+            "active_hours_utc": sorted(h for h, _ in hours.most_common(3)),
+            "active_days": [d for d in DOW if d in dict(dows.most_common(3))],
+            "languages": [lang for lang, _ in langs.most_common(3)],
+            "platforms": [p for p, _ in plats.most_common()],
+            "avg_duration": round(statistics.mean(durs), 1) if durs else None,
+            "median_likes": int(statistics.median(likes)) if likes else 0,
+            "median_views": int(statistics.median(views)) if views else 0,
+            "first_post": min(times) if times else None,
+            "last_post": max(times) if times else None,
+            "span_days": round(span, 1),
+            "per_week": round(n / (span / 7), 1) if span >= 7 else None,
+        }
+
+    def _run_creator(self, job):
+        p = job.params
+        tid = p["topic_id"]
+        handle, platform, aurl = p["handle"], p.get("platform", "x"), p.get("author_url")
+        job.title = f"profile @{handle}"
+        job.log(f"◎ learning @{handle} ({platform}) for this topic")
+        job.total = 3
+        src = self.follow_author(tid, handle, platform, aurl)
+        job.done = 1
+        job.log("  collecting their recent posts…")
+        items = list(self.fetch(job, self.get_source(src["id"]),
+                                "", 40, {"media": self.topic(tid)["settings"].get("media", "video")}))
+        for it in items:
+            self.link(tid, it["id"], "", src["id"])
+        job.done = 2
+        prof = self._creator_profile(items)
+        t = self.topic(tid)
+        st = t["settings"]
+        # feed what they post about into the topic as soft signal + searches
+        soft = list(dict.fromkeys((st.get("soft") or []) + prof.get("top_hashtags", [])[:4]))
+        creators = dict(st.get("creators") or {})
+        creators[handle.lower()] = dict(prof, handle=handle, platform=platform,
+                                        source_id=src["id"], added=now())
+        self.update_topic(tid, {"settings": {"soft": soft, "creators": creators}})
+        self.set_query(tid, "@" + handle.lstrip("@"), add=True)
+        for h in prof.get("top_hashtags", [])[:3]:
+            self.set_query(tid, "#" + h.lstrip("#"), add=True)
+        self.embed.ensure([it["id"] for it in items], job.log, job.check)
+        TopicScorer(self, tid).rescore()
+        job.done = 3
+        job.result = {"handle": handle, "platform": platform, "collected": len(items), "profile": prof}
+        job.log(f"  done: {len(items)} posts, {len(prof.get('top_hashtags', []))} hashtags learned")
+
+    def remove_creator(self, tid, handle):
+        t = self.topic(tid)
+        creators = dict(t["settings"].get("creators") or {})
+        c = creators.pop(handle.lower(), None)
+        self.update_topic(tid, {"settings": {"creators": creators}})
+        if c and c.get("source_id"):
+            self.delete_source(c["source_id"])
+
+    def set_creator_notes(self, tid, handle, notes):
+        """User's own free-text notes/labels on a creator (not auto-inferred)."""
+        t = self.topic(tid)
+        creators = dict(t["settings"].get("creators") or {})
+        c = creators.get(handle.lower())
+        if not c:
+            return None
+        c["notes"] = str(notes)[:4000]
+        self.update_topic(tid, {"settings": {"creators": creators}})
+        return c
+
     # ═════════ playback / download / analyze ═════════
-    def play_url(self, item_id):
-        """A direct, phone-playable URL for an item that isn't downloaded."""
+    def resolve_play(self, item_id):
+        """Return (url, headers) for an item's video so the server can fetch
+        and stream it. Resolves via yt-dlp when there is no direct media URL,
+        and keeps any request headers the host needs (referer, cookies…)."""
         it = self.db.get(item_id)
         if not it:
-            return None
-        if it.get("media_url") and it["media_url"].startswith("http"):
-            return it["media_url"]
+            return None, {}
         c = self._play_cache.get(item_id)
-        if c and c[1] > time.time():
-            return c[0]
-        if not self.tools.yt_dlp or not it.get("url"):
-            return None
-        try:
-            out = subprocess.run(self.tools.yt_dlp + [
-                "-g", "--no-warnings", "--no-playlist", "-f",
-                "b[ext=mp4][vcodec^=avc1][acodec!=none]/b[ext=mp4][acodec!=none]/18/b[acodec!=none]/b",
-                *self.cookie_args(), it["url"]], capture_output=True, text=True, timeout=60).stdout
-        except (subprocess.SubprocessError, OSError):
-            return None
-        url = next((ln for ln in out.splitlines() if ln.startswith("http")), None)
+        if c and c[2] > time.time():
+            return c[0], c[1]
+        url, headers = None, {}
+        if it.get("media_url") and it["media_url"].startswith("http"):
+            url = it["media_url"]
+        elif self.tools.yt_dlp and it.get("url"):
+            # -j gives the chosen format's url AND the http_headers it needs
+            try:
+                out = subprocess.run(self.tools.yt_dlp + [
+                    "-j", "--no-warnings", "--no-playlist", "-f",
+                    "b[ext=mp4][vcodec^=avc1][acodec!=none]/b[ext=mp4][acodec!=none]/18/b[acodec!=none]/b",
+                    *self.cookie_args(), *self.impersonate_args(),
+                    it["url"]], capture_output=True, text=True, timeout=90).stdout
+                info = json.loads(out.splitlines()[0]) if out.strip() else {}
+                url = info.get("url")
+                headers = info.get("http_headers") or {}
+            except (subprocess.SubprocessError, ValueError, OSError, IndexError):
+                url = None
         if url:
-            self._play_cache[item_id] = (url, time.time() + 3000)
+            self._play_cache[item_id] = (url, headers, time.time() + 2400)
+        return url, headers
+
+    def play_url(self, item_id):
+        url, _ = self.resolve_play(item_id)
         return url
+
+    def open_stream(self, item_id, rng=None, retried=False):
+        """Open the upstream video (optionally a byte range) for proxying to
+        the phone. Returns the urllib response, or None."""
+        url, headers = self.resolve_play(item_id)
+        if not url:
+            return None
+        h = {"User-Agent": USER_AGENT}
+        h.update(headers)
+        if rng:
+            h["Range"] = rng
+        try:
+            return urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=30)
+        except (urllib.error.HTTPError, urllib.error.URLError, OSError):
+            if not retried:         # a stale signed URL: resolve fresh once
+                self._play_cache.pop(item_id, None)
+                return self.open_stream(item_id, rng, retried=True)
+            return None
 
     def _run_download(self, job):
         self._download_many(job, job.params.get("ids") or [], job.params.get("analyze"))

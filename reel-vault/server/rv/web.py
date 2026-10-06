@@ -35,6 +35,28 @@ LOOPBACK = ("127.0.0.1", "localhost", "[::1]", "::1")
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 
+def parse_creator(text, platform=None, author_url=None):
+    """Accept a bare @handle, or a profile link, and work out (handle, platform, url)."""
+    text = (text or "").strip()
+    if text.startswith("http") or "/" in text and "." in text.split("/")[0]:
+        url = text if text.startswith("http") else "https://" + text
+        from .util import domain_of
+        dom = domain_of(url)
+        parts = [p for p in urllib.parse.urlparse(url).path.split("/") if p]
+        handle = ""
+        for p in parts:
+            if p.startswith("@"):
+                handle = p[1:]
+                break
+        if not handle and parts:
+            handle = parts[-1] if parts[-1] not in ("videos", "media", "submitted") else parts[-2] if len(parts) > 1 else ""
+        plat = ("x" if dom in ("x.com", "twitter.com") else "youtube" if "youtu" in dom
+                else "tiktok" if "tiktok" in dom else "reddit" if "reddit" in dom
+                else "mastodon" if dom else platform or "")
+        return handle.lstrip("@"), plat, (url if plat in ("youtube", "mastodon") else author_url)
+    return text.lstrip("@"), (platform or "x"), author_url
+
+
 def _route_ip(target):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -226,6 +248,37 @@ class Handler(BaseHTTPRequestHandler):
             traceback.print_exc()
             self._send(500, {"error": str(e)})
 
+    def _stream_proxy(self, item_id):
+        """Fetch the item's video on the server and relay it to the client,
+        passing through the Range request so the phone can seek. This makes
+        videos play that the phone can't fetch directly (X, cookie/referer-gated)."""
+        upstream = self.vault.open_stream(item_id, self.headers.get("Range"))
+        if upstream is None:
+            return self._send(502, {"error": "could not open this video"})
+        try:
+            code = upstream.status
+            h = upstream.headers
+            self.send_response(code if code in (200, 206) else 200)
+            self.send_header("Content-Type", h.get("Content-Type", "video/mp4"))
+            self.send_header("Accept-Ranges", "bytes")
+            for k in ("Content-Length", "Content-Range"):
+                if h.get(k):
+                    self.send_header(k, h[k])
+            self.send_header("Cache-Control", "no-store")
+            self._cors()
+            self.end_headers()
+            if self.command == "HEAD":
+                return
+            while True:
+                chunk = upstream.read(1 << 16)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            upstream.close()
+
     def _file(self, root: Path, rel: str):
         root = root.resolve()
         f = (root / rel).resolve()
@@ -308,7 +361,11 @@ class Handler(BaseHTTPRequestHandler):
                 items, terms = related(v, arg)
                 return ok({"items": items, "terms": terms})
             if sub == "play":
-                return ok({"url": v.play_url(arg)})
+                # hand back our own proxy URL; the server fetches & relays the video
+                return ok({"url": f"/api/items/{urllib.parse.quote(arg)}/stream",
+                           "ok": bool(v.resolve_play(arg)[0])})
+            if sub == "stream":
+                return self._stream_proxy(arg)
             if sub == "topics":
                 return ok({"topics": v.db.q(
                     "SELECT t.topic_id, t.label, t.score, p.name FROM topic_items t "
@@ -436,6 +493,21 @@ class Handler(BaseHTTPRequestHandler):
                 b = self._body()
                 return ok(v.follow_author(arg, b.get("author", ""), b.get("platform", ""),
                                           b.get("author_url")))
+            if sub == "creator" and method == "POST":
+                b = self._body()
+                handle, platform, aurl = parse_creator(b.get("handle") or b.get("author") or "",
+                                                        b.get("platform"), b.get("author_url"))
+                if not handle:
+                    return self._send(400, {"error": "enter a username or profile link"})
+                return ok(v.submit("creator", {"topic_id": arg, "handle": handle,
+                                               "platform": platform, "author_url": aurl,
+                                               "title": f"profile @{handle}"}).to_dict())
+            if sub == "creator" and method == "PATCH":
+                b = self._body()
+                return ok(v.set_creator_notes(arg, b.get("handle", ""), b.get("notes", "")) or {})
+            if sub == "creator" and method == "DELETE":
+                v.remove_creator(arg, params.get("handle", ""))
+                return ok()
             if sub == "more" and method == "POST":       # "find more like this item"
                 b = self._body()
                 _, terms = related(v, b["item_id"], limit=1)

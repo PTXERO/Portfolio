@@ -19,7 +19,7 @@ from collections import Counter, defaultdict
 from .util import light_stem, now, tokens
 
 ORIGIN_WEIGHT = {"seed": 1.0, "user": 1.0, "morph": 0.9, "synonym": 0.8, "learned": 0.65,
-                 "cooccur": 0.6, "web": 0.55, "author": 0.7, "related": 0.6}
+                 "cooccur": 0.6, "web": 0.55, "author": 0.7, "related": 0.6, "soft": 0.45}
 
 
 def sigmoid(z):
@@ -193,8 +193,11 @@ class TopicScorer:
         qrows = db.q("SELECT query, origin, weight FROM topic_queries WHERE topic_id=? AND enabled=1",
                      (topic_id,))
         seeds = json.loads(self.topic["seeds"] or "[]") if self.topic else []
+        settings = json.loads(self.topic["settings"] or "{}") if self.topic else {}
+        soft = [s for s in (settings.get("soft") or []) if s and s.strip()]
         qs = {(r["query"], r["origin"], r["weight"] or 1) for r in qrows}
         qs |= {(s, "seed", 1.0) for s in seeds}
+        qs |= {(s, "soft", 1.0) for s in soft}     # boost when present, never required
         self.qterms = query_terms(sorted(qs))
         self.hits = defaultdict(list)
         for r in db.q("SELECT item_id, query FROM topic_hits WHERE topic_id=?", (topic_id,)):
@@ -259,7 +262,32 @@ class TopicScorer:
                 why["taste"] = round(s, 3)
         learned = sum(p * w for p, w in parts) / sum(w for _, w in parts)
         alpha = min(0.85, n / (n + 4))
+        lower = self._why_lower(x)
+        if lower:
+            why["lower"] = lower
         return (1 - alpha) * base + alpha * learned, why
+
+    def _why_lower(self, x, n=3):
+        """This item's own words/tags that you tend to 👎 — the 'why not' hint.
+        Uses the trained classifier weights, else the disliked profile."""
+        src = self.w if self.w else {k: -v for k, v in self.nc.items()}
+        if not src:
+            return []
+        scored = [(x[k] * src[k], k) for k in x if src.get(k, 0) < 0]
+        scored.sort()        # most negative contribution first
+        out, seen = [], set()
+        for contrib, k in scored:
+            if contrib >= -0.02:
+                break
+            label = self.readable(k)
+            base = label.lstrip("#@").lower()
+            if base in seen or k[0] in "sdm":   # skip site/duration/media as "reasons"
+                continue
+            seen.add(base)
+            out.append(label)
+            if len(out) >= n:
+                break
+        return out
 
     def rescore(self, item_ids=None):
         db = self.v.db

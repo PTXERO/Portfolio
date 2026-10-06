@@ -185,6 +185,20 @@ class TestSearch(Base):
         self.assertNotIn("x:1", [i["id"] for i in items])
         self.assertTrue(terms)
 
+    def test_topic_filter_scopes_and_sorts(self):
+        t = self.v.create_topic("roads", ["road"])
+        tid = t["id"]
+        for iid, label, score in [("x:1", 1, 0.2), ("x:3", 0, 0.6), ("x:2", 0, 0.1), ("x:4", -1, 0.9)]:
+            self.v.link(tid, iid, "road", "x")
+            self.v.db.exec("UPDATE topic_items SET label=?, score=? WHERE topic_id=? AND item_id=?",
+                           (label, score, tid, iid))
+        ids, _ = self.ids(topic=tid, sort="likes")
+        self.assertEqual(set(ids), {"x:1", "x:3"})          # liked + high score only
+        self.assertNotIn("x:4", ids)                        # downvoted excluded even with top likes
+        self.assertNotIn("x:2", ids)                        # low score excluded
+        ids_all, _ = self.ids(topic=tid, topic_all="1")
+        self.assertEqual(set(ids_all), {"x:1", "x:2", "x:3", "x:4"})
+
     def test_upsert_keeps_user_data(self):
         self.v.db.update("x:1", {"tags": "mine", "starred": 1})
         self.v.db.upsert(S.item_from_x(*tweet("1", "edited text", likes=999)[1:], "again"))
@@ -262,6 +276,30 @@ class TestLearning(Base):
                  {"query": "bad", "origin": "web", "enabled": 1, "runs": 5, "precision": .1},
                  {"query": "off", "origin": "web", "enabled": 0, "runs": 0, "precision": .5}]
         self.assertEqual(pick_queries(stats, 2), ["skate", "good"])
+
+    def test_soft_keywords_and_why_lower(self):
+        self.v.update_topic(self.tid, {"settings": {"soft": ["street", "night"]}})
+        # teach it: street/night skate good; hockey/ice bad
+        self.v.vote(self.tid, "x:100", 1)                    # "Kickflip down the 12 stair"
+        self.v.vote(self.tid, "x:104", 1)                    # "Night skate downtown ledges"
+        self.v.vote(self.tid, f"x:{100 + len(SKATE)}", -1)   # hockey
+        self.v.vote(self.tid, f"x:{101 + len(SKATE)}", -1)   # figure skating
+        TopicScorer(self.v, self.tid).rescore()
+        refresh_expansions(self.v, self.tid, web=False)
+        q = {r["query"] for r in self.v.db.q(
+            "SELECT query FROM topic_queries WHERE topic_id=? AND origin='soft'", (self.tid,))}
+        self.assertTrue({"street", "night"} & q, q)          # soft words became searches
+        # a hockey item's why-note names the words you downvote
+        sc = TopicScorer(self.v, self.tid)
+        _, why = sc.score(self.v.db.get(f"x:{102 + len(SKATE)}"))   # "Ice skate sharpening #hockey"
+        self.assertTrue(any(w in ("hockey", "ice", "#hockey") for w in why.get("lower", [])), why)
+
+    def test_creator_profile(self):
+        items = [self.v.db.get(f"x:{100 + i}") for i in range(len(SKATE))]
+        prof = self.v._creator_profile(items)
+        self.assertEqual(prof["posts"], len(SKATE))
+        self.assertIn("skate", prof["top_hashtags"])
+        self.assertIn("median_likes", prof)
 
     def test_feed_review_and_queries_stats(self):
         TopicScorer(self.v, self.tid).rescore()
