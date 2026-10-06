@@ -289,9 +289,127 @@ def list_people(v, topic=None, q="", sort=""):
     return {"people": out, "total": len(out)}
 
 
+# ── the WORD web: @accounts + #hashtags + words/"phrases" as one graph ──
+_WORD_MIN = 3
+
+
+def _parse_focus(f):
+    f = str(f or "").strip()
+    if not f:
+        return None
+    if f[0] == "@":
+        return {"kind": "account", "key": f[1:].lower()}
+    if f[0] == "#":
+        return {"kind": "hashtag", "key": re.sub(r"[^\w]+", "", f[1:].lower())}
+    m = re.match(r'^"(.+)"$', f)
+    txt = (m.group(1) if m else f).lower().strip()
+    return {"kind": "word", "key": txt, "phrase": " " in txt}
+
+
+def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
+    by, idf, h_df, w_df = _build(v)
+    kinds = {k for k in str(kinds).split(",") if k}
+    cap = min(int(max_nodes or 80), 160)
+    fz = _parse_focus(focus)
+    node_w, edge_w, kind_of = Counter(), Counter(), {}
+
+    def link(a, b, w):
+        if a != b:
+            edge_w[(a, b) if a < b else (b, a)] += w
+
+    acct_key = {}
+    for a in by.values():
+        aid = f"@{a.author.lower()}|{a.platform}"
+        acct_key[aid] = a.id
+        kind_of[aid] = "account"
+    for a in by.values():
+        aid = f"@{a.author.lower()}|{a.platform}"
+        for it in a.items:
+            tags = ["#" + h for h in _hashes(it)]
+            words = ["w:" + w for w in {w for w in _tokens(it.get("text")) if len(w) > _WORD_MIN and w not in STOP}]
+            if fz and fz["kind"] == "word" and fz.get("phrase") and fz["key"] in str(it.get("text") or "").lower():
+                words.append("w:" + fz["key"])
+            for t in tags:
+                kind_of[t] = "hashtag"
+                node_w[t] += idf(h_df[t[1:]])
+                link(aid, t, 1)
+            for w in words:
+                kind_of[w] = "word"
+                node_w[w] += 0.6 * idf(w_df.get(w[2:], 1))
+                link(aid, w, 0.6)
+            node_w[aid] += 1
+            for i in range(len(tags)):
+                for j in range(i + 1, len(tags)):
+                    link(tags[i], tags[j], 1.2)
+            for t in tags:
+                for w in words:
+                    link(t, w, 0.5)
+            if len(words) <= 12:
+                for i in range(len(words)):
+                    for j in range(i + 1, len(words)):
+                        link(words[i], words[j], 0.3)
+        for b in by.values():
+            if b.id == a.id:
+                continue
+            w, hn, wn, ment = _edge(a, b, idf, h_df, w_df)
+            if w > 0:
+                link(aid, f"@{b.author.lower()}|{b.platform}", w * 0.5)
+
+    def nb(nid):
+        out = [(y if x == nid else x, w) for (x, y), w in edge_w.items() if nid in (x, y)]
+        return sorted(out, key=lambda p: -p[1])
+
+    focus_id = None
+    if fz:
+        if fz["kind"] == "account":
+            focus_id = next((k for k in kind_of if k.startswith("@" + fz["key"] + "|")), None)
+        elif fz["kind"] == "hashtag":
+            focus_id = "#" + fz["key"]
+        else:
+            focus_id = "w:" + fz["key"]
+    if focus_id and (focus_id in kind_of or focus_id in node_w):
+        first = [p for p in nb(focus_id) if kind_of.get(p[0]) in kinds][:int(cap * 0.6)]
+        seen = [focus_id] + [p[0] for p in first]
+        sset = set(seen)
+        for k, _ in first:
+            for k2, _ in nb(k)[:4]:
+                if len(sset) >= cap:
+                    break
+                if kind_of.get(k2) in kinds and k2 not in sset:
+                    sset.add(k2)
+                    seen.append(k2)
+        ids = seen
+    else:
+        per = {"account": round(cap * 0.4), "hashtag": round(cap * 0.3), "word": round(cap * 0.3)}
+        ids = []
+        for kind in ("account", "hashtag", "word"):
+            if kind in kinds:
+                ids += sorted((k for k in node_w if kind_of.get(k) == kind), key=lambda k: -node_w[k])[:per[kind]]
+    idset = set(ids)
+    edges = sorted(({"a": a, "b": b, "w": round(w, 2)} for (a, b), w in edge_w.items() if a in idset and b in idset),
+                   key=lambda e: -e["w"])[:cap * 4]
+    deg = Counter()
+    for e in edges:
+        deg[e["a"]] += e["w"]
+        deg[e["b"]] += e["w"]
+    meta = _all_meta(v)
+    nodes = []
+    for nid in ids:
+        kind = kind_of.get(nid, "word")
+        label = nid[1:].split("|")[0] if kind == "account" else nid if kind == "hashtag" else nid[2:]
+        pid = acct_key.get(nid) if kind == "account" else None
+        nodes.append({"id": nid, "kind": kind, "label": label, "w": round(node_w[nid], 2), "strength": round(deg[nid], 1),
+                      "person_id": pid, "attrs": ((meta.get(pid) or {}).get("attrs", [])[:3] if pid else [])})
+    return {"nodes": nodes, "edges": edges, "focus": focus_id if focus_id in idset else None,
+            "focus_asked": focus or "", "kinds": sorted(kinds), "generated": _now()}
+
+
 def handle(v, method, parts, params, body):
     """Route /api/people… and /api/graph like the browser module does."""
     if parts[0] == "graph":
+        if "focus" in params or "kinds" in params:
+            return word_graph(v, params.get("focus") or "", params.get("kinds") or "account,hashtag,word",
+                              int(params.get("max") or 80))
         return graph(v, params.get("topic") or None, int(params.get("max") or 60), float(params.get("min") or 1.5))
     pid = parts[1] if len(parts) > 1 else None
     if not pid:

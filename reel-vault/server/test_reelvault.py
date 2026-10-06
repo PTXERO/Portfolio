@@ -569,3 +569,42 @@ class TestPeople(Base):
         self.assertEqual(people.handle(self.v, "GET", ["people", "ana|x"], {}, {})["author"], "ana")
         self.assertIn("nodes", people.handle(self.v, "GET", ["graph"], {"max": "10"}, {}))
         self.assertEqual(people.handle(self.v, "PATCH", ["people", "ana|x"], {}, {"notes": "x"})["notes"], "x")
+
+
+class TestWordWeb(Base):
+    """The word web: @accounts, #hashtags and words/"phrases" in one graph, centred on a focus."""
+
+    def _seed(self):
+        self.add(tweet("1", "golden hour timelapse #photo #film", author="ana", tags=["photo", "film"]),
+                 tweet("2", "golden hour again #film #analog", author="ana", tags=["film", "analog"]),
+                 tweet("3", "my photo set golden hour #photo", author="ben", tags=["photo"]),
+                 tweet("4", "pasta night #pasta", author="dan", tags=["pasta"]))
+
+    def test_kinds_and_focus(self):
+        from rv import people
+        self._seed()
+        g = people.word_graph(self.v)
+        kinds = {n["kind"] for n in g["nodes"]}
+        self.assertEqual(kinds, {"account", "hashtag", "word"})
+        ids = {n["id"] for n in g["nodes"]}
+        self.assertIn("#film", ids)
+        self.assertIn("w:golden", ids)
+        self.assertTrue(any(e["a"] == "#film" or e["b"] == "#film" for e in g["edges"]))
+        # @account focus
+        g = people.word_graph(self.v, focus="@ana")
+        self.assertEqual(g["focus"], "@ana|x")
+        self.assertIn("#film", {n["id"] for n in g["nodes"]})
+        # #hashtag focus (case/punctuation tolerant)
+        self.assertEqual(people.word_graph(self.v, focus="#Film")["focus"], "#film")
+        # "quoted phrase" becomes its own node, linked to the accounts that said it
+        g = people.word_graph(self.v, focus='"golden hour"')
+        self.assertEqual(g["focus"], "w:golden hour")
+        touching = {e["a"] for e in g["edges"] if e["b"] == "w:golden hour"} | {e["b"] for e in g["edges"] if e["a"] == "w:golden hour"}
+        self.assertIn("@ana|x", touching)
+        self.assertIn("@ben|x", touching)
+        self.assertNotIn("@dan|x", touching)
+        # kinds filter + router
+        g = people.handle(self.v, "GET", ["graph"], {"focus": "#photo", "kinds": "account,hashtag"}, {})
+        self.assertFalse([n for n in g["nodes"] if n["kind"] == "word"])
+        self.assertEqual(g["focus"], "#photo")
+        self.assertIn("nodes", people.handle(self.v, "GET", ["graph"], {}, {}))     # legacy account graph still served

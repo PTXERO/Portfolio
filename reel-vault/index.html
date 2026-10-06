@@ -437,8 +437,15 @@ pre.cmd i{color:var(--dim);font-style:normal}
   .sheet.on{transform:none}
   .sheet .grab{display:none}
   .sheet-bg{background:rgba(0,0,0,.45)}
-  /* bulk + reason bars align to the content area, not the whole window */
-  .bulkbar,.reasonbar{left:var(--side)}
+  /* bulk bar aligns to the content area, not the whole window */
+  .bulkbar{left:var(--side)}
+  /* the 👎 "why?" prompt: a compact panel by the vote buttons, chips wrap (no sideways scroll) */
+  .reasonbar{left:auto;right:36px;bottom:176px;width:min(520px,calc(100vw - var(--side) - 72px));border:1px solid var(--bad);border-radius:var(--rc,3px);
+    padding:10px 12px 12px;box-shadow:6px 6px 0 #1a1a22;transform:translateY(16px);opacity:0;transition:transform .18s ease,opacity .18s,visibility .18s}
+  .reasonbar.on{transform:none;opacity:1}
+  .reasonbar .rb-in{max-width:none;margin:0}
+  .reasonbar .rb-chips{flex-wrap:wrap;overflow:visible;gap:6px}
+  .reasonbar .rchip{min-height:34px;padding:0 11px;font-size:11px;border-radius:var(--r,2px)}
   .toast{left:calc(50% + var(--side)/2);bottom:24px}
   /* hover affordances that make sense with a pointer */
   .btn,.chip,.tcard,.tile,.pill{transition:var(--t)}
@@ -454,6 +461,11 @@ pre.cmd i{color:var(--dim);font-style:normal}
 /* network / web */
 .web{position:relative;width:100%;height:60vh;min-height:320px;max-height:560px;border:1px solid var(--border);border-radius:12px;background:radial-gradient(circle at 50% 40%,rgba(66,212,245,.05),transparent 70%),var(--surface);overflow:hidden;touch-action:none;margin-bottom:14px}
 .web svg{width:100%;height:100%;display:block}
+.web canvas{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+.web canvas.drag{cursor:grabbing}
+.web .legend{position:absolute;right:10px;top:8px;display:flex;gap:10px;font-family:var(--fmono);font-size:10px;letter-spacing:.1em;color:var(--dim);pointer-events:none}
+.web .legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.web .focus{position:absolute;left:10px;top:8px;font-family:var(--fmono);font-size:11px;color:var(--acc);pointer-events:none}
 .web .edge{stroke:var(--b2);stroke-linecap:round}
 .web .edge.you{stroke:var(--acc3);stroke-dasharray:3 3}
 .web .edge.ment{stroke:var(--acc2);opacity:.5}
@@ -585,9 +597,15 @@ pre.cmd i{color:var(--dim);font-style:normal}
   <h2 class="h">WEB</h2>
   <p class="note" style="margin:6px 0 10px">Accounts you've collected and how they connect through shared content — follow the links to related creators. Built only from public posts on this device. It never guesses who anyone is; any label is one you add yourself.</p>
   <div class="row wrap" style="gap:8px;margin-bottom:10px">
+    <form id="nwFocusF" class="row grow" style="gap:8px;min-width:240px" autocomplete="off">
+      <input id="nwQ" placeholder='centre on  @account · #hashtag · "a phrase" · word' autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" style="flex:1;min-width:160px">
+      <button class="btn sm pri" type="submit">CENTRE</button>
+    </form>
+    <div class="chips" id="nwKinds" style="padding:0;flex-shrink:0">
+      <button class="chip on" data-kind="account">@ ACCOUNTS</button><button class="chip on" data-kind="hashtag"># TAGS</button><button class="chip on" data-kind="word">WORDS</button>
+    </div>
     <select id="nwTopic" class="sel"><option value="">All topics</option></select>
     <select id="nwSort" class="sel"><option value="">Most posts</option><option value="active">Recently active</option><option value="cadence">Posts most often</option><option value="name">Name</option></select>
-    <input id="nwQ" placeholder="find an account" autocapitalize="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:120px">
   </div>
   <div id="nwWeb" class="web"></div>
   <div id="nwList"></div>
@@ -1754,12 +1772,14 @@ async function renderNetwork(){
   const tsel = $('#nwTopic');
   if (tsel.options.length <= 1){ try{ const ts = (await api('/api/topics')).topics || []; ts.forEach(t => { const o = document.createElement('option'); o.value = t.id; o.textContent = t.name; tsel.appendChild(o); }); }catch(e){} }
   const topic = tsel.value, sort = $('#nwSort').value, q = $('#nwQ').value.trim();
+  const kinds = $$('#nwKinds .chip.on').map(c => c.dataset.kind).join(',') || 'account';
+  const listQ = q && !/^[#"]/.test(q) ? q.replace(/^@/, '') : '';
   web.innerHTML = '<div class="empty"><span class="spinner"></span></div>';
   let graph, people;
   try{
     [graph, people] = await Promise.all([
-      api('/api/graph?' + new URLSearchParams(Object.assign({ max: 60 }, topic ? { topic } : {}))),
-      api('/api/people?' + new URLSearchParams(Object.assign(sort ? { sort } : {}, topic ? { topic } : {}, q ? { q } : {}))),
+      api('/api/graph?' + new URLSearchParams(Object.assign({ max: 80, focus: q, kinds }, topic ? { topic } : {}))),
+      api('/api/people?' + new URLSearchParams(Object.assign(sort ? { sort } : {}, topic ? { topic } : {}, listQ ? { q: listQ } : {}))),
     ]);
   }catch(e){ web.innerHTML = `<div class="empty">${esc(e.message)}</div>`; listEl.innerHTML = ''; return; }
   drawWeb(web, graph);
@@ -1776,30 +1796,69 @@ function peopleCard(p){
     <div class="meta">${(p.topics || []).map(t => `<span class="pill t">${esc(t)}</span>`).join('')}${(p.hashtags || []).slice(0, 3).map(h => `<span class="pill">#${esc(h)}</span>`).join('')}${(p.attrs || []).map(a => `<span class="pill a">${esc(a)}</span>`).join('')}</div>
   </div>`;
 }
-// tiny force-directed layout → SVG spiderweb
+// ── the web, drawn on a canvas in 2.5D: a 3-D force layout projected to 2-D with
+//    depth cues (size / alpha / label by z), a slow orbit, drag to rotate, wheel to zoom.
+//    Cheap on purpose: no WebGL, node cap, 30fps, and it sleeps when hidden.
+const KIND_COLOR = { account: '#f54242', hashtag: '#42d4f5', word: '#f5a542', topic: '#c8f542' };
+let webAnim = null;
 function drawWeb(box, graph){
-  const nodes = (graph.nodes || []).map(n => Object.assign({}, n));
-  if (!nodes.length){ box.innerHTML = '<div class="empty">No connections yet. Collect more posts, or widen a topic — accounts link up when they share hashtags, words or mentions.</div>'; return; }
-  const W = box.clientWidth || 340, H = box.clientHeight || 360;
-  const idx = {}; nodes.forEach((n, i) => { idx[n.id] = i; n.x = W/2 + Math.cos(i) * (40 + i*3); n.y = H/2 + Math.sin(i*1.3) * (40 + i*2); n.vx = 0; n.vy = 0; });
+  if (webAnim){ cancelAnimationFrame(webAnim.raf); webAnim.ro && webAnim.ro.disconnect(); webAnim = null; }
+  const nodes = (graph.nodes || []).map(n => Object.assign({ kind: n.kind || 'account', label: n.label || n.author || n.id }, n));
+  if (!nodes.length){ box.innerHTML = '<div class="empty">Nothing to connect yet. Collect more posts, or widen a topic — things link up when they share hashtags, words or mentions.</div>'; return; }
+  const idx = {}; nodes.forEach((n, i) => idx[n.id] = i);
   const edges = (graph.edges || []).filter(e => idx[e.a] != null && idx[e.b] != null);
-  const maxW = Math.max(1, ...edges.map(e => e.w));
-  const maxS = Math.max(1, ...nodes.map(n => n.strength));
-  // simulate
-  for (let step = 0; step < 160; step++){
-    for (let i = 0; i < nodes.length; i++) for (let j = i+1; j < nodes.length; j++){
-      const a = nodes[i], b = nodes[j]; let dx = a.x-b.x, dy = a.y-b.y, d2 = dx*dx+dy*dy || 1; const f = 1400/d2; const d = Math.sqrt(d2);
-      a.vx += f*dx/d; a.vy += f*dy/d; b.vx -= f*dx/d; b.vy -= f*dy/d;
+  const maxW = Math.max(1, ...edges.map(e => e.w)), maxS = Math.max(1, ...nodes.map(n => n.strength || 0));
+  const focus = graph.focus && idx[graph.focus] != null ? graph.focus : null;
+  // 3-D layout: seed on a sphere, relax with repulsion + springs + gravity
+  const R0 = 160;
+  nodes.forEach((n, i) => { const t = Math.acos(1 - 2 * (i + .5) / nodes.length), p = i * 2.399963; n.x = R0 * Math.sin(t) * Math.cos(p); n.y = R0 * Math.sin(t) * Math.sin(p); n.z = R0 * Math.cos(t); n.vx = n.vy = n.vz = 0; });
+  if (focus){ const f = nodes[idx[focus]]; f.x = f.y = f.z = 0; }
+  const steps = nodes.length > 90 ? 90 : 140;
+  for (let s = 0; s < steps; s++){
+    for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++){
+      const a = nodes[i], b = nodes[j]; let dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z; const d2 = dx*dx + dy*dy + dz*dz + 1, d = Math.sqrt(d2), f = 2600 / d2;
+      a.vx += f*dx/d; a.vy += f*dy/d; a.vz += f*dz/d; b.vx -= f*dx/d; b.vy -= f*dy/d; b.vz -= f*dz/d;
     }
-    edges.forEach(e => { const a = nodes[idx[e.a]], b = nodes[idx[e.b]]; let dx = b.x-a.x, dy = b.y-a.y; const d = Math.sqrt(dx*dx+dy*dy) || 1; const k = 0.008 * (e.w/maxW + 0.2) * (d - 60); a.vx += k*dx/d; a.vy += k*dy/d; b.vx -= k*dx/d; b.vy -= k*dy/d; });
-    nodes.forEach(n => { n.vx += (W/2 - n.x)*0.004; n.vy += (H/2 - n.y)*0.004; n.x += Math.max(-8, Math.min(8, n.vx)); n.y += Math.max(-8, Math.min(8, n.vy)); n.vx *= 0.82; n.vy *= 0.82; n.x = Math.max(16, Math.min(W-16, n.x)); n.y = Math.max(16, Math.min(H-16, n.y)); });
+    edges.forEach(e => { const a = nodes[idx[e.a]], b = nodes[idx[e.b]]; let dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z; const d = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1, k = 0.01 * (0.3 + e.w / maxW) * (d - 70); a.vx += k*dx/d; a.vy += k*dy/d; a.vz += k*dz/d; b.vx -= k*dx/d; b.vy -= k*dy/d; b.vz -= k*dz/d; });
+    nodes.forEach(n => { if (n.id === focus){ n.vx = n.vy = n.vz = 0; return; } n.vx -= n.x * 0.004; n.vy -= n.y * 0.004; n.vz -= n.z * 0.004; n.x += Math.max(-9, Math.min(9, n.vx)); n.y += Math.max(-9, Math.min(9, n.vy)); n.z += Math.max(-9, Math.min(9, n.vz)); n.vx *= 0.8; n.vy *= 0.8; n.vz *= 0.8; });
   }
-  const svg = ['<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">'];
-  edges.forEach(e => { const a = nodes[idx[e.a]], b = nodes[idx[e.b]]; const cls = e.you ? 'edge you' : e.m ? 'edge ment' : 'edge'; svg.push(`<line class="${cls}" x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke-width="${(0.6 + 2.4*e.w/maxW).toFixed(2)}"/>`); });
-  nodes.forEach(n => { const r = 5 + 9*Math.sqrt(n.strength/maxS); const lbl = n.author.length > 11 ? n.author.slice(0, 10) + '…' : n.author; svg.push(`<g class="node${n.id === nwSel ? ' sel' : ''}" data-node="${esc(n.id)}"><circle r="${r.toFixed(1)}" cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}"/><text x="${n.x.toFixed(1)}" y="${(n.y + r + 10).toFixed(1)}" text-anchor="middle">@${esc(lbl)}</text></g>`); });
-  svg.push('</svg><div class="hint">● bigger = more connected · line = shared content · tap a node</div>');
-  box.innerHTML = svg.join('');
-  $$('[data-node]', box).forEach(g => g.onclick = () => { nwSel = g.dataset.node; openProfile(nwSel); });
+  box.innerHTML = `<canvas></canvas><div class="legend">${['account', 'hashtag', 'word'].map(k => `<span><i style="background:${KIND_COLOR[k]}"></i>${k === 'account' ? '@ accounts' : k === 'hashtag' ? '# tags' : 'words'}</span>`).join('')}</div>${focus ? `<div class="focus">◎ ${esc(nodes[idx[focus]].label)}</div>` : ''}<div class="hint">drag to spin · wheel to zoom · tap a node</div>`;
+  const cv = $('canvas', box), ctx = cv.getContext('2d');
+  const st = { ry: 0, rx: 0.25, zoom: 1, auto: true, last: 0, dragging: false, px: 0, py: 0, moved: 0, W: 0, H: 0, dpr: Math.min(2, devicePixelRatio || 1), proj: [] };
+  const size = () => { st.W = box.clientWidth; st.H = box.clientHeight; cv.width = st.W * st.dpr; cv.height = st.H * st.dpr; ctx.setTransform(st.dpr, 0, 0, st.dpr, 0, 0); };
+  size();
+  const project = () => {
+    const cy = Math.cos(st.ry), sy = Math.sin(st.ry), cx = Math.cos(st.rx), sx = Math.sin(st.rx), F = 520, scale = Math.min(st.W, st.H) / 420 * st.zoom;
+    st.proj = nodes.map(n => { const x1 = n.x * cy + n.z * sy, z1 = -n.x * sy + n.z * cy, y1 = n.y * cx - z1 * sx, z2 = n.y * sx + z1 * cx; const p = F / (F + z2); return { n, X: st.W/2 + x1 * p * scale, Y: st.H/2 + y1 * p * scale, p, z: z2 }; });
+  };
+  const draw = () => {
+    project(); ctx.clearRect(0, 0, st.W, st.H);
+    const P = st.proj, byId = {}; P.forEach(q => byId[q.n.id] = q);
+    ctx.lineCap = 'round';
+    edges.forEach(e => { const a = byId[e.a], b = byId[e.b]; const depth = (a.p + b.p) / 2; ctx.globalAlpha = 0.12 + 0.5 * depth * depth * (e.w / maxW) + (e.you ? .3 : 0); ctx.strokeStyle = e.you ? '#f542a8' : e.m ? '#42d4f5' : '#5a5a70'; ctx.lineWidth = (0.5 + 2 * e.w / maxW) * depth; ctx.beginPath(); ctx.moveTo(a.X, a.Y); ctx.lineTo(b.X, b.Y); ctx.stroke(); });
+    const order = P.slice().sort((a, b) => b.z - a.z);   // far first
+    order.forEach(q => { const n = q.n, r = (3 + 10 * Math.sqrt((n.strength || 0) / maxS) + (n.kind === 'account' ? 1.5 : 0)) * q.p * st.zoom ** .5, col = KIND_COLOR[n.kind] || '#999';
+      ctx.globalAlpha = 0.35 + 0.65 * q.p * q.p; ctx.beginPath(); ctx.arc(q.X, q.Y, r, 0, 7); ctx.fillStyle = '#15151b'; ctx.fill(); ctx.lineWidth = n.id === nwSel || n.id === focus ? 2.5 : 1.3; ctx.strokeStyle = col; ctx.stroke();
+      if (n.id === focus){ ctx.globalAlpha = .9; ctx.fillStyle = col; ctx.fill(); }
+      if (q.p > 0.92 || r > 7 || n.id === focus){ ctx.globalAlpha = Math.min(1, 0.25 + q.p * q.p); ctx.fillStyle = n.id === focus ? '#e2e2ea' : '#9a9ab0'; ctx.font = `${Math.round(10 * Math.min(1.3, q.p * st.zoom ** .3))}px 'Share Tech Mono', monospace`; ctx.textAlign = 'center'; const lbl = n.label.length > 16 ? n.label.slice(0, 15) + '…' : n.label; ctx.fillText((n.kind === 'account' ? '@' : '') + lbl, q.X, q.Y + r + 11); }
+    });
+    ctx.globalAlpha = 1;
+  };
+  const loop = ts => { webAnim.raf = requestAnimationFrame(loop); if (document.hidden || !box.isConnected) return; if (ts - st.last < 33) return; st.last = ts; if (st.auto && !st.dragging) st.ry += 0.0035; draw(); };
+  webAnim = { raf: requestAnimationFrame(loop), ro: window.ResizeObserver ? new ResizeObserver(() => { size(); draw(); }) : null }; webAnim.ro && webAnim.ro.observe(box);
+  const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  cv.onpointerdown = e => { st.dragging = true; st.moved = 0; [st.px, st.py] = pos(e); cv.classList.add('drag'); cv.setPointerCapture(e.pointerId); };
+  cv.onpointermove = e => { if (!st.dragging) return; const [x, y] = pos(e); st.ry += (x - st.px) * 0.008; st.rx = Math.max(-1.4, Math.min(1.4, st.rx + (y - st.py) * 0.008)); st.moved += Math.abs(x - st.px) + Math.abs(y - st.py); st.px = x; st.py = y; st.auto = false; };
+  cv.onpointerup = e => { st.dragging = false; cv.classList.remove('drag'); if (st.moved > 6) return; const [x, y] = pos(e); let best = null, bd = 20 * 20; st.proj.forEach(q => { const d = (q.X - x) ** 2 + (q.Y - y) ** 2; if (d < bd){ bd = d; best = q.n; } }); if (best) webNodeTap(best); };
+  cv.onwheel = e => { e.preventDefault(); st.zoom = Math.max(.5, Math.min(3, st.zoom * (e.deltaY < 0 ? 1.1 : 0.9))); };
+  cv.ondblclick = () => { st.auto = !st.auto; };
+  draw();
+}
+function webNodeTap(n){
+  nwSel = n.id;
+  if (n.kind === 'account'){ if (n.person_id) openProfile(n.person_id); return; }
+  $('#nwQ').value = n.kind === 'hashtag' ? n.label : (n.label.includes(' ') ? '"' + n.label + '"' : n.label);
+  renderNetwork();
 }
 async function openProfile(id){
   let p; try{ p = await api('/api/people/' + encodeURIComponent(id)); }catch(e){ return toast(e.message); }
@@ -1834,7 +1893,8 @@ async function openProfile(id){
 }
 $('#nwTopic').onchange = renderNetwork;
 $('#nwSort').onchange = renderNetwork;
-let nwQT; $('#nwQ').oninput = () => { clearTimeout(nwQT); nwQT = setTimeout(() => { if (route.view === 'network') renderNetwork(); }, 300); };
+$('#nwFocusF').onsubmit = e => { e.preventDefault(); $('#nwQ').blur(); renderNetwork(); };
+$$('#nwKinds .chip').forEach(c => c.onclick = () => { c.classList.toggle('on'); if ($$('#nwKinds .chip.on').length) renderNetwork(); else c.classList.add('on'); });
 
 // ══════════════════════════════════════════════════════
 //  SOURCES

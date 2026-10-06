@@ -183,13 +183,82 @@
     return { people: out, total: out.length };
   }
 
+  // ── the WORD web: @accounts + #hashtags + words/"phrases" as one graph ──
+  // focus: '@name' | '#tag' | '"a phrase"' | 'word' → the web is centred on it.
+  function parseFocus(f) {
+    f = String(f || '').trim(); if (!f) return null;
+    if (f[0] === '@') return { kind: 'account', key: f.slice(1).toLowerCase() };
+    if (f[0] === '#') return { kind: 'hashtag', key: f.slice(1).toLowerCase().replace(/[^\p{L}\p{N}_]+/gu, '') };
+    const m = f.match(/^"(.+)"$/); const txt = (m ? m[1] : f).toLowerCase().trim();
+    return { kind: 'word', key: txt, phrase: txt.includes(' ') };
+  }
+  const WORD_MIN = 3;
+  async function wordGraph(opts = {}) {
+    const { by, idf, hDF, wDF } = await build();
+    const kinds = new Set((opts.kinds || 'account,hashtag,word').split(',').filter(Boolean));
+    const cap = Math.min(opts.max || 80, 160);
+    const focus = parseFocus(opts.focus);
+    const items = await idb.all('items');
+    // per-post term sets → co-occurrence; per-account usage counts
+    const nodeW = {}, edgeW = {}; const kindOf = {};
+    const bump = (k, w) => { nodeW[k] = (nodeW[k] || 0) + w; };
+    const link = (a, b, w) => { if (a === b) return; const k = a < b ? a + '\u0001' + b : b + '\u0001' + a; edgeW[k] = (edgeW[k] || 0) + w; };
+    const acctId = (it) => '@' + String(it.author || '').toLowerCase() + '|' + (it.platform || '');
+    for (const it of items) {
+      if (!it.author) continue;
+      const A = acctId(it); kindOf[A] = 'account';
+      const tags = [...hashSet(it)].map((h) => '#' + h);
+      const words = [...new Set(tokens(it.text).filter((w) => w.length > WORD_MIN && !STOP.has(w)))].map((w) => 'w:' + w);
+      if (focus && focus.kind === 'word' && focus.phrase) {              // a quoted phrase is its own node
+        const txt = String(it.text || '').toLowerCase(); if (txt.includes(focus.key)) { words.push('w:' + focus.key); }
+      }
+      tags.forEach((t) => { kindOf[t] = 'hashtag'; bump(t, idf(hDF[t.slice(1)])); link(A, t, 1); });
+      words.forEach((w) => { kindOf[w] = 'word'; bump(w, 0.6 * idf(wDF[w.slice(2)] || 1)); link(A, w, 0.6); });
+      bump(A, 1);
+      // co-occurrence inside the post (cheap: tags×tags, tags×words; words×words only for short posts)
+      for (let i = 0; i < tags.length; i++) for (let j = i + 1; j < tags.length; j++) link(tags[i], tags[j], 1.2);
+      tags.forEach((t) => words.forEach((w) => link(t, w, 0.5)));
+      if (words.length <= 12) for (let i = 0; i < words.length; i++) for (let j = i + 1; j < words.length; j++) link(words[i], words[j], 0.3);
+    }
+    // account↔account edges from the existing shared-content model
+    for (const a of by.values()) for (const e of edgesFor(a, by, idf, hDF, wDF).slice(0, 6)) {
+      const A = '@' + a.author.toLowerCase() + '|' + a.platform, B = '@' + e.author.toLowerCase() + '|' + e.platform;
+      kindOf[A] = kindOf[B] = 'account'; link(A, B, e.w * 0.5);
+    }
+    // pick nodes: around the focus, else the heaviest of each kind
+    let ids;
+    const focusId = focus ? (focus.kind === 'account' ? Object.keys(kindOf).find((k) => k.startsWith('@' + focus.key + '|')) : focus.kind === 'hashtag' ? '#' + focus.key : 'w:' + focus.key) : null;
+    const nb = (id) => { const out = []; for (const k in edgeW) { const [x, y] = k.split('\u0001'); if (x === id) out.push([y, edgeW[k]]); else if (y === id) out.push([x, edgeW[k]]); } return out.sort((p, q) => q[1] - p[1]); };
+    if (focusId && (kindOf[focusId] || nodeW[focusId])) {
+      const first = nb(focusId).filter(([k]) => kinds.has(kindOf[k])).slice(0, Math.floor(cap * 0.6));
+      const seen = new Set([focusId, ...first.map((p) => p[0])]);
+      for (const [k] of first) { for (const [k2] of nb(k).slice(0, 4)) { if (seen.size >= cap) break; if (kinds.has(kindOf[k2])) seen.add(k2); } }
+      ids = [...seen];
+    } else {
+      const per = { account: Math.round(cap * 0.4), hashtag: Math.round(cap * 0.3), word: Math.round(cap * 0.3) };
+      ids = [];
+      for (const kind of ['account', 'hashtag', 'word']) if (kinds.has(kind)) ids.push(...Object.keys(nodeW).filter((k) => kindOf[k] === kind).sort((a, b) => nodeW[b] - nodeW[a]).slice(0, per[kind]));
+    }
+    const idset = new Set(ids);
+    const edges = []; for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (idset.has(a) && idset.has(b)) edges.push({ a, b, w: +edgeW[k].toFixed(2) }); }
+    edges.sort((p, q) => q.w - p.w); const E = edges.slice(0, cap * 4);
+    const deg = {}; E.forEach((e) => { deg[e.a] = (deg[e.a] || 0) + e.w; deg[e.b] = (deg[e.b] || 0) + e.w; });
+    const meta = await allMeta();
+    const nodes = ids.map((id) => { const kind = kindOf[id] || 'word'; const label = kind === 'account' ? id.slice(1).split('|')[0] : kind === 'hashtag' ? id : id.slice(2);
+      return { id, kind, label, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), person_id: kind === 'account' ? [...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id || null : null, attrs: kind === 'account' ? ((meta[[...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id]?.attrs) || []).slice(0, 3) : [] }; });
+    return { nodes, edges: E, focus: focusId && idset.has(focusId) ? focusId : null, focus_asked: opts.focus || '', kinds: [...kinds], generated: now() };
+  }
+
   // ── router (mirrors the server-style API the app calls) ──
   L.people = {
     profile, graph, list, setMeta, getMeta,
     async request(method, parts, qs, body) {
       const P = Object.fromEntries(new URLSearchParams(qs || ''));
       const id = parts[1] ? decodeURIComponent(parts[1]) : null;
-      if (parts[0] === 'graph') return graph({ topic: P.topic || null, max: +P.max || 60, min: +P.min || 1.5 });
+      if (parts[0] === 'graph') {
+        if (P.focus !== undefined || P.kinds !== undefined) return wordGraph({ focus: P.focus || '', kinds: P.kinds || 'account,hashtag,word', max: +P.max || 80 });
+        return graph({ topic: P.topic || null, max: +P.max || 60, min: +P.min || 1.5 });
+      }
       if (!id) return list({ topic: P.topic || null, q: P.q || '', sort: P.sort || '' });
       if (method === 'GET') return profile(id);
       if (method === 'PATCH') return setMeta(id, body || {});
