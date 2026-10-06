@@ -594,9 +594,12 @@ function snippet(text, re, w=60){
 //  CONNECTION
 // ══════════════════════════════════════════════════════
 let API = '', LIVE = false, STATUS = null, SYN = [], NEEDKEY = false;
+let KEY = store.get('key', '');       // access key sent as a header (works cross-origin, unlike cookies)
 const ready = () => LIVE && !NEEDKEY;
+function authHeaders(h={}){ if (KEY) h['X-RV-Key'] = KEY; return h; }
+function setKey(k){ KEY = k || ''; store.set('key', KEY); }
 async function api(path, opts={}){
-  const o = { method: opts.method || 'GET', headers: {}, credentials: 'include' };
+  const o = { method: opts.method || 'GET', headers: authHeaders({}), credentials: 'include' };
   if (opts.body !== undefined){ o.body = JSON.stringify(opts.body); o.headers['Content-Type'] = 'application/json'; }
   let r;
   try{ r = await fetch(API + path, o); }
@@ -620,7 +623,7 @@ async function watchReconnect(){
     await new Promise(r => setTimeout(r, 1500));
     try{
       const ctl = new AbortController(); setTimeout(() => ctl.abort(), 2500);
-      const res = await fetch(API + '/api/status', { signal: ctl.signal, credentials: 'include' });
+      const res = await fetch(API + '/api/status', { signal: ctl.signal, credentials: 'include', headers: authHeaders({}) });
       if (res.ok || res.status === 401){ location.reload(); return; }   // back up → reload fresh
     }catch(e){}
   }
@@ -630,13 +633,20 @@ async function watchReconnect(){
 const mediaUrl = rel => rel ? API + '/media/' + rel.split(/[\\/]/).map(encodeURIComponent).join('/') : null;
 
 async function connect(){
+  // allow a one-time setup link:  ?server=https://rv.example.com&key=XXXX
+  const qp = new URLSearchParams(location.search);
+  if (qp.get('server')){ store.set('serverUrl', qp.get('server').replace(/\/$/, '')); }
+  if (qp.get('key')){ setKey(qp.get('key')); }
+  if (qp.get('server') || qp.get('key')) history.replaceState(null, '', location.pathname + location.hash);
   const cands = [];
-  if (/^https?:$/.test(location.protocol)) cands.push(location.origin);
+  const saved = store.get('serverUrl', '');
+  if (saved) cands.push(saved);
+  if (/^https?:$/.test(location.protocol) && !/github\.io$|neocities\.org$/.test(location.hostname)) cands.push(location.origin);
   if (C.apiBase) cands.push(C.apiBase.replace(/\/$/, ''));
   for (const base of [...new Set(cands)]){
     try{
-      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 2500);
-      const r = await fetch(base + '/api/status', { signal: ctl.signal, credentials: 'include' });
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 3500);
+      const r = await fetch(base + '/api/status', { signal: ctl.signal, credentials: 'include', headers: authHeaders({}) });
       clearTimeout(t);
       if (r.status === 401){ const j = await r.json().catch(() => ({})); if (j.auth === false){ API = base; LIVE = true; NEEDKEY = true; break; } }
       if (r.ok){ const j = await r.json(); if (j && j.ok){ API = base; LIVE = true; STATUS = j; break; } }
@@ -651,24 +661,37 @@ async function connect(){
   } else {
     st.textContent = '○ DEMO'; st.className = 'chip-status demo';
     const b = $('#banner');
-    b.innerHTML = 'DEMO: no server found, so this is a sample library. To use it for real, run the small server on a computer and open it on your phone (see <a href="#setup">SETUP</a>).';
+    b.innerHTML = 'DEMO: not connected to your server, so this is a sample library. <a id="connectLink">Connect to your server →</a> or see <a href="#setup">SETUP</a>.';
     b.classList.add('on');
+    setTimeout(() => { const cl = $('#connectLink'); if (cl) cl.onclick = showPair; }, 0);
     try{ SYN = (await (await fetch('server/synonyms.json')).json()).groups; }catch(e){}
     Demo.load();
   }
 }
 function showPair(){
   if ($('#pairKey')) return;
-  openSheet(`<h3>PAIR THIS PHONE</h3>
-    <p class="note" style="margin-bottom:12px">Scan the QR code in SETUP on the computer running REEL//VAULT, or type the access key it printed.</p>
-    <form id="pairF"><input id="pairKey" placeholder="access key" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
-    <button class="btn pri" style="width:100%;margin-top:10px">PAIR</button></form>`, false);
+  const remote = !API || /github\.io$|neocities\.org$/.test(location.hostname);
+  openSheet(`<h3>CONNECT TO YOUR SERVER</h3>
+    <p class="note" style="margin-bottom:12px">${remote ? 'Paste your server link (the one your computer prints, or your HTTPS tunnel address). It can include the key, e.g. <code>https://rv.example.com/reel-vault/?key=…</code>' : 'Scan the QR code in SETUP on the computer, or type the access key it printed.'}</p>
+    <form id="pairF">
+      ${remote ? '<input id="pairUrl" placeholder="https://your-server-address" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url" style="margin-bottom:8px">' : ''}
+      <input id="pairKey" placeholder="access key" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+      <button class="btn pri" style="width:100%;margin-top:10px">CONNECT</button>
+    </form>`, false);
   $('#pairF').onsubmit = async e => {
     e.preventDefault();
+    let base = API, key = $('#pairKey').value.trim();
+    const urlField = $('#pairUrl') && $('#pairUrl').value.trim();
+    if (urlField){
+      try{ const u = new URL(urlField); if (u.searchParams.get('key')) key = u.searchParams.get('key'); base = u.origin; }
+      catch(err){ return toast('That server address doesn\'t look right'); }
+    }
+    if (!base) return toast('Enter your server address');
     try{
-      const r = await fetch(API + '/api/pair', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: $('#pairKey').value.trim() }) });
-      if (r.ok){ toast('Paired ✓'); setTimeout(() => location.reload(), 400); } else toast('Wrong key');
-    }catch(err){ toast(err.message); }
+      const r = await fetch(base + '/api/pair', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
+      if (r.ok){ store.set('serverUrl', base.replace(/\/$/, '')); setKey(key); toast('Connected ✓'); setTimeout(() => location.reload(), 500); }
+      else toast('Wrong key for that server');
+    }catch(err){ toast('Could not reach ' + base + ' — check the address and that the server is running'); }
   };
 }
 

@@ -638,7 +638,8 @@ def main(argv=None):
         print(f"wiped: {res['removed']}. starting fresh…")
     Handler.port = a.port
     Handler.phone_host = a.phone_host.strip()
-    Handler.allowed_origins = {"https://ptxero.github.io"} | {o.rstrip("/") for o in a.allow_origin}
+    Handler.allowed_origins = {"https://ptxero.github.io", "https://ptxero.neocities.org"} \
+        | {o.rstrip("/") for o in a.allow_origin}
     srv = ThreadingHTTPServer((a.host, a.port), Handler)
     srv.daemon_threads = True
     key = Handler.vault.store.access_key
