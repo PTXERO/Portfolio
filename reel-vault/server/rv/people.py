@@ -311,33 +311,44 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
     kinds = {k for k in str(kinds).split(",") if k}
     cap = min(int(max_nodes or 80), 160)
     fz = _parse_focus(focus)
-    node_w, edge_w, kind_of = Counter(), Counter(), {}
+    node_w, edge_w, kind_of, node_n = Counter(), Counter(), {}, Counter()   # node_n = posts behind each node
 
     def link(a, b, w):
         if a != b:
             edge_w[(a, b) if a < b else (b, a)] += w
 
     acct_key = {}
+    # words in more than a third of all posts are boilerplate here ("video", "new"…) and would
+    # bridge every community into one blob, so they're left out of the web
+    post_df, n_posts = Counter(), 0
     for a in by.values():
         aid = f"@{a.author.lower()}|{a.platform}"
         acct_key[aid] = a.id
         kind_of[aid] = "account"
+        for it in a.items:
+            n_posts += 1
+            post_df.update({w for w in _tokens(it.get("text")) if len(w) > _WORD_MIN and w not in STOP})
+    generic = lambda w: n_posts >= 20 and post_df[w] / n_posts > 0.35  # noqa: E731
     for a in by.values():
         aid = f"@{a.author.lower()}|{a.platform}"
         for it in a.items:
             tags = ["#" + h for h in _hashes(it)]
-            words = ["w:" + w for w in {w for w in _tokens(it.get("text")) if len(w) > _WORD_MIN and w not in STOP}]
+            words = ["w:" + w for w in {w for w in _tokens(it.get("text"))
+                                        if len(w) > _WORD_MIN and w not in STOP and not generic(w)}]
             if fz and fz["kind"] == "word" and fz.get("phrase") and fz["key"] in str(it.get("text") or "").lower():
                 words.append("w:" + fz["key"])
             for t in tags:
                 kind_of[t] = "hashtag"
                 node_w[t] += idf(h_df[t[1:]])
+                node_n[t] += 1
                 link(aid, t, 1)
             for w in words:
                 kind_of[w] = "word"
                 node_w[w] += 0.6 * idf(w_df.get(w[2:], 1))
+                node_n[w] += 1
                 link(aid, w, 0.6)
             node_w[aid] += 1
+            node_n[aid] += 1
             for i in range(len(tags)):
                 for j in range(i + 1, len(tags)):
                     link(tags[i], tags[j], 1.2)
@@ -398,7 +409,8 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
         kind = kind_of.get(nid, "word")
         label = nid[1:].split("|")[0] if kind == "account" else nid if kind == "hashtag" else nid[2:]
         pid = acct_key.get(nid) if kind == "account" else None
-        nodes.append({"id": nid, "kind": kind, "label": label, "w": round(node_w[nid], 2), "strength": round(deg[nid], 1),
+        nodes.append({"id": nid, "kind": kind, "label": label, "n": node_n[nid], "w": round(node_w[nid], 2),
+                      "strength": round(deg[nid], 1),
                       "person_id": pid, "attrs": ((meta.get(pid) or {}).get("attrs", [])[:3] if pid else [])})
     return {"nodes": nodes, "edges": edges, "focus": focus_id if focus_id in idset else None,
             "focus_asked": focus or "", "kinds": sorted(kinds), "generated": _now()}

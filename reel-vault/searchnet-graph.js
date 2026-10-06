@@ -200,15 +200,20 @@
     const focus = parseFocus(opts.focus);
     const items = await idb.all('items');
     // per-post term sets → co-occurrence; per-account usage counts
-    const nodeW = {}, edgeW = {}; const kindOf = {};
-    const bump = (k, w) => { nodeW[k] = (nodeW[k] || 0) + w; };
+    const nodeW = {}, edgeW = {}; const kindOf = {}; const nodeN = {};          // nodeN = posts behind each node
+    const bump = (k, w) => { nodeW[k] = (nodeW[k] || 0) + w; nodeN[k] = (nodeN[k] || 0) + 1; };
     const link = (a, b, w) => { if (a === b) return; const k = a < b ? a + '\u0001' + b : b + '\u0001' + a; edgeW[k] = (edgeW[k] || 0) + w; };
     const acctId = (it) => '@' + String(it.author || '').toLowerCase() + '|' + (it.platform || '');
+    // words that appear in more than a third of all posts are boilerplate here ("video", "new"…):
+    // they'd bridge every community into one blob, so they're left out of the web
+    const postDF = {}; let nPosts = 0;
+    for (const it of items) { if (!it.author) continue; nPosts++; new Set(tokens(it.text).filter((w) => w.length > WORD_MIN && !STOP.has(w))).forEach((w) => postDF[w] = (postDF[w] || 0) + 1); }
+    const generic = (w) => nPosts >= 20 && postDF[w] / nPosts > 0.35;
     for (const it of items) {
       if (!it.author) continue;
       const A = acctId(it); kindOf[A] = 'account';
       const tags = [...hashSet(it)].map((h) => '#' + h);
-      const words = [...new Set(tokens(it.text).filter((w) => w.length > WORD_MIN && !STOP.has(w)))].map((w) => 'w:' + w);
+      const words = [...new Set(tokens(it.text).filter((w) => w.length > WORD_MIN && !STOP.has(w) && !generic(w)))].map((w) => 'w:' + w);
       if (focus && focus.kind === 'word' && focus.phrase) {              // a quoted phrase is its own node
         const txt = String(it.text || '').toLowerCase(); if (txt.includes(focus.key)) { words.push('w:' + focus.key); }
       }
@@ -245,7 +250,7 @@
     const deg = {}; E.forEach((e) => { deg[e.a] = (deg[e.a] || 0) + e.w; deg[e.b] = (deg[e.b] || 0) + e.w; });
     const meta = await allMeta();
     const nodes = ids.map((id) => { const kind = kindOf[id] || 'word'; const label = kind === 'account' ? id.slice(1).split('|')[0] : kind === 'hashtag' ? id : id.slice(2);
-      return { id, kind, label, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), person_id: kind === 'account' ? [...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id || null : null, attrs: kind === 'account' ? ((meta[[...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id]?.attrs) || []).slice(0, 3) : [] }; });
+      return { id, kind, label, n: nodeN[id] || 0, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), person_id: kind === 'account' ? [...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id || null : null, attrs: kind === 'account' ? ((meta[[...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id]?.attrs) || []).slice(0, 3) : [] }; });
     return { nodes, edges: E, focus: focusId && idset.has(focusId) ? focusId : null, focus_asked: opts.focus || '', kinds: [...kinds], generated: now() };
   }
 

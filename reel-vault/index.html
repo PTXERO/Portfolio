@@ -411,8 +411,20 @@ pre.cmd i{color:var(--dim);font-style:normal}
   /* network: one screen, no page scroll — canvas left, accounts list beside it (scrolls on its own) */
   /* app-shell views: sized to the window (minus header + any banner), never scroll the page */
   :root{--bannerH:0px}
-  .shell{height:calc(100vh - var(--top) - var(--sat) - var(--bannerH));overflow:hidden;padding-bottom:20px}
-  #vNetwork.on{display:grid;grid-template-columns:minmax(0,1fr) 380px;grid-template-rows:auto auto auto minmax(0,1fr);column-gap:20px}
+  .shell{height:calc(100vh - var(--top) - var(--sat) - var(--bannerH) - 1px);overflow:hidden;padding-bottom:20px}
+  body.noscroll{overflow:hidden}
+  /* thin, quiet scrollbars on panes that scroll inside the app (desktop apps don't show fat system bars) */
+  #nwList,#tBody,.sheet,.rinfo,.jlog,.segs,.view{scrollbar-width:thin;scrollbar-color:var(--b2) transparent}
+  #nwList::-webkit-scrollbar,#tBody::-webkit-scrollbar,.sheet::-webkit-scrollbar,.rinfo::-webkit-scrollbar,.jlog::-webkit-scrollbar,.segs::-webkit-scrollbar{width:8px;height:8px}
+  #nwList::-webkit-scrollbar-thumb,#tBody::-webkit-scrollbar-thumb,.sheet::-webkit-scrollbar-thumb,.rinfo::-webkit-scrollbar-thumb,.jlog::-webkit-scrollbar-thumb,.segs::-webkit-scrollbar-thumb{background:var(--b2);border-radius:4px}
+  #nwList::-webkit-scrollbar-track,#tBody::-webkit-scrollbar-track,.sheet::-webkit-scrollbar-track,.rinfo::-webkit-scrollbar-track{background:transparent}
+  /* WEB: compact header — title and toolbar share one line, the explainer lives in a tooltip */
+  #vNetwork.on{display:grid;grid-template-columns:minmax(0,1fr) 380px;grid-template-rows:auto minmax(0,1fr);column-gap:20px;row-gap:12px;align-items:center}
+  #vNetwork>h2.h{grid-column:1;grid-row:1;font-size:30px;cursor:help}
+  #vNetwork>p.note{display:none}
+  #vNetwork>.row{grid-column:1/-1;grid-row:1;margin:0;justify-content:flex-end;padding-left:120px}
+  #vNetwork .web{grid-row:2}
+  #vNetwork #nwList{grid-row:2;align-self:stretch}
   /* topic view: header rows fixed, the body (deck / grids / brain) fills the rest and scrolls itself */
   #vTopic.on{display:flex;flex-direction:column}
   #vTopic #tBody{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
@@ -458,12 +470,34 @@ pre.cmd i{color:var(--dim);font-style:normal}
   .deck .rcard{grid-template-columns:minmax(0,1fr) 440px}
 }
 
+/* first-run setup guide */
+.onboard{position:fixed;inset:0;z-index:500;background:var(--bg);overflow-y:auto;padding:calc(24px + var(--sat)) 16px calc(32px + var(--sab));display:flex;align-items:flex-start;justify-content:center}
+.onboard[hidden]{display:none}
+.ob-card{width:100%;max-width:720px;background:var(--panel);border:1px solid var(--b2);border-radius:var(--rc,3px);box-shadow:6px 6px 0 #1a1a22;padding:22px 20px 24px;margin:auto}
+.ob-logo{font-family:var(--fdisp);font-size:28px;letter-spacing:.1em;color:var(--acc);line-height:1}
+.ob-logo em{font-style:normal;color:var(--dim)}
+.ob-title{font-family:var(--fdisp);font-size:34px;letter-spacing:.05em;font-weight:normal;line-height:1;margin:16px 0 6px}
+.ob-lead{margin-bottom:16px}
+.ob-choices{display:grid;grid-template-columns:1fr;gap:10px}
+@media(min-width:640px){.ob-choices{grid-template-columns:1fr 1fr}}
+.ob-choice{text-align:left;padding:14px;border:1px solid var(--b2);border-radius:var(--rc,3px);background:var(--surface);color:var(--txt);display:flex;flex-direction:column;gap:6px;transition:var(--t,all .15s)}
+.ob-choice:hover,.ob-choice.on{border-color:var(--acc);background:rgba(var(--acc-rgb),.04)}
+.ob-choice b{font-size:16px}
+.ob-choice span{font-size:12.5px;line-height:1.5;color:var(--txt)}
+.ob-choice small{font-family:var(--fmono);font-size:10px;letter-spacing:.08em;color:var(--dim)}
+.ob-step{margin-top:16px}
+.ob-step:empty{display:none}
+.ob-step .field input{font-size:16px}
+.ob-ok{color:var(--good)}.ob-bad{color:var(--bad)}
+.ob-foot{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 /* network / web */
 .web{position:relative;width:100%;height:60vh;min-height:320px;max-height:560px;border:1px solid var(--border);border-radius:12px;background:radial-gradient(circle at 50% 40%,rgba(66,212,245,.05),transparent 70%),var(--surface);overflow:hidden;touch-action:none;margin-bottom:14px}
 .web svg{width:100%;height:100%;display:block}
 .web canvas{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
 .web canvas.drag{cursor:grabbing}
-.web .legend{position:absolute;right:10px;top:8px;display:flex;gap:10px;font-family:var(--fmono);font-size:10px;letter-spacing:.1em;color:var(--dim);pointer-events:none}
+.web .legend{position:absolute;right:10px;top:8px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px 12px;max-width:62%;font-family:var(--fmono);font-size:10px;letter-spacing:.08em;color:var(--dim);pointer-events:none}
+.web .legend em{font-style:normal;color:var(--mut)}
+.web .legend .shapes{color:var(--mut);flex-basis:100%;text-align:right}
 .web .legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:-1px}
 .web .focus{position:absolute;left:10px;top:8px;font-family:var(--fmono);font-size:11px;color:var(--acc);pointer-events:none}
 .web .edge{stroke:var(--b2);stroke-linecap:round}
@@ -476,9 +510,11 @@ pre.cmd i{color:var(--dim);font-style:normal}
 .web .node.sel text{fill:var(--txt)}
 .web .hint{position:absolute;left:10px;bottom:8px;font-size:11px;color:var(--mut);pointer-events:none}
 .web .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:var(--dim)}
-.pcard{border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;background:var(--panel)}
-.pcard .top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
-.pcard .top b{font-size:15px}
+.pcard{border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;background:var(--panel);overflow:hidden;min-width:0;cursor:pointer}
+.pcard .top{display:flex;align-items:baseline;gap:8px;flex-wrap:nowrap;min-width:0}
+.pcard .top b{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto;max-width:70%;min-width:4ch}
+.pcard .top .note{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 0;min-width:0}
+#nwList{overflow-x:hidden}
 .pcard .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .pcard .pill{font-size:11px;padding:3px 8px;border:1px solid var(--b2);border-radius:12px;color:var(--dim)}
 .pcard .pill.t{color:var(--acc);border-color:rgba(var(--acc-rgb),.35)}
@@ -594,7 +630,7 @@ pre.cmd i{color:var(--dim);font-style:normal}
 
 <!-- ══════════ NETWORK / WEB ══════════ -->
 <section class="view" id="vNetwork">
-  <h2 class="h">WEB</h2>
+  <h2 class="h" title="Accounts, hashtags and words from what you've collected, and how they connect through shared content. Size = posts · inner = more connected · colour = community. Built only from public posts on this device; it never guesses who anyone is — any label is one you add yourself.">WEB</h2>
   <p class="note" style="margin:6px 0 10px">Accounts you've collected and how they connect through shared content — follow the links to related creators. Built only from public posts on this device. It never guesses who anyone is; any label is one you add yourself.</p>
   <div class="row wrap" style="gap:8px;margin-bottom:10px">
     <form id="nwFocusF" class="row grow" style="gap:8px;min-width:240px" autocomplete="off">
@@ -700,6 +736,28 @@ curl -fsSL https://ptxero.neocities.org/reel-vault/install-sh.txt | bash
 </section>
 
 
+
+<!-- first run: the only thing you see until SEARCH//NET is connected to something -->
+<div class="onboard" id="onboard" role="dialog" aria-modal="true" aria-labelledby="obTitle" hidden>
+  <div class="ob-card">
+    <div class="ob-logo">SEARCH<em>//</em>NET</div>
+    <h1 class="ob-title" id="obTitle">Where should it run?</h1>
+    <p class="note ob-lead">Pick one to get going. You can switch later in SETUP. Nothing is tracked either way.</p>
+    <div class="ob-choices">
+      <button class="ob-choice" data-ob="browser">
+        <b>📱 This browser</b>
+        <span>No computer needed. Searches run through your own free Cloudflare Worker and everything is saved on this device.</span>
+        <small>Best on a phone or if you don't want a PC running.</small>
+      </button>
+      <button class="ob-choice" data-ob="pc">
+        <b>🖥 A computer I own</b>
+        <span>Downloads, speech + on-screen text, meaning matching, and logged-in sites like X. Use it from your phone over Wi-Fi.</span>
+        <small>Best for the full toolkit.</small>
+      </button>
+    </div>
+    <div class="ob-step" id="obStep"></div>
+  </div>
+</div>
 
 <div class="reasonbar" id="reasonBar"><div class="rb-in">
   <span class="rb-label">👎 why? <small>(optional — teaches the topic)</small></span>
@@ -948,6 +1006,8 @@ function render(){
   const map = { topics: 'vTopics', topic: 'vTopic', library: 'vLibrary', network: 'vNetwork', sources: 'vSources', jobs: 'vJobs', setup: 'vSetup' };
   if (!map[route.view]) route.view = 'topics';
   $$('.view').forEach(v => v.classList.toggle('on', v.id === map[route.view]));
+  // one-screen views on desktop own their scrolling; the page itself must not scroll
+  document.body.classList.toggle('noscroll', $('#' + map[route.view]).classList.contains('shell') && matchMedia('(min-width:1024px)').matches);
   const navKey = route.view === 'topic' ? 'topics' : route.view;
   $$('#nav button').forEach(b => b.classList.toggle('on', b.dataset.go === navKey));
   updateBulk();
@@ -1799,58 +1859,111 @@ function peopleCard(p){
 // ── the web, drawn on a canvas in 2.5D: a 3-D force layout projected to 2-D with
 //    depth cues (size / alpha / label by z), a slow orbit, drag to rotate, wheel to zoom.
 //    Cheap on purpose: no WebGL, node cap, 30fps, and it sleeps when hidden.
-const KIND_COLOR = { account: '#f54242', hashtag: '#42d4f5', word: '#f5a542', topic: '#c8f542' };
+const KIND_COLOR = { account: '#f54242', hashtag: '#42d4f5', word: '#f5a542' };
+// community palette (neon family, distinct hues)
+const COMM = ['#f54242', '#42d4f5', '#f5a542', '#c8f542', '#f542a8', '#a66bff', '#42f5c8', '#ff8a42', '#7ab8ff', '#e2e2ea'];
 let webAnim = null;
+// ── the web: an ORGANIZED map, not a hairball.
+//    size = posts · rings = how connected (hubs in the middle) · colour = community found from the links
+//    · shape = kind (● account  ■ hashtag  ○ word) · labels only where they fit, hover shows the rest.
+//    It untangles itself live on screen, then idles with a slow 3-D tilt-spin. Plain 2-D canvas, ~30fps.
 function drawWeb(box, graph){
   if (webAnim){ cancelAnimationFrame(webAnim.raf); webAnim.ro && webAnim.ro.disconnect(); webAnim = null; }
-  const nodes = (graph.nodes || []).map(n => Object.assign({ kind: n.kind || 'account', label: n.label || n.author || n.id }, n));
+  const nodes = (graph.nodes || []).map(n => Object.assign({ kind: n.kind || 'account', label: n.label || n.author || n.id, n: n.n || 0 }, n));
   if (!nodes.length){ box.innerHTML = '<div class="empty">Nothing to connect yet. Collect more posts, or widen a topic — things link up when they share hashtags, words or mentions.</div>'; return; }
   const idx = {}; nodes.forEach((n, i) => idx[n.id] = i);
-  const edges = (graph.edges || []).filter(e => idx[e.a] != null && idx[e.b] != null);
-  const maxW = Math.max(1, ...edges.map(e => e.w)), maxS = Math.max(1, ...nodes.map(n => n.strength || 0));
+  const edges = (graph.edges || []).filter(e => idx[e.a] != null && idx[e.b] != null && e.a !== e.b);
   const focus = graph.focus && idx[graph.focus] != null ? graph.focus : null;
-  // 3-D layout: seed on a sphere, relax with repulsion + springs + gravity
-  const R0 = 160;
-  nodes.forEach((n, i) => { const t = Math.acos(1 - 2 * (i + .5) / nodes.length), p = i * 2.399963; n.x = R0 * Math.sin(t) * Math.cos(p); n.y = R0 * Math.sin(t) * Math.sin(p); n.z = R0 * Math.cos(t); n.vx = n.vy = n.vz = 0; });
-  if (focus){ const f = nodes[idx[focus]]; f.x = f.y = f.z = 0; }
-  const steps = nodes.length > 90 ? 90 : 140;
-  for (let s = 0; s < steps; s++){
-    for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++){
-      const a = nodes[i], b = nodes[j]; let dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z; const d2 = dx*dx + dy*dy + dz*dz + 1, d = Math.sqrt(d2), f = 2600 / d2;
-      a.vx += f*dx/d; a.vy += f*dy/d; a.vz += f*dz/d; b.vx -= f*dx/d; b.vy -= f*dy/d; b.vz -= f*dz/d;
-    }
-    edges.forEach(e => { const a = nodes[idx[e.a]], b = nodes[idx[e.b]]; let dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z; const d = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1, k = 0.01 * (0.3 + e.w / maxW) * (d - 70); a.vx += k*dx/d; a.vy += k*dy/d; a.vz += k*dz/d; b.vx -= k*dx/d; b.vy -= k*dy/d; b.vz -= k*dz/d; });
-    nodes.forEach(n => { if (n.id === focus){ n.vx = n.vy = n.vz = 0; return; } n.vx -= n.x * 0.004; n.vy -= n.y * 0.004; n.vz -= n.z * 0.004; n.x += Math.max(-9, Math.min(9, n.vx)); n.y += Math.max(-9, Math.min(9, n.vy)); n.z += Math.max(-9, Math.min(9, n.vz)); n.vx *= 0.8; n.vy *= 0.8; n.vz *= 0.8; });
-  }
-  box.innerHTML = `<canvas></canvas><div class="legend">${['account', 'hashtag', 'word'].map(k => `<span><i style="background:${KIND_COLOR[k]}"></i>${k === 'account' ? '@ accounts' : k === 'hashtag' ? '# tags' : 'words'}</span>`).join('')}</div>${focus ? `<div class="focus">◎ ${esc(nodes[idx[focus]].label)}</div>` : ''}<div class="hint">drag to spin · wheel to zoom · tap a node</div>`;
+  // degree (connection strength) + neighbour lists
+  const deg = new Array(nodes.length).fill(0), nb = nodes.map(() => []);
+  edges.forEach(e => { const a = idx[e.a], b = idx[e.b]; deg[a] += e.w; deg[b] += e.w; nb[a].push([b, e.w]); nb[b].push([a, e.w]); });
+  nb.forEach(l => l.sort((x, y) => y[1] - x[1]));
+  // communities: label propagation over accounts + hashtags only (generic words bridge everything and
+  // would smear it into one blob), with hub-normalised weights so big nodes don't swallow the map;
+  // words then join whichever community most of their neighbours are in.
+  const core = i => nodes[i].kind !== 'word';
+  let lab = nodes.map((_, i) => i);
+  const order = nodes.map((_, i) => i).sort((x, y) => deg[y] - deg[x]);
+  const nw = (i, j, w) => w / Math.sqrt((deg[i] || 1) * (deg[j] || 1));
+  for (let it = 0; it < 25; it++){ let changed = 0; for (const i of order){ if (!core(i) || !nb[i].length) continue; const sc = {}; nb[i].forEach(([j, w]) => { if (core(j)) sc[lab[j]] = (sc[lab[j]] || 0) + nw(i, j, w); }); let best = lab[i], bs = -1; for (const k in sc) if (sc[k] > bs || (sc[k] === bs && +k < best)){ bs = sc[k]; best = +k; } if (best !== lab[i]){ lab[i] = best; changed++; } } if (!changed) break; }
+  // accounts follow the tags they use most (keeps an account with its subject, not with a stray mention)
+  for (let pass = 0; pass < 2; pass++) for (const i of order){ if (nodes[i].kind !== 'account') continue; const sc = {}; nb[i].forEach(([j, w]) => { if (nodes[j].kind === 'hashtag') sc[lab[j]] = (sc[lab[j]] || 0) + w; }); let best = -1, bs = -1; for (const k in sc) if (sc[k] > bs){ bs = sc[k]; best = +k; } if (best >= 0) lab[i] = best; }
+  for (const i of order){ if (core(i)) continue; const sc = {}; nb[i].forEach(([j, w]) => { if (core(j)) sc[lab[j]] = (sc[lab[j]] || 0) + w; }); let best = -1, bs = -1; for (const k in sc) if (sc[k] > bs){ bs = sc[k]; best = +k; } lab[i] = best >= 0 ? best : lab[i]; }
+  // rank communities by total posts; tiny ones and any beyond 8 merge into "other"
+  const cm = {}; nodes.forEach((n, i) => { (cm[lab[i]] = cm[lab[i]] || { ids: [], posts: 0 }).ids.push(i); cm[lab[i]].posts += n.n || 1; });
+  let comms = Object.values(cm).sort((x, y) => y.posts - x.posts);
+  const MAXC = 8, big = comms.filter(c => c.ids.length >= 3).slice(0, MAXC - 1), small = comms.filter(c => !big.includes(c));
+  comms = small.length ? big.concat([{ ids: small.flatMap(c => c.ids), posts: small.reduce((s, c) => s + c.posts, 0), other: true }]) : big;
+  const commOf = new Array(nodes.length); comms.forEach((c, ci) => c.ids.forEach(i => commOf[i] = ci));
+  // name each community by its biggest hashtag (else biggest node)
+  comms.forEach(c => { const tags = c.ids.filter(i => nodes[i].kind === 'hashtag').sort((x, y) => nodes[y].n - nodes[x].n); const top = tags[0] != null ? nodes[tags[0]] : nodes[c.ids.slice().sort((x, y) => nodes[y].n - nodes[x].n)[0]]; c.name = c.other ? 'other' : (top.kind === 'account' ? '@' : '') + top.label; });
+  // layout targets: a disk. angle = community arc (members spread by rank), radius = connection rank (hubs inside)
+  const total = nodes.length, R = 170;
+  const rankByDeg = new Array(total); order.forEach((i, r) => rankByDeg[i] = r);
+  let ang = 0; const gap = 0.18;
+  comms.forEach(c => { const span = Math.max(0.25, 2 * Math.PI * (c.ids.length / total)) - gap; c.a0 = ang; c.a1 = ang + span; c.ids.sort((x, y) => deg[y] - deg[x]); c.ids.forEach((i, k) => { const t = c.ids.length > 1 ? k / (c.ids.length - 1) : .5; nodes[i].ta = c.a0 + t * span; nodes[i].tr = focus && nodes[i].id === focus ? 0 : 38 + R * Math.pow(rankByDeg[i] / Math.max(1, total - 1), .7); }); ang += span + gap; });
+  const maxN = Math.max(1, ...nodes.map(n => n.n));
+  nodes.forEach(n => { n.r = 3.5 + 11 * Math.sqrt(n.n / maxN); n.x = Math.cos(n.ta) * n.tr * (0.3 + Math.random() * .4) + (Math.random() - .5) * 60; n.y = Math.sin(n.ta) * n.tr * (0.3 + Math.random() * .4) + (Math.random() - .5) * 60; n.z = (commOf[idx[n.id]] % 3 - 1) * 14; n.vx = n.vy = 0; });
+  // chrome
+  box.innerHTML = `<canvas></canvas><div class="legend" id="webLegend">${comms.map((c, ci) => `<span><i style="background:${COMM[ci % COMM.length]}"></i>${esc(c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name)} <em>${c.ids.length}</em></span>`).join('')}<span class="shapes">● account &nbsp;■ tag &nbsp;○ word</span></div>${focus ? `<div class="focus">◎ ${esc(nodes[idx[focus]].label)}</div>` : ''}<div class="hint">size = posts · inner = more connected · colour = community · hover a node · drag to spin · wheel to zoom</div>`;
   const cv = $('canvas', box), ctx = cv.getContext('2d');
-  const st = { ry: 0, rx: 0.25, zoom: 1, auto: true, last: 0, dragging: false, px: 0, py: 0, moved: 0, W: 0, H: 0, dpr: Math.min(2, devicePixelRatio || 1), proj: [] };
+  const st = { ry: 0, rx: 0.38, zoom: 1, auto: true, last: 0, dragging: false, px: 0, py: 0, moved: 0, W: 0, H: 0, dpr: Math.min(2, devicePixelRatio || 1), proj: [], frame: 0, hover: -1, settle: 170 };
   const size = () => { st.W = box.clientWidth; st.H = box.clientHeight; cv.width = st.W * st.dpr; cv.height = st.H * st.dpr; ctx.setTransform(st.dpr, 0, 0, st.dpr, 0, 0); };
   size();
-  const project = () => {
-    const cy = Math.cos(st.ry), sy = Math.sin(st.ry), cx = Math.cos(st.rx), sx = Math.sin(st.rx), F = 520, scale = Math.min(st.W, st.H) / 420 * st.zoom;
-    st.proj = nodes.map(n => { const x1 = n.x * cy + n.z * sy, z1 = -n.x * sy + n.z * cy, y1 = n.y * cx - z1 * sx, z2 = n.y * sx + z1 * cx; const p = F / (F + z2); return { n, X: st.W/2 + x1 * p * scale, Y: st.H/2 + y1 * p * scale, p, z: z2 }; });
+  // one untangling step: pull to ring/arc target, push apart (collision), springs along strong links
+  const step = () => {
+    const kT = st.frame < 40 ? 0.02 : 0.045;
+    nodes.forEach(n => { const tx = Math.cos(n.ta) * n.tr, ty = Math.sin(n.ta) * n.tr; n.vx += (tx - n.x) * kT; n.vy += (ty - n.y) * kT; });
+    for (let i = 0; i < total; i++) for (let j = i + 1; j < total; j++){ const a = nodes[i], b = nodes[j]; let dx = a.x - b.x, dy = a.y - b.y; const d2 = dx*dx + dy*dy + .01, d = Math.sqrt(d2), min = a.r + b.r + 9; if (d < min){ const f = (min - d) / d * 0.5; a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f; } else if (d < 90){ const f = 60 / d2; a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f; } }
+    nodes.forEach((n, i) => nb[i].slice(0, 2).forEach(([j, w]) => { const m = nodes[j]; const dx = m.x - n.x, dy = m.y - n.y, d = Math.sqrt(dx*dx + dy*dy) || 1, k = 0.004 * (d - 55); n.vx += k * dx / d; n.vy += k * dy / d; }));
+    nodes.forEach(n => { if (focus && n.id === focus){ n.x = n.y = n.vx = n.vy = 0; return; } n.x += Math.max(-6, Math.min(6, n.vx)); n.y += Math.max(-6, Math.min(6, n.vy)); n.vx *= 0.72; n.vy *= 0.72; });
   };
+  const project = () => {
+    const cy = Math.cos(st.ry), sy = Math.sin(st.ry), cx = Math.cos(st.rx), sx = Math.sin(st.rx), F = 700, scale = Math.min(st.W, st.H) / 440 * st.zoom;
+    st.proj = nodes.map(n => { const x1 = n.x * cy + n.z * sy, z1 = -n.x * sy + n.z * cy, y1 = n.y * cx - z1 * sx, z2 = n.y * sx + z1 * cx; const p = F / (F + z2); return { n, X: st.W/2 + x1 * p * scale, Y: st.H/2 + y1 * p * scale, p, z: z2, s: scale }; });
+  };
+  const shape = (q, r, kind) => { ctx.beginPath(); if (kind === 'hashtag'){ ctx.rect(q.X - r, q.Y - r, 2 * r, 2 * r); } else { ctx.arc(q.X, q.Y, r, 0, 7); } };
   const draw = () => {
     project(); ctx.clearRect(0, 0, st.W, st.H);
-    const P = st.proj, byId = {}; P.forEach(q => byId[q.n.id] = q);
+    const P = st.proj, hv = st.hover, fi = focus ? idx[focus] : -1, hi = hv >= 0 ? hv : fi;
+    const lit = new Set(); if (hi >= 0){ lit.add(hi); nb[hi].forEach(([j]) => lit.add(j)); }
+    // the map's skeleton: faint rings (inner = more connected) and each community's name on its arc
+    const ringPt = (a, r) => { const cy = Math.cos(st.ry), sy = Math.sin(st.ry), cx = Math.cos(st.rx), sx = Math.sin(st.rx), F = 700, sc = Math.min(st.W, st.H) / 440 * st.zoom; const x = Math.cos(a) * r, y = Math.sin(a) * r; const x1 = x * cy, z1 = -x * sy, y1 = y * cx - z1 * sx, z2 = y * sx + z1 * cx; const p = F / (F + z2); return [st.W/2 + x1 * p * sc, st.H/2 + y1 * p * sc, p]; };
+    ctx.lineWidth = 1; ctx.setLineDash([3, 6]);
+    [0.33, 0.66, 1].forEach(f => { const r = 38 + R * f; ctx.beginPath(); for (let k = 0; k <= 72; k++){ const [x, y] = ringPt(k / 72 * 2 * Math.PI, r); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.strokeStyle = '#2c2c36'; ctx.globalAlpha = .8; ctx.stroke(); });
+    ctx.setLineDash([]);
+    comms.forEach((c, ci) => { if (c.other || c.ids.length < 2) return; const a = (c.a0 + c.a1) / 2, [x, y, p] = ringPt(a, 38 + R + 30); ctx.globalAlpha = .9 * p; ctx.fillStyle = COMM[ci % COMM.length]; ctx.font = `${Math.round(11 * Math.min(1.2, p))}px 'Share Tech Mono', monospace`; ctx.textAlign = 'center'; ctx.fillText(c.name.toUpperCase(), x, y + 4); });
+    // community halos (soft discs behind each arc) give the map its "ordered" read
+    comms.forEach((c, ci) => { if (c.other || c.ids.length < 3) return; let sx = 0, sy = 0; c.ids.forEach(i => { sx += P[i].X; sy += P[i].Y; }); sx /= c.ids.length; sy /= c.ids.length; const rr = Math.max(...c.ids.map(i => Math.hypot(P[i].X - sx, P[i].Y - sy))) + 18; const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, rr); g.addColorStop(0, COMM[ci % COMM.length] + '14'); g.addColorStop(1, COMM[ci % COMM.length] + '00'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, rr, 0, 7); ctx.fill(); });
+    // edges: each node's strongest links only (keeps it legible); all of a hovered node's links
     ctx.lineCap = 'round';
-    edges.forEach(e => { const a = byId[e.a], b = byId[e.b]; const depth = (a.p + b.p) / 2; ctx.globalAlpha = 0.12 + 0.5 * depth * depth * (e.w / maxW) + (e.you ? .3 : 0); ctx.strokeStyle = e.you ? '#f542a8' : e.m ? '#42d4f5' : '#5a5a70'; ctx.lineWidth = (0.5 + 2 * e.w / maxW) * depth; ctx.beginPath(); ctx.moveTo(a.X, a.Y); ctx.lineTo(b.X, b.Y); ctx.stroke(); });
-    const order = P.slice().sort((a, b) => b.z - a.z);   // far first
-    order.forEach(q => { const n = q.n, r = (3 + 10 * Math.sqrt((n.strength || 0) / maxS) + (n.kind === 'account' ? 1.5 : 0)) * q.p * st.zoom ** .5, col = KIND_COLOR[n.kind] || '#999';
-      ctx.globalAlpha = 0.35 + 0.65 * q.p * q.p; ctx.beginPath(); ctx.arc(q.X, q.Y, r, 0, 7); ctx.fillStyle = '#15151b'; ctx.fill(); ctx.lineWidth = n.id === nwSel || n.id === focus ? 2.5 : 1.3; ctx.strokeStyle = col; ctx.stroke();
-      if (n.id === focus){ ctx.globalAlpha = .9; ctx.fillStyle = col; ctx.fill(); }
-      if (q.p > 0.92 || r > 7 || n.id === focus){ ctx.globalAlpha = Math.min(1, 0.25 + q.p * q.p); ctx.fillStyle = n.id === focus ? '#e2e2ea' : '#9a9ab0'; ctx.font = `${Math.round(10 * Math.min(1.3, q.p * st.zoom ** .3))}px 'Share Tech Mono', monospace`; ctx.textAlign = 'center'; const lbl = n.label.length > 16 ? n.label.slice(0, 15) + '…' : n.label; ctx.fillText((n.kind === 'account' ? '@' : '') + lbl, q.X, q.Y + r + 11); }
+    const drawn = new Set();
+    nodes.forEach((n, i) => { const lim = hi === i ? nb[i].length : (st.zoom > 1.6 ? 4 : 2); nb[i].slice(0, lim).forEach(([j, w]) => { const key = i < j ? i + ':' + j : j + ':' + i; if (drawn.has(key)) return; drawn.add(key); const a = P[i], b = P[j]; const on = hi >= 0 && (i === hi || j === hi); if (hi >= 0 && !on) return; const depth = (a.p + b.p) / 2; ctx.globalAlpha = on ? .85 : .10 + .25 * depth; const ci = commOf[i] === commOf[j] ? commOf[i] : -1; ctx.strokeStyle = on ? '#e2e2ea' : ci >= 0 ? COMM[ci % COMM.length] : '#5a5a70'; ctx.lineWidth = (on ? 1.6 : .6 + 1.2 * Math.min(1, w / 6)) * depth; ctx.beginPath(); ctx.moveTo(a.X, a.Y); ctx.lineTo(b.X, b.Y); ctx.stroke(); }); });
+    // nodes, far first
+    const ord = P.map((q, i) => i).sort((a, b) => P[b].z - P[a].z);
+    const labels = [];
+    ord.forEach(i => { const q = P[i], n = q.n, ci = commOf[i], col = COMM[ci % COMM.length], r = n.r * q.p * Math.sqrt(st.zoom), dim = hi >= 0 && !lit.has(i);
+      ctx.globalAlpha = dim ? .18 : .55 + .45 * q.p;
+      shape(q, r, n.kind); ctx.fillStyle = n.kind === 'word' ? '#0d0d12' : col; ctx.fill(); ctx.lineWidth = i === hi || i === fi ? 2.5 : 1.2; ctx.strokeStyle = i === hi || i === fi ? '#fff' : col; ctx.stroke();
+      if (!dim && (r >= 7 || i === hi || i === fi || rankByDeg[i] < Math.max(6, total * .12))) labels.push({ i, q, r, pri: (i === hi || i === fi ? 1e9 : 0) + n.n * 10 + deg[i] });
     });
+    // labels: by priority, skip any that would overlap one already placed
+    labels.sort((a, b) => b.pri - a.pri); const placed = [];
+    ctx.textAlign = 'center';
+    for (const L of labels){ const n = L.q.n, txt = (n.kind === 'account' ? '@' : '') + (n.label.length > 18 ? n.label.slice(0, 17) + '…' : n.label); const fs = Math.round(Math.min(13, 9 + 3 * L.q.p)); ctx.font = `${fs}px 'Share Tech Mono', monospace`; const w = ctx.measureText(txt).width + 8, h = fs + 4, x = L.q.X, y = L.q.Y + L.r + 4; if (placed.some(b => Math.abs(b.x - x) < (b.w + w) / 2 && Math.abs(b.y - y) < h)) continue; placed.push({ x, y, w }); ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(7,7,10,.72)'; ctx.fillRect(x - w / 2, y, w, h); ctx.fillStyle = L.i === hi || L.i === fi ? '#fff' : '#c9c9d6'; ctx.fillText(txt, x, y + fs); if (placed.length > 70) break; }
+    // hover card
+    if (hv >= 0){ const q = P[hv], n = q.n; const lines = [(n.kind === 'account' ? '@' : n.kind === 'hashtag' ? '' : '"') + n.label + (n.kind === 'word' ? '"' : ''), `${n.n} post${n.n === 1 ? '' : 's'} · ${nb[hv].length} link${nb[hv].length === 1 ? '' : 's'} · ${comms[commOf[hv]].name}`]; ctx.font = `12px 'Share Tech Mono', monospace`; const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16, x = Math.min(st.W - w - 6, Math.max(6, q.X + 14)), y = Math.max(6, q.Y - 44); ctx.globalAlpha = 1; ctx.fillStyle = '#15151b'; ctx.fillRect(x, y, w, 40); ctx.strokeStyle = COMM[commOf[hv] % COMM.length]; ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, w - 1, 39); ctx.textAlign = 'left'; ctx.fillStyle = '#e2e2ea'; ctx.fillText(lines[0], x + 8, y + 16); ctx.fillStyle = '#9a9ab0'; ctx.fillText(lines[1], x + 8, y + 32); }
     ctx.globalAlpha = 1;
   };
-  const loop = ts => { webAnim.raf = requestAnimationFrame(loop); if (document.hidden || !box.isConnected) return; if (ts - st.last < 33) return; st.last = ts; if (st.auto && !st.dragging) st.ry += 0.0035; draw(); };
+  const loop = ts => { webAnim.raf = requestAnimationFrame(loop); if (document.hidden || !box.isConnected) return; if (ts - st.last < 33) return; st.last = ts; if (st.frame < st.settle){ step(); st.frame++; } else if (st.auto && !st.dragging && st.hover < 0) st.ry += 0.0012; draw(); };
   webAnim = { raf: requestAnimationFrame(loop), ro: window.ResizeObserver ? new ResizeObserver(() => { size(); draw(); }) : null }; webAnim.ro && webAnim.ro.observe(box);
   const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  const hit = (x, y) => { let best = -1, bd = 18 * 18; st.proj.forEach((q, i) => { const d = (q.X - x) ** 2 + (q.Y - y) ** 2, rr = Math.max(bd, (q.n.r * q.p + 6) ** 2); if (d < rr && (best < 0 || d < bd)){ bd = d; best = i; } }); return best; };
   cv.onpointerdown = e => { st.dragging = true; st.moved = 0; [st.px, st.py] = pos(e); cv.classList.add('drag'); cv.setPointerCapture(e.pointerId); };
-  cv.onpointermove = e => { if (!st.dragging) return; const [x, y] = pos(e); st.ry += (x - st.px) * 0.008; st.rx = Math.max(-1.4, Math.min(1.4, st.rx + (y - st.py) * 0.008)); st.moved += Math.abs(x - st.px) + Math.abs(y - st.py); st.px = x; st.py = y; st.auto = false; };
-  cv.onpointerup = e => { st.dragging = false; cv.classList.remove('drag'); if (st.moved > 6) return; const [x, y] = pos(e); let best = null, bd = 20 * 20; st.proj.forEach(q => { const d = (q.X - x) ** 2 + (q.Y - y) ** 2; if (d < bd){ bd = d; best = q.n; } }); if (best) webNodeTap(best); };
-  cv.onwheel = e => { e.preventDefault(); st.zoom = Math.max(.5, Math.min(3, st.zoom * (e.deltaY < 0 ? 1.1 : 0.9))); };
+  cv.onpointermove = e => { const [x, y] = pos(e); if (st.dragging){ st.ry += (x - st.px) * 0.008; st.rx = Math.max(0.15, Math.min(1.5, st.rx + (y - st.py) * 0.006)); st.moved += Math.abs(x - st.px) + Math.abs(y - st.py); st.px = x; st.py = y; st.auto = false; } else { st.hover = hit(x, y); cv.style.cursor = st.hover >= 0 ? 'pointer' : 'grab'; } };
+  cv.onpointerleave = () => { st.hover = -1; };
+  cv.onpointerup = e => { st.dragging = false; cv.classList.remove('drag'); if (st.moved > 6) return; const [x, y] = pos(e); const i = hit(x, y); if (i >= 0) webNodeTap(nodes[i]); };
+  cv.onwheel = e => { e.preventDefault(); st.zoom = Math.max(.6, Math.min(3.5, st.zoom * (e.deltaY < 0 ? 1.1 : 0.9))); };
   cv.ondblclick = () => { st.auto = !st.auto; };
   draw();
 }
