@@ -2358,7 +2358,7 @@ function renderWorkerBox(){
   const set = !!st.worker_url;
   box.innerHTML = `<div class="card pad" style="margin:6px 0 14px">
     <b>${set ? '◆ Browser mode' : '◆ Set up browser mode'}</b>
-    <p class="note" style="margin:6px 0 10px">Everything stays on this device. Collecting runs through <b>your own</b> Cloudflare Worker — paste its URL. Nothing is sent anywhere else. <a href="worker/README.md" target="_blank" rel="noreferrer">How to deploy one →</a></p>
+    <p class="note" style="margin:6px 0 10px">Everything stays on this device. Collecting runs through <b>your own</b> Cloudflare Worker — paste its URL. Nothing is sent anywhere else. <a href="worker/" target="_blank" rel="noreferrer">How to deploy one →</a></p>
     <label class="field"><span>Your Worker URL</span><input id="wkUrl" value="${esc(st.worker_url || '')}" placeholder="https://searchnet.you.workers.dev" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"></label>
     <label class="field"><span>Shared secret (optional, if you set one)</span><input id="wkKey" value="${esc(st.worker_key || '')}" placeholder="leave blank if none" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
     <div class="row wrap" style="margin-top:8px"><button class="btn pri sm" id="wkSave">SAVE</button>${set ? '<button class="btn sm" id="wkTest">TEST</button>' : ''}</div></div>`;
@@ -2704,7 +2704,7 @@ function showOnboarding(){
     if (which === 'browser'){
       step.innerHTML = `<div class="card pad">
         <b>1 · Deploy your free Cloudflare Worker</b>
-        <p class="note" style="margin:6px 0 10px">It does the fetching so your browser doesn't have to. Takes a few minutes, once. <a href="worker/README.md" target="_blank" rel="noreferrer">Step-by-step guide →</a></p>
+        <p class="note" style="margin:6px 0 10px">It does the fetching so your browser doesn't have to. Takes a few minutes, once. <a href="worker/" target="_blank" rel="noreferrer">Step-by-step guide →</a></p>
         <b>2 · Paste its address</b>
         <label class="field" style="margin-top:8px"><span>Worker URL</span><input id="obWk" placeholder="https://searchnet.you.workers.dev" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"></label>
         <label class="field"><span>Shared secret (only if you set one)</span><input id="obKey" placeholder="leave blank if none" autocapitalize="off" autocorrect="off" spellcheck="false"></label>

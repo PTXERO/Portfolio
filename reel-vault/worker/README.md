@@ -7,9 +7,11 @@ your own Supabase).
 
 ## Deploy (pick one)
 
-**Dashboard (no install):** Cloudflare → Workers & Pages → Create → Create Worker →
-replace the code with `searchnet-worker.js` → Deploy. You get a URL like
-`https://searchnet.yourname.workers.dev`.
+**Dashboard (no install):** the illustrated step-by-step lives at
+<https://ptxero.neocities.org/reel-vault/worker/> (this folder's `index.html`). In short:
+dash.cloudflare.com → Compute (Workers) → Workers & Pages → Create → *Start with Hello
+World!* → name it `searchnet` → Deploy → *Edit code* → select all, paste
+`searchnet-worker.js` → Deploy. Your address is `https://searchnet.<yourname>.workers.dev`.
 
 **CLI:** `npm i -g wrangler && wrangler login && wrangler deploy`
 
