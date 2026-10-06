@@ -1,4 +1,4 @@
-"""REEL//VAULT tests.  Run:  python -m unittest discover reel-vault/server
+"""SEARCH//NET tests.  Run:  python -m unittest discover reel-vault/server
 
 Offline: gallery-dl and yt-dlp are replaced by stub scripts that print
 output in the exact formats the real tools produce; media and web pages
@@ -506,7 +506,7 @@ class TestPipeline(Base):
             self.assertEqual(json.loads(body)["template"], "r/skateboarding")
             self.assertEqual(call("/api/sources", "POST", {"kind": "rss", "template": "nope"})[0], 400)
             # UI, media guard, path traversal
-            self.assertIn(b"REEL//VAULT", call("/reel-vault/")[1])
+            self.assertIn(b"SEARCH//NET", call("/reel-vault/")[1])
             self.assertEqual(call("/media/../vault.db")[0], 403)
             self.assertEqual(call("/reel-vault/data/vault.db")[0], 404)
         finally:

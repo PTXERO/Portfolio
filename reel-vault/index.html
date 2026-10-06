@@ -8,9 +8,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="ReelVault">
+<meta name="apple-mobile-web-app-title" content="SearchNet">
 <meta name="format-detection" content="telephone=no">
-<title>REEL//VAULT</title>
+<title>SEARCH//NET</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -52,7 +52,7 @@ mark{background:rgba(200,245,66,.2);color:var(--acc);border-radius:2px;padding:0
 [hidden]{display:none!important}
 
 /* ── chrome ── */
-.top{position:sticky;top:0;z-index:60;background:rgba(13,13,18,.92);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+.top{position:sticky;top:0;z-index:60;background:var(--surface);
   border-bottom:1px solid var(--border);padding:var(--sat) calc(14px + var(--sar)) 0 calc(14px + var(--sal))}
 .top-in{height:var(--top);display:flex;align-items:center;gap:10px;max-width:1200px;margin:0 auto}
 .brand{font-family:var(--fdisp);font-size:24px;letter-spacing:.1em;color:var(--acc);white-space:nowrap}
@@ -61,11 +61,17 @@ mark{background:rgba(200,245,66,.2);color:var(--acc);border-radius:2px;padding:0
 .chip-status{font-family:var(--fmono);font-size:11px;letter-spacing:.1em;padding:5px 10px;border:1px solid var(--b2);border-radius:20px;color:var(--dim);white-space:nowrap}
 .chip-status.live{border-color:var(--acc);color:var(--acc)}
 .chip-status.demo{border-color:var(--acc4);color:var(--acc4)}
-.home-link{font-family:var(--fmono);font-size:13px;color:var(--dim);text-decoration:none;padding:8px 4px}
+.home-link{flex-shrink:0}
+.hbtn{display:inline-flex;align-items:center;padding:4px 11px;border:1px solid var(--b2);border-radius:2px;color:var(--dim);font-family:var(--fmono);font-size:10px;letter-spacing:.07em;text-decoration:none;white-space:nowrap;transition:all .15s}
+.hbtn:hover{border-color:var(--acc2);color:var(--acc2)}
+.hdr-sep{width:1px;height:18px;background:var(--border);flex-shrink:0}
+.hdr-sub{font-family:var(--fmono);font-size:9px;color:var(--dim);letter-spacing:.15em;white-space:nowrap}
+.brand em{font-style:normal;color:var(--dim)}
+@media(max-width:699px){.hdr-sub{display:none}}
 
 nav.bottom{position:fixed;left:0;right:0;bottom:0;z-index:70;background:rgba(13,13,18,.96);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
   border-top:1px solid var(--border);padding:0 var(--sar) var(--sab) var(--sal)}
-nav.bottom .in{display:grid;grid-template-columns:repeat(5,1fr);height:var(--nav);max-width:640px;margin:0 auto}
+nav.bottom .in{display:grid;grid-template-columns:repeat(6,1fr);height:var(--nav);max-width:640px;margin:0 auto}
 nav.bottom button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--dim);position:relative;min-height:44px}
 nav.bottom button .i{font-size:21px;line-height:1}
 nav.bottom button .l{font-family:var(--fmono);font-size:10px;letter-spacing:.12em}
@@ -374,10 +380,20 @@ pre.cmd i{color:var(--dim);font-style:normal}
 <body>
 
 <header class="top"><div class="top-in">
-  <a class="home-link" href="../" aria-label="Portfolio home">←</a>
-  <div class="brand">REEL//VAULT<small>FIND · LEARN · SAVE</small></div>
+  <a class="hbtn home-link" href="../" aria-label="Portfolio home">&larr; HOME</a>
+  <div class="hdr-sep"></div>
+  <div class="brand">SEARCH<em>//</em>NET</div>
+  <div class="hdr-sub">FIND &middot; LEARN &middot; SAVE</div>
   <div class="grow"></div>
-  <button class="chip-status" id="status">○ …</button>
+  <nav class="bottom" aria-label="Main"><div class="in" id="nav">
+  <button data-go="topics"><span class="i">◎</span><span class="l">TOPICS</span></button>
+  <button data-go="library"><span class="i">▦</span><span class="l">LIBRARY</span></button>
+  <button data-go="network"><span class="i">◕</span><span class="l">WEB</span></button>
+  <button data-go="sources"><span class="i">⊕</span><span class="l">SOURCES</span></button>
+  <button data-go="jobs"><span class="i">⟳</span><span class="l">ACTIVITY</span><span class="badge" id="jobBadge" hidden></span></button>
+  <button data-go="setup"><span class="i">⚙</span><span class="l">SETUP</span></button>
+</div></nav>
+  <button class="chip-status" id="status">&#9675; &hellip;</button>
 </div></header>
 <div class="banner" id="banner"></div>
 
@@ -544,7 +560,7 @@ pre.cmd i{color:var(--dim);font-style:normal}
   </div>
   <h3 class="s">Run it</h3>
   <div class="card pad">
-    <p class="note" style="margin-bottom:8px">One command sets up everything: it installs or updates Python, Git and ffmpeg, downloads or updates REEL//VAULT, installs the packages, and starts it. Run the same thing again any time to update.</p>
+    <p class="note" style="margin-bottom:8px">One command sets up everything: it installs or updates Python, Git and ffmpeg, downloads or updates SEARCH//NET, installs the packages, and starts it. Run the same thing again any time to update.</p>
 <pre class="cmd"><i># Windows: paste into PowerShell</i>
 irm https://raw.githubusercontent.com/PTXERO/Portfolio/claude/new-session-7sf9nm/reel-vault/start.ps1 | iex
 <i># after the first time: double-click reel-vault\start.cmd</i>
@@ -563,14 +579,7 @@ curl -fsSL https://raw.githubusercontent.com/PTXERO/Portfolio/claude/new-session
   </div>
 </section>
 
-<nav class="bottom" aria-label="Main"><div class="in" id="nav">
-  <button data-go="topics"><span class="i">◎</span><span class="l">TOPICS</span></button>
-  <button data-go="library"><span class="i">▦</span><span class="l">LIBRARY</span></button>
-  <button data-go="network"><span class="i">◕</span><span class="l">WEB</span></button>
-  <button data-go="sources"><span class="i">⊕</span><span class="l">SOURCES</span></button>
-  <button data-go="jobs"><span class="i">⟳</span><span class="l">ACTIVITY</span><span class="badge" id="jobBadge" hidden></span></button>
-  <button data-go="setup"><span class="i">⚙</span><span class="l">SETUP</span></button>
-</div></nav>
+
 
 <div class="reasonbar" id="reasonBar"><div class="rb-in">
   <span class="rb-label">👎 why? <small>(optional — teaches the topic)</small></span>
@@ -1916,7 +1925,7 @@ async function renderSetup(){
     $('#sSyn').value = SYN.map(g => g.join(', ')).join('\n'); $('#sSynN').textContent = SYN.length + ' groups'; return;
   }
   if (!LIVE){
-    pb.innerHTML = `<div class="card pad"><b>No server found.</b><p class="note" style="margin-top:6px">REEL//VAULT does the searching and downloading on a computer you own (Mac, Windows or Linux). You use it from your iPhone over Wi-Fi. Follow <b>RUN IT</b> below, then scan the QR code it shows.</p></div>`;
+    pb.innerHTML = `<div class="card pad"><b>No server found.</b><p class="note" style="margin-top:6px">SEARCH//NET does the searching and downloading on a computer you own (Mac, Windows or Linux). You use it from your iPhone over Wi-Fi. Follow <b>RUN IT</b> below, then scan the QR code it shows.</p></div>`;
     $('#tools').innerHTML = ''; $('#dataDir').textContent = '';
     $('#sSyn').value = SYN.map(g => g.join(', ')).join('\n'); $('#sSynN').textContent = 'demo: not saved'; return;
   }

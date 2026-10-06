@@ -1,4 +1,4 @@
-# REEL//VAULT
+# SEARCH//NET
 
 A self-learning video finder for the social web, built to be used from an iPhone.
 Type a topic and it searches every source you've added (X, YouTube, Mastodon/Fediverse,
@@ -19,7 +19,7 @@ On a computer that stays on, run **one command**. It does everything:
 
 1. installs Python, or updates it if you have it
 2. installs Git and ffmpeg if they're missing
-3. downloads REEL//VAULT to `~/Portfolio`, or updates your copy
+3. downloads SEARCH//NET to `~/Portfolio`, or updates your copy
 4. installs / updates the Python packages (yt-dlp, gallery-dl, fastembed)
 5. starts the auto-updating launcher
 

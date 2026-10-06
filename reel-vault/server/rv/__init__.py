@@ -1,1 +1,1 @@
-"""REEL//VAULT backend package."""
+"""SEARCH//NET backend package."""

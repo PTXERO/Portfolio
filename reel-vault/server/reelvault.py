@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ─────────────────────────────────────────────────────────────────
-#  REEL//VAULT — find, learn, sort and save videos from the social web.
+#  SEARCH//NET — find, learn, sort and save videos from the social web.
 #
 #  python reel-vault/server/reelvault.py      → open the printed link
 #

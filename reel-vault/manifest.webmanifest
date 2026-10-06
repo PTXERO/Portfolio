@@ -1,6 +1,6 @@
 {
-  "name": "REEL//VAULT",
-  "short_name": "ReelVault",
+  "name": "SEARCH//NET",
+  "short_name": "SearchNet",
   "description": "Find, learn, sort and save videos from the social web.",
   "start_url": "./",
   "scope": "./",

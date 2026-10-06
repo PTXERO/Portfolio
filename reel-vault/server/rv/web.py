@@ -128,7 +128,7 @@ class Handler(BaseHTTPRequestHandler):
     port = 8765
     phone_host = ""
     PUBLIC = False          # when False, only private-network clients are accepted
-    server_version = "ReelVault/2.0"
+    server_version = "SearchNet/2.0"
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *args):
@@ -645,7 +645,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="REEL//VAULT server")
+    ap = argparse.ArgumentParser(description="SEARCH//NET server")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="0.0.0.0",
                     help="0.0.0.0 = reachable from your phone on the same Wi-Fi (default); "
@@ -690,7 +690,7 @@ def main(argv=None):
     srv = ThreadingHTTPServer((a.host, a.port), Handler)
     srv.daemon_threads = True
     key = Handler.vault.store.access_key
-    print("\n  REEL//VAULT")
+    print("\n  SEARCH//NET")
     print(f"  this computer : http://127.0.0.1:{a.port}/reel-vault/")
     if a.host != "127.0.0.1":
         print(f"  your phone    : http://{lan_ip()}:{a.port}/reel-vault/?key={key}")

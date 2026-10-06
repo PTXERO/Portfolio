@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # ─────────────────────────────────────────────────────────────────
-#  REEL//VAULT auto-updating launcher
+#  SEARCH//NET auto-updating launcher
 #
 #  Run this ONCE and leave it. It:
-#    • starts the REEL//VAULT server,
+#    • starts the SEARCH//NET server,
 #    • checks GitHub for new commits on a loop,
 #    • pulls and restarts the server when there are updates,
 #    • restarts the server if it ever crashes.
@@ -111,7 +111,7 @@ def main():
 
     srv = Server(passthrough)
     srv.start()
-    print("\n  REEL//VAULT launcher running." + (f"  Watching GitHub ({branch}) every {known.interval}s."
+    print("\n  SEARCH//NET launcher running." + (f"  Watching GitHub ({branch}) every {known.interval}s."
           if update else "  Auto-update off."))
     print("  Leave this window open. Press Ctrl+C to stop everything.\n", flush=True)
 
