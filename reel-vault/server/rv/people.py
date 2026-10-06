@@ -40,8 +40,14 @@ def _mentions(t):
     return {m.rstrip(".").lower() for m in _MENTION.findall(str(t or ""))}
 
 
+_TAG_IN_TEXT = re.compile(r"(?:^|\s)#(\w{2,})", re.UNICODE)
+
+
 def _hashes(it):
-    return {h for h in str(it.get("hashtags") or "").lower().split() if h}
+    h = {x for x in str(it.get("hashtags") or "").lower().split() if x}
+    if not h:                                   # YouTube etc. write their #tags in the description
+        h = {m.lower() for m in _TAG_IN_TEXT.findall(str(it.get("text") or ""))}
+    return h
 
 
 def _pid(it):
@@ -321,9 +327,13 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
     fz = _parse_focus(focus)
     node_w, edge_w, kind_of, node_n = Counter(), Counter(), {}, Counter()   # node_n = posts behind each node
 
-    def link(a, b, w):
+    edge_t = {}   # best (lowest) tier seen for the pair: 1 real relationship · 2 shared hashtag · 3 shared words
+
+    def link(a, b, w, t=3):
         if a != b:
-            edge_w[(a, b) if a < b else (b, a)] += w
+            k = (a, b) if a < b else (b, a)
+            edge_w[k] += w
+            edge_t[k] = min(edge_t.get(k, 9), t)
 
     acct_key = {}
     # words in more than a third of all posts are boilerplate here ("video", "new"…) and would
@@ -361,7 +371,12 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
                 kind_of[t] = "hashtag"
                 node_w[t] += idf(h_df[t[1:]])
                 node_n[t] += 1
-                link(aid, t, 1)
+                link(aid, t, 1, 2)
+            # real relationships written in the post: @mentions of accounts we know
+            for m in _mentions(it.get("text")):
+                bid = next((k for k in kind_of if k.startswith("@" + m + "|")), None)
+                if bid and bid != aid:
+                    link(aid, bid, 2, 1)
             for w in words:
                 kind_of[w] = "word"
                 node_w[w] += 0.6 * idf(w_df.get(w[2:], 1))
@@ -371,7 +386,7 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
             node_n[aid] += 1
             for i in range(len(tags)):
                 for j in range(i + 1, len(tags)):
-                    link(tags[i], tags[j], 1.2)
+                    link(tags[i], tags[j], 1.2, 2)
             # co-occurrence among the post's 12 most distinctive words (long descriptions included), and tags×words
             # co-occurrence the way text-network tools do it: terms inside a sliding 4-word window link
             # strongly, terms merely in the same post link weakly (first 40 distinctive terms, text order)
@@ -385,7 +400,7 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
                         break
             for t in tags:
                 for k, _ in seq:
-                    link(t, k, 0.5)
+                    link(t, k, 0.5, 3)
             for i in range(len(seq)):
                 for j in range(i + 1, len(seq)):
                     link(seq[i][0], seq[j][0], 1 if seq[j][1] - seq[i][1] <= 4 else 0.25)
@@ -394,7 +409,7 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
                 continue
             w, hn, wn, ment = _edge(a, b, idf, h_df, w_df)
             if w > 0:
-                link(aid, f"@{b.author.lower()}|{b.platform}", w * 0.5)
+                link(aid, f"@{b.author.lower()}|{b.platform}", w * 0.5, 1 if ment else 2 if hn else 3)
 
     # ── term selection (VOSviewer): minimum occurrences, then keep the most *relevant* 60% ──
     min_occ = max(2, round(n_posts * 0.01))
@@ -418,8 +433,8 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
         edge_w[(a, b)] = math.sqrt(co) * math.log(1 + assoc)
 
     def nb(nid):
-        out = [(y if x == nid else x, w) for (x, y), w in edge_w.items() if nid in (x, y)]
-        return sorted(out, key=lambda p: -p[1])
+        out = [(y if x == nid else x, w, edge_t.get((x, y), 3)) for (x, y), w in edge_w.items() if nid in (x, y)]
+        return sorted(out, key=lambda p: (p[2], -p[1]))
 
     focus_id = None
     if fz:
@@ -433,8 +448,8 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
         first = [p for p in nb(focus_id) if kind_of.get(p[0]) in kinds][:int(cap * 0.6)]
         seen = [focus_id] + [p[0] for p in first]
         sset = set(seen)
-        for k, _ in first:
-            for k2, _ in nb(k)[:4]:
+        for k, *_ in first:
+            for k2, *_ in nb(k)[:4]:
                 if len(sset) >= cap:
                     break
                 if kind_of.get(k2) in kinds and k2 not in sset:
@@ -448,10 +463,12 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
             if kind in kinds:
                 ids += sorted((k for k in node_w if kind_of.get(k) == kind), key=lambda k: -node_w[k])[:per[kind]]
     idset = set(ids)
-    all_edges = sorted(({"a": a, "b": b, "w": round(w, 2)} for (a, b), w in edge_w.items() if a in idset and b in idset),
-                       key=lambda e: -e["w"])
-    # keep the strongest links overall PLUS every node's own strongest few, so nothing is left dangling
-    keep = {id(e): e for e in all_edges[:cap * 4]}
+    all_edges = sorted(({"a": a, "b": b, "w": round(w, 2), "t": edge_t.get((a, b), 3)}
+                        for (a, b), w in edge_w.items() if a in idset and b in idset),
+                       key=lambda e: (e["t"], -e["w"]))
+    # keep every real relationship, the strongest links overall, PLUS every node's own strongest few
+    keep = {id(e): e for e in all_edges if e["t"] == 1}
+    keep.update({id(e): e for e in all_edges[:cap * 4]})
     per = defaultdict(list)
     for e in all_edges:
         per[e["a"]].append(e)

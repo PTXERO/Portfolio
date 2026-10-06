@@ -530,6 +530,7 @@ pre.cmd i{color:var(--dim);font-style:normal}
 .web .legend{position:absolute;right:10px;top:8px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px 12px;max-width:62%;font-family:var(--fmono);font-size:10px;letter-spacing:.08em;color:var(--dim);pointer-events:none}
 .web .legend em{font-style:normal;color:var(--mut)}
 .web .legend .shapes{color:var(--mut);flex-basis:100%;text-align:right}
+.web .legend .l1{color:#e2e2ea}.web .legend .l2{color:var(--acc2)}.web .legend .l3{color:#3a3a48}
 .web .legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:-1px}
 .web .focus{position:absolute;left:10px;top:8px;display:flex;align-items:center;gap:8px;font-family:var(--fmono);font-size:11px;color:var(--acc);background:rgba(13,13,18,.85);padding:4px 6px 4px 8px;border:1px solid rgba(var(--acc-rgb),.35);border-radius:var(--r,2px)}
 .web .focus .hbtn{padding:3px 8px;font-size:9px}
@@ -2046,8 +2047,8 @@ function drawWeb(box, graph){
   const focus = graph.focus && idx[graph.focus] != null ? graph.focus : null;
   // degree (connection strength) + neighbour lists
   const deg = new Array(nodes.length).fill(0), nb = nodes.map(() => []);
-  edges.forEach(e => { const a = idx[e.a], b = idx[e.b]; deg[a] += e.w; deg[b] += e.w; nb[a].push([b, e.w]); nb[b].push([a, e.w]); });
-  nb.forEach(l => l.sort((x, y) => y[1] - x[1]));
+  edges.forEach(e => { const a = idx[e.a], b = idx[e.b]; const t = e.t || (e.m ? 1 : 2); deg[a] += e.w; deg[b] += e.w; nb[a].push([b, e.w, t]); nb[b].push([a, e.w, t]); });
+  nb.forEach(l => l.sort((x, y) => (x[2] - y[2]) || (y[1] - x[1])));   // real relationships first, then by strength
   // communities: label propagation over accounts + hashtags only (generic words bridge everything and
   // would smear it into one blob), with hub-normalised weights so big nodes don't swallow the map;
   // words then join whichever community most of their neighbours are in.
@@ -2094,7 +2095,7 @@ function drawWeb(box, graph){
   // chrome
   const legendHTML = () => (st.color === 'kind'
     ? ['account', 'hashtag', 'word'].map(k => `<span><i style="background:${KIND_COLOR[k]}"></i>${k === 'account' ? '@ accounts' : k === 'hashtag' ? '# tags' : 'words'} <em>${nodes.filter(n => n.kind === k).length}</em></span>`).join('')
-    : comms.map((c, ci) => `<span><i style="background:${COMM[ci % COMM.length]}"></i>${esc(c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name)} <em>${c.ids.length}</em></span>`).join('')) + '<span class="shapes">● account &nbsp;■ tag &nbsp;○ word</span>';
+    : comms.map((c, ci) => `<span><i style="background:${COMM[ci % COMM.length]}"></i>${esc(c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name)} <em>${c.ids.length}</em></span>`).join('')) + '<span class="shapes">● account &nbsp;■ tag &nbsp;○ word</span><span class="shapes"><b class="l1">━</b> mentions / follows &nbsp;<b class="l2">━</b> shared tags &nbsp;<b class="l3">━</b> shared words</span>';
   const hintHTML = () => 'size = ' + (st.sizeBy === 'influence' ? 'influence' : 'posts') + ' · colour = ' + (st.color === 'kind' ? 'kind' : 'community') + (st.mode === '2d' ? ' · inner = more connected · drag to move around' : ' · drag to spin') + ' · wheel to zoom · tap a node';
   nwFocusNode = focus ? nodes[idx[focus]] : null;
   const fb = nwFocusNode ? `<div class="focus">◎ ${nwFocusNode.kind === 'account' ? '@' : ''}${esc(nwFocusNode.label)}${nwFocusNode.kind === 'account' && nwFocusNode.person_id ? ' <button class="hbtn" data-fprof>PROFILE</button>' : ''} <button class="hbtn" data-fclear title="Show everything again">✕</button></div>` : '';
@@ -2133,13 +2134,20 @@ function drawWeb(box, graph){
     ctx.lineWidth = 1; ctx.setLineDash([3, 6]);
     if (st.mode === '2d') [0.33, 0.66, 1].forEach(f => { const r = 38 + R * f; ctx.beginPath(); for (let k = 0; k <= 72; k++){ const [x, y] = ringPt(k / 72 * 2 * Math.PI, r); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.strokeStyle = '#2c2c36'; ctx.globalAlpha = .8; ctx.stroke(); });
     ctx.setLineDash([]);
-    if (st.mode === '2d') comms.forEach((c, ci) => { if (c.other || c.ids.length < 2) return; const a = (c.a0 + c.a1) / 2, [x, y, p] = ringPt(a, 38 + R + 30); ctx.globalAlpha = .9 * p; ctx.fillStyle = st.color === 'kind' ? '#7a7a92' : COMM[ci % COMM.length]; ctx.font = `${Math.round(11 * Math.min(1.2, p))}px 'Share Tech Mono', monospace`; ctx.textAlign = 'center'; ctx.fillText(c.name.toUpperCase(), x, y + 4); });
+    if (st.mode === '2d') comms.forEach((c, ci) => { if (c.other || c.ids.length < 4) return; const a = (c.a0 + c.a1) / 2, [x, y, p] = ringPt(a, 38 + R + 30); ctx.globalAlpha = .9 * p; ctx.fillStyle = st.color === 'kind' ? '#7a7a92' : COMM[ci % COMM.length]; ctx.font = `${Math.round(11 * Math.min(1.2, p))}px 'Share Tech Mono', monospace`; ctx.textAlign = 'center'; ctx.fillText(c.name.toUpperCase(), x, y + 4); });
     // community halos (soft discs behind each arc) give the map its "ordered" read
     if (st.mode === '2d' && st.color === 'community') comms.forEach((c, ci) => { if (c.other || c.ids.length < 3) return; let sx = 0, sy = 0; c.ids.forEach(i => { sx += P[i].X; sy += P[i].Y; }); sx /= c.ids.length; sy /= c.ids.length; const rr = Math.max(...c.ids.map(i => Math.hypot(P[i].X - sx, P[i].Y - sy))) + 18; const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, rr); g.addColorStop(0, COMM[ci % COMM.length] + '14'); g.addColorStop(1, COMM[ci % COMM.length] + '00'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, rr, 0, 7); ctx.fill(); });
     // edges: each node's strongest links only (keeps it legible); all of a hovered node's links
     ctx.lineCap = 'round';
-    const drawn = new Set();
-    nodes.forEach((n, i) => { const lim = (i === hv || i === fi) ? nb[i].length : st.mode === '3d' ? 5 : (st.zoom > 1.6 ? 4 : 2); nb[i].slice(0, lim).forEach(([j, w]) => { const key = i < j ? i + ':' + j : j + ':' + i; if (drawn.has(key)) return; drawn.add(key); const a = P[i], b = P[j]; const hovered = hv >= 0 && (i === hv || j === hv); if (hv >= 0 && !hovered) return; const on = hovered || (fi >= 0 && (i === fi || j === fi)); const depth = (a.p + b.p) / 2; ctx.globalAlpha = on ? .85 : .10 + .25 * depth; const ci = commOf[i] === commOf[j] ? commOf[i] : -1; ctx.strokeStyle = on ? '#e2e2ea' : st.color === 'kind' ? '#5a5a70' : ci >= 0 ? COMM[ci % COMM.length] : '#5a5a70'; ctx.lineWidth = (on ? 1.6 : .6 + 1.2 * Math.min(1, w / 6)) * depth; ctx.beginPath(); ctx.moveTo(a.X, a.Y); ctx.lineTo(b.X, b.Y); ctx.stroke(); }); });
+    // edges in three layers: 3 shared words (thin grey, underneath) → 2 shared hashtags (community colour) → 1 real
+    // relationships: mentions / replies / follows (white, on top). A focus or hover lights only tiers 1–2.
+    const drawn = new Set(), layers = [[], [], []];
+    nodes.forEach((n, i) => { const lim = (i === hv || i === fi) ? nb[i].length : st.mode === '3d' ? 5 : (st.zoom > 1.6 ? 4 : 2); nb[i].slice(0, lim).forEach(([j, w, t]) => { const key = i < j ? i + ':' + j : j + ':' + i; if (drawn.has(key)) return; drawn.add(key); const hovered = hv >= 0 && (i === hv || j === hv); if (hv >= 0 && !hovered) return; layers[(t || 3) - 1].push([i, j, w, t || 3, hovered]); }); });
+    for (const t of [3, 2, 1]) layers[t - 1].forEach(([i, j, w, tier, hovered]) => { const a = P[i], b = P[j]; const on = tier < 3 && (hovered || (fi >= 0 && (i === fi || j === fi))); const depth = (a.p + b.p) / 2; const ci = commOf[i] === commOf[j] ? commOf[i] : -1;
+      if (tier === 1){ ctx.strokeStyle = on ? '#ffffff' : '#c9c9d6'; ctx.globalAlpha = on ? .95 : .45 + .35 * depth; ctx.lineWidth = (on ? 2 : 1.3) * depth; }
+      else if (tier === 2){ ctx.strokeStyle = on ? '#e2e2ea' : st.color === 'kind' ? '#7a7a92' : ci >= 0 ? COMM[ci % COMM.length] : '#7a7a92'; ctx.globalAlpha = on ? .85 : .12 + .3 * depth; ctx.lineWidth = (on ? 1.6 : .6 + 1.2 * Math.min(1, w / 6)) * depth; }
+      else { ctx.strokeStyle = '#3a3a48'; ctx.globalAlpha = (fi >= 0 || hv >= 0 ? .18 : .28) * depth; ctx.lineWidth = .6 * depth; }
+      ctx.beginPath(); ctx.moveTo(a.X, a.Y); ctx.lineTo(b.X, b.Y); ctx.stroke(); });
     // nodes, far first
     const ord = P.map((q, i) => i).sort((a, b) => P[b].z - P[a].z);
     const labels = [];
@@ -2154,7 +2162,7 @@ function drawWeb(box, graph){
     for (const L of labels){ const n = L.q.n, txt = (n.kind === 'account' ? '@' : '') + (n.label.length > 18 ? n.label.slice(0, 17) + '…' : n.label); const fs = Math.round(Math.min(13, 9 + 3 * L.q.p)); ctx.font = `${fs}px 'Share Tech Mono', monospace`; const w = ctx.measureText(txt).width + 8, h = fs + 4, x = L.q.X, y = L.q.Y + L.r + 4; if (placed.some(b => Math.abs(b.x - x) < (b.w + w) / 2 && Math.abs(b.y - y) < h)) continue; placed.push({ x, y, w }); ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(7,7,10,.72)'; ctx.fillRect(x - w / 2, y, w, h); ctx.fillStyle = L.i === hi || L.i === fi ? '#fff' : '#c9c9d6'; ctx.fillText(txt, x, y + fs); if (placed.length >= Math.max(12, Math.min(80, Math.floor(st.W * st.H / 9000)))) break; }
     box.dataset.labels = placed.length; box.dataset.edges = drawn.size; box.dataset.zoom = st.zoom.toFixed(2);   // (read by tests / debugging)
     // hover card
-    if (hv >= 0){ const q = P[hv], n = q.n; const lines = [(n.kind === 'account' ? '@' : n.kind === 'hashtag' ? '' : '"') + n.label + (n.kind === 'word' ? '"' : ''), `${n.n} post${n.n === 1 ? '' : 's'} · ${nb[hv].length} link${nb[hv].length === 1 ? '' : 's'} · ${comms[commOf[hv]].name}`]; ctx.font = `12px 'Share Tech Mono', monospace`; const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16, x = Math.min(st.W - w - 6, Math.max(6, q.X + 14)), y = Math.max(6, q.Y - 44); ctx.globalAlpha = 1; ctx.fillStyle = '#15151b'; ctx.fillRect(x, y, w, 40); ctx.strokeStyle = colorOf(hv); ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, w - 1, 39); ctx.textAlign = 'left'; ctx.fillStyle = '#e2e2ea'; ctx.fillText(lines[0], x + 8, y + 16); ctx.fillStyle = '#9a9ab0'; ctx.fillText(lines[1], x + 8, y + 32); }
+    if (hv >= 0){ const q = P[hv], n = q.n; const real = nb[hv].filter(l => l[2] === 1).length, tg = nb[hv].filter(l => l[2] === 2).length; const lines = [(n.kind === 'account' ? '@' : n.kind === 'hashtag' ? '' : '"') + n.label + (n.kind === 'word' ? '"' : ''), `${n.n} post${n.n === 1 ? '' : 's'} · ${real ? real + ' real · ' : ''}${tg ? tg + ' tag · ' : ''}${nb[hv].length} links · ${comms[commOf[hv]].name}`]; ctx.font = `12px 'Share Tech Mono', monospace`; const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16, x = Math.min(st.W - w - 6, Math.max(6, q.X + 14)), y = Math.max(6, q.Y - 44); ctx.globalAlpha = 1; ctx.fillStyle = '#15151b'; ctx.fillRect(x, y, w, 40); ctx.strokeStyle = colorOf(hv); ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, w - 1, 39); ctx.textAlign = 'left'; ctx.fillStyle = '#e2e2ea'; ctx.fillText(lines[0], x + 8, y + 16); ctx.fillStyle = '#9a9ab0'; ctx.fillText(lines[1], x + 8, y + 32); }
     ctx.globalAlpha = 1;
   };
   const loop = ts => { webAnim.raf = requestAnimationFrame(loop); if (document.hidden || !box.isConnected) return; if (ts - st.last < 33) return; st.last = ts; if (st.frame < st.settle){ step(); st.frame++; } else if (st.mode === '3d' && st.auto && !st.dragging && st.hover < 0) st.ry += 0.003; draw(); };

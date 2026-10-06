@@ -28,7 +28,7 @@
   const stem = (w) => w.replace(/(ings?|edly|ed|es|s|ly)$/, '') || w;
   const tokens = (t) => (String(t || '').toLowerCase().replace(/https?:\/\/\S+/g, ' ').match(/[\p{L}\p{N}]+/gu) || []);
   const mentionsIn = (t) => [...new Set((String(t || '').match(/(?:^|[^\w@])@([a-z0-9_.]{2,})/gi) || []).map((m) => m.replace(/.*@/, '').toLowerCase().replace(/[.]+$/, '')))];
-  const hashSet = (it) => new Set((it.hashtags || '').toLowerCase().split(/\s+/).filter(Boolean));
+  const hashSet = (it) => { const h = new Set((it.hashtags || '').toLowerCase().split(/\s+/).filter(Boolean)); if (!h.size) (String(it.text || '').match(/(?:^|\s)#([\p{L}\p{N}_]{2,})/gu) || []).forEach((m) => h.add(m.replace(/.*#/, '').toLowerCase())); return h; };
   const pid = (it) => (it.author || '?') + '|' + (it.platform || '?');
   const median = (xs) => { if (!xs.length) return 0; const s = xs.slice().sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); };
 
@@ -204,7 +204,8 @@
     // per-post term sets → co-occurrence; per-account usage counts
     const nodeW = {}, edgeW = {}; const kindOf = {}; const nodeN = {};          // nodeN = posts behind each node
     const bump = (k, w) => { nodeW[k] = (nodeW[k] || 0) + w; nodeN[k] = (nodeN[k] || 0) + 1; };
-    const link = (a, b, w) => { if (a === b) return; const k = a < b ? a + '\u0001' + b : b + '\u0001' + a; edgeW[k] = (edgeW[k] || 0) + w; };
+    const edgeT = {};   // best (lowest) tier seen for the pair
+    const link = (a, b, w, t = 3) => { if (a === b) return; const k = a < b ? a + '\u0001' + b : b + '\u0001' + a; edgeW[k] = (edgeW[k] || 0) + w; edgeT[k] = Math.min(edgeT[k] || 9, t); };
     const acctId = (it) => '@' + String(it.author || '').toLowerCase() + '|' + (it.platform || '');
     // words that appear in more than a third of all posts are boilerplate here ("video", "new"…):
     // they'd bridge every community into one blob, so they're left out of the web
@@ -226,23 +227,25 @@
       if (focus && focus.kind === 'word' && focus.phrase) {              // a quoted phrase is its own node
         const txt = String(it.text || '').toLowerCase(); if (txt.includes(focus.key)) { words.push('w:' + focus.key); }
       }
-      tags.forEach((t) => { kindOf[t] = 'hashtag'; bump(t, idf(hDF[t.slice(1)])); link(A, t, 1); });
+      tags.forEach((t) => { kindOf[t] = 'hashtag'; bump(t, idf(hDF[t.slice(1)])); link(A, t, 1, 2); });
+      // real relationships written in the post: @mentions of accounts we know
+      mentionsIn(it.text).forEach((m) => { const B = Object.keys(kindOf).find((k) => k.startsWith('@' + m + '|')) || ('@' + m + '|' + (it.platform || '')); if (kindOf[B] === 'account' && B !== A) link(A, B, 2, 1); });
       words.forEach((w) => { kindOf[w] = 'word'; bump(w, 0.6 * idf(wDF[w.slice(2)] || 1)); link(A, w, 0.6); });
       bump(A, 1);
       // co-occurrence inside the post (cheap: tags×tags, tags×words; words×words only for short posts)
-      for (let i = 0; i < tags.length; i++) for (let j = i + 1; j < tags.length; j++) link(tags[i], tags[j], 1.2);
+      for (let i = 0; i < tags.length; i++) for (let j = i + 1; j < tags.length; j++) link(tags[i], tags[j], 1.2, 2);
       // co-occurrence among the post's 12 most distinctive words (long descriptions included), and tags×words
       // co-occurrence the way text-network tools do it: terms inside a sliding 4-word window link strongly,
       // terms merely in the same post link weakly (first 40 distinctive terms, text order)
       const seq = []; { const seen = new Set(); let pos = 0; for (const w of tokens(it.text)) { pos++; const k = 'w:' + w; if (kindOf[k] === 'word' && !seen.has(k)) { seen.add(k); seq.push([k, pos]); if (seq.length >= 40) break; } } }
       const wTop = seq.map((x) => x[0]);
-      tags.forEach((t) => wTop.forEach((w) => link(t, w, 0.5)));
+      tags.forEach((t) => wTop.forEach((w) => link(t, w, 0.5, 3)));
       for (let i = 0; i < seq.length; i++) for (let j = i + 1; j < seq.length; j++) link(seq[i][0], seq[j][0], seq[j][1] - seq[i][1] <= 4 ? 1 : 0.25);
     }
     // account↔account edges from the existing shared-content model
     for (const a of by.values()) for (const e of edgesFor(a, by, idf, hDF, wDF).slice(0, 6)) {
       const A = '@' + a.author.toLowerCase() + '|' + a.platform, B = '@' + e.author.toLowerCase() + '|' + e.platform;
-      kindOf[A] = kindOf[B] = 'account'; link(A, B, e.w * 0.5);
+      kindOf[A] = kindOf[B] = 'account'; link(A, B, e.w * 0.5, e.why.some((x) => x.kind === 'mentions') ? 1 : e.shared_hashtags ? 2 : 3);
     }
     // ── term selection (VOSviewer): minimum occurrences, then keep the most *relevant* 60% ──
     //    relevance = how specific a term is to a few accounts (spread-evenly-everywhere terms score low)
@@ -260,7 +263,7 @@
     // pick nodes: around the focus, else the heaviest of each kind
     let ids;
     const focusId = focus ? (focus.kind === 'account' ? Object.keys(kindOf).find((k) => k.startsWith('@' + focus.key + '|')) : focus.kind === 'hashtag' ? '#' + focus.key : 'w:' + focus.key) : null;
-    const nb = (id) => { const out = []; for (const k in edgeW) { const [x, y] = k.split('\u0001'); if (x === id) out.push([y, edgeW[k]]); else if (y === id) out.push([x, edgeW[k]]); } return out.sort((p, q) => q[1] - p[1]); };
+    const nb = (id) => { const out = []; for (const k in edgeW) { const [x, y] = k.split('\u0001'); if (x === id) out.push([y, edgeW[k], edgeT[k]]); else if (y === id) out.push([x, edgeW[k], edgeT[k]]); } return out.sort((p, q) => (p[2] - q[2]) || (q[1] - p[1])); };
     if (focusId && (kindOf[focusId] || nodeW[focusId])) {
       const first = nb(focusId).filter(([k]) => kinds.has(kindOf[k])).slice(0, Math.floor(cap * 0.6));
       const seen = new Set([focusId, ...first.map((p) => p[0])]);
@@ -272,10 +275,10 @@
       for (const kind of ['account', 'hashtag', 'word']) if (kinds.has(kind)) ids.push(...Object.keys(nodeW).filter((k) => kindOf[k] === kind).sort((a, b) => nodeW[b] - nodeW[a]).slice(0, per[kind]));
     }
     const idset = new Set(ids);
-    const edges = []; for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (idset.has(a) && idset.has(b)) edges.push({ a, b, w: +edgeW[k].toFixed(2) }); }
+    const edges = []; for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (idset.has(a) && idset.has(b)) edges.push({ a, b, w: +edgeW[k].toFixed(2), t: edgeT[k] || 3 }); }
     // keep the strongest links overall PLUS every node's own strongest few, so nothing is left dangling
-    edges.sort((p, q) => q.w - p.w);
-    const keep = new Set(edges.slice(0, cap * 4)); const per = {};
+    edges.sort((p, q) => (p.t - q.t) || (q.w - p.w));
+    const keep = new Set(edges.filter((e) => e.t === 1).concat(edges.slice(0, cap * 4))); const per = {};
     for (const e of edges) { (per[e.a] = per[e.a] || []).push(e); (per[e.b] = per[e.b] || []).push(e); }
     for (const id in per) per[id].slice(0, 4).forEach((e) => keep.add(e));
     const E = [...keep];
