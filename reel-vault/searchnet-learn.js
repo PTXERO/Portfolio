@@ -146,18 +146,37 @@
   // ── running a topic (collect through the Worker, score, link) ──
   async function runTopic(tid, job) {
     const t = await getTopic(tid); if (!t) throw new Error('topic gone');
-    job.topic_id = tid; job.log('◎ ' + t.name + ': expanding searches');
-    await expand(tid);
+    const person = (t.settings || {}).person;
+    job.topic_id = tid; job.log('◎ ' + t.name + (person ? ': person dossier — accounts\' own feeds' : ': expanding searches'));
+    if (!person) await expand(tid);
     const t2 = await getTopic(tid);
     const queries = (t2.queries || []).filter((q) => q.enabled).map((q) => q.query);
     const seeds = t2.seeds || [];
-    const runQs = [...new Set(seeds.concat(queries))].slice(0, 3 + 2 * (t2.settings.breadth || 3));
-    const srcs = (await L.request('/api/sources')).sources.filter((s) => s.enabled && s.searchable);
+    let runQs = [...new Set(seeds.concat(queries))].slice(0, 3 + 2 * (t2.settings.breadth || 3));
+    let srcs = (await L.request('/api/sources')).sources.filter((s) => s.enabled && s.searchable);
+    if (person && person.mode === 'account') {        // one @account: its own feed + 'from:' searches only (Bluesky supports them)
+      runQs = runQs.filter((q) => /^from:/i.test(q)); srcs = srcs.filter((s) => s.source === 'bluesky');
+    } else if (person) {                               // a name: quoted-name searches only, never grown keywords
+      runQs = runQs.filter((q) => q.startsWith('"') || /^from:/i.test(q) || q.toLowerCase() === [person.first, person.last].filter(Boolean).join(' ').toLowerCase());
+    }
+    if (t2.sources && t2.sources.length) srcs = srcs.filter((s) => t2.sources.includes(s.id));
     job.total = Math.max(1, runQs.length * srcs.length + 2);
     job.log('  ' + runQs.length + ' searches × ' + srcs.length + ' sources');
     const seen = new Set();
     // collect directly (synchronously), then link everything matching
     await collectForTopic(t2, runQs, srcs, job, seen);
+    // creators (person dossiers): refresh each account's own feed through the Worker and keep it linked
+    for (const c of Object.values(t2.settings.creators || {})) {
+      if (job.cancel) break;
+      if (!WORKER_ACCOUNT.has(c.platform)) continue;
+      try {
+        const mj = await L.people.request('POST', ['people', c.handle + '|' + c.platform, 'more'], '', { limit: 30, media: t2.settings.media === 'video' ? 'video' : 'all' });
+        for (let i = 0; i < 90 && mj.id; i++) { const r = L.jobs[mj.id]; if (!r || !['running', 'queued'].includes(r.state)) break; await new Promise((x) => setTimeout(x, 300)); }
+        const own = (await idb.all('items')).filter((it) => String(it.author || '').toLowerCase() === c.handle.toLowerCase() && it.platform === c.platform);
+        for (const it of own) await link(tid, it.id, '@' + c.handle, 'creator');
+        job.log('  @' + c.handle + ': ' + own.length + ' of their posts');
+      } catch (e) { job.log('  @' + c.handle + ': ' + e.message); }
+    }
     // link items from the library that match, score all
     await linkAndScore(tid, job);
     t2.last_run = now(); await saveTopic(t2);
@@ -356,10 +375,12 @@
       const tagC = {}; items.forEach((it) => String(it.hashtags || '').toLowerCase().split(/\s+/).filter(Boolean).forEach((h) => tagC[h] = (tagC[h] || 0) + 1));
       const topTags = Object.entries(tagC).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([h]) => h);
       const t2 = await getTopic(t.id);
-      t2.settings.soft = [...new Set((t2.settings.soft || []).concat(topTags.slice(0, 4)))];
       t2.settings.creators = Object.assign({}, t2.settings.creators || {}, { [handle.toLowerCase()]: { handle, platform, n: items.length, top_hashtags: topTags, added: now() } });
-      t2.queries = t2.queries || [];
-      for (const q of ['@' + handle].concat(topTags.slice(0, 3).map((h) => '#' + h))) if (!t2.queries.some((x) => x.query.toLowerCase() === q.toLowerCase())) t2.queries.push({ query: q, origin: 'creator', enabled: true, locked: false, runs: 0, found: 0, pos: 0, neg: 0, created: now() });
+      if (!t2.settings.person) {   // a person dossier stays on the person: no topic-wide searches grown from what they post about
+        t2.settings.soft = [...new Set((t2.settings.soft || []).concat(topTags.slice(0, 4)))];
+        t2.queries = t2.queries || [];
+        for (const q of ['@' + handle].concat(topTags.slice(0, 3).map((h) => '#' + h))) if (!t2.queries.some((x) => x.query.toLowerCase() === q.toLowerCase())) t2.queries.push({ query: q, origin: 'creator', enabled: true, locked: false, runs: 0, found: 0, pos: 0, neg: 0, created: now() });
+      }
       await saveTopic(t2); await rescore(t.id);
       j.done = 3; j.result = { handle, platform, collected: items.length, profile: { top_hashtags: topTags } };
       j.log('  done: ' + items.length + ' posts, ' + topTags.length + ' hashtags learned');

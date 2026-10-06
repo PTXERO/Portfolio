@@ -589,12 +589,24 @@ class Vault:
             raise RuntimeError("topic was deleted")
         st = t["settings"]
         breadth = to_int(st.get("breadth"), 3)
-        job.log(f"◎ {t['name']}: growing searches (breadth {breadth})")
-        refresh_expansions(self, tid, web=True)
+        person = st.get("person")
+        if person:
+            job.log(f"◎ {t['name']}: person dossier — accounts' own feeds" + (" + name searches" if person.get("mode") != "account" else ""))
+        else:
+            job.log(f"◎ {t['name']}: growing searches (breadth {breadth})")
+            refresh_expansions(self, tid, web=True)
         stats = query_stats(self.db, tid)
         k = to_int(st.get("queries_per_run")) or (3 + 2 * breadth)
         queries = pick_queries(stats, k)
         searchable, feeds = self.topic_sources(t)
+        if person and person.get("mode") == "account":
+            # one @account: only its own feed, plus 'from:' searches where a network supports them.
+            # No free-text searching — that is how posts unrelated to the person crept in.
+            queries = [q for q in queries if q.lower().startswith("from:")]
+            searchable = [s for s in searchable if s.get("kind") == "x" or "bluesky" in (s.get("preset") or "")]
+        elif person:
+            queries = [q for q in queries if q.startswith('"') or q.lower().startswith("from:")
+                       or q.lower() == " ".join(x for x in (person.get("first"), person.get("last")) if x).lower()]
         opts = {"media": st.get("media", "video"), "search_tab": st.get("search_tab"),
                 "min_likes": st.get("min_likes"), "lang": st.get("lang")}
         per = max(1, min(to_int(st.get("per_query"), 15), 200))
@@ -946,15 +958,20 @@ class Vault:
         prof = self._creator_profile(items)
         t = self.topic(tid)
         st = t["settings"]
-        # feed what they post about into the topic as soft signal + searches
-        soft = list(dict.fromkeys((st.get("soft") or []) + prof.get("top_hashtags", [])[:4]))
         creators = dict(st.get("creators") or {})
         creators[handle.lower()] = dict(prof, handle=handle, platform=platform,
                                         source_id=src["id"], added=now())
-        self.update_topic(tid, {"settings": {"soft": soft, "creators": creators}})
-        self.set_query(tid, "@" + handle.lstrip("@"), add=True)
-        for h in prof.get("top_hashtags", [])[:3]:
-            self.set_query(tid, "#" + h.lstrip("#"), add=True)
+        if st.get("person"):
+            # a person dossier stays on the person: their feed is the source; what they post about
+            # must NOT turn into topic-wide searches (that is how unrelated posts crept in)
+            self.update_topic(tid, {"settings": {"creators": creators}})
+        else:
+            # feed what they post about into the topic as soft signal + searches
+            soft = list(dict.fromkeys((st.get("soft") or []) + prof.get("top_hashtags", [])[:4]))
+            self.update_topic(tid, {"settings": {"soft": soft, "creators": creators}})
+            self.set_query(tid, "@" + handle.lstrip("@"), add=True)
+            for h in prof.get("top_hashtags", [])[:3]:
+                self.set_query(tid, "#" + h.lstrip("#"), add=True)
         self.embed.ensure([it["id"] for it in items], job.log, job.check)
         TopicScorer(self, tid).rescore()
         job.done = 3

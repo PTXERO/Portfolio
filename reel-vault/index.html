@@ -632,7 +632,7 @@ body.noscroll-max{overflow:hidden}
     </div>
     <div class="grid2">
       <label class="field"><span>State / region <small class="note">(optional — narrows a common name)</small></span><input id="ntState" placeholder="Florida" autocapitalize="words" autocorrect="off"></label>
-      <label class="field"><span>Known handles <small class="note">(optional, comma-separated)</small></span><input id="ntHandles" placeholder="@ethan.chapman, @echapman" autocapitalize="off" autocorrect="off"></label>
+      <label class="field"><span>Known accounts <small class="note">(optional · links or handles, comma-separated · a bare @name means X)</small></span><input id="ntHandles" placeholder="x.com/echapman, youtube.com/@ethanc, @ethan@mastodon.social, ethan.bsky.social" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
     </div>
     <p class="note" style="margin:0">It searches the name (in quotes, with the state), any handles you give, and links out to the public people-search sites so you can see what's exposed. Nothing is scraped from those sites, and no home addresses are stored — only links. Everything stays on this device.</p>
     </div>
@@ -1138,7 +1138,7 @@ function personFromForm(){
     return { mode: 'account', handle, platform: $('#ntNet').value, handles: [] };
   }
   const first = $('#ntFirst').value.trim(), last = $('#ntLast').value.trim(), state = $('#ntState').value.trim();
-  const handles = $('#ntHandles').value.split(/[,\s]+/).map(h => h.trim().replace(/^@/, '')).filter(Boolean);
+  const handles = $('#ntHandles').value.split(/[,\n]+/).map(h => h.trim()).filter(Boolean);   // kept as typed: a link decides its own network
   if (!first && !last) return null;
   return { first, last, state, handles };
 }
@@ -1146,8 +1146,7 @@ function personSeeds(p){
   if (p.mode === 'account') return [(p.platform === 'x' || p.platform === 'bluesky' ? 'from:' : '@') + p.handle];   // this account's own posts, nowhere else
   const full = [p.first, p.last].filter(Boolean).join(' ');
   const out = [`"${full}"`]; if (p.state) out.push(`"${full}" ${p.state}`); out.push(full);
-  p.handles.forEach(h => out.push('@' + h));
-  return [...new Set(out)];
+  return [...new Set(out)];      // known accounts are added as creators (their own feeds), never as text searches
 }
 $('#newTopicForm').onsubmit = async e => {
   e.preventDefault();
@@ -1165,6 +1164,9 @@ $('#newTopicForm').onsubmit = async e => {
       try{ const srcs = (await api('/api/sources')).sources || []; const mine = srcs.filter(x => [x.kind, x.source, x.preset, x.platform].some(v => String(v || '').toLowerCase() === person.platform)).map(x => x.id); if (mine.length) body.sources = mine; else body.run = false; }catch(e){}
     }
     const t = await api('/api/topics', { method: 'POST', body });
+    if (person && person.mode !== 'account' && (person.handles || []).length){   // known accounts → their own feeds, scoped to this topic
+      for (const h of person.handles){ try{ const c = await api('/api/topics/' + t.id + '/creator', { method: 'POST', body: { handle: h } }); if (c.error) throw new Error(c.error); }catch(e){ toast(h + ': ' + e.message, 6000); } }
+    }
     if (person && person.mode === 'account'){           // the account itself is this topic's creator: its own feed, linked to the topic
       const pid = person.handle + '|' + person.platform;
       try{ const c = await api('/api/topics/' + t.id + '/creator', { method: 'POST', body: { handle: person.handle, platform: person.platform } }); if (c.error) throw new Error(c.error); }
@@ -1573,7 +1575,9 @@ function personCardHTML(p, T, items){
   if (p.mode === 'account') return personAccountCardHTML(p, items || []);
   const first = (p.first || '').toLowerCase().replace(/[^a-z0-9]/g, ''), last = (p.last || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const full = [p.first, p.last].filter(Boolean).join(' '), q = encodeURIComponent(`"${full}"${p.state ? ' ' + p.state : ''}`);
-  const guesses = [...new Set([...(p.handles || []), first + last, first + '.' + last, first + '_' + last, first && last ? first[0] + last : '', first + last.slice(0, 1)].filter(h => h && h.length > 2))].slice(0, 8);
+  // known accounts may be typed as links — reduce each to its bare username for the guess table
+  const bare = h => String(h || '').trim().replace(/^https?:\/\/[^/]+\/(?:profile\/|user\/|@)?/i, '').replace(/^@/, '').replace(/[/?#].*$/, '').split('@')[0];
+  const guesses = [...new Set([...(p.handles || []).map(bare), first + last, first + '.' + last, first + '_' + last, first && last ? first[0] + last : '', first + last.slice(0, 1)].filter(h => h && h.length > 2))].slice(0, 8);
   const nets = [['Bluesky', h => `https://bsky.app/profile/${h}.bsky.social`], ['X', h => `https://x.com/${h}`], ['Instagram', h => `https://www.instagram.com/${h}/`], ['TikTok', h => `https://www.tiktok.com/@${h}`], ['YouTube', h => `https://www.youtube.com/@${h}`], ['Reddit', h => `https://www.reddit.com/user/${h}`], ['Threads', h => `https://www.threads.net/@${h}`], ['GitHub', h => `https://github.com/${h}`]];
   const searches = [['Google', `https://www.google.com/search?q=${q}`], ['Bing', `https://www.bing.com/search?q=${q}`], ['DuckDuckGo', `https://duckduckgo.com/?q=${q}`], ['Images', `https://www.google.com/search?tbm=isch&q=${q}`], ['Facebook', `https://www.facebook.com/search/people/?q=${encodeURIComponent(full)}`], ['LinkedIn', `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(full)}`], ['YouTube', `https://www.youtube.com/results?search_query=${q}`], ['Reddit', `https://www.reddit.com/search/?q=${q}`], ['TikTok', `https://www.tiktok.com/search?q=${encodeURIComponent(full)}`], ['Bluesky', `https://bsky.app/search?q=${encodeURIComponent(full)}`], ['Mastodon', `https://mastodon.social/search?q=${encodeURIComponent(full)}&type=accounts`]];
   const st = encodeURIComponent(p.state || '');
@@ -1584,7 +1588,8 @@ function personCardHTML(p, T, items){
     <p class="note" style="margin:4px 0 10px">Everything here is a link you open yourself. SEARCH//NET collects posts for the name and handles (REVIEW / WEB), but pulls nothing from people-search sites and never stores a home address — those links are there so you can see what's exposed and ask for removal.</p>
     <div class="note" style="margin-bottom:4px">Handles to check <small>(guesses from the name${(p.handles || []).length ? ' + yours' : ''}) · tap a network</small></div>
     <table class="ptab">${guesses.map(h => `<tr><th>@${esc(h)}</th><td>${nets.map(([n, f]) => a(n, f(h))).join('')}</td></tr>`).join('')}</table>
-    <div class="row wrap" style="gap:8px;margin:6px 0 10px"><button class="btn sm" id="pAddHandle">+ ADD A KNOWN HANDLE</button><span class="note">Known handles are searched as topics and their posts land in REVIEW.</span></div>
+    ${Object.keys((T.settings || {}).creators || {}).length ? `<div class="note" style="margin:8px 0 4px">Known accounts <small>(their own feeds are sources of this dossier)</small></div><div class="meta">${Object.values(T.settings.creators).map(c => `<span class="pill a"><b class="l1">━</b> @${esc(c.handle)} · ${esc(c.platform)}${c.n != null || c.collected != null ? ' · ' + fmtN(c.n != null ? c.n : c.collected) : ''}</span>`).join('')}</div>` : ''}
+    <div class="row wrap" style="gap:8px;margin:6px 0 10px"><button class="btn sm" id="pAddHandle">+ ADD A KNOWN ACCOUNT</button><span class="note">Paste a profile link (any network) or an @handle (X). Only that account's own posts are pulled in — nothing is searched by name elsewhere.</span></div>
     <div class="note" style="margin-bottom:4px">Name searches</div><div class="meta">${searches.map(([n, u]) => a(n, u)).join('')}</div>
     <div class="note" style="margin:10px 0 4px">People-search &amp; records sites <small>(show addresses, relatives, phone numbers — open them to see what's public and use each site's opt-out)</small></div><div class="meta">${people.map(([n, u]) => a(n, u, 'a')).join('')}</div>
   </div>`;
@@ -1665,9 +1670,10 @@ async function renderDossier(){
     const pc = $('#paCrawl', body); if (pc) pc.onclick = () => openCrawl(pid);
   }
   const addH = $('#pAddHandle', body); if (addH) addH.onclick = async () => {
-    const h = prompt('Handle to add as a search (without @):'); if (!h) return;
-    const clean = h.trim().replace(/^@/, ''); const P = Object.assign({ handles: [] }, person); P.handles = [...new Set([...(P.handles || []), clean])];
-    try{ T = await api('/api/topics/' + T.id, { method: 'PATCH', body: { seeds: [...new Set([...(T.seeds || []), '@' + clean])], settings: { person: P } } }); toast('Added @' + clean); renderDossier(); }catch(e){ toast(e.message); }
+    const h = prompt('Profile link (any network) or @handle (X):'); if (!h || !h.trim()) return;
+    const P = Object.assign({ handles: [] }, person); P.handles = [...new Set([...(P.handles || []), h.trim()])];
+    try{ T = await api('/api/topics/' + T.id, { method: 'PATCH', body: { settings: { person: P } } }); }catch(e){}
+    addCreator(h.trim());
   };
   $('#dWeb').onclick = () => go('network?' + new URLSearchParams({ topic: T.id }));
   $('#dReview').onclick = () => go('topic/' + T.id + '/review');
