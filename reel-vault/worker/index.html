@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SEARCH//NET · Worker guide</title>
+<meta name="description" content="Set up the SearchNet Cloudflare Worker in your own account — step by step, no install.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
+<style>
+:root{--bg:#07070a;--surface:#0d0d12;--panel:#121218;--panel2:#17171f;--border:#1f1f29;--b2:#2c2c36;--acc:#f54242;--acc-rgb:245,66,66;--acc2:#42d4f5;--acc4:#f5a542;--good:#44ff88;--bad:#ff4d6d;--txt:#e2e2ea;--dim:#7a7a92;--mut:#3a3a48;--fmono:'Share Tech Mono',ui-monospace,monospace;--fdisp:'Bebas Neue',Impact,sans-serif;--fbody:'DM Mono',ui-monospace,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--fbody);font-size:14px;line-height:1.5}
+a{color:var(--acc)}
+.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:14px;padding:12px 16px;background:rgba(7,7,10,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+.brand{font-family:var(--fdisp);font-size:24px;letter-spacing:.1em;color:var(--acc);text-decoration:none;white-space:nowrap}
+.brand small{font-family:var(--fmono);font-size:10px;color:var(--dim);letter-spacing:.15em;margin-left:8px}
+.hbtn{display:inline-flex;align-items:center;padding:5px 11px;border:1px solid var(--b2);border-radius:2px;color:var(--dim);font-family:var(--fmono);font-size:10px;letter-spacing:.07em;text-decoration:none;white-space:nowrap}
+.hbtn:hover{color:var(--txt);border-color:var(--dim)}
+main{max-width:860px;margin:0 auto;padding:22px 16px 80px}
+h1{font-family:var(--fdisp);font-size:40px;letter-spacing:.06em;margin:6px 0 4px;font-weight:400}
+h2{font-family:var(--fdisp);font-size:24px;letter-spacing:.08em;margin:30px 0 10px;font-weight:400;color:var(--txt)}
+.lead{color:var(--dim);margin:0 0 18px}
+.step{display:grid;grid-template-columns:44px minmax(0,1fr);gap:14px;padding:16px 0;border-top:1px solid var(--border)}
+.step:last-of-type{border-bottom:1px solid var(--border)}
+.n{font-family:var(--fdisp);font-size:34px;line-height:1;color:var(--acc);text-shadow:0 0 14px rgba(var(--acc-rgb),.45)}
+.step h3{margin:4px 0 6px;font-size:15px;font-weight:500}
+.step p{margin:6px 0;color:var(--txt)}
+.step .note,.note{color:var(--dim);font-size:13px}
+kbd,code{font-family:var(--fmono);font-size:12.5px;background:var(--panel2);border:1px solid var(--b2);border-radius:4px;padding:1px 6px;color:var(--txt)}
+kbd{color:var(--acc2)}
+.ui{color:var(--acc4)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border:1px solid var(--acc);border-radius:2px;background:transparent;color:var(--acc);font-family:var(--fmono);font-size:12px;letter-spacing:.1em;cursor:pointer;text-decoration:none}
+.btn.pri{background:var(--acc);color:#0b0b0e;box-shadow:0 0 18px rgba(var(--acc-rgb),.35)}
+.btn.sm{padding:7px 12px;font-size:11px}
+.btn:disabled{opacity:.5;cursor:default}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin:14px 0}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+input{font-family:var(--fmono);font-size:16px;color:var(--txt);background:var(--panel);border:1px solid var(--b2);border-radius:8px;outline:none;padding:10px 12px;flex:1;min-width:220px}
+input:focus{border-color:var(--acc)}
+pre{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;font-family:var(--fmono);font-size:12.5px;color:var(--txt);margin:8px 0}
+table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0}
+td,th{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--dim);font-weight:400;font-family:var(--fmono);font-size:11px;letter-spacing:.1em}
+.ok{color:var(--good)}.bad{color:var(--bad)}.warn{color:var(--acc4)}
+#status{font-family:var(--fmono);font-size:12.5px;margin-top:10px;min-height:1.4em}
+.tag{display:inline-block;font-family:var(--fmono);font-size:10px;letter-spacing:.1em;border:1px solid var(--b2);border-radius:20px;padding:3px 9px;color:var(--dim);margin-left:8px;vertical-align:middle}
+details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
+@media (max-width:600px){.brand small{display:none}h1{font-size:32px}.step{grid-template-columns:34px 1fr;gap:10px}.n{font-size:28px}}
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="hbtn" href="../">← APP</a>
+  <a class="brand" href="../">SEARCH//NET<small>WORKER GUIDE</small></a>
+  <span style="flex:1"></span>
+  <a class="hbtn" href="searchnet-worker.js" target="_blank" rel="noreferrer">RAW CODE</a>
+</div>
+<main>
+  <h1>YOUR OWN WORKER <span class="tag" id="latest">LATEST v1.2</span></h1>
+  <p class="lead">The Worker is a tiny fetcher that runs in <b>your</b> Cloudflare account, for free. The app (in your browser) asks it for posts; it fetches from open APIs and hands them back. It stores nothing and logs nothing — your library stays in your browser. Setting it up takes about five minutes, once.</p>
+
+  <div class="card">
+    <div class="row">
+      <button class="btn pri" id="copy">⧉ COPY WORKER CODE</button>
+      <a class="btn" href="searchnet-worker.js" download="searchnet-worker.js">⬇ DOWNLOAD .JS</a>
+      <span class="note" id="copyMsg">You'll paste this in step 4.</span>
+    </div>
+  </div>
+
+  <div class="step"><div class="n">1</div><div>
+    <h3>Make a free Cloudflare account</h3>
+    <p>Go to <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noreferrer">dash.cloudflare.com/sign-up</a>. Email + password, confirm the email. No card, no domain needed — the free plan gives 100,000 Worker requests a day, far more than this needs.</p>
+  </div></div>
+
+  <div class="step"><div class="n">2</div><div>
+    <h3>Create a Worker</h3>
+    <p>In the dashboard's left menu open <span class="ui">Compute (Workers)</span> → <span class="ui">Workers &amp; Pages</span> (on some accounts it's just <span class="ui">Workers &amp; Pages</span>). Press <span class="ui">Create</span>, stay on the <span class="ui">Workers</span> tab and choose <span class="ui">Start with Hello World!</span></p>
+    <p>Name it <code>searchnet</code> and press <span class="ui">Deploy</span>. The first time, Cloudflare asks you to pick a <code>workers.dev</code> subdomain — any name; it becomes part of your Worker's address.</p>
+    <p class="note">If your dashboard looks different: any route that ends in an empty "Hello World" Worker is fine. What matters is step 4.</p>
+  </div></div>
+
+  <div class="step"><div class="n">3</div><div>
+    <h3>Open the code editor</h3>
+    <p>On the page that appears after deploying, press <span class="ui">Edit code</span> (top right). You'll see a file called <code>worker.js</code> (or <code>index.js</code>) with a few lines of Hello World.</p>
+  </div></div>
+
+  <div class="step"><div class="n">4</div><div>
+    <h3>Replace the code and deploy</h3>
+    <p>Click into the editor, select everything (<kbd>Ctrl</kbd>+<kbd>A</kbd> / <kbd>⌘</kbd>+<kbd>A</kbd>), delete it, and paste the code you copied above. Press <span class="ui">Deploy</span> (top right) and confirm.</p>
+    <p class="note">Paste the <b>whole</b> file — it starts with a comment block and ends with a small "Node test shim". The editor may warn about <code>module</code> on the last lines; that's fine, it's ignored on Cloudflare.</p>
+  </div></div>
+
+  <div class="step"><div class="n">5</div><div>
+    <h3>Copy your Worker's address</h3>
+    <p>Press the back arrow to the Worker's overview. Your address is shown there, like <code>https://searchnet.<i>yourname</i>.workers.dev</code>. If the overview shows "Preview URL" instead, press <span class="ui">Visit</span> and copy the address bar.</p>
+    <p>Check it works — paste it below and press TEST. It should answer with <code>"worker": "searchnet"</code> and its version.</p>
+    <div class="row" style="margin-top:8px"><input id="url" placeholder="https://searchnet.yourname.workers.dev" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"><input id="key" placeholder="secret (only if you set one, step 7)" autocapitalize="off" style="max-width:280px"><button class="btn sm" id="test">TEST</button></div>
+    <div id="status"></div>
+  </div></div>
+
+  <div class="step"><div class="n">6</div><div>
+    <h3>Tell the app</h3>
+    <p>Back in SEARCH//NET open <a href="../#sources">SOURCES</a>, paste the address into <span class="ui">Your Cloudflare Worker</span> and save. The first-run guide has the same box. From then on every topic you create collects through your Worker.</p>
+  </div></div>
+
+  <div class="step"><div class="n">7</div><div>
+    <h3>Optional: lock it to you</h3>
+    <p>Anyone who learns the address could spend your free requests. To prevent that: Worker → <span class="ui">Settings</span> → <span class="ui">Variables and Secrets</span> → <span class="ui">Add</span> → type <span class="ui">Secret</span>, name <code>SEARCHNET_SECRET</code>, value = any long random string → <span class="ui">Deploy</span>. Put the same string in the app next to the Worker address (it's sent as the <code>X-SN-Key</code> header).</p>
+  </div></div>
+
+  <h2>UPDATING LATER</h2>
+  <p>The app and the Worker grow together. When the app needs something newer than your Worker has, it tells you ("Your Worker is older than this app"). To update: copy the code above again → Worker → <span class="ui">Edit code</span> → select all, paste, <span class="ui">Deploy</span>. Your address and secret stay the same. The TEST box above shows which version you're running.</p>
+  <table>
+    <tr><th>version</th><th>what it added</th></tr>
+    <tr><td>1.2</td><td><code>/follows</code> — public follow lists (Mastodon, Bluesky) for <b>LOAD FOLLOWS</b> and the white "real link" lines in the WEB; LOAD MORE finds remote fediverse accounts (<code>@name@other.server</code>) via your home instance</td></tr>
+    <tr><td>1.1</td><td><code>/account</code> — an account's own posts, behind <b>LOAD MORE POSTS</b> and <b>INTEGRATE ALL</b></td></tr>
+    <tr><td>1.0</td><td>search across Mastodon, Lemmy, Reddit, Bluesky, YouTube (Invidious) and any RSS feed</td></tr>
+  </table>
+
+  <h2>COMMAND LINE INSTEAD</h2>
+  <p class="note">If you'd rather not use the dashboard and have Node installed:</p>
+  <pre>npm i -g wrangler
+wrangler login
+wrangler deploy            # run inside the reel-vault/worker folder
+wrangler secret put SEARCHNET_SECRET   # optional, step 7</pre>
+
+  <h2>WHAT IT CAN AND CAN'T DO</h2>
+  <table>
+    <tr><th>source</th><th>needs</th><th>notes</th></tr>
+    <tr><td>mastodon</td><td>instance (e.g. mastodon.social)</td><td>hashtag timelines; also bridged Bluesky and Loops/Pixelfed video</td></tr>
+    <tr><td>bluesky</td><td>–</td><td>public post search, author feeds, follow lists</td></tr>
+    <tr><td>reddit</td><td>–</td><td>works from the Cloudflare edge even when a home IP is blocked</td></tr>
+    <tr><td>lemmy</td><td>instance (e.g. lemmy.world)</td><td>federated Reddit-like</td></tr>
+    <tr><td>youtube</td><td>–</td><td>via public Invidious instances (best effort — they come and go)</td></tr>
+    <tr><td>rss</td><td>url</td><td>any RSS/Atom feed, incl. a YouTube channel's <code>feeds/videos.xml</code></td></tr>
+  </table>
+  <p class="note">It cannot run yt-dlp or ffmpeg, so it returns metadata and direct media links where sites expose them — not downloaded files, and no X/Twitter or TikTok (those need a login). For that, run the optional PC server; you can use both at once.</p>
+
+  <details><summary>API, for the curious</summary>
+    <pre>GET /health
+GET /search?source=mastodon&q=skate&limit=30&instance=mastodon.social[&media=all]
+GET /account?platform=bluesky&handle=name.bsky.social&limit=50
+GET /follows?platform=mastodon&handle=name@server&instance=mastodon.social
+GET /resolve?url=…      best-effort direct media URL
+GET /fetch?url=…        CORS proxy</pre>
+    <p class="note">All responses carry permissive CORS headers so the hosted app can call them; add <code>?key=</code> or the <code>X-SN-Key</code> header when a secret is set.</p>
+  </details>
+</main>
+<script>
+const LATEST = '1.2';
+const $ = (s) => document.querySelector(s);
+$('#copy').onclick = async () => {
+  const b = $('#copy'); b.disabled = true;
+  try {
+    const code = await (await fetch('searchnet-worker.js', { cache: 'no-store' })).text();
+    await navigator.clipboard.writeText(code);
+    $('#copyMsg').textContent = '✓ copied ' + code.split('\n').length + ' lines — now paste it into the Cloudflare editor (step 4)';
+  } catch (e) { $('#copyMsg').innerHTML = 'Couldn\'t copy automatically — open <a href="searchnet-worker.js" target="_blank" rel="noreferrer">the raw code</a>, select all, copy.'; }
+  b.disabled = false;
+};
+$('#test').onclick = async () => {
+  const st = $('#status'); let u = $('#url').value.trim().replace(/\/+$/, ''); const key = $('#key').value.trim();
+  if (!u) { st.innerHTML = '<span class="warn">Paste your Worker address first.</span>'; return; }
+  if (!/^https?:\/\//.test(u)) u = 'https://' + u;
+  st.textContent = 'asking ' + u + ' …';
+  try {
+    const r = await fetch(u + '/health' + (key ? '?key=' + encodeURIComponent(key) : ''), { headers: key ? { 'X-SN-Key': key } : {} });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 401) { st.innerHTML = '<span class="warn">It answers, but wants its secret — type it in the second box.</span>'; return; }
+    if (!r.ok || j.worker !== 'searchnet') { st.innerHTML = '<span class="bad">That address answers, but not as a SearchNet Worker (' + (j.error || 'HTTP ' + r.status) + '). Check step 4 was deployed.</span>'; return; }
+    const v = String(j.version || '1.0'), up = cmp(v, LATEST) >= 0;
+    st.innerHTML = '<span class="ok">✓ SearchNet Worker ' + v + (j.secured ? ' · secured' : ' · open (see step 7)') + '</span> — ' + (up ? '<span class="ok">up to date.</span>' : '<span class="warn">older than this app (latest ' + LATEST + '): copy the code again and redeploy (see UPDATING LATER).</span>')
+      + ' <a href="../#sources">Use it in the app →</a>';
+  } catch (e) { st.innerHTML = '<span class="bad">No answer — check the address (it should end in .workers.dev), that you pressed Deploy, and that the Worker isn\'t paused.</span>'; }
+};
+$('#url').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#test').click(); });
+function cmp(a, b) { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d; } return 0; }
+</script>
+</body>
+</html>

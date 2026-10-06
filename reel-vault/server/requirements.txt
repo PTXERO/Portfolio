@@ -1,0 +1,5 @@
+# Required: finds and downloads the videos
+yt-dlp
+gallery-dl
+# Optional: search what is SAID in videos (speech-to-text)
+# faster-whisper

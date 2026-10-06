@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASCII//RENDER — shared entry</title><!-- share view page v1 -->
+
+<meta property="og:title" content="ASCII//RENDER">
+<meta property="og:description" content="An ASCII render made with PTXERO ASCII//RENDER">
+<meta property="og:type" content="website">
+<script src="../design-tokens.js?v=1"></script>
+<script src="share.config.js?v=1"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
+<link rel="stylesheet" href="../shared.css?v=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg,#07070a);color:var(--txt,#d8d8e0);font-family:var(--fbody,'DM Mono',monospace);font-size:12px;}
+  /* banner — identical to ASCII//RENDER header */
+  .ax-hdr{height:44px;min-height:44px;flex-shrink:0;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--border,#1c1c24);gap:14px;background:var(--surface,#0d0d12);position:sticky;top:0;z-index:50;}
+  .ax-logo{font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:24px;letter-spacing:.1em;color:var(--acc,#c8f542);line-height:1;flex-shrink:0;}
+  .ax-logo em{color:var(--dim,#5a5a70);font-style:normal;}
+  .ax-sep{width:1px;height:18px;background:var(--border,#1c1c24);flex-shrink:0;}
+  .ax-spacer{flex:1;}
+  .ax-btn{padding:4px 11px;border:1px solid var(--b2,#28282f);border-radius:2px;background:transparent;color:var(--dim,#5a5a70);font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;letter-spacing:.07em;transition:all .15s;text-decoration:none;cursor:pointer;flex-shrink:0;}
+  .ax-btn:hover{border-color:var(--acc2,#42d4f5);color:var(--acc2,#42d4f5);}
+  .wrap{max-width:900px;margin:0 auto;padding:24px 16px 64px;}
+  .v-img-frame{border:1px solid var(--b2,#28282f);border-radius:3px;background:#000;box-shadow:var(--shadow,6px 6px 0 #1a1a22);overflow:auto;}
+  .v-img-frame img,.v-img-frame video{display:block;max-width:100%;height:auto;margin:0 auto;image-rendering:pixelated;}
+  .v-post{border:1px solid var(--b2,#28282f);border-radius:3px;background:var(--panel,#101015);box-shadow:var(--shadow,6px 6px 0 #1a1a22);
+    padding:22px 20px;font-family:var(--fbody,'DM Mono',monospace);font-size:16px;line-height:1.7;color:var(--txt,#d8d8e0);white-space:pre-wrap;word-break:break-word;}
+  .v-title{font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:26px;letter-spacing:.02em;color:var(--txt,#d8d8e0);margin-top:22px;}
+  .v-desc{font-family:var(--fbody,'DM Mono',monospace);font-size:13px;line-height:1.7;color:var(--txt,#d8d8e0);margin:8px 2px 0;white-space:pre-wrap;}
+  .v-tag{color:var(--acc,#c8f542);text-decoration:none;}
+  .v-tag:hover{text-decoration:underline;}
+  .v-url{color:var(--acc2,#42d4f5);text-decoration:underline;word-break:break-all;}
+  /* RF station view — map screencap + glowing LISTEN */
+  .v-rf{position:relative;border:1px solid var(--b2,#28282f);border-radius:3px;overflow:hidden;background:#07070a;box-shadow:var(--shadow,6px 6px 0 #1a1a22);}
+  .v-rfmap{display:block;width:100%;height:auto;}
+  .v-rfscrim{position:absolute;inset:0;background:radial-gradient(120% 95% at 50% 42%, rgba(7,7,10,.18), rgba(7,7,10,.78));pointer-events:none;}
+  .v-rfover{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;}
+  .v-rfk{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;letter-spacing:.3em;color:#42d4f5;opacity:.85;text-shadow:0 1px 5px #000;}
+  .v-rfname{font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:30px;letter-spacing:.02em;color:#eaffff;margin-top:6px;line-height:1.05;text-shadow:0 1px 8px #000;}
+  .v-rffreq{font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:64px;color:#42d4f5;line-height:1;margin:6px 0 4px;text-shadow:0 0 26px rgba(66,212,245,.75),0 1px 8px #000;}
+  .v-rfmhz{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:14px;color:#42d4f5;opacity:.8;margin-left:6px;letter-spacing:.1em;}
+  .v-rfloc{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:12px;color:#c8f6ff;letter-spacing:.05em;text-shadow:0 1px 5px #000;}
+  .v-rflisten{margin-top:16px;position:relative;z-index:1;border-color:#42d4f5!important;background:#42d4f5!important;color:#07070a!important;box-shadow:0 0 20px rgba(66,212,245,.6);}
+  .v-rflisten:hover{box-shadow:0 0 30px rgba(66,212,245,.95)!important;transform:translateY(-1px);}
+  /* RF signal-chain / pedalboard view */
+  .v-setup{position:relative;aspect-ratio:2.3/1;overflow:hidden;background:radial-gradient(120% 130% at 50% 45%, rgba(66,212,245,.08), rgba(7,7,10,.9)), repeating-linear-gradient(0deg, rgba(66,212,245,.05) 0 1px, transparent 1px 28px), repeating-linear-gradient(90deg, rgba(66,212,245,.05) 0 1px, transparent 1px 28px), #07070a;}
+  .v-schem{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  .v-schemk{position:absolute;top:10px;left:12px;font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;letter-spacing:.24em;color:#42d4f5;opacity:.85;text-shadow:0 1px 5px #000;z-index:1;pointer-events:none;}
+  /* RF audio clip view */
+  .v-aud{position:relative;aspect-ratio:3.4/1;overflow:hidden;background:radial-gradient(120% 130% at 50% 50%, rgba(66,212,245,.08), rgba(7,7,10,.9)), #07070a;}
+  .v-wave{position:absolute;inset:0;width:100%;height:100%;}
+  .v-audplayer{width:100%;margin-top:12px;display:block;}
+  .v-meta{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 2px;font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;color:var(--dim,#5a5a70);letter-spacing:.05em;}
+  .v-av{width:24px;height:24px;flex:none;border-radius:50%;background-size:cover;background-position:center;border:1px solid var(--b2,#28282f);display:inline-block;vertical-align:middle;}
+  /* @handle pill — identical to the ASCII//RENDER editor username button */
+  .v-user{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:9px;letter-spacing:.12em;padding:3px 8px;border-radius:2px;
+    border:1px solid rgba(200,245,66,.35);color:var(--acc,#c8f542);background:rgba(200,245,66,.08);text-decoration:none;display:inline-block;transition:all .15s;}
+  .v-user:hover{border-color:var(--acc,#c8f542);background:rgba(200,245,66,.15);}
+  .v-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;}
+  .v-btn{cursor:pointer;font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;letter-spacing:.07em;padding:8px 14px;border-radius:2px;
+    border:1px solid var(--b2,#28282f);background:transparent;color:var(--dim,#5a5a70);text-decoration:none;display:inline-block;transition:all .15s;}
+  .v-btn:hover{border-color:var(--acc2,#42d4f5);color:var(--acc2,#42d4f5);}
+  .v-btn.primary{border-color:var(--acc,#c8f542);color:var(--acc,#c8f542);}
+  .v-btn.primary:hover{border-color:var(--acc,#c8f542);color:#000;background:var(--acc,#c8f542);}
+  .v-btn.liked{border-color:#f542a8;color:#f542a8;}
+  .v-btn.danger{border-color:rgba(230,80,80,.5);color:#e66;}
+  .v-btn.danger:hover{border-color:#e66;color:#e66;background:transparent;}
+  .v-msg{font-family:var(--fmono,'Share Tech Mono',monospace);color:var(--dim,#5a5a70);padding:60px 0;text-align:center;}
+  /* comments */
+  .v-comments{margin-top:34px;border-top:1px solid var(--b2,#28282f);padding-top:22px;}
+  .v-chead{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;letter-spacing:.18em;color:var(--dim,#5a5a70);margin-bottom:16px;}
+  .v-chead b{color:var(--acc,#c8f542);font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:15px;letter-spacing:.03em;margin-left:4px;}
+  .v-c{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid rgba(40,40,47,.55);position:relative;}
+  .v-cav{width:30px;height:30px;flex:none;border:1px solid var(--b2,#28282f);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:12px;background:rgba(10,10,14,.6);}
+  .v-cmain{flex:1;min-width:0;}
+  .v-cwho{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;letter-spacing:.05em;}
+  .v-cwho .nm{font-weight:500;text-decoration:none;}
+  .v-cwho .nm:hover{text-decoration:underline;}
+  .v-cwho .dt{color:var(--dim,#5a5a70);margin-left:8px;font-size:10px;}
+  .v-cbody{font-family:var(--fbody,'DM Mono',monospace);font-size:13px;line-height:1.6;color:var(--txt,#d8d8e0);margin-top:3px;white-space:pre-wrap;word-break:break-word;}
+  .v-cdel{position:absolute;top:11px;right:0;cursor:pointer;background:none;border:none;color:var(--dim,#5a5a70);font-size:12px;line-height:1;opacity:0;transition:opacity .12s,color .12s;}
+  .v-c:hover .v-cdel{opacity:1;}
+  .v-cdel:hover{color:#e66;}
+  .v-cbox{display:flex;gap:8px;margin-top:16px;align-items:flex-start;}
+  .v-cinput{flex:1;background:var(--panel,#101015);border:1px solid var(--b2,#28282f);border-radius:3px;color:var(--txt,#d8d8e0);
+    font-family:var(--fbody,'DM Mono',monospace);font-size:13px;padding:9px 11px;resize:vertical;min-height:38px;line-height:1.5;}
+  .v-cinput:focus{outline:none;border-color:var(--acc,#c8f542);}
+  .v-cempty{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;color:var(--dim,#5a5a70);padding:4px 0;letter-spacing:.05em;}
+  .v-cnote{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;color:var(--dim,#5a5a70);margin-top:14px;letter-spacing:.05em;}
+  .v-cnote a{color:var(--acc2,#42d4f5);}
+</style>
+</head>
+<body>
+<header class="ax-hdr">
+  <a class="ax-btn" href="../social.html">← SOCIAL</a>
+  <div class="ax-sep"></div>
+  <div class="ax-logo">ASCII<em>//</em>RENDER</div>
+  <div class="ax-spacer"></div>
+  <a class="ax-btn" href="./">✎ EDITOR</a>
+  <a class="ax-btn" href="../">PTXERO</a>
+</header>
+<div class="wrap">
+  <div id="viewBody"><div class="v-msg">Loading…</div></div>
+</div>
+<script>
+(function(){
+  const CFG = window.SHARE || {};
+  if(CFG.supabaseUrl) CFG.supabaseUrl = CFG.supabaseUrl.replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
+  const body = document.getElementById('viewBody');
+  const params = new URLSearchParams(location.search);
+  const slug = params.get('r') || params.get('p') || '';   // unified content id: render slug OR text-post id
+  let isText = !params.get('r') && !!params.get('p');   // may flip: a ?r= id can turn out to be a text post (e.g. notification links)
+  const READY = CFG.supabaseUrl && !/YOURPROJECT/.test(CFG.supabaseUrl) && CFG.supabaseAnonKey && !/YOUR_ANON/.test(CFG.supabaseAnonKey);
+  const publicUrl = (p) => `${CFG.supabaseUrl}/storage/v1/object/public/${CFG.bucket}/${p}`;
+  const workerBase = (CFG.workerUrl && /^https?:/.test(CFG.workerUrl)) ? CFG.workerUrl.replace(/\/+$/,'') : '';
+
+  function handlePrefix(){ let p=''; try{ p=localStorage.getItem('ptxero_handle_prefix')||''; }catch(e){} p=p.replace(/[^A-Za-z0-9]/g,'').toUpperCase().slice(0,2); return p||'RF'; }
+  function myHandle(){
+    let id=null; try{ id=localStorage.getItem('ptxero_rf_player_id'); }catch(e){}
+    if(!id) return null;
+    let h=0; for(let i=0;i<id.length;i++){ h=(h*31+id.charCodeAt(i))>>>0; }
+    return handlePrefix()+'-'+h.toString(16).toUpperCase().slice(0,4).padStart(4,'0');
+  }
+  function myTokens(){ try{ return JSON.parse(localStorage.getItem('ptxero_my_renders')||'{}'); }catch(e){ return {}; } }
+  async function sha256hex(str){ const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)); return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+  async function identitySecret(){ let id=null; try{ id=localStorage.getItem('ptxero_rf_player_id'); }catch(e){} return id ? await sha256hex(id + '|ptxero-profile-secret-v1') : null; }
+
+  function msg(t){ body.innerHTML = '<div class="v-msg">' + t + '</div>'; }
+  if(!slug){ msg('No entry specified.'); return; }
+  if(!READY){ msg('This site’s share backend isn’t configured yet.'); return; }
+
+  (async function(){
+   try{
+    const _hdr = { apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey };
+    const _get = async (tbl, col) => { const r = await fetch(`${CFG.supabaseUrl}/rest/v1/${tbl}?${col}=eq.${encodeURIComponent(slug)}&select=*`, { headers: _hdr }); return r.ok ? await r.json() : []; };
+    let rows = await _get(isText ? 'posts' : 'renders', isText ? 'id' : 'slug');
+    if(!rows.length && !isText){ const p = await _get('posts', 'id'); if(p.length){ isText = true; rows = p; } }   // ?r= id was actually a text post
+      const row = rows[0];
+      if(!row){ msg('Entry not found (it may have been removed).'); return; }
+      const imgUrl = publicUrl(slug + '/output.png');
+      const remixUrl = new URL('index.html?remix=' + encodeURIComponent(slug), location.href).href;
+      const date = row.created_at ? new Date(row.created_at).toLocaleDateString() : '';
+      const tokens = myTokens();
+      const mySuffix = (myHandle()||'').split('-').pop();
+      const isAdmin = mySuffix === 'CB6C';
+      const mine = (!!mySuffix && String(row.handle||'').split('-').pop() === mySuffix) || (!isText && !!tokens[slug]);
+      const shownHandle = (mine ? myHandle() : row.handle) || 'anon';   // your entries show your CURRENT prefix
+      document.title = (isText ? (row.body ? row.body.slice(0,42) : 'text entry') : (row.title || 'entry')) + ' — ASCII//RENDER';
+      if(!isText){
+        const og = document.querySelector('meta[property="og:image"]') || (() => { const m = document.createElement('meta'); m.setAttribute('property','og:image'); document.head.appendChild(m); return m; })();
+        og.setAttribute('content', imgUrl);
+      }
+
+      const isAudio = isText && row.kind === 'rf_audio';
+      const isSetup = isText && row.kind === 'rf_setup';
+      const isRf = isText && !isSetup && !isAudio && row.kind && String(row.kind).indexOf('rf') === 0;
+      const rd = row.data || {};
+      const mediaBlock = isAudio
+        ? '<div class="v-rf v-aud"><canvas class="v-wave" width="1000" height="280"></canvas><div class="v-rfscrim"></div><div class="v-rfover">'
+          + '<div class="v-rfk">AUDIO · PTXERO//RF</div><div class="v-rfname">' + esc(row.body || 'clip') + '</div>'
+          + ((rd.dur != null && rd.dur) ? '<div class="v-rfloc">◷ ' + (Math.floor(rd.dur/60) + ':' + String(Math.round(rd.dur%60)).padStart(2,'0')) + '</div>' : '') + '</div></div>'
+          + (rd.audio ? '<audio class="v-audplayer" controls preload="none" src="' + esc(rd.audio) + '"></audio>' : '<div class="v-desc">Audio is still processing — check back shortly.</div>')
+          + (rd.caption ? '<div class="v-desc">' + linkifyTags(esc(rd.caption)) + '</div>' : '')
+        : isSetup
+        ? '<div class="v-rf v-setup"><canvas class="v-schem" width="1200" height="520"></canvas>'
+          + '<div class="v-schemk">SIGNAL CHAIN · ' + ((rd.count != null) ? rd.count : (Array.isArray(rd.modules) ? rd.modules.length : 0)) + ' MODULES' + (Array.isArray(rd.cmds) && rd.cmds.length ? (' · ' + rd.cmds.length + ' CTRL') : '') + '</div></div>'
+          + '<div class="v-title">' + esc(row.body || 'signal chain') + '</div>'
+          + '<a class="v-btn primary v-rflisten" href="../rf/index.html?setup=' + encodeURIComponent(slug) + '">≋ LOAD CHAIN INTO RF</a>'
+          + (rd.caption ? '<div class="v-desc">' + linkifyTags(esc(rd.caption)) + '</div>' : '')
+        : isRf
+        ? '<div class="v-rf"><canvas class="v-rfmap" width="900" height="480"></canvas><div class="v-rfscrim"></div><div class="v-rfover">'
+          + '<div class="v-rfk">RF STATION</div><div class="v-rfname">' + esc(row.body || 'station') + '</div>'
+          + '<div class="v-rffreq">' + ((rd.freq != null) ? (+rd.freq).toFixed(1) : '—') + '<span class="v-rfmhz">MHz</span></div>'
+          + (rd.loc ? '<div class="v-rfloc">◎ ' + esc(rd.loc) + (rd.lat != null ? '  ·  ' + (+rd.lat).toFixed(2) + ', ' + (+rd.lon).toFixed(2) : '') + '</div>' : '')
+          + '<a class="v-btn primary v-rflisten" href="../rf/index.html?station=' + encodeURIComponent(slug) + '">▶ LISTEN IN RF</a></div></div>'
+          + (rd.caption ? '<div class="v-desc">' + linkifyTags(esc(rd.caption)) + '</div>' : '')
+        : isText
+        ? '<div class="v-post">' + linkifyTags(esc(row.body || '')) + '</div>'
+        : '<div class="v-img-frame">' + (row.media === 'webm' ? '<video autoplay loop muted playsinline controls poster="' + imgUrl + '" src="' + publicUrl(slug + '/output.webm') + '"></video>' : '<img alt="ASCII render" src="' + imgUrl + '">') + '</div>'
+          + '<div class="v-title">' + esc(row.title || 'untitled entry') + '</div>'
+          + (row.description ? '<div class="v-desc">' + linkifyTags(esc(row.description)) + '</div>' : '');
+      body.innerHTML = ''
+        + mediaBlock
+        + '<div class="v-meta"><a class="v-user" href="' + (mine ? '../social.html?me=1' : '../social.html?u=' + encodeURIComponent(String(row.handle||'').split('-').pop())) + '">@' + esc(shownHandle) + '</a>' + (date ? '<span>· ' + date + '</span>' : '') + (mine ? '<span>· your entry</span>' : '') + '</div>'
+        + '<div class="v-actions">'
+        +   (workerBase ? '<button class="v-btn" id="likeBtn"><span id="likeHeart">♡</span> <span id="likeCt"></span></button>' : '')
+        +   ((mySuffix && !mine && workerBase) ? '<button class="v-btn" id="repostBtn"><span id="repostLbl">↻ REPOST</span> <span id="repostCt"></span></button>' : '')
+        +   (!isText && row.allow_remix ? '<a class="v-btn primary" href="' + remixUrl + '">↺ OPEN IN EDITOR / REMIX</a>' : '')
+        +   (!isText ? '<a class="v-btn" href="' + imgUrl + '" download="ascii-render.png">⬇ DOWNLOAD PNG</a>' : '')
+        +   '<button class="v-btn" id="copyBtn">⧉ COPY LINK</button>'
+        +   '<button class="v-btn" id="saveBtn">＋ SAVE</button>'
+        +   ((mine && workerBase) ? '<button class="v-btn" id="featBtn">☆ FEATURE</button>' : '')
+        +   (((mine || isAdmin) && workerBase) ? '<button class="v-btn danger" id="delBtn">✕ DELETE</button>' : '')
+        +   ((mySuffix && !mine && workerBase) ? '<button class="v-btn" id="reportBtn">REPORT</button>' : '')
+        + '</div>'
+        + (workerBase ? '<div class="v-comments" id="vComments"></div>' : '');
+      if(isRf){ const mc = document.querySelector('.v-rfmap'); if(mc && rd.lat != null && rd.lon != null) drawRfMap(mc, +rd.lat, +rd.lon); }
+      if(isSetup){ const scv = document.querySelector('.v-schem'); if(scv) drawChainSchematic(scv, rd.board || boardFromChain(rd.chain)); }
+      if(isAudio){ const wc = document.querySelector('.v-wave'); if(wc) drawWave(wc, rd.peaks); }
+
+      // tint + name the @handle pill from the creator's profile (color + display name)
+      (function(){
+        const suf = String(row.handle||'').split('-').pop();
+        fetch(`${CFG.supabaseUrl}/rest/v1/profiles?uid=eq.${encodeURIComponent(suf)}&select=theme`, { headers:{ apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey } })
+          .then(r => r.ok ? r.json() : []).then(rows => {
+            const t = (rows[0] && rows[0].theme) || {};
+            const el = document.querySelector('.v-user'); if(!el) return;
+            if(['#c8f542','#42d4f5','#f542a8','#f5a542'].indexOf(t.color) >= 0){ el.style.color = t.color; el.style.borderColor = t.color + '59'; el.style.background = t.color + '14'; }
+            if(t.name && String(t.name).trim()){ el.textContent = String(t.name).trim(); el.title = '@' + shownHandle; }
+            if(t.avatar && !document.querySelector('.v-av')){ const av = document.createElement('span'); av.className = 'v-av'; av.style.backgroundImage = 'url(' + publicUrl('avatars/' + suf + '.jpg') + '?v=' + t.avatar + ')'; el.parentNode.insertBefore(av, el); }
+          }).catch(()=>{});
+      })();
+
+      document.getElementById('copyBtn').onclick = () => {
+        // copy the WORKER og-card link so the shared link unfurls with a preview
+        // (crawlers don't run JS, so the static view.html url never previews)
+        const ogLink = workerBase ? (workerBase + (isText ? '/p/' : '/r/') + encodeURIComponent(slug)) : location.href;
+        navigator.clipboard.writeText(ogLink).then(() => { document.getElementById('copyBtn').textContent = '✓ COPIED'; }).catch(()=>{});
+      };
+
+      // report / flag to the admin queue
+      (function(){
+        const reportBtn = document.getElementById('reportBtn'); if(!reportBtn) return;
+        reportBtn.onclick = async () => {
+          const reason = window.prompt('Report this entry to the moderators — reason (optional):', '');
+          if(reason === null) return;   // cancelled
+          reportBtn.disabled = true; reportBtn.textContent = 'REPORTING…';
+          try{
+            const secret = await identitySecret();
+            const fd = new FormData(); fd.append('uid', mySuffix); fd.append('secret', secret || ''); fd.append('action', 'add');
+            fd.append('target', slug); fd.append('kind', isText ? 'text' : 'render'); fd.append('reason', reason);
+            const r = await fetch(workerBase + '/report', { method:'POST', body: fd }); if(!r.ok) throw new Error();
+            reportBtn.textContent = '✓ REPORTED';
+          }catch(e){ reportBtn.disabled = false; reportBtn.textContent = 'REPORT'; alert('Could not submit report.'); }
+        };
+      })();
+
+      // bookmark / save (local to this device)
+      (function(){
+        const SAVE_KEY = 'ptxero_saved';
+        const getSaved = () => { try{ return JSON.parse(localStorage.getItem(SAVE_KEY) || '[]'); }catch(e){ return []; } };
+        const saveBtn = document.getElementById('saveBtn'); if(!saveBtn) return;
+        const paint = () => { const on = getSaved().includes(slug); saveBtn.textContent = on ? '✓ SAVED' : '＋ SAVE'; saveBtn.classList.toggle('primary', on); };
+        paint();
+        saveBtn.onclick = () => {
+          let s = getSaved(); s = s.includes(slug) ? s.filter(x => x !== slug) : s.concat([slug]);
+          try{ localStorage.setItem(SAVE_KEY, JSON.stringify(s.slice(-500))); }catch(e){}
+          paint();
+        };
+      })();
+
+      // repost / boost — amplify into your followers' feeds
+      (function(){
+        const repostBtn = document.getElementById('repostBtn'); if(!repostBtn) return;
+        const lbl = document.getElementById('repostLbl'), ct = document.getElementById('repostCt');
+        let state = { count: 0, mine: false };
+        const paint = () => { repostBtn.classList.toggle('primary', state.mine); lbl.textContent = state.mine ? '↻ REPOSTED' : '↻ REPOST'; ct.textContent = state.count || ''; };
+        fetch(`${CFG.supabaseUrl}/rest/v1/reposts?target=eq.${encodeURIComponent(slug)}&select=uid`, { headers:{ apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey } })
+          .then(r => r.ok ? r.json() : []).then(rows => { state = { count: rows.length, mine: !!rows.find(x => x.uid === mySuffix) }; paint(); }).catch(()=>{});
+        repostBtn.onclick = async () => {
+          const prev = state; const willRepost = !state.mine;
+          state = { count: Math.max(0, state.count + (willRepost ? 1 : -1)), mine: willRepost }; paint();
+          try{
+            const secret = await identitySecret();
+            const fd = new FormData(); fd.append('uid', mySuffix); fd.append('secret', secret || ''); fd.append('target', slug); fd.append('kind', isText ? 'text' : 'render'); fd.append('action', willRepost ? 'repost' : 'unrepost');
+            const r = await fetch(workerBase + '/repost', { method:'POST', body: fd }); if(!r.ok) throw new Error();
+          }catch(e){ state = prev; paint(); }
+        };
+      })();
+
+      // feature toggle (own entries) — pin / unpin on your profile
+      const featBtn = document.getElementById('featBtn');
+      if(featBtn){
+        let featSet = null;
+        const paintFeat = () => { const on = !!(featSet && featSet.includes(slug)); featBtn.textContent = on ? '★ FEATURED' : '☆ FEATURE'; featBtn.classList.toggle('primary', on); };
+        fetch(`${CFG.supabaseUrl}/rest/v1/profiles?uid=eq.${encodeURIComponent(mySuffix)}&select=featured`, { headers:{ apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey } })
+          .then(r => r.ok ? r.json() : []).then(rows => { featSet = (rows[0] && rows[0].featured) || []; paintFeat(); }).catch(() => { featSet = []; });
+        featBtn.onclick = async () => {
+          if(!featSet) return;
+          const on = featSet.includes(slug);
+          const next = on ? featSet.filter(x => x !== slug) : featSet.concat([slug]);
+          featBtn.disabled = true;
+          try{
+            const secret = await identitySecret();
+            const fd = new FormData(); fd.append('uid', mySuffix); fd.append('secret', secret || ''); fd.append('featured', JSON.stringify(next));
+            const r = await fetch(workerBase + '/profile', { method:'POST', body: fd }); if(!r.ok) throw new Error();
+            featSet = next; paintFeat();
+          }catch(e){ alert('Could not update featured.'); }
+          finally{ featBtn.disabled = false; }
+        };
+      }
+
+      // likes
+      if(workerBase){
+        const mySuffix = (myHandle()||'').split('-').pop();
+        let likeState = { count: 0, mine: false };
+        const likeBtn = document.getElementById('likeBtn'), heart = document.getElementById('likeHeart'), ct = document.getElementById('likeCt');
+        const paint = () => { likeBtn.classList.toggle('liked', likeState.mine); heart.textContent = likeState.mine ? '♥' : '♡'; ct.textContent = likeState.count || ''; };
+        fetch(`${CFG.supabaseUrl}/rest/v1/likes?slug=eq.${encodeURIComponent(slug)}&select=uid`, { headers:{ apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey } })
+          .then(r => r.ok ? r.json() : []).then(rows => { likeState = { count: rows.length, mine: !!(mySuffix && rows.find(x => x.uid === mySuffix)) }; paint(); }).catch(()=>{});
+        likeBtn.onclick = async () => {
+          if(!mySuffix) return;
+          const prev = likeState; const willLike = !likeState.mine;
+          likeState = { count: Math.max(0, likeState.count + (willLike ? 1 : -1)), mine: willLike }; paint();
+          try{ const secret = await identitySecret(); const fd = new FormData(); fd.append('slug', slug); fd.append('uid', mySuffix); fd.append('secret', secret || ''); fd.append('action', willLike ? 'like' : 'unlike'); const r = await fetch(workerBase + '/like', { method:'POST', body: fd }); if(!r.ok) throw new Error(); }
+          catch(e){ likeState = prev; paint(); }
+        };
+      }
+
+      // comments
+      if(workerBase) initComments();
+      function initComments(){
+        const ADMIN_SUFFIX = 'CB6C';
+        const isAdmin = !!mySuffix && mySuffix === ADMIN_SUFFIX;
+        const PALETTE = ['#c8f542','#42d4f5','#f542a8','#f5a542'];
+        const wrap = document.getElementById('vComments'); if(!wrap) return;
+        wrap.innerHTML = '<div class="v-chead">COMMENTS<b id="cCount"></b></div><div id="cList"><div class="v-cempty">Loading…</div></div><div id="cCompose"></div>';
+        const listEl = wrap.querySelector('#cList'), countEl = wrap.querySelector('#cCount'), composeEl = wrap.querySelector('#cCompose');
+
+        function renderComment(c, prof){
+          const theme = (prof && prof.theme) || {};
+          const uHandle = ((prof && prof.prefix) || 'RF') + '-' + c.uid;
+          const dName = (theme.name && String(theme.name).trim()) || null;
+          const color = PALETTE.indexOf(theme.color) >= 0 ? theme.color : '#c8f542';
+          const av = (dName || uHandle).replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase() || '@';
+          const dt = c.created_at ? new Date(c.created_at).toLocaleDateString() : '';
+          const href = '../social.html?u=' + encodeURIComponent(c.uid);
+          const nameHtml = dName
+            ? '<a class="nm" href="' + href + '" style="color:' + color + '" title="@' + esc(uHandle) + '">' + esc(dName) + '</a>'
+            : '<a class="nm" href="' + href + '" style="color:' + color + '">@' + esc(uHandle) + '</a>';
+          const el = document.createElement('div'); el.className = 'v-c';
+          el.innerHTML = '<div class="v-cav" style="border-color:' + color + ';color:' + color + '">' + esc(av) + '</div>'
+            + '<div class="v-cmain"><div class="v-cwho">' + nameHtml + '<span class="dt">' + esc(dt) + '</span></div>'
+            + '<div class="v-cbody">' + linkifyTags(esc(c.body)) + '</div></div>';
+          if(mySuffix && (c.uid === mySuffix || isAdmin)){
+            const del = document.createElement('button'); del.className = 'v-cdel'; del.title = 'Delete comment'; del.textContent = '✕';
+            del.onclick = async () => {
+              if(!window.confirm('Delete this comment?')) return;
+              del.disabled = true;
+              try{
+                const secret = await identitySecret();
+                const fd = new FormData(); fd.append('slug', slug); fd.append('uid', mySuffix); fd.append('secret', secret||''); fd.append('action','delete'); fd.append('id', c.id);
+                const r = await fetch(workerBase + '/comment', { method:'POST', body: fd }); if(!r.ok) throw new Error();
+                el.remove();
+                const n = (parseInt(countEl.textContent||'0',10)||1) - 1; countEl.textContent = n > 0 ? n : '';
+                if(!listEl.querySelector('.v-c')) listEl.innerHTML = '<div class="v-cempty">No comments yet — start the thread.</div>';
+              }catch(e){ del.disabled = false; alert('Could not delete comment.'); }
+            };
+            el.appendChild(del);
+          }
+          return el;
+        }
+
+        async function load(){
+          let rows = [];
+          try{ const r = await fetch(`${CFG.supabaseUrl}/rest/v1/comments?slug=eq.${encodeURIComponent(slug)}&order=created_at.asc&select=id,uid,body,created_at`, { headers:{ apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey } }); rows = r.ok ? await r.json() : []; }catch(e){ rows = []; }
+          countEl.textContent = rows.length || '';
+          let pmap = {};
+          const uids = [...new Set(rows.map(c => c.uid).filter(Boolean))];
+          if(uids.length){
+            try{ const pr = await fetch(`${CFG.supabaseUrl}/rest/v1/profiles?uid=in.(${uids.map(encodeURIComponent).join(',')})&select=uid,prefix,theme`, { headers:{ apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey } });
+              if(pr.ok) (await pr.json()).forEach(p => { pmap[p.uid] = p; }); }catch(e){}
+          }
+          if(!rows.length){ listEl.innerHTML = '<div class="v-cempty">No comments yet — start the thread.</div>'; return; }
+          listEl.innerHTML = ''; rows.forEach(c => listEl.appendChild(renderComment(c, pmap[c.uid])));
+        }
+
+        if(mySuffix){
+          composeEl.innerHTML = '<div class="v-cbox"><textarea class="v-cinput" id="cInput" maxlength="500" placeholder="Add a comment…"></textarea><button class="v-btn primary" id="cPost">POST</button></div>';
+          const input = composeEl.querySelector('#cInput'), postBtn = composeEl.querySelector('#cPost');
+          const submit = async () => {
+            const val = input.value.trim(); if(!val) return;
+            postBtn.disabled = true; postBtn.textContent = '…';
+            try{
+              const secret = await identitySecret();
+              const fd = new FormData(); fd.append('slug', slug); fd.append('uid', mySuffix); fd.append('secret', secret||''); fd.append('body', val);
+              const r = await fetch(workerBase + '/comment', { method:'POST', body: fd }); if(!r.ok) throw new Error(await r.text());
+              input.value = ''; await load();
+            }catch(e){ alert('Could not post comment.'); }
+            finally{ postBtn.disabled = false; postBtn.textContent = 'POST'; }
+          };
+          postBtn.onclick = submit;
+          input.addEventListener('keydown', (e) => { if((e.metaKey||e.ctrlKey) && e.key === 'Enter'){ e.preventDefault(); submit(); } });
+        } else {
+          composeEl.innerHTML = '<div class="v-cnote">Set up an identity on the <a href="../social.html">SOCIAL</a> page to join the conversation.</div>';
+        }
+
+        load();
+      }
+
+      const delBtn = document.getElementById('delBtn');
+      if(delBtn){
+        delBtn.onclick = async () => {
+          const token = tokens[slug];
+          const adminOther = !mine && isAdmin;
+          const ok = window.confirm(adminOther
+            ? '◆ ADMIN — delete this entry by @' + (row.handle || 'anon') + '? This can’t be undone.'
+            : (isText
+              ? 'Delete this text entry? This can’t be undone.'
+              : (token
+                ? 'Delete “' + (row.title || 'this entry') + '”? This can’t be undone.'
+                : 'No delete token for this entry on this device. Delete anyway using your identity? '
+                  + '(Trusted-circle fallback — only do this for your own entries.)')));
+          if(!ok) return;
+          delBtn.disabled = true; delBtn.textContent = 'DELETING…';
+          try{
+            let r;
+            const secret = await identitySecret();
+            if(isText){
+              const fd = new FormData(); fd.append('id', slug); fd.append('uid', mySuffix); fd.append('secret', secret||''); fd.append('action', 'delete');
+              r = await fetch(workerBase + '/post', { method:'POST', body: fd });
+            } else {
+              const fd = new FormData();
+              fd.append('slug', slug);
+              if(token) fd.append('token', token);
+              fd.append('handle', myHandle() || '');
+              fd.append('secret', secret || '');   // enables the ADMIN override on the worker
+              r = await fetch(workerBase + '/delete', { method:'POST', body: fd });
+            }
+            if(!r.ok){ alert('Delete failed (' + r.status + '): ' + await r.text()); delBtn.disabled = false; delBtn.textContent = '✕ DELETE'; return; }
+            if(!isText && token){ delete tokens[slug]; try{ localStorage.setItem('ptxero_my_renders', JSON.stringify(tokens)); }catch(e){} }
+            msg('Entry deleted. <br><br><a class="v-btn" href="../social.html">◱ BACK TO SOCIAL</a>');
+          }catch(e){ alert('Delete failed: ' + e.message); delBtn.disabled = false; delBtn.textContent = '✕ DELETE'; }
+        };
+      }
+   }catch(err){ msg('Could not load this entry (' + err + ').'); }
+  })();
+
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  // RF station map (coastline → offscreen world, cached) with a glowing marker
+  let _rfWorld = null, _rfWorldP = null;
+  function rfWorld(){
+    if(_rfWorld) return Promise.resolve(_rfWorld);
+    if(_rfWorldP) return _rfWorldP;
+    _rfWorldP = fetch('../rf/coastline.json').then(r => r.ok ? r.json() : null).then(geo => {
+      const W = 1440, H = 720, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#07070a'; ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = 'rgba(66,212,245,.14)'; ctx.lineWidth = 1;
+      for(let gx = 0; gx <= W; gx += W/8){ ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
+      for(let gy = 0; gy <= H; gy += H/4){ ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+      if(geo && geo.features){
+        ctx.strokeStyle = 'rgba(66,212,245,.55)'; ctx.lineWidth = 0.7; ctx.beginPath();
+        geo.features.forEach(f => { const g = f.geometry; if(!g) return;
+          const lines = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
+          lines.forEach(co => co.forEach((c, i) => { const x = (c[0]+180)/360*W, y = (90-c[1])/180*H; if(i===0) ctx.moveTo(x, y); else ctx.lineTo(x, y); })); });
+        ctx.stroke();
+      }
+      _rfWorld = cv; return cv;
+    }).catch(() => { const cv = document.createElement('canvas'); cv.width = 640; cv.height = 320; _rfWorld = cv; return cv; });
+    return _rfWorldP;
+  }
+  function drawRfMap(canvas, lat, lon){
+    rfWorld().then(world => {
+      const ctx = canvas.getContext('2d'), W = canvas.width, H = canvas.height, WW = world.width, WH = world.height;
+      ctx.fillStyle = '#07070a'; ctx.fillRect(0, 0, W, H);
+      const latSpan = 56, lonSpan = latSpan * (W / H);
+      const sx = ((lon - lonSpan/2) + 180)/360 * WW, sw = lonSpan/360 * WW;
+      const sy = (90 - (lat + latSpan/2))/180 * WH, sh = latSpan/180 * WH;
+      ctx.drawImage(world, sx, sy, sw, sh, 0, 0, W, H);
+      const x = W/2, y = H/2, r = Math.min(W, H) * 0.16;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, 'rgba(66,212,245,.85)'); g.addColorStop(1, 'rgba(66,212,245,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(66,212,245,.8)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y, r*0.34, 0, 7); ctx.stroke();
+      ctx.fillStyle = '#eaffff'; ctx.beginPath(); ctx.arc(x, y, r*0.13, 0, 7); ctx.fill();
+    });
+  }
+  // Static waveform from a normalized peaks array.
+  function drawWave(canvas, peaks){
+    const ctx=canvas.getContext('2d'), W=canvas.width, H=canvas.height; ctx.clearRect(0,0,W,H);
+    if(!Array.isArray(peaks)||!peaks.length) return;
+    const n=peaks.length, step=W/n, mid=H/2;
+    ctx.fillStyle='rgba(66,212,245,.5)';
+    for(let i=0;i<n;i++){ const h=Math.max(2,(+peaks[i]||0)*H*0.72); ctx.fillRect(i*step+step*0.18, mid-h/2, Math.max(1,step*0.64), h); }
+  }
+  // Derive a schematic board from a serialized chain (data.chain is always present).
+  function boardFromChain(chain){
+    if(!chain || !Array.isArray(chain.nodes)) return null;
+    const pretty = { hardwarein:'HW IN', hardwareout:'HW OUT' };
+    const nodes = [{ id:'__source__', label:'RF IN', kind:'src' }];
+    chain.nodes.forEach(n => { const t = String(n.type || '?'); nodes.push({ id:n.id, label:(pretty[t] || t.toUpperCase()), kind:'mod' }); });
+    nodes.push({ id:'__output__', label:'OUTPUT', kind:'out' });
+    const ids = new Set(nodes.map(n => n.id));
+    const edges = (Array.isArray(chain.edges) ? chain.edges : []).filter(e => ids.has(e.fromId) && ids.has(e.toId)).map(e => ({ f:e.fromId, t:e.toId }));
+    return { nodes, edges };
+  }
+  // Signal-chain schematic — nodes laid out by longest-path from the source.
+  function scRoundRect(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  function drawChainSchematic(canvas, board){
+    if(!canvas) return false;
+    const ctx=canvas.getContext('2d'), W=canvas.width, H=canvas.height;
+    ctx.clearRect(0,0,W,H);
+    if(!board || !Array.isArray(board.nodes) || !board.nodes.length) return false;
+    const nodes=board.nodes, edges=Array.isArray(board.edges)?board.edges:[];
+    const byId={}; nodes.forEach(n=>byId[n.id]=n);
+    const layer={}; nodes.forEach(n=>layer[n.id]=0);
+    for(let it=0; it<nodes.length+1; it++){ let ch=false;
+      edges.forEach(e=>{ if(byId[e.f]&&byId[e.t] && layer[e.t]<layer[e.f]+1){ layer[e.t]=layer[e.f]+1; ch=true; } });
+      if(!ch) break; }
+    let maxL=0; nodes.forEach(n=>{ if(layer[n.id]>maxL) maxL=layer[n.id]; });
+    nodes.forEach(n=>{ if(n.kind==='out') layer[n.id]=maxL; });
+    const grouped={}; nodes.forEach(n=>{ (grouped[layer[n.id]]=grouped[layer[n.id]]||[]).push(n); });
+    let maxRows=1; Object.keys(grouped).forEach(L=>{ if(grouped[L].length>maxRows) maxRows=grouped[L].length; });
+    const padX=W*0.05, padY=H*0.09;
+    const colStep0=(W-2*padX)/Math.max(1,maxL), rowStep0=(H-2*padY)/Math.max(1,maxRows);
+    const bw=Math.min(colStep0*0.58, W*0.16);
+    const bh=Math.min(maxRows>1?rowStep0*0.48:H*0.16, H*0.16);
+    const innerX=padX+bw/2, innerY=padY+bh/2;
+    const colStep=maxL>0 ? (W-2*innerX)/maxL : 0;
+    const rowStep=maxRows>1 ? (H-2*innerY)/(maxRows-1) : 0;
+    const pos={};
+    Object.keys(grouped).forEach(L=>{ const arr=grouped[L], n=arr.length, cx=maxL? innerX+(+L)*colStep : W/2;
+      arr.forEach((nd,i)=>{ pos[nd.id]={ x:cx, y:H/2 + (i-(n-1)/2)*rowStep }; }); });
+    ctx.lineWidth=1.6; ctx.strokeStyle='rgba(66,212,245,.5)';
+    edges.forEach(e=>{ const a=pos[e.f], b=pos[e.t]; if(!a||!b) return;
+      const ax=a.x+bw/2, bx=b.x-bw/2; ctx.beginPath(); ctx.moveTo(ax,a.y);
+      ctx.bezierCurveTo((ax+bx)/2,a.y,(ax+bx)/2,b.y,bx,b.y); ctx.stroke(); });
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    nodes.forEach(nd=>{ const p=pos[nd.id]; if(!p) return;
+      const col=nd.kind==='src'?'#c8f542':nd.kind==='out'?'#f5a542':'#42d4f5';
+      ctx.fillStyle='rgba(7,10,12,.94)'; ctx.strokeStyle=col; ctx.lineWidth=1.6;
+      scRoundRect(ctx,p.x-bw/2,p.y-bh/2,bw,bh,5); ctx.fill(); ctx.stroke();
+      ctx.fillStyle=col; const fs=Math.max(9,Math.min(Math.round(bh*0.44),Math.round(bw*0.15))); ctx.font='600 '+fs+"px 'Share Tech Mono', monospace";
+      let lbl=String(nd.label||'').toUpperCase(); const maxCh=Math.max(3,Math.floor(bw/(fs*0.62)));
+      if(lbl.length>maxCh) lbl=lbl.slice(0,maxCh-1)+'…';
+      ctx.fillText(lbl,p.x,p.y+1); });
+    return true;
+  }
+  function linkifyTags(escaped){
+    return String(escaped)
+      .replace(/\bhttps?:\/\/[^\s<]+/g, (u) => { const t = (u.match(/[.,!?)]+$/) || [''])[0]; const c = u.slice(0, u.length - t.length); const raw = c.replace(/&amp;/g,'&').replace(/&quot;/g,'"'); return '<a class="v-url" href="' + raw + '" target="_blank" rel="noopener noreferrer">' + c + '</a>' + t; })
+      .replace(/(^|\s)#(\w{1,30})/g, (m, pre, tag) => pre + '<a class="v-tag" href="../social.html?tag=' + tag.toLowerCase() + '">#' + tag + '</a>');
+  }
+})();
+</script>
+</body>
+</html>

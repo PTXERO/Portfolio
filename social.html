@@ -1,0 +1,1639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PTXERO//SOCIAL</title><!-- social hub v1 -->
+<meta name="description" content="The PTXERO network hub">
+<script src="design-tokens.js?v=1"></script>
+<script src="ascii-render/share.config.js?v=1"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
+<link rel="stylesheet" href="shared.css?v=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg,#07070a);color:var(--txt,#d8d8e0);font-family:var(--fbody,'DM Mono',monospace);font-size:12px;}
+  .ax-hdr{height:44px;min-height:44px;flex-shrink:0;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--border,#1c1c24);gap:14px;background:var(--surface,#0d0d12);position:sticky;top:0;z-index:50;}
+  .ax-logo{font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:24px;letter-spacing:.1em;color:var(--acc,#c8f542);line-height:1;flex-shrink:0;}
+  .ax-logo em{color:var(--dim,#5a5a70);font-style:normal;}
+  .ax-sep{width:1px;height:18px;background:var(--border,#1c1c24);flex-shrink:0;}
+  .ax-spacer{flex:1;}
+  .ax-btn{padding:4px 11px;border:1px solid var(--b2,#28282f);border-radius:2px;background:transparent;color:var(--dim,#5a5a70);font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;letter-spacing:.07em;transition:all .15s;text-decoration:none;cursor:pointer;flex-shrink:0;}
+  .ax-btn:hover{border-color:var(--acc2,#42d4f5);color:var(--acc2,#42d4f5);}
+  /* --pacc = the profile owner's palette accent; set on .wrap so the whole page skins to it */
+  .wrap{--pacc:var(--acc,#c8f542);max-width:1100px;margin:0 auto;padding:24px 16px 80px;}
+  .s-back{display:inline-block;font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;letter-spacing:.1em;color:var(--dim,#5a5a70);text-decoration:none;margin-bottom:14px;border:1px solid var(--b2,#28282f);border-radius:2px;padding:5px 11px;transition:all .15s;}
+  .s-back:hover{border-color:var(--acc2,#42d4f5);color:var(--acc2,#42d4f5);}
+  .s-profile{position:relative;overflow:hidden;min-height:104px;border:1px solid var(--b2,#28282f);border-radius:3px;
+    background:var(--panel,#101015);box-shadow:var(--shadow,6px 6px 0 #1a1a22);margin:8px 0 6px;}
+  .s-pf-bg{position:absolute;inset:0;overflow:hidden;opacity:.30;pointer-events:none;user-select:none;}
+  .s-pf-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(16,16,21,.62),rgba(16,16,21,.06));}
+  .s-pf-banner{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;user-select:none;}
+  .s-pf-banner::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(10,10,14,.86),rgba(10,10,14,.42));}
+  .s-pf-fg{position:relative;z-index:1;display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;padding:16px 18px;}
+  .s-av{width:52px;height:52px;flex:none;border:1px solid var(--pacc);border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;
+    font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:20px;letter-spacing:.06em;color:var(--pacc);background:rgba(10,10,14,.6);background-size:cover;background-position:center;}
+  .s-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+  .s-link{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;letter-spacing:.04em;color:var(--acc2,#42d4f5);text-decoration:none;border:1px solid var(--b2,#28282f);border-radius:2px;padding:4px 9px;transition:all .15s;text-shadow:0 1px 3px rgba(0,0,0,.6);}
+  .s-link:hover{border-color:var(--acc2,#42d4f5);}
+  .s-who{display:flex;flex-direction:column;gap:2px;flex:1;min-width:200px;}
+  .s-handle{font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:26px;letter-spacing:.02em;color:var(--txt,#d8d8e0);line-height:1;text-shadow:0 1px 4px rgba(0,0,0,.6);}
+  .s-handle .at{color:var(--pacc);}
+  .s-uhandle{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:12px;letter-spacing:.05em;color:var(--dim,#5a5a70);line-height:1.2;margin-top:3px;text-shadow:0 1px 3px rgba(0,0,0,.6);}
+  .s-uhandle .at{color:var(--pacc);}
+  .s-note{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;letter-spacing:.05em;color:var(--dim,#5a5a70);text-shadow:0 1px 3px rgba(0,0,0,.6);}
+  .s-bio{font-family:var(--fbody,'DM Mono',monospace);font-size:12px;line-height:1.6;color:var(--txt,#d8d8e0);margin-top:6px;max-width:60ch;white-space:pre-wrap;text-shadow:0 1px 3px rgba(0,0,0,.7);}
+  .s-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+  .s-count{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;color:var(--dim,#5a5a70);margin-left:auto;text-align:right;text-shadow:0 1px 3px rgba(0,0,0,.6);}
+  .s-count b{color:var(--pacc);font-size:18px;font-family:var(--fdisp,'Bebas Neue',sans-serif);}
+  .s-cta{padding:4px 11px;border:1px solid var(--b2,#28282f);border-radius:2px;background:transparent;color:var(--dim,#5a5a70);
+    font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;letter-spacing:.07em;transition:all .15s;text-decoration:none;cursor:pointer;display:inline-block;}
+  .s-cta:hover{border-color:var(--acc2,#42d4f5);color:var(--acc2,#42d4f5);}
+  .s-cta.primary{border-color:var(--pacc);color:var(--pacc);}
+  .s-cta.primary:hover{border-color:var(--pacc);color:#000;background:var(--pacc);}
+  .s-cta.following{border-color:var(--pacc);color:var(--pacc);background:transparent;}
+  .s-cta.following:hover{border-color:#e66;color:#e66;background:transparent;}
+  .s-stats{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;letter-spacing:.05em;color:var(--dim,#5a5a70);margin-top:8px;text-shadow:0 1px 3px rgba(0,0,0,.6);}
+  .s-stats b{color:var(--txt,#d8d8e0);font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:14px;letter-spacing:.02em;}
+  .s-filter{display:flex;gap:8px;margin:22px 2px 16px;align-items:center;}
+  .s-tab{cursor:pointer;font-family:var(--fmono,'Share Tech Mono',monospace);font-size:9px;letter-spacing:.14em;text-transform:uppercase;padding:6px 14px;border-radius:2px;
+    border:1px solid var(--b2,#28282f);background:transparent;color:var(--dim,#5a5a70);transition:all .15s;}
+  .s-tab:hover{color:var(--txt,#d8d8e0);}
+  .s-tab.on{border-color:var(--pacc);color:var(--pacc);}
+  .s-label{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:var(--dim,#5a5a70);margin-right:4px;}
+  .s-search{flex:1;min-width:120px;max-width:280px;margin-left:auto;background:var(--bg,#07070a);border:1px solid var(--b2,#28282f);border-radius:2px;color:var(--txt,#d8d8e0);font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;letter-spacing:.05em;padding:6px 10px;}
+  .s-search:focus{outline:none;border-color:var(--acc2,#42d4f5);}
+  .s-ugrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;}
+  .s-ucard{display:flex;align-items:center;gap:12px;border:1px solid var(--b2,#28282f);border-radius:3px;background:var(--panel,#101015);padding:12px;text-decoration:none;color:inherit;box-shadow:4px 4px 0 #1a1a22;transition:border-color .15s,transform .06s;}
+  .s-ucard:hover{border-color:var(--acc,#c8f542);}
+  .s-ucard:active{transform:translateY(1px);}
+  .s-uav{width:40px;height:40px;flex:none;border:1px solid var(--acc,#c8f542);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:15px;background:rgba(10,10,14,.6);}
+  .s-uinfo{min-width:0;}
+  .s-uname{font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:16px;letter-spacing:.03em;color:var(--txt,#d8d8e0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .s-usub{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:9px;letter-spacing:.05em;color:var(--dim,#5a5a70);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px;}
+  .s-ubio{font-family:var(--fbody,'DM Mono',monospace);font-size:11px;color:var(--dim,#5a5a70);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;}
+  .s-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;}
+  .s-card{position:relative;display:block;border:1px solid var(--b2,#28282f);border-radius:3px;background:var(--panel,#101015);
+    overflow:hidden;text-decoration:none;color:inherit;box-shadow:4px 4px 0 #1a1a22;transition:border-color .15s,transform .06s;}
+  .s-card:hover{border-color:var(--cardaccent,var(--acc,#c8f542));}
+  .s-card:active{transform:translateY(1px);}
+  .s-thumb{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;background:#000;image-rendering:pixelated;border-bottom:1px solid var(--b2,#28282f);}
+  /* RF station "signal" card — map screencap + glowing LISTEN */
+  .s-rfholo{position:relative;overflow:hidden;border-bottom:1px solid var(--b2,#28282f);background:#07070a;}
+  .s-rfmap{display:block;width:100%;height:auto;}
+  .s-rfscrim{position:absolute;inset:0;background:radial-gradient(120% 95% at 50% 42%, rgba(7,7,10,.22), rgba(7,7,10,.8));pointer-events:none;}
+  .s-rfover{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:10px 12px;}
+  .s-rfk{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:8px;letter-spacing:.28em;color:#42d4f5;opacity:.85;text-shadow:0 1px 4px #000;}
+  .s-rfname{font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:17px;letter-spacing:.02em;color:#eaffff;margin-top:3px;line-height:1.05;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 6px #000;}
+  .s-rffreq{font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:34px;color:#42d4f5;line-height:1;margin:3px 0 2px;text-shadow:0 0 16px rgba(66,212,245,.7),0 1px 6px #000;}
+  .s-rfmhz{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;color:#42d4f5;opacity:.8;margin-left:4px;letter-spacing:.1em;}
+  .s-rfloc{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;color:#c8f6ff;letter-spacing:.05em;text-shadow:0 1px 4px #000;}
+  .s-rflisten{display:inline-block;margin-top:10px;position:relative;z-index:1;font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;letter-spacing:.14em;color:#07070a;
+    background:#42d4f5;border:1px solid #42d4f5;border-radius:2px;padding:7px 18px;cursor:pointer;transition:all .15s;box-shadow:0 0 16px rgba(66,212,245,.55);}
+  .s-rflisten:hover{box-shadow:0 0 26px rgba(66,212,245,.9);transform:translateY(-1px);}
+  .s-rfcard:hover{border-color:#42d4f5;}
+  /* RF signal-chain / pedalboard card — schematic diagram */
+  .s-schemholo{position:relative;aspect-ratio:1/1;border-bottom:1px solid var(--b2,#28282f);overflow:hidden;background:radial-gradient(120% 120% at 50% 50%, rgba(66,212,245,.08), rgba(7,7,10,.9)), repeating-linear-gradient(0deg, rgba(66,212,245,.05) 0 1px, transparent 1px 30px), repeating-linear-gradient(90deg, rgba(66,212,245,.05) 0 1px, transparent 1px 30px), #07070a;}
+  .s-schem{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  .s-schemk{position:absolute;top:7px;left:9px;font-family:var(--fmono,'Share Tech Mono',monospace);font-size:8px;letter-spacing:.22em;color:#42d4f5;opacity:.85;text-shadow:0 1px 4px #000;z-index:1;pointer-events:none;}
+  .s-setupname{font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:19px;letter-spacing:.02em;color:#eaffff;margin-bottom:6px;line-height:1.1;}
+  .s-loadchain{display:inline-block;margin:6px 0 10px;}
+  /* RF audio clip card */
+  .s-audholo{position:relative;aspect-ratio:1/1;border-bottom:1px solid var(--b2,#28282f);overflow:hidden;background:radial-gradient(120% 120% at 50% 50%, rgba(66,212,245,.08), rgba(7,7,10,.92)), #07070a;}
+  .s-wave{position:absolute;inset:0;width:100%;height:100%;}
+  .s-audscrim{position:absolute;inset:0;background:radial-gradient(120% 95% at 50% 45%, rgba(7,7,10,.12), rgba(7,7,10,.7));pointer-events:none;}
+  .s-audplay{width:54px;height:54px;border-radius:50%;border:1px solid #42d4f5;background:rgba(66,212,245,.16);color:#42d4f5;font-size:19px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(66,212,245,.5);transition:all .15s;margin:6px 0;position:relative;z-index:1;}
+  .s-audplay:hover{background:#42d4f5;color:#07070a;transform:translateY(-1px);}
+  .s-auddur{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;letter-spacing:.1em;color:#c8f6ff;text-shadow:0 1px 4px #000;}
+  .s-textbody{padding:16px 14px;aspect-ratio:1/1;box-sizing:border-box;font-family:var(--fbody,'DM Mono',monospace);font-size:13px;line-height:1.6;
+    color:var(--txt,#d8d8e0);white-space:pre-wrap;word-break:break-word;overflow:hidden;display:-webkit-box;-webkit-line-clamp:9;line-clamp:9;-webkit-box-orient:vertical;
+    border-bottom:1px solid var(--b2,#28282f);background:linear-gradient(180deg,rgba(255,255,255,.02),transparent);}
+  /* text-entry composer */
+  .s-compose{display:flex;gap:8px;align-items:flex-start;margin:0 2px 18px;}
+  .s-cinput{flex:1;background:var(--panel,#101015);border:1px solid var(--b2,#28282f);border-radius:3px;color:var(--txt,#d8d8e0);
+    font-family:var(--fbody,'DM Mono',monospace);font-size:13px;padding:10px 12px;resize:vertical;min-height:44px;line-height:1.5;}
+  .s-cinput:focus{outline:none;border-color:var(--pacc,#c8f542);}
+  .s-body{padding:10px 11px 12px;}
+  .s-name{font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:17px;letter-spacing:.02em;color:var(--txt,#d8d8e0);line-height:1.05;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .s-cap{font-family:var(--fbody,'DM Mono',monospace);font-size:11px;line-height:1.4;color:var(--dim,#5a5a70);margin-top:3px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;}
+  .s-tag{color:var(--pacc,#c8f542);cursor:pointer;}
+  .s-tag:hover{text-decoration:underline;}
+  .s-url{color:var(--acc2,#42d4f5);cursor:pointer;text-decoration:underline;word-break:break-all;}
+  .s-taghead{display:flex;align-items:baseline;gap:12px;margin:6px 2px 20px;padding-bottom:14px;border-bottom:1px solid var(--b2,#28282f);}
+  .s-tagname{font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:34px;letter-spacing:.02em;color:var(--pacc,#c8f542);line-height:1;}
+  .s-tagsub{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;letter-spacing:.15em;color:var(--dim,#5a5a70);text-transform:uppercase;}
+  .s-reports{display:flex;flex-direction:column;gap:12px;}
+  .s-report{border:1px solid var(--b2,#28282f);border-radius:3px;background:var(--panel,#101015);padding:13px 15px;box-shadow:4px 4px 0 #1a1a22;}
+  .s-rmeta{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap;}
+  .s-rlink{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;letter-spacing:.05em;color:var(--acc2,#42d4f5);text-decoration:none;}
+  .s-rlink:hover{text-decoration:underline;}
+  .s-rwhen{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:9px;color:var(--dim,#5a5a70);}
+  .s-rreason{font-family:var(--fbody,'DM Mono',monospace);font-size:13px;line-height:1.5;color:var(--txt,#d8d8e0);margin:8px 0 4px;white-space:pre-wrap;word-break:break-word;}
+  .s-rby{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:9px;letter-spacing:.05em;color:var(--dim,#5a5a70);}
+  .s-ractions{display:flex;gap:8px;margin-top:10px;}
+  .s-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;font-family:var(--fmono,'Share Tech Mono',monospace);font-size:9px;letter-spacing:.05em;color:var(--dim,#5a5a70);}
+  .s-meta .h{color:var(--acc,#c8f542);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .s-repost{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:9px;letter-spacing:.05em;color:var(--acc2,#42d4f5);padding:7px 11px 0;}
+  .s-mleft{display:inline-flex;align-items:center;gap:5px;min-width:0;}
+  .s-mav{width:18px;height:18px;flex:none;border-radius:50%;border:1px solid var(--b2,#28282f);background:rgba(10,10,14,.6);background-size:cover;background-position:center;overflow:hidden;
+    display:inline-flex;align-items:center;justify-content:center;font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:8px;letter-spacing:0;}
+  .s-del{position:absolute;top:7px;right:7px;width:24px;height:24px;border-radius:50%;border:1px solid rgba(230,80,80,.5);
+    background:rgba(10,8,10,.82);color:#e66;font-family:var(--fmono,'Share Tech Mono',monospace);font-size:13px;line-height:1;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .12s,background .12s,transform .06s;z-index:2;}
+  .s-card:hover .s-del{opacity:1;}
+  .s-del:hover{background:#e66;color:#0a0a0a;}
+  .s-del:active{transform:scale(.9);}
+  @media (hover: none){ .s-del{opacity:.92;} }
+  .s-feat{position:absolute;top:7px;left:7px;width:24px;height:24px;border-radius:50%;border:1px solid rgba(200,245,66,.45);
+    background:rgba(10,8,10,.82);color:var(--pacc,#c8f542);font-family:var(--fmono,'Share Tech Mono',monospace);font-size:12px;line-height:1;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .12s,transform .06s;z-index:2;}
+  .s-card:hover .s-feat{opacity:1;}
+  .s-feat.on{opacity:1;border-color:var(--pacc,#c8f542);}
+  .s-feat:active{transform:scale(.9);}
+  @media (hover: none){ .s-feat{opacity:.9;} }
+  .s-mright{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+  .s-cmt{display:inline-flex;align-items:center;gap:2px;font-family:var(--fmono,'Share Tech Mono',monospace);font-size:9px;color:var(--dim,#5a5a70);}
+  .s-like{display:inline-flex;align-items:center;gap:3px;border:1px solid var(--b2,#28282f);border-radius:10px;background:transparent;
+    color:var(--dim,#5a5a70);font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;line-height:1;padding:2px 7px;cursor:pointer;transition:all .12s;}
+  .s-like:hover{border-color:#f542a8;color:#f542a8;}
+  .s-like.on{border-color:#f542a8;color:#f542a8;}
+  .s-like .heart{font-size:11px;}
+  .s-like:active{transform:scale(.94);}
+  .s-save{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--b2,#28282f);border-radius:10px;background:transparent;
+    color:var(--dim,#5a5a70);font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;line-height:1;padding:2px 7px;cursor:pointer;transition:all .12s;}
+  .s-save:hover{border-color:var(--acc2,#42d4f5);color:var(--acc2,#42d4f5);}
+  .s-save.on{border-color:var(--acc2,#42d4f5);color:var(--acc2,#42d4f5);}
+  .s-save:active{transform:scale(.94);}
+  .s-msg{font-family:var(--fmono,'Share Tech Mono',monospace);color:var(--dim,#5a5a70);padding:70px 0;text-align:center;font-size:12px;line-height:1.7;}
+  /* modals */
+  .ob-ov{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(3,3,6,.82);backdrop-filter:blur(3px);font-family:var(--fmono,'Share Tech Mono',monospace);padding:16px;}
+  .ob-panel{background:var(--panel,#101015);border:1px solid var(--acc,#c8f542);border-radius:3px;box-shadow:var(--shadow,6px 6px 0 #1a1a22);max-width:min(94vw,460px);width:100%;padding:22px;color:var(--txt,#d8d8e0);max-height:92vh;overflow:auto;}
+  .ob-title{font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:26px;letter-spacing:.04em;color:var(--acc,#c8f542);line-height:1;margin-bottom:10px;}
+  .ob-p{font-size:12px;line-height:1.7;margin:0 0 12px;}
+  .ob-dim{color:var(--dim,#5a5a70);}
+  .ob-lbl{display:block;font-family:var(--fmono,'Share Tech Mono',monospace);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--dim,#5a5a70);margin:14px 0 2px;}
+  .ob-handle{font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:30px;letter-spacing:.04em;color:var(--acc,#c8f542);text-align:center;margin:14px 0;padding:12px;border:1px dashed rgba(200,245,66,.4);border-radius:3px;}
+  .ob-input{width:100%;box-sizing:border-box;background:var(--bg,#07070a);border:1px solid var(--b2,#28282f);border-radius:2px;color:var(--txt,#d8d8e0);font-family:var(--fmono,'Share Tech Mono',monospace);font-size:14px;padding:11px;margin:2px 0;letter-spacing:.06em;}
+  .ob-input:focus{outline:none;border-color:var(--acc,#c8f542);}
+  textarea.ob-input{resize:vertical;min-height:64px;line-height:1.5;font-family:var(--fbody,'DM Mono',monospace);}
+  .ob-sws{display:flex;gap:10px;margin:6px 0 2px;}
+  .ob-sw{width:34px;height:34px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:transform .1s;padding:0;}
+  .ob-sw:hover{transform:scale(1.12);}
+  .ob-sw.on{border-color:var(--txt,#d8d8e0);}
+  .ob-styles{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 2px;}
+  .ob-style{flex:1;min-width:64px;font-family:var(--fmono,'Share Tech Mono',monospace);font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:8px 6px;border-radius:2px;border:1px solid var(--b2,#28282f);background:transparent;color:var(--dim,#5a5a70);cursor:pointer;transition:all .15s;}
+  .ob-style:hover{color:var(--txt,#d8d8e0);}
+  .ob-style.on{border-color:var(--acc,#c8f542);color:var(--acc,#c8f542);}
+  .ob-btn{display:block;width:100%;box-sizing:border-box;text-align:center;cursor:pointer;font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;letter-spacing:.1em;padding:11px;border-radius:2px;border:1px solid var(--b2,#28282f);background:transparent;color:var(--txt,#d8d8e0);margin-top:12px;transition:all .15s;}
+  .ob-btn.primary{border-color:var(--acc,#c8f542);color:var(--acc,#c8f542);}
+  .ob-btn:hover{border-color:var(--acc2,#42d4f5);color:var(--acc2,#42d4f5);}
+  .ob-btn.primary:hover{border-color:var(--acc,#c8f542);color:#000;background:var(--acc,#c8f542);}
+  .ob-div{display:flex;align-items:center;gap:10px;color:var(--dim,#5a5a70);font-size:9px;letter-spacing:.15em;margin:14px 0;}
+  .ob-div::before,.ob-div::after{content:'';flex:1;height:1px;background:var(--b2,#28282f);}
+  .ob-skip{display:block;text-align:center;margin-top:14px;font-size:10px;letter-spacing:.08em;color:var(--dim,#5a5a70);cursor:pointer;background:none;border:none;width:100%;}
+  .ob-skip:hover{color:var(--txt,#d8d8e0);}
+  /* edit-profile avatar picker */
+  .ep-avrow{display:flex;align-items:center;gap:14px;margin:2px 0 8px;}
+  .ep-av{width:60px;height:60px;flex:none;border-radius:50%;border:1px solid var(--acc,#c8f542);background:rgba(10,10,14,.6);background-size:cover;background-position:center;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:22px;color:var(--acc,#c8f542);}
+  .ep-avbtn{cursor:pointer;font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;letter-spacing:.1em;padding:8px 12px;border:1px solid var(--b2,#28282f);border-radius:2px;color:var(--dim,#5a5a70);transition:all .15s;}
+  .ep-avbtn:hover{border-color:var(--acc2,#42d4f5);color:var(--acc2,#42d4f5);}
+  .ep-bnrow{display:flex;align-items:center;gap:14px;margin:2px 0 8px;}
+  .ep-bn{width:120px;height:42px;flex:none;border-radius:3px;border:1px solid var(--b2,#28282f);background:rgba(10,10,14,.6);background-size:cover;background-position:center;}
+  /* identical to the view-page ✕ DELETE button (.v-btn.danger), just labelled REMOVE */
+  .ep-rm{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:10px;letter-spacing:.07em;padding:8px 14px;border-radius:2px;border:1px solid rgba(230,80,80,.5);background:transparent;color:#e66;transition:all .15s;}
+  .ep-rm:hover{border-color:#e66;color:#e66;background:transparent;}
+  /* notifications */
+  .ax-bell{position:relative;font-size:13px;line-height:1;}
+  .ax-badge{position:absolute;top:-5px;right:-5px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:#f542a8;color:#0a0a0e;
+    font-family:var(--fmono,'Share Tech Mono',monospace);font-size:9px;line-height:15px;text-align:center;font-weight:700;box-sizing:border-box;}
+  .n-panel{position:absolute;top:44px;right:10px;width:330px;max-width:calc(100vw - 20px);max-height:72vh;overflow-y:auto;
+    background:var(--surface,#0d0d12);border:1px solid var(--b2,#28282f);border-radius:4px;box-shadow:0 10px 34px rgba(0,0,0,.6);z-index:200;}
+  .n-head{display:flex;justify-content:space-between;align-items:center;padding:11px 13px;font-family:var(--fmono,'Share Tech Mono',monospace);
+    font-size:10px;letter-spacing:.18em;color:var(--dim,#5a5a70);border-bottom:1px solid var(--b2,#28282f);position:sticky;top:0;background:var(--surface,#0d0d12);}
+  .n-item{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;text-decoration:none;color:var(--txt,#d8d8e0);border-bottom:1px solid rgba(40,40,47,.4);}
+  .n-item:last-child{border-bottom:none;}
+  .n-item:hover{background:rgba(255,255,255,.03);}
+  .n-item.unread{background:rgba(245,66,168,.07);}
+  .n-av{width:30px;height:30px;flex:none;border:1px solid var(--b2,#28282f);border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-family:var(--fdisp,'Bebas Neue',sans-serif);font-size:12px;background:rgba(10,10,14,.6);}
+  .n-body{flex:1;min-width:0;}
+  .n-txt{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;line-height:1.45;color:var(--txt,#d8d8e0);}
+  .n-txt .who{font-weight:500;}
+  .n-when{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:9px;color:var(--dim,#5a5a70);margin-top:2px;letter-spacing:.05em;}
+  .n-dot{width:6px;height:6px;border-radius:50%;background:#f542a8;flex:none;margin-top:6px;}
+  .n-empty{padding:30px 14px;text-align:center;color:var(--dim,#5a5a70);font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;letter-spacing:.05em;}
+</style>
+</head>
+<body>
+<header class="ax-hdr">
+  <a class="ax-btn" href="./">← HOME</a>
+  <div class="ax-sep"></div>
+  <div class="ax-logo">PTXERO<em>//</em>SOCIAL</div>
+  <div class="ax-spacer"></div>
+  <button class="ax-btn ax-bell" id="btnNotif" type="button" style="display:none;" title="Notifications">✦<span class="ax-badge" id="notifBadge" style="display:none;"></span></button>
+  <a class="ax-btn" href="ascii-render/">ASCII//RENDER</a>
+  <a class="ax-btn" href="rf/">RF</a>
+</header>
+
+<div class="wrap">
+  <a class="s-back" id="backFeed" href="social.html" style="display:none;">← ALL ENTRIES</a>
+  <div class="s-profile" id="pfBox">
+    <div class="s-pf-banner" id="pfBanner" aria-hidden="true" style="display:none;"></div>
+    <div class="s-pf-bg" id="pfBg" aria-hidden="true"></div>
+    <div class="s-pf-fg">
+      <div class="s-av" id="pfAv">@</div>
+      <div class="s-who">
+        <div class="s-handle"><span class="at" id="pfAt">@</span><span id="pfHandle">…</span><span id="pfLive" class="pf-live" style="display:none;"></span></div>
+        <div class="s-uhandle" id="pfUser" style="display:none;"><span class="at">@</span><span id="pfUserName"></span></div>
+        <div class="s-note" id="pfNote"></div>
+        <div class="s-bio" id="pfBio"></div>
+        <div class="s-links" id="pfLinks" style="display:none;"></div>
+        <div class="s-stats" id="pfStats" style="display:none;"><b id="pfFollowers">0</b> followers · <b id="pfFollowing">0</b> following</div>
+        <div class="s-actions" id="pfActions">
+          <button class="s-cta primary" id="btnNewEntry" type="button">＋ NEW ENTRY</button>
+          <button class="s-cta" id="btnEdit" type="button">✎ EDIT PROFILE</button>
+          <button class="s-cta" id="btnKey" type="button">⚿ MY KEY</button>
+          <a class="s-cta" id="btnReports" href="social.html?reports=1" style="display:none;">◆ REPORTS</a>
+        </div>
+        <div class="s-actions" id="pfFollowActions" style="display:none;">
+          <button class="s-cta primary" id="btnFollow" type="button">＋ FOLLOW</button>
+        </div>
+        <div class="s-actions" id="pfLiveActions" style="display:none;"><a class="s-cta primary" id="pfConnect" title="Tune your RF to the exact station they're hearing right now">◎ CONNECT</a></div>
+      </div>
+      <div class="s-count"><b id="pfCount">0</b><br><span id="pfCountLabel">your entries</span></div>
+    </div>
+  </div>
+
+  <div id="liveNow" class="live-rail" style="display:none;"></div>
+
+  <div id="featured"></div>
+
+  <div class="s-filter" id="sFilter">
+    <span class="s-label">FEED</span>
+    <button class="s-tab on" id="tabAll" type="button">ALL</button>
+    <button class="s-tab" id="tabFollowing" type="button">FOLLOWING</button>
+    <button class="s-tab" id="tabMine" type="button">MINE</button>
+    <button class="s-tab" id="tabSaved" type="button">SAVED</button>
+    <input class="s-search" id="userSearch" type="search" placeholder="find users…" autocomplete="off">
+  </div>
+
+  <div id="feed"><div class="s-msg">Loading…</div></div>
+</div>
+
+<script>
+(function(){
+  const CFG = window.SHARE || {};
+  if(CFG.supabaseUrl) CFG.supabaseUrl = CFG.supabaseUrl.replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
+  const feed = document.getElementById('feed');
+  const READY = CFG.supabaseUrl && !/YOURPROJECT/.test(CFG.supabaseUrl) && CFG.supabaseAnonKey && !/YOUR_ANON/.test(CFG.supabaseAnonKey);
+  const publicUrl = (p) => `${CFG.supabaseUrl}/storage/v1/object/public/${CFG.bucket}/${p}`;
+  const workerBase = (CFG.workerUrl && /^https?:/.test(CFG.workerUrl)) ? CFG.workerUrl.replace(/\/+$/,'') : '';
+  const anonHdr = { apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey };
+
+  const PALETTE = ['#c8f542','#42d4f5','#f542a8','#f5a542'];
+  const DEFAULT_COLOR = '#c8f542';
+
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  // linkify #tags + URLs in already-escaped text as spans; wired via JS click (avoids nested <a> inside card anchors)
+  function linkifyTags(escaped){
+    return String(escaped)
+      .replace(/\bhttps?:\/\/[^\s<]+/g, (u) => { const t = (u.match(/[.,!?)]+$/) || [''])[0]; const c = u.slice(0, u.length - t.length); return '<span class="s-url" data-url="' + c + '">' + c + '</span>' + t; })
+      .replace(/(^|\s)#(\w{1,30})/g, (m, pre, tag) => pre + '<span class="s-tag" data-tag="' + tag.toLowerCase() + '">#' + tag + '</span>');
+  }
+  function wireTags(el){
+    el.querySelectorAll('.s-tag').forEach(t => t.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); location.href = 'social.html?tag=' + encodeURIComponent(t.dataset.tag); }));
+    el.querySelectorAll('.s-url').forEach(t => t.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); const u = String(t.dataset.url || '').replace(/&amp;/g,'&').replace(/&quot;/g,'"'); if(/^https?:\/\//.test(u)) window.open(u, '_blank', 'noopener'); }));
+  }
+  function msg(t){ feed.innerHTML = '<div class="s-msg">' + t + '</div>'; }
+
+  const ID_KEY = 'ptxero_rf_player_id', ACK_KEY = 'ptxero_social_onboarded', BG_KEY = 'ptxero_social_bg', PFX_KEY = 'ptxero_handle_prefix';
+  function getRawId(){ try{ return localStorage.getItem(ID_KEY); }catch(e){ return null; } }
+  function ensureId(){ let id = getRawId(); if(!id){ id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'rf-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10); try{ localStorage.setItem(ID_KEY, id); }catch(e){} } return id; }
+  function cleanPrefix(v){ return String(v||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase().slice(0,2); }
+  function handlePrefix(){ let p=''; try{ p = localStorage.getItem(PFX_KEY)||''; }catch(e){} return cleanPrefix(p) || 'RF'; }
+  function handleSuffix(){ const id = getRawId(); if(!id) return null; let h = 0; for(let i=0;i<id.length;i++){ h=(h*31 + id.charCodeAt(i))>>>0; } return h.toString(16).toUpperCase().slice(0,4).padStart(4,'0'); }
+  function myHandle(){ const s = handleSuffix(); return s ? handlePrefix()+'-'+s : null; }
+  function suffixOf(h){ return String(h||'').split('-').pop(); }
+  function myTokens(){ try { return JSON.parse(localStorage.getItem('ptxero_my_renders')||'{}'); } catch(e){ return {}; } }
+  async function sha256hex(str){ const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)); return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+  async function identitySecret(){ const id = getRawId(); return id ? await sha256hex(id + '|ptxero-profile-secret-v1') : null; }
+  // cover-crop an image file to a WxH JPEG (used for avatar + banner)
+  function resizeCover(file, W, H){
+    return new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => {
+        const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+        const ctx = cv.getContext('2d');
+        const scale = Math.max(W / img.width, H / img.height), w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+        cv.toBlob(b => b ? res(b) : rej(new Error('encode failed')), 'image/jpeg', 0.85);
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = () => rej(new Error('not an image'));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  function resizeToAvatar(file){ return resizeCover(file, 160, 160); }
+  function resizeToBanner(file){ return resizeCover(file, 1000, 280); }
+  function avatarUrl(uid, ver){ return publicUrl('avatars/' + uid + '.jpg') + (ver ? ('?v=' + ver) : ''); }
+  function bannerUrl(uid, ver){ return publicUrl('banners/' + uid + '.jpg') + (ver ? ('?v=' + ver) : ''); }
+
+  // ── profiles ──
+  async function fetchProfile(uid){
+    if(!uid || !READY) return null;
+    const base = `${CFG.supabaseUrl}/rest/v1/profiles?uid=eq.${encodeURIComponent(uid)}`;
+    try{
+      let r = await fetch(base + '&select=uid,prefix,bio,theme,featured', { headers: anonHdr });
+      if(r.status === 400) r = await fetch(base + '&select=uid,prefix,bio,featured', { headers: anonHdr });
+      if(!r.ok) return null;
+      return (await r.json())[0] || null;
+    }catch(e){ return null; }
+  }
+  // batch: map of suffix → chosen palette color (for coloring @handles in the feed)
+  async function fetchColors(suffixes){
+    const uniq = [...new Set(suffixes.filter(Boolean))];
+    if(!uniq.length || !READY) return {};
+    try{
+      const r = await fetch(`${CFG.supabaseUrl}/rest/v1/profiles?uid=in.(${uniq.map(encodeURIComponent).join(',')})&select=uid,theme`, { headers: anonHdr });
+      if(!r.ok) return {};
+      const rows = await r.json(); const map = {};
+      rows.forEach(row => { const t = row.theme || {}; map[row.uid] = { color: (PALETTE.indexOf(t.color) >= 0 ? t.color : null), name: (t.name && String(t.name).trim()) ? String(t.name).trim() : null, avatar: t.avatar || null }; });
+      return map;
+    }catch(e){ return {}; }
+  }
+  // batch: map of slug → { count, mine } for like counts + whether I liked it
+  async function fetchLikes(slugs){
+    const uniq = [...new Set((slugs||[]).filter(Boolean))];
+    if(!uniq.length || !READY) return {};
+    try{
+      const r = await fetch(`${CFG.supabaseUrl}/rest/v1/likes?slug=in.(${uniq.map(encodeURIComponent).join(',')})&select=slug,uid`, { headers: anonHdr });
+      if(!r.ok) return {};
+      const rows = await r.json(); const map = {};
+      rows.forEach(row => { const m = map[row.slug] || (map[row.slug] = { count: 0, mine: false }); m.count++; if(MY_SUFFIX && row.uid === MY_SUFFIX) m.mine = true; });
+      return map;
+    }catch(e){ return {}; }
+  }
+  // batch: map of slug → comment count
+  async function fetchComments(slugs){
+    const uniq = [...new Set((slugs||[]).filter(Boolean))];
+    if(!uniq.length || !READY) return {};
+    try{
+      const r = await fetch(`${CFG.supabaseUrl}/rest/v1/comments?slug=in.(${uniq.map(encodeURIComponent).join(',')})&select=slug`, { headers: anonHdr });
+      if(!r.ok) return {};
+      const rows = await r.json(); const map = {};
+      rows.forEach(row => { map[row.slug] = (map[row.slug] || 0) + 1; });
+      return map;
+    }catch(e){ return {}; }
+  }
+  async function saveProfile(fields){
+    const uid = handleSuffix(); const secret = await identitySecret();
+    if(!uid || !secret || !workerBase) throw new Error('profile backend unavailable');
+    const fd = new FormData(); fd.append('uid', uid); fd.append('secret', secret);
+    if(fields.prefix !== undefined) fd.append('prefix', fields.prefix);
+    if(fields.bio    !== undefined) fd.append('bio', fields.bio);
+    if(fields.theme  !== undefined) fd.append('theme', JSON.stringify(fields.theme));
+    if(fields.featured !== undefined) fd.append('featured', JSON.stringify(fields.featured));
+    if(fields.avatarBlob) fd.append('avatar', fields.avatarBlob, 'avatar.jpg');
+    if(fields.bannerBlob) fd.append('banner', fields.bannerBlob, 'banner.jpg');
+    const r = await fetch(workerBase + '/profile', { method:'POST', body: fd });
+    if(!r.ok) throw new Error('profile ' + r.status + ' ' + await r.text());
+  }
+
+  // ── key file ──
+  function buildKey(){ return { _type:'ptxero-identity', version:1, playerId:getRawId(), prefix:handlePrefix(), handle:myHandle(), renders:myTokens(), exported:new Date().toISOString() }; }
+  function downloadKey(){
+    const data = buildKey(); const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'}); const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'ptxero-key-'+(data.handle||'anon')+'.json'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500); try{ localStorage.setItem(ACK_KEY,'1'); }catch(e){}
+  }
+  function applyImport(text){
+    const d = JSON.parse(text);
+    if(!d || d._type !== 'ptxero-identity' || !d.playerId) throw new Error('Not a valid PTXERO key file.');
+    try{ localStorage.setItem(ID_KEY, d.playerId); }catch(e){}
+    if(d.prefix){ try{ localStorage.setItem(PFX_KEY, cleanPrefix(d.prefix)); }catch(e){} }
+    if(d.renders && typeof d.renders === 'object'){ const merged = Object.assign({}, myTokens(), d.renders); try{ localStorage.setItem('ptxero_my_renders', JSON.stringify(merged)); }catch(e){} }
+    try{ localStorage.setItem(ACK_KEY,'1'); }catch(e){}
+  }
+
+  // ── modals ──
+  function closeModal(){ const o = document.getElementById('obOverlay'); if(o) o.remove(); }
+  function makeOverlay(dismissable){
+    closeModal();
+    const ov = document.createElement('div'); ov.id = 'obOverlay'; ov.className = 'ob-ov';
+    const panel = document.createElement('div'); panel.className = 'ob-panel';
+    ov.appendChild(panel); document.body.appendChild(ov);
+    if(dismissable) ov.addEventListener('click', e => { if(e.target === ov) closeModal(); });
+    return panel;
+  }
+  // ── New Entry: choose a content type (text / render / RF) ──
+  function showNewEntry(){
+    const panel = makeOverlay(true);
+    function chooser(){
+      panel.innerHTML =
+          '<div class="ob-title">＋ NEW ENTRY</div>'
+        + '<button class="ob-btn primary" data-act="text">✎ TEXT ENTRY</button>'
+        + '<button class="ob-btn" data-act="render">▦ ASCII RENDER</button>'
+        + '<button class="ob-btn" data-act="rf">≋ RF STATION</button>'
+        + '<button class="ob-skip" data-act="close">cancel</button>';
+      panel.querySelector('[data-act="text"]').onclick = textComposer;
+      panel.querySelector('[data-act="render"]').onclick = () => location.assign('ascii-render/');
+      panel.querySelector('[data-act="rf"]').onclick = () => location.assign('rf/');
+      panel.querySelector('[data-act="close"]').onclick = closeModal;
+    }
+    function textComposer(){
+      panel.innerHTML =
+          '<div class="ob-title">✎ TEXT ENTRY</div>'
+        + '<textarea class="ob-input" id="neText" maxlength="1000" placeholder="What’s on your mind?" style="min-height:130px;resize:vertical;"></textarea>'
+        + '<button class="ob-btn primary" data-act="post">POST ENTRY</button>'
+        + '<button class="ob-skip" data-act="back">← back</button>';
+      const ta = panel.querySelector('#neText'); setTimeout(() => ta.focus(), 30);
+      const postBtn = panel.querySelector('[data-act="post"]');
+      postBtn.onclick = async () => {
+        const val = ta.value.trim(); if(!val) return;
+        postBtn.disabled = true; postBtn.textContent = 'POSTING…';
+        const ok = await createTextPost(val);
+        if(ok) closeModal(); else { postBtn.disabled = false; postBtn.textContent = 'POST ENTRY'; }
+      };
+      panel.querySelector('[data-act="back"]').onclick = chooser;
+      ta.addEventListener('keydown', (e) => { if((e.metaKey || e.ctrlKey) && e.key === 'Enter'){ e.preventDefault(); postBtn.click(); } });
+    }
+    chooser();
+  }
+
+  function showIdentityModal(mode){
+    const panel = makeOverlay(mode === 'manage');
+    const fileIn = document.createElement('input'); fileIn.type = 'file'; fileIn.accept = '.json,application/json'; fileIn.style.display = 'none';
+    document.getElementById('obOverlay').appendChild(fileIn);
+    fileIn.addEventListener('change', () => {
+      const f = fileIn.files && fileIn.files[0]; if(!f) return;
+      const rd = new FileReader();
+      rd.onload = () => { try{ applyImport(rd.result); location.assign('social.html'); }catch(e){ alert('Import failed: ' + e.message); } };
+      rd.readAsText(f);
+    });
+    function renderChoose(){
+      const h = myHandle() || 'anon';
+      const title = mode === 'new' ? 'WELCOME' : (mode === 'backup' ? '⚿ BACK UP YOUR KEY' : '⚿ YOUR KEY');
+      const intro = mode === 'new'
+        ? 'You’re new to PTXERO//SOCIAL, so Ive generated an anonymous key for you:'
+        : (mode === 'backup' ? 'Save your key so you never lose access to your entries:' : 'This key <b>is</b> your account so keep it somewhere safe:');
+      panel.innerHTML =
+          '<div class="ob-title">' + title + '</div><p class="ob-p">' + intro + '</p><div class="ob-handle">@' + esc(h) + '</div>'
+        + '<p class="ob-p ob-dim">There’s no email or password. The key file is the only way back into your account on another device or after clearing your browser. Lose it and it can’t be recovered.</p>'
+        + '<button class="ob-btn primary" data-act="dl">⬇ DOWNLOAD MY KEY</button><div class="ob-div">OR</div><button class="ob-btn" data-act="imp">⇪ IMPORT A KEY (returning user)</button>'
+        + (mode === 'manage' ? '<button class="ob-skip" data-act="close">close</button>' : '<button class="ob-skip" data-act="skip">continue without saving →</button>');
+      panel.querySelector('[data-act="dl"]').onclick = () => { downloadKey(); renderSaved(); };
+      panel.querySelector('[data-act="imp"]').onclick = () => fileIn.click();
+      const skip = panel.querySelector('[data-act="skip"]'); if(skip) skip.onclick = () => { try{ localStorage.setItem(ACK_KEY,'1'); }catch(e){} closeModal(); };
+      const cl = panel.querySelector('[data-act="close"]'); if(cl) cl.onclick = closeModal;
+    }
+    function renderSaved(){ panel.innerHTML = '<div class="ob-title">✓ KEY SAVED</div><p class="ob-p">Your key for <b>@' + esc(myHandle()||'anon') + '</b> downloaded. Store it somewhere safe...</p><button class="ob-btn primary" data-act="enter">ENTER SOCIAL</button>'; panel.querySelector('[data-act="enter"]').onclick = closeModal; }
+    renderChoose();
+  }
+  function maybeOnboard(wasExisting){ let acked=false; try{ acked = localStorage.getItem(ACK_KEY)==='1'; }catch(e){} if(acked) return; showIdentityModal(wasExisting?'backup':'new'); }
+
+  function showEditProfile(){
+    const panel = makeOverlay(true);
+    const suffix = handleSuffix() || '????';
+    const curPrefix = handlePrefix();
+    const theme = (TARGET_PROFILE && TARGET_PROFILE.theme) || {};
+    let curColor = (PALETTE.indexOf(theme.color) >= 0) ? theme.color : DEFAULT_COLOR;
+    let curBg = (theme.bg != null ? theme.bg : ''); if(!curBg){ try{ curBg = localStorage.getItem(BG_KEY)||''; }catch(e){} }
+    panel.innerHTML =
+        '<div class="ob-title">✎ EDIT PROFILE</div>'
+      + '<div class="ep-avrow"><div class="ep-av" id="epAvPrev"></div><label class="ep-avbtn">CHANGE PHOTO<input type="file" id="epAvIn" accept="image/*" hidden></label><button type="button" class="ep-avbtn ep-rm" id="epAvRm" style="display:none;">✕ REMOVE</button></div>'
+      + '<label class="ob-lbl">Username</label>'
+      + '<input class="ob-input" id="epPrefix" maxlength="2" placeholder="RF" style="text-align:center;letter-spacing:.35em;text-transform:uppercase;font-size:18px;">'
+      + '<div class="ob-p ob-dim" id="epPreview" style="text-align:center;margin:6px 0 0;">@' + esc(curPrefix) + '-' + esc(suffix) + '</div>'
+      + '<label class="ob-lbl">Display name</label>'
+      + '<input class="ob-input" id="epName" maxlength="20" placeholder="e.g. PTXERO — optional, shown above @' + esc(curPrefix) + '-' + esc(suffix) + '">'
+      + '<label class="ob-lbl">Color</label>'
+      + '<div class="ob-sws" id="epSws">' + PALETTE.map(c => '<button type="button" class="ob-sw" data-c="'+c+'" style="background:'+c+'"></button>').join('') + '</div>'
+      + '<label class="ob-lbl">Bio</label>'
+      + '<textarea class="ob-input" id="epBio" maxlength="500" placeholder="Tell the circle about yourself…"></textarea>'
+      + '<label class="ob-lbl">Links</label>'
+      + '<textarea class="ob-input" id="epLinks" maxlength="400" placeholder="https://your-site.com — one per line"></textarea>'
+      + '<label class="ob-lbl">Background</label>'
+      + '<input class="ob-input" id="epBg" maxlength="48" placeholder="' + esc(myHandle()||'PTXERO') + '">'
+      + '<label class="ob-lbl">Background style</label>'
+      + '<div class="ob-styles" id="epStyles">' + BG_STYLES.map(s => '<button type="button" class="ob-style" data-s="'+s+'">'+s+'</button>').join('') + '</div>'
+      + '<label class="ob-lbl">Banner image <span class="ob-dim">— replaces the scrolling text</span></label>'
+      + '<div class="ep-bnrow"><div class="ep-bn" id="epBnPrev"></div><label class="ep-avbtn">CHANGE BANNER<input type="file" id="epBnIn" accept="image/*" hidden></label><button type="button" class="ep-avbtn ep-rm" id="epBnRm" style="display:none;">✕ REMOVE</button></div>'
+      + '<button class="ob-btn primary" data-act="save">SAVE PROFILE</button><button class="ob-skip" data-act="close">cancel</button>';
+    const pfx = panel.querySelector('#epPrefix'); pfx.value = curPrefix;
+    const bio = panel.querySelector('#epBio'); bio.value = (TARGET_PROFILE && TARGET_PROFILE.bio) || '';
+    const bg  = panel.querySelector('#epBg');  bg.value = curBg;
+    const nm  = panel.querySelector('#epName'); nm.value = (theme.name || '');
+    const preview = panel.querySelector('#epPreview');
+    pfx.addEventListener('input', () => { preview.textContent = '@' + (cleanPrefix(pfx.value)||'RF') + '-' + suffix; });
+    let chosenColor = curColor;
+    const sws = panel.querySelectorAll('.ob-sw');
+    sws.forEach(sw => { if(sw.dataset.c === curColor) sw.classList.add('on'); sw.onclick = () => { chosenColor = sw.dataset.c; sws.forEach(x=>x.classList.remove('on')); sw.classList.add('on'); }; });
+    let chosenStyle = (BG_STYLES.indexOf(theme.bgStyle) >= 0) ? theme.bgStyle : 'drift';
+    const stys = panel.querySelectorAll('.ob-style');
+    stys.forEach(b => { if(b.dataset.s === chosenStyle) b.classList.add('on'); b.onclick = () => { chosenStyle = b.dataset.s; stys.forEach(x=>x.classList.remove('on')); b.classList.add('on'); }; });
+    // avatar preview + picker (+ remove)
+    let newAvatarBlob = null, removeAvatar = false;
+    const avPrev = panel.querySelector('#epAvPrev'), avRm = panel.querySelector('#epAvRm');
+    function paintAvPrev(){
+      if(newAvatarBlob){ avPrev.style.backgroundImage = 'url(' + URL.createObjectURL(newAvatarBlob) + ')'; avPrev.textContent = ''; avRm.style.display = ''; }
+      else if(theme.avatar && !removeAvatar){ avPrev.style.backgroundImage = 'url(' + avatarUrl(suffix, theme.avatar) + ')'; avPrev.textContent = ''; avRm.style.display = ''; }
+      else { avPrev.style.backgroundImage = 'none'; avPrev.textContent = (nm.value || curPrefix).slice(0,2).toUpperCase(); avRm.style.display = 'none'; }
+    }
+    paintAvPrev();
+    panel.querySelector('#epAvIn').addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0]; if(!f) return;
+      try{ newAvatarBlob = await resizeToAvatar(f); removeAvatar = false; paintAvPrev(); }catch(err){ alert('Could not read that image.'); }
+    });
+    avRm.addEventListener('click', () => { newAvatarBlob = null; removeAvatar = true; paintAvPrev(); });
+    // banner preview + picker (+ remove)
+    let newBannerBlob = null, removeBanner = false;
+    const bnPrev = panel.querySelector('#epBnPrev'), bnRm = panel.querySelector('#epBnRm');
+    function paintBnPrev(){
+      if(newBannerBlob){ bnPrev.style.backgroundImage = 'url(' + URL.createObjectURL(newBannerBlob) + ')'; bnRm.style.display = ''; }
+      else if(theme.banner && !removeBanner){ bnPrev.style.backgroundImage = 'url(' + bannerUrl(suffix, theme.banner) + ')'; bnRm.style.display = ''; }
+      else { bnPrev.style.backgroundImage = 'none'; bnRm.style.display = 'none'; }
+    }
+    paintBnPrev();
+    panel.querySelector('#epBnIn').addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0]; if(!f) return;
+      try{ newBannerBlob = await resizeToBanner(f); removeBanner = false; paintBnPrev(); }catch(err){ alert('Could not read that image.'); }
+    });
+    bnRm.addEventListener('click', () => { newBannerBlob = null; removeBanner = true; paintBnPrev(); });
+    const linksTa = panel.querySelector('#epLinks'); linksTa.value = Array.isArray(theme.links) ? theme.links.join('\n') : '';
+    setTimeout(() => { pfx.focus(); pfx.select(); }, 30);
+    const saveBtn = panel.querySelector('[data-act="save"]');
+    saveBtn.onclick = async () => {
+      const p = cleanPrefix(pfx.value); const bgVal = bg.value.trim();
+      const links = linksTa.value.split('\n').map(s => s.trim()).filter(s => /^https?:\/\//.test(s)).slice(0, 6);
+      try{ if(p && p !== 'RF') localStorage.setItem(PFX_KEY, p); else localStorage.removeItem(PFX_KEY); }catch(e){}
+      try{ if(bgVal) localStorage.setItem(BG_KEY, bgVal); else localStorage.removeItem(BG_KEY); }catch(e){}
+      saveBtn.disabled = true; saveBtn.textContent = 'SAVING…';
+      const newTheme = { color: chosenColor, bg: bgVal, bgStyle: chosenStyle, name: nm.value.trim(), links: links };
+      if(theme.avatar && !removeAvatar) newTheme.avatar = theme.avatar;   // preserve unless removed; worker overrides when a new one is uploaded
+      if(theme.banner && !removeBanner) newTheme.banner = theme.banner;
+      try{ await saveProfile({ prefix: p || 'RF', bio: bio.value.trim(), theme: newTheme, avatarBlob: newAvatarBlob, bannerBlob: newBannerBlob }); location.assign('social.html'); }
+      catch(e){ alert('Profile couldn’t save to the server (' + e.message + ').\nUsername & background were applied locally.'); location.assign('social.html'); }
+    };
+    panel.querySelector('[data-act="close"]').onclick = closeModal;
+  }
+
+  // ── profile background — several on-brand styles, all honoring --pacc ──
+  const BG_STYLES = ['drift','rain','static','pulse'];
+  let BG_TEXT = 'PTXERO', BG_STYLE = 'drift';
+  const BG_GLYPHS = '░▒▓·:+=/'.split('');
+  function bgPool(text){ const t = String(text||'').replace(/\s+/g,''); return (t.length ? t : 'PTXERO').split(''); }
+  function bgChar(pool){ return Math.random()<0.62 ? pool[(Math.random()*pool.length)|0] : BG_GLYPHS[(Math.random()*BG_GLYPHS.length)|0]; }
+  function makeProfileBg(host, text, style){
+    if(!host) return null; host.innerHTML = '';
+    const pool = bgPool(text); const COL_W = 13, ROW_H = 14;
+    const W = host.offsetWidth, H = host.offsetHeight; if(W<=0||H<=0) return null;
+    const rows = Math.ceil(H/ROW_H)+1;
+    style = (BG_STYLES.indexOf(style) >= 0) ? style : 'drift';
+    let raf, frame = 0;
+    if(style === 'drift'){
+      const numCols = Math.ceil(W/COL_W)+4, SPEED = 0.28;
+      const shade = () => Math.random()<0.72 ? 'var(--dim,#5a5a70)' : 'var(--pacc,#c8f542)';
+      const cols = [];
+      for(let i=0;i<numCols;i++){
+        const col = document.createElement('div');
+        col.style.cssText = 'position:absolute;top:0;bottom:0;width:'+COL_W+'px;left:'+(i*COL_W)+'px;display:flex;flex-direction:column;font-family:var(--fmono,monospace);font-size:11px;line-height:'+ROW_H+'px;';
+        const cells = [];
+        for(let r=0;r<rows;r++){ const s=document.createElement('span'); s.textContent=bgChar(pool); s.style.color=shade(); col.appendChild(s); cells.push(s); }
+        host.appendChild(col); cols.push({ el: col, x: i*COL_W, cells });
+      }
+      (function tick(){ const totalW=cols.length*COL_W; for(const c of cols){ c.x-=SPEED; if(c.x<-COL_W){ c.x=totalW-COL_W; c.cells.forEach(s=>{ s.textContent=bgChar(pool); s.style.color=shade(); }); } c.el.style.left=Math.round(c.x)+'px'; } raf=requestAnimationFrame(tick); })();
+      return () => cancelAnimationFrame(raf);
+    }
+    // grid of fixed cells for rain/static/pulse
+    const numCols = Math.ceil(W/COL_W)+2; const grid = [];
+    for(let c=0;c<numCols;c++){
+      const col=document.createElement('div');
+      col.style.cssText='position:absolute;top:0;bottom:0;width:'+COL_W+'px;left:'+(c*COL_W)+'px;display:flex;flex-direction:column;font-family:var(--fmono,monospace);font-size:11px;line-height:'+ROW_H+'px;';
+      const cells=[]; for(let r=0;r<rows;r++){ const s=document.createElement('span'); s.textContent=bgChar(pool); s.style.color='var(--dim,#5a5a70)'; col.appendChild(s); cells.push(s); }
+      host.appendChild(col); grid.push(cells);
+    }
+    if(style === 'rain'){
+      const TRAIL=8; const drops=[]; for(let c=0;c<numCols;c++) drops.push({ y:-((Math.random()*rows*2)|0), sp:0.12+Math.random()*0.4 });
+      for(let c=0;c<numCols;c++) for(let r=0;r<rows;r++) grid[c][r].style.opacity='0';
+      (function tick(){ for(let c=0;c<numCols;c++){ const d=drops[c]; d.y+=d.sp; const head=Math.floor(d.y);
+          for(let r=0;r<rows;r++){ const s=grid[c][r]; const dist=head-r;
+            if(dist===0){ s.textContent=bgChar(pool); s.style.color='var(--pacc,#c8f542)'; s.style.opacity='1'; }
+            else if(dist>0 && dist<TRAIL){ s.style.color='var(--pacc,#c8f542)'; s.style.opacity=String((1-dist/TRAIL)*0.6); }
+            else s.style.opacity='0'; }
+          if(head-TRAIL>rows){ d.y=-((Math.random()*rows)|0); d.sp=0.12+Math.random()*0.4; } }
+        raf=requestAnimationFrame(tick); })();
+      return () => cancelAnimationFrame(raf);
+    }
+    if(style === 'static'){
+      for(let c=0;c<numCols;c++) for(let r=0;r<rows;r++) grid[c][r].style.opacity=String(0.35+Math.random()*0.5);
+      (function tick(){ frame++; if(frame%2===0){ const n=Math.ceil(numCols*rows*0.03); for(let k=0;k<n;k++){ const c=(Math.random()*numCols)|0, r=(Math.random()*rows)|0, s=grid[c][r]; s.textContent=bgChar(pool); s.style.color=Math.random()<0.25?'var(--pacc,#c8f542)':'var(--dim,#5a5a70)'; s.style.opacity=String(0.35+Math.random()*0.6); } } raf=requestAnimationFrame(tick); })();
+      return () => cancelAnimationFrame(raf);
+    }
+    // pulse — a bright band sweeps across
+    for(let c=0;c<numCols;c++) for(let r=0;r<rows;r++){ grid[c][r].style.color='var(--dim,#5a5a70)'; grid[c][r].style.opacity='0.45'; }
+    const BAND=4; let sweep=-BAND;
+    (function tick(){ frame++; if(frame%2===0){ sweep+=0.6; if(sweep>numCols+BAND) sweep=-BAND;
+        for(let c=0;c<numCols;c++){ const dist=Math.abs(c-sweep); const near=dist<BAND;
+          for(let r=0;r<rows;r++){ const s=grid[c][r]; if(near){ s.style.color='var(--pacc,#c8f542)'; s.style.opacity=String(Math.max(.45,1-dist/BAND)); if(Math.random()<0.06) s.textContent=bgChar(pool); } else { s.style.color='var(--dim,#5a5a70)'; s.style.opacity='0.4'; } } } }
+      raf=requestAnimationFrame(tick); })();
+    return () => cancelAnimationFrame(raf);
+  }
+  let stopBg = null, rzT = null, HAS_BANNER = false;
+  function restartBg(){ if(HAS_BANNER) return; if(stopBg){ stopBg(); stopBg=null; } stopBg = makeProfileBg(document.getElementById('pfBg'), BG_TEXT, BG_STYLE); }
+  window.addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(restartBg, 150); });
+  window.addEventListener('load', restartBg);
+
+  // ── mode ──
+  const params = new URLSearchParams(location.search);
+  const rawU = (params.get('u')||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase().slice(0,8);
+  const rawTag = (params.get('tag')||'').replace(/[^A-Za-z0-9_]/g,'').toLowerCase().slice(0,30);
+  const TAG_MODE = !!rawTag;
+  const REPORTS_MODE = params.get('reports') === '1';
+  const wasExisting = !!getRawId();
+  ensureId();
+  const MY_SUFFIX = handleSuffix();
+  const viewUid = rawU || null;
+  const targetUid = viewUid || MY_SUFFIX;
+  const isOwn = !viewUid || (MY_SUFFIX && viewUid === MY_SUFFIX);
+  const HANDLE = myHandle();
+  const isMine = (h) => !!MY_SUFFIX && suffixOf(h) === MY_SUFFIX;
+  const ADMIN_SUFFIX = 'CB6C';                      // the owner (PTXERO) is the admin
+  const IS_ADMIN = MY_SUFFIX === ADMIN_SUFFIX;
+
+  let TARGET_PROFILE = null;
+  let COLORMAP = {};
+  let MYFEATURED = new Set();
+  let LIKEMAP = {};
+  let COMMENTMAP = {};
+  let FOLLOWSET = new Set();      // suffixes MY_SUFFIX follows
+  let FOLLOWFEED = null;          // cached FOLLOWING renders
+  let FOLLOWSTATE_LOADED = false;
+  const wrapEl = document.querySelector('.wrap');
+
+  document.getElementById('btnNewEntry').addEventListener('click', showNewEntry);
+  document.getElementById('btnEdit').addEventListener('click', showEditProfile);
+  document.getElementById('btnKey').addEventListener('click', () => showIdentityModal('manage'));
+  document.getElementById('tabAll').addEventListener('click', () => setFilter('all'));
+  document.getElementById('tabFollowing').addEventListener('click', () => setFilter('following'));
+  document.getElementById('tabMine').addEventListener('click', () => setFilter('mine'));
+  document.getElementById('tabSaved').addEventListener('click', () => setFilter('saved'));
+  document.getElementById('btnFollow').addEventListener('click', toggleFollow);
+  const SAVE_KEY = 'ptxero_saved';
+  function getSaved(){ try{ return JSON.parse(localStorage.getItem(SAVE_KEY) || '[]'); }catch(e){ return []; } }
+  let SAVEDFEED = null;
+  async function loadSavedFeed(){
+    const ids = getSaved().filter(s => /^[A-Za-z0-9_-]+$/.test(s));
+    if(!ids.length){ SAVEDFEED = []; return SAVEDFEED; }
+    const inList = ids.map(encodeURIComponent).join(',');
+    try{
+      const [rr, pp] = await Promise.all([
+        fetch(`${CFG.supabaseUrl}/rest/v1/renders?slug=in.(${inList})&select=slug,title,description,handle,created_at,media`, { headers: anonHdr }),
+        fetch(`${CFG.supabaseUrl}/rest/v1/posts?id=in.(${inList})&select=id,body,handle,uid,created_at,kind,data`, { headers: anonHdr }).catch(() => null),
+      ]);
+      const renders = rr.ok ? await rr.json() : [];
+      const posts = (pp && pp.ok) ? await pp.json() : [];
+      const merged = mergeItems(renders, posts);
+      const byId = {}; merged.forEach(m => { byId[m.slug] = m; });
+      SAVEDFEED = ids.slice().reverse().map(s => byId[s]).filter(Boolean);   // most-recently-saved first
+    }catch(e){ SAVEDFEED = []; }
+    Object.assign(COLORMAP, await fetchColors(SAVEDFEED.map(x => suffixOf(x.handle))));
+    Object.assign(LIKEMAP, await fetchLikes(SAVEDFEED.map(x => x.slug)));
+    Object.assign(COMMENTMAP, await fetchComments(SAVEDFEED.map(x => x.slug)));
+    return SAVEDFEED;
+  }
+  document.getElementById('btnNotif').addEventListener('click', toggleNotifs);
+
+  // ── follows ──
+  async function fetchFollowState(){
+    if(FOLLOWSTATE_LOADED || !MY_SUFFIX || !READY) return;
+    try{ const r = await fetch(`${CFG.supabaseUrl}/rest/v1/follows?follower=eq.${encodeURIComponent(MY_SUFFIX)}&select=followee`, { headers: anonHdr }); if(r.ok){ (await r.json()).forEach(x => FOLLOWSET.add(x.followee)); } }catch(e){}
+    FOLLOWSTATE_LOADED = true;
+  }
+  async function fetchFollowCounts(uid){
+    if(!uid || !READY) return { followers: 0, following: 0 };
+    try{
+      const [fr, gr] = await Promise.all([
+        fetch(`${CFG.supabaseUrl}/rest/v1/follows?followee=eq.${encodeURIComponent(uid)}&select=follower`, { headers: anonHdr }),
+        fetch(`${CFG.supabaseUrl}/rest/v1/follows?follower=eq.${encodeURIComponent(uid)}&select=followee`, { headers: anonHdr }),
+      ]);
+      return { followers: fr.ok ? (await fr.json()).length : 0, following: gr.ok ? (await gr.json()).length : 0 };
+    }catch(e){ return { followers: 0, following: 0 }; }
+  }
+  function paintFollowBtn(){
+    const btn = document.getElementById('btnFollow'); if(!btn) return;
+    const on = FOLLOWSET.has(targetUid);
+    btn.className = 's-cta ' + (on ? 'following' : 'primary');
+    btn.textContent = on ? '✓ FOLLOWING' : '＋ FOLLOW';
+  }
+  async function toggleFollow(){
+    if(!MY_SUFFIX || !targetUid || targetUid === MY_SUFFIX || !workerBase) return;
+    const willFollow = !FOLLOWSET.has(targetUid);
+    if(willFollow) FOLLOWSET.add(targetUid); else FOLLOWSET.delete(targetUid);
+    FOLLOWFEED = null;                          // invalidate FOLLOWING cache
+    paintFollowBtn();
+    const fEl = document.getElementById('pfFollowers');
+    if(fEl) fEl.textContent = Math.max(0, (parseInt(fEl.textContent, 10) || 0) + (willFollow ? 1 : -1));
+    try{
+      const secret = await identitySecret(); if(!secret) throw new Error('no secret');
+      const fd = new FormData(); fd.append('follower', MY_SUFFIX); fd.append('followee', targetUid); fd.append('secret', secret); fd.append('action', willFollow ? 'follow' : 'unfollow');
+      const r = await fetch(workerBase + '/follow', { method:'POST', body: fd }); if(!r.ok) throw new Error();
+    }catch(e){
+      if(willFollow) FOLLOWSET.delete(targetUid); else FOLLOWSET.add(targetUid);   // revert
+      paintFollowBtn();
+      if(fEl) fEl.textContent = Math.max(0, (parseInt(fEl.textContent, 10) || 0) + (willFollow ? -1 : 1));
+      alert('Could not update follow.');
+    }
+  }
+  async function loadFollowingFeed(){
+    if(FOLLOWFEED) return FOLLOWFEED;
+    await fetchFollowState();
+    const sufs = [...FOLLOWSET];
+    if(!sufs.length){ FOLLOWFEED = []; return FOLLOWFEED; }
+    try{
+      const orClause = sufs.map(s => `handle.ilike.*-${encodeURIComponent(s)}`).join(',');
+      const [rr, pp] = await Promise.all([
+        fetch(`${CFG.supabaseUrl}/rest/v1/renders?or=(${orClause})&select=slug,title,description,handle,created_at,media&order=created_at.desc&limit=100`, { headers: anonHdr }),
+        fetch(`${CFG.supabaseUrl}/rest/v1/posts?or=(${orClause})&select=id,body,handle,uid,created_at,kind,data&order=created_at.desc&limit=100`, { headers: anonHdr }).catch(() => null),
+      ]);
+      const renders = rr.ok ? await rr.json() : [];
+      const posts = (pp && pp.ok) ? await pp.json() : [];
+      const reposts = await loadRepostsBy(sufs);   // entries reposted by people you follow
+      FOLLOWFEED = mergeItems(renders, posts).concat(reposts);
+      FOLLOWFEED.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    }catch(e){ FOLLOWFEED = []; }
+    const reposterSufs = FOLLOWFEED.filter(x => x._repostBy).map(x => x._repostBy);
+    Object.assign(COLORMAP, await fetchColors(FOLLOWFEED.map(x => suffixOf(x.handle)).concat(reposterSufs)));
+    Object.assign(LIKEMAP, await fetchLikes(FOLLOWFEED.map(x => x.slug)));
+    Object.assign(COMMENTMAP, await fetchComments(FOLLOWFEED.map(x => x.slug)));
+    return FOLLOWFEED;
+  }
+  // resolve entries reposted by a set of users → feed items tagged with _repostBy (repost-time ordering)
+  async function loadRepostsBy(sufs){
+    try{
+      const rp = await fetch(`${CFG.supabaseUrl}/rest/v1/reposts?uid=in.(${sufs.map(encodeURIComponent).join(',')})&select=uid,target,kind,created_at&order=created_at.desc&limit=100`, { headers: anonHdr });
+      if(!rp.ok) return [];
+      const reposts = await rp.json(); if(!reposts.length) return [];
+      const rTargets = [...new Set(reposts.filter(r => r.kind !== 'text').map(r => r.target))];
+      const pTargets = [...new Set(reposts.filter(r => r.kind === 'text').map(r => r.target))];
+      const [rt, pt] = await Promise.all([
+        rTargets.length ? fetch(`${CFG.supabaseUrl}/rest/v1/renders?slug=in.(${rTargets.map(encodeURIComponent).join(',')})&select=slug,title,description,handle,created_at,media`, { headers: anonHdr }) : null,
+        pTargets.length ? fetch(`${CFG.supabaseUrl}/rest/v1/posts?id=in.(${pTargets.map(encodeURIComponent).join(',')})&select=id,body,handle,uid,created_at,kind,data`, { headers: anonHdr }) : null,
+      ]);
+      const rmap = {}; if(rt && rt.ok){ (await rt.json()).forEach(x => { rmap[x.slug] = Object.assign({ _type:'render' }, x); }); }
+      const pmap = {}; if(pt && pt.ok){ (await pt.json()).forEach(p => { pmap[p.id] = { _type:'text', slug:p.id, body:p.body, handle:p.handle, created_at:p.created_at }; }); }
+      const out = [];
+      reposts.forEach(r => {
+        const item = (r.kind === 'text') ? pmap[r.target] : rmap[r.target];
+        if(item) out.push(Object.assign({}, item, { _repostBy: r.uid, created_at: r.created_at }));
+      });
+      return out;
+    }catch(e){ return []; }
+  }
+
+  // ── notifications ──
+  let NOTIFS = [];
+  async function loadNotifs(){
+    if(!MY_SUFFIX || !workerBase) return;
+    try{
+      const secret = await identitySecret(); if(!secret) return;
+      const fd = new FormData(); fd.append('uid', MY_SUFFIX); fd.append('secret', secret); fd.append('action', 'list');
+      const r = await fetch(workerBase + '/notifications', { method:'POST', body: fd });
+      if(!r.ok) return;
+      const data = await r.json();
+      NOTIFS = data.items || [];
+      document.getElementById('btnNotif').style.display = '';
+      setNotifBadge(data.unread || 0);
+    }catch(e){}
+  }
+  function setNotifBadge(n){
+    const b = document.getElementById('notifBadge');
+    if(n > 0){ b.textContent = n > 99 ? '99+' : String(n); b.style.display = ''; }
+    else { b.textContent = ''; b.style.display = 'none'; }
+  }
+  function relTime(iso){
+    if(!iso) return '';
+    const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    if(s < 60) return 'just now';
+    const m = Math.floor(s/60); if(m < 60) return m + 'm ago';
+    const h = Math.floor(m/60); if(h < 24) return h + 'h ago';
+    const d = Math.floor(h/24); if(d < 7) return d + 'd ago';
+    return new Date(iso).toLocaleDateString();
+  }
+  async function fetchActors(uids){
+    const uniq = [...new Set((uids||[]).filter(Boolean))];
+    if(!uniq.length) return {};
+    try{
+      const r = await fetch(`${CFG.supabaseUrl}/rest/v1/profiles?uid=in.(${uniq.map(encodeURIComponent).join(',')})&select=uid,prefix,theme`, { headers: anonHdr });
+      if(!r.ok) return {};
+      const map = {}; (await r.json()).forEach(p => { map[p.uid] = p; }); return map;
+    }catch(e){ return {}; }
+  }
+  function notifRow(n, prof){
+    const theme = (prof && prof.theme) || {};
+    const uHandle = ((prof && prof.prefix) || 'RF') + '-' + n.actor;
+    const dName = (theme.name && String(theme.name).trim()) || null;
+    const color = (PALETTE.indexOf(theme.color) >= 0) ? theme.color : DEFAULT_COLOR;
+    const who = dName || ('@' + uHandle);
+    const av = (dName || uHandle).replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase() || '@';
+    const verb = n.type === 'like' ? 'liked your entry' : n.type === 'comment' ? 'commented on your entry' : n.type === 'follow' ? 'followed you' : n.type === 'repost' ? 'reposted your entry' : 'did something';
+    const href = (n.type === 'follow') ? ('social.html?u=' + encodeURIComponent(n.actor)) : ('ascii-render/view.html?r=' + encodeURIComponent(n.slug||''));
+    return '<a class="n-item' + (n.read ? '' : ' unread') + '" href="' + href + '">'
+      + '<div class="n-av" style="border-color:' + color + ';color:' + color + '">' + esc(av) + '</div>'
+      + '<div class="n-body"><div class="n-txt"><span class="who" style="color:' + color + '">' + esc(who) + '</span> ' + verb + '</div>'
+      + '<div class="n-when">' + esc(relTime(n.created_at)) + '</div></div>'
+      + (n.read ? '' : '<span class="n-dot"></span>') + '</a>';
+  }
+  function closeNotifs(){ const p = document.getElementById('nPanel'); if(p) p.remove(); document.removeEventListener('click', outsideNotif, true); }
+  function outsideNotif(e){ const p = document.getElementById('nPanel'); const b = document.getElementById('btnNotif'); if(p && !p.contains(e.target) && b && !b.contains(e.target)) closeNotifs(); }
+  async function toggleNotifs(){
+    if(document.getElementById('nPanel')){ closeNotifs(); return; }
+    const panel = document.createElement('div'); panel.className = 'n-panel'; panel.id = 'nPanel';
+    panel.innerHTML = '<div class="n-head"><span>NOTIFICATIONS</span></div><div class="n-empty">Loading…</div>';
+    document.querySelector('.ax-hdr').appendChild(panel);
+    setTimeout(() => document.addEventListener('click', outsideNotif, true), 0);
+    const actors = await fetchActors(NOTIFS.map(n => n.actor));
+    panel.innerHTML = '<div class="n-head"><span>NOTIFICATIONS</span></div>'
+      + (NOTIFS.length ? NOTIFS.map(n => notifRow(n, actors[n.actor])).join('') : '<div class="n-empty">No notifications yet.</div>');
+    if(NOTIFS.some(n => !n.read)){
+      try{
+        const secret = await identitySecret();
+        const fd = new FormData(); fd.append('uid', MY_SUFFIX); fd.append('secret', secret||''); fd.append('action', 'read');
+        fetch(workerBase + '/notifications', { method:'POST', body: fd });
+      }catch(e){}
+      NOTIFS.forEach(n => n.read = true);
+      setNotifBadge(0);
+    }
+  }
+
+  // ── user search (filter profiles by name / prefix / id) ──
+  let ALLPROFILES = null;
+  async function loadAllProfiles(){
+    if(ALLPROFILES) return ALLPROFILES;
+    try{ const r = await fetch(`${CFG.supabaseUrl}/rest/v1/profiles?select=uid,prefix,bio,theme&limit=300`, { headers: anonHdr }); ALLPROFILES = r.ok ? await r.json() : []; }
+    catch(e){ ALLPROFILES = []; }
+    return ALLPROFILES;
+  }
+  async function searchUsers(qRaw){
+    const q = (qRaw||'').trim().toLowerCase();
+    const featEl = document.getElementById('featured');
+    if(!q){ if(featEl) featEl.style.display = ''; render(); return; }
+    if(featEl) featEl.style.display = 'none';
+    const profs = await loadAllProfiles();
+    const named = p => { const n = p.theme && p.theme.name && String(p.theme.name).trim(); return n || ((p.prefix||'RF') + '-' + p.uid); };
+    const matches = profs.filter(p => {
+      const n = ((p.theme && p.theme.name) || '').toLowerCase();
+      return n.includes(q) || (p.prefix||'').toLowerCase().includes(q) || (p.uid||'').toLowerCase().includes(q);
+    }).slice(0, 40);
+    if(!matches.length){ feed.innerHTML = '<div class="s-msg">No users found for “' + esc(q) + '”.</div>'; return; }
+    const grid = document.createElement('div'); grid.className = 's-ugrid';
+    matches.forEach(p => {
+      const color = (p.theme && PALETTE.indexOf(p.theme.color) >= 0) ? p.theme.color : DEFAULT_COLOR;
+      const uHandle = (p.prefix||'RF') + '-' + p.uid;
+      const dName = (p.theme && p.theme.name && String(p.theme.name).trim()) || null;
+      const nm = named(p); const av = nm.replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase() || '@';
+      const hasAv = p.theme && p.theme.avatar;
+      const avHtml = hasAv
+        ? '<div class="s-uav" style="border-color:' + color + ';background-image:url(' + avatarUrl(p.uid, p.theme.avatar) + ');background-size:cover;background-position:center;overflow:hidden"></div>'
+        : '<div class="s-uav" style="border-color:' + color + ';color:' + color + '">' + esc(av) + '</div>';
+      const a = document.createElement('a'); a.className = 's-ucard'; a.href = 'social.html?u=' + encodeURIComponent(p.uid);
+      a.innerHTML = avHtml
+        + '<div class="s-uinfo"><div class="s-uname" style="color:' + color + '">' + (dName ? esc(dName) : '@' + esc(uHandle)) + '</div>'
+        + (dName ? '<div class="s-usub">@' + esc(uHandle) + '</div>' : '')
+        + (p.bio ? '<div class="s-ubio">' + esc(p.bio) + '</div>' : '') + '</div>';
+      grid.appendChild(a);
+    });
+    feed.innerHTML = ''; feed.appendChild(grid);
+  }
+  (function(){ const si = document.getElementById('userSearch'); if(!si) return; let sT; si.addEventListener('input', () => { clearTimeout(sT); sT = setTimeout(() => searchUsers(si.value), 200); }); })();
+
+  async function paintProfile(){
+    const prof = targetUid ? await fetchProfile(targetUid) : null;
+    TARGET_PROFILE = prof;
+    if(isOwn) MYFEATURED = new Set((prof && prof.featured) || []);
+    const theme = (prof && prof.theme) || {};
+    const prefix = (prof && prof.prefix) || (isOwn ? handlePrefix() : 'RF');
+    const name = (theme.name && String(theme.name).trim()) ? String(theme.name).trim() : null;
+    const uname = targetUid ? (prefix + '-' + targetUid) : (myHandle() || 'anon');
+    // Display name headline (no @) + @username subtitle; degrade to just @username.
+    const pfAt = document.getElementById('pfAt');
+    const pfUser = document.getElementById('pfUser');
+    document.getElementById('pfHandle').textContent = name || uname;
+    pfAt.style.display = name ? 'none' : '';
+    pfUser.style.display = name ? '' : 'none';
+    document.getElementById('pfUserName').textContent = uname;
+    const shown = name || uname;
+    const pfAvEl = document.getElementById('pfAv');
+    if(theme.avatar && targetUid){ pfAvEl.style.backgroundImage = 'url(' + avatarUrl(targetUid, theme.avatar) + ')'; pfAvEl.textContent = ''; }
+    else { pfAvEl.style.backgroundImage = ''; pfAvEl.textContent = name ? name.slice(0,2).toUpperCase() : prefix; }
+    const bioEl = document.getElementById('pfBio'); bioEl.innerHTML = linkifyTags(esc((prof && prof.bio) || '')); wireTags(bioEl);
+    const linksEl = document.getElementById('pfLinks');
+    const links = Array.isArray(theme.links) ? theme.links.filter(u => /^https?:\/\//.test(u)) : [];
+    linksEl.innerHTML = links.map(u => { const label = u.replace(/^https?:\/\/(www\.)?/,'').replace(/\/+$/,''); return '<a class="s-link" href="' + esc(u) + '" target="_blank" rel="noopener noreferrer">↗ ' + esc(label.slice(0,40)) + '</a>'; }).join('');
+    linksEl.style.display = links.length ? '' : 'none';
+    const noteEl = document.getElementById('pfNote');
+    if(targetUid === ADMIN_SUFFIX){ noteEl.textContent = '◆ ADMIN'; noteEl.style.color = 'var(--pacc)'; noteEl.style.letterSpacing = '.2em'; }
+    else { noteEl.textContent = isOwn ? '' : 'PTXERO member'; noteEl.style.color = ''; }
+    const color = (PALETTE.indexOf(theme.color) >= 0) ? theme.color : DEFAULT_COLOR;
+    wrapEl.style.setProperty('--pacc', color);   // skins profile + own ALL/NEW RENDER
+    const bannerEl = document.getElementById('pfBanner');
+    HAS_BANNER = !!(theme.banner && targetUid);
+    if(HAS_BANNER){
+      bannerEl.style.backgroundImage = 'url(' + bannerUrl(targetUid, theme.banner) + ')'; bannerEl.style.display = '';
+      if(stopBg){ stopBg(); stopBg = null; } document.getElementById('pfBg').innerHTML = '';   // banner replaces the scrolling text
+    } else {
+      bannerEl.style.display = 'none';
+      let localBg=''; if(isOwn){ try{ localBg = localStorage.getItem(BG_KEY)||''; }catch(e){} }
+      BG_TEXT = (theme.bg && theme.bg.trim()) || localBg || shown;
+      BG_STYLE = (BG_STYLES.indexOf(theme.bgStyle) >= 0) ? theme.bgStyle : 'drift';
+      restartBg();
+    }
+    document.getElementById('pfActions').style.display = isOwn ? '' : 'none';
+    document.getElementById('btnReports').style.display = (isOwn && IS_ADMIN) ? '' : 'none';
+    document.getElementById('sFilter').style.display = isOwn ? '' : 'none';
+    document.getElementById('backFeed').style.display = isOwn ? 'none' : '';
+    document.getElementById('pfCountLabel').textContent = isOwn ? 'your entries' : 'entries';
+    // follow stats + button
+    if(MY_SUFFIX) await fetchFollowState();
+    const counts = await fetchFollowCounts(targetUid);
+    document.getElementById('pfFollowers').textContent = counts.followers;
+    document.getElementById('pfFollowing').textContent = counts.following;
+    document.getElementById('pfStats').style.display = '';
+    const canFollow = !isOwn && targetUid && MY_SUFFIX && targetUid !== MY_SUFFIX && !!workerBase;
+    document.getElementById('pfFollowActions').style.display = canFollow ? '' : 'none';
+    if(canFollow) paintFollowBtn();
+    return prof;
+  }
+
+  document.getElementById('pfHandle').textContent = HANDLE || 'anon';
+  if(!TAG_MODE && !REPORTS_MODE) paintProfile().then(() => loadFeatured());
+
+  if(!READY){ msg('This site’s social backend isn’t configured yet.'); maybeOnboard(wasExisting); return; }
+
+  loadNotifs();
+
+  let ALL = [];
+  let filter = 'all';
+
+  function cardHandle(row){
+    if(isMine(row.handle)) return HANDLE;
+    if(!isOwn && suffixOf(row.handle) === targetUid && TARGET_PROFILE && TARGET_PROFILE.prefix) return TARGET_PROFILE.prefix + '-' + targetUid;
+    return row.handle || 'anon';
+  }
+
+  // "reposted by @X" attribution line for repost items in the following feed
+  function repostTag(row){
+    if(!row._repostBy) return '';
+    const meta = COLORMAP[row._repostBy] || {};
+    const who = meta.name || row._repostBy;
+    return '<div class="s-repost">↻ reposted by @' + esc(who) + '</div>';
+  }
+  // small avatar chip shown left of a creator's name (image if they have a photo, else initials)
+  function metaAvatar(suffix, ver, initialsSrc, color){
+    const inner = ver ? '' : esc(String(initialsSrc || '').replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase());
+    const style = ver ? ('border-color:' + color + ';background-image:url(' + avatarUrl(suffix, ver) + ')') : ('border-color:' + color + ';color:' + color);
+    return '<span class="s-mav" style="' + style + '">' + inner + '</span>';
+  }
+  function buildCard(row){
+    const slug = row.slug; const mine = isMine(row.handle);
+    const meta = COLORMAP[suffixOf(row.handle)] || {};
+    const hColor = meta.color || DEFAULT_COLOR;               // creator's chosen color
+    const hUser = cardHandle(row);                            // stable @username (prefix-suffix)
+    const hDisplay = meta.name || null;                       // creator's display name if set
+    const nameHtml = hDisplay
+      ? '<span class="h" style="color:' + hColor + '" title="@' + esc(hUser) + '">' + esc(hDisplay) + '</span>'
+      : '<span class="h" style="color:' + hColor + '">@' + esc(hUser) + '</span>';
+    const card = document.createElement('a'); card.className = 's-card'; card.href = 'ascii-render/view.html?r=' + encodeURIComponent(slug);
+    card.style.setProperty('--cardaccent', hColor);   // hover outline reflects this creator's color
+    const cCount = COMMENTMAP[slug] || 0;
+    const cmtHtml = cCount ? '<span class="s-cmt" title="' + cCount + ' comment' + (cCount>1?'s':'') + '">❞ ' + cCount + '</span>' : '';
+    const date = row.created_at ? new Date(row.created_at).toLocaleDateString() : '';
+    const thumb = (row.media === 'webm')
+      ? '<video class="s-thumb" autoplay loop muted playsinline preload="metadata" poster="' + publicUrl(slug+'/output.png') + '" src="' + publicUrl(slug+'/output.webm') + '"></video>'
+      : '<img class="s-thumb" loading="lazy" alt="ASCII render" src="' + publicUrl(slug + '/output.png') + '">';
+    card.innerHTML = repostTag(row) + thumb
+      + '<div class="s-body"><div class="s-name">' + esc(row.title || 'untitled entry') + '</div>'
+      + (row.description ? '<div class="s-cap">' + linkifyTags(esc(row.description)) + '</div>' : '')
+      + '<div class="s-meta"><span class="s-mleft">' + metaAvatar(suffixOf(row.handle), meta.avatar, hDisplay || hUser, hColor) + nameHtml + '</span><span class="s-mright">' + cmtHtml + '<span class="s-lslot"></span><span class="s-sslot"></span><span>' + esc(date) + '</span></span></div></div>';
+    if(workerBase){
+      const m = LIKEMAP[slug] || { count: 0, mine: false };
+      const like = document.createElement('button'); like.type = 'button'; like.title = 'Like'; like.className = 's-like' + (m.mine ? ' on' : '');
+      like.innerHTML = '<span class="heart">' + (m.mine ? '♥' : '♡') + '</span><span class="ct">' + (m.count || '') + '</span>';
+      like.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleLike(slug, like); });
+      const slot = card.querySelector('.s-lslot'); if(slot) slot.appendChild(like); else card.appendChild(like);
+    }
+    addSaveButton(card, slug);
+    wireTags(card);
+    return card;
+  }
+  // text entry card — same meta/like/comment affordances as a render card, body instead of a thumbnail
+  function buildTextCard(row){
+    const slug = row.slug; const mine = isMine(row.handle);
+    const meta = COLORMAP[suffixOf(row.handle)] || {};
+    const hColor = meta.color || DEFAULT_COLOR;
+    const hUser = cardHandle(row);
+    const hDisplay = meta.name || null;
+    const nameHtml = hDisplay
+      ? '<span class="h" style="color:' + hColor + '" title="@' + esc(hUser) + '">' + esc(hDisplay) + '</span>'
+      : '<span class="h" style="color:' + hColor + '">@' + esc(hUser) + '</span>';
+    const card = document.createElement('a'); card.className = 's-card s-tcard'; card.href = 'ascii-render/view.html?p=' + encodeURIComponent(slug);
+    card.style.setProperty('--cardaccent', hColor);   // hover outline reflects this creator's color
+    const cCount = COMMENTMAP[slug] || 0;
+    const cmtHtml = cCount ? '<span class="s-cmt" title="' + cCount + ' comment' + (cCount>1?'s':'') + '">❞ ' + cCount + '</span>' : '';
+    const date = row.created_at ? new Date(row.created_at).toLocaleDateString() : '';
+    card.innerHTML = repostTag(row) + '<div class="s-textbody">' + linkifyTags(esc(row.body || '')) + '</div>'
+      + '<div class="s-body"><div class="s-meta"><span class="s-mleft">' + metaAvatar(suffixOf(row.handle), meta.avatar, hDisplay || hUser, hColor) + nameHtml + '</span><span class="s-mright">' + cmtHtml + '<span class="s-lslot"></span><span class="s-sslot"></span><span>' + esc(date) + '</span></span></div></div>';
+    if(workerBase){
+      const m = LIKEMAP[slug] || { count: 0, mine: false };
+      const like = document.createElement('button'); like.type = 'button'; like.title = 'Like'; like.className = 's-like' + (m.mine ? ' on' : '');
+      like.innerHTML = '<span class="heart">' + (m.mine ? '♥' : '♡') + '</span><span class="ct">' + (m.count || '') + '</span>';
+      like.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleLike(slug, like); });
+      const slot = card.querySelector('.s-lslot'); if(slot) slot.appendChild(like); else card.appendChild(like);
+    }
+    addSaveButton(card, slug);
+    wireTags(card);
+    return card;
+  }
+  // world coastline drawn once to an offscreen canvas (equirectangular), reused per RF card
+  let _rfWorld = null, _rfWorldP = null;
+  function rfWorld(){
+    if(_rfWorld) return Promise.resolve(_rfWorld);
+    if(_rfWorldP) return _rfWorldP;
+    _rfWorldP = fetch('rf/coastline.json').then(r => r.ok ? r.json() : null).then(geo => {
+      const W = 1440, H = 720, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#07070a'; ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = 'rgba(66,212,245,.14)'; ctx.lineWidth = 1;
+      for(let gx = 0; gx <= W; gx += W/8){ ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
+      for(let gy = 0; gy <= H; gy += H/4){ ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+      if(geo && geo.features){
+        ctx.strokeStyle = 'rgba(66,212,245,.55)'; ctx.lineWidth = 0.6; ctx.beginPath();
+        geo.features.forEach(f => { const g = f.geometry; if(!g) return;
+          const lines = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
+          lines.forEach(co => co.forEach((c, i) => { const x = (c[0]+180)/360*W, y = (90-c[1])/180*H; if(i===0) ctx.moveTo(x, y); else ctx.lineTo(x, y); })); });
+        ctx.stroke();
+      }
+      _rfWorld = cv; return cv;
+    }).catch(() => { const cv = document.createElement('canvas'); cv.width = 640; cv.height = 320; _rfWorld = cv; return cv; });
+    return _rfWorldP;
+  }
+  function drawRfMap(canvas, lat, lon){
+    rfWorld().then(world => {
+      const ctx = canvas.getContext('2d'), W = canvas.width, H = canvas.height, WW = world.width, WH = world.height;
+      ctx.fillStyle = '#07070a'; ctx.fillRect(0, 0, W, H);
+      const latSpan = 56, lonSpan = latSpan * (W / H);   // region around the station, matched to canvas aspect
+      const sx = ((lon - lonSpan/2) + 180)/360 * WW, sw = lonSpan/360 * WW;
+      const sy = (90 - (lat + latSpan/2))/180 * WH, sh = latSpan/180 * WH;
+      ctx.drawImage(world, sx, sy, sw, sh, 0, 0, W, H);
+      const x = W/2, y = H/2, r = Math.min(W, H) * 0.16;   // marker is always centered
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, 'rgba(66,212,245,.85)'); g.addColorStop(1, 'rgba(66,212,245,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(66,212,245,.8)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, r*0.34, 0, 7); ctx.stroke();
+      ctx.fillStyle = '#eaffff'; ctx.beginPath(); ctx.arc(x, y, r*0.13, 0, 7); ctx.fill();
+    });
+  }
+  // RF station entry — map screencap + glowing LISTEN deep-link into RF
+  // Derive a schematic board from a serialized chain (works for every post, since
+  // data.chain is always present). Endpoints use the fixed source/output ids.
+  function boardFromChain(chain){
+    if(!chain || !Array.isArray(chain.nodes)) return null;
+    const pretty = { hardwarein:'HW IN', hardwareout:'HW OUT' };
+    const nodes = [{ id:'__source__', label:'RF IN', kind:'src' }];
+    chain.nodes.forEach(n => { const t = String(n.type || '?'); nodes.push({ id:n.id, label:(pretty[t] || t.toUpperCase()), kind:'mod' }); });
+    nodes.push({ id:'__output__', label:'OUTPUT', kind:'out' });
+    const ids = new Set(nodes.map(n => n.id));
+    const edges = (Array.isArray(chain.edges) ? chain.edges : []).filter(e => ids.has(e.fromId) && ids.has(e.toId)).map(e => ({ f:e.fromId, t:e.toId }));
+    return { nodes, edges };
+  }
+  // Draw a signal-chain SCHEMATIC from a board {nodes:[{id,label,kind}], edges:[{f,t}]}.
+  // Nodes are laid out by longest-path from the source, so the order/branches are real.
+  function scRoundRect(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  function drawChainSchematic(canvas, board){
+    if(!canvas) return false;
+    const ctx=canvas.getContext('2d'), W=canvas.width, H=canvas.height;
+    ctx.clearRect(0,0,W,H);
+    if(!board || !Array.isArray(board.nodes) || !board.nodes.length) return false;
+    const nodes=board.nodes, edges=Array.isArray(board.edges)?board.edges:[];
+    const byId={}; nodes.forEach(n=>byId[n.id]=n);
+    const layer={}; nodes.forEach(n=>layer[n.id]=0);
+    for(let it=0; it<nodes.length+1; it++){ let ch=false;
+      edges.forEach(e=>{ if(byId[e.f]&&byId[e.t] && layer[e.t]<layer[e.f]+1){ layer[e.t]=layer[e.f]+1; ch=true; } });
+      if(!ch) break; }
+    let maxL=0; nodes.forEach(n=>{ if(layer[n.id]>maxL) maxL=layer[n.id]; });
+    nodes.forEach(n=>{ if(n.kind==='out') layer[n.id]=maxL; });   // OUTPUT pinned far right
+    const grouped={}; nodes.forEach(n=>{ (grouped[layer[n.id]]=grouped[layer[n.id]]||[]).push(n); });
+    let maxRows=1; Object.keys(grouped).forEach(L=>{ if(grouped[L].length>maxRows) maxRows=grouped[L].length; });
+    const padX=W*0.05, padY=H*0.09;
+    const colStep0=(W-2*padX)/Math.max(1,maxL), rowStep0=(H-2*padY)/Math.max(1,maxRows);
+    const bw=Math.min(colStep0*0.58, W*0.16);                 // box sized to the cell first…
+    const bh=Math.min(maxRows>1?rowStep0*0.48:H*0.16, H*0.16);
+    const innerX=padX+bw/2, innerY=padY+bh/2;                 // …then columns inset so ends never clip
+    const colStep=maxL>0 ? (W-2*innerX)/maxL : 0;
+    const rowStep=maxRows>1 ? (H-2*innerY)/(maxRows-1) : 0;
+    const pos={};
+    Object.keys(grouped).forEach(L=>{ const arr=grouped[L], n=arr.length, cx=maxL? innerX+(+L)*colStep : W/2;
+      arr.forEach((nd,i)=>{ pos[nd.id]={ x:cx, y:H/2 + (i-(n-1)/2)*rowStep }; }); });
+    ctx.lineWidth=1.4; ctx.strokeStyle='rgba(66,212,245,.5)';
+    edges.forEach(e=>{ const a=pos[e.f], b=pos[e.t]; if(!a||!b) return;
+      const ax=a.x+bw/2, bx=b.x-bw/2; ctx.beginPath(); ctx.moveTo(ax,a.y);
+      ctx.bezierCurveTo((ax+bx)/2,a.y,(ax+bx)/2,b.y,bx,b.y); ctx.stroke(); });
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    nodes.forEach(nd=>{ const p=pos[nd.id]; if(!p) return;
+      const col=nd.kind==='src'?'#c8f542':nd.kind==='out'?'#f5a542':'#42d4f5';
+      ctx.fillStyle='rgba(7,10,12,.94)'; ctx.strokeStyle=col; ctx.lineWidth=1.4;
+      scRoundRect(ctx,p.x-bw/2,p.y-bh/2,bw,bh,4); ctx.fill(); ctx.stroke();
+      ctx.fillStyle=col; const fs=Math.max(8,Math.min(Math.round(bh*0.44),Math.round(bw*0.15))); ctx.font='600 '+fs+"px 'Share Tech Mono', monospace";
+      let lbl=String(nd.label||'').toUpperCase(); const maxCh=Math.max(3,Math.floor(bw/(fs*0.62)));
+      if(lbl.length>maxCh) lbl=lbl.slice(0,maxCh-1)+'…';
+      ctx.fillText(lbl,p.x,p.y+1); });
+    return true;
+  }
+  // RF signal-chain / pedalboard entry — schematic of the board + glowing LOAD button
+  function buildSetupCard(row){
+    const slug = row.slug; const mine = isMine(row.handle); const d = row.data || {};
+    const meta = COLORMAP[suffixOf(row.handle)] || {};
+    const hColor = meta.color || DEFAULT_COLOR;
+    const hUser = cardHandle(row); const hDisplay = meta.name || null;
+    const nameHtml = hDisplay
+      ? '<span class="h" style="color:' + hColor + '" title="@' + esc(hUser) + '">' + esc(hDisplay) + '</span>'
+      : '<span class="h" style="color:' + hColor + '">@' + esc(hUser) + '</span>';
+    const card = document.createElement('a'); card.className = 's-card s-rfcard'; card.href = 'ascii-render/view.html?p=' + encodeURIComponent(slug);
+    card.style.setProperty('--cardaccent', '#42d4f5');
+    const cCount = COMMENTMAP[slug] || 0;
+    const cmtHtml = cCount ? '<span class="s-cmt" title="' + cCount + ' comment' + (cCount>1?'s':'') + '">❞ ' + cCount + '</span>' : '';
+    const date = row.created_at ? new Date(row.created_at).toLocaleDateString() : '';
+    const count = (d.count != null) ? d.count : (Array.isArray(d.modules) ? d.modules.length : 0);
+    const cmdN = Array.isArray(d.cmds) ? d.cmds.length : 0;
+    card.innerHTML = '<div class="s-schemholo"><canvas class="s-schem" width="480" height="480"></canvas><div class="s-schemk">SIGNAL CHAIN · ' + count + ' MOD' + (count===1?'':'S') + (cmdN?(' · ' + cmdN + ' CTRL'):'') + '</div></div>'
+      + '<div class="s-body">'
+      + '<div class="s-setupname">' + esc(row.body || 'signal chain') + '</div>'
+      + (d.caption ? '<div class="s-cap">' + linkifyTags(esc(d.caption)) + '</div>' : '')
+      + '<span class="s-rflisten s-loadchain" data-load="' + encodeURIComponent(slug) + '">≋ LOAD CHAIN</span>'
+      + '<div class="s-meta"><span class="s-mleft">' + metaAvatar(suffixOf(row.handle), meta.avatar, hDisplay || hUser, hColor) + nameHtml + '</span><span class="s-mright">' + cmtHtml + '<span class="s-lslot"></span><span class="s-sslot"></span><span>' + esc(date) + '</span></span></div></div>';
+    const scv = card.querySelector('.s-schem'); if(scv && !drawChainSchematic(scv, d.board || boardFromChain(d.chain))){ const holo = card.querySelector('.s-schemholo'); if(holo) holo.classList.add('s-schem-empty'); }
+    const lb = card.querySelector('.s-loadchain'); if(lb) lb.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); location.href = 'rf/index.html?setup=' + lb.dataset.load; });
+    if(workerBase){
+      const m = LIKEMAP[slug] || { count: 0, mine: false };
+      const like = document.createElement('button'); like.type = 'button'; like.title = 'Like'; like.className = 's-like' + (m.mine ? ' on' : '');
+      like.innerHTML = '<span class="heart">' + (m.mine ? '♥' : '♡') + '</span><span class="ct">' + (m.count || '') + '</span>';
+      like.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleLike(slug, like); });
+      const slot = card.querySelector('.s-lslot'); if(slot) slot.appendChild(like);
+    }
+    if((mine || IS_ADMIN) && workerBase){
+      const del = document.createElement('button'); del.className = 's-del'; del.type = 'button'; del.title = 'Delete this entry'; del.textContent = '✕';
+      del.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); doTextDelete(row, card); });
+      card.appendChild(del);
+    }
+    addSaveButton(card, slug);
+    wireTags(card);
+    return card;
+  }
+  // Draw a static waveform from a normalized peaks array.
+  function drawWave(canvas, peaks){
+    const ctx=canvas.getContext('2d'), W=canvas.width, H=canvas.height; ctx.clearRect(0,0,W,H);
+    if(!Array.isArray(peaks)||!peaks.length) return;
+    const n=peaks.length, step=W/n, mid=H/2;
+    ctx.fillStyle='rgba(66,212,245,.5)';
+    for(let i=0;i<n;i++){ const h=Math.max(2, (+peaks[i]||0)*H*0.72); ctx.fillRect(i*step+step*0.18, mid-h/2, Math.max(1,step*0.64), h); }
+  }
+  let _audEl=null, _audSpan=null;
+  function toggleAudio(span, url){
+    if(!url) return;
+    if(_audEl && _audSpan===span){ if(_audEl.paused){ _audEl.play().catch(()=>{}); span.textContent='‖'; } else { _audEl.pause(); span.textContent='▶'; } return; }
+    if(_audEl){ _audEl.pause(); if(_audSpan) _audSpan.textContent='▶'; }
+    _audEl=new Audio(url); _audSpan=span; span.textContent='‖';
+    _audEl.play().catch(()=>{ span.textContent='▶'; });
+    _audEl.onended=()=>{ span.textContent='▶'; };
+  }
+  // RF audio clip entry — waveform + inline play button
+  function buildAudioCard(row){
+    const slug = row.slug; const mine = isMine(row.handle); const d = row.data || {};
+    const meta = COLORMAP[suffixOf(row.handle)] || {};
+    const hColor = meta.color || DEFAULT_COLOR;
+    const hUser = cardHandle(row); const hDisplay = meta.name || null;
+    const nameHtml = hDisplay
+      ? '<span class="h" style="color:' + hColor + '" title="@' + esc(hUser) + '">' + esc(hDisplay) + '</span>'
+      : '<span class="h" style="color:' + hColor + '">@' + esc(hUser) + '</span>';
+    const card = document.createElement('a'); card.className = 's-card s-rfcard'; card.href = 'ascii-render/view.html?p=' + encodeURIComponent(slug);
+    card.style.setProperty('--cardaccent', '#42d4f5');
+    const cCount = COMMENTMAP[slug] || 0;
+    const cmtHtml = cCount ? '<span class="s-cmt" title="' + cCount + ' comment' + (cCount>1?'s':'') + '">❞ ' + cCount + '</span>' : '';
+    const date = row.created_at ? new Date(row.created_at).toLocaleDateString() : '';
+    const dur = (d.dur != null) ? +d.dur : 0;
+    const durStr = dur ? (Math.floor(dur/60) + ':' + String(Math.round(dur%60)).padStart(2,'0')) : '';
+    card.innerHTML = '<div class="s-audholo"><canvas class="s-wave" width="480" height="480"></canvas><div class="s-audscrim"></div>'
+      + '<div class="s-rfover"><div class="s-rfk">AUDIO · PTXERO//RF</div>'
+      + '<span class="s-audplay" role="button" aria-label="Play">▶</span>'
+      + '<div class="s-rfname">' + esc(row.body || 'clip') + '</div>'
+      + (durStr ? '<div class="s-auddur">◷ ' + durStr + '</div>' : '') + '</div></div>'
+      + '<div class="s-body">' + (d.caption ? '<div class="s-cap">' + linkifyTags(esc(d.caption)) + '</div>' : '') + '<div class="s-meta"><span class="s-mleft">' + metaAvatar(suffixOf(row.handle), meta.avatar, hDisplay || hUser, hColor) + nameHtml + '</span><span class="s-mright">' + cmtHtml + '<span class="s-lslot"></span><span class="s-sslot"></span><span>' + esc(date) + '</span></span></div></div>';
+    const wc = card.querySelector('.s-wave'); if(wc) drawWave(wc, d.peaks);
+    const pb = card.querySelector('.s-audplay'); if(pb) pb.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleAudio(pb, d.audio); });
+    if(workerBase){
+      const m = LIKEMAP[slug] || { count: 0, mine: false };
+      const like = document.createElement('button'); like.type = 'button'; like.title = 'Like'; like.className = 's-like' + (m.mine ? ' on' : '');
+      like.innerHTML = '<span class="heart">' + (m.mine ? '♥' : '♡') + '</span><span class="ct">' + (m.count || '') + '</span>';
+      like.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleLike(slug, like); });
+      const slot = card.querySelector('.s-lslot'); if(slot) slot.appendChild(like);
+    }
+    if((mine || IS_ADMIN) && workerBase){
+      const del = document.createElement('button'); del.className = 's-del'; del.type = 'button'; del.title = 'Delete this entry'; del.textContent = '✕';
+      del.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); doTextDelete(row, card); });
+      card.appendChild(del);
+    }
+    addSaveButton(card, slug);
+    wireTags(card);
+    return card;
+  }
+  function buildRfCard(row){
+    const slug = row.slug; const mine = isMine(row.handle); const d = row.data || {};
+    const meta = COLORMAP[suffixOf(row.handle)] || {};
+    const hColor = meta.color || DEFAULT_COLOR;
+    const hUser = cardHandle(row); const hDisplay = meta.name || null;
+    const nameHtml = hDisplay
+      ? '<span class="h" style="color:' + hColor + '" title="@' + esc(hUser) + '">' + esc(hDisplay) + '</span>'
+      : '<span class="h" style="color:' + hColor + '">@' + esc(hUser) + '</span>';
+    const card = document.createElement('a'); card.className = 's-card s-rfcard'; card.href = 'ascii-render/view.html?p=' + encodeURIComponent(slug);
+    card.style.setProperty('--cardaccent', '#42d4f5');
+    const cCount = COMMENTMAP[slug] || 0;
+    const cmtHtml = cCount ? '<span class="s-cmt" title="' + cCount + ' comment' + (cCount>1?'s':'') + '">❞ ' + cCount + '</span>' : '';
+    const date = row.created_at ? new Date(row.created_at).toLocaleDateString() : '';
+    const freq = (d.freq != null) ? (+d.freq).toFixed(1) : '—';
+    card.innerHTML = '<div class="s-rfholo"><canvas class="s-rfmap" width="400" height="400"></canvas><div class="s-rfscrim"></div>'
+      + '<div class="s-rfover"><div class="s-rfk">RF STATION</div>'
+      + '<div class="s-rfname">' + esc(row.body || 'station') + '</div>'
+      + '<div class="s-rffreq">' + esc(freq) + '<span class="s-rfmhz">MHz</span></div>'
+      + (d.loc ? '<div class="s-rfloc">◎ ' + esc(d.loc) + '</div>' : '')
+      + '<span class="s-rflisten" data-listen="' + encodeURIComponent(slug) + '">▶ LISTEN</span></div></div>'
+      + '<div class="s-body">' + (d.caption ? '<div class="s-cap">' + linkifyTags(esc(d.caption)) + '</div>' : '') + '<div class="s-meta"><span class="s-mleft">' + metaAvatar(suffixOf(row.handle), meta.avatar, hDisplay || hUser, hColor) + nameHtml + '</span><span class="s-mright">' + cmtHtml + '<span class="s-lslot"></span><span class="s-sslot"></span><span>' + esc(date) + '</span></span></div></div>';
+    const mc = card.querySelector('.s-rfmap'); if(mc && d.lat != null && d.lon != null) drawRfMap(mc, +d.lat, +d.lon);
+    const lb = card.querySelector('.s-rflisten'); if(lb) lb.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); location.href = 'rf/index.html?station=' + lb.dataset.listen; });
+    if(workerBase){
+      const m = LIKEMAP[slug] || { count: 0, mine: false };
+      const like = document.createElement('button'); like.type = 'button'; like.title = 'Like'; like.className = 's-like' + (m.mine ? ' on' : '');
+      like.innerHTML = '<span class="heart">' + (m.mine ? '♥' : '♡') + '</span><span class="ct">' + (m.count || '') + '</span>';
+      like.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleLike(slug, like); });
+      const slot = card.querySelector('.s-lslot'); if(slot) slot.appendChild(like);
+    }
+    if((mine || IS_ADMIN) && workerBase){
+      const del = document.createElement('button'); del.className = 's-del'; del.type = 'button'; del.title = 'Delete this entry'; del.textContent = '✕';
+      del.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); doTextDelete(row, card); });
+      card.appendChild(del);
+    }
+    addSaveButton(card, slug);
+    wireTags(card);
+    return card;
+  }
+  async function doTextDelete(row, card){
+    if(!MY_SUFFIX || !workerBase) return;
+    if(!window.confirm('Delete this text entry? This can’t be undone.')) return;
+    try{
+      const secret = await identitySecret();
+      const fd = new FormData(); fd.append('id', row.slug); fd.append('uid', MY_SUFFIX); fd.append('secret', secret || ''); fd.append('action', 'delete');
+      const r = await fetch(workerBase + '/post', { method:'POST', body: fd }); if(!r.ok) throw new Error(await r.text());
+      ALL = ALL.filter(x => x.slug !== row.slug);
+      if(FOLLOWFEED) FOLLOWFEED = FOLLOWFEED.filter(x => x.slug !== row.slug);
+      card.style.transition = 'opacity .2s'; card.style.opacity = '0'; setTimeout(() => { updateCount(); render(); }, 200);
+    }catch(e){ alert('Delete failed: ' + e.message); }
+  }
+  // create a text entry; returns true on success (used by the New Entry modal)
+  async function createTextPost(body){
+    const val = String(body || '').trim();
+    if(!val){ return false; }
+    if(!MY_SUFFIX || !workerBase){ alert('You need an identity to post — try reloading.'); return false; }
+    try{
+      const secret = await identitySecret();
+      const fd = new FormData(); fd.append('uid', MY_SUFFIX); fd.append('secret', secret || ''); fd.append('handle', HANDLE || ('RF-' + MY_SUFFIX)); fd.append('body', val);
+      const r = await fetch(workerBase + '/post', { method:'POST', body: fd }); if(!r.ok) throw new Error(await r.text());
+      const data = await r.json(); const p = data.post;
+      if(p){
+        const item = { _type:'text', slug:p.id, body:p.body, handle:p.handle, created_at:p.created_at };
+        ALL.unshift(item); LIKEMAP[p.id] = { count:0, mine:false };
+        updateCount();
+        if(filter === 'following') setFilter('all');   // your own post isn't in the following feed
+        else render();
+      }
+      return true;
+    }catch(e){ alert('Could not post: ' + e.message); return false; }
+  }
+  function paintLike(el, slug){
+    const m = LIKEMAP[slug] || { count: 0, mine: false };
+    el.classList.toggle('on', m.mine);
+    const h = el.querySelector('.heart'); if(h) h.textContent = m.mine ? '♥' : '♡';
+    const c = el.querySelector('.ct'); if(c) c.textContent = m.count || '';
+  }
+  async function toggleLike(slug, el){
+    if(!MY_SUFFIX || !workerBase) return;
+    const cur = LIKEMAP[slug] || { count: 0, mine: false };
+    const willLike = !cur.mine;
+    LIKEMAP[slug] = { count: Math.max(0, cur.count + (willLike ? 1 : -1)), mine: willLike };   // optimistic
+    paintLike(el, slug);
+    try{
+      const secret = await identitySecret(); if(!secret) throw new Error('no secret');
+      const fd = new FormData(); fd.append('slug', slug); fd.append('uid', MY_SUFFIX); fd.append('secret', secret); fd.append('action', willLike ? 'like' : 'unlike');
+      const r = await fetch(workerBase + '/like', { method:'POST', body: fd });
+      if(!r.ok) throw new Error('like ' + r.status);
+    }catch(e){ LIKEMAP[slug] = cur; paintLike(el, slug); }   // revert
+  }
+  function addSaveButton(card, slug){
+    const saved = getSaved().includes(slug);
+    const save = document.createElement('button'); save.type = 'button'; save.title = saved ? 'Saved' : 'Save';
+    save.className = 's-save' + (saved ? ' on' : ''); save.textContent = saved ? '✓' : '＋';
+    save.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleSaveCard(slug, save); });
+    const slot = card.querySelector('.s-sslot'); if(slot) slot.appendChild(save); else card.appendChild(save);
+  }
+  function toggleSaveCard(slug, btn){
+    let s = getSaved(); const on = !s.includes(slug);
+    s = on ? s.concat([slug]) : s.filter(x => x !== slug);
+    try{ localStorage.setItem(SAVE_KEY, JSON.stringify(s.slice(-500))); }catch(e){}
+    btn.classList.toggle('on', on); btn.textContent = on ? '✓' : '＋'; btn.title = on ? 'Saved' : 'Save';
+  }
+  function render(){
+    let rows;
+    if(filter === 'following') rows = FOLLOWFEED || [];
+    else if(filter === 'saved') rows = SAVEDFEED || [];
+    else if(isOwn && filter === 'mine') rows = ALL.filter(r => isMine(r.handle));
+    else rows = ALL;
+    if(!rows.length){
+      const emptyMsg = (filter === 'following')
+        ? (FOLLOWSET.size ? 'No entries from people you follow yet.' : 'You’re not following anyone yet.<br>Use <b>find users…</b> above to discover creators.')
+        : (filter === 'saved')
+        ? 'You haven’t saved any entries yet.<br>Open an entry and hit <b>＋ SAVE</b>.'
+        : isOwn ? (filter === 'mine' ? 'You haven’t shared any entries yet.<br><a class="s-cta primary" href="ascii-render/">＋ MAKE ONE</a>' : 'No entries shared yet.<br>Be the first — open the editor and hit ⤴ SHARE.') : 'No entries here yet.';
+      msg(emptyMsg);
+      return;
+    }
+    const grid = document.createElement('div'); grid.className = 's-grid';
+    rows.forEach(row => grid.appendChild(row._type === 'rf' ? (row.kind === 'rf_setup' ? buildSetupCard(row) : row.kind === 'rf_audio' ? buildAudioCard(row) : buildRfCard(row)) : row._type === 'text' ? buildTextCard(row) : buildCard(row)));
+    feed.innerHTML = ''; feed.appendChild(grid);
+  }
+  async function toggleFeature(slug, btn){
+    const had = MYFEATURED.has(slug);
+    if(had) MYFEATURED.delete(slug); else MYFEATURED.add(slug);
+    const now = MYFEATURED.has(slug); btn.classList.toggle('on', now); btn.textContent = now ? '★' : '☆';
+    try{ await saveProfile({ featured: [...MYFEATURED] }); loadFeatured(); }
+    catch(e){ if(had) MYFEATURED.add(slug); else MYFEATURED.delete(slug); btn.classList.toggle('on', had); btn.textContent = had ? '★' : '☆'; alert('Could not update featured: ' + e.message); }
+  }
+  async function loadFeatured(){
+    const host = document.getElementById('featured'); if(!host) return;
+    const feats = (isOwn ? [...MYFEATURED] : ((TARGET_PROFILE && TARGET_PROFILE.featured) || [])).filter(s => /^[A-Za-z0-9]+$/.test(s));
+    if(!feats.length){ host.innerHTML = ''; return; }
+    try{
+      const inList = feats.join(',');
+      const [rr, pp] = await Promise.all([
+        fetch(`${CFG.supabaseUrl}/rest/v1/renders?slug=in.(${inList})&select=slug,title,description,handle,created_at,media`, { headers: anonHdr }),
+        fetch(`${CFG.supabaseUrl}/rest/v1/posts?id=in.(${inList})&select=id,body,handle,uid,created_at,kind,data`, { headers: anonHdr }).catch(() => null),
+      ]);
+      if(!rr.ok){ host.innerHTML = ''; return; }
+      const merged = mergeItems(await rr.json(), (pp && pp.ok) ? await pp.json() : []);
+      const byId = {}; merged.forEach(m => { byId[m.slug] = m; });
+      const rows = feats.map(s => byId[s]).filter(Boolean);   // keep the creator's chosen order
+      if(!rows.length){ host.innerHTML = ''; return; }
+      Object.assign(COLORMAP, await fetchColors(rows.map(x => suffixOf(x.handle))));
+      Object.assign(LIKEMAP, await fetchLikes(rows.map(x => x.slug)));
+      Object.assign(COMMENTMAP, await fetchComments(rows.map(x => x.slug)));
+      const grid = document.createElement('div'); grid.className = 's-grid';
+      rows.forEach(row => grid.appendChild(row._type === 'rf' ? (row.kind === 'rf_setup' ? buildSetupCard(row) : row.kind === 'rf_audio' ? buildAudioCard(row) : buildRfCard(row)) : row._type === 'text' ? buildTextCard(row) : buildCard(row)));
+      host.innerHTML = '<div class="s-label" style="margin:2px 2px 12px;">★ FEATURED</div>';
+      host.appendChild(grid);
+    }catch(e){ host.innerHTML = ''; }
+  }
+
+  async function doDelete(row, token, card){
+    const adminDel = !token && !isMine(row.handle) && IS_ADMIN;
+    const prompt = token ? 'Delete “' + (row.title || 'this entry') + '”? This can’t be undone.'
+      : (adminDel ? '◆ ADMIN — delete “' + (row.title || 'this entry') + '” by @' + (row.handle||'anon') + '? This can’t be undone.'
+      : 'We can’t verify you made “' + (row.title || 'this entry') + '” from this device. Delete anyway using your identity?');
+    if(!window.confirm(prompt)) return;
+    try{
+      const fd = new FormData(); fd.append('slug', row.slug); if(token) fd.append('token', token); fd.append('handle', HANDLE || '');
+      try{ const sec = await identitySecret(); if(sec) fd.append('secret', sec); }catch(e){}   // authorizes admin delete
+      const r = await fetch(workerBase + '/delete', { method:'POST', body: fd });
+      if(!r.ok){ alert('Delete failed (' + r.status + '): ' + await r.text()); return; }
+      ALL = ALL.filter(x => x.slug !== row.slug);
+      const tok = myTokens(); if(tok[row.slug]){ delete tok[row.slug]; try{ localStorage.setItem('ptxero_my_renders', JSON.stringify(tok)); }catch(e){} }
+      card.style.transition = 'opacity .2s'; card.style.opacity = '0'; setTimeout(() => { updateCount(); render(); }, 200);
+    }catch(e){ alert('Delete failed: ' + e.message); }
+  }
+  function updateCount(){ document.getElementById('pfCount').textContent = isOwn ? ALL.filter(r => isMine(r.handle)).length : ALL.length; }
+  async function setFilter(f){
+    filter = f;
+    document.getElementById('tabAll').classList.toggle('on', f==='all');
+    document.getElementById('tabFollowing').classList.toggle('on', f==='following');
+    document.getElementById('tabMine').classList.toggle('on', f==='mine');
+    document.getElementById('tabSaved').classList.toggle('on', f==='saved');
+    if(f === 'following' && !FOLLOWFEED){ msg('Loading…'); await loadFollowingFeed(); }
+    if(f === 'saved'){ msg('Loading…'); SAVEDFEED = null; await loadSavedFeed(); }   // reload each time (bookmarks change)
+    render();
+  }
+
+  const wantMine = /(?:^|[?&])me=1/.test(location.search) || location.hash === '#mine';
+  // unified feed: renders + text posts, merged newest-first (posts table may not exist yet → graceful)
+  async function loadMainFeed(){
+    const sel = 'order=created_at.desc&limit=' + (isOwn ? 60 : 100);
+    const rq = isOwn
+      ? `${CFG.supabaseUrl}/rest/v1/renders?select=slug,title,description,handle,created_at,media&${sel}`
+      : `${CFG.supabaseUrl}/rest/v1/renders?handle=ilike.*-${encodeURIComponent(targetUid)}&select=slug,title,description,handle,created_at,media&${sel}`;
+    const pq = isOwn
+      ? `${CFG.supabaseUrl}/rest/v1/posts?select=id,body,handle,uid,created_at,kind,data&${sel}`
+      : `${CFG.supabaseUrl}/rest/v1/posts?handle=ilike.*-${encodeURIComponent(targetUid)}&select=id,body,handle,uid,created_at,kind,data&${sel}`;
+    const [rr, pp] = await Promise.all([ fetch(rq, { headers: anonHdr }), fetch(pq, { headers: anonHdr }).catch(() => null) ]);
+    if(!rr.ok) throw rr.status;
+    const renders = await rr.json();
+    const posts = (pp && pp.ok) ? await pp.json() : [];
+    return mergeItems(renders, posts);
+  }
+  function mergeItems(renders, posts){
+    const items = (renders || []).map(r => Object.assign({ _type:'render' }, r))
+      .concat((posts || []).map(p => ({ _type: (p.kind && p.kind.indexOf('rf') === 0) ? 'rf' : 'text', kind: p.kind || 'text', data: p.data || null, slug:p.id, body:p.body, handle:p.handle, created_at:p.created_at })));
+    items.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return items;
+  }
+  // ── tag browse mode (?tag=foo) — entries whose caption/body contain #foo ──
+  async function loadTagFeed(tag){
+    const pat = '*%23' + encodeURIComponent(tag) + '*';   // %23 = '#'
+    let renders = [], posts = [];
+    try{ const r = await fetch(`${CFG.supabaseUrl}/rest/v1/posts?body=ilike.${pat}&select=id,body,handle,uid,created_at,kind,data&order=created_at.desc&limit=100`, { headers: anonHdr }); if(r.ok) posts = await r.json(); }catch(e){}
+    try{ const r = await fetch(`${CFG.supabaseUrl}/rest/v1/renders?description=ilike.${pat}&select=slug,title,description,handle,created_at,media&order=created_at.desc&limit=100`, { headers: anonHdr }); if(r.ok) renders = await r.json(); }catch(e){}
+    ALL = mergeItems(renders, posts);
+    const [cmap, lmap, kmap] = await Promise.all([fetchColors(ALL.map(r => suffixOf(r.handle))), fetchLikes(ALL.map(r => r.slug)), fetchComments(ALL.map(r => r.slug))]);
+    COLORMAP = cmap; LIKEMAP = lmap; COMMENTMAP = kmap;
+    filter = 'all';
+    if(!ALL.length){ msg('No entries tagged <b>#' + esc(tag) + '</b> yet.'); return; }
+    render();
+  }
+  function enterTagMode(tag){
+    document.getElementById('pfBox').style.display = 'none';
+    const feat = document.getElementById('featured'); if(feat) feat.style.display = 'none';
+    document.getElementById('sFilter').style.display = 'none';
+    const back = document.getElementById('backFeed'); back.style.display = ''; back.textContent = '← ALL ENTRIES'; back.href = 'social.html';
+    const head = document.createElement('div'); head.className = 's-taghead'; head.innerHTML = '<span class="s-tagname">#' + esc(tag) + '</span><span class="s-tagsub">tagged entries</span>';
+    const feedEl = document.getElementById('feed'); feedEl.parentNode.insertBefore(head, feedEl);
+    document.title = '#' + tag + ' — PTXERO//SOCIAL';
+    loadTagFeed(tag);
+  }
+
+  if(TAG_MODE){ enterTagMode(rawTag); return; }
+
+  // ── admin moderation queue (?reports=1) ──
+  async function enterReportsMode(){
+    document.getElementById('pfBox').style.display = 'none';
+    const feat = document.getElementById('featured'); if(feat) feat.style.display = 'none';
+    document.getElementById('sFilter').style.display = 'none';
+    const back = document.getElementById('backFeed'); back.style.display = ''; back.textContent = '← BACK'; back.href = 'social.html';
+    const head = document.createElement('div'); head.className = 's-taghead'; head.innerHTML = '<span class="s-tagname">◆ MODERATION</span><span class="s-tagsub">open reports</span>';
+    const feedEl = document.getElementById('feed'); feedEl.parentNode.insertBefore(head, feedEl);
+    document.title = 'Moderation — PTXERO//SOCIAL';
+    if(!IS_ADMIN){ msg('Admins only.'); return; }
+    msg('Loading reports…');
+    let reports = [];
+    try{
+      const secret = await identitySecret();
+      const fd = new FormData(); fd.append('uid', MY_SUFFIX); fd.append('secret', secret || ''); fd.append('action', 'list');
+      const r = await fetch(workerBase + '/report', { method:'POST', body: fd });
+      if(r.ok){ reports = (await r.json()).reports || []; }
+    }catch(e){}
+    if(!reports.length){ msg('No open reports. All clear.'); return; }
+    const list = document.createElement('div'); list.className = 's-reports';
+    reports.forEach(rep => {
+      const href = (rep.kind === 'text') ? ('ascii-render/view.html?p=' + encodeURIComponent(rep.target)) : ('ascii-render/view.html?r=' + encodeURIComponent(rep.target));
+      const when = rep.created_at ? new Date(rep.created_at).toLocaleString() : '';
+      const el = document.createElement('div'); el.className = 's-report';
+      el.innerHTML = '<div class="s-rmeta"><a class="s-rlink" href="' + href + '">' + esc(rep.kind) + ' · ' + esc(rep.target) + '</a><span class="s-rwhen">' + esc(when) + '</span></div>'
+        + '<div class="s-rreason">' + (rep.reason ? esc(rep.reason) : '<i>no reason given</i>') + '</div>'
+        + '<div class="s-rby">reported by @' + esc(rep.reporter) + '</div>';
+      const acts = document.createElement('div'); acts.className = 's-ractions';
+      const open = document.createElement('a'); open.className = 's-cta'; open.href = href; open.textContent = 'OPEN ENTRY';
+      const resolve = document.createElement('button'); resolve.className = 's-cta'; resolve.type = 'button'; resolve.textContent = '✓ RESOLVE';
+      resolve.onclick = async () => {
+        resolve.disabled = true;
+        try{
+          const secret = await identitySecret();
+          const fd = new FormData(); fd.append('uid', MY_SUFFIX); fd.append('secret', secret || ''); fd.append('action', 'resolve'); fd.append('id', rep.id);
+          const r = await fetch(workerBase + '/report', { method:'POST', body: fd }); if(!r.ok) throw new Error();
+          el.style.opacity = '.4'; resolve.textContent = 'RESOLVED';
+        }catch(e){ resolve.disabled = false; alert('Could not resolve.'); }
+      };
+      acts.append(open, resolve); el.appendChild(acts);
+      list.appendChild(el);
+    });
+    feedEl.innerHTML = ''; feedEl.appendChild(list);
+  }
+  // ── LIVE NOW rail: who's ON AIR / LISTENING right now (RF-as-entry P3) ──
+  (function initLiveRail(){
+    const rail = document.getElementById('liveNow'); if(!rail) return;
+    const css = document.createElement('style'); css.textContent =
+      '.live-rail{margin:12px 0 14px;border:1px solid rgba(66,212,245,.22);border-radius:4px;background:linear-gradient(180deg,rgba(66,212,245,.05),rgba(3,6,8,0));padding:8px 10px;}'
+     +'.lr-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}'
+     +'.lr-title{font-size:11px;letter-spacing:.14em;color:#42d4f5;font-weight:700;white-space:nowrap;}'
+     +'.lr-you{margin-left:auto;display:flex;align-items:center;gap:4px;}'
+     +'.lr-you-lbl{font-size:8px;letter-spacing:.14em;color:#5a5a70;text-transform:uppercase;}'
+     +'.lr-you-opt{cursor:pointer;font-family:inherit;font-size:8px;letter-spacing:.08em;padding:3px 6px;border-radius:2px;border:1px solid rgba(90,90,112,.4);background:transparent;color:#5a5a70;text-transform:uppercase;}'
+     +'.lr-you-opt.on{border-color:#42d4f5;color:#42d4f5;background:rgba(66,212,245,.1);}'
+     +'.lr-self{font-size:9px;letter-spacing:.06em;padding:2px 7px;border-radius:2px;white-space:nowrap;border:1px solid transparent;}'
+     +'.lr-self.onair{color:#ff3b3b;border-color:rgba(255,59,59,.4);} .lr-self.listen{color:#00ff50;border-color:rgba(0,255,80,.35);} .lr-self.idle{color:#5a5a70;}'
+     +'.pf-live{display:inline-flex;align-items:center;gap:4px;font-size:9px;letter-spacing:.08em;padding:2px 8px;border-radius:999px;vertical-align:middle;margin-left:8px;border:1px solid transparent;font-family:var(--fmono,monospace);}'
+     +'.pf-live.onair{color:#ff3b3b;border-color:rgba(255,59,59,.5);background:rgba(255,59,59,.08);}'
+     +'.pf-live.listen{color:#00ff50;border-color:rgba(0,255,80,.4);background:rgba(0,255,80,.07);}'
+     +'.lr-track{display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;scrollbar-width:thin;}'
+     +'.lr-empty{font-size:10px;letter-spacing:.06em;color:#454558;padding:7px 0 2px;}'
+     +'.lr-pill{flex:0 0 auto;display:flex;align-items:center;gap:6px;text-decoration:none;padding:5px 9px;border-radius:999px;border:1px solid rgba(90,90,112,.35);background:rgba(8,12,16,.6);max-width:230px;}'
+     +'.lr-pill .lr-ic{font-size:11px;line-height:1;}'
+     +'.lr-pill.onair{border-color:rgba(255,59,59,.55);} .lr-pill.onair .lr-ic{color:#ff3b3b;animation:lrPulse 1.3s ease-in-out infinite;}'
+     +'.lr-pill.listen{border-color:rgba(0,255,80,.4);} .lr-pill.listen .lr-ic{color:#00ff50;}'
+     +'.lr-h{font-size:11px;color:#d8d8e0;white-space:nowrap;}'
+     +'.lr-m{font-size:9px;color:#6a6a80;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+     +'@keyframes lrPulse{0%,100%{opacity:.5;}50%{opacity:1;}}';
+    document.head.appendChild(css);
+
+    const PRIV_KEY='ptxero_presence_privacy';
+    const getPriv=()=>{ try{ const v=localStorage.getItem(PRIV_KEY); return ['off','followers','public'].includes(v)?v:'public'; }catch(e){ return 'public'; } };
+    const setPriv=(v)=>{ try{ localStorage.setItem(PRIV_KEY, v); }catch(e){} };
+    const ICON={on_air:'◉',listening:'▶'}, WORD={on_air:'ON AIR',listening:'LISTENING'};
+    let latest=[];
+
+    function youControl(){
+      const cur=getPriv();
+      const opt=(v,t)=>'<button class="lr-you-opt'+(cur===v?' on':'')+'" data-pv="'+v+'">'+t+'</button>';
+      return '<span class="lr-you" title="Your ON AIR / LISTENING status is broadcast from the RF app. This sets who can see it.">'
+           + '<span class="lr-you-lbl">you</span>'+opt('off','off')+opt('followers','flw')+opt('public','pub')+'</span>';
+    }
+    function pill(p){
+      const meta = p.label ? esc(String(p.label).slice(0,28)) : (p.freq!=null?(Number(p.freq).toFixed(1)+' MHz'):'');
+      const h = esc(p.handle||('RF-'+p.uid));
+      return '<a class="lr-pill '+(p.state==='on_air'?'onair':'listen')+'" href="social.html?u='+encodeURIComponent(p.uid)+'" title="@'+h+' — '+(WORD[p.state]||'')+(meta?(' · '+meta):'')+'">'
+           + '<span class="lr-ic">'+(ICON[p.state]||'•')+'</span><span class="lr-h">@'+h+'</span>'
+           + (meta?('<span class="lr-m">'+meta+'</span>'):'') + '</a>';
+    }
+    function selfStatus(){
+      const me=(latest||[]).find(p=>p.uid===MY_SUFFIX);
+      if(me && (me.state==='on_air'||me.state==='listening')){
+        const meta=me.label?esc(String(me.label).slice(0,24)):(me.freq!=null?Number(me.freq).toFixed(1)+' MHz':'');
+        return '<span class="lr-self '+(me.state==='on_air'?'onair':'listen')+'">'+(ICON[me.state]||'•')+' '+(WORD[me.state]||'')+(meta?(' · '+meta):'')+'</span>';
+      }
+      return '<span class="lr-self idle">○ you’re idle</span>';
+    }
+    // CONNECT link: rebuild their listening context in RF (location → same station).
+    function connectHref(p){
+      if(p.freq==null) return null;
+      let u='rf/?tune='+encodeURIComponent(Number(p.freq).toFixed(1));
+      if(p.lat!=null && p.lon!=null){ u+='&lat='+encodeURIComponent(p.lat)+'&lon='+encodeURIComponent(p.lon); }
+      if(p.label) u+='&name='+encodeURIComponent(String(p.label).slice(0,40));
+      return u;
+    }
+    // Live status badge + CONNECT button on the currently-viewed profile header.
+    function paintProfileLive(){
+      const el=document.getElementById('pfLive');
+      const acts=document.getElementById('pfLiveActions'), cn=document.getElementById('pfConnect');
+      const puid=(typeof targetUid!=='undefined' && targetUid) ? targetUid : MY_SUFFIX;
+      const isSelf=(puid===MY_SUFFIX);
+      const me=(latest||[]).find(p=>p.uid===puid && (p.state==='on_air'||p.state==='listening'));
+      if(el){
+        if(!me){ el.style.display='none'; el.textContent=''; el.className='pf-live'; }
+        else{
+          const meta=me.label?String(me.label).slice(0,26):(me.freq!=null?Number(me.freq).toFixed(1)+' MHz':'');
+          const word=me.state==='on_air'?'ON AIR':'LISTENING NOW';
+          el.className='pf-live '+(me.state==='on_air'?'onair':'listen');
+          el.textContent=(ICON[me.state]||'•')+' '+word+(meta?(' · '+meta):'');
+          el.style.display='';
+        }
+      }
+      if(acts && cn){
+        const href=(me && !isSelf) ? connectHref(me) : null;
+        if(href){ cn.href=href; cn.textContent=(me.state==='on_air'?'◎ TUNE IN':'◎ CONNECT'); acts.style.display=''; }
+        else { acts.style.display='none'; cn.removeAttribute('href'); }
+      }
+    }
+    function paint(){
+      const list=(latest||[]).filter(p=>p.uid!==MY_SUFFIX && (p.state==='on_air'||p.state==='listening'));
+      const body = list.length ? ('<div class="lr-track">'+list.slice(0,40).map(pill).join('')+'</div>')
+                               : '<div class="lr-empty">— no one else is broadcasting right now —</div>';
+      rail.innerHTML='<div class="lr-top"><span class="lr-title">((•)) LIVE NOW</span>'+selfStatus()+youControl()+'</div>'+body;
+      rail.style.display='';
+      [].slice.call(rail.querySelectorAll('.lr-you-opt')).forEach(b=>b.addEventListener('click',()=>{ setPriv(b.dataset.pv); paint(); }));
+      paintProfileLive();
+    }
+    async function poll(){
+      if(workerBase){
+        try{ const r=await fetch(workerBase+'/presence?viewer='+encodeURIComponent(MY_SUFFIX||''),{cache:'no-store'});
+             if(r.ok){ const j=await r.json(); latest=Array.isArray(j.roster)?j.roster:[]; } }catch(e){}
+      }
+      paint();
+    }
+    paint(); poll();
+    setInterval(()=>{ if(!document.hidden) poll(); }, 20000);
+  })();
+
+  if(REPORTS_MODE){ enterReportsMode(); return; }
+
+  loadMainFeed()
+    .then(items => {
+      ALL = items || []; updateCount();
+      Promise.all([fetchColors(ALL.map(r => suffixOf(r.handle))), fetchLikes(ALL.map(r => r.slug)), fetchComments(ALL.map(r => r.slug))])
+        .then(([cmap, lmap, kmap]) => { COLORMAP = cmap; LIKEMAP = lmap; COMMENTMAP = kmap; setFilter(isOwn && wantMine ? 'mine' : 'all'); });
+    })
+    .catch(err => msg('Could not load the feed (' + esc(String(err)) + ').<br>The backend may be waking up — try again shortly.'))
+    .finally(() => { if(isOwn) maybeOnboard(wasExisting); });
+})();
+</script>
+</body>
+</html>

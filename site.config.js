@@ -32,14 +32,19 @@ const SITE = {
     body:    'DM Mono',
   },
 
+  // ── Live status endpoint ────────────────────────────────────────
+  // Cloudflare Worker (edge-cached ~30 min). Projects with status:'auto'
+  // get their operational badge (LIVE / PARTIAL / DOWN) from this at load.
+  statusUrl: 'https://share.ptxero.net/status',
+
   // ── Projects ────────────────────────────────────────────────────
-  // status: 'live' | 'wip' | 'soon'
+  // status: 'live' | 'wip' | 'soon' | 'auto' (auto → resolved from statusUrl)
   projects: [
     {
       id:     'about',
       title:  'ABOUT',
-      desc:   'Who I am, what I shoot, and what I use.',
-      tags:   ['photography', 'tools', 'contact'],
+      desc:   'Who I am, what I shoot.',
+      tags:   ['photography', 'contact'],
       url:    './about/',
       status: 'live',
     },
@@ -47,8 +52,16 @@ const SITE = {
       id:     'gallery',
       title:  'GALLERY',
       desc:   'Image gallery of my photography',
-      tags:   ['flickr', 'photography', 'film'],
+      tags:   ['photography', 'film'],
       url:    './gallery/',
+      status: 'live',
+    },
+    {
+      id:     'social',
+      title:  'PTXERO//SOCIAL',
+      desc:   'PTXERO SOCIAL NETWORK',
+      tags:   ['social', 'blog', 'platform'],
+      url:    './social.html',
       status: 'live',
     },
     {
@@ -56,9 +69,26 @@ const SITE = {
       title:  'ASCII//RENDER',
       sub:    'v8.1',
       desc:   'Converts images, GIFs and video into ASCII art. Color modes, region masking, brush tool, GIF + WebM export. !!Not Mobile Friendly!!',
-      tags:   ['image', 'video', 'ascii'],
+      tags:   ['image', 'video', 'gif', 'ascii'],
       url:    './ascii-render/',
-      status: 'wip',
+      status: 'auto',
+    },
+    {
+      id:     'rf',
+      title:  'RF',
+      desc:   'Digital Radio Receiver',
+      tags:   ['radio', 'signal', 'spectrum', 'sound manipulation'],
+      url:    './rf/',
+      status: 'auto',
+    },
+    {
+      id:     'reel-vault',
+      title:  'SEARCH//NET',
+      sub:    'v3.0',
+      desc:   'Self-learning social search. Ask about a topic and it searches Mastodon, Bluesky, Reddit, YouTube, X and any site you add, learns from your 👍/👎, builds profiles of the accounts behind the posts and draws the web of how they connect (follows, mentions, shared tags). Runs in your browser through your own Cloudflare Worker, or on your PC. Desktop + phone.',
+      tags:   ['search', 'social', 'osint', 'ml', 'python'],
+      url:    './reel-vault/',
+      status: 'live',
     },
     // Project Template:
     // {

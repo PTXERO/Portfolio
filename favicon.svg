@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="6" fill="#05090d"/>
+  <!-- PTXERO ▚ mark: ╲ diagonal split, cyan upper-right + slate lower-left -->
+  <polygon points="9,9 55,9 55,55" fill="#42d4f5"/>
+  <polygon points="9,9 55,55 9,55" fill="#284e5c"/>
+  <line x1="9" y1="9" x2="55" y2="55" stroke="#05090d" stroke-width="1.6"/>
+</svg>
