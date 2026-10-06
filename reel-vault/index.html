@@ -369,19 +369,19 @@ pre.cmd i{color:var(--dim);font-style:normal}
    A real desktop tool: fixed left sidebar, everything on one screen,
    wider multi-column views, side-by-side review, open-in-new-window. */
 @media(min-width:1024px){
-  :root{--side:208px}
+  :root{--side:160px}
   body{padding-bottom:0;padding-left:var(--side)}
   .newwin{display:inline-flex}
   /* header spans full width, above the sidebar; content starts past the sidebar */
-  .top{left:0;right:0;z-index:90;padding-left:calc(var(--side) + 20px)}
+  .top{z-index:90;margin-left:calc(-1 * var(--side));width:calc(100% + var(--side));padding-left:calc(var(--side) + 20px)}
   .top-in{max-width:none;margin:0}
   .hdr-sub{display:inline}
   /* nav: bottom tab bar -> left sidebar rail */
   nav.bottom{position:fixed;left:0;top:calc(var(--top) + var(--sat));bottom:0;right:auto;width:var(--side);
-    border-top:none;border-right:1px solid var(--border);background:var(--surface);padding:10px 10px calc(10px + var(--sab));
+    border-top:none;border-right:1px solid var(--border);background:var(--surface);padding:8px 6px calc(8px + var(--sab));
     -webkit-backdrop-filter:none;backdrop-filter:none;overflow-y:auto}
   nav.bottom .in{display:flex;flex-direction:column;gap:3px;height:auto;max-width:none}
-  nav.bottom button{flex-direction:row;justify-content:flex-start;gap:12px;height:44px;min-height:44px;padding:0 12px;
+  nav.bottom button{flex-direction:row;justify-content:flex-start;gap:10px;height:40px;min-height:40px;padding:0 8px;
     border-radius:var(--r);border:1px solid transparent;letter-spacing:.1em}
   nav.bottom button .i{font-size:17px;width:18px;text-align:center}
   nav.bottom button .l{font-size:12px}
@@ -389,7 +389,7 @@ pre.cmd i{color:var(--dim);font-style:normal}
   nav.bottom button.on{color:var(--acc);background:rgba(var(--acc-rgb),.08);border-color:rgba(var(--acc-rgb),.3)}
   nav.bottom .badge{position:static;margin-left:auto;transform:none}
   /* give each nav item a hover "open in new window" affordance */
-  nav.bottom button::after{content:"\2317";position:absolute;right:10px;opacity:0;color:var(--dim);font-size:13px;transition:opacity .15s}
+  nav.bottom button::after{content:"\2317";position:absolute;right:6px;opacity:0;color:var(--dim);font-size:13px;transition:opacity .15s}
   nav.bottom button:hover::after{opacity:.6}
   nav.bottom button:hover::after:hover{opacity:1;color:var(--acc)}
   /* views: breathe, use the width */
@@ -452,12 +452,15 @@ pre.cmd i{color:var(--dim);font-style:normal}
   /* bulk bar aligns to the content area, not the whole window */
   .bulkbar{left:var(--side)}
   /* the 👎 "why?" prompt: a compact panel by the vote buttons, chips wrap (no sideways scroll) */
-  .reasonbar{left:auto;right:36px;bottom:176px;width:min(520px,calc(100vw - var(--side) - 72px));border:1px solid var(--bad);border-radius:var(--rc,3px);
-    padding:10px 12px 12px;box-shadow:6px 6px 0 #1a1a22;transform:translateY(16px);opacity:0;transition:transform .18s ease,opacity .18s,visibility .18s}
+  /* desktop: the "why?" strip is one slim row tucked under the video, not a panel over the text */
+  .reasonbar{left:calc(var(--side) + 32px);right:auto;bottom:46px;width:auto;max-width:min(640px,calc(100vw - var(--side) - 480px));border:1px solid rgba(255,77,109,.55);border-top:1px solid rgba(255,77,109,.55);border-radius:var(--r,2px);
+    padding:4px 8px;background:rgba(18,18,24,.94);box-shadow:none;transform:translateY(8px);opacity:0;transition:transform .15s ease,opacity .15s,visibility .15s}
   .reasonbar.on{transform:none;opacity:1}
-  .reasonbar .rb-in{max-width:none;margin:0}
-  .reasonbar .rb-chips{flex-wrap:wrap;overflow:visible;gap:6px}
-  .reasonbar .rchip{min-height:34px;padding:0 11px;font-size:11px;border-radius:var(--r,2px)}
+  .reasonbar .rb-in{max-width:none;margin:0;display:flex;align-items:center;gap:8px}
+  .reasonbar .rb-label{margin:0;white-space:nowrap;font-size:10px}
+  .reasonbar .rb-label small{display:none}
+  .reasonbar .rb-chips{flex-wrap:nowrap;overflow-x:auto;gap:5px}
+  .reasonbar .rchip{min-height:24px;padding:0 8px;font-size:10px;border-radius:var(--r,2px)}
   .toast{left:calc(50% + var(--side)/2);bottom:24px}
   /* hover affordances that make sense with a pointer */
   .btn,.chip,.tcard,.tile,.pill{transition:var(--t)}
@@ -539,6 +542,14 @@ b.l1{color:#e2e2ea}b.l2{color:var(--acc2)}b.l3{color:#5a5a6c}.web .legend .l3{co
 .web .wtb button:hover{color:var(--txt)}
 .web .wtb button.on{color:var(--acc);border-color:rgba(var(--acc-rgb),.45);background:rgba(var(--acc-rgb),.08)}
 .web .wtb .sep{width:1px;height:16px;background:var(--b2);margin:0 2px}
+.web .wpop{position:absolute;right:10px;bottom:calc(var(--strip) + 8px);width:min(300px,calc(100% - 20px));background:rgba(13,13,18,.96);border:1px solid var(--b2);border-radius:var(--r,2px);padding:10px 12px;z-index:5;font-family:var(--fmono);font-size:11px}
+.web .wpop .t{color:var(--acc);letter-spacing:.1em;margin-bottom:6px}.web .wpop .t small{display:block;color:var(--dim);letter-spacing:0;margin-top:2px}
+.web .wpop label{display:grid;grid-template-columns:110px 1fr 20px;align-items:center;gap:8px;margin:5px 0;color:var(--txt)}
+.web .wpop input[type=range]{width:100%;margin:0;accent-color:var(--acc);background:transparent;border:none;padding:0;min-height:0;height:18px}
+.web .wpop em{font-style:normal;color:var(--dim);text-align:right}
+.dcard.person{border-color:rgba(var(--acc-rgb),.35)}
+.ptab{border-collapse:collapse;width:100%;margin:2px 0 4px}.ptab th{text-align:left;font-family:var(--fmono);font-weight:400;font-size:12px;color:var(--txt);padding:4px 10px 4px 0;white-space:nowrap;vertical-align:top}.ptab td{padding:3px 0}.ptab td .pill{margin:2px 4px 2px 0}
+a.pill{text-decoration:none}
 .web:fullscreen,.web.max{position:fixed;top:0;left:0;right:0;bottom:0;width:auto;height:auto;max-height:none;z-index:600;border-radius:0;border:none;margin:0;background:var(--bg)}
 .web:fullscreen .strip,.web.max .strip{height:calc(var(--strip) + var(--sab));padding-bottom:var(--sab)}
 .web:fullscreen canvas,.web.max canvas{height:calc(100% - var(--strip) - var(--sab))}
@@ -600,6 +611,21 @@ body.noscroll-max{overflow:hidden}
     <input id="ntName" placeholder="skateboarding, storm chasing…" enterkeyhint="go" autocapitalize="off" autocorrect="off" aria-label="New topic">
     <button class="btn pri" type="submit">GO</button>
   </form>
+  <div class="row wrap" style="gap:8px;margin:-4px 0 10px;align-items:center">
+    <button type="button" class="chip" id="ntPersonBtn" title="Build a dossier on a person — yourself or family — from what is publicly online">◉ A PERSON</button>
+    <span class="note">Dossier on a name: what's publicly findable about you or your family, in one place.</span>
+  </div>
+  <div class="card pad" id="ntPerson" hidden style="margin-bottom:12px">
+    <div class="grid2">
+      <label class="field"><span>First name</span><input id="ntFirst" placeholder="Ethan" autocapitalize="words" autocorrect="off"></label>
+      <label class="field"><span>Last name</span><input id="ntLast" placeholder="Chapman" autocapitalize="words" autocorrect="off"></label>
+    </div>
+    <div class="grid2">
+      <label class="field"><span>State / region <small class="note">(optional — narrows a common name)</small></span><input id="ntState" placeholder="Florida" autocapitalize="words" autocorrect="off"></label>
+      <label class="field"><span>Known handles <small class="note">(optional, comma-separated)</small></span><input id="ntHandles" placeholder="@ethan.chapman, @echapman" autocapitalize="off" autocorrect="off"></label>
+    </div>
+    <p class="note" style="margin:0">It searches the name (in quotes, with the state), any handles you give, and links out to the public people-search sites so you can see what's exposed. Nothing is scraped from those sites, and no home addresses are stored — only links. Everything stays on this device.</p>
+  </div>
   <details class="more">
     <summary>▸ MORE OPTIONS</summary>
     <div class="card pad" style="margin-top:4px">
@@ -1091,16 +1117,35 @@ async function runTopic(id){
   catch(e){ toast(e.message); return false; }
 }
 $('#ntBreadth').oninput = e => $('#ntBreadthL').textContent = BREADTH[e.target.value];
+$('#ntPersonBtn').onclick = () => { const on = $('#ntPerson').hidden; $('#ntPerson').hidden = !on; $('#ntPersonBtn').classList.toggle('on', on); if (on) $('#ntFirst').focus(); };
+// a person = first/last (+state, +handles) → quoted-name searches, handle searches, and a PERSON card in the dossier
+function personFromForm(){
+  if ($('#ntPerson').hidden) return null;
+  const first = $('#ntFirst').value.trim(), last = $('#ntLast').value.trim(), state = $('#ntState').value.trim();
+  const handles = $('#ntHandles').value.split(/[,\s]+/).map(h => h.trim().replace(/^@/, '')).filter(Boolean);
+  if (!first && !last) return null;
+  return { first, last, state, handles };
+}
+function personSeeds(p){
+  const full = [p.first, p.last].filter(Boolean).join(' ');
+  const out = [`"${full}"`]; if (p.state) out.push(`"${full}" ${p.state}`); out.push(full);
+  p.handles.forEach(h => out.push('@' + h));
+  return [...new Set(out)];
+}
 $('#newTopicForm').onsubmit = async e => {
   e.preventDefault();
-  const name = $('#ntName').value.trim();
-  if (!name) return $('#ntName').focus();
+  const person = personFromForm();
+  const name = person ? [person.first, person.last].filter(Boolean).join(' ') : $('#ntName').value.trim();
+  if (!name) return (person ? $('#ntFirst') : $('#ntName')).focus();
   if (!ready()) return toast('Topics need the server, see SETUP', 3500);
-  const seeds = [name, ...$('#ntSeeds').value.split('\n').map(s => s.trim()).filter(Boolean)];
+  const seeds = [...(person ? personSeeds(person) : [name]), ...$('#ntSeeds').value.split('\n').map(s => s.trim()).filter(Boolean)];
   try{
     const soft = $('#ntSoft').value.split(/[,\n]/).map(x => x.trim()).filter(Boolean);
-    const t = await api('/api/topics', { method: 'POST', body: { name, seeds, settings: { breadth: +$('#ntBreadth').value, media: $('#ntMedia').value, refresh_hours: +$('#ntRefresh').value, soft } } });
+    const settings = { breadth: +$('#ntBreadth').value, media: person ? 'everything' : $('#ntMedia').value, refresh_hours: +$('#ntRefresh').value, soft };
+    if (person) settings.person = person;
+    const t = await api('/api/topics', { method: 'POST', body: { name, seeds, settings } });
     $('#ntName').value = ''; $('#ntSeeds').value = ''; $('#ntName').blur();
+    if (person){ ['ntFirst', 'ntLast', 'ntState', 'ntHandles'].forEach(id => $('#' + id).value = ''); $('#ntPerson').hidden = true; $('#ntPersonBtn').classList.remove('on'); }
     toast('Searching for "' + name + '"…'); pollJobs();
     go('topic/' + t.id + '/dossier');
   }catch(err){ toast(err.message); }
@@ -1394,7 +1439,8 @@ async function wikiViews(title){
 function communitiesOf(graph){
   const nodes = graph.nodes || [], idx = {}; nodes.forEach((n, i) => idx[n.id] = i);
   const deg = new Array(nodes.length).fill(0), nb = nodes.map(() => []);
-  (graph.edges || []).forEach(e => { const a = idx[e.a], b = idx[e.b]; if (a == null || b == null || a === b) return; deg[a] += e.w; deg[b] += e.w; nb[a].push([b, e.w]); nb[b].push([a, e.w]); });
+  const PW = pullWeights();
+  (graph.edges || []).forEach(e => { const a = idx[e.a], b = idx[e.b]; if (a == null || b == null || a === b) return; const w = edgePull(e, PW); if (w <= 0) return; deg[a] += w; deg[b] += w; nb[a].push([b, w]); nb[b].push([a, w]); });
   const core = i => nodes[i].kind !== 'word', order = nodes.map((_, i) => i).sort((x, y) => deg[y] - deg[x]);
   let lab = nodes.map((_, i) => i); const nw = (i, j, w) => w / Math.sqrt((deg[i] || 1) * (deg[j] || 1));
   for (let it = 0; it < 25; it++){ let ch = 0; for (const i of order){ if (!core(i) || !nb[i].length) continue; const sc = {}; nb[i].forEach(([j, w]) => { if (core(j)) sc[lab[j]] = (sc[lab[j]] || 0) + nw(i, j, w); }); let best = lab[i], bs = -1; for (const k in sc) if (sc[k] > bs || (sc[k] === bs && +k < best)){ bs = sc[k]; best = +k; } if (best !== lab[i]){ lab[i] = best; ch++; } } if (!ch) break; }
@@ -1406,6 +1452,27 @@ function communitiesOf(graph){
   return comms;
 }
 let integrateRun = null;
+// PERSON card: where a name shows up online — handle guesses per network, name searches, people-search sites.
+// Links only: nothing is scraped from these, no addresses are stored. Built so you (or family) can see what's exposed.
+function personCardHTML(p, T){
+  const first = (p.first || '').toLowerCase().replace(/[^a-z0-9]/g, ''), last = (p.last || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const full = [p.first, p.last].filter(Boolean).join(' '), q = encodeURIComponent(`"${full}"${p.state ? ' ' + p.state : ''}`);
+  const guesses = [...new Set([...(p.handles || []), first + last, first + '.' + last, first + '_' + last, first && last ? first[0] + last : '', first + last.slice(0, 1)].filter(h => h && h.length > 2))].slice(0, 8);
+  const nets = [['Bluesky', h => `https://bsky.app/profile/${h}.bsky.social`], ['X', h => `https://x.com/${h}`], ['Instagram', h => `https://www.instagram.com/${h}/`], ['TikTok', h => `https://www.tiktok.com/@${h}`], ['YouTube', h => `https://www.youtube.com/@${h}`], ['Reddit', h => `https://www.reddit.com/user/${h}`], ['Threads', h => `https://www.threads.net/@${h}`], ['GitHub', h => `https://github.com/${h}`]];
+  const searches = [['Google', `https://www.google.com/search?q=${q}`], ['Bing', `https://www.bing.com/search?q=${q}`], ['DuckDuckGo', `https://duckduckgo.com/?q=${q}`], ['Images', `https://www.google.com/search?tbm=isch&q=${q}`], ['Facebook', `https://www.facebook.com/search/people/?q=${encodeURIComponent(full)}`], ['LinkedIn', `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(full)}`], ['YouTube', `https://www.youtube.com/results?search_query=${q}`], ['Reddit', `https://www.reddit.com/search/?q=${q}`], ['TikTok', `https://www.tiktok.com/search?q=${encodeURIComponent(full)}`], ['Bluesky', `https://bsky.app/search?q=${encodeURIComponent(full)}`], ['Mastodon', `https://mastodon.social/search?q=${encodeURIComponent(full)}&type=accounts`]];
+  const st = encodeURIComponent(p.state || '');
+  const people = [['FamilyTreeNow', `https://www.familytreenow.com/search/genealogy/results?first=${encodeURIComponent(p.first || '')}&last=${encodeURIComponent(p.last || '')}&citystatezip=${st}`], ['TruePeopleSearch', `https://www.truepeoplesearch.com/results?name=${encodeURIComponent(full)}&citystatezip=${st}`], ['FastPeopleSearch', `https://www.fastpeoplesearch.com/name/${encodeURIComponent(full.replace(/\s+/g, '-'))}${p.state ? '_' + st : ''}`], ['Whitepages', `https://www.whitepages.com/name/${encodeURIComponent(full.replace(/\s+/g, '-'))}${p.state ? '/' + st : ''}`], ['Spokeo', `https://www.spokeo.com/${encodeURIComponent(full.replace(/\s+/g, '-'))}${p.state ? '/' + st : ''}`], ['Have I Been Pwned', 'https://haveibeenpwned.com/']];
+  const a = (label, href, cls = '') => `<a class="pill ${cls}" href="${esc(href)}" target="_blank" rel="noreferrer noopener">${esc(label)}</a>`;
+  return `<div class="dcard span2 person">
+    <div class="dh">◉ PERSON · ${esc(full)}${p.state ? ` <span class="note">· ${esc(p.state)}</span>` : ''} <span class="note">· self-dossier: what's publicly findable about this name</span></div>
+    <p class="note" style="margin:4px 0 10px">Everything here is a link you open yourself. SEARCH//NET collects posts for the name and handles (REVIEW / WEB), but pulls nothing from people-search sites and never stores a home address — those links are there so you can see what's exposed and ask for removal.</p>
+    <div class="note" style="margin-bottom:4px">Handles to check <small>(guesses from the name${(p.handles || []).length ? ' + yours' : ''}) · tap a network</small></div>
+    <table class="ptab">${guesses.map(h => `<tr><th>@${esc(h)}</th><td>${nets.map(([n, f]) => a(n, f(h))).join('')}</td></tr>`).join('')}</table>
+    <div class="row wrap" style="gap:8px;margin:6px 0 10px"><button class="btn sm" id="pAddHandle">+ ADD A KNOWN HANDLE</button><span class="note">Known handles are searched as topics and their posts land in REVIEW.</span></div>
+    <div class="note" style="margin-bottom:4px">Name searches</div><div class="meta">${searches.map(([n, u]) => a(n, u)).join('')}</div>
+    <div class="note" style="margin:10px 0 4px">People-search &amp; records sites <small>(show addresses, relatives, phone numbers — open them to see what's public and use each site's opt-out)</small></div><div class="meta">${people.map(([n, u]) => a(n, u, 'a')).join('')}</div>
+  </div>`;
+}
 async function renderDossier(){
   const body = $('#tBody');
   body.innerHTML = '<div class="empty"><span class="spinner"></span> building the dossier…</div>';
@@ -1438,7 +1505,9 @@ async function renderDossier(){
   const circles = communitiesOf(graph);
   const bars = (arr, max, cls) => `<div class="spark ${cls || ''}">${arr.map(v => `<i style="height:${Math.max(2, Math.round(100 * v / max))}%" title="${v}"></i>`).join('')}</div>`;
   const pct = v => Math.round(100 * v / Math.max(1, n));
+  const person = (T.settings || {}).person || null;
   body.innerHTML = `<div class="dossier">
+    ${person ? personCardHTML(person, T) : ''}
     <div class="dcard span2">
       <div class="dh">${esc(name)} <span class="note">${fmtN(n)} posts · ${fmtN(who.length)} accounts · ${plats.length} sites${T.counts && (T.counts.pos || T.counts.neg) ? ' · you rated ' + fmtN(T.counts.pos + T.counts.neg) : ''}</span></div>
       ${wiki ? `<div class="wiki">${wiki.thumb ? `<img src="${esc(wiki.thumb)}" alt="" referrerpolicy="no-referrer">` : ''}<div><p>${esc(wiki.extract)}</p><a class="note" href="${esc(wiki.url)}" target="_blank" rel="noreferrer">Wikipedia · ${esc(wiki.title)} →</a></div></div>`
@@ -1462,6 +1531,11 @@ async function renderDossier(){
   </div>`;
   $$('[data-prof]', body).forEach(b => b.onclick = () => openProfile(b.dataset.prof));
   $$('[data-focus]', body).forEach(b => b.onclick = () => go('network?' + new URLSearchParams({ topic: T.id, focus: b.dataset.focus })));
+  const addH = $('#pAddHandle', body); if (addH) addH.onclick = async () => {
+    const h = prompt('Handle to add as a search (without @):'); if (!h) return;
+    const clean = h.trim().replace(/^@/, ''); const P = Object.assign({ handles: [] }, person); P.handles = [...new Set([...(P.handles || []), clean])];
+    try{ T = await api('/api/topics/' + T.id, { method: 'PATCH', body: { seeds: [...new Set([...(T.seeds || []), '@' + clean])], settings: { person: P } } }); toast('Added @' + clean); renderDossier(); }catch(e){ toast(e.message); }
+  };
   $('#dWeb').onclick = () => go('network?' + new URLSearchParams({ topic: T.id }));
   $('#dReview').onclick = () => go('topic/' + T.id + '/review');
   $('#dIntegrate').onclick = () => integrateAll(who.slice(0, 100));
@@ -2043,6 +2117,16 @@ function peopleCard(p){
 //    depth cues (size / alpha / label by z), a slow orbit, drag to rotate, wheel to zoom.
 //    Cheap on purpose: no WebGL, node cap, 30fps, and it sleeps when hidden.
 const KIND_COLOR = { account: '#f54242', hashtag: '#42d4f5', word: '#f5a542' };
+// how hard each kind of connection pulls in the layout and counts in the ordering (0–10, yours to tune in WEIGHTS):
+// mentions are the strongest signal, a follow half that, shared hashtags a little, shared words nothing by default —
+// grey word links are still drawn, they just don't drag the circles around or decide who sits in the middle.
+const PULL_DEFAULT = { m: 10, f: 5, h: 3, s: 0 };
+const PULL_NAMES = { m: 'mentions', f: 'follows', h: 'shared tags', s: 'shared words' };
+function pullWeights(){ return Object.assign({}, PULL_DEFAULT, store.get('webWeights', {})); }
+function edgePull(e, W){
+  if (e.p) return (e.p.m * W.m + e.p.f * W.f + e.p.h * W.h + e.p.s * W.s) / 10;
+  const t = e.t || (e.m ? 1 : 2); return e.w * (t === 1 ? W.m : t === 2 ? W.h : W.s) / 10;   // older servers: by tier
+}
 // community palette (neon family, distinct hues)
 const COMM = ['#f54242', '#42d4f5', '#f5a542', '#c8f542', '#f542a8', '#a66bff', '#42f5c8', '#ff8a42', '#7ab8ff', '#e2e2ea'];
 let webAnim = null;
@@ -2059,8 +2143,11 @@ function drawWeb(box, graph){
   const focus = graph.focus && idx[graph.focus] != null ? graph.focus : null;
   // degree (connection strength) + neighbour lists
   const deg = new Array(nodes.length).fill(0), nb = nodes.map(() => []);
-  edges.forEach(e => { const a = idx[e.a], b = idx[e.b]; const t = e.t || (e.m ? 1 : 2); deg[a] += e.w; deg[b] += e.w; nb[a].push([b, e.w, t]); nb[b].push([a, e.w, t]); });
-  nb.forEach(l => l.sort((x, y) => (x[2] - y[2]) || (y[1] - x[1])));   // real relationships first, then by strength
+  const PW = pullWeights();
+  edges.forEach(e => { e.pull = edgePull(e, PW); });
+  edges.forEach(e => { const a = idx[e.a], b = idx[e.b]; const t = e.t || (e.m ? 1 : 2); deg[a] += e.pull; deg[b] += e.pull; nb[a].push([b, e.pull, t, e]); nb[b].push([a, e.pull, t, e]); });
+  nb.forEach(l => l.sort((x, y) => (y[1] - x[1]) || (x[2] - y[2])));   // strongest pull first (then real relationships)
+  const maxPull = Math.max(1e-9, ...edges.map(e => e.pull));
   // communities: label propagation over accounts + hashtags only (generic words bridge everything and
   // would smear it into one blob), with hub-normalised weights so big nodes don't swallow the map;
   // words then join whichever community most of their neighbours are in.
@@ -2096,7 +2183,7 @@ function drawWeb(box, graph){
     const steps = total > 90 ? 80 : 120;
     for (let s = 0; s < steps; s++){
       for (let i = 0; i < total; i++) for (let j = i + 1; j < total; j++){ const a = nodes[i], b = nodes[j]; const dx = a.sx - b.sx, dy = a.sy - b.sy, dz = a.sz - b.sz, d2 = dx*dx + dy*dy + dz*dz + 1, d = Math.sqrt(d2), f = 2600 / d2; a.wx += f*dx/d; a.wy += f*dy/d; a.wz += f*dz/d; b.wx -= f*dx/d; b.wy -= f*dy/d; b.wz -= f*dz/d; }
-      edges.forEach(e => { const a = nodes[idx[e.a]], b = nodes[idx[e.b]]; const dx = b.sx - a.sx, dy = b.sy - a.sy, dz = b.sz - a.sz, d = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1, k = 0.01 * (0.3 + e.w / Math.max(1, ...edges.map(x => x.w))) * (d - 70); a.wx += k*dx/d; a.wy += k*dy/d; a.wz += k*dz/d; b.wx -= k*dx/d; b.wy -= k*dy/d; b.wz -= k*dz/d; });
+      edges.forEach(e => { if (e.pull <= 0) return; const a = nodes[idx[e.a]], b = nodes[idx[e.b]]; const dx = b.sx - a.sx, dy = b.sy - a.sy, dz = b.sz - a.sz, d = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1, k = 0.01 * (0.3 + e.pull / maxPull) * (d - 70); a.wx += k*dx/d; a.wy += k*dy/d; a.wz += k*dz/d; b.wx -= k*dx/d; b.wy -= k*dy/d; b.wz -= k*dz/d; });
       nodes.forEach(n => { if (focus && n.id === focus){ n.wx = n.wy = n.wz = 0; return; } n.wx -= n.sx * 0.004; n.wy -= n.sy * 0.004; n.wz -= n.sz * 0.004; n.sx += Math.max(-9, Math.min(9, n.wx)); n.sy += Math.max(-9, Math.min(9, n.wy)); n.sz += Math.max(-9, Math.min(9, n.wz)); n.wx *= 0.8; n.wy *= 0.8; n.wz *= 0.8; });
     }
     // fit: whatever the clusters did, the ball sits inside the view (centred, furthest node at ~R0)
@@ -2108,11 +2195,12 @@ function drawWeb(box, graph){
   const legendHTML = () => (st.color === 'kind'
     ? ['account', 'hashtag', 'word'].map(k => `<span><i style="background:${KIND_COLOR[k]}"></i>${k === 'account' ? '@ accounts' : k === 'hashtag' ? '# tags' : 'words'} <em>${nodes.filter(n => n.kind === k).length}</em></span>`).join('')
     : comms.map((c, ci) => `<span><i style="background:${COMM[ci % COMM.length]}"></i>${esc(c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name)} <em>${c.ids.length}</em></span>`).join('')) + '<span class="shapes">● account &nbsp;■ tag &nbsp;○ word</span><span class="shapes"><b class="l1">━</b> mentions / follows &nbsp;<b class="l2">━</b> shared tags &nbsp;<b class="l3">━</b> shared words</span>';
-  const hintHTML = () => 'size = ' + (st.sizeBy === 'influence' ? 'influence' : 'posts') + ' · colour = ' + (st.color === 'kind' ? 'kind' : 'community') + (st.mode === '2d' ? ' · inner = more connected · drag to move around' : ' · drag to spin') + ' · wheel to zoom · tap a node';
+  const hintHTML = () => 'size = ' + (st.sizeBy === 'influence' ? 'influence' : 'posts') + ' · colour = ' + (st.color === 'kind' ? 'kind' : 'community') + (st.mode === '2d' ? ' · inner = more pull · drag to move around' : ' · drag to spin') + ' · pull @' + PW.m + ' ↔' + PW.f + ' #' + PW.h + ' w' + PW.s + ' · wheel to zoom · tap a node';
   nwFocusNode = focus ? nodes[idx[focus]] : null;
   const fb = nwFocusNode ? `<div class="focus">◎ ${nwFocusNode.kind === 'account' ? '@' : ''}${esc(nwFocusNode.label)}${nwFocusNode.kind === 'account' && nwFocusNode.person_id ? ' <button class="hbtn" data-fprof>PROFILE</button>' : ''} <button class="hbtn" data-fclear title="Show everything again">✕</button></div>` : '';
   box.innerHTML = `<canvas></canvas><div class="legend" id="webLegend"></div>${fb}
-    <div class="strip"><div class="wtb"><button data-wm="3d" title="3-D: the floating web you can spin">3D</button><button data-wm="2d" title="2-D: the organized map — rings by connection, arcs by community — you can drag around">2D</button><span class="sep"></span><button data-wc="community" title="Colour by community (clusters found from the links)">COMMUNITY</button><button data-wc="kind" title="Colour by kind: account / tag / word">KIND</button><span class="sep"></span><button data-ws="posts" title="Size by number of posts">POSTS</button><button data-ws="influence" title="Size by influence: terms and accounts that bridge different parts of the web (betweenness centrality)">INFLUENCE</button><span class="sep"></span><button data-wf title="Full screen">⛶</button></div><div class="hint" id="webHint"></div></div>`;
+    <div class="strip"><div class="wtb"><button data-wm="3d" title="3-D: the floating web you can spin">3D</button><button data-wm="2d" title="2-D: the organized map — rings by connection, arcs by community — you can drag around">2D</button><span class="sep"></span><button data-wc="community" title="Colour by community (clusters found from the links)">COMMUNITY</button><button data-wc="kind" title="Colour by kind: account / tag / word">KIND</button><span class="sep"></span><button data-ws="posts" title="Size by number of posts">POSTS</button><button data-ws="influence" title="Size by influence: terms and accounts that bridge different parts of the web (betweenness centrality)">INFLUENCE</button><span class="sep"></span><button data-ww title="How hard each kind of connection pulls (mentions / follows / shared tags / shared words)">WEIGHTS</button><span class="sep"></span><button data-wf title="Full screen">⛶</button></div><div class="hint" id="webHint"></div></div>
+    <div class="wpop" id="webWeights" hidden><div class="t">PULL STRENGTH <small>0 = drawn, but doesn't move or rank anything</small></div>${['m', 'f', 'h', 's'].map(k => `<label><span><b class="l${k === 'm' || k === 'f' ? 1 : k === 'h' ? 2 : 3}">━</b> ${PULL_NAMES[k]}</span><input type="range" min="0" max="10" step="1" data-pw="${k}" value="${PW[k]}"><em>${PW[k]}</em></label>`).join('')}<div class="row" style="justify-content:flex-end;gap:8px;margin-top:6px"><button class="hbtn" data-pwreset>DEFAULTS</button><button class="hbtn" data-pwclose>DONE</button></div></div>`;
   const syncChrome = () => { $('#webLegend', box).innerHTML = legendHTML(); $('#webHint', box).textContent = hintHTML(); $$('[data-wm]', box).forEach(b => b.classList.toggle('on', b.dataset.wm === st.mode)); $$('[data-wc]', box).forEach(b => b.classList.toggle('on', b.dataset.wc === st.color)); $$('[data-ws]', box).forEach(b => b.classList.toggle('on', b.dataset.ws === st.sizeBy)); };
   const cv = $('canvas', box), ctx = cv.getContext('2d');
   const st = { ry: 0, rx: 0.25, zoom: 1, auto: true, last: 0, dragging: false, px: 0, py: 0, moved: 0, W: 0, H: 0, dpr: Math.min(2, devicePixelRatio || 1), proj: [], frame: 0, hover: -1, settle: 170,
@@ -2125,7 +2213,7 @@ function drawWeb(box, graph){
     const kT = st.frame < 40 ? 0.02 : 0.045;
     nodes.forEach(n => { const tx = Math.cos(n.ta) * n.tr, ty = Math.sin(n.ta) * n.tr; n.vx += (tx - n.x) * kT; n.vy += (ty - n.y) * kT; });
     for (let i = 0; i < total; i++) for (let j = i + 1; j < total; j++){ const a = nodes[i], b = nodes[j]; let dx = a.x - b.x, dy = a.y - b.y; const d2 = dx*dx + dy*dy + .01, d = Math.sqrt(d2), min = a.r + b.r + 9; if (d < min){ const f = (min - d) / d * 0.5; a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f; } else if (d < 90){ const f = 60 / d2; a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f; } }
-    nodes.forEach((n, i) => nb[i].slice(0, 2).forEach(([j, w]) => { const m = nodes[j]; const dx = m.x - n.x, dy = m.y - n.y, d = Math.sqrt(dx*dx + dy*dy) || 1, k = 0.004 * (d - 55); n.vx += k * dx / d; n.vy += k * dy / d; }));
+    nodes.forEach((n, i) => nb[i].slice(0, 2).forEach(([j, w]) => { if (w <= 0) return; const m = nodes[j]; const dx = m.x - n.x, dy = m.y - n.y, d = Math.sqrt(dx*dx + dy*dy) || 1, k = 0.004 * (0.5 + w / maxPull) * (d - 55); n.vx += k * dx / d; n.vy += k * dy / d; }));
     nodes.forEach(n => { if (focus && n.id === focus){ n.x = n.y = n.vx = n.vy = 0; return; } n.x += Math.max(-6, Math.min(6, n.vx)); n.y += Math.max(-6, Math.min(6, n.vy)); n.vx *= 0.72; n.vy *= 0.72; });
   };
   const project = () => {
@@ -2174,7 +2262,7 @@ function drawWeb(box, graph){
     for (const L of labels){ const n = L.q.n, txt = (n.kind === 'account' ? '@' : '') + (n.label.length > 18 ? n.label.slice(0, 17) + '…' : n.label); const fs = Math.round(Math.min(13, 9 + 3 * L.q.p)); ctx.font = `${fs}px 'Share Tech Mono', monospace`; const w = ctx.measureText(txt).width + 8, h = fs + 4, x = L.q.X, y = L.q.Y + L.r + 4; if (placed.some(b => Math.abs(b.x - x) < (b.w + w) / 2 && Math.abs(b.y - y) < h)) continue; placed.push({ x, y, w }); ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(7,7,10,.72)'; ctx.fillRect(x - w / 2, y, w, h); ctx.fillStyle = L.i === hi || L.i === fi ? '#fff' : '#c9c9d6'; ctx.fillText(txt, x, y + fs); if (placed.length >= Math.max(12, Math.min(80, Math.floor(st.W * st.H / 9000)))) break; }
     box.dataset.labels = placed.length; box.dataset.edges = drawn.size; box.dataset.zoom = st.zoom.toFixed(2);   // (read by tests / debugging)
     // hover card
-    if (hv >= 0){ const q = P[hv], n = q.n; const real = nb[hv].filter(l => l[2] === 1).length, tg = nb[hv].filter(l => l[2] === 2).length; const lines = [(n.kind === 'account' ? '@' : n.kind === 'hashtag' ? '' : '"') + n.label + (n.kind === 'word' ? '"' : ''), `${n.n} post${n.n === 1 ? '' : 's'} · ${real ? real + ' real · ' : ''}${tg ? tg + ' tag · ' : ''}${nb[hv].length} links · ${comms[commOf[hv]].name}`]; ctx.font = `12px 'Share Tech Mono', monospace`; const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16, x = Math.min(st.W - w - 6, Math.max(6, q.X + 14)), y = Math.max(6, q.Y - 44); ctx.globalAlpha = 1; ctx.fillStyle = '#15151b'; ctx.fillRect(x, y, w, 40); ctx.strokeStyle = colorOf(hv); ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, w - 1, 39); ctx.textAlign = 'left'; ctx.fillStyle = '#e2e2ea'; ctx.fillText(lines[0], x + 8, y + 16); ctx.fillStyle = '#9a9ab0'; ctx.fillText(lines[1], x + 8, y + 32); }
+    if (hv >= 0){ const q = P[hv], n = q.n; const cnt = k => nb[hv].filter(l => l[3] && l[3].p && l[3].p[k] > 0).length; const bits = [['m', '@'], ['f', '↔'], ['h', '#'], ['s', 'w']].map(([k, g]) => cnt(k) ? cnt(k) + ' ' + g : '').filter(Boolean).join(' · '); const lines = [(n.kind === 'account' ? '@' : n.kind === 'hashtag' ? '' : '"') + n.label + (n.kind === 'word' ? '"' : ''), `${n.n} post${n.n === 1 ? '' : 's'} · ${nb[hv].length} links${bits ? ' (' + bits + ')' : ''} · pull ${deg[hv].toFixed(1)} · ${comms[commOf[hv]].name}`]; ctx.font = `12px 'Share Tech Mono', monospace`; const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16, x = Math.min(st.W - w - 6, Math.max(6, q.X + 14)), y = Math.max(6, q.Y - 44); ctx.globalAlpha = 1; ctx.fillStyle = '#15151b'; ctx.fillRect(x, y, w, 40); ctx.strokeStyle = colorOf(hv); ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, w - 1, 39); ctx.textAlign = 'left'; ctx.fillStyle = '#e2e2ea'; ctx.fillText(lines[0], x + 8, y + 16); ctx.fillStyle = '#9a9ab0'; ctx.fillText(lines[1], x + 8, y + 32); }
     ctx.globalAlpha = 1;
   };
   const loop = ts => { webAnim.raf = requestAnimationFrame(loop); if (document.hidden || !box.isConnected) return; if (ts - st.last < 33) return; st.last = ts; if (st.frame < st.settle){ step(); st.frame++; } else if (st.mode === '3d' && st.auto && !st.dragging && st.hover < 0) st.ry += 0.003; draw(); };
@@ -2205,6 +2293,12 @@ function drawWeb(box, graph){
   $$('[data-wm]', box).forEach(b => b.onclick = () => { st.mode = b.dataset.wm; store.set('webMode', st.mode); if (st.mode === '2d'){ st.panX = st.panY = 0; } syncChrome(); draw(); });
   $$('[data-wc]', box).forEach(b => b.onclick = () => { st.color = b.dataset.wc; store.set('webColor', st.color); syncChrome(); draw(); });
   $$('[data-ws]', box).forEach(b => b.onclick = () => { st.sizeBy = b.dataset.ws; store.set('webSize', st.sizeBy); sizeNodes(); syncChrome(); draw(); });
+  // WEIGHTS: slide, release → the web re-lays itself out with the new pull (stays open while you tune)
+  const wpop = $('#webWeights', box); if (box._weightsOpen) wpop.hidden = false;
+  $('[data-ww]', box).onclick = () => { wpop.hidden = !wpop.hidden; box._weightsOpen = !wpop.hidden; };
+  $('[data-pwclose]', box).onclick = () => { wpop.hidden = true; box._weightsOpen = false; };
+  $$('[data-pw]', box).forEach(r => { r.oninput = () => { r.nextElementSibling.textContent = r.value; }; r.onchange = () => { const W = pullWeights(); W[r.dataset.pw] = +r.value; store.set('webWeights', W); drawWeb(box, graph); }; });
+  $('[data-pwreset]', box).onclick = () => { store.set('webWeights', {}); drawWeb(box, graph); };
   const fsBtn = $('[data-wf]', box);
   const exitMax = () => { box.classList.remove('max'); document.body.classList.remove('noscroll-max'); fsBtn.textContent = '⛶'; size(); draw(); };
   fsBtn.onclick = async () => {

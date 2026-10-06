@@ -150,7 +150,8 @@
       // follows (either direction): the platform itself says these two are linked
       const fAB = a._follows.has(b.id), fBA = b._follows.has(a.id);
       if (fAB || fBA) { w += 4; why.push({ kind: 'follows', mutual: fAB && fBA }); }
-      if (w > 0) out.push({ id: b.id, author: b.author, platform: b.platform, author_url: b.author_url, w: +w.toFixed(2), why, shared_hashtags: hn, shared_words: wn, t: (fAB || fBA || mAB || mBA) ? 1 : hn ? 2 : 3 });
+      if (w > 0) out.push({ id: b.id, author: b.author, platform: b.platform, author_url: b.author_url, w: +w.toFixed(2), why, shared_hashtags: hn, shared_words: wn, t: (fAB || fBA || mAB || mBA) ? 1 : hn ? 2 : 3,
+        p: { m: (mAB || mBA) ? 3 : 0, f: (fAB || fBA) ? 4 : 0, h: +hs.toFixed(2), s: +ws.toFixed(2) } });
     }
     return out.sort((x, y) => y.w - x.w);
   }
@@ -170,17 +171,17 @@
     const strength = {}; const edges = [];
     for (let i = 0; i < top.length; i++) {
       for (let j = i + 1; j < top.length; j++) {
-        const a = top[i], b = top[j]; let w = 0, hn = 0;
-        a._H.forEach((h) => { if (b._H.has(h)) { w += idf(hDF[h]); hn++; } });
-        let wn = 0; a._W.forEach((x) => { if (b._W.has(x)) { w += 0.5 * idf(wDF[x]); wn++; } });
+        const a = top[i], b = top[j]; let w = 0, hn = 0, hs = 0, ws = 0;
+        a._H.forEach((h) => { if (b._H.has(h)) { w += idf(hDF[h]); hs += idf(hDF[h]); hn++; } });
+        let wn = 0; a._W.forEach((x) => { if (b._W.has(x)) { w += 0.5 * idf(wDF[x]); ws += 0.5 * idf(wDF[x]); wn++; } });
         const ment = a._mentions.has(b.author.toLowerCase()) || b._mentions.has(a.author.toLowerCase());
         const fol = a._follows.has(b.id) || b._follows.has(a.id);
         if (ment) w += 3; if (fol) w += 4;
-        if (w >= (opts.min || 1.5) || ment || fol) { edges.push({ a: a.id, b: b.id, w: +w.toFixed(2), h: hn, m: ment || fol ? 1 : 0, f: fol ? 1 : 0, t: ment || fol ? 1 : hn ? 2 : 3 }); strength[a.id] = (strength[a.id] || 0) + w; strength[b.id] = (strength[b.id] || 0) + w; }
+        if (w >= (opts.min || 1.5) || ment || fol) { edges.push({ a: a.id, b: b.id, w: +w.toFixed(2), h: hn, m: ment || fol ? 1 : 0, f: fol ? 1 : 0, t: ment || fol ? 1 : hn ? 2 : 3, p: { m: ment ? 3 : 0, f: fol ? 4 : 0, h: +hs.toFixed(2), s: +ws.toFixed(2) } }); strength[a.id] = (strength[a.id] || 0) + w; strength[b.id] = (strength[b.id] || 0) + w; }
       }
     }
     // hand-added links always show
-    for (const a of top) (meta[a.id]?.links || []).forEach((lid) => { if (topSet.has(lid) && !edges.some((e) => (e.a === a.id && e.b === lid) || (e.a === lid && e.b === a.id))) edges.push({ a: a.id, b: lid, w: 2, h: 0, m: 0, you: 1 }); });
+    for (const a of top) (meta[a.id]?.links || []).forEach((lid) => { if (topSet.has(lid) && !edges.some((e) => (e.a === a.id && e.b === lid) || (e.a === lid && e.b === a.id))) edges.push({ a: a.id, b: lid, w: 2, h: 0, m: 0, you: 1, t: 1, p: { m: 0, f: 2, h: 0, s: 0 } }); });
     const nodes = top.map((a) => ({ id: a.id, author: a.author, platform: a.platform, n: a.items.length, strength: +(strength[a.id] || 0).toFixed(1), attrs: (meta[a.id]?.attrs || []).slice(0, 4), topics: [...new Set(a.items.flatMap((it) => (byItem.get(it.id) || []).map((v) => v.topic_id)))].length }));
     return { nodes, edges, total_accounts: by.size, shown: nodes.length, generated: now() };
   }
@@ -226,11 +227,13 @@
     const focus = parseFocus(opts.focus);
     let items = await idb.all('items');
     if (opts.platform) items = items.filter((it) => it.platform === opts.platform);
+    if (opts.topic) { const { byItem } = await voteIndex(); items = items.filter((it) => (byItem.get(it.id) || []).some((v) => v.topic_id === opts.topic)); }   // only what this topic found
     // per-post term sets → co-occurrence; per-account usage counts
     const nodeW = {}, edgeW = {}; const kindOf = {}; const nodeN = {};          // nodeN = posts behind each node
     const bump = (k, w) => { nodeW[k] = (nodeW[k] || 0) + w; nodeN[k] = (nodeN[k] || 0) + 1; };
     const edgeT = {};   // best (lowest) tier seen for the pair
-    const link = (a, b, w, t = 3) => { if (a === b) return; const k = a < b ? a + '\u0001' + b : b + '\u0001' + a; edgeW[k] = (edgeW[k] || 0) + w; edgeT[k] = Math.min(edgeT[k] || 9, t); };
+    const edgeP = {};   // how much of the weight came from each kind: m mention · f follow · h shared hashtag · s shared words
+    const link = (a, b, w, t = 3, kind = 's') => { if (a === b) return; const k = a < b ? a + '\u0001' + b : b + '\u0001' + a; edgeW[k] = (edgeW[k] || 0) + w; edgeT[k] = Math.min(edgeT[k] || 9, t); const P = edgeP[k] || (edgeP[k] = { m: 0, f: 0, h: 0, s: 0 }); P[kind] += w; };
     const acctId = (it) => '@' + String(it.author || '').toLowerCase() + '|' + (it.platform || '');
     // words that appear in more than a third of all posts are boilerplate here ("video", "new"…):
     // they'd bridge every community into one blob, so they're left out of the web
@@ -252,13 +255,13 @@
       if (focus && focus.kind === 'word' && focus.phrase) {              // a quoted phrase is its own node
         const txt = String(it.text || '').toLowerCase(); if (txt.includes(focus.key)) { words.push('w:' + focus.key); }
       }
-      tags.forEach((t) => { kindOf[t] = 'hashtag'; bump(t, idf(hDF[t.slice(1)])); link(A, t, 1, 2); });
+      tags.forEach((t) => { kindOf[t] = 'hashtag'; bump(t, idf(hDF[t.slice(1)])); link(A, t, 1, 2, 'h'); });
       // real relationships written in the post: @mentions of accounts we know
-      mentionsIn(it.text).forEach((m) => { const B = Object.keys(kindOf).find((k) => k.startsWith('@' + m + '|')) || ('@' + m + '|' + (it.platform || '')); if (kindOf[B] === 'account' && B !== A) link(A, B, 2, 1); });
+      mentionsIn(it.text).forEach((m) => { const B = Object.keys(kindOf).find((k) => k.startsWith('@' + m + '|')) || ('@' + m + '|' + (it.platform || '')); if (kindOf[B] === 'account' && B !== A) link(A, B, 2, 1, 'm'); });
       words.forEach((w) => { kindOf[w] = 'word'; bump(w, 0.6 * idf(wDF[w.slice(2)] || 1)); link(A, w, 0.6); });
       bump(A, 1);
       // co-occurrence inside the post (cheap: tags×tags, tags×words; words×words only for short posts)
-      for (let i = 0; i < tags.length; i++) for (let j = i + 1; j < tags.length; j++) link(tags[i], tags[j], 1.2, 2);
+      for (let i = 0; i < tags.length; i++) for (let j = i + 1; j < tags.length; j++) link(tags[i], tags[j], 1.2, 2, 'h');
       // co-occurrence among the post's 12 most distinctive words (long descriptions included), and tags×words
       // co-occurrence the way text-network tools do it: terms inside a sliding 4-word window link strongly,
       // terms merely in the same post link weakly (first 40 distinctive terms, text order)
@@ -271,10 +274,10 @@
     const inView = (a) => kindOf['@' + a.author.toLowerCase() + '|' + a.platform] === 'account';
     for (const a of by.values()) { if (!inView(a)) continue; for (const e of edgesFor(a, by, idf, hDF, wDF).slice(0, 6)) {
       const B = '@' + e.author.toLowerCase() + '|' + e.platform; if (kindOf[B] !== 'account') continue;
-      link('@' + a.author.toLowerCase() + '|' + a.platform, B, e.w * 0.5, e.t);
+      const A2 = '@' + a.author.toLowerCase() + '|' + a.platform; for (const kind of ['m', 'f', 'h', 's']) if (e.p[kind]) link(A2, B, e.p[kind] * 0.5, kind === 'm' || kind === 'f' ? 1 : kind === 'h' ? 2 : 3, kind);
     } }
     // real relationships from the platforms' own graphs: every follow between two accounts here is a tier-1 link
-    for (const a of by.values()) { if (!inView(a)) continue; for (const bid of a._follows) { const b = by.get(bid); if (b && inView(b)) link('@' + a.author.toLowerCase() + '|' + a.platform, '@' + b.author.toLowerCase() + '|' + b.platform, 3, 1); } }
+    for (const a of by.values()) { if (!inView(a)) continue; for (const bid of a._follows) { const b = by.get(bid); if (b && inView(b)) link('@' + a.author.toLowerCase() + '|' + a.platform, '@' + b.author.toLowerCase() + '|' + b.platform, 3, 1, 'f'); } }
     // ── term selection (VOSviewer): minimum occurrences, then keep the most *relevant* 60% ──
     //    relevance = how specific a term is to a few accounts (spread-evenly-everywhere terms score low)
     const minOcc = Math.max(2, Math.round(nPosts * 0.01));
@@ -287,7 +290,7 @@
     // ── edge weights (association strength): co-occurrence vs. what chance predicts from each term's frequency ──
     for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (kindOf[a] === 'account' || kindOf[b] === 'account') continue;
       const co = edgeW[k], oa = nodeN[a] || 1, ob = nodeN[b] || 1; const as = nPosts * co / (oa * ob);   // >1 = more than chance
-      edgeW[k] = Math.sqrt(co) * Math.log(1 + as); }
+      const nw = Math.sqrt(co) * Math.log(1 + as), P = edgeP[k]; if (P && co) for (const kk in P) P[kk] *= nw / co; edgeW[k] = nw; }
     // pick nodes: around the focus, else the heaviest of each kind
     let ids;
     const focusId = focus ? (focus.kind === 'account' ? Object.keys(kindOf).find((k) => k.startsWith('@' + focus.key + '|')) : focus.kind === 'hashtag' ? '#' + focus.key : 'w:' + focus.key) : null;
@@ -303,7 +306,7 @@
       for (const kind of ['account', 'hashtag', 'word']) if (kinds.has(kind)) ids.push(...Object.keys(nodeW).filter((k) => kindOf[k] === kind).sort((a, b) => nodeW[b] - nodeW[a]).slice(0, per[kind]));
     }
     const idset = new Set(ids);
-    const edges = []; for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (idset.has(a) && idset.has(b)) edges.push({ a, b, w: +edgeW[k].toFixed(2), t: edgeT[k] || 3 }); }
+    const edges = []; for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (idset.has(a) && idset.has(b)) { const P = edgeP[k] || { m: 0, f: 0, h: 0, s: edgeW[k] }; edges.push({ a, b, w: +edgeW[k].toFixed(2), t: edgeT[k] || 3, p: { m: +P.m.toFixed(2), f: +P.f.toFixed(2), h: +P.h.toFixed(2), s: +P.s.toFixed(2) } }); } }
     // keep the strongest links overall PLUS every node's own strongest few, so nothing is left dangling
     edges.sort((p, q) => (p.t - q.t) || (q.w - p.w));
     const keep = new Set(edges.filter((e) => e.t === 1).concat(edges.slice(0, cap * 4))); const per = {};
@@ -383,7 +386,7 @@
       const P = Object.fromEntries(new URLSearchParams(qs || ''));
       const id = parts[1] ? decodeURIComponent(parts[1]) : null;
       if (parts[0] === 'graph') {
-        if (P.focus !== undefined || P.kinds !== undefined) return wordGraph({ focus: P.focus || '', kinds: P.kinds || 'account,hashtag,word', max: +P.max || 80, platform: P.platform || '' });
+        if (P.focus !== undefined || P.kinds !== undefined) return wordGraph({ focus: P.focus || '', kinds: P.kinds || 'account,hashtag,word', max: +P.max || 80, platform: P.platform || '', topic: P.topic || '' });
         return graph({ topic: P.topic || null, max: +P.max || 60, min: +P.min || 1.5, platform: P.platform || '' });
       }
       if (!id) return list({ topic: P.topic || null, q: P.q || '', sort: P.sort || '', platform: P.platform || '' });
