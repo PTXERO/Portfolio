@@ -137,18 +137,33 @@ class Ctx:
         for info in self._ytdlp_run(base + [target]):
             got += 1
             yield info
+        self._explain_redirect(mark)
         # Cloudflare-style bot checks: retry once looking like a normal browser
         blocked = any("impersonat" in ln.lower() or "cloudflare" in ln.lower()
                       for ln in self.job.log_lines[mark:])
         if not got and blocked and not v.impersonate_args(self.src):
             if v.can_impersonate():
                 self.job.log("  ↻ site has a bot check: retrying as a normal browser")
+                mark2 = len(self.job.log_lines)
                 for info in self._ytdlp_run(base + ["--impersonate", "chrome",
                                                     "--extractor-args", "generic:impersonate", target]):
                     yield info
+                self._explain_redirect(mark2)
             else:
                 self.job.log('  → install browser impersonation once: '
                              'python -m pip install -U "yt-dlp[default,curl-cffi]"  (then restart)')
+
+    REGION_HINT = re.compile(r"Unsupported URL: (\S*(?:block|geo|region|country|restrict|unavailable|"
+                             r"not-available|age-verif)\S*)", re.I)
+
+    def _explain_redirect(self, mark):
+        """Say plainly when a site sent us to a 'blocked in your region' page."""
+        for ln in self.job.log_lines[mark:]:
+            m = self.REGION_HINT.search(ln)
+            if m:
+                self.job.log(f"  ⚑ the site redirected to {m.group(1)} — it blocks visitors from your "
+                             "location, so this source can't work from here. Switch it off in SOURCES.")
+                return
 
     def _ytdlp_run(self, cmd):
         for line in self.v.stream(self.job, cmd):
