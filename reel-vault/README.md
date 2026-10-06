@@ -15,26 +15,51 @@ iPhone (Firefox) ──Wi-Fi──▶ your computer: python reel-vault/server/re
 
 ## Run it
 
-On a computer that stays on (Mac, Windows, Linux):
+On a computer that stays on, run **one command**. It does everything:
 
-```bash
-pip install -U yt-dlp gallery-dl fastembed   # fastembed = 🧠 meaning matching (optional)
-pip install faster-whisper                   # optional: search what is said
-# optional: ffmpeg (thumbnails) and tesseract (on-screen text) from your package manager
-python reel-vault/server/reelvault.py
+1. installs Python, or updates it if you have it
+2. installs Git and ffmpeg if they're missing
+3. downloads REEL//VAULT to `~/Portfolio`, or updates your copy
+4. installs / updates the Python packages (yt-dlp, gallery-dl, fastembed)
+5. starts the auto-updating launcher
+
+**Windows** — paste into PowerShell (no admin window needed):
+
+```powershell
+irm https://raw.githubusercontent.com/PTXERO/Portfolio/claude/new-session-7sf9nm/reel-vault/start.ps1 | iex
 ```
 
-**Keep it updated automatically.** Instead of the line above, start the launcher once and
-leave it running. It keeps the server up, checks GitHub for new commits on a loop, and pulls +
-restarts when there are updates — your phone reconnects on its own:
+After the first time, just **double-click `reel-vault\start.cmd`**.
+
+**Mac / Linux** — paste into Terminal:
 
 ```bash
-python reel-vault/server/run.py
+curl -fsSL https://raw.githubusercontent.com/PTXERO/Portfolio/claude/new-session-7sf9nm/reel-vault/start.sh | bash
 ```
 
-Options pass through to the server (`--port`, `--phone-host`, `--data`). `--interval 30` changes
-how often it checks for updates; `--no-update` just keeps the server running without pulling.
-(Auto-update needs a `git clone`; a downloaded ZIP won't update itself.)
+After the first time: `bash ~/Portfolio/reel-vault/start.sh`. (Mac needs [Homebrew](https://brew.sh);
+on Mac/Linux the packages go in a private `reel-vault/.venv`, so nothing touches your system Python.)
+
+Run the same command again whenever you like: it updates Python, the project and the packages
+(yt-dlp in particular needs frequent updates as sites change), then starts.
+
+Options:
+
+| | |
+|---|---|
+| `REELVAULT_DIR` | where the project lives (default `~/Portfolio`) |
+| `REELVAULT_BRANCH` | branch to follow (default: this build's branch; `main` once merged) |
+| `REELVAULT_NO_SYSTEM_UPDATE=1` | skip the Python / Git / ffmpeg update check |
+| anything after the script | passed to the server, e.g. `start.sh --port 9000` |
+
+Optional extras, if you want them: `pip install faster-whisper` (search what is said) and
+tesseract from your package manager (on-screen text).
+
+**While it runs** it keeps the server up, checks GitHub for new commits on a loop, and pulls +
+restarts when there are updates — your phone reconnects on its own. Prefer doing it by hand?
+`python reel-vault/server/run.py` is the launcher on its own (`--interval 30` changes how often it
+checks, `--no-update` stops it pulling, other options such as `--port`, `--phone-host`, `--data`
+go to the server).
 
 It prints two links. The computer opens SETUP, which shows a **QR code**. Scan it with
 the iPhone (same Wi-Fi) and open it in Firefox. The link carries an access key that pairs

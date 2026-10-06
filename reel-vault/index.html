@@ -544,11 +544,15 @@ pre.cmd i{color:var(--dim);font-style:normal}
   </div>
   <h3 class="s">Run it</h3>
   <div class="card pad">
-<pre class="cmd"><i># on a computer (Mac / Windows / Linux)</i>
-pip install -U yt-dlp gallery-dl fastembed
-python reel-vault/server/reelvault.py
-<i># then scan the QR code with your iPhone</i></pre>
-    <p class="note" style="margin-top:8px">The computer stays on, on the same Wi-Fi as your phone. In Firefox on iPhone: ⋯ → Share → <b>Add to Home Screen</b> to use it like an app.</p>
+    <p class="note" style="margin-bottom:8px">One command sets up everything: it installs or updates Python, Git and ffmpeg, downloads or updates REEL//VAULT, installs the packages, and starts it. Run the same thing again any time to update.</p>
+<pre class="cmd"><i># Windows: paste into PowerShell</i>
+irm https://raw.githubusercontent.com/PTXERO/Portfolio/claude/new-session-7sf9nm/reel-vault/start.ps1 | iex
+<i># after the first time: double-click reel-vault\start.cmd</i>
+
+<i># Mac / Linux: paste into Terminal</i>
+curl -fsSL https://raw.githubusercontent.com/PTXERO/Portfolio/claude/new-session-7sf9nm/reel-vault/start.sh | bash
+<i># after the first time: bash ~/Portfolio/reel-vault/start.sh</i></pre>
+    <p class="note" style="margin-top:8px">Leave that window open. Then scan the QR code on this page with your iPhone (same Wi-Fi). In Firefox on iPhone: ⋯ → Share → <b>Add to Home Screen</b> to use it like an app.</p>
   </div>
   <h3 class="s">Danger zone</h3>
   <div class="card pad">

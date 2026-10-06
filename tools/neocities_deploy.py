@@ -31,7 +31,7 @@ API = os.environ.get("NEOCITIES_API_URL", "https://neocities.org/api")
 # the site is hand-maintained in the Neocities editor and must not be touched here.
 PUBLISH_ROOTS = ("reel-vault/",)          # the only subtree this tool publishes
 # never published: tooling, the local server's code, private data
-SKIP_DIRS = {".git", ".github", ".claude", "tools", "node_modules", "__pycache__", "data", "models"}
+SKIP_DIRS = {".git", ".github", ".claude", ".venv", "tools", "node_modules", "__pycache__", "data", "models"}
 SKIP_FILES = {".gitignore", ".DS_Store", "Thumbs.db"}
 SKIP_PATTERNS = ("reel-vault/server/",)   # server code runs on the PC, never on the static host
 # Neocities (free plan) accepts these; anything else is skipped with a note
