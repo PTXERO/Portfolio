@@ -504,7 +504,8 @@ class Handler(BaseHTTPRequestHandler):
                                                "title": f"profile @{handle}"}).to_dict())
             if sub == "creator" and method == "PATCH":
                 b = self._body()
-                return ok(v.set_creator_notes(arg, b.get("handle", ""), b.get("notes", "")) or {})
+                return ok(v.set_creator_meta(arg, b.get("handle", ""), b.get("notes"),
+                                             b.get("attrs")) or {})
             if sub == "creator" and method == "DELETE":
                 v.remove_creator(arg, params.get("handle", ""))
                 return ok()

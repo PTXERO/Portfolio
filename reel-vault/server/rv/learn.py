@@ -194,7 +194,8 @@ class TopicScorer:
                      (topic_id,))
         seeds = json.loads(self.topic["seeds"] or "[]") if self.topic else []
         settings = json.loads(self.topic["settings"] or "{}") if self.topic else {}
-        soft = [s for s in (settings.get("soft") or []) if s and s.strip()]
+        soft = [s for s in (settings.get("soft") or []) + (settings.get("_attr_soft") or [])
+                if s and s.strip()]
         qs = {(r["query"], r["origin"], r["weight"] or 1) for r in qrows}
         qs |= {(s, "seed", 1.0) for s in seeds}
         qs |= {(s, "soft", 1.0) for s in soft}     # boost when present, never required

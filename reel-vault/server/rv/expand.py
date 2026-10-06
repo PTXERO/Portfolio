@@ -183,7 +183,7 @@ def refresh_expansions(vault, topic_id, web=True):
 
     # soft keywords: search each on its own, and combined with the top main word,
     # so related content comes in — but they never gate what's kept (see TopicScorer)
-    soft = [s.strip() for s in (st.get("soft") or []) if s and s.strip()]
+    soft = [s.strip() for s in (st.get("soft") or []) + (st.get("_attr_soft") or []) if s and s.strip()]
     main = seeds[0] if seeds else ""
     for i, sk in enumerate(soft):
         add(sk, "soft", i < 2)

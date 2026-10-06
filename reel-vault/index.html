@@ -217,6 +217,12 @@ details.more[open] summary{color:var(--acc)}
 .whynot{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
 .whynot b{font-style:normal;color:var(--bad);font-weight:normal;font-family:var(--fmono);font-size:11px;margin-right:2px}
 .whynot span{font-family:var(--fmono);font-size:11px;padding:2px 7px;border-radius:9px;border:1px solid rgba(255,77,109,.35);color:var(--bad)}
+.attrrow{display:flex;gap:6px;margin-bottom:6px;align-items:center}
+.attrrow .attr-k{flex:0 0 38%;font-size:13px;padding:8px 9px}
+.attrrow .attr-v{flex:1;font-size:13px;padding:8px 9px}
+.attrrow .attr-boost,.attrrow .attr-x{flex:0 0 38px;width:38px;height:38px;border:1px solid var(--b2);border-radius:8px;font-size:14px;color:var(--dim)}
+.attrrow .attr-boost.on{color:var(--acc);border-color:var(--acc);background:rgba(200,245,66,.08)}
+.attrrow .attr-x{color:var(--bad)}
 .prec{width:54px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;display:inline-block}
 .prec i{display:block;height:100%;background:var(--good)}
 .fchip{display:inline-flex;align-items:center;gap:6px;margin:0 6px 8px 0;padding:7px 12px;border-radius:16px;border:1px solid var(--b2);font-family:var(--fmono);font-size:12px;background:var(--panel);min-height:36px}
@@ -966,6 +972,23 @@ async function renderBrain(){
   $('#addCreator').onsubmit = async e => { e.preventDefault(); const h = $('#addCreatorIn').value.trim(); if (!h) return; await addCreator(h); };
   $$('[data-delc]', body).forEach(b => b.onclick = async () => { if (!await confirmSheet('Remove creator?', 'Removes their profile and feed from this topic. Collected posts stay.', 'REMOVE')) return; await api('/api/topics/' + T.id + '/creator?handle=' + encodeURIComponent(b.dataset.delc), { method: 'DELETE' }); renderBrain(); });
   $$('[data-cnotes]', body).forEach(t => t.onchange = async () => { try{ await api('/api/topics/' + T.id + '/creator', { method: 'PATCH', body: { handle: t.dataset.cnotes, notes: t.value } }); toast('Notes saved'); }catch(e){ toast(e.message); } });
+  const saveAttrs = async handle => {
+    const box = $(`[data-attrs="${CSS.escape(handle)}"]`); if (!box) return;
+    const attrs = $$('.attrrow', box).map(r => ({ k: $('.attr-k', r).value.trim(), v: $('.attr-v', r).value.trim(), boost: $('.attr-boost', r).classList.contains('on') })).filter(a => a.k || a.v);
+    try{ await api('/api/topics/' + T.id + '/creator', { method: 'PATCH', body: { handle, attrs } }); toast('Attributes saved — search updated'); }catch(e){ toast(e.message); }
+  };
+  const bindRow = (row, handle) => {
+    $('.attr-x', row).onclick = () => { row.remove(); saveAttrs(handle); };
+    $('.attr-boost', row).onclick = e => { e.target.classList.toggle('on'); saveAttrs(handle); };
+    $$('.attr-k, .attr-v', row).forEach(i => i.onchange = () => saveAttrs(handle));
+  };
+  $$('[data-attrs]', body).forEach(box => $$('.attrrow', box).forEach(r => bindRow(r, box.dataset.attrs)));
+  $$('[data-attradd]', body).forEach(btn => btn.onclick = () => {
+    const handle = btn.dataset.attradd, box = $(`[data-attrs="${CSS.escape(handle)}"]`);
+    const tmp = document.createElement('div'); tmp.innerHTML = attrRow({ k: btn.dataset.k, v: '', boost: true });
+    const row = tmp.firstElementChild; box.appendChild(row); bindRow(row, handle);
+    (btn.dataset.k ? $('.attr-v', row) : $('.attr-k', row)).focus();
+  });
 }
 function creatorsHTML(creators){
   if (!creators || !creators.length) return '';
@@ -976,8 +999,16 @@ function creatorsHTML(creators){
     ${when(p) ? `<div class="note">posts ${when(p)}</div>` : ''}
     ${p.languages && p.languages.length ? `<div class="note">language: ${p.languages.map(esc).join(', ')}</div>` : ''}
     ${p.top_hashtags && p.top_hashtags.length ? `<div class="why" style="margin-top:6px">${p.top_hashtags.slice(0, 6).map(h => `<span>#${esc(h)}</span>`).join('')}</div>` : ''}
-    <label class="field" style="margin:8px 0 0"><span>Your notes / labels (whatever you want to record)</span><textarea data-cnotes="${esc(p.handle)}" rows="2" placeholder="e.g. interviews, west coast, posts weekends">${esc(p.notes || '')}</textarea></label>
+    <div class="s" style="margin:12px 0 6px">Your attributes — labels you add to tune the search</div>
+    <div class="attrs" data-attrs="${esc(p.handle)}">${(p.attrs || []).map(attrRow).join('')}</div>
+    <div class="row" style="margin-top:4px;flex-wrap:wrap;gap:5px">${['gender', 'sexuality', 'politics', 'region', 'style', 'language'].map(k => `<button class="chip" data-attradd="${esc(p.handle)}" data-k="${k}">+ ${k}</button>`).join('')}<button class="chip" data-attradd="${esc(p.handle)}" data-k="">+ custom</button></div>
+    <div class="note" style="margin-top:6px">Values with ✦ on are added to this topic's soft keywords, so they shape what's found and ranked. Nothing is guessed — only what you enter.</div>
+    <label class="field" style="margin:10px 0 0"><span>Free notes</span><textarea data-cnotes="${esc(p.handle)}" rows="2" placeholder="anything else to remember">${esc(p.notes || '')}</textarea></label>
   </div>`).join('');
+}
+function attrRow(a = { k: '', v: '', boost: true }){
+  return `<div class="attrrow"><input class="attr-k" placeholder="field" value="${esc(a.k || '')}" autocapitalize="off"><input class="attr-v" placeholder="value" value="${esc(a.v || '')}" autocapitalize="off">
+    <button class="attr-boost${a.boost !== false ? ' on' : ''}" title="Use to improve search" type="button">✦</button><button class="attr-x" title="Remove" type="button">✕</button></div>`;
 }
 async function addCreator(handle){
   toast('Learning @' + handle.replace(/^@/, '') + '… (see ACTIVITY)', 3500);

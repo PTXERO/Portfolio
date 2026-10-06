@@ -889,16 +889,49 @@ class Vault:
         if c and c.get("source_id"):
             self.delete_source(c["source_id"])
 
-    def set_creator_notes(self, tid, handle, notes):
-        """User's own free-text notes/labels on a creator (not auto-inferred)."""
+    def set_creator_meta(self, tid, handle, notes=None, attrs=None):
+        """User's own labels on a creator. `attrs` is a list of {k, v, boost}
+        the user types (gender, sexuality, politics, region, vibe… — anything).
+        Nothing is inferred. Attribute values marked boost feed the topic's
+        soft keywords so they cater the search and ranking."""
         t = self.topic(tid)
         creators = dict(t["settings"].get("creators") or {})
         c = creators.get(handle.lower())
         if not c:
             return None
-        c["notes"] = str(notes)[:4000]
+        if notes is not None:
+            c["notes"] = str(notes)[:4000]
+        if attrs is not None:
+            clean = []
+            for a in attrs[:40]:
+                k = str(a.get("k", "")).strip()[:40]
+                val = str(a.get("v", "")).strip()[:120]
+                if k or val:
+                    clean.append({"k": k, "v": val, "boost": a.get("boost", True) is not False})
+            c["attrs"] = clean
         self.update_topic(tid, {"settings": {"creators": creators}})
+        self._apply_creator_attrs(tid)
         return c
+
+    def _apply_creator_attrs(self, tid):
+        """Merge creators' boosting attribute values into the topic's soft
+        keywords, so the user's labels actually shape search + ranking."""
+        t = self.topic(tid)
+        st = t["settings"]
+        creators = st.get("creators") or {}
+        from_attrs = []
+        for c in creators.values():
+            for a in c.get("attrs") or []:
+                if a.get("boost") and a.get("v"):
+                    # split multi-word values into terms (e.g. "left leaning" → both)
+                    for term in [a["v"].strip()] + a["v"].split():
+                        term = term.strip().lower()
+                        if len(term) > 1 and term not in from_attrs:
+                            from_attrs.append(term)
+        # kept separate from the user's manual soft keywords so the two never
+        # clobber each other; the scorer and expansion read both lists
+        self.update_topic(tid, {"settings": {"_attr_soft": from_attrs}})
+        TopicScorer(self, tid).rescore()
 
     # ═════════ playback / download / analyze ═════════
     def resolve_play(self, item_id):
