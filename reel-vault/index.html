@@ -548,6 +548,7 @@ b.l1{color:#e2e2ea}b.l2{color:var(--acc2)}b.l3{color:#5a5a6c}.web .legend .l3{co
 .web .wpop input[type=range]{width:100%;margin:0;accent-color:var(--acc);background:transparent;border:none;padding:0;min-height:0;height:18px}
 .web .wpop em{font-style:normal;color:var(--dim);text-align:right}
 .dcard.person{border-color:rgba(var(--acc-rgb),.35)}
+.pill .lnk{background:none;border:none;padding:0;margin:0;color:inherit;font:inherit;cursor:pointer}.pill .lnk:hover{color:var(--acc)}
 .ptab{border-collapse:collapse;width:100%;margin:2px 0 4px}.ptab th{text-align:left;font-family:var(--fmono);font-weight:400;font-size:12px;color:var(--txt);padding:4px 10px 4px 0;white-space:nowrap;vertical-align:top}.ptab td{padding:3px 0}.ptab td .pill{margin:2px 4px 2px 0}
 a.pill{text-decoration:none}
 .web:fullscreen,.web.max{position:fixed;top:0;left:0;right:0;bottom:0;width:auto;height:auto;max-height:none;z-index:600;border-radius:0;border:none;margin:0;background:var(--bg)}
@@ -1164,9 +1165,10 @@ $('#newTopicForm').onsubmit = async e => {
       try{ const srcs = (await api('/api/sources')).sources || []; const mine = srcs.filter(x => [x.kind, x.source, x.preset, x.platform].some(v => String(v || '').toLowerCase() === person.platform)).map(x => x.id); if (mine.length) body.sources = mine; else body.run = false; }catch(e){}
     }
     const t = await api('/api/topics', { method: 'POST', body });
-    if (person && person.mode === 'account'){           // their own posts straight in, plus follow lists where public
+    if (person && person.mode === 'account'){           // the account itself is this topic's creator: its own feed, linked to the topic
       const pid = person.handle + '|' + person.platform;
-      api('/api/people/' + encodeURIComponent(pid) + '/more', { method: 'POST', body: { limit: 50, media: 'all' } }).catch(() => {});
+      try{ const c = await api('/api/topics/' + t.id + '/creator', { method: 'POST', body: { handle: person.handle, platform: person.platform } }); if (c.error) throw new Error(c.error); }
+      catch(e){ toast(e.message, 7000); }
       if (['mastodon', 'bluesky'].includes(person.platform)) api('/api/people/' + encodeURIComponent(pid) + '/follows', { method: 'POST', body: {} }).catch(() => {});
     }
     $('#ntName').value = ''; $('#ntSeeds').value = ''; $('#ntName').blur();
@@ -1546,6 +1548,7 @@ function linkedAccounts(items){
 }
 function personAccountCardHTML(p, items){
   const pid = p.handle + '|' + p.platform, url = (PROFILE_URL[p.platform] || (h => '#'))(p.handle);
+  const creators = {}; Object.keys((T.settings || {}).creators || {}).forEach(k => creators[k.toLowerCase()] = true);
   const own = items.filter(it => (it.author || '').toLowerCase() === p.handle.toLowerCase() && it.platform === p.platform);
   const linked = linkedAccounts(own);
   const tagged = {}; own.forEach(it => (String(it.text || '').replace(/https?:\/\/\S+/g, ' ').match(/(?:^|[^\w@])@([a-z0-9_.]{2,})/gi) || []).forEach(m => { const h = m.replace(/.*@/, '').toLowerCase().replace(/[.]+$/, ''); if (h !== p.handle.toLowerCase()) tagged[h] = (tagged[h] || 0) + 1; }));
@@ -1559,8 +1562,9 @@ function personAccountCardHTML(p, items){
       ${['mastodon', 'bluesky'].includes(p.platform) ? `<button class="btn sm" id="paFollows">↔ LOAD FOLLOWS</button><button class="btn sm" id="paCrawl">⟲ CRAWL HOPS</button>` : `<span class="note">${esc(p.platform)} publishes no follow list — links come from mentions and what they post.</span>`}
       <span class="note grow" id="paMsg">${fmtN(own.length)} of their posts in the library</span>
     </div>
-    <div class="note" style="margin-bottom:4px">Who they tag <small>(in their own posts · times tagged)</small></div>
-    <div class="meta">${tags.length ? tags.map(([h, n]) => `<button class="pill" data-focus="@${esc(h)}">@${esc(h)} ×${n}</button>`).join('') : '<span class="note">nothing yet — pull their posts first</span>'}</div>
+    <div class="note" style="margin-bottom:4px">Who they tag <small>(in their own posts · times tagged · <b>+</b> pulls that account in as a creator of this topic, same network)</small></div>
+    <div class="meta">${tags.length ? tags.map(([h, n]) => { const have = !!creators[h]; return `<span class="pill${have ? ' a' : ''}"><button class="lnk" data-focus="@${esc(h)}">@${esc(h)} ×${n}</button>${have ? ' ✓' : ` <button class="lnk" data-addc="${esc(h)}" data-n="${n}" title="Pull @${esc(h)}'s own ${esc(p.platform)} posts into this topic">+</button>`}</span>`; }).join('') : '<span class="note">nothing yet — pull their posts first</span>'}</div>
+    ${tags.some(([h, n]) => n >= 2 && !creators[h]) ? `<div class="row wrap" style="gap:8px;margin-top:6px"><button class="btn sm" id="paExpand">⇶ EXPAND 1 HOP <small>· add everyone tagged 2+ times (${tags.filter(([h, n]) => n >= 2 && !creators[h]).length})</small></button><span class="note">Each becomes a creator here; their tags then show up too — repeat to go another hop.</span></div>` : ''}
     <div class="note" style="margin:10px 0 4px">Linked elsewhere <small>(URLs they posted themselves — the only cross-network evidence used)</small></div>
     <div class="meta">${linked.length ? linked.map(l => `<a class="pill a" href="${esc(l.url)}" target="_blank" rel="noreferrer noopener">${esc(l.site)} · ${esc(l.handle)}${l.n > 1 ? ' ×' + l.n : ''}</a>`).join('') : '<span class="note">no links to other networks in their posts so far</span>'}</div>
   </div>`;
@@ -1620,7 +1624,7 @@ async function renderDossier(){
   const person = (T.settings || {}).person || null;
   let ownItems = items;
   if (person && person.mode === 'account'){           // their own pulled posts live in the library, not only in this topic
-    try{ const r = await api('/api/search?' + new URLSearchParams({ q: '@' + person.handle, limit: 500, fuzzy: '0', synonyms: '0' })); ownItems = [...items, ...(r.items || [])]; }catch(e){}
+    try{ const r = await api('/api/search?' + new URLSearchParams({ q: '@' + person.handle, limit: 500, fuzzy: '0', synonyms: '0' })); const seenIds = new Set(items.map(i => i.id)); ownItems = items.concat((r.items || []).filter(i => !seenIds.has(i.id))); }catch(e){}
   }
   body.innerHTML = `<div class="dossier">
     ${person ? personCardHTML(person, T, ownItems) : ''}
@@ -1651,6 +1655,12 @@ async function renderDossier(){
     const pid = person.handle + '|' + person.platform, m = $('#paMsg', body);
     const job = async (path, body2, label) => { m.innerHTML = `<span class="spinner"></span> ${label}…`; try{ let r = await api('/api/people/' + encodeURIComponent(pid) + path, { method: 'POST', body: body2 }); if (r.error) throw new Error(r.error); for (let i = 0; i < 60 && r.id && ['queued', 'running'].includes(r.state); i++){ await new Promise(x => setTimeout(x, 900)); r = await api('/api/jobs/' + r.id); } if (r.state === 'error') throw new Error((r.log || []).slice(-1)[0] || 'failed'); toast(label + ' done', 3000); renderDossier(); }catch(e){ m.textContent = e.message; } };
     $('#paPull', body).onclick = () => job('/more', { limit: 50, media: 'all' }, 'Pulling posts');
+    $$('[data-addc]', body).forEach(b => b.onclick = () => addCreator(b.dataset.addc, person.platform));
+    const ex = $('#paExpand', body); if (ex) ex.onclick = async () => {
+      ex.disabled = true; const hs = $$('[data-addc]', body).filter(b => +b.dataset.n >= 2).map(b => b.dataset.addc).slice(0, 10);
+      for (const h of hs){ try{ const j = await api('/api/topics/' + T.id + '/creator', { method: 'POST', body: { handle: h, platform: person.platform } }); if (j.error) throw new Error(j.error); for (let i = 0; i < 60; i++){ const r = await api('/api/jobs/' + j.id); if (!['queued', 'running'].includes(r.state)) break; await new Promise(x => setTimeout(x, 900)); } }catch(e){ toast('@' + h + ': ' + e.message, 4000); } }
+      toast('Expanded by ' + hs.length + ' account' + (hs.length === 1 ? '' : 's'), 4000); try{ T = await api('/api/topics/' + T.id); }catch(e){} renderDossier();
+    };
     const pf = $('#paFollows', body); if (pf) pf.onclick = () => job('/follows', {}, 'Reading follow lists');
     const pc = $('#paCrawl', body); if (pc) pc.onclick = () => openCrawl(pid);
   }
@@ -1773,10 +1783,11 @@ function attrRow(a = { k: '', v: '', boost: true }){
   return `<div class="attrrow"><input class="attr-k" placeholder="field" value="${esc(a.k || '')}" autocapitalize="off"><input class="attr-v" placeholder="value" value="${esc(a.v || '')}" autocapitalize="off">
     <button class="attr-boost${a.boost !== false ? ' on' : ''}" title="Use to improve search" type="button">✦</button><button class="attr-x" title="Remove" type="button">✕</button></div>`;
 }
-async function addCreator(handle){
+async function addCreator(handle, platform){
   toast('Learning @' + handle.replace(/^@/, '') + '… (see ACTIVITY)', 3500);
   try{
-    const j = await api('/api/topics/' + T.id + '/creator', { method: 'POST', body: { handle } });
+    const j = await api('/api/topics/' + T.id + '/creator', { method: 'POST', body: Object.assign({ handle }, platform ? { platform } : {}) });
+    if (j.error) throw new Error(j.error);
     pollJobs();
     const wait = async () => {
       let r; try{ r = await api('/api/jobs/' + j.id); }catch(e){ return; }
@@ -1784,9 +1795,10 @@ async function addCreator(handle){
       if (r.state === 'done' && r.result){ toast('Added @' + r.result.handle + ': ' + r.result.collected + ' posts learned'); }
       else toast('Could not profile that creator (check ACTIVITY log)', 4000);
       if (route.view === 'topic' && route.seg === 'brain') renderBrain();
+      if (route.view === 'topic' && route.seg === 'dossier'){ try{ T = await api('/api/topics/' + T.id); }catch(e){} renderDossier(); }
     };
     wait();
-  }catch(e){ toast(e.message); }
+  }catch(e){ toast(e.message, 6000); }
 }
 async function setQ(query, action){ try{ await api('/api/topics/' + T.id + '/queries', { method: 'POST', body: { query, action } }); }catch(e){ toast(e.message); } }
 

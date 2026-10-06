@@ -323,10 +323,50 @@
       if (sub === 'insights') return await insights(arg);
       if (sub === 'queries' && method === 'POST') { const act = body.action, q = String(body.query || '').trim(); t.queries = t.queries || []; if (act === 'add') { if (!t.queries.some((x) => x.query.toLowerCase() === q.toLowerCase())) t.queries.push({ query: q, origin: 'user', enabled: true, locked: true, runs: 0, found: 0, pos: 0, neg: 0 }); } else { const row = t.queries.find((x) => x.query === q); if (row) { if (act === 'delete') t.queries = t.queries.filter((x) => x !== row); else { row.enabled = act === 'enable'; row.locked = true; } } } await saveTopic(t); await rescore(arg); return { ok: true }; }
       if (sub === 'reason' && method === 'DELETE') { const P = Object.fromEntries(new URLSearchParams(qs)); if (P.anti) t.settings.anti = (t.settings.anti || []).filter((w) => w !== P.anti); if (P.pref) delete (t.settings.prefs || {})[P.pref]; await saveTopic(t); await rescore(arg); return { ok: true }; }
-      if (sub === 'creator' || sub === 'follow' || sub === 'more') return { error: 'creator profiles need the local PC server (they fetch a whole profile)' };
+      if (sub === 'creator' && method === 'POST') return creator(t, body || {});
+      if (sub === 'creator' && method === 'DELETE') { const P = Object.fromEntries(new URLSearchParams(qs)); const c = Object.assign({}, t.settings.creators || {}); delete c[String(P.handle || '').toLowerCase()]; t.settings.creators = c; await saveTopic(t); return { ok: true }; }
+      if (sub === 'follow' || sub === 'more') return { error: 'this needs the local PC server' };
       return { error: 'topic route not available in browser: ' + parts.join('/') };
     },
   };
+  // ── a creator for this topic: one @account on one network. Their own posts are pulled through the
+  //    Worker (/account) and linked to the topic; what they post about becomes soft signal + searches.
+  //    X / Instagram / TikTok need a login, so they're PC-server only.
+  const WORKER_ACCOUNT = new Set(['mastodon', 'bluesky', 'reddit', 'youtube', 'lemmy']);
+  function creator(t, body) {
+    let handle = String(body.handle || body.author || '').trim(), platform = String(body.platform || '').toLowerCase();
+    const m = handle.match(/^https?:\/\/(?:www\.)?([^/]+)\/(?:profile\/|user\/|@)?([^/?#]+)/i);
+    if (m) { const dom = m[1]; handle = m[2]; platform = /bsky/.test(dom) ? 'bluesky' : /youtu/.test(dom) ? 'youtube' : /reddit/.test(dom) ? 'reddit' : /x\.com|twitter/.test(dom) ? 'x' : /instagram/.test(dom) ? 'instagram' : /tiktok/.test(dom) ? 'tiktok' : 'mastodon'; if (platform === 'mastodon' && !handle.includes('@')) handle += '@' + dom; }
+    handle = handle.replace(/^@/, '');
+    if (!handle) return { error: 'enter a username or profile link' };
+    if (!platform) platform = handle.includes('@') ? 'mastodon' : /\.bsky\.social$|\./.test(handle) ? 'bluesky' : 'x';
+    if (!WORKER_ACCOUNT.has(platform)) return { error: platform + ' needs a login to read a profile — run the PC server (SETUP → cookies) for ' + platform + ' accounts. Mastodon, Bluesky, Reddit and YouTube work from the browser.' };
+    const j = L.newJob('creator', 'profile @' + handle); j.topic_id = t.id;
+    L.runSafe(j, async () => {
+      j.total = 3; j.log('◎ learning @' + handle + ' (' + platform + ') for this topic');
+      const pid = handle + '|' + platform;
+      const mj = await L.people.request('POST', ['people', pid, 'more'], '', { limit: 40, media: t.settings.media === 'video' ? 'video' : 'all' });
+      if (mj.error) throw new Error(mj.error);
+      for (let i = 0; i < 90; i++) { const r = L.jobs[mj.id]; if (!r || !['running', 'queued'].includes(r.state)) { if (r && r.state === 'error') throw new Error((r.log_lines || []).slice(-1)[0] || 'could not read the account'); break; } await new Promise((x) => setTimeout(x, 400)); }
+      j.done = 1;
+      const items = (await idb.all('items')).filter((it) => String(it.author || '').toLowerCase() === handle.toLowerCase() && it.platform === platform);
+      for (const it of items) await link(t.id, it.id, '@' + handle, 'creator');
+      j.done = 2; j.stats.found = items.length; j.stats.linked = items.length;
+      // what they post about → soft keywords + searches (same as the server's creator profile)
+      const tagC = {}; items.forEach((it) => String(it.hashtags || '').toLowerCase().split(/\s+/).filter(Boolean).forEach((h) => tagC[h] = (tagC[h] || 0) + 1));
+      const topTags = Object.entries(tagC).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([h]) => h);
+      const t2 = await getTopic(t.id);
+      t2.settings.soft = [...new Set((t2.settings.soft || []).concat(topTags.slice(0, 4)))];
+      t2.settings.creators = Object.assign({}, t2.settings.creators || {}, { [handle.toLowerCase()]: { handle, platform, n: items.length, top_hashtags: topTags, added: now() } });
+      t2.queries = t2.queries || [];
+      for (const q of ['@' + handle].concat(topTags.slice(0, 3).map((h) => '#' + h))) if (!t2.queries.some((x) => x.query.toLowerCase() === q.toLowerCase())) t2.queries.push({ query: q, origin: 'creator', enabled: true, locked: false, runs: 0, found: 0, pos: 0, neg: 0, created: now() });
+      await saveTopic(t2); await rescore(t.id);
+      j.done = 3; j.result = { handle, platform, collected: items.length, profile: { top_hashtags: topTags } };
+      j.log('  done: ' + items.length + ' posts, ' + topTags.length + ' hashtags learned');
+    });
+    return L.jobDict(j);
+  }
+
   // ── auto-update: topics with an Auto-refresh setting keep collecting while the app is open.
   //    (The PC server has a real scheduler; in browser mode this is it.)
   async function autoRefresh() {

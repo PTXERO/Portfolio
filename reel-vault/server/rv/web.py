@@ -69,7 +69,10 @@ def parse_creator(text, platform=None, author_url=None):
             handle = parts[-1] if parts[-1] not in ("videos", "media", "submitted") else parts[-2] if len(parts) > 1 else ""
         plat = ("x" if dom in ("x.com", "twitter.com") else "youtube" if "youtu" in dom
                 else "tiktok" if "tiktok" in dom else "reddit" if "reddit" in dom
-                else "mastodon" if dom else platform or "")
+                else "bluesky" if "bsky" in dom else "instagram" if "instagram" in dom
+                else "threads" if "threads" in dom else "mastodon" if dom else platform or "")
+        if plat == "mastodon" and handle and "@" not in handle:
+            handle = f"{handle}@{dom}"                 # keep the server with the name
         return handle.lstrip("@"), plat, (url if plat in ("youtube", "mastodon") else author_url)
     return text.lstrip("@"), (platform or "x"), author_url
 

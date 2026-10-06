@@ -848,14 +848,28 @@ class Vault:
     def follow_author(self, tid, author, platform, author_url=None):
         """Turn a creator you keep liking into a followed feed for this topic."""
         tpl, engine, kind = author_url, "auto", "url"
+        author = author.lstrip("@")
         if platform == "x":
             tpl, engine = f"https://x.com/{author}/media", "gallery-dl"
-        elif platform == "mastodon" and author_url:
-            tpl, kind = author_url.rstrip("/") + ".rss", "rss"
-        elif platform == "youtube" and author_url:
-            tpl, engine = author_url.rstrip("/") + "/videos", "yt-dlp"
+        elif platform == "mastodon":
+            if author_url:
+                tpl, kind = author_url.rstrip("/") + ".rss", "rss"
+            elif "@" in author:                       # user@host → that server's public feed
+                user, host = author.split("@", 1)
+                tpl, kind = f"https://{host}/@{user}.rss", "rss"
+        elif platform == "youtube":
+            base = (author_url or f"https://www.youtube.com/@{author}").rstrip("/")
+            tpl, engine = (base if base.endswith("/videos") else base + "/videos"), "yt-dlp"
         elif platform == "reddit":
             tpl, engine = f"https://www.reddit.com/user/{author}/submitted/", "gallery-dl"
+        elif platform == "bluesky":
+            tpl, engine = f"https://bsky.app/profile/{author}", "gallery-dl"
+        elif platform == "tiktok":
+            tpl, engine = f"https://www.tiktok.com/@{author}", "yt-dlp"
+        elif platform == "instagram":
+            tpl, engine = f"https://www.instagram.com/{author}/", "gallery-dl"
+        elif platform == "threads":
+            tpl, engine = f"https://www.threads.net/@{author}", "gallery-dl"
         if not tpl:
             raise ValueError("don't know this creator's page")
         return self.add_source({"name": f"@{author} ({platform})", "kind": kind, "template": tpl,

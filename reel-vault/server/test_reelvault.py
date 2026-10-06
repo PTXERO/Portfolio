@@ -607,6 +607,27 @@ class TestPeople(Base):
         self.assertTrue(all(n["platform"] == "x" for n in people.graph(self.v, platform="x")["nodes"]))
         self.assertEqual(people.handle(self.v, "GET", ["people"], {"platform": "mastodon"}, {})["total"], 3)
 
+    def test_creator_feeds_per_network(self):
+        """One @username on one site becomes that topic's own source — no cross-site guessing."""
+        from rv.web import parse_creator
+        tid = self.v.create_topic("me")["id"]
+        feeds = {plat: self.v.follow_author(tid, "someone", plat)["template"]
+                 for plat in ("x", "youtube", "reddit", "bluesky", "tiktok", "instagram", "threads")}
+        self.assertEqual(feeds["x"], "https://x.com/someone/media")
+        self.assertEqual(feeds["youtube"], "https://www.youtube.com/@someone/videos")
+        self.assertEqual(feeds["bluesky"], "https://bsky.app/profile/someone")
+        self.assertEqual(feeds["tiktok"], "https://www.tiktok.com/@someone")
+        self.assertEqual(feeds["instagram"], "https://www.instagram.com/someone/")
+        self.assertEqual(self.v.follow_author(tid, "someone@m.social", "mastodon")["template"], "https://m.social/@someone.rss")
+        # every feed is scoped to this topic only
+        self.assertTrue(all(s["options"].get("topic") == tid for s in self.v.list_sources() if s["name"].startswith("@someone")))
+        # a bare handle keeps the platform you chose; a link decides its own
+        self.assertEqual(parse_creator("@someone", "youtube")[:2], ("someone", "youtube"))
+        self.assertEqual(parse_creator("https://bsky.app/profile/x.bsky.social")[:2], ("x.bsky.social", "bluesky"))
+        self.assertEqual(parse_creator("https://www.instagram.com/some.one/")[:2], ("some.one", "instagram"))
+        self.assertEqual(parse_creator("https://m.social/@someone")[:2], ("someone@m.social", "mastodon"))
+
+
 class TestWordWeb(Base):
     """The word web: @accounts, #hashtags and words/"phrases" in one graph, centred on a focus."""
 
