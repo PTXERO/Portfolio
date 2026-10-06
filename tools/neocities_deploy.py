@@ -39,6 +39,12 @@ ALLOWED = set("""apng asc atom avif bin cjs css csv dae eot epub geojson gif glb
 ico jpeg jpg js json jxl key kml knowl less manifest map markdown md mf mid midi mjs mtl obj opml osdx
 otf pdf pgp pls png py rdf rss sass scss sf2 svg text toml ts tsv ttf txt webapp webmanifest webp woff
 woff2 xcf xml xsl xslt yaml yml""".split())
+# files Neocities won't take under their real type, published as .txt copies so the
+# one-line installers can live on the site:  irm https://ptxero.neocities.org/reel-vault/install.txt | iex
+PUBLISH_AS = {
+    "reel-vault/install.txt":    "reel-vault/start.ps1",   # Windows (PowerShell)
+    "reel-vault/install-sh.txt": "reel-vault/start.sh",    # macOS / Linux
+}
 
 
 def local_files():
@@ -55,6 +61,11 @@ def local_files():
             skipped.append(rel)
             continue
         out[rel] = p
+    for rel, src in PUBLISH_AS.items():
+        if (ROOT / src).is_file():
+            out[rel] = ROOT / src
+            if src in skipped:
+                skipped.remove(src)
     return out, skipped
 
 

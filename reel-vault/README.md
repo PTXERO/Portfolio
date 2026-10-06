@@ -26,7 +26,7 @@ On a computer that stays on, run **one command**. It does everything:
 **Windows** — paste into PowerShell (no admin window needed):
 
 ```powershell
-irm https://raw.githubusercontent.com/PTXERO/Portfolio/claude/new-session-7sf9nm/reel-vault/start.ps1 | iex
+irm https://ptxero.neocities.org/reel-vault/install.txt | iex
 ```
 
 After the first time, just **double-click `reel-vault\start.cmd`**.
@@ -34,7 +34,7 @@ After the first time, just **double-click `reel-vault\start.cmd`**.
 **Mac / Linux** — paste into Terminal:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PTXERO/Portfolio/claude/new-session-7sf9nm/reel-vault/start.sh | bash
+curl -fsSL https://ptxero.neocities.org/reel-vault/install-sh.txt | bash
 ```
 
 After the first time: `bash ~/Portfolio/reel-vault/start.sh`. (Mac needs [Homebrew](https://brew.sh);
@@ -48,7 +48,7 @@ Options:
 | | |
 |---|---|
 | `REELVAULT_DIR` | where the project lives (default `~/Portfolio`) |
-| `REELVAULT_BRANCH` | branch to follow (default: this build's branch; `main` once merged) |
+| `REELVAULT_BRANCH` | branch to follow (default `main`) |
 | `REELVAULT_NO_SYSTEM_UPDATE=1` | skip the Python / Git / ffmpeg update check |
 | anything after the script | passed to the server, e.g. `start.sh --port 9000` |
 

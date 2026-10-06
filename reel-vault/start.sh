@@ -10,7 +10,8 @@
 #    5. starts the auto-updating launcher (run.py)
 #
 #  First time, paste this into Terminal:
-#    curl -fsSL https://raw.githubusercontent.com/PTXERO/Portfolio/claude/new-session-7sf9nm/reel-vault/start.sh | bash
+#    curl -fsSL https://ptxero.neocities.org/reel-vault/install-sh.txt | bash
+#  (same file on GitHub: https://raw.githubusercontent.com/PTXERO/Portfolio/main/reel-vault/start.sh)
 #
 #  After that:  bash reel-vault/start.sh   (from the project folder)
 #
@@ -23,7 +24,7 @@
 set -euo pipefail
 
 REPO_URL="https://github.com/PTXERO/Portfolio"
-BRANCH="${REELVAULT_BRANCH:-claude/new-session-7sf9nm}"   # switch to main once merged
+BRANCH="${REELVAULT_BRANCH:-main}"
 
 say()  { printf '  \033[36m%s\033[0m\n' "$*"; }
 warn() { printf '  \033[33m! %s\033[0m\n' "$*"; }

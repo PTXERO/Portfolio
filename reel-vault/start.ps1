@@ -9,7 +9,8 @@
 #    5. starts the auto-updating launcher (run.py)
 #
 #  First time, paste this into PowerShell (no download needed):
-#    irm https://raw.githubusercontent.com/PTXERO/Portfolio/claude/new-session-7sf9nm/reel-vault/start.ps1 | iex
+#    irm https://ptxero.neocities.org/reel-vault/install.txt | iex
+#  (same file on GitHub: https://raw.githubusercontent.com/PTXERO/Portfolio/main/reel-vault/start.ps1)
 #
 #  After that, just double-click  reel-vault\start.cmd  (or run this file again).
 #
@@ -27,7 +28,7 @@
   # progress to stderr, which 'Stop' would turn into a fatal error.
   $ErrorActionPreference = 'Continue'
   $RepoUrl = 'https://github.com/PTXERO/Portfolio'
-  $Branch  = if ($env:REELVAULT_BRANCH) { $env:REELVAULT_BRANCH } else { 'claude/new-session-7sf9nm' }   # switch to 'main' once merged
+  $Branch  = if ($env:REELVAULT_BRANCH) { $env:REELVAULT_BRANCH } else { 'main' }
   $ServerArgs = @($args)
 
   function Say($msg)  { Write-Host "  $msg" -ForegroundColor Cyan }
