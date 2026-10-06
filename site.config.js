@@ -83,12 +83,12 @@ const SITE = {
     },
     {
       id:     'reel-vault',
-      title:  'REEL//VAULT',
-      sub:    'v2.0',
-      desc:   'Self-learning video finder. Type a topic, it searches X, YouTube, Mastodon, Reddit and any site you add, then learns from your 👍/👎. Phone-first.',
-      tags:   ['video', 'search', 'ml', 'python'],
+      title:  'SEARCH//NET',
+      sub:    'v3.0',
+      desc:   'Self-learning social search. Ask about a topic and it searches Mastodon, Bluesky, Reddit, YouTube, X and any site you add, learns from your 👍/👎, builds profiles of the accounts behind the posts and draws the web of how they connect (follows, mentions, shared tags). Runs in your browser through your own Cloudflare Worker, or on your PC. Desktop + phone.',
+      tags:   ['search', 'social', 'osint', 'ml', 'python'],
       url:    './reel-vault/',
-      status: 'wip',
+      status: 'live',
     },
     // Project Template:
     // {
