@@ -413,8 +413,8 @@ class Handler(BaseHTTPRequestHandler):
         if route == "search":
             return ok(search(v.db, v.store, params, semantic=v.semantic_scores))
 
-        if route in ("people", "graph"):          # WEB view: account profiles + connection web
-            return ok(people.handle(v, method, parts, params, self._body() if method == "PATCH" else {}))
+        if route in ("people", "graph", "identities"):   # WEB view: profiles, connection web, one-person identities
+            return ok(people.handle(v, method, parts, params, self._body() if method in ("PATCH", "POST") else {}))
 
         if route == "items" and arg:
             if sub == "related":

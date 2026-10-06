@@ -46,6 +46,33 @@
     all[id] = m; await idb.put('kv', { k: 'people_meta', v: all }); return m;
   }
 
+  // ── identities: one person, several accounts (possibly on several networks). Every link is one YOU
+  //    made, and each remembers why ('you' typed it, 'post link' they posted, 'bio link', 'name match'
+  //    you accepted). Nothing here is ever inferred by the engine.
+  async function identities() { const row = await idb.get('kv', 'identities'); return (row && row.v) || []; }
+  async function saveIdentities(list) { await idb.put('kv', { k: 'identities', v: list }); return list; }
+  const accKey = (id) => String(id || '').replace(/^@/, '').toLowerCase();
+  async function identityIndex() { const map = new Map(); for (const I of await identities()) for (const acc of I.accounts || []) map.set(accKey(acc.id), I); return map; }
+  function identityDTO(I) { return { id: I.id, name: I.name, note: I.note || '', topic_id: I.topic_id || null, created: I.created, accounts: (I.accounts || []).map((a) => ({ id: a.id, handle: String(a.id).split('|')[0], platform: String(a.id).split('|')[1] || '', how: a.how || 'you', added: a.added })) }; }
+  async function identityWrite(method, id, body) {
+    let list = await identities();
+    if (method === 'POST') {
+      const I = { id: Math.random().toString(36).slice(2, 10), name: String(body.name || '').trim().slice(0, 120) || 'unnamed', note: String(body.note || '').slice(0, 2000), accounts: [], topic_id: body.topic_id || null, created: now() };
+      (body.accounts || []).forEach((a) => { const aid = typeof a === 'string' ? a : a.id; if (!aid) return; list.forEach((O) => { O.accounts = (O.accounts || []).filter((x) => accKey(x.id) !== accKey(aid)); });   // an account belongs to one person
+        if (!I.accounts.some((x) => accKey(x.id) === accKey(aid))) I.accounts.push({ id: aid.replace(/^@/, ''), how: (a && a.how) || 'you', added: now() }); });
+      list.push(I); await saveIdentities(list); return identityDTO(I);
+    }
+    const I = list.find((x) => x.id === id); if (!I) return { error: 'no such person' };
+    if (method === 'DELETE') { await saveIdentities(list.filter((x) => x.id !== id)); return { ok: true }; }
+    if ('name' in body) I.name = String(body.name || '').trim().slice(0, 120) || I.name;
+    if ('note' in body) I.note = String(body.note || '').slice(0, 2000);
+    if ('topic_id' in body) I.topic_id = body.topic_id || null;
+    (body.add || []).forEach((a) => { const aid = (typeof a === 'string' ? a : a.id || '').replace(/^@/, ''); if (!aid) return; list.forEach((O) => { if (O.id !== I.id) O.accounts = (O.accounts || []).filter((x) => accKey(x.id) !== accKey(aid)); });   // an account belongs to one person
+      if (!I.accounts.some((x) => accKey(x.id) === accKey(aid))) I.accounts.push({ id: aid, how: (a && a.how) || 'you', added: now() }); });
+    (body.remove || []).forEach((aid) => { I.accounts = I.accounts.filter((x) => accKey(x.id) !== accKey(aid)); });
+    await saveIdentities(list); return identityDTO(I);
+  }
+
   // ── build per-account aggregates from collected items ──
   async function build() {
     const items = await idb.all('items');
@@ -77,9 +104,11 @@
       if (src) { src._followsAt = Math.max(src._followsAt, r.ts || 0); if (r.kind === 'follows') src._followsN++; else src._followersN++; }
       if (src && dst) { if (r.kind === 'follows') { src._follows.add(dst.id); dst._followers.add(src.id); } else { src._followers.add(dst.id); dst._follows.add(src.id); } }
     }
+    const idIndex = await identityIndex();
+    for (const a of by.values()) a._identity = idIndex.get(accKey(a.id)) || null;
     const N = by.size || 1;
     const idf = (df) => Math.log((N + 1) / ((df || 0) + 1)) + 1;
-    return { by, N, hDF, wDF, idf, rel, lower };
+    return { by, N, hDF, wDF, idf, rel, lower, idIndex };
   }
 
   // votes → which topics an account's items sit in
@@ -123,6 +152,7 @@
       known.sort((x, y) => y.n - x.n); unknown.sort((x, y) => y.posts - x.posts);
       return { n: rows.length, known, unknown: unknown.slice(0, 40) }; };
     return {
+      identity: a._identity ? identityDTO(a._identity) : null,
       follows: relOut('follows'), followed_by: relOut('followed_by'), follows_loaded: a._followsAt || 0,
       follows_supported: ['mastodon', 'bluesky'].includes(a.platform),
       id, author: a.author, author_name: a.author_name, platform: a.platform, author_url: a.author_url,
@@ -154,8 +184,10 @@
       // follows (either direction): the platform itself says these two are linked
       const fAB = a._follows.has(b.id), fBA = b._follows.has(a.id);
       if (fAB || fBA) { w += 4; why.push({ kind: 'follows', mutual: fAB && fBA }); }
-      if (w > 0) out.push({ id: b.id, author: b.author, platform: b.platform, author_url: b.author_url, w: +w.toFixed(2), why, shared_hashtags: hn, shared_words: wn, t: (fAB || fBA || mAB || mBA) ? 1 : hn ? 2 : 3,
-        p: { m: (mAB || mBA) ? 3 : 0, f: (fAB || fBA) ? 4 : 0, h: +hs.toFixed(2), s: +ws.toFixed(2) } });
+      const same1 = a._identity && b._identity && a._identity.id === b._identity.id;   // you said these are one person
+      if (same1) { w += 5; why.push({ kind: 'identity', name: a._identity.name }); }
+      if (w > 0) out.push({ id: b.id, author: b.author, platform: b.platform, author_url: b.author_url, w: +w.toFixed(2), why, shared_hashtags: hn, shared_words: wn, t: (same1 || fAB || fBA || mAB || mBA) ? 1 : hn ? 2 : 3,
+        p: { m: (mAB || mBA) ? 3 : 0, f: (fAB || fBA) ? 4 : 0, h: +hs.toFixed(2), s: +ws.toFixed(2), i: same1 ? 5 : 0 } });
     }
     return out.sort((x, y) => y.w - x.w);
   }
@@ -180,13 +212,14 @@
         let wn = 0; a._W.forEach((x) => { if (b._W.has(x)) { w += 0.5 * idf(wDF[x]); ws += 0.5 * idf(wDF[x]); wn++; } });
         const ment = a.platform === b.platform && (a._mentions.has(b.author.toLowerCase()) || b._mentions.has(a.author.toLowerCase()));
         const fol = a._follows.has(b.id) || b._follows.has(a.id);
-        if (ment) w += 3; if (fol) w += 4;
-        if (w >= (opts.min || 1.5) || ment || fol) { edges.push({ a: a.id, b: b.id, w: +w.toFixed(2), h: hn, m: ment || fol ? 1 : 0, f: fol ? 1 : 0, t: ment || fol ? 1 : hn ? 2 : 3, p: { m: ment ? 3 : 0, f: fol ? 4 : 0, h: +hs.toFixed(2), s: +ws.toFixed(2) } }); strength[a.id] = (strength[a.id] || 0) + w; strength[b.id] = (strength[b.id] || 0) + w; }
+        const same1 = a._identity && b._identity && a._identity.id === b._identity.id;
+        if (ment) w += 3; if (fol) w += 4; if (same1) w += 5;
+        if (w >= (opts.min || 1.5) || ment || fol || same1) { edges.push({ a: a.id, b: b.id, w: +w.toFixed(2), h: hn, m: ment || fol || same1 ? 1 : 0, f: fol ? 1 : 0, t: ment || fol || same1 ? 1 : hn ? 2 : 3, p: { m: ment ? 3 : 0, f: fol ? 4 : 0, h: +hs.toFixed(2), s: +ws.toFixed(2), i: same1 ? 5 : 0 } }); strength[a.id] = (strength[a.id] || 0) + w; strength[b.id] = (strength[b.id] || 0) + w; }
       }
     }
     // hand-added links always show
     for (const a of top) (meta[a.id]?.links || []).forEach((lid) => { if (topSet.has(lid) && !edges.some((e) => (e.a === a.id && e.b === lid) || (e.a === lid && e.b === a.id))) edges.push({ a: a.id, b: lid, w: 2, h: 0, m: 0, you: 1, t: 1, p: { m: 0, f: 2, h: 0, s: 0 } }); });
-    const nodes = top.map((a) => ({ id: a.id, author: a.author, platform: a.platform, n: nPosts(a.items), strength: +(strength[a.id] || 0).toFixed(1), attrs: (meta[a.id]?.attrs || []).slice(0, 4), topics: [...new Set(a.items.flatMap((it) => (byItem.get(it.id) || []).map((v) => v.topic_id)))].length }));
+    const nodes = top.map((a) => ({ id: a.id, author: a.author, platform: a.platform, n: nPosts(a.items), identity: a._identity ? a._identity.name : null, identity_id: a._identity ? a._identity.id : null, strength: +(strength[a.id] || 0).toFixed(1), attrs: (meta[a.id]?.attrs || []).slice(0, 4), topics: [...new Set(a.items.flatMap((it) => (byItem.get(it.id) || []).map((v) => v.topic_id)))].length }));
     return { nodes, edges, total_accounts: by.size, shown: nodes.length, generated: now() };
   }
 
@@ -204,7 +237,7 @@
       const cad = cadence(a.items);
       const tset = new Set(); a.items.forEach((it) => (byItem.get(it.id) || []).forEach((v) => tset.add(topics[v.topic_id])));
       const media = {}; a.items.forEach((it) => { const m = it.media || 'video'; media[m] = (media[m] || 0) + 1; });
-      return { id: a.id, author: a.author, author_name: a.author_name, platform: a.platform, author_url: a.author_url, n: nPosts(a.items), per_week: cad.per_week, last: cad.last, follows: a._followsN, followed_by: a._followersN, topics: [...tset].filter(Boolean).slice(0, 4), media, hashtags: topCount(a.items, (it) => [...hashSet(it)], 4).map((x) => x.value), attrs: (meta[a.id]?.attrs || []).slice(0, 4), has_notes: !!(meta[a.id]?.notes) };
+      return { id: a.id, author: a.author, author_name: a.author_name, platform: a.platform, author_url: a.author_url, n: nPosts(a.items), identity: a._identity ? a._identity.name : null, identity_id: a._identity ? a._identity.id : null, per_week: cad.per_week, last: cad.last, follows: a._followsN, followed_by: a._followersN, topics: [...tset].filter(Boolean).slice(0, 4), media, hashtags: topCount(a.items, (it) => [...hashSet(it)], 4).map((x) => x.value), attrs: (meta[a.id]?.attrs || []).slice(0, 4), has_notes: !!(meta[a.id]?.notes) };
     });
     const SO = { active: (x, y) => (y.last || 0) - (x.last || 0), cadence: (x, y) => y.per_week - x.per_week, name: (x, y) => x.author.localeCompare(y.author),
       network: (x, y) => x.platform.localeCompare(y.platform) || (y.n - x.n), follows: (x, y) => (y.follows + y.followed_by) - (x.follows + x.followed_by) || (y.n - x.n) };
@@ -237,7 +270,7 @@
     const bump = (k, w) => { nodeW[k] = (nodeW[k] || 0) + w; nodeN[k] = (nodeN[k] || 0) + 1; };
     const edgeT = {};   // best (lowest) tier seen for the pair
     const edgeP = {};   // how much of the weight came from each kind: m mention · f follow · h shared hashtag · s shared words
-    const link = (a, b, w, t = 3, kind = 's') => { if (a === b) return; const k = a < b ? a + '\u0001' + b : b + '\u0001' + a; edgeW[k] = (edgeW[k] || 0) + w; edgeT[k] = Math.min(edgeT[k] || 9, t); const P = edgeP[k] || (edgeP[k] = { m: 0, f: 0, h: 0, s: 0 }); P[kind] += w; };
+    const link = (a, b, w, t = 3, kind = 's') => { if (a === b) return; const k = a < b ? a + '\u0001' + b : b + '\u0001' + a; edgeW[k] = (edgeW[k] || 0) + w; edgeT[k] = Math.min(edgeT[k] || 9, t); const P = edgeP[k] || (edgeP[k] = { m: 0, f: 0, h: 0, s: 0, i: 0 }); P[kind] += w; };
     const acctId = (it) => '@' + String(it.author || '').toLowerCase() + '|' + (it.platform || '');
     // words that appear in more than a third of all posts are boilerplate here ("video", "new"…):
     // they'd bridge every community into one blob, so they're left out of the web
@@ -283,6 +316,9 @@
     } }
     // real relationships from the platforms' own graphs: every follow between two accounts here is a tier-1 link
     for (const a of by.values()) { if (!inView(a)) continue; for (const bid of a._follows) { const b = by.get(bid); if (b && inView(b)) link('@' + a.author.toLowerCase() + '|' + a.platform, '@' + b.author.toLowerCase() + '|' + b.platform, 3, 1, 'f'); } }
+    // the same person on several accounts (your own links): tier-1, and mergeable into one node
+    const idents = await identities(); const personOf = {};
+    for (const I of idents) { const members = (I.accounts || []).map((x) => '@' + accKey(x.id)).filter((k) => kindOf[k] === 'account'); members.forEach((k) => personOf[k] = I); for (let i = 0; i < members.length; i++) for (let j = i + 1; j < members.length; j++) link(members[i], members[j], 5, 1, 'i'); }
     // ── term selection (VOSviewer): minimum occurrences, then keep the most *relevant* 60% ──
     //    relevance = how specific a term is to a few accounts (spread-evenly-everywhere terms score low)
     const minOcc = Math.max(2, Math.round(nPosts * 0.01));
@@ -298,7 +334,7 @@
       const nw = Math.sqrt(co) * Math.log(1 + as), P = edgeP[k]; if (P && co) for (const kk in P) P[kk] *= nw / co; edgeW[k] = nw; }
     // pick nodes: around the focus, else the heaviest of each kind
     let ids;
-    const focusId = focus ? (focus.kind === 'account' ? Object.keys(kindOf).find((k) => k.startsWith('@' + focus.key + '|')) : focus.kind === 'hashtag' ? '#' + focus.key : 'w:' + focus.key) : null;
+    let focusId = focus ? (focus.kind === 'account' ? Object.keys(kindOf).find((k) => k.startsWith('@' + focus.key + '|')) : focus.kind === 'hashtag' ? '#' + focus.key : 'w:' + focus.key) : null;
     const nb = (id) => { const out = []; for (const k in edgeW) { const [x, y] = k.split('\u0001'); if (x === id) out.push([y, edgeW[k], edgeT[k]]); else if (y === id) out.push([x, edgeW[k], edgeT[k]]); } return out.sort((p, q) => (p[2] - q[2]) || (q[1] - p[1])); };
     // ego network: everything within `hops` of the focus, walking only links of the kinds in `via`
     // (default: mentions, follows, shared tags — a shared word is not a hop). Nearer hops fill first,
@@ -320,8 +356,18 @@
       ids = [];
       for (const kind of ['account', 'hashtag', 'word']) if (kinds.has(kind)) ids.push(...Object.keys(nodeW).filter((k) => kindOf[k] === kind).sort((a, b) => nodeW[b] - nodeW[a]).slice(0, per[kind]));
     }
+    // MERGE: collapse each person's accounts into one node named after them (links re-routed, counts summed)
+    const personName = {}, personMembers = {};
+    if (opts.merge) {
+      const alias = {}; for (const k in personOf) alias[k] = 'person:' + personOf[k].id;
+      const A = (k) => alias[k] || k;
+      const nids = [], seenN = new Set();
+      for (const k of ids) { const m = A(k); if (m !== k) { kindOf[m] = 'account'; nodeN[m] = (nodeN[m] || 0) + (nodeN[k] || 0); nodeW[m] = (nodeW[m] || 0) + (nodeW[k] || 0); if (hopOf[k] !== undefined) hopOf[m] = Math.min(hopOf[m] === undefined ? 99 : hopOf[m], hopOf[k]); personName[m] = personOf[k].name; (personMembers[m] = personMembers[m] || []).push(k.slice(1)); } if (!seenN.has(m)) { seenN.add(m); nids.push(m); } }
+      ids = nids; if (focusId) focusId = A(focusId);
+      for (const k of Object.keys(edgeW)) { const [a, b] = k.split('\u0001'); const a2 = A(a), b2 = A(b); if (a2 === a && b2 === b) continue; const w = edgeW[k], t = edgeT[k], P = edgeP[k]; delete edgeW[k]; delete edgeT[k]; delete edgeP[k]; if (a2 === b2) continue; const k2 = a2 < b2 ? a2 + '\u0001' + b2 : b2 + '\u0001' + a2; edgeW[k2] = (edgeW[k2] || 0) + w; edgeT[k2] = Math.min(edgeT[k2] || 9, t || 3); const Q = edgeP[k2] || (edgeP[k2] = { m: 0, f: 0, h: 0, s: 0, i: 0 }); if (P) for (const kk in P) Q[kk] = (Q[kk] || 0) + P[kk]; }
+    }
     const idset = new Set(ids);
-    const edges = []; for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (idset.has(a) && idset.has(b)) { const P = edgeP[k] || { m: 0, f: 0, h: 0, s: edgeW[k] }; edges.push({ a, b, w: +edgeW[k].toFixed(2), t: edgeT[k] || 3, p: { m: +P.m.toFixed(2), f: +P.f.toFixed(2), h: +P.h.toFixed(2), s: +P.s.toFixed(2) } }); } }
+    const edges = []; for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (idset.has(a) && idset.has(b)) { const P = edgeP[k] || { m: 0, f: 0, h: 0, s: edgeW[k], i: 0 }; edges.push({ a, b, w: +edgeW[k].toFixed(2), t: edgeT[k] || 3, p: { m: +P.m.toFixed(2), f: +P.f.toFixed(2), h: +P.h.toFixed(2), s: +P.s.toFixed(2), i: +(P.i || 0).toFixed(2) } }); } }
     // keep the strongest links overall PLUS every node's own strongest few, so nothing is left dangling
     edges.sort((p, q) => (p.t - q.t) || (q.w - p.w));
     const keep = new Set(edges.filter((e) => e.t === 1).concat(edges.slice(0, cap * 4))); const per = {};
@@ -330,8 +376,10 @@
     const E = [...keep];
     const deg = {}; E.forEach((e) => { deg[e.a] = (deg[e.a] || 0) + e.w; deg[e.b] = (deg[e.b] || 0) + e.w; });
     const meta = await allMeta();
-    const nodes = ids.map((id) => { const kind = kindOf[id] || 'word'; const label = kind === 'account' ? id.slice(1).split('|')[0] : kind === 'hashtag' ? id : id.slice(2);
-      return { id, kind, label, n: nodeN[id] || 0, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), hop: hopOf[id] === undefined ? null : hopOf[id], person_id: kind === 'account' ? [...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id || null : null, attrs: kind === 'account' ? ((meta[[...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id]?.attrs) || []).slice(0, 3) : [] }; });
+    const nodes = ids.map((id) => { const kind = kindOf[id] || 'word'; const isPerson = id.startsWith('person:'); const label = isPerson ? personName[id] : kind === 'account' ? id.slice(1).split('|')[0] : kind === 'hashtag' ? id : id.slice(2);
+      if (isPerson) { const first = (personMembers[id] || [])[0]; return { id, kind: 'account', label, n: nodeN[id] || 0, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), hop: hopOf[id] === undefined ? null : hopOf[id], person_id: first ? ([...by.values()].find((a) => a.id.toLowerCase() === first)?.id || first) : null, identity_id: id.slice(7), identity: label, accounts: personMembers[id] || [], attrs: [] }; }
+      const I = personOf[id];
+      return { id, kind, label, identity: I ? I.name : null, identity_id: I ? I.id : null, n: nodeN[id] || 0, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), hop: hopOf[id] === undefined ? null : hopOf[id], person_id: kind === 'account' ? [...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id || null : null, attrs: kind === 'account' ? ((meta[[...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id]?.attrs) || []).slice(0, 3) : [] }; });
     return { nodes, edges: E, focus: focusId && idset.has(focusId) ? focusId : null, focus_asked: opts.focus || '', kinds: [...kinds], hops: focusId ? Math.max(0, ...Object.values(hopOf)) : null, generated: now() };
   }
 
@@ -397,12 +445,16 @@
 
   // ── router (mirrors the server-style API the app calls) ──
   L.people = {
-    profile, graph, list, setMeta, getMeta,
+    profile, graph, list, setMeta, getMeta, identities, identityWrite,
     async request(method, parts, qs, body) {
       const P = Object.fromEntries(new URLSearchParams(qs || ''));
+      if (parts[0] === 'identities') {
+        if (!parts[1]) { if (method === 'GET') return { identities: (await identities()).map(identityDTO) }; if (method === 'POST') return identityWrite('POST', null, body || {}); }
+        else { const iid = decodeURIComponent(parts[1]); if (method === 'GET') { const I = (await identities()).find((x) => x.id === iid); return I ? identityDTO(I) : { error: 'no such person' }; } return identityWrite(method, iid, body || {}); }
+      }
       const id = parts[1] ? decodeURIComponent(parts[1]) : null;
       if (parts[0] === 'graph') {
-        if (P.focus !== undefined || P.kinds !== undefined) return wordGraph({ focus: P.focus || '', kinds: P.kinds || 'account,hashtag,word', max: +P.max || 80, platform: P.platform || '', topic: P.topic || '', hops: P.hops, via: P.via });
+        if (P.focus !== undefined || P.kinds !== undefined) return wordGraph({ focus: P.focus || '', kinds: P.kinds || 'account,hashtag,word', max: +P.max || 80, platform: P.platform || '', topic: P.topic || '', hops: P.hops, via: P.via, merge: P.merge === '1' });
         return graph({ topic: P.topic || null, max: +P.max || 60, min: +P.min || 1.5, platform: P.platform || '' });
       }
       if (!id) return list({ topic: P.topic || null, q: P.q || '', sort: P.sort || '', platform: P.platform || '' });

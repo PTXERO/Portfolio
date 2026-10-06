@@ -21,6 +21,7 @@ import re
 import statistics
 import time
 import urllib.parse
+import uuid
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -110,16 +111,86 @@ def set_meta(v, pid, patch):
     return m
 
 
+# ── identities: one person, several accounts (possibly on several networks). Every link is one the
+#    user made, each with its reason ('you', 'post link', 'bio link', 'name match'). Never inferred. ──
+def _ident_path(v) -> Path:
+    return Path(v.data_dir) / "identities.json"
+
+
+def identities(v):
+    p = _ident_path(v)
+    try:
+        return json.loads(p.read_text()) if p.exists() else []
+    except (OSError, ValueError):
+        return []
+
+
+def _acc_key(aid):
+    return str(aid or "").lstrip("@").lower()
+
+
+def identity_dto(i):
+    return {"id": i["id"], "name": i.get("name") or "", "note": i.get("note") or "", "topic_id": i.get("topic_id"),
+            "created": i.get("created"),
+            "accounts": [{"id": a["id"], "handle": str(a["id"]).split("|")[0], "platform": (str(a["id"]).split("|") + [""])[1],
+                          "how": a.get("how") or "you", "added": a.get("added")} for a in i.get("accounts") or []]}
+
+
+def identity_write(v, method, iid, body):
+    body = body or {}
+    lst = identities(v)
+    if method == "POST":
+        i = {"id": uuid.uuid4().hex[:8], "name": str(body.get("name") or "").strip()[:120] or "unnamed",
+             "note": str(body.get("note") or "")[:2000], "accounts": [], "topic_id": body.get("topic_id"), "created": _now()}
+        for a in body.get("accounts") or []:
+            aid = (a if isinstance(a, str) else a.get("id") or "").lstrip("@")
+            if not aid:
+                continue
+            for o in lst:                                   # an account belongs to one person
+                o["accounts"] = [x for x in o.get("accounts") or [] if _acc_key(x["id"]) != _acc_key(aid)]
+            if not any(_acc_key(x["id"]) == _acc_key(aid) for x in i["accounts"]):
+                i["accounts"].append({"id": aid, "how": (a.get("how") if isinstance(a, dict) else None) or "you", "added": _now()})
+        lst.append(i)
+        _ident_path(v).write_text(json.dumps(lst, indent=1))
+        return identity_dto(i)
+    i = next((x for x in lst if x["id"] == iid), None)
+    if not i:
+        return {"error": "no such person"}
+    if method == "DELETE":
+        _ident_path(v).write_text(json.dumps([x for x in lst if x["id"] != iid], indent=1))
+        return {"ok": True}
+    if "name" in body:
+        i["name"] = str(body.get("name") or "").strip()[:120] or i["name"]
+    if "note" in body:
+        i["note"] = str(body.get("note") or "")[:2000]
+    if "topic_id" in body:
+        i["topic_id"] = body.get("topic_id")
+    for a in body.get("add") or []:
+        aid = (a if isinstance(a, str) else a.get("id") or "").lstrip("@")
+        if not aid:
+            continue
+        for o in lst:                                   # an account belongs to one person
+            if o["id"] != i["id"]:
+                o["accounts"] = [x for x in o.get("accounts") or [] if _acc_key(x["id"]) != _acc_key(aid)]
+        if not any(_acc_key(x["id"]) == _acc_key(aid) for x in i["accounts"]):
+            i["accounts"].append({"id": aid, "how": (a.get("how") if isinstance(a, dict) else None) or "you", "added": _now()})
+    for aid in body.get("remove") or []:
+        i["accounts"] = [x for x in i["accounts"] if _acc_key(x["id"]) != _acc_key(aid)]
+    _ident_path(v).write_text(json.dumps(lst, indent=1))
+    return identity_dto(i)
+
+
 # ── aggregates over collected items ──
 class _Acct:
     __slots__ = ("id", "author", "platform", "author_url", "author_name", "items", "H", "W", "M",
-                 "F", "FB", "FN", "FBN", "FAT")
+                 "F", "FB", "FN", "FBN", "FAT", "I")
 
     def __init__(self, id_, it):
         self.id, self.author, self.platform = id_, it.get("author") or "?", it.get("platform") or "?"
         self.author_url, self.author_name = it.get("author_url") or "", it.get("author_name") or ""
         self.items, self.H, self.W, self.M = [], set(), set(), set()
         self.F, self.FB, self.FN, self.FBN, self.FAT = set(), set(), 0, 0, 0   # follows / followed-by (ids in library)
+        self.I = None                                                          # the identity (person) this account belongs to
 
 
 def _build(v):
@@ -159,6 +230,12 @@ def _build(v):
             else:
                 src.FB.add(dst.id)
                 dst.F.add(src.id)
+    idx = {}
+    for i in identities(v):
+        for a in i.get("accounts") or []:
+            idx[_acc_key(a["id"])] = i
+    for a in by.values():
+        a.I = idx.get(_acc_key(a.id))
     n = max(1, len(by))
     idf = lambda df: math.log((n + 1) / ((df or 0) + 1)) + 1  # noqa: E731
     return by, idf, h_df, w_df
@@ -216,19 +293,24 @@ def _edge(a, b, idf, h_df, w_df):
         wn += 1
     ment = a.platform == b.platform and (a.author.lower() in b.M or b.author.lower() in a.M)   # same network only
     fol = b.id in a.F or a.id in b.F        # the platform itself says these two are linked
-    w = hs + ws + (3 if ment else 0) + (4 if fol else 0)
+    w = hs + ws + (3 if ment else 0) + (4 if fol else 0) + (5 if _same_person(a, b) else 0)
     return w, hn, wn, ment, fol
 
 
+def _same_person(a, b):
+    return bool(a.I and b.I and a.I["id"] == b.I["id"])
+
+
 def _parts(a, b, idf, h_df, w_df, ment, fol):
-    """How much of a connection came from each kind: m mention · f follow · h shared hashtags · s shared words."""
+    """How much of a connection came from each kind: m mention · f follow · h shared hashtags · s shared words · i same person."""
     return {"m": 3 if ment else 0, "f": 4 if fol else 0,
             "h": round(sum(idf(h_df[h]) for h in a.H & b.H), 2),
-            "s": round(sum(0.5 * idf(w_df[x]) for x in a.W & b.W), 2)}
+            "s": round(sum(0.5 * idf(w_df[x]) for x in a.W & b.W), 2),
+            "i": 5 if _same_person(a, b) else 0}
 
 
-def _tier(ment, fol, hn):
-    return 1 if (ment or fol) else 2 if hn else 3
+def _tier(ment, fol, hn, same=False):
+    return 1 if (ment or fol or same) else 2 if hn else 3
 
 
 def profile(v, pid):
@@ -261,11 +343,13 @@ def profile(v, pid):
             continue
         w, hn, wn, ment, fol = _edge(a, b, idf, h_df, w_df)
         if w > 0:
+            same = _same_person(a, b)
             why = (([{"kind": "hashtags", "n": hn}] if hn else []) + ([{"kind": "mentions"}] if ment else [])
-                   + ([{"kind": "follows", "mutual": b.id in a.F and a.id in b.F}] if fol else []))
+                   + ([{"kind": "follows", "mutual": b.id in a.F and a.id in b.F}] if fol else [])
+                   + ([{"kind": "identity", "name": a.I["name"]}] if same else []))
             edges.append({"id": b.id, "author": b.author, "platform": b.platform, "author_url": b.author_url,
                           "w": round(w, 2), "why": why, "shared_hashtags": hn, "shared_words": wn,
-                          "t": _tier(ment, fol, hn), "p": _parts(a, b, idf, h_df, w_df, ment, fol)})
+                          "t": _tier(ment, fol, hn, same), "p": _parts(a, b, idf, h_df, w_df, ment, fol)})
     edges.sort(key=lambda e: -e["w"])
     recent = sorted((it for it in items if it.get("media_url") or it.get("thumbnail") or it.get("url")),
                     key=lambda it: -(it.get("posted_at") or 0))[:8]
@@ -291,6 +375,7 @@ def profile(v, pid):
         return {"n": len(rows), "known": known, "unknown": unknown[:40]}
 
     return {
+        "identity": identity_dto(a.I) if a.I else None,
         "follows": rel_out("follows"), "followed_by": rel_out("followed_by"), "follows_loaded": a.FAT,
         "follows_supported": a.platform in ("mastodon", "bluesky"),
         "id": pid, "author": a.author, "author_name": a.author_name, "platform": a.platform,
@@ -326,9 +411,10 @@ def graph(v, topic=None, max_nodes=60, min_w=1.5, platform=""):
     for i, a in enumerate(top):
         for b in top[i + 1:]:
             w, hn, wn, ment, fol = _edge(a, b, idf, h_df, w_df)
-            if w >= min_w or ment or fol:
-                edges.append({"a": a.id, "b": b.id, "w": round(w, 2), "h": hn, "m": 1 if (ment or fol) else 0,
-                              "f": 1 if fol else 0, "t": _tier(ment, fol, hn),
+            same = _same_person(a, b)
+            if w >= min_w or ment or fol or same:
+                edges.append({"a": a.id, "b": b.id, "w": round(w, 2), "h": hn, "m": 1 if (ment or fol or same) else 0,
+                              "f": 1 if fol else 0, "t": _tier(ment, fol, hn, same),
                               "p": _parts(a, b, idf, h_df, w_df, ment, fol)})
                 strength[a.id] += w
                 strength[b.id] += w
@@ -338,6 +424,7 @@ def graph(v, topic=None, max_nodes=60, min_w=1.5, platform=""):
                 edges.append({"a": a.id, "b": lid, "w": 2, "h": 0, "m": 0, "you": 1, "t": 1,
                               "p": {"m": 0, "f": 2, "h": 0, "s": 0}})
     nodes = [{"id": a.id, "author": a.author, "platform": a.platform, "n": _n_posts(a.items),
+              "identity": a.I["name"] if a.I else None, "identity_id": a.I["id"] if a.I else None,
               "strength": round(strength[a.id], 1), "attrs": (meta.get(a.id) or {}).get("attrs", [])[:4],
               "topics": len({r["topic_id"] for it in a.items for r in by_item.get(it["id"], [])})} for a in top]
     return {"nodes": nodes, "edges": edges, "total_accounts": len(by), "shown": len(nodes), "generated": _now()}
@@ -362,6 +449,7 @@ def list_people(v, topic=None, q="", sort="", platform=""):
         tset = {names.get(r["topic_id"]) for it in a.items for r in by_item.get(it["id"], [])}
         out.append({"id": a.id, "author": a.author, "author_name": a.author_name, "platform": a.platform,
                     "author_url": a.author_url, "n": _n_posts(a.items), "per_week": cad["per_week"], "last": cad["last"],
+                    "identity": a.I["name"] if a.I else None, "identity_id": a.I["id"] if a.I else None,
                     "follows": a.FN, "followed_by": a.FBN,
                     "topics": [t for t in tset if t][:4],
                     "media": dict(Counter((it.get("media") or "video") for it in a.items)),
@@ -401,7 +489,7 @@ def _parse_focus(f):
     return {"kind": "word", "key": txt, "phrase": " " in txt}
 
 
-def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform="", topic="", hops=2, via=""):
+def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform="", topic="", hops=2, via="", merge=False):
     by, idf, h_df, w_df = _build(v)
     if platform:
         by = {k: a for k, a in by.items() if a.platform == platform}
@@ -426,7 +514,7 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
             k = (a, b) if a < b else (b, a)
             edge_w[k] += w
             edge_t[k] = min(edge_t.get(k, 9), t)
-            edge_p.setdefault(k, {"m": 0.0, "f": 0.0, "h": 0.0, "s": 0.0})[kind] += w
+            edge_p.setdefault(k, {"m": 0.0, "f": 0.0, "h": 0.0, "s": 0.0, "i": 0.0})[kind] += w
 
     acct_key = {}
     # words in more than a third of all posts are boilerplate here ("video", "new"…) and would
@@ -514,6 +602,15 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
             b = by.get(bid)
             if b:
                 link(aid, f"@{b.author.lower()}|{b.platform}", 3, 1, "f")
+    # the same person on several accounts (the user's own links): tier 1, and mergeable into one node
+    person_of = {}
+    for i in identities(v):
+        members = [m for m in ("@" + _acc_key(x["id"]) for x in i.get("accounts") or []) if kind_of.get(m) == "account"]
+        for m in members:
+            person_of[m] = i
+        for x in range(len(members)):
+            for y in range(x + 1, len(members)):
+                link(members[x], members[y], 5, 1, "i")
 
     # ── term selection (VOSviewer): minimum occurrences, then keep the most *relevant* 60% ──
     min_occ = max(2, round(n_posts * 0.01))
@@ -593,9 +690,45 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
         for kind in ("account", "hashtag", "word"):
             if kind in kinds:
                 ids += sorted((k for k in node_w if kind_of.get(k) == kind), key=lambda k: -node_w[k])[:per[kind]]
+    # MERGE: collapse each person's accounts into one node named after them (links re-routed, counts summed)
+    person_name, person_members = {}, {}
+    if merge:
+        alias = {k: "person:" + i["id"] for k, i in person_of.items()}
+        al = lambda k: alias.get(k, k)  # noqa: E731
+        nids, seen_n = [], set()
+        for k in ids:
+            m = al(k)
+            if m != k:
+                kind_of[m] = "account"
+                node_n[m] += node_n[k]
+                node_w[m] += node_w[k]
+                if k in hop_of:
+                    hop_of[m] = min(hop_of.get(m, 99), hop_of[k])
+                person_name[m] = person_of[k]["name"]
+                person_members.setdefault(m, []).append(k[1:])
+            if m not in seen_n:
+                seen_n.add(m)
+                nids.append(m)
+        ids = nids
+        if focus_id:
+            focus_id = al(focus_id)
+        for (a, b) in list(edge_w.keys()):
+            a2, b2 = al(a), al(b)
+            if a2 == a and b2 == b:
+                continue
+            w, t, p = edge_w.pop((a, b)), edge_t.pop((a, b), 3), edge_p.pop((a, b), None)
+            if a2 == b2:
+                continue
+            k2 = (a2, b2) if a2 < b2 else (b2, a2)
+            edge_w[k2] += w
+            edge_t[k2] = min(edge_t.get(k2, 9), t)
+            q = edge_p.setdefault(k2, {"m": 0.0, "f": 0.0, "h": 0.0, "s": 0.0, "i": 0.0})
+            if p:
+                for kk, pv in p.items():
+                    q[kk] = q.get(kk, 0) + pv
     idset = set(ids)
     all_edges = sorted(({"a": a, "b": b, "w": round(w, 2), "t": edge_t.get((a, b), 3),
-                         "p": {kk: round(pv, 2) for kk, pv in edge_p.get((a, b), {"m": 0, "f": 0, "h": 0, "s": w}).items()}}
+                         "p": {kk: round(pv, 2) for kk, pv in edge_p.get((a, b), {"m": 0, "f": 0, "h": 0, "s": w, "i": 0}).items()}}
                         for (a, b), w in edge_w.items() if a in idset and b in idset),
                        key=lambda e: (e["t"], -e["w"]))
     # keep every real relationship, the strongest links overall, PLUS every node's own strongest few
@@ -617,10 +750,20 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
     nodes = []
     for nid in ids:
         kind = kind_of.get(nid, "word")
+        if nid.startswith("person:"):
+            members = person_members.get(nid, [])
+            first = acct_key.get("@" + members[0]) if members else None
+            nodes.append({"id": nid, "kind": "account", "label": person_name.get(nid, ""), "n": node_n[nid],
+                          "w": round(node_w[nid], 2), "strength": round(deg[nid], 1), "hop": hop_of.get(nid),
+                          "person_id": first, "identity_id": nid[7:], "identity": person_name.get(nid, ""),
+                          "accounts": members, "attrs": []})
+            continue
         label = nid[1:].split("|")[0] if kind == "account" else nid if kind == "hashtag" else nid[2:]
         pid = acct_key.get(nid) if kind == "account" else None
+        i = person_of.get(nid)
         nodes.append({"id": nid, "kind": kind, "label": label, "n": node_n[nid], "w": round(node_w[nid], 2),
                       "strength": round(deg[nid], 1), "hop": hop_of.get(nid),
+                      "identity": i["name"] if i else None, "identity_id": i["id"] if i else None,
                       "person_id": pid, "attrs": ((meta.get(pid) or {}).get("attrs", [])[:3] if pid else [])})
     return {"nodes": nodes, "edges": edges, "focus": focus_id if focus_id in idset else None,
             "focus_asked": focus or "", "kinds": sorted(kinds), "hops": max(hop_of.values()) if hop_of else None,
@@ -759,12 +902,24 @@ def load_follows(v, pid, fetch=fetch_follows):
 
 
 def handle(v, method, parts, params, body):
-    """Route /api/people… and /api/graph like the browser module does."""
+    """Route /api/people…, /api/graph and /api/identities like the browser module does."""
+    if parts[0] == "identities":
+        if len(parts) < 2 or not parts[1]:
+            if method == "GET":
+                return {"identities": [identity_dto(i) for i in identities(v)]}
+            if method == "POST":
+                return identity_write(v, "POST", None, body)
+        else:
+            if method == "GET":
+                i = next((x for x in identities(v) if x["id"] == parts[1]), None)
+                return identity_dto(i) if i else {"error": "no such person"}
+            return identity_write(v, method, parts[1], body)
+        return {"error": "identities route not available"}
     if parts[0] == "graph":
         if "focus" in params or "kinds" in params:
             return word_graph(v, params.get("focus") or "", params.get("kinds") or "account,hashtag,word",
                               int(params.get("max") or 80), params.get("platform") or "", params.get("topic") or "",
-                              params.get("hops") or 2, params.get("via") or "")
+                              params.get("hops") or 2, params.get("via") or "", params.get("merge") == "1")
         return graph(v, params.get("topic") or None, int(params.get("max") or 60), float(params.get("min") or 1.5),
                      params.get("platform") or "")
     pid = parts[1] if len(parts) > 1 else None

@@ -1164,6 +1164,13 @@ $('#newTopicForm').onsubmit = async e => {
       try{ const srcs = (await api('/api/sources')).sources || []; const mine = srcs.filter(x => [x.kind, x.source, x.preset, x.platform].some(v => String(v || '').toLowerCase() === person.platform)).map(x => x.id); if (mine.length) body.sources = mine; else body.run = false; }catch(e){}
     }
     const t = await api('/api/topics', { method: 'POST', body });
+    if (person){                                        // the dossier's person: one identity, its accounts tied under the name
+      try{
+        const accts = person.mode === 'account' ? [{ id: person.handle + '|' + person.platform, how: 'you' }] : (person.handles || []).map(h => accountIdFromText(h)).filter(Boolean).map(id => ({ id, how: 'you' }));
+        const I = await api('/api/identities', { method: 'POST', body: { name, topic_id: t.id, accounts: accts } });
+        if (I && I.id){ person.identity_id = I.id; await api('/api/topics/' + t.id, { method: 'PATCH', body: { settings: { person } } }); }
+      }catch(e){}
+    }
     if (person && person.mode !== 'account' && (person.handles || []).length){   // known accounts → their own feeds, scoped to this topic
       for (const h of person.handles){ try{ const c = await api('/api/topics/' + t.id + '/creator', { method: 'POST', body: { handle: h } }); if (c.error) throw new Error(c.error); }catch(e){ toast(h + ': ' + e.message, 6000); } }
     }
@@ -1548,8 +1555,9 @@ function linkedAccounts(items){
   const out = {}; items.forEach(it => { for (const m of String(it.text || '').matchAll(LINK_RE)){ const key = (m[1] + '/' + m[2]).toLowerCase().replace(/\/$/, ''); if (/\/(status|watch|p|reel|post|shorts|search|hashtag|explore|i|intent)$/.test(key)) continue; out[key] = out[key] || { url: m[0].replace(/[).,]+$/, ''), site: m[1].toLowerCase().replace(/\/.*/, ''), handle: m[2].replace(/^@/, ''), n: 0 }; out[key].n++; } });
   return Object.values(out).sort((a, b) => b.n - a.n).slice(0, 20);
 }
-function personAccountCardHTML(p, items){
+function personAccountCardHTML(p, items, I){
   const pid = p.handle + '|' + p.platform, url = (PROFILE_URL[p.platform] || (h => '#'))(p.handle);
+  const identAccts = new Set((I ? I.accounts : []).map(a => a.id.toLowerCase())); const identCard = identityCardHTML(I);
   const creators = {}; Object.keys((T.settings || {}).creators || {}).forEach(k => creators[k.toLowerCase()] = true);
   const own = items.filter(it => (it.author || '').toLowerCase() === p.handle.toLowerCase() && it.platform === p.platform);
   const linked = linkedAccounts(own);
@@ -1568,11 +1576,18 @@ function personAccountCardHTML(p, items){
     <div class="meta">${tags.length ? tags.map(([h, n]) => { const have = !!creators[h]; return `<span class="pill${have ? ' a' : ''}"><button class="lnk" data-focus="@${esc(h)}">@${esc(h)} ×${n}</button>${have ? ' ✓' : ` <button class="lnk" data-addc="${esc(h)}" data-n="${n}" title="Pull @${esc(h)}'s own ${esc(p.platform)} posts into this topic">+</button>`}</span>`; }).join('') : '<span class="note">nothing yet — pull their posts first</span>'}</div>
     ${tags.some(([h, n]) => n >= 2 && !creators[h]) ? `<div class="row wrap" style="gap:8px;margin-top:6px"><button class="btn sm" id="paExpand">⇶ EXPAND 1 HOP <small>· add everyone tagged 2+ times (${tags.filter(([h, n]) => n >= 2 && !creators[h]).length})</small></button><span class="note">Each becomes a creator here; their tags then show up too — repeat to go another hop.</span></div>` : ''}
     <div class="note" style="margin:10px 0 4px">Linked elsewhere <small>(URLs they posted themselves — the only cross-network evidence used)</small></div>
-    <div class="meta">${linked.length ? linked.map(l => `<a class="pill a" href="${esc(l.url)}" target="_blank" rel="noreferrer noopener">${esc(l.site)} · ${esc(l.handle)}${l.n > 1 ? ' ×' + l.n : ''}</a>`).join('') : '<span class="note">no links to other networks in their posts so far</span>'}</div>
+    <div class="meta">${linked.length ? linked.map(l => { const aid = l.handle.replace(/^@/, '') + '|' + siteToPlatform(l.site); const have = identAccts.has(aid.toLowerCase()); return `<span class="pill${have ? ' a' : ''}"><a class="lnk" href="${esc(l.url)}" target="_blank" rel="noreferrer noopener">${esc(l.site)} · ${esc(l.handle)}${l.n > 1 ? ' ×' + l.n : ''}</a>${have ? ' ✓' : ` <button class="lnk" data-idlink="${esc(aid)}" title="They linked this themselves — tie it to this person">+ same person</button>`}</span>`; }).join('') : '<span class="note">no links to other networks in their posts so far</span>'}</div>
+    ${identCard}
   </div>`;
 }
-function personCardHTML(p, T, items){
-  if (p.mode === 'account') return personAccountCardHTML(p, items || []);
+// the accounts tied to this dossier's person (identity), for the PERSON card
+function identityCardHTML(I){
+  if (!I) return '';
+  return `<div class="note" style="margin:10px 0 4px">This person's accounts <small>(you tied these together · dashed line in the web · MERGE shows them as one)</small></div>
+    <div class="meta">${I.accounts.map(a => `<span class="pill a" title="${esc(HOW_LABEL[a.how] || a.how)}"><button class="lnk" data-prof="${esc(a.id)}"><b class="l1">╌</b> @${esc(a.handle)} · ${esc(a.platform)}</button> <small class="note">${esc(a.how)}</small></button></span>`).join('')}<button class="pill" id="paIdent">◉ manage</button></div>`;
+}
+function personCardHTML(p, T, items, I){
+  if (p.mode === 'account') return personAccountCardHTML(p, items || [], I);
   const first = (p.first || '').toLowerCase().replace(/[^a-z0-9]/g, ''), last = (p.last || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const full = [p.first, p.last].filter(Boolean).join(' '), q = encodeURIComponent(`"${full}"${p.state ? ' ' + p.state : ''}`);
   // known accounts may be typed as links — reduce each to its bare username for the guess table
@@ -1591,6 +1606,7 @@ function personCardHTML(p, T, items){
     ${Object.keys((T.settings || {}).creators || {}).length ? `<div class="note" style="margin:8px 0 4px">Known accounts <small>(their own feeds are sources of this dossier)</small></div><div class="meta">${Object.values(T.settings.creators).map(c => `<span class="pill a"><b class="l1">━</b> @${esc(c.handle)} · ${esc(c.platform)}${c.n != null || c.collected != null ? ' · ' + fmtN(c.n != null ? c.n : c.collected) : ''}</span>`).join('')}</div>` : ''}
     <div class="row wrap" style="gap:8px;margin:6px 0 10px"><button class="btn sm" id="pAddHandle">+ ADD A KNOWN ACCOUNT</button><span class="note">Paste a profile link (any network) or an @handle (X). Only that account's own posts are pulled in — nothing is searched by name elsewhere.</span></div>
     <div class="note" style="margin-bottom:4px">Name searches</div><div class="meta">${searches.map(([n, u]) => a(n, u)).join('')}</div>
+    ${identityCardHTML(I)}
     <div class="note" style="margin:10px 0 4px">People-search &amp; records sites <small>(show addresses, relatives, phone numbers — open them to see what's public and use each site's opt-out)</small></div><div class="meta">${people.map(([n, u]) => a(n, u, 'a')).join('')}</div>
   </div>`;
 }
@@ -1628,12 +1644,13 @@ async function renderDossier(){
   const bars = (arr, max, cls) => `<div class="spark ${cls || ''}">${arr.map(v => `<i style="height:${Math.max(2, Math.round(100 * v / max))}%" title="${v}"></i>`).join('')}</div>`;
   const pct = v => Math.round(100 * v / Math.max(1, n));
   const person = (T.settings || {}).person || null;
-  let ownItems = items;
+  let ownItems = items, ident = null;
+  if (person && person.identity_id){ try{ ident = await api('/api/identities/' + encodeURIComponent(person.identity_id)); if (ident.error) ident = null; }catch(e){} }
   if (person && person.mode === 'account'){           // their own pulled posts live in the library, not only in this topic
     try{ const r = await api('/api/search?' + new URLSearchParams({ q: '@' + person.handle, limit: 500, fuzzy: '0', synonyms: '0' })); const seenIds = new Set(items.map(i => i.id)); ownItems = items.concat((r.items || []).filter(i => !seenIds.has(i.id))); }catch(e){}
   }
   body.innerHTML = `<div class="dossier">
-    ${person ? personCardHTML(person, T, ownItems) : ''}
+    ${person ? personCardHTML(person, T, ownItems, ident) : ''}
     <div class="dcard span2">
       <div class="dh">${esc(name)} <span class="note">${fmtN(n)} posts · ${fmtN(who.length)} accounts · ${plats.length} sites${T.counts && (T.counts.pos || T.counts.neg) ? ' · you rated ' + fmtN(T.counts.pos + T.counts.neg) : ''}</span></div>
       ${wiki ? `<div class="wiki">${wiki.thumb ? `<img src="${esc(wiki.thumb)}" alt="" referrerpolicy="no-referrer">` : ''}<div><p>${esc(wiki.extract)}</p><a class="note" href="${esc(wiki.url)}" target="_blank" rel="noreferrer">Wikipedia · ${esc(wiki.title)} →</a></div></div>`
@@ -1658,6 +1675,13 @@ async function renderDossier(){
   </div>`;
   $$('[data-prof]', body).forEach(b => b.onclick = () => openProfile(b.dataset.prof));
   $$('[data-focus]', body).forEach(b => b.onclick = () => go('network?' + new URLSearchParams({ topic: T.id, focus: b.dataset.focus })));
+  const pIdBtn = $('#paIdent', body); if (pIdBtn) pIdBtn.onclick = () => openIdentity(person.identity_id);
+  $$('[data-idlink]', body).forEach(b => b.onclick = async () => {
+    try{
+      if (!person.identity_id){ const I = await api('/api/identities', { method: 'POST', body: { name: T.name.replace(/^@/, ''), topic_id: T.id, accounts: person.mode === 'account' ? [{ id: person.handle + '|' + person.platform, how: 'you' }] : [] } }); person.identity_id = I.id; T = await api('/api/topics/' + T.id, { method: 'PATCH', body: { settings: { person } } }); }
+      await linkAccount(b.dataset.idlink, person.identity_id, 'post link'); renderDossier();
+    }catch(e){ toast(e.message); }
+  });
   if (person && person.mode === 'account'){
     const pid = person.handle + '|' + person.platform, m = $('#paMsg', body);
     const job = async (path, body2, label) => { m.innerHTML = `<span class="spinner"></span> ${label}…`; try{ let r = await api('/api/people/' + encodeURIComponent(pid) + path, { method: 'POST', body: body2 }); if (r.error) throw new Error(r.error); for (let i = 0; i < 60 && r.id && ['queued', 'running'].includes(r.state); i++){ await new Promise(x => setTimeout(x, 900)); r = await api('/api/jobs/' + r.id); } if (r.state === 'error') throw new Error((r.log || []).slice(-1)[0] || 'failed'); toast(label + ' done', 3000); renderDossier(); }catch(e){ m.textContent = e.message; } };
@@ -2237,7 +2261,7 @@ async function renderNetwork(){
   const extra = Object.assign(topic ? { topic } : {}, platform ? { platform } : {});
   try{
     [graph, people] = await Promise.all([
-      api('/api/graph?' + new URLSearchParams(Object.assign({ max: 80, focus: q, kinds }, q ? { hops: webHops(), via: hopVia(q) } : {}, extra))),
+      api('/api/graph?' + new URLSearchParams(Object.assign({ max: 80, focus: q, kinds }, q ? { hops: webHops(), via: hopVia(q) } : {}, store.get('webMerge', false) ? { merge: '1' } : {}, extra))),
       api('/api/people?' + new URLSearchParams(Object.assign(sort ? { sort } : {}, extra, listQ ? { q: listQ } : {}))),
     ]);
   }catch(e){ web.innerHTML = `<div class="empty">${esc(e.message)}</div>`; listEl.innerHTML = ''; return; }
@@ -2254,7 +2278,7 @@ function peopleCard(p){
   const freq = p.per_week ? p.per_week + '/wk' : '';
   const mediaBits = Object.entries(p.media || {}).map(([k, v]) => v + ' ' + k).join(' · ');
   return `<div class="pcard" data-person="${esc(p.id)}">
-    <div class="top"><b>@${esc(p.author)}</b><span class="note">${esc(p.platform || '')}${p.author_name ? ' · ' + esc(p.author_name) : ''}</span><span class="grow"></span>${p.has_notes ? '<span class="pill a">✎ your notes</span>' : ''}</div>
+    <div class="top"><b>@${esc(p.author)}</b><span class="note">${esc(p.platform || '')}${p.author_name ? ' · ' + esc(p.author_name) : ''}${p.identity ? ' · <b class="l1">╌</b> ' + esc(p.identity) : ''}</span><span class="grow"></span>${p.has_notes ? '<span class="pill a">✎ your notes</span>' : ''}</div>
     <div class="note" style="margin-top:4px">${fmtN(p.n)} posts${freq ? ' · ' + freq : ''}${p.last ? ' · last ' + ago(p.last) : ''}${mediaBits ? ' · ' + esc(mediaBits) : ''}${p.follows || p.followed_by ? ' · ↗' + fmtN(p.follows || 0) + ' ↙' + fmtN(p.followed_by || 0) : ''}</div>
     <div class="meta">${(p.topics || []).map(t => `<span class="pill t">${esc(t)}</span>`).join('')}${(p.hashtags || []).slice(0, 3).map(h => `<span class="pill">#${esc(h)}</span>`).join('')}${(p.attrs || []).map(a => `<span class="pill a">${esc(a)}</span>`).join('')}</div>
   </div>`;
@@ -2266,11 +2290,11 @@ const KIND_COLOR = { account: '#f54242', hashtag: '#42d4f5', word: '#f5a542' };
 // how hard each kind of connection pulls in the layout and counts in the ordering (0–10, yours to tune in WEIGHTS):
 // mentions are the strongest signal, a follow half that, shared hashtags a little, shared words nothing by default —
 // grey word links are still drawn, they just don't drag the circles around or decide who sits in the middle.
-const PULL_DEFAULT = { m: 10, f: 5, h: 3, s: 0 };
-const PULL_NAMES = { m: 'mentions', f: 'follows', h: 'shared tags', s: 'shared words' };
+const PULL_DEFAULT = { i: 10, m: 10, f: 5, h: 3, s: 0 };
+const PULL_NAMES = { i: 'same person (you)', m: 'mentions', f: 'follows', h: 'shared tags', s: 'shared words' };
 function pullWeights(){ return Object.assign({}, PULL_DEFAULT, store.get('webWeights', {})); }
 function edgePull(e, W){
-  if (e.p) return (e.p.m * W.m + e.p.f * W.f + e.p.h * W.h + e.p.s * W.s) / 10;
+  if (e.p) return ((e.p.i || 0) * (W.i == null ? 10 : W.i) + e.p.m * W.m + e.p.f * W.f + e.p.h * W.h + e.p.s * W.s) / 10;
   const t = e.t || (e.m ? 1 : 2); return e.w * (t === 1 ? W.m : t === 2 ? W.h : W.s) / 10;   // older servers: by tier
 }
 // community palette (neon family, distinct hues)
@@ -2351,11 +2375,11 @@ function drawWeb(box, graph){
   const hintHTML = () => 'size = ' + (st.sizeBy === 'influence' ? 'influence' : 'posts') + ' · colour = ' + (st.color === 'kind' ? 'kind' : 'community') + (st.mode === '2d' ? (focus && hopRing ? ' · rings = hops from the centre' : ' · inner = more pull') + ' · drag to move around' : ' · drag to spin') + ' · pull @' + PW.m + ' ↔' + PW.f + ' #' + PW.h + ' w' + PW.s + ' · wheel to zoom · tap a node';
   nwFocusNode = focus ? nodes[idx[focus]] : null;
   const H = webHops();
-  const fb = nwFocusNode ? `<div class="focus">◎ ${nwFocusNode.kind === 'account' ? '@' : ''}${esc(nwFocusNode.label)} <button class="hbtn" data-fhops title="How far from the centre to show: 1 hop = direct links, 2 = friends of friends, 3 = the classic three degrees, ALL = everything reachable. Only links that pull (see WEIGHTS) count as a hop.">${H >= 6 ? 'ALL' : H + ' HOP' + (H > 1 ? 'S' : '')} ▾</button>${nwFocusNode.kind === 'account' && nwFocusNode.person_id ? ' <button class="hbtn" data-fprof>PROFILE</button> <button class="hbtn" data-fcrawl title="Log this account\'s follows / followers / mutuals outward, hop by hop">CRAWL</button>' : ''} <button class="hbtn" data-fclear title="Show everything again">✕</button></div>` : '';
+  const fb = nwFocusNode ? `<div class="focus">◎ ${nwFocusNode.kind === 'account' && !String(nwFocusNode.id).startsWith('person:') ? '@' : ''}${esc(nwFocusNode.label)}${nwFocusNode.identity && !String(nwFocusNode.id).startsWith('person:') ? ` <small class="note">· ${esc(nwFocusNode.identity)}</small>` : ''} <button class="hbtn" data-fhops title="How far from the centre to show: 1 hop = direct links, 2 = friends of friends, 3 = the classic three degrees, ALL = everything reachable. Only links that pull (see WEIGHTS) count as a hop.">${H >= 6 ? 'ALL' : H + ' HOP' + (H > 1 ? 'S' : '')} ▾</button>${nwFocusNode.kind === 'account' && nwFocusNode.person_id ? ' <button class="hbtn" data-fprof>PROFILE</button> <button class="hbtn" data-fcrawl title="Log this account\'s follows / followers / mutuals outward, hop by hop">CRAWL</button>' : ''} <button class="hbtn" data-fclear title="Show everything again">✕</button></div>` : '';
   box.innerHTML = `<canvas></canvas><div class="legend" id="webLegend"></div>${fb}
-    <div class="strip"><div class="wtb"><button data-wm="3d" title="3-D: the floating web you can spin">3D</button><button data-wm="2d" title="2-D: the organized map — rings by connection, arcs by community — you can drag around">2D</button><span class="sep"></span><button data-wc="community" title="Colour by community (clusters found from the links)">COMMUNITY</button><button data-wc="kind" title="Colour by kind: account / tag / word">KIND</button><span class="sep"></span><button data-ws="posts" title="Size by number of posts">POSTS</button><button data-ws="influence" title="Size by influence: terms and accounts that bridge different parts of the web (betweenness centrality)">INFLUENCE</button><span class="sep"></span><button data-ww title="How hard each kind of connection pulls (mentions / follows / shared tags / shared words)">WEIGHTS</button><span class="sep"></span><button data-wf title="Full screen">⛶</button></div><div class="hint" id="webHint"></div></div>
-    <div class="wpop" id="webWeights" hidden><div class="t">PULL STRENGTH <small>0 = drawn, but doesn't move or rank anything</small></div>${['m', 'f', 'h', 's'].map(k => `<label><span><b class="l${k === 'm' || k === 'f' ? 1 : k === 'h' ? 2 : 3}">━</b> ${PULL_NAMES[k]}</span><input type="range" min="0" max="10" step="1" data-pw="${k}" value="${PW[k]}"><em>${PW[k]}</em></label>`).join('')}<div class="row" style="justify-content:flex-end;gap:8px;margin-top:6px"><button class="hbtn" data-pwreset>DEFAULTS</button><button class="hbtn" data-pwclose>DONE</button></div></div>`;
-  const syncChrome = () => { $('#webLegend', box).innerHTML = legendHTML(); $('#webHint', box).textContent = hintHTML(); $$('[data-wm]', box).forEach(b => b.classList.toggle('on', b.dataset.wm === st.mode)); $$('[data-wc]', box).forEach(b => b.classList.toggle('on', b.dataset.wc === st.color)); $$('[data-ws]', box).forEach(b => b.classList.toggle('on', b.dataset.ws === st.sizeBy)); };
+    <div class="strip"><div class="wtb"><button data-wm="3d" title="3-D: the floating web you can spin">3D</button><button data-wm="2d" title="2-D: the organized map — rings by connection, arcs by community — you can drag around">2D</button><span class="sep"></span><button data-wc="community" title="Colour by community (clusters found from the links)">COMMUNITY</button><button data-wc="kind" title="Colour by kind: account / tag / word">KIND</button><span class="sep"></span><button data-ws="posts" title="Size by number of posts">POSTS</button><button data-ws="influence" title="Size by influence: terms and accounts that bridge different parts of the web (betweenness centrality)">INFLUENCE</button><span class="sep"></span><button data-wmg title="Collapse each person's accounts (the ones you linked) into one node named after them">MERGE</button><span class="sep"></span><button data-ww title="How hard each kind of connection pulls (mentions / follows / shared tags / shared words)">WEIGHTS</button><span class="sep"></span><button data-wf title="Full screen">⛶</button></div><div class="hint" id="webHint"></div></div>
+    <div class="wpop" id="webWeights" hidden><div class="t">PULL STRENGTH <small>0 = drawn, but doesn't move or rank anything</small></div>${['i', 'm', 'f', 'h', 's'].map(k => `<label><span><b class="l${k === 'i' || k === 'm' || k === 'f' ? 1 : k === 'h' ? 2 : 3}">${k === 'i' ? '╌' : '━'}</b> ${PULL_NAMES[k]}</span><input type="range" min="0" max="10" step="1" data-pw="${k}" value="${PW[k]}"><em>${PW[k]}</em></label>`).join('')}<div class="row" style="justify-content:flex-end;gap:8px;margin-top:6px"><button class="hbtn" data-pwreset>DEFAULTS</button><button class="hbtn" data-pwclose>DONE</button></div></div>`;
+  const syncChrome = () => { $('#webLegend', box).innerHTML = legendHTML(); $('#webHint', box).textContent = hintHTML(); const mg = $('[data-wmg]', box); if (mg) mg.classList.toggle('on', !!store.get('webMerge', false)); $$('[data-wm]', box).forEach(b => b.classList.toggle('on', b.dataset.wm === st.mode)); $$('[data-wc]', box).forEach(b => b.classList.toggle('on', b.dataset.wc === st.color)); $$('[data-ws]', box).forEach(b => b.classList.toggle('on', b.dataset.ws === st.sizeBy)); };
   const cv = $('canvas', box), ctx = cv.getContext('2d');
   const st = { ry: 0, rx: 0.25, zoom: 1, auto: true, last: 0, dragging: false, px: 0, py: 0, moved: 0, W: 0, H: 0, dpr: Math.min(2, devicePixelRatio || 1), proj: [], frame: 0, hover: -1, settle: 170,
     mode: store.get('webMode', '3d'), color: store.get('webColor', 'community'), sizeBy: store.get('webSize', 'posts'), panX: 0, panY: 0 };
@@ -2396,12 +2420,14 @@ function drawWeb(box, graph){
     // edges in three layers: 3 shared words (thin grey, underneath) → 2 shared hashtags (community colour) → 1 real
     // relationships: mentions / replies / follows (white, on top). A focus or hover lights only tiers 1–2.
     const drawn = new Set(), layers = [[], [], []];
-    nodes.forEach((n, i) => { const lim = (i === hv || i === fi) ? nb[i].length : st.mode === '3d' ? 5 : (st.zoom > 1.6 ? 4 : 2); nb[i].slice(0, lim).forEach(([j, w, t]) => { const key = i < j ? i + ':' + j : j + ':' + i; if (drawn.has(key)) return; drawn.add(key); const hovered = hv >= 0 && (i === hv || j === hv); if (hv >= 0 && !hovered) return; layers[(t || 3) - 1].push([i, j, w, t || 3, hovered]); }); });
-    for (const t of [3, 2, 1]) layers[t - 1].forEach(([i, j, w, tier, hovered]) => { const a = P[i], b = P[j]; const on = tier < 3 && (hovered || (fi >= 0 && (i === fi || j === fi))); const depth = (a.p + b.p) / 2; const ci = commOf[i] === commOf[j] ? commOf[i] : -1;
+    nodes.forEach((n, i) => { const lim = (i === hv || i === fi) ? nb[i].length : st.mode === '3d' ? 5 : (st.zoom > 1.6 ? 4 : 2); nb[i].slice(0, lim).forEach(([j, w, t, e]) => { const key = i < j ? i + ':' + j : j + ':' + i; if (drawn.has(key)) return; drawn.add(key); const hovered = hv >= 0 && (i === hv || j === hv); if (hv >= 0 && !hovered) return; layers[(t || 3) - 1].push([i, j, w, t || 3, hovered, e]); }); });
+    for (const t of [3, 2, 1]) layers[t - 1].forEach(([i, j, w, tier, hovered, e]) => { const a = P[i], b = P[j]; const on = tier < 3 && (hovered || (fi >= 0 && (i === fi || j === fi))); const depth = (a.p + b.p) / 2; const ci = commOf[i] === commOf[j] ? commOf[i] : -1;
+      ctx.setLineDash(e && e.p && e.p.i > 0 ? [5, 4] : []);   // dashed = the same person on two accounts (your link)
       if (tier === 1){ ctx.strokeStyle = on ? '#ffffff' : '#c9c9d6'; ctx.globalAlpha = on ? .95 : .45 + .35 * depth; ctx.lineWidth = (on ? 2 : 1.3) * depth; }
       else if (tier === 2){ ctx.strokeStyle = on ? '#e2e2ea' : st.color === 'kind' ? '#7a7a92' : ci >= 0 ? COMM[ci % COMM.length] : '#7a7a92'; ctx.globalAlpha = on ? .85 : .12 + .3 * depth; ctx.lineWidth = (on ? 1.6 : .6 + 1.2 * Math.min(1, w / 6)) * depth; }
       else { ctx.strokeStyle = '#3a3a48'; ctx.globalAlpha = (fi >= 0 || hv >= 0 ? .18 : .28) * depth; ctx.lineWidth = .6 * depth; }
       ctx.beginPath(); ctx.moveTo(a.X, a.Y); ctx.lineTo(b.X, b.Y); ctx.stroke(); });
+    ctx.setLineDash([]);
     // nodes, far first
     const ord = P.map((q, i) => i).sort((a, b) => P[b].z - P[a].z);
     const labels = [];
@@ -2449,6 +2475,7 @@ function drawWeb(box, graph){
   $$('[data-wm]', box).forEach(b => b.onclick = () => { st.mode = b.dataset.wm; store.set('webMode', st.mode); if (st.mode === '2d'){ st.panX = st.panY = 0; } syncChrome(); draw(); });
   $$('[data-wc]', box).forEach(b => b.onclick = () => { st.color = b.dataset.wc; store.set('webColor', st.color); syncChrome(); draw(); });
   $$('[data-ws]', box).forEach(b => b.onclick = () => { st.sizeBy = b.dataset.ws; store.set('webSize', st.sizeBy); sizeNodes(); syncChrome(); draw(); });
+  const mgBtn = $('[data-wmg]', box); if (mgBtn) mgBtn.onclick = () => { store.set('webMerge', !store.get('webMerge', false)); renderNetwork(); };
   // WEIGHTS: slide, release → the web re-lays itself out with the new pull (stays open while you tune)
   const wpop = $('#webWeights', box); if (box._weightsOpen) wpop.hidden = false;
   $('[data-ww]', box).onclick = () => { wpop.hidden = !wpop.hidden; box._weightsOpen = !wpop.hidden; };
@@ -2472,9 +2499,68 @@ let nwFocusNode = null;   // the node the web is currently centred on (set by dr
 function webNodeTap(n){
   nwSel = n.id;
   // every kind of node centres the web on itself; tapping the account you're already centred on opens its profile
-  if (n.kind === 'account' && nwFocusNode && nwFocusNode.id === n.id){ if (n.person_id) openProfile(n.person_id); return; }
+  if (n.kind === 'account' && nwFocusNode && nwFocusNode.id === n.id){ if (n.id.startsWith('person:') && n.identity_id) openIdentity(n.identity_id); else if (n.person_id) openProfile(n.person_id); return; }
   $('#nwQ').value = n.kind === 'account' ? '@' + n.label : n.kind === 'hashtag' ? n.label : (n.label.includes(' ') ? '"' + n.label + '"' : n.label);
   renderNetwork();
+}
+// ── one person, several accounts. Links are yours; each remembers why. ──
+const HOW_LABEL = { you: 'you linked it', 'post link': 'they linked it in a post', 'bio link': 'they linked it in their bio', 'name match': 'same name — you accepted' };
+function siteToPlatform(site){ site = String(site || '').toLowerCase(); return /x\.com|twitter/.test(site) ? 'x' : /instagram/.test(site) ? 'instagram' : /tiktok/.test(site) ? 'tiktok' : /youtu/.test(site) ? 'youtube' : /bsky/.test(site) ? 'bluesky' : /threads/.test(site) ? 'threads' : /reddit/.test(site) ? 'reddit' : /github/.test(site) ? 'github' : /twitch/.test(site) ? 'twitch' : /facebook/.test(site) ? 'facebook' : /linkedin/.test(site) ? 'linkedin' : 'mastodon'; }
+// "x.com/name", "@name@server", "name.bsky.social", "@name" (X) → "handle|platform"
+function accountIdFromText(t){
+  t = String(t || '').trim(); if (!t) return null;
+  const m = t.match(/^https?:\/\/(?:www\.|m\.)?([^/]+)\/(?:profile\/|user\/|@)?([^/?#]+)/i);
+  if (m){ const plat = siteToPlatform(m[1]); let h = m[2].replace(/^@/, ''); if (plat === 'mastodon' && !h.includes('@')) h += '@' + m[1]; return h + '|' + plat; }
+  if (t.includes('|')) return t.replace(/^@/, '');
+  const h = t.replace(/^@/, '');
+  return h + '|' + (h.includes('@') ? 'mastodon' : /\.bsky\.social$/.test(h) ? 'bluesky' : 'x');
+}
+async function openIdentity(id){
+  let I; try{ I = await api('/api/identities/' + encodeURIComponent(id)); }catch(e){ return toast(e.message); }
+  if (!I || I.error) return toast('No such person');
+  openSheet(`<h3>◉ ${esc(I.name)} <span class="note" style="font-weight:400">· one person · ${I.accounts.length} account${I.accounts.length === 1 ? '' : 's'}</span></h3>
+    <p class="note" style="margin-bottom:8px">Accounts you've tied to this name. Every link here is one you made — the app never merges on its own. The web draws them with a dashed white line, or as one node with MERGE on.</p>
+    <div class="meta" id="idAccts">${I.accounts.map(a => `<span class="pill a" title="${esc(HOW_LABEL[a.how] || a.how)}"><button class="lnk" data-open="${esc(a.id)}">@${esc(a.handle)} · ${esc(a.platform)}</button> <small class="note">${esc(a.how)}</small> <button class="lnk" data-unlink="${esc(a.id)}" title="Unlink">✕</button></span>`).join('') || '<span class="note">no accounts yet</span>'}</div>
+    <div class="row wrap" style="gap:8px;margin:10px 0">
+      <button class="btn sm" id="idAdd">+ LINK AN ACCOUNT</button>
+      <button class="btn sm" id="idWeb">◕ SHOW IN WEB</button>
+      ${I.topic_id ? `<button class="btn sm" id="idTopic">◎ OPEN DOSSIER</button>` : `<button class="btn sm" id="idDossier">◎ MAKE A DOSSIER</button>`}
+    </div>
+    <label class="field"><span>Name</span><input id="idName" value="${esc(I.name)}"></label>
+    <textarea id="idNote" rows="2" placeholder="your notes (private to this device)" style="margin-top:8px">${esc(I.note || '')}</textarea>
+    <div class="row wrap" style="margin-top:10px;gap:8px"><button class="btn pri sm" id="idSave">SAVE</button><button class="btn sm danger" id="idDel">DELETE PERSON</button></div>`);
+  $$('[data-open]').forEach(el => el.onclick = () => { closeSheet(); openProfile(el.dataset.open); });
+  $$('[data-unlink]').forEach(el => el.onclick = async () => { await api('/api/identities/' + encodeURIComponent(id), { method: 'PATCH', body: { remove: [el.dataset.unlink] } }); openIdentity(id); if (route.view === 'network') renderNetwork(); });
+  $('#idAdd').onclick = async () => { const t = prompt('Profile link (any network), @name@server, name.bsky.social, or @handle (X):'); const aid = accountIdFromText(t); if (!aid) return; await linkAccount(aid, id, 'you'); openIdentity(id); };
+  $('#idWeb').onclick = () => { store.set('webMerge', true); const first = I.accounts[0]; closeSheet(); go('network?' + new URLSearchParams({ focus: first ? '@' + first.handle : I.name })); };
+  const ot = $('#idTopic'); if (ot) ot.onclick = () => { closeSheet(); go('topic/' + I.topic_id + '/dossier'); };
+  const md = $('#idDossier'); if (md) md.onclick = async () => {
+    try{ const t = await api('/api/topics', { method: 'POST', body: { name: I.name, seeds: [`"${I.name}"`, I.name], run: false, settings: { breadth: 1, media: 'everything', person: { mode: 'name', first: I.name.split(' ')[0] || '', last: I.name.split(' ').slice(1).join(' '), state: '', handles: I.accounts.map(a => a.id), identity_id: id } } } });
+      await api('/api/identities/' + encodeURIComponent(id), { method: 'PATCH', body: { topic_id: t.id } });
+      for (const a of I.accounts){ try{ await api('/api/topics/' + t.id + '/creator', { method: 'POST', body: { handle: a.handle, platform: a.platform } }); }catch(e){} }
+      closeSheet(); go('topic/' + t.id + '/dossier');
+    }catch(e){ toast(e.message); }
+  };
+  $('#idSave').onclick = async () => { await api('/api/identities/' + encodeURIComponent(id), { method: 'PATCH', body: { name: $('#idName').value, note: $('#idNote').value } }); toast('Saved'); closeSheet(); if (route.view === 'network') renderNetwork(); };
+  $('#idDel').onclick = async () => { if (!confirm('Delete this person? The accounts and their posts stay; only the grouping goes.')) return; await api('/api/identities/' + encodeURIComponent(id), { method: 'DELETE' }); closeSheet(); if (route.view === 'network') renderNetwork(); };
+}
+// attach an account to a person (existing or new); also makes it a creator of that person's dossier if there is one
+async function linkAccount(accountId, identityId, how){
+  const I = await api('/api/identities/' + encodeURIComponent(identityId), { method: 'PATCH', body: { add: [{ id: accountId, how: how || 'you' }] } });
+  if (I.error) throw new Error(I.error);
+  if (I.topic_id){ const [h, p] = accountId.split('|'); api('/api/topics/' + I.topic_id + '/creator', { method: 'POST', body: { handle: h, platform: p } }).catch(() => {}); }
+  toast('@' + accountId.split('|')[0] + ' → ' + I.name, 3000);
+  return I;
+}
+// pick a person for an account: existing ones as buttons, or a new name
+async function chooseIdentityFor(accountId, how){
+  let list = []; try{ list = (await api('/api/identities')).identities || []; }catch(e){}
+  openSheet(`<h3>WHO IS @${esc(accountId.split('|')[0])}?</h3>
+    <p class="note" style="margin-bottom:8px">Tie this account to a person you already track, or start a new one. Only you decide this; the app never guesses.</p>
+    <div class="meta">${list.map(I => `<button class="pill a" data-pick="${esc(I.id)}">◉ ${esc(I.name)} <small>· ${I.accounts.length}</small></button>`).join('')}</div>
+    <form id="newIdent" class="row" style="margin-top:10px;gap:8px"><input id="newIdentName" placeholder="new person's name" style="flex:1"><button class="btn pri sm" type="submit">NEW PERSON</button></form>`);
+  $$('[data-pick]').forEach(b => b.onclick = async () => { try{ await linkAccount(accountId, b.dataset.pick, how); }catch(e){ toast(e.message); } closeSheet(); openProfile(accountId); if (route.view === 'network') renderNetwork(); });
+  $('#newIdent').onsubmit = async e => { e.preventDefault(); const name = $('#newIdentName').value.trim(); if (!name) return; try{ const I = await api('/api/identities', { method: 'POST', body: { name, accounts: [{ id: accountId, how: how || 'you' }] } }); toast('@' + accountId.split('|')[0] + ' → ' + I.name, 3000); }catch(err){ toast(err.message); } closeSheet(); openProfile(accountId); if (route.view === 'network') renderNetwork(); };
 }
 async function openProfile(id){
   let p; try{ p = await api('/api/people/' + encodeURIComponent(id)); }catch(e){ return toast(e.message); }
@@ -2498,6 +2584,9 @@ async function openProfile(id){
       <div class="meta">${p.follows.known.map(k => `<span class="pill a" data-open="${esc(k.id)}" style="cursor:pointer" title="in your library"><b class="l1">━</b> @${esc(k.author)} ${k.n}</span>`).join('')}${p.followed_by.known.filter(k => !p.follows.known.some(f => f.id === k.id)).map(k => `<span class="pill a" data-open="${esc(k.id)}" style="cursor:pointer" title="follows this account · in your library"><b class="l1">━</b> @${esc(k.author)} ↙</span>`).join('')}${p.follows.unknown.slice(0, 20).map(u => `<span class="pill" data-pull="${esc(u.id)}" style="cursor:pointer" title="not in your library yet — tap to pull their posts in">@${esc(u.handle)}${u.posts ? ' ' + fmtN(u.posts) : ''} +</span>`).join('')}</div>
       ${p.follows.n + p.followed_by.n === 0 ? '<p class="note">Nothing public — the account hides its lists, or follows no one.</p>' : ''}` : `<p class="note">${p.follows_supported ? 'Not loaded yet. LOAD FOLLOWS reads who they follow and who follows them — accounts already in your library become white lines in the web; others can be pulled in with one tap.' : esc(p.platform || 'this network') + ' has no public follow list to read; connections here come from mentions and shared content.'}</p>`}` : ''}
     ${p.mentions_out && p.mentions_out.length ? `<h3 class="s">Mentions</h3><div class="meta">${p.mentions_out.map(m => `<span class="pill${m.known ? ' a' : ''}" ${m.known ? `data-open="${esc(m.handle + '|' + p.platform)}" style="cursor:pointer"` : ''}>@${esc(m.handle)} ${m.count}</span>`).join('')}</div>` : ''}
+    <h3 class="s">Same person <small class="note">(accounts you tied together)</small></h3>
+    ${p.identity ? `<div class="meta"><button class="pill a" id="pIdent">◉ ${esc(p.identity.name)} · ${p.identity.accounts.length} account${p.identity.accounts.length === 1 ? '' : 's'}</button>${p.identity.accounts.filter(a => a.id.toLowerCase() !== String(p.id).toLowerCase()).map(a => `<span class="pill" data-open="${esc(a.id)}" style="cursor:pointer" title="${esc(HOW_LABEL[a.how] || a.how)}"><b class="l1">╌</b> @${esc(a.handle)} · ${esc(a.platform)}</span>`).join('')}</div>`
+      : `<div class="row wrap" style="gap:8px"><button class="btn sm" id="pLink">◉ LINK TO A PERSON</button><span class="note">Group this with their other accounts (other networks too) under one name.</span></div>`}
     <h3 class="s">Your notes <small class="note">(private to this device)</small></h3>
     <p class="note" style="margin-bottom:6px">Labels and notes you add here are your own — the app never guesses them. Use them to shape your searches.</p>
     <input id="pAttrs" placeholder="your labels, comma-separated (e.g. artist, favourite)" value="${esc((p.meta.attrs || []).join(', '))}" autocapitalize="none">
@@ -2527,6 +2616,8 @@ async function openProfile(id){
     }catch(e){ toast(e.message); b.disabled = false; b.textContent = '⬇ LOAD 50 MORE POSTS'; }
   };
   const pc = $('#pCrawl'); if (pc) pc.onclick = () => { closeSheet(); openCrawl(id); };
+  const pi = $('#pIdent'); if (pi) pi.onclick = () => { closeSheet(); openIdentity(p.identity.id); };
+  const pl = $('#pLink'); if (pl) pl.onclick = () => { closeSheet(); chooseIdentityFor(p.id, 'you'); };
   const pf = $('#pFollows'); if (pf) pf.onclick = async () => {
     pf.disabled = true; pf.textContent = '⏳ READING…';
     try{

@@ -641,6 +641,41 @@ class TestPeople(Base):
         self.assertNotIn(frozenset(("@someone|mastodon", "@clonestoo|x")), mention_edges)
         self.assertEqual(next(n for n in g["nodes"] if n["id"] == "@clonestoo|x")["n"], 2)
 
+    def test_identities_tie_accounts_under_one_name(self):
+        """One person, several accounts on several networks: only the user links them, each link keeps its
+        reason, the web draws them as tier-1 'same person' links, and MERGE collapses them into one node."""
+        from rv import people
+        up = self.v.db.upsert
+        up({"id": "x:1", "platform": "x", "post_id": "1", "author": "clonestoo", "text": "hi #a", "hashtags": "a", "media": "video", "url": "u1"})
+        up({"id": "ig:2", "platform": "instagram", "post_id": "2", "author": "clone.stoo", "text": "yo #b", "hashtags": "b", "media": "image", "url": "u2"})
+        up({"id": "x:3", "platform": "x", "post_id": "3", "author": "other", "text": "thanks @clonestoo", "media": "video", "url": "u3"})
+        # nothing links the X and Instagram accounts on their own
+        self.assertNotIn("clone.stoo|instagram", {c["id"] for c in people.profile(self.v, "clonestoo|x")["connected"]})
+        I = people.handle(self.v, "POST", ["identities"], {}, {"name": "Clone Stoo", "accounts": [{"id": "clonestoo|x", "how": "you"}]})
+        I = people.handle(self.v, "PATCH", ["identities", I["id"]], {}, {"add": [{"id": "clone.stoo|instagram", "how": "post link"}]})
+        self.assertEqual([(a["handle"], a["platform"], a["how"]) for a in I["accounts"]],
+                         [("clonestoo", "x", "you"), ("clone.stoo", "instagram", "post link")])
+        self.assertTrue((self.tmp / "identities.json").exists())           # stays on this machine
+        p = people.profile(self.v, "clonestoo|x")
+        self.assertEqual(p["identity"]["name"], "Clone Stoo")
+        c = next(c for c in p["connected"] if c["id"] == "clone.stoo|instagram")
+        self.assertEqual((c["t"], c["p"]["i"]), (1, 5))
+        self.assertTrue(any(w["kind"] == "identity" for w in c["why"]))
+        g = people.word_graph(self.v, kinds="account")
+        e = next(e for e in g["edges"] if {e["a"], e["b"]} == {"@clonestoo|x", "@clone.stoo|instagram"})
+        self.assertGreater(e["p"]["i"], 0)
+        self.assertEqual(next(n for n in g["nodes"] if n["id"] == "@clonestoo|x")["identity"], "Clone Stoo")
+        gm = people.word_graph(self.v, kinds="account", merge=True)
+        ids = {n["id"] for n in gm["nodes"]}
+        self.assertNotIn("@clonestoo|x", ids)
+        node = next(n for n in gm["nodes"] if n["id"].startswith("person:"))
+        self.assertEqual((node["label"], node["n"], sorted(node["accounts"])), ("Clone Stoo", 2, ["clone.stoo|instagram", "clonestoo|x"]))
+        self.assertTrue(any({e["a"], e["b"]} == {node["id"], "@other|x"} and e["p"]["m"] > 0 for e in gm["edges"]))   # the mention follows into the merged node
+        # an account belongs to one person: moving it removes it from the other
+        J = people.handle(self.v, "POST", ["identities"], {}, {"name": "Someone Else", "accounts": ["clone.stoo|instagram"]})
+        self.assertEqual([a["id"] for a in people.handle(self.v, "GET", ["identities", I["id"]], {}, {})["accounts"]], ["clonestoo|x"])
+        self.assertEqual(people.handle(self.v, "DELETE", ["identities", J["id"]], {}, {}), {"ok": True})
+
     def test_creator_feeds_per_network(self):
         """One @username on one site becomes that topic's own source — no cross-site guessing."""
         from rv.web import parse_creator
