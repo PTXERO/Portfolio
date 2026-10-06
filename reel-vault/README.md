@@ -55,6 +55,15 @@ browser on the computer where you're logged in, or point to an exported `cookies
 A source can also have its own cookies. Use a spare account: heavy scraping can get
 accounts limited and is against those sites' terms. Keep it personal.
 
+## Start fresh (wipe)
+
+Erase the whole library — every collected video, topic, vote and download — and start over:
+
+- In the app: **SETUP → Danger zone → Wipe everything** (optionally keep your ★ starred videos).
+- On the computer: `python reel-vault/server/reelvault.py --wipe` (asks you to type WIPE; add `--yes` to skip).
+
+Your pairing, settings and word groups are kept, so the phone stays connected.
+
 ## How it gets smart
 
 **Topics.** Each topic has starting words, a breadth (focused … everything), the media to

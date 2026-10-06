@@ -1247,6 +1247,52 @@ class Vault:
             TopicScorer(self, t["id"]).rescore()
 
     # ═════════ items ═════════
+    def wipe(self, reset_sources=True, keep_starred=False):
+        """Start fresh: clear the whole library, topics, votes, vectors and
+        downloaded files. Keeps your settings, synonyms and access key (so
+        the phone stays paired). Returns what was removed."""
+        import shutil as _sh
+        counts = {t: (self.db.one(f"SELECT count(*) n FROM {t}") or {"n": 0})["n"]
+                  for t in ("items", "topics", "sources")}
+        keep_ids = set()
+        if keep_starred:
+            keep_ids = {r["id"] for r in self.db.q("SELECT id FROM items WHERE starred=1")}
+        for tbl in ("topic_items", "topic_hits", "topic_queries", "topics", "cache"):
+            self.db.exec(f"DELETE FROM {tbl}")
+        if keep_ids:
+            ph = ",".join("?" * len(keep_ids))
+            self.db.exec(f"DELETE FROM items WHERE id NOT IN ({ph})", list(keep_ids))
+            self.db.exec(f"DELETE FROM vectors WHERE item_id NOT IN ({ph})", list(keep_ids))
+        else:
+            for tbl in ("items", "vectors"):
+                self.db.exec(f"DELETE FROM {tbl}")   # triggers keep items_fts in sync
+        self.db.exec("DELETE FROM sources")
+        # wipe downloaded media (except kept items' files)
+        keep_files = set()
+        for iid in keep_ids:
+            it = self.db.get(iid)
+            for k in ("file", "thumb_file"):
+                if it and it.get(k):
+                    keep_files.add((self.media_dir / it[k]).resolve())
+        if self.media_dir.exists():
+            for child in self.media_dir.iterdir():
+                try:
+                    if child.is_dir() and not any(f in keep_files for f in child.rglob("*")):
+                        _sh.rmtree(child, ignore_errors=True)
+                    elif child.is_file() and child.resolve() not in keep_files:
+                        child.unlink()
+                except OSError:
+                    pass
+        if reset_sources:
+            for key in S.DEFAULT_SOURCES:
+                self.add_source(S.source_from_preset(key))
+        try:
+            self.db.conn.execute("VACUUM")
+        except Exception:      # noqa: BLE001
+            pass
+        self._play_cache.clear()
+        return {"removed": counts, "kept_starred": len(keep_ids)}
+
     def delete(self, item_id, remove_file=True):
         it = self.db.get(item_id)
         if not it:

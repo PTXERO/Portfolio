@@ -508,6 +508,13 @@ python reel-vault/server/reelvault.py
 <i># then scan the QR code with your iPhone</i></pre>
     <p class="note" style="margin-top:8px">The computer stays on, on the same Wi-Fi as your phone. In Firefox on iPhone: ⋯ → Share → <b>Add to Home Screen</b> to use it like an app.</p>
   </div>
+  <h3 class="s">Danger zone</h3>
+  <div class="card pad">
+    <b>Start fresh</b>
+    <p class="note" style="margin:6px 0 10px">Erases every collected video, topic, vote and downloaded file, and resets sources to the defaults. Your pairing, settings and word groups are kept. This can't be undone.</p>
+    <label class="row note" style="margin-bottom:10px"><input type="checkbox" id="wipeKeepStar"> keep my ★ starred videos</label>
+    <button class="btn danger" id="wipeBtn">WIPE EVERYTHING</button>
+  </div>
 </section>
 
 <nav class="bottom" aria-label="Main"><div class="in" id="nav">
@@ -1723,6 +1730,18 @@ $('#sSynSave').onclick = async () => {
   const groups = $('#sSyn').value.split('\n').map(l => l.split(',').map(w => w.trim().toLowerCase()).filter(Boolean)).filter(g => g.length > 1);
   if (ready()){ try{ SYN = (await api('/api/synonyms', { method: 'PUT', body: { groups } })).groups; }catch(e){ return toast(e.message); } } else SYN = groups;
   $('#sSynN').textContent = SYN.length + ' groups · saved'; toast('Saved');
+};
+if ($('#wipeBtn')) $('#wipeBtn').onclick = async () => {
+  if (!ready()) return toast('Needs the server');
+  const keep = $('#wipeKeepStar').checked;
+  if (!await confirmSheet('Wipe everything?', 'This permanently erases every collected video, topic, vote and download' + (keep ? ' (except your ★ starred videos)' : '') + '. Your pairing and settings stay. This can\'t be undone.', 'WIPE')) return;
+  const typed = await ask('Type WIPE to confirm', { placeholder: 'WIPE', ok: 'ERASE EVERYTHING' });
+  if (typed !== 'WIPE') return toast('Cancelled');
+  try{
+    const r = await api('/api/wipe', { method: 'POST', body: { confirm: 'WIPE', reset_sources: true, keep_starred: keep } });
+    toast('Wiped. Starting fresh.'); topicsCache = []; STATUS = null;
+    await refreshStatusChip(); setTimeout(() => location.reload(), 800);
+  }catch(e){ toast(e.message); }
 };
 
 // ══════════════════════════════════════════════════════

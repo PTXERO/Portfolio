@@ -199,6 +199,19 @@ class TestSearch(Base):
         ids_all, _ = self.ids(topic=tid, topic_all="1")
         self.assertEqual(set(ids_all), {"x:1", "x:2", "x:3", "x:4"})
 
+    def test_wipe(self):
+        self.v.db.update("x:1", {"starred": 1})
+        t = self.v.create_topic("z", ["z"]); self.v.link(t["id"], "x:2", "z", "x")
+        key = self.v.store.access_key
+        res = self.v.wipe(reset_sources=True, keep_starred=True)
+        self.assertEqual(self.v.db.one("SELECT count(*) n FROM topics")["n"], 0)
+        self.assertIsNotNone(self.v.db.get("x:1"))          # starred kept
+        self.assertIsNone(self.v.db.get("x:2"))             # rest cleared
+        self.assertGreater(self.v.db.one("SELECT count(*) n FROM sources")["n"], 0)  # defaults restored
+        self.assertEqual(self.v.store.access_key, key)      # phone stays paired
+        self.v.wipe(keep_starred=False)
+        self.assertEqual(self.v.db.one("SELECT count(*) n FROM items")["n"], 0)
+
     def test_upsert_keeps_user_data(self):
         self.v.db.update("x:1", {"tags": "mine", "starred": 1})
         self.v.db.upsert(S.item_from_x(*tweet("1", "edited text", likes=999)[1:], "again"))

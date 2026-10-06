@@ -542,6 +542,13 @@ class Handler(BaseHTTPRequestHandler):
         if route == "understand" and method == "POST":
             return ok(v.submit("understand", {"title": "understand library (semantic)"}).to_dict())
 
+        if route == "wipe" and method == "POST":
+            b = self._body()
+            if b.get("confirm") != "WIPE":
+                return self._send(400, {"error": 'send {"confirm":"WIPE"} to proceed'})
+            return ok(v.wipe(reset_sources=b.get("reset_sources", True),
+                             keep_starred=b.get("keep_starred", False)))
+
         if route == "synonyms":
             if method == "PUT":
                 v.store.save_synonyms(self._body().get("groups") or [])
@@ -601,11 +608,28 @@ def main(argv=None):
     ap.add_argument("--no-browser", action="store_true", help="don't open a browser tab")
     ap.add_argument("--phone-host", default="",
                     help="address the phone should use, e.g. 192.168.1.20 (if the printed one is wrong, e.g. on a VPN)")
+    ap.add_argument("--wipe", action="store_true",
+                    help="erase the whole library (videos, topics, votes) and start fresh, then run")
+    ap.add_argument("--yes", action="store_true", help="skip the confirmation prompt for --wipe")
     a = ap.parse_args(argv)
 
     data = Path(a.data).expanduser().resolve()
     data.mkdir(parents=True, exist_ok=True)
     Handler.vault = Vault(data)
+    if a.wipe:
+        if not a.yes:
+            if not sys.stdin.isatty():
+                print("--wipe needs --yes when there's no terminal (e.g. under run.py). Skipping wipe.")
+                a.wipe = False
+            else:
+                ans = input("This ERASES every collected video, topic and vote in "
+                            f"{data}. Type WIPE to confirm: ").strip()
+                if ans != "WIPE":
+                    print("cancelled.")
+                    return
+    if a.wipe:
+        res = Handler.vault.wipe()
+        print(f"wiped: {res['removed']}. starting fresh…")
     Handler.port = a.port
     Handler.phone_host = a.phone_host.strip()
     Handler.allowed_origins = {"https://ptxero.github.io"} | {o.rstrip("/") for o in a.allow_origin}
