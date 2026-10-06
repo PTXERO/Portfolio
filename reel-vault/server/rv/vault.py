@@ -344,7 +344,13 @@ class Vault:
                 if src and src.get("id"):
                     self.db.exec("UPDATE sources SET last_error=? WHERE id=?", (msg[:300], src["id"]))
                 if err.get("error") == "AuthRequired" or "cookie" in str(err.get("message")).lower():
-                    job.log("  → this site needs a login: set cookies in SETUP")
+                    args = self.cookie_args(src)
+                    if "--cookies-from-browser" in args:
+                        job.log(f"  → {args[-1].title()} is open and locks its cookie file, so the login can't be read. "
+                                f"Close {args[-1].title()} completely (tray too) and run again, or export a cookies.txt "
+                                "(browser extension 'Get cookies.txt LOCALLY') and put its path in SETUP → cookies file")
+                    else:
+                        job.log("  → this site needs a login: set cookies in SETUP")
                 return
 
     # ═════════ sources ═════════

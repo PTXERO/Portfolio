@@ -87,6 +87,10 @@ CREATE TABLE IF NOT EXISTS topic_queries(
   runs INTEGER DEFAULT 0, found INTEGER DEFAULT 0, last_run INTEGER, created INTEGER,
   PRIMARY KEY(topic_id, query)
 );
+CREATE TABLE IF NOT EXISTS relations(
+  src TEXT, dst TEXT, kind TEXT, ts INTEGER, name TEXT DEFAULT '', url TEXT DEFAULT '', posts INTEGER DEFAULT 0,
+  PRIMARY KEY(src, dst, kind)
+);
 CREATE TABLE IF NOT EXISTS cache(key TEXT PRIMARY KEY, value TEXT, ts INTEGER);
 CREATE TABLE IF NOT EXISTS vectors(item_id TEXT PRIMARY KEY, model TEXT, dim INTEGER, vec BLOB);
 """

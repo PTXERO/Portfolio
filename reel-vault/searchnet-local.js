@@ -12,7 +12,7 @@
   'use strict';
 
   // ── IndexedDB (tiny promise wrapper) ──────────────────────────
-  const DB_NAME = 'searchnet', DB_VER = 1;
+  const DB_NAME = 'searchnet', DB_VER = 2;
   let _db = null;
   function openDB() {
     if (_db) return Promise.resolve(_db);
@@ -24,6 +24,7 @@
         if (!db.objectStoreNames.contains('topics')) db.createObjectStore('topics', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('votes')) db.createObjectStore('votes', { keyPath: 'k' });
         if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv', { keyPath: 'k' });
+        if (!db.objectStoreNames.contains('rel')) db.createObjectStore('rel', { keyPath: 'k' });   // v2: real account→account relations (follows)
       };
       r.onsuccess = () => { _db = r.result; res(_db); };
       r.onerror = () => rej(r.error);
@@ -145,6 +146,8 @@
     const r = await fetch(base + path + (s.worker_key ? (path.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(s.worker_key) : ''),
       { headers: s.worker_key ? { 'X-SN-Key': s.worker_key } : {} });
     const j = await r.json().catch(() => ({}));
+    if (r.status === 404 && (j.error === 'not found' || !j.error) && !/^\/(search|health)/.test(path))
+      throw new Error('Your Worker is older than this app — paste the new worker/searchnet-worker.js into Cloudflare (SOURCES → your Worker → how to update)');
     if (!r.ok) throw new Error(j.error || ('Worker HTTP ' + r.status));
     return j;
   }
@@ -293,7 +296,7 @@
         if (sub === 'cancel' && method === 'POST') { const j = JOBS[arg]; if (j) j.cancel = true; return j ? jobDict(j) : { error: 'no job' }; }
         const j = JOBS[arg]; return j ? jobDict(j, true) : { error: 'no job' };
       }
-      if (route === 'wipe' && method === 'POST') { if (body.confirm !== 'WIPE') return { error: 'confirm' }; await idb.clear('items'); await idb.clear('topics'); await idb.clear('votes'); return { removed: {}, ok: true }; }
+      if (route === 'wipe' && method === 'POST') { if (body.confirm !== 'WIPE') return { error: 'confirm' }; await idb.clear('items'); await idb.clear('topics'); await idb.clear('votes'); await idb.clear('rel'); return { removed: {}, ok: true }; }
 
       // topics are handled by the learn module when present
       if (route === 'topics' && this.learn) return this.learn.request(method, parts, qs || '', body);

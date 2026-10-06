@@ -571,6 +571,42 @@ class TestPeople(Base):
         self.assertEqual(people.handle(self.v, "PATCH", ["people", "ana|x"], {}, {"notes": "x"})["notes"], "x")
 
 
+    def test_follows_are_real_tier1_links(self):
+        """Follow lists from the platform's public graph become white tier-1 links (and only those)."""
+        from rv import people
+        for i, (who, txt) in enumerate((("ana", "sunset #photo"), ("ben", "cooking #pasta"), ("cat", "gym"))):
+            self.v.db.upsert({"id": f"m{i}", "platform": "mastodon", "author": who, "author_url": f"https://m.social/@{who}",
+                              "text": txt, "hashtags": txt.split("#")[-1] if "#" in txt else "", "media": "video",
+                              "url": f"https://m.social/@{who}/{i}", "posted_at": 1700000000 + i})
+        fake = lambda plat, handle, url="", limit=300: {"follows": [{"handle": "ben", "name": "Ben", "url": "", "posts": 9},  # noqa: E731
+                                                         {"handle": "zed@elsewhere", "name": "", "url": "", "posts": 3}],
+                                                        "followers": [{"handle": "cat", "name": "", "url": "", "posts": 1}]}
+        r = people.load_follows(self.v, "ana|mastodon", fetch=fake)
+        self.assertEqual((r["state"], r["result"]["follows"], r["result"]["followers"], r["result"]["known"]), ("done", 2, 1, 2))
+        p = people.profile(self.v, "ana|mastodon")
+        self.assertEqual([k["author"] for k in p["follows"]["known"]], ["ben"])
+        self.assertEqual([u["handle"] for u in p["follows"]["unknown"]], ["zed@elsewhere"])
+        self.assertEqual([k["author"] for k in p["followed_by"]["known"]], ["cat"])
+        conn = {c["author"]: c for c in p["connected"]}
+        self.assertEqual(conn["ben"]["t"], 1)                        # nothing in common but a follow: still linked
+        self.assertTrue(any(w["kind"] == "follows" for w in conn["ben"]["why"]))
+        g = people.graph(self.v)
+        e = next(e for e in g["edges"] if {e["a"], e["b"]} == {"ana|mastodon", "ben|mastodon"})
+        self.assertEqual((e["f"], e["t"]), (1, 1))
+        wg = people.word_graph(self.v, kinds="account")
+        e = next(e for e in wg["edges"] if {e["a"], e["b"]} == {"@ana|mastodon", "@ben|mastodon"})
+        self.assertEqual(e["t"], 1)
+        # a non-fediverse account is told why, not failed silently
+        self.assertIn("error", people.load_follows(self.v, "nobody|x", fetch=fake))
+        # the people list knows networks and can sort / filter by them
+        self._seed()
+        lst = people.list_people(self.v, sort="network")
+        self.assertEqual(lst["platforms"], {"mastodon": 3, "x": 4})
+        self.assertEqual([p["platform"] for p in lst["people"]][:3], ["mastodon"] * 3)
+        self.assertEqual(people.list_people(self.v, platform="x")["total"], 4)
+        self.assertTrue(all(n["platform"] == "x" for n in people.graph(self.v, platform="x")["nodes"]))
+        self.assertEqual(people.handle(self.v, "GET", ["people"], {"platform": "mastodon"}, {})["total"], 3)
+
 class TestWordWeb(Base):
     """The word web: @accounts, #hashtags and words/"phrases" in one graph, centred on a focus."""
 

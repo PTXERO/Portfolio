@@ -52,6 +52,7 @@ All responses include permissive CORS headers so the hosted app can call it.
 
 The app and the Worker evolve together. When the app gains a feature that needs the
 Worker (the `/account` endpoint behind **LOAD MORE POSTS** on a profile arrived in
-Worker 1.1), redeploy: paste the new `searchnet-worker.js` over the old one in the
+Worker 1.1; `/follows` behind **LOAD FOLLOWS** and the white "real link" lines in the
+WEB, plus remote-account lookup for LOAD MORE, arrived in Worker 1.2), redeploy: paste the new `searchnet-worker.js` over the old one in the
 Cloudflare dashboard, or run `wrangler deploy` again. `GET /health` shows the version
 your Worker is running.

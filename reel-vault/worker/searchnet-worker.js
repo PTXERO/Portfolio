@@ -21,7 +21,7 @@
  *  the way the optional local PC server does.
  * ───────────────────────────────────────────────────────────────── */
 
-const VERSION = "1.1";
+const VERSION = "1.2";
 const UA = "SearchNetWorker/1.0 (+https://github.com/)";
 const INVIDIOUS = ["https://yewtu.be", "https://invidious.nerdvpn.de", "https://invidious.jing.rocks"];
 
@@ -53,6 +53,10 @@ export default {
       if (p === "/account") {                 // an account's own recent posts (for "load more" on a profile)
         const limit = Math.min(parseInt(q.limit || "50", 10) || 50, 100);
         return json({ items: await accountPosts(q, limit) });
+      }
+      if (p === "/follows") {                 // who an account publicly follows (real links for the WEB)
+        const limit = Math.min(parseInt(q.limit || "200", 10) || 200, 400);
+        return json(await accountFollows(q, limit));
       }
       if (p === "/resolve") {                 // best-effort direct media URL for an item link
         return json({ url: await resolveMedia(q.url) });
@@ -243,6 +247,26 @@ function redditItem(o, q) {
   });
 }
 
+// Find a fediverse account where it can actually be read. A remote account ("user@loops.video") found through
+// mastodon.social may live on software without a Mastodon API (Loops, Pixelfed…), so try: the instance the
+// app searched from (full acct), then the account's own host, then mastodon.social — first one that answers wins.
+async function mastoLookup(handle, url, instance) {
+  const [user, home] = handle.includes("@") ? handle.split("@") : [handle, null];
+  const ownHost = home || (url.match(/^https?:\/\/([^/]+)/) || [])[1] || null;
+  const tries = [];
+  if (instance) tries.push([instance, ownHost && ownHost !== instance ? `${user}@${ownHost}` : user]);
+  if (ownHost) tries.push([ownHost, user]);
+  if (!instance || instance !== "mastodon.social") tries.push(["mastodon.social", ownHost ? `${user}@${ownHost}` : user]);
+  let last = null;
+  for (const [host, acct] of tries) {
+    try {
+      const acc = await getJSON(`https://${host}/api/v1/accounts/lookup?acct=${encodeURIComponent(acct)}`);
+      if (acc && acc.id) return { host, acc };
+    } catch (e) { last = e; }
+  }
+  throw new Error(`couldn't find @${handle} on ${tries.map((t) => t[0]).join(", ")}${last ? " (" + last.message + ")" : ""}`);
+}
+
 // ── /account: an account's own recent posts. q = { platform, handle, url, instance, limit, media } ──
 async function accountPosts(q, limit) {
   const handle = (q.handle || "").replace(/^@/, "").trim();
@@ -250,10 +274,7 @@ async function accountPosts(q, limit) {
   const plat = (q.platform || "").toLowerCase();
   if (!handle && !url) throw new Error("handle or url required");
   if (plat === "mastodon") {
-    // acct may be "user@host"; else take the host from the profile URL; else the given/default instance
-    let [user, host] = handle.includes("@") ? handle.split("@") : [handle, null];
-    if (!host) host = (url.match(/^https?:\/\/([^/]+)/) || [])[1] || q.instance || "mastodon.social";
-    const acc = await getJSON(`https://${host}/api/v1/accounts/lookup?acct=${encodeURIComponent(user)}`);
+    const { host, acc } = await mastoLookup(handle, url, q.instance);
     const arr = await getJSON(`https://${host}/api/v1/accounts/${acc.id}/statuses?limit=${Math.min(limit, 40)}&only_media=true&exclude_replies=true&exclude_reblogs=true`);
     return mastoItems(arr, q).slice(0, limit);
   }
@@ -284,6 +305,51 @@ async function accountPosts(q, limit) {
   // anything else: if we were given a feed-ish URL, try it as RSS
   if (/\.(xml|rss|atom)(\?|$)|\/feed/.test(url)) return parseFeed(await getText(url), limit, q.media === "all");
   throw new Error(`loading more posts isn't supported for '${plat || "this site"}' from the Worker (the PC server can)`);
+}
+// ── /follows: an account's PUBLIC following list (and who follows it, where the API offers it).
+//    Only platforms with an open graph API: Mastodon (unless the user hides it) and Bluesky.
+//    Returns handles in the same form the app stores authors in, so they line up with the library.
+async function accountFollows(q, limit) {
+  const handle = (q.handle || "").replace(/^@/, "").trim();
+  const url = q.url || "";
+  const plat = (q.platform || "").toLowerCase();
+  if (!handle && !url) throw new Error("handle or url required");
+  const out = { platform: plat, follows: [], followers: [], partial: false };
+  if (plat === "mastodon") {
+    const { host, acc } = await mastoLookup(handle, url, q.instance);
+    // acct is "name" for local accounts and "name@their.host" for remote ones; the app's author for a
+    // local account is also plain "name", so both sides match without any guessing
+    const row = (a) => ({ handle: a.acct, name: a.display_name || "", url: a.url || "", posts: a.statuses_count || 0 });
+    const page = async (kind) => {
+      const rows = []; let next = `https://${host}/api/v1/accounts/${acc.id}/${kind}?limit=80`;
+      for (let i = 0; i < 5 && next && rows.length < limit; i++) {
+        const r = await fetch(next, { headers: { "User-Agent": UA, Accept: "application/json" } });
+        if (!r.ok) { out.partial = true; break; }             // 403 = the user hides this list; respect it
+        (await r.json()).forEach((a) => rows.push(row(a)));
+        next = ((r.headers.get("Link") || "").match(/<([^>]+)>;\s*rel="next"/) || [])[1] || null;
+      }
+      return rows.slice(0, limit);
+    };
+    out.follows = await page("following");
+    out.followers = await page("followers");
+    return out;
+  }
+  if (plat === "bluesky") {
+    const row = (a) => ({ handle: a.handle, name: a.displayName || "", url: `https://bsky.app/profile/${a.handle}`, posts: 0 });
+    const page = async (xrpc, key) => {
+      const rows = []; let cursor = "";
+      for (let i = 0; i < 5 && rows.length < limit; i++) {
+        const d = await getJSON(`https://public.api.bsky.app/xrpc/${xrpc}?actor=${encodeURIComponent(handle)}&limit=100${cursor ? "&cursor=" + encodeURIComponent(cursor) : ""}`);
+        (d[key] || []).forEach((a) => rows.push(row(a)));
+        cursor = d.cursor; if (!cursor) break;
+      }
+      return rows.slice(0, limit);
+    };
+    out.follows = await page("app.bsky.graph.getFollows", "follows");
+    out.followers = await page("app.bsky.graph.getFollowers", "followers");
+    return out;
+  }
+  throw new Error(`'${plat || "this site"}' has no public follow list the Worker can read (Mastodon and Bluesky do)`);
 }
 function SOURCES_lemmyRow(row) {
   const po = row.post || {}, c = row.creator || {}, co = row.community || {};

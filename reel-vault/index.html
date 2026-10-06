@@ -437,8 +437,8 @@ pre.cmd i{color:var(--dim);font-style:normal}
   #vNetwork>.row{margin-bottom:6px}
   #vNetwork>.row select{width:auto;min-width:170px}
   #vNetwork>.row input{flex:1}
-  #vNetwork .web{grid-column:1;grid-row:4;height:100%;max-height:none;margin:0}
-  #vNetwork #nwList{grid-column:2;grid-row:4;overflow-y:auto;padding-right:4px;min-height:0}
+  #vNetwork .web{grid-column:1;grid-row:2;height:100%;min-height:0;max-height:none;margin:0;align-self:stretch}
+  #vNetwork #nwList{grid-column:2;grid-row:2;overflow-y:auto;padding-right:4px;min-height:0}
   #vNetwork #nwList h3.s{margin-top:0}
   /* setup: two columns so it's not one long scroll */
   #vSetup{max-width:1100px}
@@ -530,7 +530,7 @@ pre.cmd i{color:var(--dim);font-style:normal}
 .web .legend{position:absolute;right:10px;top:8px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px 12px;max-width:62%;font-family:var(--fmono);font-size:10px;letter-spacing:.08em;color:var(--dim);pointer-events:none}
 .web .legend em{font-style:normal;color:var(--mut)}
 .web .legend .shapes{color:var(--mut);flex-basis:100%;text-align:right}
-.web .legend .l1{color:#e2e2ea}.web .legend .l2{color:var(--acc2)}.web .legend .l3{color:#3a3a48}
+b.l1{color:#e2e2ea}b.l2{color:var(--acc2)}b.l3{color:#5a5a6c}.web .legend .l3{color:#3a3a48}
 .web .legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:-1px}
 .web .focus{position:absolute;left:10px;top:8px;display:flex;align-items:center;gap:8px;font-family:var(--fmono);font-size:11px;color:var(--acc);background:rgba(13,13,18,.85);padding:4px 6px 4px 8px;border:1px solid rgba(var(--acc-rgb),.35);border-radius:var(--r,2px)}
 .web .focus .hbtn{padding:3px 8px;font-size:9px}
@@ -686,7 +686,8 @@ body.noscroll-max{overflow:hidden}
       <button class="chip on" data-kind="account">@ ACCOUNTS</button><button class="chip on" data-kind="hashtag"># TAGS</button><button class="chip on" data-kind="word">WORDS</button>
     </div>
     <select id="nwTopic" class="sel"><option value="">All topics</option></select>
-    <select id="nwSort" class="sel"><option value="">Most posts</option><option value="active">Recently active</option><option value="cadence">Posts most often</option><option value="name">Name</option></select>
+    <select id="nwNet" class="sel" title="Only accounts from one social network"><option value="">All networks</option></select>
+    <select id="nwSort" class="sel"><option value="">Most posts</option><option value="network">By network</option><option value="follows">Most follows</option><option value="active">Recently active</option><option value="cadence">Posts most often</option><option value="name">Name</option></select>
   </div>
   <div id="nwWeb" class="web"></div>
   <div id="nwList"></div>
@@ -746,6 +747,7 @@ body.noscroll-max{overflow:hidden}
   <div class="card pad">
     <label class="field"><span>Cookies file (cookies.txt) path</span><input id="sCookiesFile" placeholder="/Users/me/cookies.txt" autocapitalize="off" autocorrect="off"></label>
     <label class="field"><span>Or read cookies from browser</span><select id="sCookiesBrowser"><option value="">— none —</option><option>firefox</option><option>chrome</option><option>safari</option><option>edge</option><option>brave</option><option>chromium</option><option>opera</option><option>vivaldi</option></select></label>
+    <p class="note" style="margin:-4px 0 10px">Reading from a browser only works while that browser is <b>fully closed</b> (Windows locks its cookie file while it runs — you'll see "Permission denied … Cookies"). If you'd rather keep it open, export a cookies.txt with a browser extension such as "Get cookies.txt LOCALLY" and put its path above.</p>
     <div class="grid2">
       <label class="field"><span>Speech model</span><select id="sWhisper"><option value="tiny">Tiny</option><option value="base">Base</option><option value="small">Small</option><option value="medium">Medium</option><option value="large-v3">Large</option></select></label>
       <label class="field"><span>OCR every N sec</span><input id="sOcr" type="number" min="0" inputmode="numeric"></label>
@@ -1477,6 +1479,11 @@ async function integrateAll(accts){
       if (j.error) throw new Error(j.error);
       for (let i = 0; i < 60; i++){ const r = await api('/api/jobs/' + j.id); if (!['queued', 'running'].includes(r.state)){ added += (r.stats && r.stats.new) || 0; if (r.state === 'error') failed++; break; } await new Promise(r => setTimeout(r, 800)); }
     }catch(e){ failed++; }
+    if (['mastodon', 'bluesky'].includes(a.platform)){                       // real links: who they follow
+      try{ const f = await api('/api/people/' + encodeURIComponent(a.id) + '/follows', { method: 'POST', body: {} });
+        if (!f.error && f.id && ['queued', 'running'].includes(f.state)) for (let i = 0; i < 20; i++){ const r = await api('/api/jobs/' + f.id); if (!['queued', 'running'].includes(r.state)) break; await new Promise(r => setTimeout(r, 600)); }
+      }catch(e){ /* follow lists are a bonus; a hidden list is fine */ }
+    }
     done++;
   }
   integrateRun = null;
@@ -2002,20 +2009,25 @@ async function renderNetwork(){
     if (route.qs.has('focus')) $('#nwQ').value = route.qs.get('focus');
     history.replaceState(history.state, '', '#network');
   }
-  const topic = tsel.value, sort = $('#nwSort').value, q = $('#nwQ').value.trim();
+  const topic = tsel.value, sort = $('#nwSort').value, q = $('#nwQ').value.trim(), platform = $('#nwNet').value;
   const kinds = $$('#nwKinds .chip.on').map(c => c.dataset.kind).join(',') || 'account';
   const listQ = q && !/^[#"]/.test(q) ? q.replace(/^@/, '') : '';
   web.innerHTML = '<div class="empty"><span class="spinner"></span></div>';
   let graph, people;
+  const extra = Object.assign(topic ? { topic } : {}, platform ? { platform } : {});
   try{
     [graph, people] = await Promise.all([
-      api('/api/graph?' + new URLSearchParams(Object.assign({ max: 80, focus: q, kinds }, topic ? { topic } : {}))),
-      api('/api/people?' + new URLSearchParams(Object.assign(sort ? { sort } : {}, topic ? { topic } : {}, listQ ? { q: listQ } : {}))),
+      api('/api/graph?' + new URLSearchParams(Object.assign({ max: 80, focus: q, kinds }, extra))),
+      api('/api/people?' + new URLSearchParams(Object.assign(sort ? { sort } : {}, extra, listQ ? { q: listQ } : {}))),
     ]);
   }catch(e){ web.innerHTML = `<div class="empty">${esc(e.message)}</div>`; listEl.innerHTML = ''; return; }
+  // network filter options from what's actually in the library (keeps the current choice)
+  const nsel = $('#nwNet'), nets = Object.entries(people.platforms || {}).sort((a, b) => b[1] - a[1]);
+  if (nets.length && nsel.options.length !== nets.length + 1){ nsel.innerHTML = '<option value="">All networks</option>' + nets.map(([k, n]) => `<option value="${esc(k)}">${esc(k)} · ${n}</option>`).join(''); nsel.value = platform; }
   drawWeb(web, graph);
   const P = people.people || [];
-  listEl.innerHTML = `<h3 class="s">${fmtN(people.total)} account${people.total === 1 ? '' : 's'}${topic ? ' in this topic' : ''}</h3>` + (P.length ? P.map(p => peopleCard(p)).join('') : '<div class="empty">No accounts yet — collect some posts first.</div>');
+  let lastNet = null;
+  listEl.innerHTML = `<h3 class="s">${fmtN(people.total)} account${people.total === 1 ? '' : 's'}${topic ? ' in this topic' : ''}${platform ? ' on ' + esc(platform) : ''}</h3>` + (P.length ? P.map(p => (sort === 'network' && p.platform !== lastNet ? `<h3 class="s" style="margin-top:10px">${esc((lastNet = p.platform) || '?')}</h3>` : '') + peopleCard(p)).join('') : '<div class="empty">No accounts yet — collect some posts first.</div>');
   $$('[data-person]', listEl).forEach(el => el.onclick = () => openProfile(el.dataset.person));
 }
 function peopleCard(p){
@@ -2023,7 +2035,7 @@ function peopleCard(p){
   const mediaBits = Object.entries(p.media || {}).map(([k, v]) => v + ' ' + k).join(' · ');
   return `<div class="pcard" data-person="${esc(p.id)}">
     <div class="top"><b>@${esc(p.author)}</b><span class="note">${esc(p.platform || '')}${p.author_name ? ' · ' + esc(p.author_name) : ''}</span><span class="grow"></span>${p.has_notes ? '<span class="pill a">✎ your notes</span>' : ''}</div>
-    <div class="note" style="margin-top:4px">${fmtN(p.n)} posts${freq ? ' · ' + freq : ''}${p.last ? ' · last ' + ago(p.last) : ''}${mediaBits ? ' · ' + esc(mediaBits) : ''}</div>
+    <div class="note" style="margin-top:4px">${fmtN(p.n)} posts${freq ? ' · ' + freq : ''}${p.last ? ' · last ' + ago(p.last) : ''}${mediaBits ? ' · ' + esc(mediaBits) : ''}${p.follows || p.followed_by ? ' · ↗' + fmtN(p.follows || 0) + ' ↙' + fmtN(p.followed_by || 0) : ''}</div>
     <div class="meta">${(p.topics || []).map(t => `<span class="pill t">${esc(t)}</span>`).join('')}${(p.hashtags || []).slice(0, 3).map(h => `<span class="pill">#${esc(h)}</span>`).join('')}${(p.attrs || []).map(a => `<span class="pill a">${esc(a)}</span>`).join('')}</div>
   </div>`;
 }
@@ -2227,7 +2239,14 @@ async function openProfile(id){
       <div class="wd">${p.weekdays.map((d, i) => `<i><b style="height:${Math.round(22*d/wmax)}px"></b>${wd[i]}</i>`).join('')}</div>` : ''}
     ${p.topics && p.topics.length ? `<h3 class="s">Topics</h3><div class="meta">${p.topics.map(t => `<span class="pill t">${esc(t.name)} · ${t.matched}${t.liked ? ' 👍' + t.liked : ''}</span>`).join('')}</div>` : ''}
     ${p.hashtags && p.hashtags.length ? `<h3 class="s">Posts about</h3><div class="meta">${p.hashtags.slice(0, 10).map(h => `<span class="pill">#${esc(h.value)} ${h.count}</span>`).join('')}${p.words.slice(0, 8).map(w => `<span class="pill">${esc(w.value)}</span>`).join('')}</div>` : ''}
-    ${p.connected && p.connected.length ? `<h3 class="s">Connected accounts</h3><div class="meta" id="pConn">${p.connected.map(c => `<span class="pill" data-open="${esc(c.id)}" style="cursor:pointer">@${esc(c.author)}${c.shared_hashtags ? ' · ' + c.shared_hashtags + ' #' : ''}${c.why.some(w => w.kind === 'mentions') ? ' · @' : ''}</span>`).join('')}</div>` : ''}
+    ${p.connected && p.connected.length ? `<h3 class="s">Connected accounts</h3>
+      <p class="note" style="margin-bottom:6px">Same line colours as the web: <b class="l1">━</b> follows / mentions (real) · <b class="l2">━</b> shared hashtags · <b class="l3">━</b> shared words only.</p>
+      <div class="meta" id="pConn">${p.connected.map(c => { const fol = c.why.find(w => w.kind === 'follows'), men = c.why.some(w => w.kind === 'mentions'); const t = c.t || (fol || men ? 1 : c.shared_hashtags ? 2 : 3);
+        return `<span class="pill" data-open="${esc(c.id)}" style="cursor:pointer" title="${fol ? (fol.mutual ? 'follow each other' : 'one follows the other') + ' · ' : ''}${men ? 'mentions · ' : ''}${c.shared_hashtags ? c.shared_hashtags + ' shared hashtags · ' : ''}${c.shared_words ? c.shared_words + ' shared words' : ''}"><b class="l${t}">━</b> @${esc(c.author)}${fol ? (fol.mutual ? ' ⇄' : ' →') : ''}${men ? ' @' : ''}${c.shared_hashtags ? ' · ' + c.shared_hashtags + ' #' : ''}</span>`; }).join('')}</div>` : ''}
+    ${p.follows ? `<h3 class="s">Follows <small class="note">(from ${esc(p.platform)}'s public list)</small></h3>
+      ${p.follows_loaded ? `<div class="note" style="margin-bottom:6px">Follows ${fmtN(p.follows.n)} · followed by ${fmtN(p.followed_by.n)} · loaded ${ago(p.follows_loaded)}</div>
+      <div class="meta">${p.follows.known.map(k => `<span class="pill a" data-open="${esc(k.id)}" style="cursor:pointer" title="in your library"><b class="l1">━</b> @${esc(k.author)} ${k.n}</span>`).join('')}${p.followed_by.known.filter(k => !p.follows.known.some(f => f.id === k.id)).map(k => `<span class="pill a" data-open="${esc(k.id)}" style="cursor:pointer" title="follows this account · in your library"><b class="l1">━</b> @${esc(k.author)} ↙</span>`).join('')}${p.follows.unknown.slice(0, 20).map(u => `<span class="pill" data-pull="${esc(u.id)}" style="cursor:pointer" title="not in your library yet — tap to pull their posts in">@${esc(u.handle)}${u.posts ? ' ' + fmtN(u.posts) : ''} +</span>`).join('')}</div>
+      ${p.follows.n + p.followed_by.n === 0 ? '<p class="note">Nothing public — the account hides its lists, or follows no one.</p>' : ''}` : `<p class="note">${p.follows_supported ? 'Not loaded yet. LOAD FOLLOWS reads who they follow and who follows them — accounts already in your library become white lines in the web; others can be pulled in with one tap.' : esc(p.platform || 'this network') + ' has no public follow list to read; connections here come from mentions and shared content.'}</p>`}` : ''}
     ${p.mentions_out && p.mentions_out.length ? `<h3 class="s">Mentions</h3><div class="meta">${p.mentions_out.map(m => `<span class="pill${m.known ? ' a' : ''}" ${m.known ? `data-open="${esc(m.handle + '|' + p.platform)}" style="cursor:pointer"` : ''}>@${esc(m.handle)} ${m.count}</span>`).join('')}</div>` : ''}
     <h3 class="s">Your notes <small class="note">(private to this device)</small></h3>
     <p class="note" style="margin-bottom:6px">Labels and notes you add here are your own — the app never guesses them. Use them to shape your searches.</p>
@@ -2237,6 +2256,7 @@ async function openProfile(id){
       <button class="btn pri sm" id="pSave">SAVE NOTES</button>
       <button class="btn sm" id="pPosts">▦ THEIR POSTS</button>
       <button class="btn sm" id="pMore" title="Pull this account's recent posts into your library — no rating needed. They show in LIBRARY and the WEB right away.">⬇ LOAD 50 MORE POSTS</button>
+      ${p.follows_supported ? `<button class="btn sm" id="pFollows" title="Read the account's public follow lists so the web can draw real follow links">↔ ${p.follows_loaded ? 'RELOAD' : 'LOAD'} FOLLOWS</button>` : ''}
     </div>
     <p class="note" style="margin-top:8px">LOAD MORE pulls their recent posts straight in — nothing to rate. More of an account at once makes its patterns show up in the WEB.</p>`);
   $('#pMore').onclick = async () => {
@@ -2256,6 +2276,31 @@ async function openProfile(id){
       wait().catch(e => { toast(e.message); b.disabled = false; b.textContent = '⬇ LOAD 50 MORE POSTS'; });
     }catch(e){ toast(e.message); b.disabled = false; b.textContent = '⬇ LOAD 50 MORE POSTS'; }
   };
+  const pf = $('#pFollows'); if (pf) pf.onclick = async () => {
+    pf.disabled = true; pf.textContent = '⏳ READING…';
+    try{
+      const j = await api('/api/people/' + encodeURIComponent(id) + '/follows', { method: 'POST', body: {} });
+      if (j.error) throw new Error(j.error);
+      let r = j; for (let i = 0; i < 40 && ['queued', 'running'].includes(r.state); i++){ await new Promise(x => setTimeout(x, 800)); r = await api('/api/jobs/' + j.id); }
+      if (r.state === 'error') throw new Error((r.log || []).slice(-1)[0] || 'failed');
+      const res = r.result || {}; toast(`@${p.author}: follows ${fmtN(res.follows || 0)} · followed by ${fmtN(res.followers || 0)} · ${res.known || 0} in your library${res.partial ? ' · list partly hidden' : ''}`, 5000);
+      if (route.view === 'network') renderNetwork();
+      closeSheet(); openProfile(id);
+    }catch(e){ toast(e.message, 5000); pf.disabled = false; pf.textContent = '↔ LOAD FOLLOWS'; }
+  };
+  // a follow that isn't in the library yet: pull their posts in, then open them
+  $$('[data-pull]').forEach(el => el.onclick = async () => {
+    const pid = el.dataset.pull; el.textContent = '⏳ ' + el.textContent.replace(/ \+$/, '');
+    try{
+      const j = await api('/api/people/' + encodeURIComponent(pid) + '/more', { method: 'POST', body: { limit: 30, media: 'all' } });
+      if (j.error) throw new Error(j.error);
+      let r = j; for (let i = 0; i < 60 && ['queued', 'running'].includes(r.state); i++){ await new Promise(x => setTimeout(x, 1000)); r = await api('/api/jobs/' + j.id); }
+      if (r.state === 'error') throw new Error((r.log || []).slice(-1)[0] || 'failed');
+      toast('+' + fmtN((r.stats || {}).new || 0) + ' posts from @' + pid.split('|')[0], 4000);
+      if (route.view === 'network') renderNetwork();
+      closeSheet(); openProfile(pid);
+    }catch(e){ toast(e.message, 5000); el.textContent = el.textContent.replace('⏳ ', '') + ' +'; }
+  });
   $$('[data-open]').forEach(el => el.onclick = () => { closeSheet(); nwSel = el.dataset.open; openProfile(el.dataset.open); });
   $('#pSave').onclick = async () => {
     const attrs = $('#pAttrs').value.split(',').map(s => s.trim()).filter(Boolean);
@@ -2266,6 +2311,7 @@ async function openProfile(id){
 }
 $('#nwTopic').onchange = renderNetwork;
 $('#nwSort').onchange = renderNetwork;
+$('#nwNet').onchange = renderNetwork;
 $('#nwFocusF').onsubmit = e => { e.preventDefault(); $('#nwQ').blur(); renderNetwork(); };
 $$('#nwKinds .chip').forEach(c => c.onclick = () => { c.classList.toggle('on'); if ($$('#nwKinds .chip.on').length) renderNetwork(); else c.classList.add('on'); });
 

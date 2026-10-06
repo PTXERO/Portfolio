@@ -20,6 +20,7 @@ import math
 import re
 import statistics
 import time
+import urllib.parse
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -102,12 +103,14 @@ def set_meta(v, pid, patch):
 
 # ── aggregates over collected items ──
 class _Acct:
-    __slots__ = ("id", "author", "platform", "author_url", "author_name", "items", "H", "W", "M")
+    __slots__ = ("id", "author", "platform", "author_url", "author_name", "items", "H", "W", "M",
+                 "F", "FB", "FN", "FBN", "FAT")
 
     def __init__(self, id_, it):
         self.id, self.author, self.platform = id_, it.get("author") or "?", it.get("platform") or "?"
         self.author_url, self.author_name = it.get("author_url") or "", it.get("author_name") or ""
         self.items, self.H, self.W, self.M = [], set(), set(), set()
+        self.F, self.FB, self.FN, self.FBN, self.FAT = set(), set(), 0, 0, 0   # follows / followed-by (ids in library)
 
 
 def _build(v):
@@ -130,9 +133,35 @@ def _build(v):
             a.M |= _mentions(it.get("text"))
         h_df.update(a.H)
         w_df.update(a.W)
+    # real relationships pulled from the platforms' public graphs (LOAD FOLLOWS / INTEGRATE)
+    lower = {a.id.lower(): a for a in by.values()}
+    for r in _relations(v):
+        src, dst = lower.get(str(r["src"]).lower()), lower.get(str(r["dst"]).lower())
+        if src:
+            src.FAT = max(src.FAT, r["ts"] or 0)
+            if r["kind"] == "follows":
+                src.FN += 1
+            else:
+                src.FBN += 1
+        if src and dst:
+            if r["kind"] == "follows":
+                src.F.add(dst.id)
+                dst.FB.add(src.id)
+            else:
+                src.FB.add(dst.id)
+                dst.F.add(src.id)
     n = max(1, len(by))
     idf = lambda df: math.log((n + 1) / ((df or 0) + 1)) + 1  # noqa: E731
     return by, idf, h_df, w_df
+
+
+def _relations(v, src=None):
+    try:
+        if src:
+            return v.db.q("SELECT src, dst, kind, ts, name, url, posts FROM relations WHERE lower(src)=lower(?)", (src,))
+        return v.db.q("SELECT src, dst, kind, ts FROM relations")
+    except Exception:  # noqa: BLE001 — an older library file without the table
+        return []
 
 
 def _vote_index(v):
@@ -179,7 +208,14 @@ def _edge(a, b, idf, h_df, w_df):
     ment = a.author.lower() in b.M or b.author.lower() in a.M
     if ment:
         w += 3
-    return w, hn, wn, ment
+    fol = b.id in a.F or a.id in b.F        # the platform itself says these two are linked
+    if fol:
+        w += 4
+    return w, hn, wn, ment, fol
+
+
+def _tier(ment, fol, hn):
+    return 1 if (ment or fol) else 2 if hn else 3
 
 
 def profile(v, pid):
@@ -209,11 +245,13 @@ def profile(v, pid):
     for b in by.values():
         if b.id == a.id:
             continue
-        w, hn, wn, ment = _edge(a, b, idf, h_df, w_df)
+        w, hn, wn, ment, fol = _edge(a, b, idf, h_df, w_df)
         if w > 0:
-            why = ([{"kind": "hashtags", "n": hn}] if hn else []) + ([{"kind": "mentions"}] if ment else [])
+            why = (([{"kind": "hashtags", "n": hn}] if hn else []) + ([{"kind": "mentions"}] if ment else [])
+                   + ([{"kind": "follows", "mutual": b.id in a.F and a.id in b.F}] if fol else []))
             edges.append({"id": b.id, "author": b.author, "platform": b.platform, "author_url": b.author_url,
-                          "w": round(w, 2), "why": why, "shared_hashtags": hn, "shared_words": wn})
+                          "w": round(w, 2), "why": why, "shared_hashtags": hn, "shared_words": wn,
+                          "t": _tier(ment, fol, hn)})
     edges.sort(key=lambda e: -e["w"])
     recent = sorted((it for it in items if it.get("media_url") or it.get("thumbnail") or it.get("url")),
                     key=lambda it: -(it.get("posted_at") or 0))[:8]
@@ -222,7 +260,25 @@ def profile(v, pid):
         for m in _mentions(it.get("text")):
             if m != a.author.lower():
                 ment[m] += 1
+    lower = {x.id.lower(): x for x in by.values()}
+
+    def rel_out(kind):
+        rows = [r for r in _relations(v, pid) if r["kind"] == kind]
+        known, unknown = [], []
+        for r in rows:
+            b = lower.get(str(r["dst"]).lower())
+            if b:
+                known.append({"id": b.id, "author": b.author, "n": len(b.items)})
+            else:
+                unknown.append({"id": r["dst"], "handle": str(r["dst"]).split("|")[0], "name": r["name"] or "",
+                                "url": r["url"] or "", "posts": r["posts"] or 0})
+        known.sort(key=lambda x: -x["n"])
+        unknown.sort(key=lambda x: -x["posts"])
+        return {"n": len(rows), "known": known, "unknown": unknown[:40]}
+
     return {
+        "follows": rel_out("follows"), "followed_by": rel_out("followed_by"), "follows_loaded": a.FAT,
+        "follows_supported": a.platform in ("mastodon", "bluesky"),
         "id": pid, "author": a.author, "author_name": a.author_name, "platform": a.platform,
         "author_url": a.author_url, "n": len(items), **_cadence(items), "media": dict(media),
         "dur_median": _median([it.get("duration") for it in items if (it.get("duration") or 0) > 0]),
@@ -240,12 +296,14 @@ def profile(v, pid):
     }
 
 
-def graph(v, topic=None, max_nodes=60, min_w=1.5):
+def graph(v, topic=None, max_nodes=60, min_w=1.5, platform=""):
     by, idf, h_df, w_df = _build(v)
     by_item, _ = _vote_index(v)
     accts = list(by.values())
     if topic:
         accts = [a for a in accts if any(r["topic_id"] == topic for it in a.items for r in by_item.get(it["id"], []))]
+    if platform:
+        accts = [a for a in accts if a.platform == platform]
     accts.sort(key=lambda a: -len(a.items))
     top = accts[:min(max_nodes or 60, 120)]
     top_ids = {a.id for a in top}
@@ -253,9 +311,10 @@ def graph(v, topic=None, max_nodes=60, min_w=1.5):
     strength, edges = Counter(), []
     for i, a in enumerate(top):
         for b in top[i + 1:]:
-            w, hn, wn, ment = _edge(a, b, idf, h_df, w_df)
-            if w >= min_w or ment:
-                edges.append({"a": a.id, "b": b.id, "w": round(w, 2), "h": hn, "m": 1 if ment else 0})
+            w, hn, wn, ment, fol = _edge(a, b, idf, h_df, w_df)
+            if w >= min_w or ment or fol:
+                edges.append({"a": a.id, "b": b.id, "w": round(w, 2), "h": hn, "m": 1 if (ment or fol) else 0,
+                              "f": 1 if fol else 0, "t": _tier(ment, fol, hn)})
                 strength[a.id] += w
                 strength[b.id] += w
     for a in top:
@@ -268,13 +327,16 @@ def graph(v, topic=None, max_nodes=60, min_w=1.5):
     return {"nodes": nodes, "edges": edges, "total_accounts": len(by), "shown": len(nodes), "generated": _now()}
 
 
-def list_people(v, topic=None, q="", sort=""):
+def list_people(v, topic=None, q="", sort="", platform=""):
     by, idf, h_df, w_df = _build(v)
     by_item, names = _vote_index(v)
     meta = _all_meta(v)
     rows = list(by.values())
+    platforms = dict(Counter(a.platform for a in rows))
     if topic:
         rows = [a for a in rows if any(r["topic_id"] == topic for it in a.items for r in by_item.get(it["id"], []))]
+    if platform:
+        rows = [a for a in rows if a.platform == platform]
     if q:
         ql = q.lower()
         rows = [a for a in rows if ql in f"{a.author} {a.author_name}".lower()]
@@ -284,15 +346,18 @@ def list_people(v, topic=None, q="", sort=""):
         tset = {names.get(r["topic_id"]) for it in a.items for r in by_item.get(it["id"], [])}
         out.append({"id": a.id, "author": a.author, "author_name": a.author_name, "platform": a.platform,
                     "author_url": a.author_url, "n": len(a.items), "per_week": cad["per_week"], "last": cad["last"],
+                    "follows": a.FN, "followed_by": a.FBN,
                     "topics": [t for t in tset if t][:4],
                     "media": dict(Counter((it.get("media") or "video") for it in a.items)),
                     "hashtags": [x["value"] for x in _top(a.items, lambda it: list(_hashes(it)), 4)],
                     "attrs": (meta.get(a.id) or {}).get("attrs", [])[:4],
                     "has_notes": bool((meta.get(a.id) or {}).get("notes"))})
     key = {"active": lambda x: -(x["last"] or 0), "cadence": lambda x: -x["per_week"],
-           "name": lambda x: x["author"].lower()}.get(sort, lambda x: -x["n"])
+           "name": lambda x: x["author"].lower(),
+           "network": lambda x: (x["platform"], -x["n"]),
+           "follows": lambda x: (-(x["follows"] + x["followed_by"]), -x["n"])}.get(sort, lambda x: -x["n"])
     out.sort(key=key)
-    return {"people": out, "total": len(out)}
+    return {"people": out, "total": len(out), "platforms": platforms}
 
 
 # ── the WORD web: @accounts + #hashtags + words/"phrases" as one graph ──
@@ -320,8 +385,10 @@ def _parse_focus(f):
     return {"kind": "word", "key": txt, "phrase": " " in txt}
 
 
-def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
+def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform=""):
     by, idf, h_df, w_df = _build(v)
+    if platform:
+        by = {k: a for k, a in by.items() if a.platform == platform}
     kinds = {k for k in str(kinds).split(",") if k}
     cap = min(int(max_nodes or 80), 160)
     fz = _parse_focus(focus)
@@ -407,9 +474,14 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
         for b in by.values():
             if b.id == a.id:
                 continue
-            w, hn, wn, ment = _edge(a, b, idf, h_df, w_df)
+            w, hn, wn, ment, fol = _edge(a, b, idf, h_df, w_df)
             if w > 0:
-                link(aid, f"@{b.author.lower()}|{b.platform}", w * 0.5, 1 if ment else 2 if hn else 3)
+                link(aid, f"@{b.author.lower()}|{b.platform}", w * 0.5, _tier(ment, fol, hn))
+        # real relationships from the platform's own graph: every follow between two accounts here is tier 1
+        for bid in a.F:
+            b = by.get(bid)
+            if b:
+                link(aid, f"@{b.author.lower()}|{b.platform}", 3, 1)
 
     # ── term selection (VOSviewer): minimum occurrences, then keep the most *relevant* 60% ──
     min_occ = max(2, round(n_posts * 0.01))
@@ -494,27 +566,162 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
             "focus_asked": focus or "", "kinds": sorted(kinds), "generated": _now()}
 
 
+def _stub(pid):
+    """An account we only know from a follow list ("name@host|mastodon", "x.bsky.social|bluesky")."""
+    author, _, platform = str(pid or "").lstrip("@").partition("|")
+    if not author or platform not in ("mastodon", "bluesky"):   # only networks we can read by handle alone
+        return None
+    url = ""
+    if platform == "bluesky":
+        url = f"https://bsky.app/profile/{author}"
+    elif platform == "mastodon" and "@" in author:
+        user, host = author.split("@", 1)
+        url = f"https://{host}/@{user}"
+    a = _Acct(f"{author}|{platform}", {"author": author, "platform": platform, "author_url": url})
+    return a
+
+
+def _account(v, pid):
+    by, *_ = _build(v)
+    lower = {a.id.lower(): a for a in by.values()}
+    return by.get(pid) or lower.get(str(pid).lower()) or _stub(pid)
+
+
+def fetch_follows(platform, handle, url="", limit=300):
+    """Public follow lists straight from the platform (Mastodon, Bluesky). Returns
+    {follows: [...], followers: [...], partial} with handles in the app's author form."""
+    from .util import http_json
+    handle = (handle or "").lstrip("@").strip()
+    out = {"platform": platform, "follows": [], "followers": [], "partial": False}
+    if platform == "mastodon":
+        user, _, host = handle.partition("@")
+        host = host or (re.match(r"https?://([^/]+)", url or "") or [None, ""])[1] or "mastodon.social"
+        acc = http_json(f"https://{host}/api/v1/accounts/lookup?acct={urllib.parse.quote(user)}")
+        row = lambda a: {"handle": a.get("acct") or "", "name": a.get("display_name") or "",  # noqa: E731
+                         "url": a.get("url") or "", "posts": a.get("statuses_count") or 0}
+        for kind in ("following", "followers"):
+            try:
+                rows = [row(a) for a in http_json(f"https://{host}/api/v1/accounts/{acc['id']}/{kind}?limit=80")]
+            except Exception:  # noqa: BLE001 — 403 when the account hides its list: respect it
+                rows, out["partial"] = [], True
+            out["follows" if kind == "following" else "followers"] = rows[:limit]
+        return out
+    if platform == "bluesky":
+        row = lambda a: {"handle": a.get("handle") or "", "name": a.get("displayName") or "",  # noqa: E731
+                         "url": f"https://bsky.app/profile/{a.get('handle')}", "posts": 0}
+        for xrpc, key in (("app.bsky.graph.getFollows", "follows"), ("app.bsky.graph.getFollowers", "followers")):
+            rows, cursor = [], ""
+            for _ in range(4):
+                d = http_json(f"https://public.api.bsky.app/xrpc/{xrpc}?actor={urllib.parse.quote(handle)}&limit=100"
+                              + (f"&cursor={urllib.parse.quote(cursor)}" if cursor else ""))
+                rows += [row(a) for a in d.get(key) or []]
+                cursor = d.get("cursor")
+                if not cursor or len(rows) >= limit:
+                    break
+            out[key] = rows[:limit]
+        return out
+    raise ValueError(f"{platform or 'this site'} doesn't publish a follow list we can read (Mastodon and Bluesky do)")
+
+
+def masto_lookup(handle, url="", instance=""):
+    """Where a fediverse account can actually be read: the instance we search from (full acct),
+    then its own host, then mastodon.social — a remote account on Loops/Pixelfed may only answer via a relay."""
+    from .util import http_json
+    user, _, home = handle.lstrip("@").partition("@")
+    own = home or (re.match(r"https?://([^/]+)", url or "") or [None, None])[1]
+    tries = []
+    if instance:
+        tries.append((instance, f"{user}@{own}" if own and own != instance else user))
+    if own:
+        tries.append((own, user))
+    if instance != "mastodon.social":
+        tries.append(("mastodon.social", f"{user}@{own}" if own else user))
+    last = None
+    for host, acct in tries:
+        try:
+            acc = http_json(f"https://{host}/api/v1/accounts/lookup?acct={urllib.parse.quote(acct)}")
+            if acc and acc.get("id"):
+                return host, acc
+        except Exception as e:  # noqa: BLE001
+            last = e
+    raise ValueError(f"couldn't find @{handle} on {', '.join(h for h, _ in tries)}" + (f" ({last})" if last else ""))
+
+
+def more_mastodon(v, a, limit=50, media="all"):
+    """LOAD MORE for a fediverse account straight from the API (no yt-dlp/gallery-dl needed)."""
+    from .sources import items_from_mastodon
+    from .util import http_json
+    instance = next((s.get("template") for s in v.list_sources() if s.get("kind") == "mastodon" and s.get("enabled")), "")
+    try:
+        host, acc = masto_lookup(a.author, a.author_url, instance or "")
+        statuses = http_json(f"https://{host}/api/v1/accounts/{acc['id']}/statuses?limit={min(limit, 40)}"
+                             "&only_media=true&exclude_replies=true&exclude_reblogs=true")
+    except Exception as e:  # noqa: BLE001
+        return {"error": str(e)}
+    found = new = 0
+    for st in statuses:
+        for it in items_from_mastodon(st, host, "more", include_images=(media == "all")):
+            found += 1
+            if v.db.upsert(it) == "new":
+                new += 1
+    return {"id": f"more-{_now()}", "kind": "collect", "title": f"more from @{a.author}", "state": "done",
+            "stats": {"found": found, "new": new}, "result": {"found": found, "new": new, "author": a.author}}
+
+
+def load_follows(v, pid, fetch=fetch_follows):
+    """Pull who this account publicly follows / is followed by into the relations table.
+    Synchronous (two or three small API calls); returns a finished job-shaped dict."""
+    a = _account(v, pid)
+    if not a:
+        return {"error": "no account"}
+    if a.platform not in ("mastodon", "bluesky"):
+        return {"error": f"{a.platform} doesn't publish a follow list we can read (Mastodon and Bluesky do)"}
+    try:
+        r = fetch(a.platform, a.author, a.author_url)
+    except Exception as e:  # noqa: BLE001
+        return {"error": f"couldn't read @{a.author}'s follow list: {e}"}
+    ts = _now()
+    v.db.exec("DELETE FROM relations WHERE lower(src)=lower(?)", (a.id,))
+    rows = [(a.id, f"{p['handle']}|{a.platform}", kind, ts, p.get("name") or "", p.get("url") or "", int(p.get("posts") or 0))
+            for kind, lst in (("follows", r.get("follows") or []), ("followed_by", r.get("followers") or []))
+            for p in lst if p.get("handle")]
+    if rows:
+        v.db.many("INSERT OR REPLACE INTO relations(src, dst, kind, ts, name, url, posts) VALUES(?,?,?,?,?,?,?)", rows)
+    by, *_ = _build(v)
+    lower = {x.id.lower() for x in by.values()}
+    known = sum(1 for row in rows if row[1].lower() in lower)
+    return {"id": f"follows-{ts}", "kind": "follows", "title": f"follows of @{a.author}", "state": "done",
+            "stats": {"found": len(rows), "new": known},
+            "result": {"follows": len(r.get("follows") or []), "followers": len(r.get("followers") or []),
+                       "known": known, "partial": bool(r.get("partial")), "author": a.author}}
+
+
 def handle(v, method, parts, params, body):
     """Route /api/people… and /api/graph like the browser module does."""
     if parts[0] == "graph":
         if "focus" in params or "kinds" in params:
             return word_graph(v, params.get("focus") or "", params.get("kinds") or "account,hashtag,word",
-                              int(params.get("max") or 80))
-        return graph(v, params.get("topic") or None, int(params.get("max") or 60), float(params.get("min") or 1.5))
+                              int(params.get("max") or 80), params.get("platform") or "")
+        return graph(v, params.get("topic") or None, int(params.get("max") or 60), float(params.get("min") or 1.5),
+                     params.get("platform") or "")
     pid = parts[1] if len(parts) > 1 else None
     if not pid:
-        return list_people(v, params.get("topic") or None, params.get("q") or "", params.get("sort") or "")
+        return list_people(v, params.get("topic") or None, params.get("q") or "", params.get("sort") or "",
+                           params.get("platform") or "")
+    if len(parts) > 2 and parts[2] == "follows" and method == "POST":
+        return load_follows(v, pid)
     if len(parts) > 2 and parts[2] == "more" and method == "POST":
         # load more of this account's own posts (no rating needed): a collect job on its profile URL,
         # which gallery-dl / yt-dlp know how to walk for X, YouTube, Mastodon, Bluesky, Reddit, …
-        by, *_ = _build(v)
-        a = by.get(pid)
+        a = _account(v, pid)
         if not a:
             return {"error": "no account"}
+        limit = max(1, min(int((body or {}).get("limit") or 50), 500))
+        if a.platform == "mastodon":            # the fediverse has an open API: read the account directly
+            return more_mastodon(v, a, limit, (body or {}).get("media") or "all")
         url = a.author_url or next((it.get("url") for it in a.items if it.get("url")), None)
         if not url:
             return {"error": "no profile link known for this account"}
-        limit = max(1, min(int((body or {}).get("limit") or 50), 500))
         return v.submit("collect", {"urls": [url], "limit": limit, "media": (body or {}).get("media") or "all",
                                     "title": f"more from @{a.author}"}).to_dict()
     if method == "GET":
