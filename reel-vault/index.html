@@ -396,7 +396,7 @@ pre.cmd i{color:var(--dim);font-style:normal}
   #grid{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))!important;gap:16px}
   /* review deck: media left, caption + actions right */
   .deck .rcard{max-width:none;display:grid;grid-template-columns:minmax(0,1fr) 380px;align-items:stretch}
-  .deck .rmedia{height:auto;min-height:420px;max-height:72vh;border-right:1px solid var(--border)}
+  .deck .rmedia{grid-row:1/3;height:auto;min-height:420px;max-height:72vh;border-right:1px solid var(--border)}
   .deck .rinfo{padding:18px 18px 6px;overflow-y:auto}
   .deck .rinfo .txt{-webkit-line-clamp:unset;display:block}
   .deck .ractions{grid-column:2;align-self:end}
