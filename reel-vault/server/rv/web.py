@@ -478,9 +478,18 @@ class Handler(BaseHTTPRequestHandler):
                 return ok(v.topic_feed(arg, params))
             if sub == "vote" and method == "POST":
                 b = self._body()
+                if b.get("reasons"):
+                    r = v.apply_reasons(arg, str(b["item_id"]), b["reasons"],
+                                        vote=to_int(b.get("label")) if "label" in b else -1)
+                    return ok({"counts": v.db.one("SELECT count(*) n, sum(label=1) pos, "
+                                                  "sum(label=-1) neg FROM topic_items WHERE topic_id=?",
+                                                  (arg,)), "applied": r})
                 return ok({"counts": v.vote(arg, str(b["item_id"]), to_int(b.get("label")))})
             if sub == "insights":
                 return ok(v.insights(arg))
+            if sub == "reason" and method == "DELETE":
+                v.clear_reason(arg, anti=params.get("anti"), pref=params.get("pref"))
+                return ok()
             if sub == "queries" and method == "POST":
                 b = self._body()
                 act, q = b.get("action"), str(b.get("query", "")).strip()

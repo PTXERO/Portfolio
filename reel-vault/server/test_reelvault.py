@@ -301,6 +301,30 @@ class TestLearning(Base):
         self.assertIn("skate", prof["top_hashtags"])
         self.assertIn("median_likes", prof)
 
+    def test_downvote_reasons(self):
+        self.add(tweet("300", "a clip made with AI generated art", author="z"),
+                 tweet("301", "a normal skate clip", author="z", tags=["skate"]))
+        self.v.link(self.tid, "x:300", "skate", "x")
+        self.v.link(self.tid, "x:301", "skate", "x")
+        # built-in reason: AI → preference + anti-keywords, applied as a 👎
+        self.v.apply_reasons(self.tid, "x:300", ["ai"])
+        st = self.v.topic(self.tid)["settings"]
+        self.assertTrue(st["prefs"].get("no_ai"))
+        self.assertIn("ai", st["anti"])
+        self.assertEqual(self.v.db.one("SELECT label FROM topic_items WHERE topic_id=? AND item_id=?",
+                                       (self.tid, "x:300"))["label"], -1)
+        # a fresh AI-captioned item is penalised without being voted on
+        self.add(tweet("302", "another AI generated clip", author="q"))
+        self.v.link(self.tid, "x:302", "skate", "x")
+        sc = TopicScorer(self.v, self.tid)
+        ai_score, why = sc.score(self.v.db.get("x:302"))
+        clean_score, _ = sc.score(self.v.db.get("x:301"))
+        self.assertLess(ai_score, clean_score)
+        self.assertNotIn("skate", why.get("lower", []))      # topic's own word never shown
+        # custom reason becomes an anti-keyword
+        self.v.apply_reasons(self.tid, "x:301", ["reaction video"])
+        self.assertIn("reaction", self.v.topic(self.tid)["settings"]["anti"])
+
     def test_feed_review_and_queries_stats(self):
         TopicScorer(self.v, self.tid).rescore()
         f = self.v.topic_feed(self.tid, {"view": "review", "limit": "5"})

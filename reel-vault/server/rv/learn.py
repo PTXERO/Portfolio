@@ -200,6 +200,10 @@ class TopicScorer:
         qs |= {(s, "seed", 1.0) for s in seeds}
         qs |= {(s, "soft", 1.0) for s in soft}     # boost when present, never required
         self.qterms = query_terms(sorted(qs))
+        self.anti = {light_stem(w) for w in (settings.get("anti") or []) if w}
+        self.prefs = settings.get("prefs") or {}
+        self.seed_stems = {light_stem(w) for s in list(seeds) + soft
+                           for w in tokens(s)}
         self.hits = defaultdict(list)
         for r in db.q("SELECT item_id, query FROM topic_hits WHERE topic_id=?", (topic_id,)):
             self.hits[r["item_id"]].append(r["query"])
@@ -263,10 +267,42 @@ class TopicScorer:
                 why["taste"] = round(s, 3)
         learned = sum(p * w for p, w in parts) / sum(w for _, w in parts)
         alpha = min(0.85, n / (n + 4))
-        lower = self._why_lower(x)
-        if lower:
-            why["lower"] = lower
-        return (1 - alpha) * base + alpha * learned, why
+        final = (1 - alpha) * base + alpha * learned
+        final = self._apply_reasons(it, final, why)
+        why["lower"] = self._why_lower(x) + why.get("lower", [])
+        # dedupe, drop the topic's own words, cap
+        out, seen = [], set()
+        for w in why["lower"]:
+            base_w = str(w).lstrip("#@").lower()
+            if base_w and base_w not in seen and light_stem(base_w) not in self.seed_stems:
+                seen.add(base_w)
+                out.append(w)
+        if out:
+            why["lower"] = out[:4]
+        else:
+            why.pop("lower", None)
+        return final, why
+
+    def _apply_reasons(self, it, score, why):
+        """Reasons you gave on 👎 become hard preferences: anti-keywords and
+        short/long/ai/ad avoidance pull a matching item's score right down."""
+        flags = []
+        if self.anti:
+            have = item_stems(it)
+            hit = self.anti & have
+            if hit:
+                score *= max(0.1, 1 - 0.6 * min(3, len(hit)))
+                flags += sorted(hit)[:3]
+        d = it.get("duration") or 0
+        if self.prefs.get("avoid_short") and 0 < d < 30:
+            score *= 0.4
+            flags.append("short")
+        if self.prefs.get("avoid_long") and d > 180:
+            score *= 0.5
+            flags.append("long")
+        if flags:
+            why["lower"] = flags + why.get("lower", [])
+        return score
 
     def _why_lower(self, x, n=3):
         """This item's own words/tags that you tend to 👎 — the 'why not' hint.
@@ -282,7 +318,7 @@ class TopicScorer:
                 break
             label = self.readable(k)
             base = label.lstrip("#@").lower()
-            if base in seen or k[0] in "sdm":   # skip site/duration/media as "reasons"
+            if base in seen or k[0] in "sdmq":   # skip site/duration/media/query internals
                 continue
             seen.add(base)
             out.append(label)

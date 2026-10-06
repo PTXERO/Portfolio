@@ -481,7 +481,8 @@ class Vault:
 
     # ═════════ topics ═════════
     TOPIC_DEFAULTS = {"breadth": 3, "media": "video", "refresh_hours": 0, "per_query": 15,
-                      "queries_per_run": 0, "auto_download": 0, "web": True, "soft": [], "creators": {}}
+                      "queries_per_run": 0, "auto_download": 0, "web": True, "soft": [], "creators": {},
+                      "anti": [], "prefs": {}, "reasons_recent": []}
 
     def topic(self, tid):
         t = self.db.one("SELECT * FROM topics WHERE id=?", (tid,))
@@ -661,6 +662,63 @@ class Vault:
         return self.db.one("SELECT count(*) n, sum(label=1) pos, sum(label=-1) neg FROM topic_items "
                            "WHERE topic_id=?", (tid,))
 
+    # Built-in downvote reasons → signals the scorer understands. "unrelated"
+    # and "dislike" are just a normal 👎 (the model learns the item's features);
+    # the others set a durable preference or a negative keyword for the topic.
+    REASON_PREFS = {"short": "avoid_short", "long": "avoid_long", "ai": "no_ai", "ad": "no_ads"}
+    REASON_ANTI = {"ai": ["ai", "aigenerated", "generated", "midjourney", "sora", "veo"],
+                   "ad": ["ad", "ads", "advert", "sponsored", "promo", "discount", "sale"]}
+
+    def apply_reasons(self, tid, item_id, reasons, vote=-1):
+        """Record why an item was rejected and turn it into learning signal.
+        Built-in reasons set prefs/anti-keywords; any other text becomes a
+        user anti-keyword for this topic. Everything here is user-chosen."""
+        t = self.topic(tid)
+        if not t:
+            return None
+        st = t["settings"]
+        prefs = dict(st.get("prefs") or {})
+        anti = list(st.get("anti") or [])
+        recent = list(st.get("reasons_recent") or [])
+        for r in reasons or []:
+            key = re.sub(r"[^a-z0-9 ]", "", str(r).strip().lower())
+            if not key:
+                continue
+            if key in self.REASON_PREFS:
+                prefs[self.REASON_PREFS[key]] = True
+                for w in self.REASON_ANTI.get(key, []):
+                    if w not in anti:
+                        anti.append(w)
+            elif key in ("unrelated", "dislike", "notmytype", "low quality", "lowquality"):
+                pass          # the 👎 itself teaches this
+            else:             # custom word the user typed (e.g. a theme they don't want)
+                for w in key.split():
+                    if len(w) > 1 and w not in anti:
+                        anti.append(w)
+                recent = [key] + [x for x in recent if x != key]
+        self.update_topic(tid, {"settings": {"prefs": prefs, "anti": anti[:60],
+                                              "reasons_recent": recent[:12]}})
+        if vote is not None:
+            self.vote(tid, item_id, vote)
+        else:
+            self.relearn(tid)
+        return {"prefs": prefs, "anti": anti, "reasons_recent": recent[:12]}
+
+    def clear_reason(self, tid, anti=None, pref=None):
+        """Remove a reason-based filter (an anti-keyword or a preference)."""
+        t = self.topic(tid)
+        st = t["settings"]
+        upd = {}
+        if anti is not None:
+            upd["anti"] = [w for w in (st.get("anti") or []) if w != anti]
+        if pref is not None:
+            prefs = dict(st.get("prefs") or {})
+            prefs.pop(pref, None)
+            upd["prefs"] = prefs
+        if upd:
+            self.update_topic(tid, {"settings": upd})
+            self.relearn(tid)
+
     def relearn(self, tid, delay=0.8):
         with self._learn_lock:
             self._learn_pending[tid] = time.time() + delay
@@ -776,6 +834,8 @@ class Vault:
         return {"queries": query_stats(self.db, tid), "likes": pos, "dislikes": neg,
                 "authors": liked_authors(self.db, tid), "n_pos": sc.n_pos, "n_neg": sc.n_neg,
                 "creators": list((self.topic(tid)["settings"].get("creators") or {}).values()),
+                "anti": self.topic(tid)["settings"].get("anti") or [],
+                "prefs": self.topic(tid)["settings"].get("prefs") or {},
                 "model": "classifier + profile" if sc.w else "profile" if sc.n_pos + sc.n_neg else
                 "matching only", "semantic": bool(sc.sem)}
 

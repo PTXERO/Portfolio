@@ -322,6 +322,16 @@ details.more[open] summary{color:var(--acc)}
 .qr img,.qr canvas{display:block;width:200px!important;height:200px!important}
 pre.cmd{font-family:var(--fmono);font-size:12px;line-height:1.8;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 12px;overflow-x:auto;color:var(--acc)}
 pre.cmd i{color:var(--dim);font-style:normal}
+.reasonbar{position:fixed;left:0;right:0;bottom:calc(var(--nav) + var(--sab));z-index:66;background:var(--panel2);border-top:1px solid var(--bad);padding:8px calc(10px + var(--sar)) 8px calc(10px + var(--sal));transform:translateY(120%);transition:transform .22s ease}
+.reasonbar.on{transform:none}
+.reasonbar .rb-in{max-width:640px;margin:0 auto}
+.reasonbar .rb-label{font-family:var(--fmono);font-size:11px;color:var(--bad);display:block;margin-bottom:6px}
+.reasonbar .rb-label small{color:var(--dim)}
+.reasonbar .rb-chips{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.reasonbar .rb-chips::-webkit-scrollbar{display:none}
+.reasonbar .rchip{flex-shrink:0;min-height:38px;padding:0 13px;border:1px solid var(--b2);border-radius:19px;font-family:var(--fmono);font-size:12px;color:var(--txt);background:var(--panel);white-space:nowrap}
+.reasonbar .rchip.on{border-color:var(--bad);color:var(--bad);background:rgba(255,77,109,.1)}
+.reasonbar .rchip.add{color:var(--acc2);border-color:rgba(66,212,245,.4)}
 #reconnect{position:fixed;inset:0;z-index:400;background:rgba(7,7,10,.9);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:24px}
 #reconnect.on{display:flex}
 #reconnect .rc-box{text-align:center;font-family:var(--fmono);font-size:14px;color:var(--txt);line-height:2}
@@ -507,6 +517,11 @@ python reel-vault/server/reelvault.py
   <button data-go="jobs"><span class="i">⟳</span><span class="l">ACTIVITY</span><span class="badge" id="jobBadge" hidden></span></button>
   <button data-go="setup"><span class="i">⚙</span><span class="l">SETUP</span></button>
 </div></nav>
+
+<div class="reasonbar" id="reasonBar"><div class="rb-in">
+  <span class="rb-label">👎 why? <small>(optional — teaches the topic)</small></span>
+  <div class="rb-chips" id="rbChips"></div>
+</div></div>
 
 <div class="bulkbar" id="bulk">
   <span class="n" id="bulkN">0</span>
@@ -696,6 +711,7 @@ function parseHash(){
 }
 function render(){
   route = parseHash();
+  if (typeof hideReasons === 'function') hideReasons();
   const map = { topics: 'vTopics', topic: 'vTopic', library: 'vLibrary', sources: 'vSources', jobs: 'vJobs', setup: 'vSetup' };
   if (!map[route.view]) route.view = 'topics';
   $$('.view').forEach(v => v.classList.toggle('on', v.id === map[route.view]));
@@ -929,6 +945,7 @@ async function vote(label){
   lastVote = { id: it.id, item: it };
   buzz();
   showCard();
+  if (label < 0) offerReasons(it); else hideReasons();
   try{
     const r = await api('/api/topics/' + T.id + '/vote', { method: 'POST', body: { item_id: it.id, label } });
     T.counts.pos = r.counts.pos || 0; T.counts.neg = r.counts.neg || 0; T.counts.unrated = Math.max(0, T.counts.unrated - 1);
@@ -937,6 +954,31 @@ async function vote(label){
   }catch(e){ toast(e.message); }
   if (deck.length < 4) setTimeout(loadDeck, 1200);   // after the model retrains, fetch its fresh best guesses
 }
+let reasonTimer = null, reasonFor = null;
+const REASONS = [['unrelated', 'unrelated'], ['dislike', "don't like it"], ['ai', 'AI'], ['ad', 'ad'], ['short', 'too short'], ['long', 'too long']];
+function offerReasons(it){
+  reasonFor = it;
+  const recent = ((T.settings && T.settings.reasons_recent) || []).filter(r => !REASONS.some(x => x[0] === r));
+  const picked = new Set();
+  $('#rbChips').innerHTML = REASONS.map(([k, lbl]) => `<button class="rchip" data-r="${k}">${esc(lbl)}</button>`).join('')
+    + recent.slice(0, 5).map(r => `<button class="rchip" data-r="${esc(r)}">${esc(r)}</button>`).join('')
+    + '<button class="rchip add" data-radd>+ reason</button>';
+  $('#reasonBar').classList.add('on');
+  clearTimeout(reasonTimer); reasonTimer = setTimeout(hideReasons, 6000);
+  const send = async r => { try{ await api('/api/topics/' + T.id + '/vote', { method: 'POST', body: { item_id: it.id, label: -1, reasons: [r] } }); }catch(e){ toast(e.message); } };
+  $$('#rbChips [data-r]').forEach(b => b.onclick = () => {
+    const r = b.dataset.r;
+    if (picked.has(r)){ picked.delete(r); b.classList.remove('on'); } else { picked.add(r); b.classList.add('on'); send(r); buzz(); }
+    clearTimeout(reasonTimer); reasonTimer = setTimeout(hideReasons, 4000);
+  });
+  $('#rbChips [data-radd]').onclick = async () => {
+    clearTimeout(reasonTimer);
+    const r = await ask('Why not? (one word or short phrase)', { placeholder: 'e.g. too loud, a man, reaction video', ok: 'ADD' });
+    if (r){ await send(r); toast('Noted — it learns this'); }
+    reasonTimer = setTimeout(hideReasons, 2000);
+  };
+}
+function hideReasons(){ clearTimeout(reasonTimer); $('#reasonBar').classList.remove('on'); reasonFor = null; }
 async function undoVote(){
   if (!lastVote) return;
   const lv = lastVote; lastVote = null;
@@ -994,6 +1036,9 @@ async function renderBrain(){
     <div>${ins.likes.length ? ins.likes.map(f => `<button class="fchip good" data-addq="${esc(f.label.replace(/^search: /, ''))}">${esc(f.label)} ＋</button>`).join('') : '<p class="note">Give a few 👍 to teach it.</p>'}</div>
     <h3 class="s">It ranks lower</h3>
     <div>${ins.dislikes.length ? ins.dislikes.map(f => `<span class="fchip bad">${esc(f.label)}</span>`).join('') : '<p class="note">Give a few 👎 to show what you don\'t want.</p>'}</div>
+    ${(ins.anti && ins.anti.length) || (ins.prefs && Object.keys(ins.prefs).length) ? `<h3 class="s">Avoid (from your 👎 reasons)</h3>
+    <p class="note" style="margin-bottom:6px">These pull matching videos down hard. Tap ✕ to drop one.</p>
+    <div>${Object.keys(ins.prefs || {}).filter(k => ins.prefs[k]).map(k => `<span class="fchip bad" data-prefdel="${esc(k)}">${esc({ no_ai: 'AI', no_ads: 'ads', avoid_short: 'short clips', avoid_long: 'long videos' }[k] || k)} ✕</span>`).join('')}${(ins.anti || []).map(w => `<span class="fchip bad" data-antidel="${esc(w)}">${esc(w)} ✕</span>`).join('')}</div>` : ''}
     <h3 class="s">Creators in this topic</h3>
     <p class="note" style="margin-bottom:8px">Add a username or profile link. It pulls their posts, learns what and when they post, and feeds that in.</p>
     <form class="row" id="addCreator" style="margin-bottom:8px"><input id="addCreatorIn" placeholder="@username or profile link" autocapitalize="off" autocorrect="off" enterkeyhint="done" aria-label="Add a creator"><button class="btn pri">ADD</button></form>
@@ -1007,6 +1052,8 @@ async function renderBrain(){
   $$('[data-q]', body).forEach(c => c.onchange = () => setQ(c.dataset.q, c.checked ? 'enable' : 'disable'));
   $$('[data-qdel]', body).forEach(b => b.onclick = async () => { await setQ(b.dataset.qdel, 'delete'); renderBrain(); });
   $$('[data-addq]', body).forEach(b => b.onclick = async () => { await setQ(b.dataset.addq, 'add'); toast('Added "' + b.dataset.addq + '"'); renderBrain(); });
+  $$('[data-antidel]', body).forEach(b => b.onclick = async () => { try{ await api('/api/topics/' + T.id + '/reason?anti=' + encodeURIComponent(b.dataset.antidel), { method: 'DELETE' }); renderBrain(); }catch(e){ toast(e.message); } });
+  $$('[data-prefdel]', body).forEach(b => b.onclick = async () => { try{ await api('/api/topics/' + T.id + '/reason?pref=' + encodeURIComponent(b.dataset.prefdel), { method: 'DELETE' }); renderBrain(); }catch(e){ toast(e.message); } });
   $$('[data-follow]', body).forEach(b => b.onclick = async () => {
     const a = ins.authors[+b.dataset.follow];
     b.disabled = true; b.textContent = '…';
