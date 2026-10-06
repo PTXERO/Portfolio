@@ -52,7 +52,7 @@ mark{background:rgba(200,245,66,.2);color:var(--acc);border-radius:2px;padding:0
 [hidden]{display:none!important}
 
 /* ── chrome ── */
-.top{position:sticky;top:0;z-index:60;background:var(--surface);
+.top{position:sticky;top:0;z-index:80;background:var(--surface);
   border-bottom:1px solid var(--border);padding:var(--sat) calc(14px + var(--sar)) 0 calc(14px + var(--sal))}
 .top-in{height:var(--top);display:flex;align-items:center;gap:10px;max-width:1200px;margin:0 auto}
 .brand{font-family:var(--fdisp);font-size:24px;letter-spacing:.1em;color:var(--acc);white-space:nowrap}
@@ -331,8 +331,8 @@ details.more[open] summary{color:var(--acc)}
 .qr img,.qr canvas{display:block;width:200px!important;height:200px!important}
 pre.cmd{font-family:var(--fmono);font-size:12px;line-height:1.8;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 12px;overflow-x:auto;color:var(--acc)}
 pre.cmd i{color:var(--dim);font-style:normal}
-.reasonbar{position:fixed;left:0;right:0;bottom:calc(var(--nav) + var(--sab));z-index:66;background:var(--panel2);border-top:1px solid var(--bad);padding:8px calc(10px + var(--sar)) 8px calc(10px + var(--sal));transform:translateY(120%);transition:transform .22s ease}
-.reasonbar.on{transform:none}
+.reasonbar{position:fixed;left:0;right:0;bottom:calc(var(--nav) + var(--sab));z-index:66;background:var(--panel2);border-top:1px solid var(--bad);padding:8px calc(10px + var(--sar)) 8px calc(10px + var(--sal));transform:translateY(120%);visibility:hidden;transition:transform .22s ease,visibility .22s}
+.reasonbar.on{transform:none;visibility:visible}
 .reasonbar .rb-in{max-width:640px;margin:0 auto}
 .reasonbar .rb-label{font-family:var(--fmono);font-size:11px;color:var(--bad);display:block;margin-bottom:6px}
 .reasonbar .rb-label small{color:var(--dim)}
