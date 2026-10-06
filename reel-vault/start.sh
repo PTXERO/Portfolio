@@ -25,6 +25,7 @@ set -euo pipefail
 
 REPO_URL="https://github.com/PTXERO/Portfolio"
 BRANCH="${REELVAULT_BRANCH:-main}"
+DEV_BRANCH="claude/new-session-7sf9nm"   # where SEARCH//NET lives until it is merged into main
 
 say()  { printf '  \033[36m%s\033[0m\n' "$*"; }
 warn() { printf '  \033[33m! %s\033[0m\n' "$*"; }
@@ -87,6 +88,13 @@ else
   git -C "$REPO" fetch origin "$BRANCH" || warn "couldn't reach GitHub; starting with what you have."
   [ "$(git -C "$REPO" rev-parse --abbrev-ref HEAD)" = "$BRANCH" ] || git -C "$REPO" checkout "$BRANCH"
   git -C "$REPO" pull --ff-only origin "$BRANCH" || warn "couldn't fast-forward (local changes?). Starting with what you have."
+fi
+# if the tracked branch doesn't carry the app yet (not merged), follow the branch that does
+if [ ! -f "$REPO/reel-vault/server/run.py" ] && [ "$BRANCH" != "$DEV_BRANCH" ]; then
+  warn "branch '$BRANCH' doesn't contain SEARCH//NET yet - using '$DEV_BRANCH' instead."
+  BRANCH="$DEV_BRANCH"
+  git -C "$REPO" fetch origin "$BRANCH" && git -C "$REPO" checkout -B "$BRANCH" "origin/$BRANCH"
+  [ -f "$REPO/reel-vault/server/run.py" ] || fail "Could not find reel-vault/server/run.py on any branch. Check $REPO_URL."
 fi
 
 # ── 4. Python packages (private venv) ───────────────────────

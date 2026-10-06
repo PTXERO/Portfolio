@@ -29,6 +29,7 @@
   $ErrorActionPreference = 'Continue'
   $RepoUrl = 'https://github.com/PTXERO/Portfolio'
   $Branch  = if ($env:REELVAULT_BRANCH) { $env:REELVAULT_BRANCH } else { 'main' }
+  $DevBranch = 'claude/new-session-7sf9nm'   # where SEARCH//NET lives until it is merged into main
   $ServerArgs = @($args)
 
   function Say($msg)  { Write-Host "  $msg" -ForegroundColor Cyan }
@@ -145,6 +146,15 @@
     if ($current -ne $Branch) { Run git -C $Repo checkout $Branch }
     Run git -C $Repo pull --ff-only origin $Branch
     if ($LASTEXITCODE -ne 0) { Warn 'Could not fast-forward (local changes?). Starting with what you have.' }
+  }
+
+  # if the tracked branch doesn't carry the app yet (not merged), follow the branch that does
+  if (-not (Test-Path (Join-Path $Repo 'reel-vault/server/run.py')) -and $Branch -ne $DevBranch) {
+    Warn "branch '$Branch' doesn't contain SEARCH//NET yet - using '$DevBranch' instead."
+    $Branch = $DevBranch
+    Run git -C $Repo fetch origin $Branch
+    Run git -C $Repo checkout -B $Branch "origin/$Branch"
+    if (-not (Test-Path (Join-Path $Repo 'reel-vault/server/run.py'))) { Fail "Could not find reel-vault/server/run.py on any branch. Check $RepoUrl." }
   }
 
   # -- 4. Python packages ---------------------------------------
