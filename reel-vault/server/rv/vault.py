@@ -131,8 +131,27 @@ class Ctx:
                                 "--playlist-end", str(limit), *v.cookie_args(self.src)]
         if flat:
             cmd.append("--flat-playlist")
-        cmd.append(target)
-        for line in v.stream(self.job, cmd):
+        base = cmd + v.impersonate_args(self.src)
+        mark = len(self.job.log_lines)
+        got = 0
+        for info in self._ytdlp_run(base + [target]):
+            got += 1
+            yield info
+        # Cloudflare-style bot checks: retry once looking like a normal browser
+        blocked = any("impersonat" in ln.lower() or "cloudflare" in ln.lower()
+                      for ln in self.job.log_lines[mark:])
+        if not got and blocked and not v.impersonate_args(self.src):
+            if v.can_impersonate():
+                self.job.log("  ↻ site has a bot check: retrying as a normal browser")
+                for info in self._ytdlp_run(base + ["--impersonate", "chrome",
+                                                    "--extractor-args", "generic:impersonate", target]):
+                    yield info
+            else:
+                self.job.log('  → install browser impersonation once: '
+                             'python -m pip install -U "yt-dlp[default,curl-cffi]"  (then restart)')
+
+    def _ytdlp_run(self, cmd):
+        for line in self.v.stream(self.job, cmd):
             line = line.strip()
             if line.startswith("{"):
                 try:
@@ -269,6 +288,15 @@ class Vault:
             except Exception:    # noqa: BLE001
                 return False
         return S.domain_of(url) in S.X_HOSTS
+
+    def can_impersonate(self):
+        return importlib.util.find_spec("curl_cffi") is not None
+
+    def impersonate_args(self, src=None):
+        """Per-source option: always look like a normal browser."""
+        if src and (src.get("options") or {}).get("impersonate") and self.can_impersonate():
+            return ["--impersonate", "chrome", "--extractor-args", "generic:impersonate"]
+        return []
 
     def ytdlp_supports(self, url):
         if self._ytdlp_ies is None:
@@ -826,8 +854,15 @@ class Vault:
                 "-f", "bv*[vcodec^=avc1][ext=mp4]+ba[ext=m4a]/b[ext=mp4][vcodec^=avc1]/bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b",
                 "--merge-output-format", "mp4",
                 "-o", str(out_dir / (stem + ".%(ext)s")), *self.cookie_args(), it["url"]]
+            mark = len(job.log_lines)
             for _ in self.stream(job, cmd, timeout=3600):
                 pass
+            if not list(out_dir.glob(stem + ".*")) and self.can_impersonate() and any(
+                    "impersonat" in ln.lower() or "cloudflare" in ln.lower() for ln in job.log_lines[mark:]):
+                job.log("  ↻ bot check: retrying as a normal browser")
+                for _ in self.stream(job, cmd[:-1] + ["--impersonate", "chrome", "--extractor-args",
+                                                      "generic:impersonate", cmd[-1]], timeout=3600):
+                    pass
             found = sorted(f for f in out_dir.glob(stem + ".*")
                            if f.suffix not in (".part", ".ytdl", ".jpg", ".webp")
                            and not f.name.endswith(".thumb.jpg"))
