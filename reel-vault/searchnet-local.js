@@ -218,7 +218,32 @@
         const all = await items(); const s = await settings();
         return { ok: true, local: true, auth: true, tools: { worker: !!s.worker_url }, counts: { n: all.length, files: 0, speech: all.filter((i) => i.transcript).length }, vectors: 0, semantic: false, data_dir: 'your browser (IndexedDB)', settings: s, topics: (await idb.all('topics')).length, worker_url: s.worker_url };
       }
-      if (route === 'search') { await loadSyn(); return runSearch(await items(), qs || ''); }
+      if (route === 'search') {
+        await loadSyn();
+        const P = Object.fromEntries(new URLSearchParams(qs || ''));
+        let pool = await items();
+        // topic filter: only items linked to the topic (what the server's search does)
+        if (P.topic) {
+          const minS = P.topic_min !== undefined && P.topic_min !== '' ? +P.topic_min : 0.5;
+          const sc = {};
+          (await idb.all('votes')).filter((v) => v.topic_id === P.topic).forEach((v) => {
+            const keep = P.topic_all === '1' || v.label > 0 || (v.label === 0 && (v.score || 0) >= minS);
+            if (keep) sc[v.item_id] = v;
+          });
+          pool = pool.filter((it) => sc[it.id]).map((it) => Object.assign({}, it, { t_score: sc[it.id].score, t_label: sc[it.id].label }));
+        }
+        const sortTopic = P.sort === 'topic';
+        const p2 = new URLSearchParams(qs || ''); if (sortTopic) p2.delete('sort');
+        const res = runSearch(pool, p2.toString());
+        if (sortTopic) {
+          // re-rank the whole match set by topic score, then re-page
+          const all = runSearch(pool, (() => { const q = new URLSearchParams(p2); q.set('offset', '0'); q.set('limit', '100000'); return q.toString(); })()).items
+            .sort((a, b) => (b.t_score || 0) - (a.t_score || 0) || (b._s - a._s));
+          const off = +P.offset || 0, lim = +P.limit || 40;
+          res.items = all.slice(off, off + lim); res.total = all.length;
+        }
+        return res;
+      }
       if (route === 'synonyms') { if (method === 'PUT') { SYN = body.groups || []; await saveSettings({ synonyms: SYN }); } return { groups: SYN }; }
       if (route === 'settings') { if (method === 'PUT') { SET = await saveSettings(body); } return await settings(); }
       if (route === 'understand' && method === 'POST') { const j = newJob('understand', 'understand (not available in browser)'); j.state = 'done'; j.finished = Math.floor(Date.now() / 1000); return jobDict(j); }

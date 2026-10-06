@@ -24,7 +24,7 @@
 :root{
   --bg:#07070a;--surface:#0d0d12;--panel:#121218;--panel2:#17171f;
   --border:#1f1f29;--b2:#2c2c36;
-  --acc:#c8f542;--acc2:#42d4f5;--acc3:#f542a8;--acc4:#f5a542;--good:#44ff88;--bad:#ff4d6d;
+  --acc:#f54242;--acc-rgb:245,66,66;--acc2:#42d4f5;--acc3:#f542a8;--acc4:#f5a542;--good:#44ff88;--bad:#ff4d6d;
   --txt:#e2e2ea;--dim:#7a7a92;--mut:#3a3a48;
   --fmono:'Share Tech Mono',ui-monospace,monospace;
   --fdisp:'Bebas Neue',Impact,sans-serif;
@@ -48,7 +48,7 @@ select{background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),li
   background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px;background-repeat:no-repeat;padding-right:34px}
 input:focus,select:focus,textarea:focus{border-color:var(--acc)}
 textarea{resize:vertical;line-height:1.5}
-mark{background:rgba(200,245,66,.2);color:var(--acc);border-radius:2px;padding:0 1px}
+mark{background:rgba(var(--acc-rgb),.2);color:var(--acc);border-radius:2px;padding:0 1px}
 [hidden]{display:none!important}
 
 /* ── chrome ── */
@@ -110,7 +110,7 @@ h3.s{font-family:var(--fmono);font-size:11px;letter-spacing:.2em;color:var(--dim
 .chips::-webkit-scrollbar{display:none}
 .chip{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;min-height:38px;padding:0 13px;border:1px solid var(--b2);border-radius:19px;
   font-family:var(--fmono);font-size:12px;letter-spacing:.05em;color:var(--dim);background:var(--panel);white-space:nowrap}
-.chip.on{border-color:var(--acc);color:var(--acc);background:rgba(200,245,66,.08)}
+.chip.on{border-color:var(--acc);color:var(--acc);background:rgba(var(--acc-rgb),.08)}
 .chip.f.on{border-color:var(--acc2);color:var(--acc2);background:rgba(66,212,245,.08)}
 .chip.x{color:var(--acc2);border-color:rgba(66,212,245,.4)}
 .seg{display:flex;background:var(--panel);border:1px solid var(--b2);border-radius:10px;padding:3px;gap:3px;overflow-x:auto;scrollbar-width:none}
@@ -220,7 +220,7 @@ details.more[open] summary{color:var(--acc)}
 .qrow .q{font-size:14px;overflow-wrap:anywhere}
 .qrow .meta2{font-family:var(--fmono);font-size:11px;color:var(--dim);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .origin{font-family:var(--fmono);font-size:10px;letter-spacing:.08em;padding:2px 6px;border-radius:6px;border:1px solid var(--b2);text-transform:uppercase}
-.origin.seed,.origin.user{color:var(--acc);border-color:rgba(200,245,66,.4)}
+.origin.seed,.origin.user{color:var(--acc);border-color:rgba(var(--acc-rgb),.4)}
 .origin.web{color:var(--acc2);border-color:rgba(66,212,245,.4)}
 .origin.learned,.origin.cooccur{color:var(--acc4);border-color:rgba(245,165,66,.4)}
 .origin.author{color:var(--acc3);border-color:rgba(245,66,168,.4)}
@@ -232,7 +232,7 @@ details.more[open] summary{color:var(--acc)}
 .attrrow .attr-k{flex:0 0 38%;font-size:13px;padding:8px 9px}
 .attrrow .attr-v{flex:1;font-size:13px;padding:8px 9px}
 .attrrow .attr-boost,.attrrow .attr-x{flex:0 0 38px;width:38px;height:38px;border:1px solid var(--b2);border-radius:8px;font-size:14px;color:var(--dim)}
-.attrrow .attr-boost.on{color:var(--acc);border-color:var(--acc);background:rgba(200,245,66,.08)}
+.attrrow .attr-boost.on{color:var(--acc);border-color:var(--acc);background:rgba(var(--acc-rgb),.08)}
 .attrrow .attr-x{color:var(--bad)}
 .prec{width:54px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;display:inline-block}
 .prec i{display:block;height:100%;background:var(--good)}
@@ -350,6 +350,100 @@ pre.cmd i{color:var(--dim);font-style:normal}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 @media(max-width:899px){.brand small{display:none}}
 @media(max-width:360px){.brand{font-size:21px}}
+.newwin{display:none}
+/* loading states: a preview on its way never looks like "no preview" */
+.mload{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:3;pointer-events:none;
+  background:rgba(7,7,10,.35);font-family:var(--fmono);font-size:11px;letter-spacing:.1em;color:var(--txt)}
+.mload .spinner{width:22px;height:22px;border-width:2px}
+.thumb:has(img,video):not(.ok){animation:pulse 1.3s ease-in-out infinite}
+.thumb.ok{animation:none}
+
+/* ═══════════════ DESKTOP (>=1024px) ═══════════════
+   A real desktop tool: fixed left sidebar, everything on one screen,
+   wider multi-column views, side-by-side review, open-in-new-window. */
+@media(min-width:1024px){
+  :root{--side:208px}
+  body{padding-bottom:0;padding-left:var(--side)}
+  .newwin{display:inline-flex}
+  /* header spans full width, above the sidebar; content starts past the sidebar */
+  .top{left:0;right:0;z-index:90;padding-left:calc(var(--side) + 20px)}
+  .top-in{max-width:none;margin:0}
+  .hdr-sub{display:inline}
+  /* nav: bottom tab bar -> left sidebar rail */
+  nav.bottom{position:fixed;left:0;top:calc(var(--top) + var(--sat));bottom:0;right:auto;width:var(--side);
+    border-top:none;border-right:1px solid var(--border);background:var(--surface);padding:10px 10px calc(10px + var(--sab));
+    -webkit-backdrop-filter:none;backdrop-filter:none;overflow-y:auto}
+  nav.bottom .in{display:flex;flex-direction:column;gap:3px;height:auto;max-width:none}
+  nav.bottom button{flex-direction:row;justify-content:flex-start;gap:12px;height:44px;min-height:44px;padding:0 12px;
+    border-radius:var(--r);border:1px solid transparent;letter-spacing:.1em}
+  nav.bottom button .i{font-size:17px;width:18px;text-align:center}
+  nav.bottom button .l{font-size:12px}
+  nav.bottom button:hover{background:var(--panel);color:var(--txt)}
+  nav.bottom button.on{color:var(--acc);background:rgba(var(--acc-rgb),.08);border-color:rgba(var(--acc-rgb),.3)}
+  nav.bottom .badge{position:static;margin-left:auto;transform:none}
+  /* give each nav item a hover "open in new window" affordance */
+  nav.bottom button::after{content:"\2317";position:absolute;right:10px;opacity:0;color:var(--dim);font-size:13px;transition:opacity .15s}
+  nav.bottom button:hover::after{opacity:.6}
+  nav.bottom button:hover::after:hover{opacity:1;color:var(--acc)}
+  /* views: breathe, use the width */
+  .view{max-width:1360px;padding:24px 32px 64px}
+  .banner{max-width:1360px;margin:14px auto 0}
+  h2.h{font-size:34px}
+  /* topics as a responsive card grid */
+  #topicList{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
+  #topicList .tcard{margin-bottom:0}
+  /* library: denser tiles, roomy */
+  #grid{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))!important;gap:16px}
+  /* review deck: media left, caption + actions right */
+  .deck .rcard{max-width:none;display:grid;grid-template-columns:minmax(0,1fr) 380px;align-items:stretch}
+  .deck .rmedia{height:auto;min-height:420px;max-height:72vh;border-right:1px solid var(--border)}
+  .deck .rinfo{padding:18px 18px 6px;overflow-y:auto}
+  .deck .rinfo .txt{-webkit-line-clamp:unset;display:block}
+  .deck .ractions{grid-column:2;align-self:end}
+  .deckbar{max-width:none}
+  /* network: one screen, no page scroll — canvas left, accounts list beside it (scrolls on its own) */
+  /* app-shell views: sized to the window (minus header + any banner), never scroll the page */
+  :root{--bannerH:0px}
+  .shell{height:calc(100vh - var(--top) - var(--sat) - var(--bannerH));overflow:hidden;padding-bottom:20px}
+  #vNetwork.on{display:grid;grid-template-columns:minmax(0,1fr) 380px;grid-template-rows:auto auto auto minmax(0,1fr);column-gap:20px}
+  /* topic view: header rows fixed, the body (deck / grids / brain) fills the rest and scrolls itself */
+  #vTopic.on{display:flex;flex-direction:column}
+  #vTopic #tBody{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
+  #vTopic .deck{height:calc(100% - 34px)}   /* leave room for the deckbar below it */
+  #vTopic .deck .rcard{height:100%;min-height:0}
+  #vTopic .deck .rmedia{height:100%;min-height:0;max-height:none}
+  #vTopic .deck .rinfo{min-height:0}
+  #vTopic .deckbar{margin-top:8px}
+  #vNetwork>h2.h,#vNetwork>p.note,#vNetwork>.row{grid-column:1/-1}
+  #vNetwork>.row{margin-bottom:6px}
+  #vNetwork>.row select{width:auto;min-width:170px}
+  #vNetwork>.row input{flex:1}
+  #vNetwork .web{grid-column:1;grid-row:4;height:100%;max-height:none;margin:0}
+  #vNetwork #nwList{grid-column:2;grid-row:4;overflow-y:auto;padding-right:4px;min-height:0}
+  #vNetwork #nwList h3.s{margin-top:0}
+  /* setup: two columns so it's not one long scroll */
+  #vSetup{max-width:1100px}
+  #vSetup .card.pad{max-width:720px}
+  /* sheets become a right-docked panel (desktop apps, not phones) */
+  .sheet{left:auto;right:0;bottom:0;top:calc(var(--top) + var(--sat));width:440px;margin-left:0;max-height:none;height:auto;
+    border-radius:0;border-left:1px solid var(--b2);border-top:none;transform:translateX(105%)}
+  .sheet.on{transform:none}
+  .sheet .grab{display:none}
+  .sheet-bg{background:rgba(0,0,0,.45)}
+  /* bulk + reason bars align to the content area, not the whole window */
+  .bulkbar,.reasonbar{left:var(--side)}
+  .toast{left:calc(50% + var(--side)/2);bottom:24px}
+  /* hover affordances that make sense with a pointer */
+  .btn,.chip,.tcard,.tile,.pill{transition:var(--t)}
+  .btn:hover:not(:disabled){border-color:var(--acc);color:var(--acc)}
+  .btn.pri:hover:not(:disabled){filter:brightness(1.08);color:#0b0b0f}
+  .tcard:hover{border-color:var(--acc);background:rgba(var(--acc-rgb),.02)}
+}
+@media(min-width:1600px){
+  .view{max-width:1560px}
+  .deck .rcard{grid-template-columns:minmax(0,1fr) 440px}
+}
+
 /* network / web */
 .web{position:relative;width:100%;height:60vh;min-height:320px;max-height:560px;border:1px solid var(--border);border-radius:12px;background:radial-gradient(circle at 50% 40%,rgba(66,212,245,.05),transparent 70%),var(--surface);overflow:hidden;touch-action:none;margin-bottom:14px}
 .web svg{width:100%;height:100%;display:block}
@@ -368,7 +462,7 @@ pre.cmd i{color:var(--dim);font-style:normal}
 .pcard .top b{font-size:15px}
 .pcard .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .pcard .pill{font-size:11px;padding:3px 8px;border:1px solid var(--b2);border-radius:12px;color:var(--dim)}
-.pcard .pill.t{color:var(--acc);border-color:rgba(200,245,66,.35)}
+.pcard .pill.t{color:var(--acc);border-color:rgba(var(--acc-rgb),.35)}
 .pcard .pill.a{color:var(--acc3);border-color:rgba(245,66,168,.35)}
 .spark{display:flex;align-items:flex-end;gap:2px;height:34px;margin-top:4px}
 .spark i{flex:1;background:var(--acc2);opacity:.6;border-radius:1px;min-height:1px}
@@ -385,6 +479,7 @@ pre.cmd i{color:var(--dim);font-style:normal}
   <div class="brand">SEARCH<em>//</em>NET</div>
   <div class="hdr-sub">FIND &middot; LEARN &middot; SAVE</div>
   <div class="grow"></div>
+  <button class="hbtn newwin" id="newWin" title="Open this view in a new window" aria-label="Open in a new window">&#10697; NEW WINDOW</button>
   <nav class="bottom" aria-label="Main"><div class="in" id="nav">
   <button data-go="topics"><span class="i">◎</span><span class="l">TOPICS</span></button>
   <button data-go="library"><span class="i">▦</span><span class="l">LIBRARY</span></button>
@@ -992,8 +1087,16 @@ function showCard(){
 function attachDeckVideo(v){
   const hint = () => $('#tapHint');
   v.muted = true;
+  // show a clear "loading" state until the first frame actually arrives, so a slow
+  // stream never looks like "no preview"
+  const box = v.parentElement; let ld = box && box.querySelector('.mload');
+  if (box && !ld){ ld = document.createElement('div'); ld.className = 'mload'; ld.innerHTML = '<span class="spinner"></span><span>loading video…</span>'; box.appendChild(ld); }
+  if (hint()) hint().innerHTML = '<span class="spinner"></span> loading…';
+  const loaded = () => { if (ld) ld.remove(); if (hint()) hint().textContent = v.paused ? '▶ tap to play' : v.muted ? '🔇 tap for sound' : '🔊 tap to mute'; };
+  v.addEventListener('loadeddata', loaded, { once: true }); v.addEventListener('playing', loaded, { once: true });
+  if (v.readyState >= 2) loaded();
   const p = v.play(); if (p) p.catch(() => { if (hint()) hint().textContent = '▶ tap to play'; });
-  v.addEventListener('error', () => { if (hint()) hint().textContent = 'can\'t preview here: OPEN or ⬇ save'; }, { once: true });
+  v.addEventListener('error', () => { if (ld) ld.remove(); if (hint()) hint().textContent = 'can\'t preview here: OPEN or ⬇ save'; }, { once: true });
   $('#rmedia').onclick = e => {
     if (e.target.closest('#fsBtn')) return;
     if (v.paused){ v.play(); } else { v.muted = !v.muted; }
@@ -1079,16 +1182,17 @@ function offerReasons(it){
   $('#reasonBar').classList.add('on');
   clearTimeout(reasonTimer); reasonTimer = setTimeout(hideReasons, 6000);
   const send = async r => { try{ await api('/api/topics/' + T.id + '/vote', { method: 'POST', body: { item_id: it.id, label: -1, reasons: [r] } }); }catch(e){ toast(e.message); } };
+  // pick one reason → it's sent and the bar goes away. (Ignore it → it slides away by itself.)
   $$('#rbChips [data-r]').forEach(b => b.onclick = () => {
     const r = b.dataset.r;
-    if (picked.has(r)){ picked.delete(r); b.classList.remove('on'); } else { picked.add(r); b.classList.add('on'); send(r); buzz(); }
-    clearTimeout(reasonTimer); reasonTimer = setTimeout(hideReasons, 4000);
+    picked.add(r); b.classList.add('on'); send(r); buzz();
+    clearTimeout(reasonTimer); reasonTimer = setTimeout(hideReasons, 250);
   });
   $('#rbChips [data-radd]').onclick = async () => {
     clearTimeout(reasonTimer);
     const r = await ask('Why not? (one word or short phrase)', { placeholder: 'e.g. too loud, a man, reaction video', ok: 'ADD' });
     if (r){ await send(r); toast('Noted — it learns this'); }
-    reasonTimer = setTimeout(hideReasons, 2000);
+    hideReasons();
   };
 }
 function hideReasons(){ clearTimeout(reasonTimer); $('#reasonBar').classList.remove('on'); reasonFor = null; }
@@ -1271,10 +1375,12 @@ async function topicSettings(){
 const lazyIO = 'IntersectionObserver' in window ? new IntersectionObserver(ents => ents.forEach(e => { if (e.isIntersecting){ const v = e.target; v.src = v.dataset.src; v.preload = 'metadata'; lazyIO.unobserve(v); } }), { rootMargin: '300px' }) : null;
 function tileHTML(it, { votes=false, re=null, small=false } = {}){
   let media = '';
-  if (it.thumb_file && LIVE) media = `<img loading="lazy" src="${esc(mediaUrl(it.thumb_file))}" alt="">`;
-  else if (it.thumbnail) media = `<img loading="lazy" src="${esc(it.thumbnail)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">`;
-  else if (it.media_url && (it.media || 'video') === 'video') media = `<video muted playsinline preload="none" data-src="${esc(it.media_url)}#t=0.5"></video>`;
-  else if (it.media_url) media = `<img loading="lazy" src="${esc(it.media_url)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">`;
+  // every tile pulses while its preview is on the way (.ld), and settles once a frame lands (.ok)
+  const ok = `onload="this.parentNode.classList.add('ok')"`;
+  if (it.thumb_file && LIVE) media = `<img loading="lazy" src="${esc(mediaUrl(it.thumb_file))}" alt="" ${ok}>`;
+  else if (it.thumbnail) media = `<img loading="lazy" src="${esc(it.thumbnail)}" alt="" referrerpolicy="no-referrer" ${ok} onerror="this.parentNode.classList.add('ok');this.remove()">`;
+  else if (it.media_url && (it.media || 'video') === 'video') media = `<video muted playsinline preload="none" data-src="${esc(it.media_url)}#t=0.5" onloadeddata="this.parentNode.classList.add('ok')" onerror="this.parentNode.classList.add('ok')"></video>`;
+  else if (it.media_url) media = `<img loading="lazy" src="${esc(it.media_url)}" alt="" referrerpolicy="no-referrer" ${ok} onerror="this.parentNode.classList.add('ok');this.remove()">`;
   let hit = '';
   if (re && !small){
     re.lastIndex = 0;
@@ -2063,7 +2169,22 @@ const Demo = {
 // ══════════════════════════════════════════════════════
 //  BOOT
 // ══════════════════════════════════════════════════════
-$$('[data-go]').forEach(b => b.onclick = () => { const key = route.view === 'topic' ? 'topics' : route.view; if (b.closest('#nav') && key === b.dataset.go && route.view !== 'topic'){ window.scrollTo({ top: 0, behavior: 'smooth' }); return; } go(b.dataset.go); });
+// open a view in its own window (multitasking on desktop): every view is a hash, so the
+// new window boots straight into it with the same connection/pairing
+const openWindow = hash => { const u = location.pathname + location.search + '#' + hash; window.open(u, '_blank', 'noopener'); };
+$$('[data-go]').forEach(b => {
+  b.onclick = e => {
+    if (e.ctrlKey || e.metaKey) return openWindow(b.dataset.go);
+    const key = route.view === 'topic' ? 'topics' : route.view;
+    if (b.closest('#nav') && key === b.dataset.go && route.view !== 'topic'){ window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    go(b.dataset.go);
+  };
+  b.onauxclick = e => { if (e.button === 1){ e.preventDefault(); openWindow(b.dataset.go); } };
+});
+$('#newWin').onclick = () => openWindow(location.hash.slice(1) || 'topics');
+// desktop app-shell: WEB and TOPIC size themselves to the window; tell CSS how tall the banner is
+['vNetwork', 'vTopic'].forEach(id => $('#' + id).classList.add('shell'));
+if (window.ResizeObserver){ const b = $('#banner'); const setBH = () => document.documentElement.style.setProperty('--bannerH', (b.classList.contains('on') ? b.getBoundingClientRect().height + 14 : 0) + 'px'); new ResizeObserver(setBH).observe(b); new MutationObserver(setBH).observe(b, { attributes: true, attributeFilter: ['class'] }); setBH(); }
 $('#status').onclick = () => go('setup');
 window.addEventListener('hashchange', () => { if ($('#viewer').classList.contains('on')) return; render(); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) pollJobs(); });
