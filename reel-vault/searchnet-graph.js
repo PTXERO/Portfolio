@@ -254,6 +254,29 @@
     return { nodes, edges: E, focus: focusId && idset.has(focusId) ? focusId : null, focus_asked: opts.focus || '', kinds: [...kinds], generated: now() };
   }
 
+  // ── "load more posts": pull an account's own recent posts into the library, no rating needed.
+  //    They show up in LIBRARY and the WEB straight away — the point is seeing an account en masse.
+  async function loadMore(id, body) {
+    const { by } = await build();
+    const a = by.get(id); if (!a) return { error: 'no account' };
+    const j = L.newJob('collect', 'more from @' + a.author);
+    L.runSafe(j, async () => {
+      const params = new URLSearchParams({ platform: a.platform, handle: a.author, url: a.author_url || '', limit: Math.min(+body.limit || 50, 100), media: body.media || 'all' });
+      j.log('▶ ' + a.platform + ' · @' + a.author);
+      const r = await L.workerCall('/account?' + params);
+      let found = 0, added = 0;
+      for (const it of (r.items || [])) {
+        if (!it || !it.id) continue;
+        found++; it.collected_at = now();
+        if (!(await idb.get('items', it.id))) added++;
+        await idb.put('items', it);
+      }
+      j.stats.found = found; j.stats.new = added; j.result = { found, new: added, author: a.author };
+      j.log('  ' + found + ' posts, ' + added + ' new');
+    });
+    return L.jobDict(j);
+  }
+
   // ── router (mirrors the server-style API the app calls) ──
   L.people = {
     profile, graph, list, setMeta, getMeta,
@@ -265,6 +288,7 @@
         return graph({ topic: P.topic || null, max: +P.max || 60, min: +P.min || 1.5 });
       }
       if (!id) return list({ topic: P.topic || null, q: P.q || '', sort: P.sort || '' });
+      if (parts[2] === 'more' && method === 'POST') return loadMore(id, body || {});
       if (method === 'GET') return profile(id);
       if (method === 'PATCH') return setMeta(id, body || {});
       return { error: 'people route not available: ' + parts.join('/') };

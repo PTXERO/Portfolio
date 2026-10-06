@@ -319,6 +319,6 @@
   // expose internals the learn module needs
   Local.idb = idb; Local.settings = settings; Local.runSearch = runSearch; Local.loadSyn = loadSyn;
   Local.getSyn = () => SYN; Local.newJob = newJob; Local.jobDict = jobDict; Local.runSafe = runSafe;
-  Local.jobs = JOBS;
+  Local.jobs = JOBS; Local.workerCall = workerCall;
   window.SearchNetLocal = Local;
 })();

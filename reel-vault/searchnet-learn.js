@@ -300,6 +300,7 @@
 
   // ── the topics request router (mirrors the server) ────────────
   L.learn = {
+    autoRefresh,
     async vote(tid, iid, label) { return voteItem(tid, iid, label); },
     async itemTopics(iid) { const out = []; for (const t of await allTopics()) { const v = await idb.get('votes', voteKey(t.id, iid)); if (v) out.push({ topic_id: t.id, name: t.name, label: v.label, score: v.score }); } return out; },
     async onItemDeleted(iid) { const vs = (await idb.all('votes')).filter((v) => v.item_id === iid); for (const v of vs) await idb.del('votes', v.k); },
@@ -326,5 +327,22 @@
       return { error: 'topic route not available in browser: ' + parts.join('/') };
     },
   };
+  // ── auto-update: topics with an Auto-refresh setting keep collecting while the app is open.
+  //    (The PC server has a real scheduler; in browser mode this is it.)
+  async function autoRefresh() {
+    if (!L.enabled) return [];
+    const s = await L.settings(); if (!s.worker_url) return [];
+    const ran = [];
+    for (const t of await allTopics()) {
+      const hrs = +((t.settings || {}).refresh_hours || 0); if (!hrs) continue;
+      if (now() - (t.last_run || 0) < hrs * 3600) continue;
+      if (Object.values(L.jobs || {}).some((j) => j.topic_id === t.id && (j.state === 'running' || j.state === 'queued'))) continue;
+      const j = L.newJob('topic', 'auto-update · ' + t.name); j.topic_id = t.id; L.runSafe(j, () => runTopic(t.id, j)); ran.push(t.id);
+    }
+    return ran;
+  }
+  setTimeout(() => autoRefresh().catch(() => {}), 15000);
+  setInterval(() => { if (!document.hidden) autoRefresh().catch(() => {}); }, 5 * 60 * 1000);
+
   async function dto(t) { const votes = await topicItems(t.id); return { id: t.id, name: t.name, seeds: t.seeds, sources: t.sources || [], settings: Object.assign({}, DEF, t.settings), model: {}, created: t.created, last_run: t.last_run, counts: counts(votes), running: Object.values(L.jobs || {}).some((j) => j.topic_id === t.id && (j.state === 'running' || j.state === 'queued')) }; }
 })();

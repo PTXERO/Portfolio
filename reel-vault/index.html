@@ -574,7 +574,7 @@ body.noscroll-max{overflow:hidden}
       <label class="field"><span>How wide to search · <b id="ntBreadthL" style="color:var(--acc);font-weight:normal">WIDE</b></span><input type="range" id="ntBreadth" min="1" max="5" value="3"></label>
       <div class="grid2">
         <label class="field"><span>Collect</span><select id="ntMedia"><option value="video">Videos</option><option value="all">Videos + images</option><option value="everything">Everything</option></select></label>
-        <label class="field"><span>Auto-refresh</span><select id="ntRefresh"><option value="0">Off</option><option value="1">Hourly</option><option value="3">Every 3 h</option><option value="6">Every 6 h</option><option value="12">Every 12 h</option><option value="24">Daily</option></select></label>
+        <label class="field"><span>Auto-update · keeps collecting new posts on this topic</span><select id="ntRefresh"><option value="0">Off</option><option value="1">Hourly</option><option value="3">Every 3 h</option><option value="6">Every 6 h</option><option value="12">Every 12 h</option><option value="24">Daily</option></select></label>
       </div>
       <div class="note">Searches all your enabled SOURCES. Change per topic later with ⋯.</div>
     </div>
@@ -1442,7 +1442,7 @@ async function topicSettings(){
     <label class="field"><span>How wide · <b id="tsBL" style="color:var(--acc);font-weight:normal">${BREADTH[s.breadth]}</b></span><input type="range" id="tsB" min="1" max="5" value="${s.breadth}"></label>
     <div class="grid2">
       <label class="field"><span>Collect</span><select id="tsMedia"><option value="video">Videos</option><option value="all">Videos + images</option><option value="everything">Everything</option></select></label>
-      <label class="field"><span>Auto-refresh</span><select id="tsRef"><option value="0">Off</option><option value="1">Hourly</option><option value="3">3 h</option><option value="6">6 h</option><option value="12">12 h</option><option value="24">Daily</option></select></label>
+      <label class="field"><span>Auto-update (new posts)</span><select id="tsRef"><option value="0">Off</option><option value="1">Hourly</option><option value="3">3 h</option><option value="6">6 h</option><option value="12">12 h</option><option value="24">Daily</option></select></label>
       <label class="field"><span>Results per search</span><input id="tsPer" type="number" min="1" max="200" value="${s.per_query}" inputmode="numeric"></label>
       <label class="field"><span>Auto-save top N</span><input id="tsDl" type="number" min="0" max="500" value="${s.auto_download || 0}" inputmode="numeric"></label>
     </div>
@@ -2030,7 +2030,26 @@ async function openProfile(id){
     <div class="row wrap" style="margin-top:10px">
       <button class="btn pri sm" id="pSave">SAVE NOTES</button>
       <button class="btn sm" id="pPosts">▦ THEIR POSTS</button>
-    </div>`);
+      <button class="btn sm" id="pMore" title="Pull this account's recent posts into your library — no rating needed. They show in LIBRARY and the WEB right away.">⬇ LOAD 50 MORE POSTS</button>
+    </div>
+    <p class="note" style="margin-top:8px">LOAD MORE pulls their recent posts straight in — nothing to rate. More of an account at once makes its patterns show up in the WEB.</p>`);
+  $('#pMore').onclick = async () => {
+    const b = $('#pMore'); b.disabled = true; b.textContent = '⏳ LOADING…';
+    try{
+      const j = await api('/api/people/' + encodeURIComponent(id) + '/more', { method: 'POST', body: { limit: 50, media: 'all' } });
+      if (j.error) throw new Error(j.error);
+      pollJobs();
+      const wait = async () => {
+        const r = await api('/api/jobs/' + j.id);
+        if (['queued', 'running'].includes(r.state)) return setTimeout(wait, 1200);
+        if (r.state === 'error') throw new Error((r.log || []).slice(-1)[0] || 'failed');
+        const st = r.stats || {}; toast('+' + fmtN(st.new || 0) + ' new posts from @' + p.author + (st.found ? ' (' + fmtN(st.found) + ' found)' : ''), 4000);
+        if (route.view === 'network') renderNetwork(); else if (route.view === 'library') runSearch();
+        closeSheet(); openProfile(id);
+      };
+      wait().catch(e => { toast(e.message); b.disabled = false; b.textContent = '⬇ LOAD 50 MORE POSTS'; });
+    }catch(e){ toast(e.message); b.disabled = false; b.textContent = '⬇ LOAD 50 MORE POSTS'; }
+  };
   $$('[data-open]').forEach(el => el.onclick = () => { closeSheet(); nwSel = el.dataset.open; openProfile(el.dataset.open); });
   $('#pSave').onclick = async () => {
     const attrs = $('#pAttrs').value.split(',').map(s => s.trim()).filter(Boolean);

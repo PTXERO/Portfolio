@@ -21,7 +21,7 @@
  *  the way the optional local PC server does.
  * ───────────────────────────────────────────────────────────────── */
 
-const VERSION = "1.0";
+const VERSION = "1.1";
 const UA = "SearchNetWorker/1.0 (+https://github.com/)";
 const INVIDIOUS = ["https://yewtu.be", "https://invidious.nerdvpn.de", "https://invidious.jing.rocks"];
 
@@ -49,6 +49,10 @@ export default {
         const limit = Math.min(parseInt(q.limit || "30", 10) || 30, 100);
         const items = await src(q, limit);
         return json({ items });
+      }
+      if (p === "/account") {                 // an account's own recent posts (for "load more" on a profile)
+        const limit = Math.min(parseInt(q.limit || "50", 10) || 50, 100);
+        return json({ items: await accountPosts(q, limit) });
       }
       if (p === "/resolve") {                 // best-effort direct media URL for an item link
         return json({ url: await resolveMedia(q.url) });
@@ -108,26 +112,7 @@ const SOURCES = {
     for (const t of tags) {
       if (out.length >= limit) break;
       const arr = await getJSON(`https://${inst}/api/v1/timelines/tag/${encodeURIComponent(t)}?limit=40&only_media=true`);
-      for (const st of arr) {
-        const s = st.reblog || st;
-        const acc = s.account || {};
-        for (const m of (s.media_attachments || [])) {
-          const kind = { video: "video", gifv: "video", image: "image" }[m.type] || "post";
-          if (kind === "image" && q.media && q.media !== "all") continue;
-          const meta = (m.meta || {}).original || {};
-          out.push(item({
-            id: "mastodon:" + s.id, platform: "mastodon", media: kind,
-            url: s.url || s.uri, media_url: m.url || m.remote_url,
-            author: acc.acct, author_name: acc.display_name, author_url: acc.url,
-            text: stripHtml(s.content) + (m.description ? "\n" + m.description : ""),
-            hashtags: (s.tags || []).map((x) => x.name).join(" "),
-            posted_at: toTs(s.created_at), duration: meta.duration,
-            width: meta.width, height: meta.height,
-            likes: s.favourites_count, reposts: s.reblogs_count, replies: s.replies_count,
-            thumbnail: m.preview_url,
-          }));
-        }
-      }
+      out.push(...mastoItems(arr, q));
     }
     return out.slice(0, limit);
   },
@@ -159,51 +144,13 @@ const SOURCES = {
     const sub = (q.subreddit || "").replace(/^r\//, "");
     const base = sub ? `https://www.reddit.com/r/${sub}/search.json` : "https://www.reddit.com/search.json";
     const d = await getJSON(`${base}?q=${encodeURIComponent(q.q || "")}&limit=${limit}&sort=relevance&type=link${sub ? "&restrict_sr=1" : ""}`);
-    return ((d.data || {}).children || []).map((c) => {
-      const o = c.data || {};
-      const rv = ((o.secure_media || o.media || {}) || {}).reddit_video || {};
-      const isVid = o.is_video || /hosted:video|rich:video/.test(o.post_hint || "") || /(v\.redd|youtu|streamable|tiktok)/.test(o.domain || "");
-      const isImg = o.post_hint === "image" || imgExt.test(o.url || "");
-      if (!isVid && !(isImg && q.media === "all")) return null;
-      const prev = (((o.preview || {}).images || [{}])[0].source || {}).url || "";
-      return item({
-        id: "reddit:" + o.id, platform: "reddit", media: isVid ? "video" : "image",
-        url: "https://www.reddit.com" + o.permalink,
-        media_url: isVid ? null : o.url,
-        author: o.author, author_name: "r/" + o.subreddit,
-        text: [o.title, o.selftext].filter(Boolean).join("\n"), hashtags: tag(o.subreddit),
-        posted_at: toTs(o.created_utc), duration: rv.duration, width: rv.width, height: rv.height,
-        likes: o.score, replies: o.num_comments, thumbnail: prev.replace(/&amp;/g, "&") || null,
-      });
-    }).filter(Boolean);
+    return ((d.data || {}).children || []).map((c) => redditItem(c.data || {}, q)).filter(Boolean);
   },
 
   // Bluesky public search (video/image posts)
   async bluesky(q, limit) {
     const d = await getJSON(`https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=${encodeURIComponent(q.q || "")}&limit=${Math.min(limit, 100)}`);
-    const out = [];
-    for (const p of (d.posts || [])) {
-      const embed = p.embed || {};
-      const media = embed.$type && /video/.test(embed.$type) ? "video"
-        : embed.images ? "image" : embed.media && embed.media.images ? "image" : "post";
-      if (media === "post") continue;
-      if (media === "image" && q.media && q.media !== "all") continue;
-      const handle = (p.author || {}).handle;
-      out.push(item({
-        id: "bluesky:" + (p.cid || p.uri), platform: "bluesky", media,
-        url: `https://bsky.app/profile/${handle}/post/${(p.uri || "").split("/").pop()}`,
-        media_url: embed.playlist || null,
-        author: handle, author_name: (p.author || {}).displayName,
-        author_url: `https://bsky.app/profile/${handle}`,
-        text: (p.record || {}).text || "",
-        hashtags: (((p.record || {}).facets || []).flatMap((f) => (f.features || [])
-          .filter((x) => x.$type && x.$type.includes("tag")).map((x) => x.tag))).join(" "),
-        posted_at: toTs((p.record || {}).createdAt),
-        likes: p.likeCount, reposts: p.repostCount, replies: p.replyCount,
-        thumbnail: embed.thumbnail || (embed.images && embed.images[0] && embed.images[0].thumb) || null,
-      }));
-    }
-    return out.slice(0, limit);
+    return (d.posts || []).map((p) => bskyItem(p, q)).filter(Boolean).slice(0, limit);
   },
 
   // YouTube search via a public Invidious instance (best-effort; instances come and go)
@@ -232,6 +179,121 @@ const SOURCES = {
     return parseFeed(xml, limit, q.media === "all");
   },
 };
+
+// ── shared mappers (used by search and by /account) ──────────────
+function mastoItems(statuses, q) {
+  const out = [];
+  for (const st of statuses || []) {
+    const s = st.reblog || st;
+    const acc = s.account || {};
+    for (const m of (s.media_attachments || [])) {
+      const kind = { video: "video", gifv: "video", image: "image" }[m.type] || "post";
+      if (kind === "image" && q.media && q.media !== "all") continue;
+      const meta = (m.meta || {}).original || {};
+      out.push(item({
+        id: "mastodon:" + s.id, platform: "mastodon", media: kind,
+        url: s.url || s.uri, media_url: m.url || m.remote_url,
+        author: acc.acct, author_name: acc.display_name, author_url: acc.url,
+        text: stripHtml(s.content) + (m.description ? "\n" + m.description : ""),
+        hashtags: (s.tags || []).map((x) => x.name).join(" "),
+        posted_at: toTs(s.created_at), duration: meta.duration,
+        width: meta.width, height: meta.height,
+        likes: s.favourites_count, reposts: s.reblogs_count, replies: s.replies_count,
+        thumbnail: m.preview_url,
+      }));
+    }
+  }
+  return out;
+}
+function bskyItem(p, q) {
+  const embed = p.embed || {};
+  const media = embed.$type && /video/.test(embed.$type) ? "video"
+    : embed.images ? "image" : embed.media && embed.media.images ? "image" : "post";
+  if (media === "post") return null;
+  if (media === "image" && q.media && q.media !== "all") return null;
+  const handle = (p.author || {}).handle;
+  return item({
+    id: "bluesky:" + (p.cid || p.uri), platform: "bluesky", media,
+    url: `https://bsky.app/profile/${handle}/post/${(p.uri || "").split("/").pop()}`,
+    media_url: embed.playlist || null,
+    author: handle, author_name: (p.author || {}).displayName,
+    author_url: `https://bsky.app/profile/${handle}`,
+    text: (p.record || {}).text || "",
+    hashtags: (((p.record || {}).facets || []).flatMap((f) => (f.features || [])
+      .filter((x) => x.$type && x.$type.includes("tag")).map((x) => x.tag))).join(" "),
+    posted_at: toTs((p.record || {}).createdAt),
+    likes: p.likeCount, reposts: p.repostCount, replies: p.replyCount,
+    thumbnail: embed.thumbnail || (embed.images && embed.images[0] && embed.images[0].thumb) || null,
+  });
+}
+function redditItem(o, q) {
+  const rv = ((o.secure_media || o.media || {}) || {}).reddit_video || {};
+  const isVid = o.is_video || /hosted:video|rich:video/.test(o.post_hint || "") || /(v\.redd|youtu|streamable|tiktok)/.test(o.domain || "");
+  const isImg = o.post_hint === "image" || imgExt.test(o.url || "");
+  if (!isVid && !(isImg && q.media === "all")) return null;
+  const prev = (((o.preview || {}).images || [{}])[0].source || {}).url || "";
+  return item({
+    id: "reddit:" + o.id, platform: "reddit", media: isVid ? "video" : "image",
+    url: "https://www.reddit.com" + o.permalink,
+    media_url: isVid ? null : o.url,
+    author: o.author, author_name: "r/" + o.subreddit,
+    text: [o.title, o.selftext].filter(Boolean).join("\n"), hashtags: tag(o.subreddit),
+    posted_at: toTs(o.created_utc), duration: rv.duration, width: rv.width, height: rv.height,
+    likes: o.score, replies: o.num_comments, thumbnail: prev.replace(/&amp;/g, "&") || null,
+  });
+}
+
+// ── /account: an account's own recent posts. q = { platform, handle, url, instance, limit, media } ──
+async function accountPosts(q, limit) {
+  const handle = (q.handle || "").replace(/^@/, "").trim();
+  const url = q.url || "";
+  const plat = (q.platform || "").toLowerCase();
+  if (!handle && !url) throw new Error("handle or url required");
+  if (plat === "mastodon") {
+    // acct may be "user@host"; else take the host from the profile URL; else the given/default instance
+    let [user, host] = handle.includes("@") ? handle.split("@") : [handle, null];
+    if (!host) host = (url.match(/^https?:\/\/([^/]+)/) || [])[1] || q.instance || "mastodon.social";
+    const acc = await getJSON(`https://${host}/api/v1/accounts/lookup?acct=${encodeURIComponent(user)}`);
+    const arr = await getJSON(`https://${host}/api/v1/accounts/${acc.id}/statuses?limit=${Math.min(limit, 40)}&only_media=true&exclude_replies=true&exclude_reblogs=true`);
+    return mastoItems(arr, q).slice(0, limit);
+  }
+  if (plat === "bluesky") {
+    const d = await getJSON(`https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(handle)}&limit=${Math.min(limit, 100)}&filter=posts_with_media`);
+    return (d.feed || []).map((f) => bskyItem(f.post || {}, q)).filter(Boolean).slice(0, limit);
+  }
+  if (plat === "reddit") {
+    const d = await getJSON(`https://www.reddit.com/user/${encodeURIComponent(handle)}/submitted.json?limit=${Math.min(limit, 100)}&sort=new`);
+    return ((d.data || {}).children || []).map((c) => redditItem(c.data || {}, q)).filter(Boolean).slice(0, limit);
+  }
+  if (plat === "lemmy") {
+    const inst = (url.match(/^https?:\/\/([^/]+)/) || [])[1] || q.instance || "lemmy.world";
+    const d = await getJSON(`https://${inst}/api/v3/user?username=${encodeURIComponent(handle)}&sort=New&limit=${Math.min(limit, 50)}`);
+    return (d.posts || []).map((row) => SOURCES_lemmyRow(row)).filter(Boolean).slice(0, limit);
+  }
+  if (plat === "youtube") {
+    // channel RSS needs the channel id; resolve a /@handle or /c/ URL by reading the page once
+    let cid = (url.match(/\/channel\/(UC[\w-]+)/) || [])[1];
+    if (!cid) {
+      const page = await getText(url || `https://www.youtube.com/@${encodeURIComponent(handle)}`, { "Accept-Language": "en" });
+      cid = (page.match(/"channelId":"(UC[\w-]+)"/) || page.match(/channel_id=(UC[\w-]+)/) || [])[1];
+    }
+    if (!cid) throw new Error("could not find that YouTube channel's id");
+    const xml = await getText(`https://www.youtube.com/feeds/videos.xml?channel_id=${cid}`);
+    return parseFeed(xml, limit, q.media === "all");
+  }
+  // anything else: if we were given a feed-ish URL, try it as RSS
+  if (/\.(xml|rss|atom)(\?|$)|\/feed/.test(url)) return parseFeed(await getText(url), limit, q.media === "all");
+  throw new Error(`loading more posts isn't supported for '${plat || "this site"}' from the Worker (the PC server can)`);
+}
+function SOURCES_lemmyRow(row) {
+  const po = row.post || {}, c = row.creator || {}, co = row.community || {};
+  const u = po.url || "";
+  const media = vidExt.test(u) || /\/videos\/|v\.redd|streamable|youtu/.test(u) ? "video" : imgExt.test(u) ? "image" : po.thumbnail_url ? "image" : "post";
+  if (media === "post") return null;
+  return item({ id: "lemmy:" + po.id, platform: "lemmy", media, url: po.ap_id || u, media_url: vidExt.test(u) || imgExt.test(u) ? u : null,
+    author: c.name, author_name: c.display_name, author_url: c.actor_id, text: [po.name, po.body].filter(Boolean).join("\n"),
+    hashtags: tag(co.name), posted_at: toTs(po.published), likes: (row.counts || {}).score, replies: (row.counts || {}).comments, thumbnail: po.thumbnail_url || null });
+}
 
 function item(o) {
   const m = o.media || "video";

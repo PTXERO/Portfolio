@@ -608,3 +608,13 @@ class TestWordWeb(Base):
         self.assertFalse([n for n in g["nodes"] if n["kind"] == "word"])
         self.assertEqual(g["focus"], "#photo")
         self.assertIn("nodes", people.handle(self.v, "GET", ["graph"], {}, {}))     # legacy account graph still served
+
+
+class TestPeopleMore(Base):
+    def test_more_submits_a_collect_job_on_the_profile(self):
+        from rv import people
+        self.add(tweet("1", "sunset #film", author="ana", tags=["film"]))
+        j = people.handle(self.v, "POST", ["people", "ana|x", "more"], {}, {"limit": 10})
+        self.assertEqual(j.get("kind"), "collect")
+        self.assertIn("ana", j.get("title", ""))
+        self.assertEqual(people.handle(self.v, "POST", ["people", "nobody|x", "more"], {}, {}).get("error"), "no account")

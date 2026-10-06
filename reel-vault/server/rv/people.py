@@ -426,6 +426,19 @@ def handle(v, method, parts, params, body):
     pid = parts[1] if len(parts) > 1 else None
     if not pid:
         return list_people(v, params.get("topic") or None, params.get("q") or "", params.get("sort") or "")
+    if len(parts) > 2 and parts[2] == "more" and method == "POST":
+        # load more of this account's own posts (no rating needed): a collect job on its profile URL,
+        # which gallery-dl / yt-dlp know how to walk for X, YouTube, Mastodon, Bluesky, Reddit, …
+        by, *_ = _build(v)
+        a = by.get(pid)
+        if not a:
+            return {"error": "no account"}
+        url = a.author_url or next((it.get("url") for it in a.items if it.get("url")), None)
+        if not url:
+            return {"error": "no profile link known for this account"}
+        limit = max(1, min(int((body or {}).get("limit") or 50), 500))
+        return v.submit("collect", {"urls": [url], "limit": limit, "media": (body or {}).get("media") or "all",
+                                    "title": f"more from @{a.author}"}).to_dict()
     if method == "GET":
         return profile(v, pid)
     if method == "PATCH":

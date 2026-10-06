@@ -47,3 +47,11 @@ links where sites expose them — not downloaded/merged video files. For the ful
 `GET /health` · `GET /search?source=<s>&q=<query>&limit=30[&instance=…][&media=all]`
 · `GET /resolve?url=…` (best-effort direct media URL) · `GET /fetch?url=…` (CORS proxy).
 All responses include permissive CORS headers so the hosted app can call it.
+
+## Updating your Worker
+
+The app and the Worker evolve together. When the app gains a feature that needs the
+Worker (the `/account` endpoint behind **LOAD MORE POSTS** on a profile arrived in
+Worker 1.1), redeploy: paste the new `searchnet-worker.js` over the old one in the
+Cloudflare dashboard, or run `wrangler deploy` again. `GET /health` shows the version
+your Worker is running.
