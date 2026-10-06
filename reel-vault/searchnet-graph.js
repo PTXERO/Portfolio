@@ -193,6 +193,8 @@
     return { kind: 'word', key: txt, phrase: txt.includes(' ') };
   }
   const WORD_MIN = 3;
+  // words that are about the platform, not the subject
+  const BOILER = new Set('video videos watch watching subscribe subscribed follow following like likes liked share shares comment comments channel link links bio click clicks free download full official episode part parts live stream streaming streamed check today tonight tomorrow yesterday week weekend month year years day days hours minutes time new news music song songs sound sounds audio youtube tiktok instagram twitter facebook reddit mastodon bluesky shorts short reel reels post posts posted thread update updates premiere viral trending credit credits source sources original repost reposted http https www com'.split(' '));
   async function wordGraph(opts = {}) {
     const { by, idf, hDF, wDF } = await build();
     const kinds = new Set((opts.kinds || 'account,hashtag,word').split(',').filter(Boolean));
@@ -208,7 +210,14 @@
     // they'd bridge every community into one blob, so they're left out of the web
     const postDF = {}; let nPosts = 0;
     for (const it of items) { if (!it.author) continue; nPosts++; new Set(tokens(it.text).filter((w) => w.length > WORD_MIN && !STOP.has(w))).forEach((w) => postDF[w] = (postDF[w] || 0) + 1); }
-    const generic = (w) => nPosts >= 20 && postDF[w] / nPosts > 0.35;
+    // …but never the word you centred on, and never a word that is also used as a hashtag (then it's a subject, not filler)
+    const tagWords = new Set(); for (const it of items) hashSet(it).forEach((h) => tagWords.add(h));
+    const focusWords = new Set(focus && focus.kind === 'word' ? focus.key.split(/\s+/) : []);
+    // platform boilerplate is named outright; the statistical net only catches words used by nearly EVERY
+    // account AND in most posts (a single-topic library's own key words legitimately run high)
+    const acctDF = {}; for (const a of by.values()) { const seen = new Set(); a.items.forEach((it) => tokens(it.text).forEach((w) => seen.add(w))); seen.forEach((w) => acctDF[w] = (acctDF[w] || 0) + 1); }
+    const nAcc = Math.max(1, by.size);
+    const generic = (w) => !focusWords.has(w) && !tagWords.has(w) && (BOILER.has(w) || (nPosts >= 20 && nAcc >= 5 && postDF[w] / nPosts > 0.6 && acctDF[w] / nAcc > 0.8));
     for (const it of items) {
       if (!it.author) continue;
       const A = acctId(it); kindOf[A] = 'account';
@@ -222,8 +231,10 @@
       bump(A, 1);
       // co-occurrence inside the post (cheap: tags×tags, tags×words; words×words only for short posts)
       for (let i = 0; i < tags.length; i++) for (let j = i + 1; j < tags.length; j++) link(tags[i], tags[j], 1.2);
-      tags.forEach((t) => words.forEach((w) => link(t, w, 0.5)));
-      if (words.length <= 12) for (let i = 0; i < words.length; i++) for (let j = i + 1; j < words.length; j++) link(words[i], words[j], 0.3);
+      // co-occurrence among the post's 12 most distinctive words (long descriptions included), and tags×words
+      const wTop = words.slice(0, 30);   // text order: titles/descriptions lead with their key terms (rarest-first dropped common topic words)
+      tags.forEach((t) => wTop.forEach((w) => link(t, w, 0.5)));
+      for (let i = 0; i < wTop.length; i++) for (let j = i + 1; j < wTop.length; j++) link(wTop[i], wTop[j], 0.5);
     }
     // account↔account edges from the existing shared-content model
     for (const a of by.values()) for (const e of edgesFor(a, by, idf, hDF, wDF).slice(0, 6)) {
@@ -246,7 +257,12 @@
     }
     const idset = new Set(ids);
     const edges = []; for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (idset.has(a) && idset.has(b)) edges.push({ a, b, w: +edgeW[k].toFixed(2) }); }
-    edges.sort((p, q) => q.w - p.w); const E = edges.slice(0, cap * 4);
+    // keep the strongest links overall PLUS every node's own strongest few, so nothing is left dangling
+    edges.sort((p, q) => q.w - p.w);
+    const keep = new Set(edges.slice(0, cap * 4)); const per = {};
+    for (const e of edges) { (per[e.a] = per[e.a] || []).push(e); (per[e.b] = per[e.b] || []).push(e); }
+    for (const id in per) per[id].slice(0, 4).forEach((e) => keep.add(e));
+    const E = [...keep];
     const deg = {}; E.forEach((e) => { deg[e.a] = (deg[e.a] || 0) + e.w; deg[e.b] = (deg[e.b] || 0) + e.w; });
     const meta = await allMeta();
     const nodes = ids.map((id) => { const kind = kindOf[id] || 'word'; const label = kind === 'account' ? id.slice(1).split('|')[0] : kind === 'hashtag' ? id : id.slice(2);

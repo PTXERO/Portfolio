@@ -2118,7 +2118,9 @@ function drawWeb(box, graph){
   const draw = () => {
     project(); ctx.clearRect(0, 0, st.W, st.H);
     const P = st.proj, hv = st.hover, fi = focus ? idx[focus] : -1, hi = hv >= 0 ? hv : fi;
-    const lit = new Set(); if (hi >= 0){ lit.add(hi); nb[hi].forEach(([j]) => lit.add(j)); }
+    // hover DIMS everything else; the centred node only HIGHLIGHTS itself and its links (the rest stays readable)
+    const lit = new Set(); if (hv >= 0){ lit.add(hv); nb[hv].forEach(([j]) => lit.add(j)); }
+    const fl = new Set(); if (fi >= 0){ fl.add(fi); nb[fi].forEach(([j]) => fl.add(j)); }
     // the map's skeleton: faint rings (inner = more connected) and each community's name on its arc
     const ringPt = (a, r) => { const sc = Math.min(st.W, st.H) / 440 * st.zoom; const x = Math.cos(a) * r, y = Math.sin(a) * r; if (st.mode === '2d') return [st.W/2 + (x + st.panX) * sc, st.H/2 + (y + st.panY) * sc, 1]; const cy = Math.cos(st.ry), sy = Math.sin(st.ry), cx = Math.cos(st.rx), sx = Math.sin(st.rx), F = 700; const x1 = x * cy, z1 = -x * sy, y1 = y * cx - z1 * sx, z2 = y * sx + z1 * cx; const p = F / (F + z2); return [st.W/2 + x1 * p * sc, st.H/2 + y1 * p * sc, p]; };
     ctx.lineWidth = 1; ctx.setLineDash([3, 6]);
@@ -2130,19 +2132,20 @@ function drawWeb(box, graph){
     // edges: each node's strongest links only (keeps it legible); all of a hovered node's links
     ctx.lineCap = 'round';
     const drawn = new Set();
-    nodes.forEach((n, i) => { const lim = hi === i ? nb[i].length : st.mode === '3d' ? 5 : (st.zoom > 1.6 ? 4 : 2); nb[i].slice(0, lim).forEach(([j, w]) => { const key = i < j ? i + ':' + j : j + ':' + i; if (drawn.has(key)) return; drawn.add(key); const a = P[i], b = P[j]; const on = hi >= 0 && (i === hi || j === hi); if (hi >= 0 && !on) return; const depth = (a.p + b.p) / 2; ctx.globalAlpha = on ? .85 : .10 + .25 * depth; const ci = commOf[i] === commOf[j] ? commOf[i] : -1; ctx.strokeStyle = on ? '#e2e2ea' : st.color === 'kind' ? '#5a5a70' : ci >= 0 ? COMM[ci % COMM.length] : '#5a5a70'; ctx.lineWidth = (on ? 1.6 : .6 + 1.2 * Math.min(1, w / 6)) * depth; ctx.beginPath(); ctx.moveTo(a.X, a.Y); ctx.lineTo(b.X, b.Y); ctx.stroke(); }); });
+    nodes.forEach((n, i) => { const lim = (i === hv || i === fi) ? nb[i].length : st.mode === '3d' ? 5 : (st.zoom > 1.6 ? 4 : 2); nb[i].slice(0, lim).forEach(([j, w]) => { const key = i < j ? i + ':' + j : j + ':' + i; if (drawn.has(key)) return; drawn.add(key); const a = P[i], b = P[j]; const hovered = hv >= 0 && (i === hv || j === hv); if (hv >= 0 && !hovered) return; const on = hovered || (fi >= 0 && (i === fi || j === fi)); const depth = (a.p + b.p) / 2; ctx.globalAlpha = on ? .85 : .10 + .25 * depth; const ci = commOf[i] === commOf[j] ? commOf[i] : -1; ctx.strokeStyle = on ? '#e2e2ea' : st.color === 'kind' ? '#5a5a70' : ci >= 0 ? COMM[ci % COMM.length] : '#5a5a70'; ctx.lineWidth = (on ? 1.6 : .6 + 1.2 * Math.min(1, w / 6)) * depth; ctx.beginPath(); ctx.moveTo(a.X, a.Y); ctx.lineTo(b.X, b.Y); ctx.stroke(); }); });
     // nodes, far first
     const ord = P.map((q, i) => i).sort((a, b) => P[b].z - P[a].z);
     const labels = [];
-    ord.forEach(i => { const q = P[i], n = q.n, col = colorOf(i), r = n.r * q.p * Math.sqrt(st.zoom), dim = hi >= 0 && !lit.has(i);
+    ord.forEach(i => { const q = P[i], n = q.n, col = colorOf(i), r = n.r * q.p * Math.sqrt(st.zoom), dim = hv >= 0 && !lit.has(i);
       ctx.globalAlpha = dim ? .18 : .55 + .45 * q.p;
       shape(q, r, n.kind); ctx.fillStyle = n.kind === 'word' ? '#0d0d12' : col; ctx.fill(); ctx.lineWidth = i === hi || i === fi ? 2.5 : 1.2; ctx.strokeStyle = i === hi || i === fi ? '#fff' : col; ctx.stroke();
-      if (!dim && (r >= 7 || i === hi || i === fi || rankByDeg[i] < Math.max(6, total * .12))) labels.push({ i, q, r, pri: (i === hi || i === fi ? 1e9 : 0) + n.n * 10 + deg[i] });
+      if (!dim && (r >= 7 || i === hi || fl.has(i) || rankByDeg[i] < Math.max(6, total * .12))) labels.push({ i, q, r, pri: (i === hi || i === fi ? 1e9 : fl.has(i) ? 1e6 : 0) + n.n * 10 + deg[i] });
     });
     // labels: by priority, skip any that would overlap one already placed
     labels.sort((a, b) => b.pri - a.pri); const placed = [];
     ctx.textAlign = 'center';
     for (const L of labels){ const n = L.q.n, txt = (n.kind === 'account' ? '@' : '') + (n.label.length > 18 ? n.label.slice(0, 17) + '…' : n.label); const fs = Math.round(Math.min(13, 9 + 3 * L.q.p)); ctx.font = `${fs}px 'Share Tech Mono', monospace`; const w = ctx.measureText(txt).width + 8, h = fs + 4, x = L.q.X, y = L.q.Y + L.r + 4; if (placed.some(b => Math.abs(b.x - x) < (b.w + w) / 2 && Math.abs(b.y - y) < h)) continue; placed.push({ x, y, w }); ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(7,7,10,.72)'; ctx.fillRect(x - w / 2, y, w, h); ctx.fillStyle = L.i === hi || L.i === fi ? '#fff' : '#c9c9d6'; ctx.fillText(txt, x, y + fs); if (placed.length > 70) break; }
+    box.dataset.labels = placed.length; box.dataset.edges = drawn.size;   // (read by tests / debugging)
     // hover card
     if (hv >= 0){ const q = P[hv], n = q.n; const lines = [(n.kind === 'account' ? '@' : n.kind === 'hashtag' ? '' : '"') + n.label + (n.kind === 'word' ? '"' : ''), `${n.n} post${n.n === 1 ? '' : 's'} · ${nb[hv].length} link${nb[hv].length === 1 ? '' : 's'} · ${comms[commOf[hv]].name}`]; ctx.font = `12px 'Share Tech Mono', monospace`; const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16, x = Math.min(st.W - w - 6, Math.max(6, q.X + 14)), y = Math.max(6, q.Y - 44); ctx.globalAlpha = 1; ctx.fillStyle = '#15151b'; ctx.fillRect(x, y, w, 40); ctx.strokeStyle = colorOf(hv); ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, w - 1, 39); ctx.textAlign = 'left'; ctx.fillStyle = '#e2e2ea'; ctx.fillText(lines[0], x + 8, y + 16); ctx.fillStyle = '#9a9ab0'; ctx.fillText(lines[1], x + 8, y + 32); }
     ctx.globalAlpha = 1;

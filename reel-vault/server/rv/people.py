@@ -291,6 +291,14 @@ def list_people(v, topic=None, q="", sort=""):
 
 # ── the WORD web: @accounts + #hashtags + words/"phrases" as one graph ──
 _WORD_MIN = 3
+# words that are about the platform, not the subject
+BOILER = set(("video videos watch watching subscribe subscribed follow following like likes liked share shares "
+              "comment comments channel link links bio click clicks free download full official episode part parts "
+              "live stream streaming streamed check today tonight tomorrow yesterday week weekend month year years "
+              "day days hours minutes time new news music song songs sound sounds audio youtube tiktok instagram "
+              "twitter facebook reddit mastodon bluesky shorts short reel reels post posts posted thread update "
+              "updates premiere viral trending credit credits source sources original repost reposted http https "
+              "www com").split())
 
 
 def _parse_focus(f):
@@ -328,13 +336,25 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
         for it in a.items:
             n_posts += 1
             post_df.update({w for w in _tokens(it.get("text")) if len(w) > _WORD_MIN and w not in STOP})
-    generic = lambda w: n_posts >= 20 and post_df[w] / n_posts > 0.35  # noqa: E731
+    # …but never the word the user centred on, nor a word also used as a hashtag (a subject, not filler)
+    tag_words = {h for a in by.values() for it in a.items for h in _hashes(it)}
+    focus_words = set(fz["key"].split()) if fz and fz["kind"] == "word" else set()
+    # platform boilerplate is named outright; the statistical net only catches words used by nearly EVERY
+    # account AND in most posts (a single-topic library's own key words legitimately run high)
+    acct_df = Counter()
+    for a in by.values():
+        acct_df.update({w for it in a.items for w in _tokens(it.get("text"))})
+    n_acc = max(1, len(by))
+    generic = lambda w: (w not in focus_words and w not in tag_words and  # noqa: E731
+                         (w in BOILER or (n_posts >= 20 and n_acc >= 5 and post_df[w] / n_posts > 0.6
+                                          and acct_df[w] / n_acc > 0.8)))
     for a in by.values():
         aid = f"@{a.author.lower()}|{a.platform}"
         for it in a.items:
             tags = ["#" + h for h in _hashes(it)]
             words = ["w:" + w for w in {w for w in _tokens(it.get("text"))
                                         if len(w) > _WORD_MIN and w not in STOP and not generic(w)}]
+            words_set = set(words)
             if fz and fz["kind"] == "word" and fz.get("phrase") and fz["key"] in str(it.get("text") or "").lower():
                 words.append("w:" + fz["key"])
             for t in tags:
@@ -352,13 +372,22 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
             for i in range(len(tags)):
                 for j in range(i + 1, len(tags)):
                     link(tags[i], tags[j], 1.2)
+            # co-occurrence among the post's 12 most distinctive words (long descriptions included), and tags×words
+            # text order: titles/descriptions lead with their key terms (rarest-first dropped common topic words)
+            seen_w, w_top = set(), []
+            for w in _tokens(it.get("text")):
+                k = "w:" + w
+                if k in words_set and k not in seen_w:
+                    seen_w.add(k)
+                    w_top.append(k)
+                    if len(w_top) >= 30:
+                        break
             for t in tags:
-                for w in words:
+                for w in w_top:
                     link(t, w, 0.5)
-            if len(words) <= 12:
-                for i in range(len(words)):
-                    for j in range(i + 1, len(words)):
-                        link(words[i], words[j], 0.3)
+            for i in range(len(w_top)):
+                for j in range(i + 1, len(w_top)):
+                    link(w_top[i], w_top[j], 0.5)
         for b in by.values():
             if b.id == a.id:
                 continue
@@ -397,8 +426,18 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
             if kind in kinds:
                 ids += sorted((k for k in node_w if kind_of.get(k) == kind), key=lambda k: -node_w[k])[:per[kind]]
     idset = set(ids)
-    edges = sorted(({"a": a, "b": b, "w": round(w, 2)} for (a, b), w in edge_w.items() if a in idset and b in idset),
-                   key=lambda e: -e["w"])[:cap * 4]
+    all_edges = sorted(({"a": a, "b": b, "w": round(w, 2)} for (a, b), w in edge_w.items() if a in idset and b in idset),
+                       key=lambda e: -e["w"])
+    # keep the strongest links overall PLUS every node's own strongest few, so nothing is left dangling
+    keep = {id(e): e for e in all_edges[:cap * 4]}
+    per = defaultdict(list)
+    for e in all_edges:
+        per[e["a"]].append(e)
+        per[e["b"]].append(e)
+    for lst in per.values():
+        for e in lst[:4]:
+            keep[id(e)] = e
+    edges = list(keep.values())
     deg = Counter()
     for e in edges:
         deg[e["a"]] += e["w"]
