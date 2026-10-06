@@ -1,0 +1,10 @@
+# Deploy with:  npm i -g wrangler  &&  wrangler deploy
+# (or paste searchnet-worker.js into the Cloudflare dashboard: Workers & Pages → Create)
+name = "searchnet"
+main = "searchnet-worker.js"
+compatibility_date = "2024-09-01"
+
+# Protect your Worker so only you can use its quota: set a secret, then put the
+# same value in the app (SOURCES → your Worker).  Run:
+#   wrangler secret put SEARCHNET_SECRET
+# (or Dashboard → your Worker → Settings → Variables and Secrets → add SEARCHNET_SECRET)
