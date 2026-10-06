@@ -60,6 +60,15 @@ const SITE = {
       url:    './ascii-render/',
       status: 'wip',
     },
+    {
+      id:     'reel-vault',
+      title:  'REEL//VAULT',
+      sub:    'v1.0',
+      desc:   'Mass-search X (and ~1000 other sites) for videos, then sort, filter and save them. Searches captions, similar words, speech and on-screen text.',
+      tags:   ['video', 'search', 'python'],
+      url:    './reel-vault/',
+      status: 'wip',
+    },
     // Project Template:
     // {
     //   id:     'my-project',

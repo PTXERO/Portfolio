@@ -1,0 +1,3 @@
+# REEL//VAULT local library (database + downloaded videos)
+reel-vault/data/
+__pycache__/
