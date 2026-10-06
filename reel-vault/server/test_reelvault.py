@@ -515,3 +515,57 @@ class TestPipeline(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPeople(Base):
+    """WEB view on the PC server: profiles + connection web from collected public posts."""
+
+    def _seed(self):
+        self.add(tweet("1", "sunset timelapse #photo #film", author="ana", tags=["photo", "film"]),
+                 tweet("2", "another roll #film #analog", author="ana", tags=["film", "analog"]),
+                 tweet("3", "my photo set #photo #film", author="ben", tags=["photo", "film"]),
+                 tweet("4", "thanks @ana for the tips #analog", author="cat", tags=["analog"]),
+                 tweet("5", "unrelated cooking video #pasta", author="dan", tags=["pasta"]))
+
+    def test_list_profile_graph(self):
+        from rv import people
+        self._seed()
+        lst = people.list_people(self.v)
+        self.assertEqual(lst["total"], 4)
+        self.assertEqual(lst["people"][0]["author"], "ana")          # most posts first
+        p = people.profile(self.v, "ana|x")
+        self.assertEqual(p["n"], 2)
+        self.assertIn("film", [h["value"] for h in p["hashtags"]])
+        conn = {c["author"]: c for c in p["connected"]}
+        self.assertIn("ben", conn)                                    # shares #photo #film
+        self.assertIn("cat", conn)                                    # mentions @ana
+        self.assertTrue(any(w["kind"] == "mentions" for w in conn["cat"]["why"]))
+        self.assertNotIn("dan", conn)                                 # nothing in common
+        # nothing sensitive is ever inferred: no such keys exist on a profile
+        self.assertFalse([k for k in p if any(s in k.lower() for s in
+                                              ("gender", "sexual", "politic", "religion", "ethnic", "race"))])
+        g = people.graph(self.v)
+        self.assertEqual(g["shown"], 4)
+        pairs = {frozenset((e["a"], e["b"])) for e in g["edges"]}
+        self.assertIn(frozenset(("ana|x", "ben|x")), pairs)
+        self.assertIn(frozenset(("ana|x", "cat|x")), pairs)
+
+    def test_meta_is_user_entered_and_local(self):
+        from rv import people
+        self._seed()
+        m = people.set_meta(self.v, "ana|x", {"attrs": ["favourite", "film"], "notes": "met at the lab"})
+        self.assertEqual(m["attrs"], ["favourite", "film"])
+        self.assertTrue((self.tmp / "people.json").exists())          # stays on this machine
+        self.assertEqual(people.profile(self.v, "ana|x")["meta"]["notes"], "met at the lab")
+        # hand-added links show in the graph even with nothing in common
+        people.set_meta(self.v, "ana|x", {"links": ["dan|x"]})
+        g = people.graph(self.v)
+        self.assertTrue(any(e.get("you") and {e["a"], e["b"]} == {"ana|x", "dan|x"} for e in g["edges"]))
+
+    def test_router(self):
+        from rv import people
+        self._seed()
+        self.assertEqual(people.handle(self.v, "GET", ["people"], {}, {})["total"], 4)
+        self.assertEqual(people.handle(self.v, "GET", ["people", "ana|x"], {}, {})["author"], "ana")
+        self.assertIn("nodes", people.handle(self.v, "GET", ["graph"], {"max": "10"}, {}))
+        self.assertEqual(people.handle(self.v, "PATCH", ["people", "ana|x"], {}, {"notes": "x"})["notes"], "x")

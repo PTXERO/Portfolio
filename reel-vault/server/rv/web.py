@@ -18,6 +18,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from . import people
 from . import sources as S
 from .db import norm_tags
 from .related import related
@@ -404,6 +405,9 @@ class Handler(BaseHTTPRequestHandler):
 
         if route == "search":
             return ok(search(v.db, v.store, params, semantic=v.semantic_scores))
+
+        if route in ("people", "graph"):          # WEB view: account profiles + connection web
+            return ok(people.handle(v, method, parts, params, self._body() if method == "PATCH" else {}))
 
         if route == "items" and arg:
             if sub == "related":

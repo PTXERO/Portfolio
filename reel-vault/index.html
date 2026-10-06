@@ -208,6 +208,13 @@ details.more[open] summary{color:var(--acc)}
 .why span b{color:var(--acc);font-weight:normal}
 .ractions{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;padding:10px 14px 14px;align-items:center}
 .ractions .big{min-height:60px;border-radius:16px;font-size:28px;border:1px solid var(--b2);background:var(--panel)}
+/* the big vote buttons: emoji on touch screens, the hotkey on desktop */
+.ractions .big .key{display:none;flex-direction:column;align-items:center;gap:2px;line-height:1}
+.ractions .big .key kbd{font-family:var(--fmono);font-size:24px;min-width:40px;padding:4px 10px;border:1px solid var(--b2);border-bottom-width:3px;border-radius:6px;background:var(--panel2);color:var(--txt)}
+.ractions .big.no .key kbd{border-color:rgba(255,77,109,.5);color:var(--bad)}
+.ractions .big.yes .key kbd{border-color:rgba(68,255,136,.5);color:var(--good)}
+.ractions .big .key small{font-family:var(--fmono);font-size:10px;letter-spacing:.15em;color:var(--dim)}
+@media(min-width:1024px) and (hover:hover){.ractions .big .emo{display:none}.ractions .big .key{display:flex}}
 .ractions .big:active{transform:scale(.95)}
 .ractions .big.no{border-color:rgba(255,77,109,.45)}
 .ractions .big.yes{border-color:rgba(68,255,136,.45)}
@@ -1065,9 +1072,9 @@ function showCard(){
         ${it.why?.lower && it.why.lower.length ? `<div class="whynot"><b>you tend to 👎:</b>${it.why.lower.map(w => `<span>${esc(w)}</span>`).join('')}</div>` : ''}
       </div>
       <div class="ractions">
-        <button class="big no" id="vNo" aria-label="Not relevant">👎</button>
-        <div class="mid"><button class="btn sm" id="vSkip">SKIP</button><button class="btn sm" id="vOpen">OPEN</button></div>
-        <button class="big yes" id="vYes" aria-label="Relevant">👍</button>
+        <button class="big no" id="vNo" aria-label="Not relevant (comma key)" title="Not relevant — press ,"><span class="emo">👎</span><span class="key"><kbd>,</kbd><small>NOPE</small></span></button>
+        <div class="mid"><button class="btn sm" id="vSkip" title="Skip — press ↓">SKIP</button><button class="btn sm" id="vOpen">OPEN</button></div>
+        <button class="big yes" id="vYes" aria-label="Relevant (period key)" title="Relevant — press ."><span class="emo">👍</span><span class="key"><kbd>.</kbd><small>YES</small></span></button>
       </div>
     </div></div>
     <div class="deckbar"><span class="grow">${fmtN(T.counts.unrated)} to review · learned from ${fmtN(T.counts.pos + T.counts.neg)} votes</span>${lastVote ? '<button class="btn sm" id="vUndo">↺ UNDO</button>' : ''}</div>`;
@@ -1743,10 +1750,6 @@ async function renderNetwork(){
     web.innerHTML = '<div class="empty">The web is built from the accounts you collect. ' + (LOCAL ? 'Add a Worker in <a href="#sources">SOURCES</a> and run a topic.' : '<a href="#setup">Connect a server</a> or turn on browser mode.') + '</div>';
     listEl.innerHTML = ''; return;
   }
-  if (LIVE && !LOCAL){
-    web.innerHTML = '<div class="empty">The connection web runs in <b>browser mode</b> today. On the PC server it\'s coming soon — for now, switch to browser mode (CONNECT → Use this browser only) to explore account profiles and how they link.</div>';
-    listEl.innerHTML = ''; return;
-  }
   // topic filter options (once)
   const tsel = $('#nwTopic');
   if (tsel.options.length <= 1){ try{ const ts = (await api('/api/topics')).topics || []; ts.forEach(t => { const o = document.createElement('option'); o.value = t.id; o.textContent = t.name; tsel.appendChild(o); }); }catch(e){} }
@@ -2191,8 +2194,16 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) poll
 document.addEventListener('keydown', e => {
   if ($('#viewer').classList.contains('on')){ if (e.key === 'Escape') closeViewer(); if (e.key === 'ArrowRight') vstep(1); if (e.key === 'ArrowLeft') vstep(-1); return; }
   if ($('#sheet').classList.contains('on')){ if (e.key === 'Escape') closeSheet(); return; }
-  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
-  if (route.view === 'topic' && (route.seg || 'review') === 'review' && deck.length){ if (e.key === 'ArrowRight') vote(1); if (e.key === 'ArrowLeft') vote(-1); if (e.key === 'ArrowDown') $('#vSkip')?.click(); }
+  // never steal keys from a text box (or anything editable)
+  const ae = document.activeElement;
+  if (ae && (/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) || ae.isContentEditable)) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // review hotkeys: , = 👎   . = 👍   ↓ = skip   (arrows are left to the video player for scrubbing)
+  if (route.view === 'topic' && (route.seg || 'review') === 'review' && deck.length){
+    if (e.key === '.'){ e.preventDefault(); vote(1); }
+    else if (e.key === ','){ e.preventDefault(); vote(-1); }
+    else if (e.key === 'ArrowDown'){ e.preventDefault(); $('#vSkip')?.click(); }
+  }
   if (e.key === '/'){ e.preventDefault(); go('library'); setTimeout(() => $('#q').focus(), 50); }
 });
 (async function init(){
