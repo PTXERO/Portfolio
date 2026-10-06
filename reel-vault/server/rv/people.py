@@ -373,27 +373,49 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80):
                 for j in range(i + 1, len(tags)):
                     link(tags[i], tags[j], 1.2)
             # co-occurrence among the post's 12 most distinctive words (long descriptions included), and tags×words
-            # text order: titles/descriptions lead with their key terms (rarest-first dropped common topic words)
-            seen_w, w_top = set(), []
-            for w in _tokens(it.get("text")):
+            # co-occurrence the way text-network tools do it: terms inside a sliding 4-word window link
+            # strongly, terms merely in the same post link weakly (first 40 distinctive terms, text order)
+            seen_w, seq = set(), []
+            for pos, w in enumerate(_tokens(it.get("text"))):
                 k = "w:" + w
                 if k in words_set and k not in seen_w:
                     seen_w.add(k)
-                    w_top.append(k)
-                    if len(w_top) >= 30:
+                    seq.append((k, pos))
+                    if len(seq) >= 40:
                         break
             for t in tags:
-                for w in w_top:
-                    link(t, w, 0.5)
-            for i in range(len(w_top)):
-                for j in range(i + 1, len(w_top)):
-                    link(w_top[i], w_top[j], 0.5)
+                for k, _ in seq:
+                    link(t, k, 0.5)
+            for i in range(len(seq)):
+                for j in range(i + 1, len(seq)):
+                    link(seq[i][0], seq[j][0], 1 if seq[j][1] - seq[i][1] <= 4 else 0.25)
         for b in by.values():
             if b.id == a.id:
                 continue
             w, hn, wn, ment = _edge(a, b, idf, h_df, w_df)
             if w > 0:
                 link(aid, f"@{b.author.lower()}|{b.platform}", w * 0.5)
+
+    # ── term selection (VOSviewer): minimum occurrences, then keep the most *relevant* 60% ──
+    min_occ = max(2, round(n_posts * 0.01))
+    is_focus_word = lambda k: bool(fz and fz["kind"] == "word" and k == "w:" + fz["key"])  # noqa: E731
+    word_ids = [k for k, kind in kind_of.items() if kind == "word"]
+    scored = sorted(((k, node_n[k] * math.log((n_acc + 1) / (acct_df[k[2:]] + 1)))
+                     for k in word_ids if node_n[k] >= min_occ or is_focus_word(k)), key=lambda p: -p[1])
+    keep_w = {k for k, _ in scored[:max(10, math.ceil(len(scored) * 0.6))]} | {k for k, _ in scored if is_focus_word(k)}
+    for k in word_ids:
+        if k not in keep_w:
+            kind_of.pop(k, None)
+            node_w.pop(k, None)
+    for (a, b) in list(edge_w):
+        if a not in kind_of or b not in kind_of:
+            del edge_w[(a, b)]
+    # ── edge weights (association strength): co-occurrence vs. what chance predicts from each term ──
+    for (a, b), co in list(edge_w.items()):
+        if kind_of.get(a) == "account" or kind_of.get(b) == "account":
+            continue
+        assoc = n_posts * co / (max(1, node_n[a]) * max(1, node_n[b]))
+        edge_w[(a, b)] = math.sqrt(co) * math.log(1 + assoc)
 
     def nb(nid):
         out = [(y if x == nid else x, w) for (x, y), w in edge_w.items() if nid in (x, y)]

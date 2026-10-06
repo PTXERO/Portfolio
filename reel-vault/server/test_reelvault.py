@@ -618,3 +618,22 @@ class TestPeopleMore(Base):
         self.assertEqual(j.get("kind"), "collect")
         self.assertIn("ana", j.get("title", ""))
         self.assertEqual(people.handle(self.v, "POST", ["people", "nobody|x", "more"], {}, {}).get("error"), "no account")
+
+
+class TestWordWebWeights(Base):
+    """Text-network standards: window co-occurrence, min occurrences, relevance cut, association strength."""
+
+    def test_window_and_association(self):
+        from rv import people
+        # "canopy roads" are adjacent in every post; "canopy" and "kayaking" are far apart in the same posts
+        for i in range(24):
+            self.add(tweet(str(i), "Tallahassee canopy roads trip; later some kayaking on the springs #florida",
+                           author="acct%d" % (i % 6), tags=["florida"]))
+        self.add(tweet("x1", "one-off word zyxw here #florida", author="acct0", tags=["florida"]))
+        g = people.word_graph(self.v, focus="canopy")
+        w = {frozenset((e["a"], e["b"])): e["w"] for e in g["edges"]}
+        near = w.get(frozenset(("w:canopy", "w:roads")), 0)
+        far = w.get(frozenset(("w:canopy", "w:kayaking")), 0)
+        self.assertGreater(near, far)                                   # window proximity counts more
+        self.assertNotIn("w:zyxw", {n["id"] for n in g["nodes"]})       # below the minimum occurrences
+        self.assertEqual(g["focus"], "w:canopy")

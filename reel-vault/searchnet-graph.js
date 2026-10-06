@@ -232,15 +232,31 @@
       // co-occurrence inside the post (cheap: tags×tags, tags×words; words×words only for short posts)
       for (let i = 0; i < tags.length; i++) for (let j = i + 1; j < tags.length; j++) link(tags[i], tags[j], 1.2);
       // co-occurrence among the post's 12 most distinctive words (long descriptions included), and tags×words
-      const wTop = words.slice(0, 30);   // text order: titles/descriptions lead with their key terms (rarest-first dropped common topic words)
+      // co-occurrence the way text-network tools do it: terms inside a sliding 4-word window link strongly,
+      // terms merely in the same post link weakly (first 40 distinctive terms, text order)
+      const seq = []; { const seen = new Set(); let pos = 0; for (const w of tokens(it.text)) { pos++; const k = 'w:' + w; if (kindOf[k] === 'word' && !seen.has(k)) { seen.add(k); seq.push([k, pos]); if (seq.length >= 40) break; } } }
+      const wTop = seq.map((x) => x[0]);
       tags.forEach((t) => wTop.forEach((w) => link(t, w, 0.5)));
-      for (let i = 0; i < wTop.length; i++) for (let j = i + 1; j < wTop.length; j++) link(wTop[i], wTop[j], 0.5);
+      for (let i = 0; i < seq.length; i++) for (let j = i + 1; j < seq.length; j++) link(seq[i][0], seq[j][0], seq[j][1] - seq[i][1] <= 4 ? 1 : 0.25);
     }
     // account↔account edges from the existing shared-content model
     for (const a of by.values()) for (const e of edgesFor(a, by, idf, hDF, wDF).slice(0, 6)) {
       const A = '@' + a.author.toLowerCase() + '|' + a.platform, B = '@' + e.author.toLowerCase() + '|' + e.platform;
       kindOf[A] = kindOf[B] = 'account'; link(A, B, e.w * 0.5);
     }
+    // ── term selection (VOSviewer): minimum occurrences, then keep the most *relevant* 60% ──
+    //    relevance = how specific a term is to a few accounts (spread-evenly-everywhere terms score low)
+    const minOcc = Math.max(2, Math.round(nPosts * 0.01));
+    const wordIds = Object.keys(kindOf).filter((k) => kindOf[k] === 'word');
+    const keepW = new Set(); const isFocusWord = (k) => focus && focus.kind === 'word' && k === 'w:' + focus.key;
+    const scored = wordIds.filter((k) => (nodeN[k] || 0) >= minOcc || isFocusWord(k)).map((k) => [k, (nodeN[k] || 0) * Math.log((nAcc + 1) / ((acctDF[k.slice(2)] || 0) + 1))]).sort((a, b) => b[1] - a[1]);
+    scored.slice(0, Math.max(10, Math.ceil(scored.length * 0.6))).forEach(([k]) => keepW.add(k)); scored.forEach(([k]) => { if (isFocusWord(k)) keepW.add(k); });
+    for (const k of wordIds) if (!keepW.has(k)) { delete kindOf[k]; delete nodeW[k]; }
+    for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (!kindOf[a] || !kindOf[b]) delete edgeW[k]; }
+    // ── edge weights (association strength): co-occurrence vs. what chance predicts from each term's frequency ──
+    for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (kindOf[a] === 'account' || kindOf[b] === 'account') continue;
+      const co = edgeW[k], oa = nodeN[a] || 1, ob = nodeN[b] || 1; const as = nPosts * co / (oa * ob);   // >1 = more than chance
+      edgeW[k] = Math.sqrt(co) * Math.log(1 + as); }
     // pick nodes: around the focus, else the heaviest of each kind
     let ids;
     const focusId = focus ? (focus.kind === 'account' ? Object.keys(kindOf).find((k) => k.startsWith('@' + focus.key + '|')) : focus.kind === 'hashtag' ? '#' + focus.key : 'w:' + focus.key) : null;

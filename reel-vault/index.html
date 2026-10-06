@@ -2067,7 +2067,10 @@ function drawWeb(box, graph){
   const rankByDeg = new Array(total); order.forEach((i, r) => rankByDeg[i] = r);
   let ang = 0; const gap = 0.18;
   comms.forEach(c => { const span = Math.max(0.25, 2 * Math.PI * (c.ids.length / total)) - gap; c.a0 = ang; c.a1 = ang + span; c.ids.sort((x, y) => deg[y] - deg[x]); c.ids.forEach((i, k) => { const t = c.ids.length > 1 ? k / (c.ids.length - 1) : .5; nodes[i].ta = c.a0 + t * span; nodes[i].tr = focus && nodes[i].id === focus ? 0 : 38 + R * Math.pow(rankByDeg[i] / Math.max(1, total - 1), .7); }); ang += span + gap; });
-  const maxN = Math.max(1, ...nodes.map(n => n.n));
+  // influence = betweenness centrality (Brandes): the nodes that bridge different parts of the web
+  const between = (() => { const bc = new Array(total).fill(0); for (let sIdx = 0; sIdx < total; sIdx++){ const S = [], P2 = nodes.map(() => []), sig = new Array(total).fill(0), dist = new Array(total).fill(-1); sig[sIdx] = 1; dist[sIdx] = 0; const Q = [sIdx]; while (Q.length){ const v = Q.shift(); S.push(v); for (const [w] of nb[v]){ if (dist[w] < 0){ dist[w] = dist[v] + 1; Q.push(w); } if (dist[w] === dist[v] + 1){ sig[w] += sig[v]; P2[w].push(v); } } } const delta = new Array(total).fill(0); while (S.length){ const w = S.pop(); for (const v of P2[w]) delta[v] += sig[v] / sig[w] * (1 + delta[w]); if (w !== sIdx) bc[w] += delta[w]; } } return bc; })();
+  const maxN = Math.max(1, ...nodes.map(n => n.n)), maxB = Math.max(1e-9, ...between);
+  const sizeNodes = () => nodes.forEach((n, i) => { n.r = st.sizeBy === 'influence' ? 3.5 + 12 * Math.sqrt(between[i] / maxB) : 3.5 + 11 * Math.sqrt(n.n / maxN); });
   nodes.forEach(n => { n.r = 3.5 + 11 * Math.sqrt(n.n / maxN); n.x = Math.cos(n.ta) * n.tr * (0.3 + Math.random() * .4) + (Math.random() - .5) * 60; n.y = Math.sin(n.ta) * n.tr * (0.3 + Math.random() * .4) + (Math.random() - .5) * 60; n.z = (commOf[idx[n.id]] % 3 - 1) * 14; n.vx = n.vy = 0; });
   // 3-D: the free-floating ball — seeded on a sphere, relaxed with repulsion + springs + gravity (sx, sy, sz)
   { const R0 = 160; nodes.forEach((n, i) => { const t = Math.acos(1 - 2 * (i + .5) / nodes.length), ph = i * 2.399963; n.sx = R0 * Math.sin(t) * Math.cos(ph); n.sy = R0 * Math.sin(t) * Math.sin(ph); n.sz = R0 * Math.cos(t); n.wx = n.wy = n.wz = 0; });
@@ -2087,19 +2090,19 @@ function drawWeb(box, graph){
   const legendHTML = () => (st.color === 'kind'
     ? ['account', 'hashtag', 'word'].map(k => `<span><i style="background:${KIND_COLOR[k]}"></i>${k === 'account' ? '@ accounts' : k === 'hashtag' ? '# tags' : 'words'} <em>${nodes.filter(n => n.kind === k).length}</em></span>`).join('')
     : comms.map((c, ci) => `<span><i style="background:${COMM[ci % COMM.length]}"></i>${esc(c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name)} <em>${c.ids.length}</em></span>`).join('')) + '<span class="shapes">● account &nbsp;■ tag &nbsp;○ word</span>';
-  const hintHTML = () => 'size = posts · colour = ' + (st.color === 'kind' ? 'kind' : 'community') + (st.mode === '2d' ? ' · inner = more connected · drag to move around' : ' · drag to spin') + ' · wheel to zoom · tap a node';
+  const hintHTML = () => 'size = ' + (st.sizeBy === 'influence' ? 'influence' : 'posts') + ' · colour = ' + (st.color === 'kind' ? 'kind' : 'community') + (st.mode === '2d' ? ' · inner = more connected · drag to move around' : ' · drag to spin') + ' · wheel to zoom · tap a node';
   nwFocusNode = focus ? nodes[idx[focus]] : null;
   const fb = nwFocusNode ? `<div class="focus">◎ ${nwFocusNode.kind === 'account' ? '@' : ''}${esc(nwFocusNode.label)}${nwFocusNode.kind === 'account' && nwFocusNode.person_id ? ' <button class="hbtn" data-fprof>PROFILE</button>' : ''} <button class="hbtn" data-fclear title="Show everything again">✕</button></div>` : '';
   box.innerHTML = `<canvas></canvas><div class="legend" id="webLegend"></div>${fb}
-    <div class="wtb"><button data-wm="3d" title="3-D: the floating web you can spin">3D</button><button data-wm="2d" title="2-D: the organized map — rings by connection, arcs by community — you can drag around">2D</button><span class="sep"></span><button data-wc="community" title="Colour by community (clusters found from the links)">COMMUNITY</button><button data-wc="kind" title="Colour by kind: account / tag / word">KIND</button><span class="sep"></span><button data-wf title="Full screen">⛶</button></div>
+    <div class="wtb"><button data-wm="3d" title="3-D: the floating web you can spin">3D</button><button data-wm="2d" title="2-D: the organized map — rings by connection, arcs by community — you can drag around">2D</button><span class="sep"></span><button data-wc="community" title="Colour by community (clusters found from the links)">COMMUNITY</button><button data-wc="kind" title="Colour by kind: account / tag / word">KIND</button><span class="sep"></span><button data-ws="posts" title="Size by number of posts">POSTS</button><button data-ws="influence" title="Size by influence: terms and accounts that bridge different parts of the web (betweenness centrality)">INFLUENCE</button><span class="sep"></span><button data-wf title="Full screen">⛶</button></div>
     <div class="hint" id="webHint"></div>`;
-  const syncChrome = () => { $('#webLegend', box).innerHTML = legendHTML(); $('#webHint', box).textContent = hintHTML(); $$('[data-wm]', box).forEach(b => b.classList.toggle('on', b.dataset.wm === st.mode)); $$('[data-wc]', box).forEach(b => b.classList.toggle('on', b.dataset.wc === st.color)); };
+  const syncChrome = () => { $('#webLegend', box).innerHTML = legendHTML(); $('#webHint', box).textContent = hintHTML(); $$('[data-wm]', box).forEach(b => b.classList.toggle('on', b.dataset.wm === st.mode)); $$('[data-wc]', box).forEach(b => b.classList.toggle('on', b.dataset.wc === st.color)); $$('[data-ws]', box).forEach(b => b.classList.toggle('on', b.dataset.ws === st.sizeBy)); };
   const cv = $('canvas', box), ctx = cv.getContext('2d');
   const st = { ry: 0, rx: 0.25, zoom: 1, auto: true, last: 0, dragging: false, px: 0, py: 0, moved: 0, W: 0, H: 0, dpr: Math.min(2, devicePixelRatio || 1), proj: [], frame: 0, hover: -1, settle: 170,
-    mode: store.get('webMode', '3d'), color: store.get('webColor', 'community'), panX: 0, panY: 0 };
+    mode: store.get('webMode', '3d'), color: store.get('webColor', 'community'), sizeBy: store.get('webSize', 'posts'), panX: 0, panY: 0 };
   const colorOf = i => st.color === 'kind' ? (KIND_COLOR[nodes[i].kind] || '#999') : COMM[commOf[i] % COMM.length];
   const size = () => { st.W = box.clientWidth; st.H = box.clientHeight; cv.width = st.W * st.dpr; cv.height = st.H * st.dpr; ctx.setTransform(st.dpr, 0, 0, st.dpr, 0, 0); };
-  size(); syncChrome();
+  size(); sizeNodes(); syncChrome();
   // one untangling step: pull to ring/arc target, push apart (collision), springs along strong links
   const step = () => {
     const kT = st.frame < 40 ? 0.02 : 0.045;
@@ -2164,6 +2167,7 @@ function drawWeb(box, graph){
   const fc = $('[data-fclear]', box); if (fc) fc.onclick = () => { $('#nwQ').value = ''; renderNetwork(); };
   $$('[data-wm]', box).forEach(b => b.onclick = () => { st.mode = b.dataset.wm; store.set('webMode', st.mode); if (st.mode === '2d'){ st.panX = st.panY = 0; } syncChrome(); draw(); });
   $$('[data-wc]', box).forEach(b => b.onclick = () => { st.color = b.dataset.wc; store.set('webColor', st.color); syncChrome(); draw(); });
+  $$('[data-ws]', box).forEach(b => b.onclick = () => { st.sizeBy = b.dataset.ws; store.set('webSize', st.sizeBy); sizeNodes(); syncChrome(); draw(); });
   const fsBtn = $('[data-wf]', box);
   const exitMax = () => { box.classList.remove('max'); document.body.classList.remove('noscroll-max'); fsBtn.textContent = '⛶'; size(); draw(); };
   fsBtn.onclick = async () => {
