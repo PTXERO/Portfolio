@@ -38,7 +38,7 @@ def _tokens(t):
 
 
 def _mentions(t):
-    return {m.rstrip(".").lower() for m in _MENTION.findall(str(t or ""))}
+    return {m.rstrip(".").lower() for m in _MENTION.findall(_URL.sub(" ", str(t or "")))}   # never from inside a URL
 
 
 _TAG_IN_TEXT = re.compile(r"(?:^|\s)#(\w{2,})", re.UNICODE)
@@ -52,7 +52,16 @@ def _hashes(it):
 
 
 def _pid(it):
-    return f"{it.get('author') or '?'}|{it.get('platform') or '?'}"
+    return f"{str(it.get('author') or '?').lower()}|{it.get('platform') or '?'}"   # one handle = one account, any case
+
+
+def _post_key(it):
+    """A tweet with four images is four items; 'posts' counts the tweet once."""
+    return f"{it.get('platform') or ''}:{it['post_id']}" if it.get("post_id") else re.sub(r"_\d+$", "", str(it.get("id") or ""))
+
+
+def _n_posts(items):
+    return len({_post_key(it) for it in items})
 
 
 def _median(xs):
@@ -114,7 +123,7 @@ class _Acct:
 
 
 def _build(v):
-    rows = v.db.q("SELECT id, platform, author, author_name, url, media_url, text, hashtags, lang, "
+    rows = v.db.q("SELECT id, platform, author, author_name, url, media_url, text, hashtags, lang, post_id, "
                   "posted_at, duration, likes, views, media, thumbnail, transcript, tags FROM items "
                   "WHERE coalesce(author,'') != ''")
     by = {}
@@ -205,7 +214,7 @@ def _edge(a, b, idf, h_df, w_df):
     for x in a.W & b.W:
         ws += 0.5 * idf(w_df[x])
         wn += 1
-    ment = a.author.lower() in b.M or b.author.lower() in a.M
+    ment = a.platform == b.platform and (a.author.lower() in b.M or b.author.lower() in a.M)   # same network only
     fol = b.id in a.F or a.id in b.F        # the platform itself says these two are linked
     w = hs + ws + (3 if ment else 0) + (4 if fol else 0)
     return w, hn, wn, ment, fol
@@ -224,9 +233,10 @@ def _tier(ment, fol, hn):
 
 def profile(v, pid):
     by, idf, h_df, w_df = _build(v)
-    a = by.get(pid)
+    a = by.get(pid) or by.get(str(pid).lower())
     if not a:
         return {"error": "no account"}
+    pid = a.id
     by_item, names = _vote_index(v)
     items = a.items
     media = Counter((it.get("media") or "video") for it in items)
@@ -284,7 +294,7 @@ def profile(v, pid):
         "follows": rel_out("follows"), "followed_by": rel_out("followed_by"), "follows_loaded": a.FAT,
         "follows_supported": a.platform in ("mastodon", "bluesky"),
         "id": pid, "author": a.author, "author_name": a.author_name, "platform": a.platform,
-        "author_url": a.author_url, "n": len(items), **_cadence(items), "media": dict(media),
+        "author_url": a.author_url, "n": _n_posts(items), "items_n": len(items), **_cadence(items), "media": dict(media),
         "dur_median": _median([it.get("duration") for it in items if (it.get("duration") or 0) > 0]),
         "likes_median": _median([it.get("likes") or 0 for it in items]),
         "views_median": _median([it.get("views") or 0 for it in items]),
@@ -308,7 +318,7 @@ def graph(v, topic=None, max_nodes=60, min_w=1.5, platform=""):
         accts = [a for a in accts if any(r["topic_id"] == topic for it in a.items for r in by_item.get(it["id"], []))]
     if platform:
         accts = [a for a in accts if a.platform == platform]
-    accts.sort(key=lambda a: -len(a.items))
+    accts.sort(key=lambda a: -_n_posts(a.items))
     top = accts[:min(max_nodes or 60, 120)]
     top_ids = {a.id for a in top}
     meta = _all_meta(v)
@@ -327,7 +337,7 @@ def graph(v, topic=None, max_nodes=60, min_w=1.5, platform=""):
             if lid in top_ids and not any({e["a"], e["b"]} == {a.id, lid} for e in edges):
                 edges.append({"a": a.id, "b": lid, "w": 2, "h": 0, "m": 0, "you": 1, "t": 1,
                               "p": {"m": 0, "f": 2, "h": 0, "s": 0}})
-    nodes = [{"id": a.id, "author": a.author, "platform": a.platform, "n": len(a.items),
+    nodes = [{"id": a.id, "author": a.author, "platform": a.platform, "n": _n_posts(a.items),
               "strength": round(strength[a.id], 1), "attrs": (meta.get(a.id) or {}).get("attrs", [])[:4],
               "topics": len({r["topic_id"] for it in a.items for r in by_item.get(it["id"], [])})} for a in top]
     return {"nodes": nodes, "edges": edges, "total_accounts": len(by), "shown": len(nodes), "generated": _now()}
@@ -351,7 +361,7 @@ def list_people(v, topic=None, q="", sort="", platform=""):
         cad = _cadence(a.items)
         tset = {names.get(r["topic_id"]) for it in a.items for r in by_item.get(it["id"], [])}
         out.append({"id": a.id, "author": a.author, "author_name": a.author_name, "platform": a.platform,
-                    "author_url": a.author_url, "n": len(a.items), "per_week": cad["per_week"], "last": cad["last"],
+                    "author_url": a.author_url, "n": _n_posts(a.items), "per_week": cad["per_week"], "last": cad["last"],
                     "follows": a.FN, "followed_by": a.FBN,
                     "topics": [t for t in tset if t][:4],
                     "media": dict(Counter((it.get("media") or "video") for it in a.items)),
@@ -441,6 +451,7 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
     generic = lambda w: (w not in focus_words and w not in tag_words and  # noqa: E731
                          (w in BOILER or (n_posts >= 50 and n_acc >= 20 and post_df[w] / n_posts > 0.7
                                           and acct_df[w] / n_acc > 0.9)))
+    seen_posts = set()
     for a in by.values():
         aid = f"@{a.author.lower()}|{a.platform}"
         for it in a.items:
@@ -457,16 +468,18 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
                 link(aid, t, 1, 2, "h")
             # real relationships written in the post: @mentions of accounts we know
             for m in _mentions(it.get("text")):
-                bid = next((k for k in kind_of if k.startswith("@" + m + "|")), None)
-                if bid and bid != aid:
+                bid = f"@{m}|{a.platform}"                 # same network only
+                if kind_of.get(bid) == "account" and bid != aid:
                     link(aid, bid, 2, 1, "m")
             for w in words:
                 kind_of[w] = "word"
                 node_w[w] += 0.6 * idf(w_df.get(w[2:], 1))
                 node_n[w] += 1
                 link(aid, w, 0.6)
-            node_w[aid] += 1
-            node_n[aid] += 1
+            if _post_key(it) not in seen_posts:
+                seen_posts.add(_post_key(it))
+                node_w[aid] += 1
+                node_n[aid] += 1
             for i in range(len(tags)):
                 for j in range(i + 1, len(tags)):
                     link(tags[i], tags[j], 1.2, 2, "h")

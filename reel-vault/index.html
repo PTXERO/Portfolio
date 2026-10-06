@@ -1599,20 +1599,21 @@ async function renderDossier(){
   body.innerHTML = '<div class="empty"><span class="spinner"></span> building the dossier…</div>';
   const name = T.name, seed = (T.seeds || [])[0] || name;
   let items = [], graph = { nodes: [], edges: [] }, wiki = null, views = null;
+  const isPerson = !!((T.settings || {}).person);
   try{
     [items, graph, wiki] = await Promise.all([
       api('/api/search?' + new URLSearchParams({ topic: T.id, topic_all: '1', limit: 2000, fuzzy: '0', synonyms: '0' })).then(r => r.items || []),
       api('/api/graph?' + new URLSearchParams({ topic: T.id, kinds: 'account,hashtag,word', max: 120 })).catch(() => ({ nodes: [], edges: [] })),
-      wikiSummary(seed),
+      isPerson ? Promise.resolve(null) : wikiSummary(seed),          // an encyclopedia article for a name is almost always someone else
     ]);
-    views = await wikiViews(wiki && wiki.canonical ? wiki.canonical : seed);
+    views = isPerson ? null : await wikiViews(wiki && wiki.canonical ? wiki.canonical : seed);
   }catch(e){ body.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   const n = items.length;
   // where it's talked about
   const plat = {}; items.forEach(i => plat[i.platform || '?'] = (plat[i.platform || '?'] || 0) + 1);
   const plats = Object.entries(plat).sort((a, b) => b[1] - a[1]);
   // who talks most
-  const acc = {}; items.forEach(i => { if (!i.author) return; const k = i.author + '|' + i.platform; acc[k] = acc[k] || { id: k, author: i.author, platform: i.platform, n: 0, liked: 0, likes: 0 }; acc[k].n++; if (i.t_label > 0) acc[k].liked++; acc[k].likes += i.likes || 0; });
+  const acc = {}; const seenPost = new Set(); items.forEach(i => { if (!i.author) return; const k = i.author.toLowerCase() + '|' + i.platform; acc[k] = acc[k] || { id: k, author: i.author, platform: i.platform, n: 0, liked: 0, likes: 0 }; const pk = i.post_id ? i.platform + ':' + i.post_id : String(i.id).replace(/_\d+$/, ''); if (!seenPost.has(pk)){ seenPost.add(pk); acc[k].n++; } if (i.t_label > 0) acc[k].liked++; acc[k].likes += i.likes || 0; });
   const who = Object.values(acc).sort((a, b) => b.n - a.n || b.likes - a.likes);
   // associated keywords + people from the web
   const tags = graph.nodes.filter(x => x.kind === 'hashtag').sort((a, b) => (b.n || 0) - (a.n || 0)).slice(0, 18);
@@ -1636,6 +1637,7 @@ async function renderDossier(){
     <div class="dcard span2">
       <div class="dh">${esc(name)} <span class="note">${fmtN(n)} posts · ${fmtN(who.length)} accounts · ${plats.length} sites${T.counts && (T.counts.pos || T.counts.neg) ? ' · you rated ' + fmtN(T.counts.pos + T.counts.neg) : ''}</span></div>
       ${wiki ? `<div class="wiki">${wiki.thumb ? `<img src="${esc(wiki.thumb)}" alt="" referrerpolicy="no-referrer">` : ''}<div><p>${esc(wiki.extract)}</p><a class="note" href="${esc(wiki.url)}" target="_blank" rel="noreferrer">Wikipedia · ${esc(wiki.title)} →</a></div></div>`
+             : isPerson ? `<p class="note">Built from their posts only. ${esc(((T.settings || {}).person || {}).platform || 'The network')} gives us no profile fields (bio, location, join date, follower counts), so none are shown — and no encyclopedia lookup is made for a person's name, since it would almost always be someone else.</p>`
              : `<p class="note">No encyclopedia entry for “${esc(seed)}” — below is what your collected posts say about it.</p>`}
       <div class="row wrap" style="margin-top:12px">
         <button class="btn pri" id="dIntegrate" ${who.length ? '' : 'disabled'}>⇶ INTEGRATE ALL ASSOCIATED <small>· top ${Math.min(100, who.length)} accounts</small></button>
@@ -1650,7 +1652,7 @@ async function renderDossier(){
     <div class="dcard"><div class="dh">Keywords it goes with</div><div class="chips wrap">${tags.map(t => `<button class="chip" data-focus="${esc(t.label)}">${esc(t.label)} <em>${t.n}</em></button>`).join('')}${words.map(w => `<button class="chip f" data-focus="${esc(w.label.includes(' ') ? '"' + w.label + '"' : w.label)}">${esc(w.label)} <em>${w.n}</em></button>`).join('')}${tags.length + words.length ? '' : '<p class="note">—</p>'}</div></div>
     <div class="dcard"><div class="dh">People it's associated with</div><div class="chips wrap">${people.map(a => `<button class="chip" data-focus="@${esc(a.label)}" data-pid="${esc(a.person_id || '')}">@${esc(a.label)} <em>${a.n}</em></button>`).join('') || '<p class="note">—</p>'}</div><p class="note" style="margin-top:6px">Ordered by how connected they are inside this topic. Tap to centre the web on them.</p></div>
     <div class="dcard"><div class="dh">Trend · posts per week</div>${bars(weeks, wmax)}<div class="note" style="margin-top:4px">last 12 weeks · ${fmtN(weeks.reduce((a, b) => a + b, 0))} posts${older ? ' · ' + fmtN(older) + ' older' : ''}</div></div>
-    <div class="dcard"><div class="dh">Search interest · Wikipedia views</div>${views && views.length ? bars(views, vmax, 'cyan') + `<div class="note" style="margin-top:4px">last ${views.length} days · ${fmtN(views[views.length - 1])}/day now · peak ${fmtN(vmax)}</div>` : '<p class="note">No page-view data for this name.</p>'}</div>
+    ${isPerson ? '' : `<div class="dcard"><div class="dh">Search interest · Wikipedia views</div>${views && views.length ? bars(views, vmax, 'cyan') + `<div class="note" style="margin-top:4px">last ${views.length} days · ${fmtN(views[views.length - 1])}/day now · peak ${fmtN(vmax)}</div>` : '<p class="note">No page-view data for this name.</p>'}</div>`}
     <div class="dcard span2"><div class="dh">Social circles <span class="note">clusters of accounts, tags and words that go together</span></div>
       ${circles.length ? `<div class="circles">${circles.map((c, ci) => `<button class="circle" data-focus="${esc(c.tags[0] ? c.tags[0].label : '@' + c.accounts[0]?.label)}" style="--c:${COMM[ci % COMM.length]}"><b>${esc(c.name)}</b><span>${c.accounts.length} accounts · ${c.tags.length} tags · ${c.words.length} words</span><small>${c.accounts.slice(0, 4).map(a => '@' + esc(a.label)).join(' · ')}${c.accounts.length > 4 ? ' …' : ''}</small></button>`).join('')}</div>` : '<p class="note">Circles appear once there are enough linked posts — try INTEGRATE.</p>'}</div>
   </div>`;

@@ -607,6 +607,40 @@ class TestPeople(Base):
         self.assertTrue(all(n["platform"] == "x" for n in people.graph(self.v, platform="x")["nodes"]))
         self.assertEqual(people.handle(self.v, "GET", ["people"], {"platform": "mastodon"}, {})["total"], 3)
 
+    def test_identity_hygiene(self):
+        """Same handle on another network is NOT a link; @ inside a URL is not a mention;
+        CloneStoo and clonestoo are one account; a 4-image tweet is one post."""
+        from rv import people
+        up = self.v.db.upsert
+        up({"id": "x:1_1", "platform": "x", "post_id": "1", "author": "CloneStoo", "text": "pic 1 of 4", "media": "image", "url": "u1"})
+        up({"id": "x:1_2", "platform": "x", "post_id": "1", "author": "clonestoo", "text": "pic 2 of 4", "media": "image", "url": "u1"})
+        up({"id": "x:1_3", "platform": "x", "post_id": "1", "author": "CloneStoo", "text": "pic 3 of 4", "media": "image", "url": "u1"})
+        up({"id": "x:2", "platform": "x", "post_id": "2", "author": "CloneStoo",
+            "text": "watch https://youtube.com/@ytperson and thanks @realfriend", "media": "video", "url": "u2"})
+        up({"id": "x:3", "platform": "x", "post_id": "3", "author": "realfriend", "text": "hey", "media": "video", "url": "u3"})
+        up({"id": "x:4", "platform": "x", "post_id": "4", "author": "ytperson", "text": "yo", "media": "video", "url": "u4"})
+        up({"id": "m:5", "platform": "mastodon", "post_id": "5", "author": "clonestoo", "text": "different person entirely", "media": "video", "url": "u5"})
+        up({"id": "m:6", "platform": "mastodon", "post_id": "6", "author": "someone", "text": "cc @clonestoo", "media": "video", "url": "u6"})
+        p = people.profile(self.v, "CloneStoo|x")
+        self.assertEqual((p["n"], p["items_n"]), (2, 4))                      # 2 posts, 4 attachments, one account
+        self.assertEqual(people.profile(self.v, "clonestoo|x")["id"], "clonestoo|x")
+        conn = {c["id"]: c for c in p["connected"]}
+        self.assertIn("realfriend|x", conn)                                   # a real @mention on the same network
+        self.assertTrue(any(w["kind"] == "mentions" for w in conn["realfriend|x"]["why"]))
+        self.assertNotIn("ytperson|x", conn)                                  # youtube.com/@ytperson is a link, not a tag
+        self.assertNotIn("clonestoo|mastodon", conn)                          # same name elsewhere is not a link
+        self.assertFalse(any(w["kind"] == "mentions" for c in conn.values() for w in c["why"] if c["platform"] != "x"))
+        g = people.word_graph(self.v, kinds="account")
+        ids = {n["id"] for n in g["nodes"]}
+        self.assertIn("@clonestoo|x", ids)
+        self.assertEqual(sum(1 for n in g["nodes"] if n["id"].endswith("|x") and "clonestoo" in n["id"]), 1)
+        mention_edges = {frozenset((e["a"], e["b"])) for e in g["edges"] if e["p"]["m"] > 0}
+        self.assertIn(frozenset(("@clonestoo|x", "@realfriend|x")), mention_edges)
+        self.assertNotIn(frozenset(("@clonestoo|x", "@ytperson|x")), mention_edges)
+        self.assertNotIn(frozenset(("@clonestoo|x", "@clonestoo|mastodon")), mention_edges)
+        self.assertNotIn(frozenset(("@someone|mastodon", "@clonestoo|x")), mention_edges)
+        self.assertEqual(next(n for n in g["nodes"] if n["id"] == "@clonestoo|x")["n"], 2)
+
     def test_creator_feeds_per_network(self):
         """One @username on one site becomes that topic's own source — no cross-site guessing."""
         from rv.web import parse_creator
