@@ -2,8 +2,8 @@
 #  SEARCH//NET - one-step launcher for Windows
 #
 #  Does everything, then starts the server:
-#    1. installs Python (or updates it) with winget
-#    2. installs Git and ffmpeg if they're missing
+#    1. installs Python (or updates it) - winget, or python.org directly if there's no winget
+#    2. installs Git (winget, or Git's portable build) and ffmpeg if they're missing
 #    3. downloads the project, or updates it if you already have it
 #    4. installs / updates the Python packages (yt-dlp, gallery-dl, fastembed)
 #    5. starts the auto-updating launcher (run.py)
@@ -43,11 +43,49 @@
   }
   function Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
   $HasWinget = Have 'winget'
-  function Winget-Install($id, $what) {
-    if (-not $HasWinget) { Fail "$what is missing and winget isn't available. Install $what yourself, then run this again." }
+  function Winget-Install($id, $what) {      # $true if winget ran, $false if there's no winget
+    if (-not $HasWinget) { return $false }
     Say "installing $what..."
     Run winget install -e --id $id --silent --accept-package-agreements --accept-source-agreements
     Refresh-Path
+    return $true
+  }
+  # downloads (TLS 1.2 for older Windows; no progress bar, which is very slow in PowerShell 5.1)
+  try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
+  $ProgressPreference = 'SilentlyContinue'
+  $Tools = Join-Path $(if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { $HOME }) 'SearchNet'
+  function Download($url, $dest) {
+    New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+    Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+  }
+  # put a folder on PATH now and for future windows (current user only, no admin)
+  function Add-UserPath($dir) {
+    $env:Path = "$dir;$env:Path"
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if (-not ("$userPath" -split ';' | Where-Object { $_ -eq $dir })) {
+      [Environment]::SetEnvironmentVariable('Path', ("$dir;$userPath").TrimEnd(';'), 'User')
+    }
+  }
+  # no winget: the official python.org installer, silent, just for this user
+  function Install-PythonDirect {
+    $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
+    $url = "https://www.python.org/ftp/python/3.12.10/python-3.12.10-$arch.exe"
+    $exe = Join-Path $env:TEMP "python-3.12.10-$arch.exe"
+    Say 'downloading Python from python.org...'
+    Download $url $exe
+    Say 'installing Python (just for you, no admin needed)...'
+    Start-Process -FilePath $exe -Wait -ArgumentList '/quiet', 'InstallAllUsers=0', 'PrependPath=1', 'Include_launcher=1', 'Include_test=0'
+    Refresh-Path
+  }
+  # no winget: Git's official portable build, unpacked into %LOCALAPPDATA%\SearchNet
+  function Install-GitDirect {
+    $dir = Join-Path $Tools 'MinGit'
+    $zip = Join-Path $env:TEMP 'MinGit.zip'
+    Say 'downloading Git (portable) from github.com...'
+    Download 'https://github.com/git-for-windows/git/releases/download/v2.47.1.windows.1/MinGit-2.47.1-64-bit.zip' $zip
+    if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
+    Expand-Archive -Path $zip -DestinationPath $dir -Force
+    Add-UserPath (Join-Path $dir 'cmd')
   }
 
   # a real Python (not the Microsoft Store placeholder), or $null
@@ -57,6 +95,12 @@
       $exe = & $c[0] @($c | Select-Object -Skip 1) -c 'import sys; print(sys.executable)' 2>$null
       if ($LASTEXITCODE -eq 0 -and $exe) { return ("$exe" -split "`n" | Select-Object -Last 1).Trim() }
     }
+    # just installed but this window's PATH is stale: look where installers put it
+    foreach ($d in @("$env:LOCALAPPDATA\Programs\Python", "$env:ProgramFiles\Python312", "$env:ProgramFiles")) {
+      $hit = Get-ChildItem -Path $d -Filter python.exe -Recurse -Depth 2 -ErrorAction SilentlyContinue |
+             Where-Object { $_.FullName -notmatch 'WindowsApps|venv' } | Sort-Object FullName -Descending | Select-Object -First 1
+      if ($hit) { return $hit.FullName }
+    }
     return $null
   }
 
@@ -65,8 +109,8 @@
   # -- 1. Python ------------------------------------------------
   $Py = Find-Python
   if (-not $Py) {
-    Winget-Install 'Python.Python.3.12' 'Python'
-    $Py = Find-Python
+    if (Winget-Install 'Python.Python.3.12' 'Python') { $Py = Find-Python }
+    if (-not $Py) { Install-PythonDirect; $Py = Find-Python }
     if (-not $Py) { Fail "Python installed, but Windows can't see it yet. Close this window, open a new PowerShell, and run this again. If it still fails: Settings > Apps > Advanced app settings > App execution aliases, turn OFF python.exe and python3.exe." }
   } elseif ($HasWinget -and -not $env:REELVAULT_NO_SYSTEM_UPDATE) {
     Say 'checking for a newer Python...'
@@ -75,11 +119,11 @@
   Say ("python: " + ((& $Py --version 2>&1) | ForEach-Object { "$_" }))
 
   # -- 2. Git and ffmpeg ----------------------------------------
-  if (-not (Have 'git')) { Winget-Install 'Git.Git' 'Git' }
+  if (-not (Have 'git')) { $null = Winget-Install 'Git.Git' 'Git' }
+  if (-not (Have 'git')) { Install-GitDirect }
   if (-not (Have 'git')) { Fail "Git installed, but this window can't see it yet. Open a new PowerShell and run this again." }
   if (-not (Have 'ffmpeg')) {
-    if ($HasWinget) { Winget-Install 'Gyan.FFmpeg' 'ffmpeg (thumbnails + joining video/audio)' }
-    else { Warn 'ffmpeg not found: thumbnails and some downloads will be limited.' }
+    if (-not (Winget-Install 'Gyan.FFmpeg' 'ffmpeg (thumbnails + joining video/audio)')) { Warn 'ffmpeg not found: thumbnails and some downloads will be limited.' }
   }
 
   # -- 3. the project -------------------------------------------
