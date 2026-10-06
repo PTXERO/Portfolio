@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""Publish this portfolio to Neocities — uploads only files that changed.
+"""Publish the REEL//VAULT app to Neocities — uploads only files that changed.
 
     NEOCITIES_API_KEY=xxxx python tools/neocities_deploy.py            # publish
     NEOCITIES_API_KEY=xxxx python tools/neocities_deploy.py --dry-run  # just show what would change
-    NEOCITIES_API_KEY=xxxx python tools/neocities_deploy.py --delete   # also remove files deleted here
+    NEOCITIES_API_KEY=xxxx python tools/neocities_deploy.py --delete   # also remove deleted files (scoped)
+
+SCOPE: this only ever touches the reel-vault/ subtree (minus reel-vault/server/).
+The rest of ptxero.neocities.org — the homepage, site.config.js, gallery, about,
+exposed, ascii-render, rf, social.html, icons — is hand-maintained in the Neocities
+editor and is NEVER read, uploaded, or deleted by this tool. --delete likewise only
+removes orphans under reel-vault/, so it can't wipe the hand-maintained site.
 
 Get the key at neocities.org → Settings → (your site) → API. Standard library only.
 """
@@ -21,6 +27,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 API = os.environ.get("NEOCITIES_API_URL", "https://neocities.org/api")
 
+# This tool manages ONLY the reel-vault app on the static host. Everything else on
+# the site is hand-maintained in the Neocities editor and must not be touched here.
+PUBLISH_ROOTS = ("reel-vault/",)          # the only subtree this tool publishes
 # never published: tooling, the local server's code, private data
 SKIP_DIRS = {".git", ".github", ".claude", "tools", "node_modules", "__pycache__", "data", "models"}
 SKIP_FILES = {".gitignore", ".DS_Store", "Thumbs.db"}
@@ -37,6 +46,8 @@ def local_files():
     for p in sorted(ROOT.rglob("*")):
         rel = p.relative_to(ROOT).as_posix()
         if p.is_dir() or any(part in SKIP_DIRS for part in p.relative_to(ROOT).parts):
+            continue
+        if not rel.startswith(PUBLISH_ROOTS):     # only the reel-vault subtree
             continue
         if p.name in SKIP_FILES or rel.startswith(SKIP_PATTERNS) or p.name.startswith("."):
             continue
@@ -91,7 +102,10 @@ def main():
     files, skipped = local_files()
     changed = [(rel, p) for rel, p in files.items()
                if remote_hash.get(rel) != hashlib.sha1(p.read_bytes()).hexdigest()]
-    orphans = sorted(set(remote_hash) - set(files)) if a.delete else []
+    # only consider deleting remote files INSIDE the published subtree — never the
+    # hand-maintained parts of the site (and never the server code we don't publish)
+    orphans = sorted(r for r in (set(remote_hash) - set(files))
+                     if r.startswith(PUBLISH_ROOTS) and not r.startswith(SKIP_PATTERNS)) if a.delete else []
 
     info = call("/info", key).get("info", {})
     print(f"site: https://{info.get('sitename', '?')}.neocities.org  ·  {len(files)} files here, "

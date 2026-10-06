@@ -1,7 +1,9 @@
-# Publishes the site to Neocities whenever main changes.
+# Publishes ONLY the reel-vault/ app to Neocities whenever main changes.
+# The rest of the site is hand-maintained in the Neocities editor and is never
+# touched by this workflow (the deploy script is scoped to reel-vault/).
 # Needs a repository secret named NEOCITIES_API_KEY
 # (GitHub → Settings → Secrets and variables → Actions → New repository secret).
-name: Publish to Neocities
+name: Publish reel-vault to Neocities
 
 on:
   push:
