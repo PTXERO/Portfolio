@@ -29,6 +29,11 @@ the iPhone (same Wi-Fi) and open it in Firefox. The link carries an access key t
 the phone; other devices on your Wi-Fi can't use it without the key. In Firefox, use
 ⋯ → Share → **Add to Home Screen** to get an app icon.
 
+**On a VPN (e.g. Mullvad):** turn on the VPN app's *Local network sharing* so your phone can
+reach the PC. If the printed phone link shows a VPN address (10.64.x.x and up) instead of your Wi-Fi
+address (usually 192.168.x.x), start with `--phone-host 192.168.x.x`. Run `ipconfig` to find
+your Wi-Fi adapter's IPv4 address.
+
 Options: `--port 8765`, `--data PATH` (database and videos; default `reel-vault/data/`, git-ignored),
 `--host 127.0.0.1` (this computer only), `--allow-origin https://you.neocities.org` (lets a
 copy of the page hosted elsewhere talk to the server running on the same computer), `--no-browser`.

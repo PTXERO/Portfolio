@@ -3,9 +3,11 @@
 import argparse
 import csv
 import hmac
+import ipaddress
 import io
 import json
 import mimetypes
+import os
 import re
 import socket
 import sys
@@ -33,21 +35,60 @@ LOOPBACK = ("127.0.0.1", "localhost", "[::1]", "::1")
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 
-def lan_ip():
+def _route_ip(target):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s.connect(("192.0.2.1", 9))     # no packet is sent; picks the outgoing interface
+        s.connect((target, 9))      # no packet is sent; asks the OS which interface it would use
         return s.getsockname()[0]
     except OSError:
-        return "127.0.0.1"
+        return None
     finally:
         s.close()
+
+
+def _lan_rank(ip):
+    """Prefer home-network addresses over VPN tunnels (Mullvad 10.64/10,
+    Tailscale/CGNAT 100.64/10) so the phone link points at the Wi-Fi address."""
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return 99
+    if a.is_loopback or a.is_link_local:
+        return 99
+    if a in ipaddress.ip_network("10.64.0.0/10") or a in ipaddress.ip_network("100.64.0.0/10"):
+        return 50
+    if a in ipaddress.ip_network("192.168.0.0/16"):
+        return 0
+    if a in ipaddress.ip_network("172.16.0.0/12"):
+        return 1
+    if a in ipaddress.ip_network("10.0.0.0/8"):
+        return 2
+    return 10
+
+
+def lan_ip():
+    override = os.environ.get("REELVAULT_PHONE_HOST") or Handler.phone_host
+    if override:
+        return override
+    cands = set()
+    for target in ("192.168.1.1", "192.168.0.1", "10.0.0.1", "172.16.0.1", "192.0.2.1"):
+        ip = _route_ip(target)
+        if ip:
+            cands.add(ip)
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            cands.add(info[4][0])
+    except OSError:
+        pass
+    best = sorted(cands, key=lambda ip: (_lan_rank(ip), ip))
+    return best[0] if best and _lan_rank(best[0]) < 99 else "127.0.0.1"
 
 
 class Handler(BaseHTTPRequestHandler):
     vault: Vault = None
     allowed_origins: set = set()
     port = 8765
+    phone_host = ""
     server_version = "ReelVault/2.0"
     protocol_version = "HTTP/1.1"
 
@@ -476,12 +517,15 @@ def main(argv=None):
     ap.add_argument("--allow-origin", action="append", default=[],
                     help="extra web origin allowed to call the API, e.g. https://you.github.io")
     ap.add_argument("--no-browser", action="store_true", help="don't open a browser tab")
+    ap.add_argument("--phone-host", default="",
+                    help="address the phone should use, e.g. 192.168.1.20 (if the printed one is wrong, e.g. on a VPN)")
     a = ap.parse_args(argv)
 
     data = Path(a.data).expanduser().resolve()
     data.mkdir(parents=True, exist_ok=True)
     Handler.vault = Vault(data)
     Handler.port = a.port
+    Handler.phone_host = a.phone_host.strip()
     Handler.allowed_origins = {"https://ptxero.github.io"} | {o.rstrip("/") for o in a.allow_origin}
     srv = ThreadingHTTPServer((a.host, a.port), Handler)
     srv.daemon_threads = True
