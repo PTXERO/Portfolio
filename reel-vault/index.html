@@ -500,6 +500,16 @@ pre.cmd i{color:var(--dim);font-style:normal}
 .web .legend .shapes{color:var(--mut);flex-basis:100%;text-align:right}
 .web .legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:-1px}
 .web .focus{position:absolute;left:10px;top:8px;font-family:var(--fmono);font-size:11px;color:var(--acc);pointer-events:none}
+.web .wtb{position:absolute;left:10px;bottom:30px;display:flex;align-items:center;gap:4px;padding:4px;background:rgba(13,13,18,.85);border:1px solid var(--b2);border-radius:var(--r,2px)}
+.web .wtb button{font-family:var(--fmono);font-size:10px;letter-spacing:.1em;padding:6px 9px;border-radius:var(--r,2px);color:var(--dim);border:1px solid transparent;min-height:30px}
+.web .wtb button:hover{color:var(--txt)}
+.web .wtb button.on{color:var(--acc);border-color:rgba(var(--acc-rgb),.45);background:rgba(var(--acc-rgb),.08)}
+.web .wtb .sep{width:1px;height:16px;background:var(--b2);margin:0 2px}
+.web:fullscreen,.web.max{position:fixed;inset:0;z-index:600;width:100vw;height:100vh;max-height:none;border-radius:0;margin:0;background:var(--bg)}
+.web:fullscreen .wtb,.web.max .wtb{bottom:calc(16px + var(--sab))}
+.web:fullscreen .hint,.web.max .hint{bottom:calc(6px + var(--sab))}
+body.noscroll-max{overflow:hidden}
+@media(max-width:1023px){.web .wtb{bottom:26px}.web .wtb button{padding:6px 7px;font-size:9px}}
 .web .edge{stroke:var(--b2);stroke-linecap:round}
 .web .edge.you{stroke:var(--acc3);stroke-dasharray:3 3}
 .web .edge.ment{stroke:var(--acc2);opacity:.5}
@@ -1906,11 +1916,20 @@ function drawWeb(box, graph){
   const maxN = Math.max(1, ...nodes.map(n => n.n));
   nodes.forEach(n => { n.r = 3.5 + 11 * Math.sqrt(n.n / maxN); n.x = Math.cos(n.ta) * n.tr * (0.3 + Math.random() * .4) + (Math.random() - .5) * 60; n.y = Math.sin(n.ta) * n.tr * (0.3 + Math.random() * .4) + (Math.random() - .5) * 60; n.z = (commOf[idx[n.id]] % 3 - 1) * 14; n.vx = n.vy = 0; });
   // chrome
-  box.innerHTML = `<canvas></canvas><div class="legend" id="webLegend">${comms.map((c, ci) => `<span><i style="background:${COMM[ci % COMM.length]}"></i>${esc(c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name)} <em>${c.ids.length}</em></span>`).join('')}<span class="shapes">● account &nbsp;■ tag &nbsp;○ word</span></div>${focus ? `<div class="focus">◎ ${esc(nodes[idx[focus]].label)}</div>` : ''}<div class="hint">size = posts · inner = more connected · colour = community · hover a node · drag to spin · wheel to zoom</div>`;
+  const legendHTML = () => (st.color === 'kind'
+    ? ['account', 'hashtag', 'word'].map(k => `<span><i style="background:${KIND_COLOR[k]}"></i>${k === 'account' ? '@ accounts' : k === 'hashtag' ? '# tags' : 'words'} <em>${nodes.filter(n => n.kind === k).length}</em></span>`).join('')
+    : comms.map((c, ci) => `<span><i style="background:${COMM[ci % COMM.length]}"></i>${esc(c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name)} <em>${c.ids.length}</em></span>`).join('')) + '<span class="shapes">● account &nbsp;■ tag &nbsp;○ word</span>';
+  const hintHTML = () => 'size = posts · inner = more connected · colour = ' + (st.color === 'kind' ? 'kind' : 'community') + ' · hover a node · ' + (st.mode === '2d' ? 'drag to move around' : 'drag to spin') + ' · wheel to zoom';
+  box.innerHTML = `<canvas></canvas><div class="legend" id="webLegend"></div>${focus ? `<div class="focus">◎ ${esc(nodes[idx[focus]].label)}</div>` : ''}
+    <div class="wtb"><button data-wm="3d" title="3-D: tilted disk you can spin">3D</button><button data-wm="2d" title="2-D: flat map you can drag around">2D</button><span class="sep"></span><button data-wc="community" title="Colour by community (clusters found from the links)">COMMUNITY</button><button data-wc="kind" title="Colour by kind: account / tag / word">KIND</button><span class="sep"></span><button data-wf title="Full screen">⛶</button></div>
+    <div class="hint" id="webHint"></div>`;
+  const syncChrome = () => { $('#webLegend', box).innerHTML = legendHTML(); $('#webHint', box).textContent = hintHTML(); $$('[data-wm]', box).forEach(b => b.classList.toggle('on', b.dataset.wm === st.mode)); $$('[data-wc]', box).forEach(b => b.classList.toggle('on', b.dataset.wc === st.color)); };
   const cv = $('canvas', box), ctx = cv.getContext('2d');
-  const st = { ry: 0, rx: 0.38, zoom: 1, auto: true, last: 0, dragging: false, px: 0, py: 0, moved: 0, W: 0, H: 0, dpr: Math.min(2, devicePixelRatio || 1), proj: [], frame: 0, hover: -1, settle: 170 };
+  const st = { ry: 0, rx: 0.38, zoom: 1, auto: true, last: 0, dragging: false, px: 0, py: 0, moved: 0, W: 0, H: 0, dpr: Math.min(2, devicePixelRatio || 1), proj: [], frame: 0, hover: -1, settle: 170,
+    mode: store.get('webMode', '3d'), color: store.get('webColor', 'community'), panX: 0, panY: 0 };
+  const colorOf = i => st.color === 'kind' ? (KIND_COLOR[nodes[i].kind] || '#999') : COMM[commOf[i] % COMM.length];
   const size = () => { st.W = box.clientWidth; st.H = box.clientHeight; cv.width = st.W * st.dpr; cv.height = st.H * st.dpr; ctx.setTransform(st.dpr, 0, 0, st.dpr, 0, 0); };
-  size();
+  size(); syncChrome();
   // one untangling step: pull to ring/arc target, push apart (collision), springs along strong links
   const step = () => {
     const kT = st.frame < 40 ? 0.02 : 0.045;
@@ -1920,7 +1939,9 @@ function drawWeb(box, graph){
     nodes.forEach(n => { if (focus && n.id === focus){ n.x = n.y = n.vx = n.vy = 0; return; } n.x += Math.max(-6, Math.min(6, n.vx)); n.y += Math.max(-6, Math.min(6, n.vy)); n.vx *= 0.72; n.vy *= 0.72; });
   };
   const project = () => {
-    const cy = Math.cos(st.ry), sy = Math.sin(st.ry), cx = Math.cos(st.rx), sx = Math.sin(st.rx), F = 700, scale = Math.min(st.W, st.H) / 440 * st.zoom;
+    const scale = Math.min(st.W, st.H) / 440 * st.zoom;
+    if (st.mode === '2d'){ st.proj = nodes.map(n => ({ n, X: st.W/2 + (n.x + st.panX) * scale, Y: st.H/2 + (n.y + st.panY) * scale, p: 1, z: 0, s: scale })); return; }
+    const cy = Math.cos(st.ry), sy = Math.sin(st.ry), cx = Math.cos(st.rx), sx = Math.sin(st.rx), F = 700;
     st.proj = nodes.map(n => { const x1 = n.x * cy + n.z * sy, z1 = -n.x * sy + n.z * cy, y1 = n.y * cx - z1 * sx, z2 = n.y * sx + z1 * cx; const p = F / (F + z2); return { n, X: st.W/2 + x1 * p * scale, Y: st.H/2 + y1 * p * scale, p, z: z2, s: scale }; });
   };
   const shape = (q, r, kind) => { ctx.beginPath(); if (kind === 'hashtag'){ ctx.rect(q.X - r, q.Y - r, 2 * r, 2 * r); } else { ctx.arc(q.X, q.Y, r, 0, 7); } };
@@ -1929,21 +1950,21 @@ function drawWeb(box, graph){
     const P = st.proj, hv = st.hover, fi = focus ? idx[focus] : -1, hi = hv >= 0 ? hv : fi;
     const lit = new Set(); if (hi >= 0){ lit.add(hi); nb[hi].forEach(([j]) => lit.add(j)); }
     // the map's skeleton: faint rings (inner = more connected) and each community's name on its arc
-    const ringPt = (a, r) => { const cy = Math.cos(st.ry), sy = Math.sin(st.ry), cx = Math.cos(st.rx), sx = Math.sin(st.rx), F = 700, sc = Math.min(st.W, st.H) / 440 * st.zoom; const x = Math.cos(a) * r, y = Math.sin(a) * r; const x1 = x * cy, z1 = -x * sy, y1 = y * cx - z1 * sx, z2 = y * sx + z1 * cx; const p = F / (F + z2); return [st.W/2 + x1 * p * sc, st.H/2 + y1 * p * sc, p]; };
+    const ringPt = (a, r) => { const sc = Math.min(st.W, st.H) / 440 * st.zoom; const x = Math.cos(a) * r, y = Math.sin(a) * r; if (st.mode === '2d') return [st.W/2 + (x + st.panX) * sc, st.H/2 + (y + st.panY) * sc, 1]; const cy = Math.cos(st.ry), sy = Math.sin(st.ry), cx = Math.cos(st.rx), sx = Math.sin(st.rx), F = 700; const x1 = x * cy, z1 = -x * sy, y1 = y * cx - z1 * sx, z2 = y * sx + z1 * cx; const p = F / (F + z2); return [st.W/2 + x1 * p * sc, st.H/2 + y1 * p * sc, p]; };
     ctx.lineWidth = 1; ctx.setLineDash([3, 6]);
     [0.33, 0.66, 1].forEach(f => { const r = 38 + R * f; ctx.beginPath(); for (let k = 0; k <= 72; k++){ const [x, y] = ringPt(k / 72 * 2 * Math.PI, r); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.strokeStyle = '#2c2c36'; ctx.globalAlpha = .8; ctx.stroke(); });
     ctx.setLineDash([]);
-    comms.forEach((c, ci) => { if (c.other || c.ids.length < 2) return; const a = (c.a0 + c.a1) / 2, [x, y, p] = ringPt(a, 38 + R + 30); ctx.globalAlpha = .9 * p; ctx.fillStyle = COMM[ci % COMM.length]; ctx.font = `${Math.round(11 * Math.min(1.2, p))}px 'Share Tech Mono', monospace`; ctx.textAlign = 'center'; ctx.fillText(c.name.toUpperCase(), x, y + 4); });
+    comms.forEach((c, ci) => { if (c.other || c.ids.length < 2) return; const a = (c.a0 + c.a1) / 2, [x, y, p] = ringPt(a, 38 + R + 30); ctx.globalAlpha = .9 * p; ctx.fillStyle = st.color === 'kind' ? '#7a7a92' : COMM[ci % COMM.length]; ctx.font = `${Math.round(11 * Math.min(1.2, p))}px 'Share Tech Mono', monospace`; ctx.textAlign = 'center'; ctx.fillText(c.name.toUpperCase(), x, y + 4); });
     // community halos (soft discs behind each arc) give the map its "ordered" read
-    comms.forEach((c, ci) => { if (c.other || c.ids.length < 3) return; let sx = 0, sy = 0; c.ids.forEach(i => { sx += P[i].X; sy += P[i].Y; }); sx /= c.ids.length; sy /= c.ids.length; const rr = Math.max(...c.ids.map(i => Math.hypot(P[i].X - sx, P[i].Y - sy))) + 18; const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, rr); g.addColorStop(0, COMM[ci % COMM.length] + '14'); g.addColorStop(1, COMM[ci % COMM.length] + '00'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, rr, 0, 7); ctx.fill(); });
+    if (st.color === 'community') comms.forEach((c, ci) => { if (c.other || c.ids.length < 3) return; let sx = 0, sy = 0; c.ids.forEach(i => { sx += P[i].X; sy += P[i].Y; }); sx /= c.ids.length; sy /= c.ids.length; const rr = Math.max(...c.ids.map(i => Math.hypot(P[i].X - sx, P[i].Y - sy))) + 18; const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, rr); g.addColorStop(0, COMM[ci % COMM.length] + '14'); g.addColorStop(1, COMM[ci % COMM.length] + '00'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, rr, 0, 7); ctx.fill(); });
     // edges: each node's strongest links only (keeps it legible); all of a hovered node's links
     ctx.lineCap = 'round';
     const drawn = new Set();
-    nodes.forEach((n, i) => { const lim = hi === i ? nb[i].length : (st.zoom > 1.6 ? 4 : 2); nb[i].slice(0, lim).forEach(([j, w]) => { const key = i < j ? i + ':' + j : j + ':' + i; if (drawn.has(key)) return; drawn.add(key); const a = P[i], b = P[j]; const on = hi >= 0 && (i === hi || j === hi); if (hi >= 0 && !on) return; const depth = (a.p + b.p) / 2; ctx.globalAlpha = on ? .85 : .10 + .25 * depth; const ci = commOf[i] === commOf[j] ? commOf[i] : -1; ctx.strokeStyle = on ? '#e2e2ea' : ci >= 0 ? COMM[ci % COMM.length] : '#5a5a70'; ctx.lineWidth = (on ? 1.6 : .6 + 1.2 * Math.min(1, w / 6)) * depth; ctx.beginPath(); ctx.moveTo(a.X, a.Y); ctx.lineTo(b.X, b.Y); ctx.stroke(); }); });
+    nodes.forEach((n, i) => { const lim = hi === i ? nb[i].length : (st.zoom > 1.6 ? 4 : 2); nb[i].slice(0, lim).forEach(([j, w]) => { const key = i < j ? i + ':' + j : j + ':' + i; if (drawn.has(key)) return; drawn.add(key); const a = P[i], b = P[j]; const on = hi >= 0 && (i === hi || j === hi); if (hi >= 0 && !on) return; const depth = (a.p + b.p) / 2; ctx.globalAlpha = on ? .85 : .10 + .25 * depth; const ci = commOf[i] === commOf[j] ? commOf[i] : -1; ctx.strokeStyle = on ? '#e2e2ea' : st.color === 'kind' ? '#5a5a70' : ci >= 0 ? COMM[ci % COMM.length] : '#5a5a70'; ctx.lineWidth = (on ? 1.6 : .6 + 1.2 * Math.min(1, w / 6)) * depth; ctx.beginPath(); ctx.moveTo(a.X, a.Y); ctx.lineTo(b.X, b.Y); ctx.stroke(); }); });
     // nodes, far first
     const ord = P.map((q, i) => i).sort((a, b) => P[b].z - P[a].z);
     const labels = [];
-    ord.forEach(i => { const q = P[i], n = q.n, ci = commOf[i], col = COMM[ci % COMM.length], r = n.r * q.p * Math.sqrt(st.zoom), dim = hi >= 0 && !lit.has(i);
+    ord.forEach(i => { const q = P[i], n = q.n, col = colorOf(i), r = n.r * q.p * Math.sqrt(st.zoom), dim = hi >= 0 && !lit.has(i);
       ctx.globalAlpha = dim ? .18 : .55 + .45 * q.p;
       shape(q, r, n.kind); ctx.fillStyle = n.kind === 'word' ? '#0d0d12' : col; ctx.fill(); ctx.lineWidth = i === hi || i === fi ? 2.5 : 1.2; ctx.strokeStyle = i === hi || i === fi ? '#fff' : col; ctx.stroke();
       if (!dim && (r >= 7 || i === hi || i === fi || rankByDeg[i] < Math.max(6, total * .12))) labels.push({ i, q, r, pri: (i === hi || i === fi ? 1e9 : 0) + n.n * 10 + deg[i] });
@@ -1953,19 +1974,32 @@ function drawWeb(box, graph){
     ctx.textAlign = 'center';
     for (const L of labels){ const n = L.q.n, txt = (n.kind === 'account' ? '@' : '') + (n.label.length > 18 ? n.label.slice(0, 17) + '…' : n.label); const fs = Math.round(Math.min(13, 9 + 3 * L.q.p)); ctx.font = `${fs}px 'Share Tech Mono', monospace`; const w = ctx.measureText(txt).width + 8, h = fs + 4, x = L.q.X, y = L.q.Y + L.r + 4; if (placed.some(b => Math.abs(b.x - x) < (b.w + w) / 2 && Math.abs(b.y - y) < h)) continue; placed.push({ x, y, w }); ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(7,7,10,.72)'; ctx.fillRect(x - w / 2, y, w, h); ctx.fillStyle = L.i === hi || L.i === fi ? '#fff' : '#c9c9d6'; ctx.fillText(txt, x, y + fs); if (placed.length > 70) break; }
     // hover card
-    if (hv >= 0){ const q = P[hv], n = q.n; const lines = [(n.kind === 'account' ? '@' : n.kind === 'hashtag' ? '' : '"') + n.label + (n.kind === 'word' ? '"' : ''), `${n.n} post${n.n === 1 ? '' : 's'} · ${nb[hv].length} link${nb[hv].length === 1 ? '' : 's'} · ${comms[commOf[hv]].name}`]; ctx.font = `12px 'Share Tech Mono', monospace`; const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16, x = Math.min(st.W - w - 6, Math.max(6, q.X + 14)), y = Math.max(6, q.Y - 44); ctx.globalAlpha = 1; ctx.fillStyle = '#15151b'; ctx.fillRect(x, y, w, 40); ctx.strokeStyle = COMM[commOf[hv] % COMM.length]; ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, w - 1, 39); ctx.textAlign = 'left'; ctx.fillStyle = '#e2e2ea'; ctx.fillText(lines[0], x + 8, y + 16); ctx.fillStyle = '#9a9ab0'; ctx.fillText(lines[1], x + 8, y + 32); }
+    if (hv >= 0){ const q = P[hv], n = q.n; const lines = [(n.kind === 'account' ? '@' : n.kind === 'hashtag' ? '' : '"') + n.label + (n.kind === 'word' ? '"' : ''), `${n.n} post${n.n === 1 ? '' : 's'} · ${nb[hv].length} link${nb[hv].length === 1 ? '' : 's'} · ${comms[commOf[hv]].name}`]; ctx.font = `12px 'Share Tech Mono', monospace`; const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16, x = Math.min(st.W - w - 6, Math.max(6, q.X + 14)), y = Math.max(6, q.Y - 44); ctx.globalAlpha = 1; ctx.fillStyle = '#15151b'; ctx.fillRect(x, y, w, 40); ctx.strokeStyle = colorOf(hv); ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, w - 1, 39); ctx.textAlign = 'left'; ctx.fillStyle = '#e2e2ea'; ctx.fillText(lines[0], x + 8, y + 16); ctx.fillStyle = '#9a9ab0'; ctx.fillText(lines[1], x + 8, y + 32); }
     ctx.globalAlpha = 1;
   };
-  const loop = ts => { webAnim.raf = requestAnimationFrame(loop); if (document.hidden || !box.isConnected) return; if (ts - st.last < 33) return; st.last = ts; if (st.frame < st.settle){ step(); st.frame++; } else if (st.auto && !st.dragging && st.hover < 0) st.ry += 0.0012; draw(); };
+  const loop = ts => { webAnim.raf = requestAnimationFrame(loop); if (document.hidden || !box.isConnected) return; if (ts - st.last < 33) return; st.last = ts; if (st.frame < st.settle){ step(); st.frame++; } else if (st.mode === '3d' && st.auto && !st.dragging && st.hover < 0) st.ry += 0.0012; draw(); };
   webAnim = { raf: requestAnimationFrame(loop), ro: window.ResizeObserver ? new ResizeObserver(() => { size(); draw(); }) : null }; webAnim.ro && webAnim.ro.observe(box);
   const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   const hit = (x, y) => { let best = -1, bd = 18 * 18; st.proj.forEach((q, i) => { const d = (q.X - x) ** 2 + (q.Y - y) ** 2, rr = Math.max(bd, (q.n.r * q.p + 6) ** 2); if (d < rr && (best < 0 || d < bd)){ bd = d; best = i; } }); return best; };
   cv.onpointerdown = e => { st.dragging = true; st.moved = 0; [st.px, st.py] = pos(e); cv.classList.add('drag'); cv.setPointerCapture(e.pointerId); };
-  cv.onpointermove = e => { const [x, y] = pos(e); if (st.dragging){ st.ry += (x - st.px) * 0.008; st.rx = Math.max(0.15, Math.min(1.5, st.rx + (y - st.py) * 0.006)); st.moved += Math.abs(x - st.px) + Math.abs(y - st.py); st.px = x; st.py = y; st.auto = false; } else { st.hover = hit(x, y); cv.style.cursor = st.hover >= 0 ? 'pointer' : 'grab'; } };
+  cv.onpointermove = e => { const [x, y] = pos(e); if (st.dragging){ if (st.mode === '2d'){ const sc = Math.min(st.W, st.H) / 440 * st.zoom; st.panX += (x - st.px) / sc; st.panY += (y - st.py) / sc; } else { st.ry += (x - st.px) * 0.008; st.rx = Math.max(0.15, Math.min(1.5, st.rx + (y - st.py) * 0.006)); st.auto = false; } st.moved += Math.abs(x - st.px) + Math.abs(y - st.py); st.px = x; st.py = y; } else { st.hover = hit(x, y); cv.style.cursor = st.hover >= 0 ? 'pointer' : 'grab'; } };
   cv.onpointerleave = () => { st.hover = -1; };
   cv.onpointerup = e => { st.dragging = false; cv.classList.remove('drag'); if (st.moved > 6) return; const [x, y] = pos(e); const i = hit(x, y); if (i >= 0) webNodeTap(nodes[i]); };
   cv.onwheel = e => { e.preventDefault(); st.zoom = Math.max(.6, Math.min(3.5, st.zoom * (e.deltaY < 0 ? 1.1 : 0.9))); };
-  cv.ondblclick = () => { st.auto = !st.auto; };
+  cv.ondblclick = () => { if (st.mode === '2d'){ st.panX = st.panY = 0; st.zoom = 1; } else st.auto = !st.auto; };
+  $$('[data-wm]', box).forEach(b => b.onclick = () => { st.mode = b.dataset.wm; store.set('webMode', st.mode); if (st.mode === '2d'){ st.panX = st.panY = 0; } syncChrome(); draw(); });
+  $$('[data-wc]', box).forEach(b => b.onclick = () => { st.color = b.dataset.wc; store.set('webColor', st.color); syncChrome(); draw(); });
+  const fsBtn = $('[data-wf]', box);
+  const exitMax = () => { box.classList.remove('max'); document.body.classList.remove('noscroll-max'); fsBtn.textContent = '⛶'; size(); draw(); };
+  fsBtn.onclick = async () => {
+    if (document.fullscreenElement === box){ document.exitFullscreen(); return; }
+    if (box.classList.contains('max')){ exitMax(); return; }
+    if (box.requestFullscreen){ try{ await box.requestFullscreen(); return; }catch(e){} }
+    box.classList.add('max'); document.body.classList.add('noscroll-max'); fsBtn.textContent = '✕';   // pseudo-fullscreen (iPhone)
+    size(); draw();
+  };
+  document.addEventListener('fullscreenchange', () => { fsBtn.textContent = document.fullscreenElement === box ? '✕' : '⛶'; size(); draw(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && box.classList.contains('max')) exitMax(); });
   draw();
 }
 function webNodeTap(n){
