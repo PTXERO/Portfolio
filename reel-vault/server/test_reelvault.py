@@ -425,6 +425,27 @@ class TestPipeline(Base):
         names = [c["name"] for c in S.probe("youtube.com")]
         self.assertIn("YouTube search", names)
 
+    def test_private_only_access(self):
+        from rv import web
+        class Fake(web.Handler):
+            PUBLIC = False
+            def __init__(self, ip, headers=None): self.client_address = (ip, 1); self.headers = headers or {}
+        allow = lambda ip, h=None: web.Handler._client_allowed(Fake(ip, h))
+        self.assertTrue(allow("127.0.0.1"))
+        self.assertTrue(allow("192.168.1.9"))
+        self.assertTrue(allow("100.100.1.1"))          # Tailscale/CGNAT
+        self.assertFalse(allow("8.8.8.8"))             # public internet refused
+        self.assertFalse(allow("127.0.0.1", {"X-Forwarded-For": "8.8.8.8"}))   # tunnel refused
+        Fake.PUBLIC = True
+        self.assertTrue(allow("8.8.8.8"))              # --expose opt-in
+        # brute-force lockout
+        web._pair_fails.clear()
+        for _ in range(8):
+            web._record_attempt("9.9.9.9", False)
+        self.assertTrue(web._locked_out("9.9.9.9"))
+        web._record_attempt("9.9.9.9", True)
+        self.assertFalse(web._locked_out("9.9.9.9"))
+
     def test_http_auth_and_api(self):
         web.Handler.vault = self.v
         srv = web.ThreadingHTTPServer(("127.0.0.1", 0), web.Handler)

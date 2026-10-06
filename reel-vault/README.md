@@ -46,6 +46,22 @@ reach the PC. If the printed phone link shows a VPN address (10.64.x.x and up) i
 address (usually 192.168.x.x), start with `--phone-host 192.168.x.x`. Run `ipconfig` to find
 your Wi-Fi adapter's IPv4 address.
 
+### Remote access from another network — safely
+
+The server is **private by design**: it only accepts connections from your own LAN and your own
+VPN, and refuses the public internet (and tunnels) unless you pass `--expose`. So don't port-forward
+or expose it with a public Cloudflare/ngrok tunnel. To reach it from anywhere, put your phone and PC
+on the same **private mesh VPN** — [Tailscale](https://tailscale.com) is the easy choice:
+
+1. Install Tailscale on the PC and the iPhone, sign in to both with the same account.
+2. The PC gets a private address like `100.x.y.z` that only your own devices can reach.
+3. For a real HTTPS address (no browser "not secure"), run `tailscale serve --bg 8765` on the PC —
+   it gives `https://<pc-name>.<tailnet>.ts.net`, reachable only inside your tailnet.
+4. On the phone open that address (or the `100.x.y.z:8765` one) with `?key=YOUR_KEY` once to pair.
+
+Nothing is published to the internet; the traffic is end-to-end encrypted by the VPN. The access key
+is still required, and pairing attempts are rate-limited.
+
 Options: `--port 8765`, `--data PATH` (database and videos; default `reel-vault/data/`, git-ignored),
 `--host 127.0.0.1` (this computer only), `--allow-origin https://you.neocities.org` (lets a
 copy of the page hosted elsewhere talk to the server running on the same computer), `--no-browser`.

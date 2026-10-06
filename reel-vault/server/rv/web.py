@@ -35,6 +35,22 @@ LOOPBACK = ("127.0.0.1", "localhost", "[::1]", "::1")
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 
+_pair_fails = {}       # ip -> [timestamps of recent failed pair attempts]
+
+
+def _locked_out(ip, limit=8, window=60):
+    xs = [t for t in _pair_fails.get(ip, []) if time.time() - t < window]
+    _pair_fails[ip] = xs
+    return len(xs) >= limit
+
+
+def _record_attempt(ip, ok):
+    if ok:
+        _pair_fails.pop(ip, None)
+    else:
+        _pair_fails.setdefault(ip, []).append(time.time())
+
+
 def parse_creator(text, platform=None, author_url=None):
     """Accept a bare @handle, or a profile link, and work out (handle, platform, url)."""
     text = (text or "").strip()
@@ -111,6 +127,7 @@ class Handler(BaseHTTPRequestHandler):
     allowed_origins: set = set()
     port = 8765
     phone_host = ""
+    PUBLIC = False          # when False, only private-network clients are accepted
     server_version = "ReelVault/2.0"
     protocol_version = "HTTP/1.1"
 
@@ -122,6 +139,25 @@ class Handler(BaseHTTPRequestHandler):
     # ── auth ────────────────────────────────────────────────────
     def _host(self):
         return (self.headers.get("Host") or "").lower()
+
+    def _client_allowed(self):
+        """Only accept connections from private networks: this computer, your
+        home LAN, and your own VPN (Tailscale/CGNAT 100.64/10). Public-internet
+        clients are refused, so the server is never a public endpoint. A proxy
+        header (X-Forwarded-For/CF-Connecting-IP) means a tunnel is in front,
+        which we also refuse unless explicitly --expose'd."""
+        if self.PUBLIC:
+            return True
+        if any(self.headers.get(h) for h in ("X-Forwarded-For", "X-Real-IP",
+                                             "CF-Connecting-IP", "Forwarded")):
+            return False
+        try:
+            ip = ipaddress.ip_address(self.client_address[0])
+        except ValueError:
+            return False
+        return (ip.is_loopback or ip.is_private
+                or ip in ipaddress.ip_network("100.64.0.0/10")        # Tailscale / CGNAT
+                or ip in ipaddress.ip_network("fd7a:115c:a1e0::/48"))  # Tailscale IPv6
 
     def _authorized(self):
         key = self.vault.store.access_key
@@ -218,6 +254,9 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.unquote(u.path)
         params = {k: v[-1] for k, v in urllib.parse.parse_qs(u.query).items()}
         try:
+            if not self._client_allowed():
+                return self._send(403, {"error": "this server only accepts connections from your "
+                                        "own private network (LAN or VPN), not the public internet"})
             if not self._origin_ok():
                 return self._send(403, {"error": "origin not allowed (see --allow-origin)"})
             # pairing link: ?key=… sets a cookie, then drops the key from the URL
@@ -229,8 +268,12 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/api/"):
                 parts = path[5:].strip("/").split("/")
                 if parts[0] == "pair" and method == "POST":
+                    ip = self.client_address[0]
+                    if _locked_out(ip):
+                        return self._send(429, {"error": "too many attempts — wait a minute"})
                     ok = hmac.compare_digest(str(self._body().get("key", "")).strip(),
                                              self.vault.store.access_key)
+                    _record_attempt(ip, ok)
                     time.sleep(0 if ok else 1.0)      # slow down guessing
                     return self._send(200 if ok else 401, {"ok": ok},
                                       headers=self._cookie_header() if ok else None)
@@ -617,6 +660,9 @@ def main(argv=None):
     ap.add_argument("--wipe", action="store_true",
                     help="erase the whole library (videos, topics, votes) and start fresh, then run")
     ap.add_argument("--yes", action="store_true", help="skip the confirmation prompt for --wipe")
+    ap.add_argument("--expose", action="store_true",
+                    help="DANGER: allow connections from the public internet / through a tunnel. "
+                         "Off by default — the server only accepts your own LAN and VPN (Tailscale).")
     a = ap.parse_args(argv)
 
     data = Path(a.data).expanduser().resolve()
@@ -638,6 +684,7 @@ def main(argv=None):
         print(f"wiped: {res['removed']}. starting fresh…")
     Handler.port = a.port
     Handler.phone_host = a.phone_host.strip()
+    Handler.PUBLIC = a.expose
     Handler.allowed_origins = {"https://ptxero.github.io", "https://ptxero.neocities.org"} \
         | {o.rstrip("/") for o in a.allow_origin}
     srv = ThreadingHTTPServer((a.host, a.port), Handler)
@@ -647,7 +694,12 @@ def main(argv=None):
     print(f"  this computer : http://127.0.0.1:{a.port}/reel-vault/")
     if a.host != "127.0.0.1":
         print(f"  your phone    : http://{lan_ip()}:{a.port}/reel-vault/?key={key}")
-        print("                  (same Wi-Fi; or scan the QR code in SETUP on this computer)")
+        print("                  (same Wi-Fi, or your own VPN like Tailscale; scan the QR in SETUP)")
+    if a.expose:
+        print("  ⚠ --expose is ON: the public internet can reach this server. Only do this behind "
+              "a gateway you trust (e.g. Cloudflare Access).")
+    else:
+        print("  access        : your private network only (LAN + VPN). Not reachable from the internet.")
     print(f"  data          : {data}")
     print("  tools         : " + ", ".join(f"{k}={'yes' if x else 'no'}"
                                             for k, x in Handler.vault.tools.status().items()) + "\n")
