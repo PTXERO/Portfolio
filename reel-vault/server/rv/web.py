@@ -142,7 +142,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def _origin_ok(self):
         origin = self.headers.get("Origin")
-        return not origin or origin == f"http://{self._host()}" or origin in self.allowed_origins
+        if not origin or origin in self.allowed_origins:
+            return True
+        # same host on either scheme (so HTTPS tunnels / reverse proxies work)
+        try:
+            return urllib.parse.urlparse(origin).netloc.lower() == self._host()
+        except ValueError:
+            return False
 
     def _cookie_header(self):
         return {"Set-Cookie": f"rv_key={self.vault.store.access_key}; Path=/; Max-Age=31536000; "
