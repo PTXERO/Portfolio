@@ -9,16 +9,7 @@ const REELVAULT = {
   apiBase: 'http://127.0.0.1:8765',
 
   // Results fetched per page (infinite scroll loads more)
-  pageSize: 60,
-
-  // Default collect options
-  collect: {
-    limit:       50,      // videos per source
-    minLikes:    0,
-    tab:         'live',  // 'live' = latest, 'top' = top results
-    download:    true,
-    analyze:     false,
-  },
+  pageSize: 40,
 
   // Fall back to the built-in sample library when no server is found,
   // so the page still works when hosted statically (e.g. GitHub Pages).

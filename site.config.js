@@ -63,9 +63,9 @@ const SITE = {
     {
       id:     'reel-vault',
       title:  'REEL//VAULT',
-      sub:    'v1.0',
-      desc:   'Mass-search X (and ~1000 other sites) for videos, then sort, filter and save them. Searches captions, similar words, speech and on-screen text.',
-      tags:   ['video', 'search', 'python'],
+      sub:    'v2.0',
+      desc:   'Self-learning video finder. Type a topic, it searches X, YouTube, Mastodon, Reddit and any site you add, then learns from your 👍/👎. Phone-first.',
+      tags:   ['video', 'search', 'ml', 'python'],
       url:    './reel-vault/',
       status: 'wip',
     },

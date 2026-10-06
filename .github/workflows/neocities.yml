@@ -1,0 +1,26 @@
+# Publishes the site to Neocities whenever main changes.
+# Needs a repository secret named NEOCITIES_API_KEY
+# (GitHub → Settings → Secrets and variables → Actions → New repository secret).
+name: Publish to Neocities
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: neocities
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Upload changed files
+        env:
+          NEOCITIES_API_KEY: ${{ secrets.NEOCITIES_API_KEY }}
+        run: python tools/neocities_deploy.py

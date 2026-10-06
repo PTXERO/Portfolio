@@ -1,94 +1,125 @@
 # REEL//VAULT
 
-Find, sort, filter and save videos from X/Twitter and ~1000 other sites, with a
-search engine that looks at captions, hashtags, **similar words**, **typos**, **what
-is said** in the video and **text shown on screen**.
+A self-learning video finder for the social web, built to be used from an iPhone.
+Type a topic and it searches every source you've added (X, YouTube, Mastodon/Fediverse,
+Reddit, Bluesky, Tumblr, Instagram, any site or feed). Then you 👍 / 👎 what it finds.
+Every vote teaches it what you mean, and it rewrites its own searches to find more of it.
 
 ```
-browser UI (reel-vault/index.html)  ⇄  local server (server/reelvault.py)
-                                          ├─ gallery-dl  → finds videos on X (search, accounts, likes, bookmarks, lists)
-                                          ├─ yt-dlp      → links from YouTube, TikTok, Reddit, Instagram, …
-                                          ├─ SQLite FTS5 → full-text index, stemming, ranking
-                                          ├─ ffmpeg      → thumbnails, frames
-                                          ├─ faster-whisper (optional) → speech → text
-                                          └─ tesseract  (optional) → on-screen text
+iPhone (Firefox) ──Wi-Fi──▶ your computer: python reel-vault/server/reelvault.py
+                               ├─ sources ── gallery-dl · yt-dlp · Mastodon API · Reddit · RSS · any URL
+                               ├─ library ── SQLite full-text index + optional semantic vectors
+                               ├─ learning ─ per-topic classifier + taste profile + query bandit
+                               └─ files ──── downloads, thumbnails, speech + on-screen text
 ```
-
-The page also works without the server (e.g. on GitHub Pages): it switches to
-**DEMO** mode with a fictional sample library so the search and filters can be tried.
 
 ## Run it
 
-```bash
-pip install -U yt-dlp gallery-dl          # required
-pip install faster-whisper                # optional: search speech
-# optional: install ffmpeg + tesseract with your package manager
+On a computer that stays on (Mac, Windows, Linux):
 
-python reel-vault/server/reelvault.py     # opens http://127.0.0.1:8765/reel-vault/
+```bash
+pip install -U yt-dlp gallery-dl fastembed   # fastembed = 🧠 meaning matching (optional)
+pip install faster-whisper                   # optional: search what is said
+# optional: ffmpeg (thumbnails) and tesseract (on-screen text) from your package manager
+python reel-vault/server/reelvault.py
 ```
 
-Options: `--port 8765`, `--data PATH` (where the database and videos go; default
-`reel-vault/data/`, git-ignored), `--allow-origin https://you.github.io` (allow another
-site to use the API), `--no-browser`.
+It prints two links. The computer opens SETUP, which shows a **QR code**. Scan it with
+the iPhone (same Wi-Fi) and open it in Firefox. The link carries an access key that pairs
+the phone; other devices on your Wi-Fi can't use it without the key. In Firefox, use
+⋯ → Share → **Add to Home Screen** to get an app icon.
 
-### Logging in to X
+Options: `--port 8765`, `--data PATH` (database and videos; default `reel-vault/data/`, git-ignored),
+`--host 127.0.0.1` (this computer only), `--allow-origin https://you.neocities.org` (lets a
+copy of the page hosted elsewhere talk to the server running on the same computer), `--no-browser`.
 
-X needs a logged-in session for search, timelines, likes and bookmarks. In **SETUP**
-either give a path to a `cookies.txt` exported from your browser, or pick a browser to
-read cookies from. If a collect job finds nothing, its log shows the reason
-(e.g. `AuthRequired`).
+**Logins:** X, Instagram and some other sites only work when logged in. In SETUP, pick the
+browser on the computer where you're logged in, or point to an exported `cookies.txt`.
+A source can also have its own cookies. Use a spare account: heavy scraping can get
+accounts limited and is against those sites' terms. Keep it personal.
 
-Use a secondary account if you can. Heavy scraping can get an account rate-limited, and
-it is against X's terms of service. Keep collections for personal use.
+## How it gets smart
 
-## Using it
+**Topics.** Each topic has starting words, a breadth (focused … everything), the media to
+collect, the sources to use, and optional auto-refresh (hourly … daily).
 
-**COLLECT**
-- *Mass search*: one X search per line. You can use X syntax (`"phrase"`, `OR`, `-word`,
-  `from:user`, `#tag`). Each line can be widened with your similar-word groups
-  automatically (`car crash` → `(car OR auto OR vehicle…) (crash OR wreck OR collision…)`).
-- Filters: min likes, min reposts, since/until, language, latest/top, skip replies.
-- Accounts (their media or their likes), your bookmarks, and any links.
-- Can download right away and then analyze speech and on-screen text.
+**Search expansion.** Each run grows the topic's searches from several signals. Every search
+shows where it came from in 🧠 BRAIN:
 
-**LIBRARY**
-
-| Query | Meaning |
+| origin | from |
 |---|---|
-| `car crash` | both words (stemmed: crash = crashes = crashing) |
-| `car OR bike` | either word (or toggle ALL/ANY WORDS) |
-| `"slow motion"` | exact phrase |
-| `-dashcam` | exclude |
-| `@roadcam`, `-@roadcam` | author / not author |
-| `#storm` | hashtag (or your own tag) |
-| `tag:keep` | your tags |
-| `site:youtube` | platform |
-| `said:liftoff` | only in the speech transcript |
-| `screen:warning` | only in on-screen text |
+| seed / user | what you typed |
+| morph | word forms: plural/singular, joined words, `#hashtag` form |
+| synonym | your similar-word groups (SETUP) |
+| web | related and associated words (Datamuse). Only the strongest, or those your results actually use, start switched on |
+| cooccur | hashtags and words over-represented in what you liked compared with the whole library |
+| learned | the model's strongest positive features |
+| author | creators you keep liking (and FOLLOW turns them into a source) |
 
-- **≈ SIMILAR WORDS** expands each word with your word groups (edit them in SETUP).
-- **~ TYPOS** matches close spellings that exist in your library (`cucumbr` → cucumber).
-- **\* PARTIAL** matches word beginnings (`skate` → skateboarding).
-- **IN** buttons limit where to look: caption, hashtags, author, speech, on-screen text, tags.
-- The sidebar filters by date, length, likes, views, downloaded or not, analyzed, shape
-  (wide, tall, square), platform, hashtags, your tags and authors. Each list shows counts
-  for the current results.
-- Sort by best match, newest, likes, views, reposts, engagement, length, etc.
-- Click a video to play it, edit tags and notes, and jump to the moment a word is spoken.
-  It also shows **more like this**.
-- Shift- or ctrl-click to select several videos, then tag, star, download, analyze,
-  export or delete them in bulk.
-- Export the current results (or the selection) as JSON, CSV or a list of URLs.
-- Save searches (stored in your browser). The URL keeps the full search, so you can
-  bookmark it.
+Every search keeps its own 👍 / 👎 record. A UCB bandit picks which searches to run next:
+precise ones get priority, untried ones get explored. Auto searches that keep bringing 👎
+switch themselves off, but searches you switch on or off yourself stay as you set them.
 
-Keys: `/` search · `esc` close · `← →` previous/next · `s` star · `d` download.
+**Relevance.** Every item gets a feature vector: stemmed words, word pairs, hashtags,
+creator, site, the searches that found it, media type and length. Words are weighted by
+rarity (IDF) instead of a stopword list, so nothing is filtered out and common words simply
+count less. Per topic it combines:
+- a match score against the topic's searches, before any votes
+- a liked-minus-disliked profile (Rocchio), which works from one vote
+- a logistic-regression classifier, once there are 2 👍 and 2 👎
+- with fastembed, meaning: closeness to your liked items in embedding space
+
+The more you vote, the more the learned part outweighs plain matching. Retraining runs
+in the background shortly after each vote. Every 5 votes it also rethinks its searches.
+
+**Review order (active learning).** The REVIEW deck mixes its best guesses with the
+items it's least sure about, because those teach it the most.
+
+**More like this** ranks by meaning first, then shared distinctive words, hashtags,
+creator, and items you liked together. ✦ MORE LIKE THIS turns an item into new searches
+for a topic.
+
+## Sources
+
+SOURCES → type a domain, profile link or feed and it detects how to use it:
+1. Built-in support (X, YouTube, Mastodon, Reddit, Bluesky, Tumblr, Instagram, Pinterest,
+   Imgur, DeviantArt, Bilibili, NicoNico).
+2. The site's own search URL from its OpenSearch description.
+3. RSS/Atom feeds linked on the page.
+4. Whether gallery-dl or yt-dlp understands its search, tag or profile URLs.
+5. Mastodon servers (via `/api/v1/instance`).
+
+You can also add a custom URL template with `{q}` (search words) or `{tag}` (hashtag form).
+TEST runs a source once and shows the log. "Searches" sources take topic queries; "follows"
+sources (profiles, channels, feeds) are pulled each run and scored against your topics.
+
+Adding a new kind of source in code is one function in `server/rv/sources.py` that yields
+item dicts, registered in `ADAPTERS`.
+
+## Library
+
+Search everything collected with stemming, similar words, typo tolerance, partial words,
+🧠 meaning, and field filters (caption, hashtags, 🗣 speech, 👁 on-screen text, author).
+Query syntax: `"phrase"`, `-exclude`, `OR`, `@user`, `#tag`, `tag:x`, `site:x`, `said:x`, `screen:x`.
+Filters cover topic, type, saved, shape, dates, length, likes, views, sites, hashtags, tags
+and authors. Select items to tag, star, save, analyze, export, delete, or 👍-teach a topic.
 
 ## Files
 
-- `index.html`: the whole UI
-- `reelvault.config.js`: API address, page size, default collect options
-- `demo-data.js`: fictional sample library for DEMO mode
-- `server/reelvault.py`: the server (Python standard library only)
-- `server/synonyms.json`: the default similar-word groups (your edits are saved to the data dir)
+- `index.html`: the whole UI (mobile-first, safe-area aware, works offline in DEMO mode)
+- `reelvault.config.js`, `manifest.webmanifest`, `icon-*.png`, `demo-data.js`
+- `server/reelvault.py`: entry point
+- `server/rv/`:
+  - `web.py`: HTTP, auth, API
+  - `vault.py`: jobs, topics, downloads
+  - `sources.py`: adapters, presets, detection
+  - `learn.py`: features and models
+  - `expand.py`: query growth
+  - `embed.py`: semantic matching
+  - `related.py`: more like this
+  - `search.py`: library search
+  - `db.py`: storage
 - `server/test_reelvault.py`: tests. Run `python -m unittest discover reel-vault/server`.
+
+YouTube sometimes asks servers to "confirm you're not a bot". From a home connection it
+normally works; if not, set browser cookies in SETUP.
