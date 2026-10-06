@@ -1924,7 +1924,12 @@ function drawWeb(box, graph){
       for (let i = 0; i < total; i++) for (let j = i + 1; j < total; j++){ const a = nodes[i], b = nodes[j]; const dx = a.sx - b.sx, dy = a.sy - b.sy, dz = a.sz - b.sz, d2 = dx*dx + dy*dy + dz*dz + 1, d = Math.sqrt(d2), f = 2600 / d2; a.wx += f*dx/d; a.wy += f*dy/d; a.wz += f*dz/d; b.wx -= f*dx/d; b.wy -= f*dy/d; b.wz -= f*dz/d; }
       edges.forEach(e => { const a = nodes[idx[e.a]], b = nodes[idx[e.b]]; const dx = b.sx - a.sx, dy = b.sy - a.sy, dz = b.sz - a.sz, d = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1, k = 0.01 * (0.3 + e.w / Math.max(1, ...edges.map(x => x.w))) * (d - 70); a.wx += k*dx/d; a.wy += k*dy/d; a.wz += k*dz/d; b.wx -= k*dx/d; b.wy -= k*dy/d; b.wz -= k*dz/d; });
       nodes.forEach(n => { if (focus && n.id === focus){ n.wx = n.wy = n.wz = 0; return; } n.wx -= n.sx * 0.004; n.wy -= n.sy * 0.004; n.wz -= n.sz * 0.004; n.sx += Math.max(-9, Math.min(9, n.wx)); n.sy += Math.max(-9, Math.min(9, n.wy)); n.sz += Math.max(-9, Math.min(9, n.wz)); n.wx *= 0.8; n.wy *= 0.8; n.wz *= 0.8; });
-    } }
+    }
+    // fit: whatever the clusters did, the ball sits inside the view (centred, furthest node at ~R0)
+    let cxm = 0, cym = 0, czm = 0; nodes.forEach(n => { cxm += n.sx; cym += n.sy; czm += n.sz; }); cxm /= total; cym /= total; czm /= total;
+    if (!focus) nodes.forEach(n => { n.sx -= cxm; n.sy -= cym; n.sz -= czm; });
+    const far = Math.max(1, ...nodes.map(n => Math.hypot(n.sx, n.sy, n.sz))), k = far > R0 * 1.05 ? (R0 * 1.05) / far : 1;
+    nodes.forEach(n => { n.sx *= k; n.sy *= k; n.sz *= k; }); }
   // chrome
   const legendHTML = () => (st.color === 'kind'
     ? ['account', 'hashtag', 'word'].map(k => `<span><i style="background:${KIND_COLOR[k]}"></i>${k === 'account' ? '@ accounts' : k === 'hashtag' ? '# tags' : 'words'} <em>${nodes.filter(n => n.kind === k).length}</em></span>`).join('')
