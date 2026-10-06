@@ -24,6 +24,18 @@ pip install faster-whisper                   # optional: search what is said
 python reel-vault/server/reelvault.py
 ```
 
+**Keep it updated automatically.** Instead of the line above, start the launcher once and
+leave it running. It keeps the server up, checks GitHub for new commits on a loop, and pulls +
+restarts when there are updates — your phone reconnects on its own:
+
+```bash
+python reel-vault/server/run.py
+```
+
+Options pass through to the server (`--port`, `--phone-host`, `--data`). `--interval 30` changes
+how often it checks for updates; `--no-update` just keeps the server running without pulling.
+(Auto-update needs a `git clone`; a downloaded ZIP won't update itself.)
+
 It prints two links. The computer opens SETUP, which shows a **QR code**. Scan it with
 the iPhone (same Wi-Fi) and open it in Firefox. The link carries an access key that pairs
 the phone; other devices on your Wi-Fi can't use it without the key. In Firefox, use

@@ -320,6 +320,10 @@ details.more[open] summary{color:var(--acc)}
 .qr img,.qr canvas{display:block;width:200px!important;height:200px!important}
 pre.cmd{font-family:var(--fmono);font-size:12px;line-height:1.8;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 12px;overflow-x:auto;color:var(--acc)}
 pre.cmd i{color:var(--dim);font-style:normal}
+#reconnect{position:fixed;inset:0;z-index:400;background:rgba(7,7,10,.9);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:24px}
+#reconnect.on{display:flex}
+#reconnect .rc-box{text-align:center;font-family:var(--fmono);font-size:14px;color:var(--txt);line-height:2}
+#reconnect small{color:var(--dim);font-size:12px}
 .toast{position:fixed;left:50%;bottom:calc(var(--nav) + var(--sab) + 14px);transform:translate(-50%,10px);z-index:300;background:var(--panel2);border:1px solid var(--b2);border-radius:12px;
   font-family:var(--fmono);font-size:13px;padding:10px 16px;opacity:0;transition:.2s;pointer-events:none;width:max-content;max-width:calc(100vw - 32px);text-align:center;overflow-wrap:anywhere}
 .toast.show{opacity:1;transform:translate(-50%,0)}
@@ -570,11 +574,34 @@ const ready = () => LIVE && !NEEDKEY;
 async function api(path, opts={}){
   const o = { method: opts.method || 'GET', headers: {}, credentials: 'include' };
   if (opts.body !== undefined){ o.body = JSON.stringify(opts.body); o.headers['Content-Type'] = 'application/json'; }
-  const r = await fetch(API + path, o);
+  let r;
+  try{ r = await fetch(API + path, o); }
+  catch(e){ if (LIVE && !opts.noReconnect) watchReconnect(); throw e; }   // server down (restarting?)
   const j = await r.json().catch(() => ({}));
   if (r.status === 401){ NEEDKEY = true; showPair(); throw new Error('This device needs pairing'); }
   if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
   return j;
+}
+// When the server goes away (e.g. the launcher is restarting it after an update),
+// show a notice and reload once it's back — picking up any new version automatically.
+let reconnecting = false;
+async function watchReconnect(){
+  if (reconnecting || !LIVE) return;
+  reconnecting = true;
+  let el = $('#reconnect');
+  if (!el){ el = document.createElement('div'); el.id = 'reconnect'; el.innerHTML = '<div class="rc-box"><span class="spinner"></span> Reconnecting to your computer…<br><small>It may be installing an update.</small></div>'; document.body.appendChild(el); }
+  el.classList.add('on');
+  const startedAt = Date.now();
+  for (let i = 0; i < 600; i++){          // keep trying for up to ~10 min
+    await new Promise(r => setTimeout(r, 1500));
+    try{
+      const ctl = new AbortController(); setTimeout(() => ctl.abort(), 2500);
+      const res = await fetch(API + '/api/status', { signal: ctl.signal, credentials: 'include' });
+      if (res.ok || res.status === 401){ location.reload(); return; }   // back up → reload fresh
+    }catch(e){}
+  }
+  reconnecting = false; el.classList.remove('on');
+  void startedAt;
 }
 const mediaUrl = rel => rel ? API + '/media/' + rel.split(/[\\/]/).map(encodeURIComponent).join('/') : null;
 
