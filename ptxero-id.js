@@ -56,10 +56,26 @@
     return (keyCache = { priv: kp.privateKey, pub: kp.publicKey, spki });
   }
   async function pub() { const k = await keys(); return k ? k.spki : null; }
+  // Does this hub understand PTXERO IDs (hub ≥ 2.0)? Older Workers only allow Content-Type in CORS, so signed
+  // headers would make the browser block the request outright — on those we send the legacy form instead.
+  // Probed once per origin per tab (sessionStorage), so a redeployed hub is picked up by the next tab.
+  const capCache = {};
+  function capable(origin) {
+    if (capCache[origin]) return capCache[origin];                       // a promise: concurrent callers share one probe
+    return (capCache[origin] = (async () => {
+      let v = null; try { v = JSON.parse(sessionStorage.getItem('ptxero_hubcap:' + origin) || 'null'); } catch (e) { v = null; }
+      if (v === null) {
+        try { const r = await fetch(origin + '/health', { cache: 'no-store' }); const j = await r.json().catch(() => ({})); v = !!(r.ok && j.hub); } catch (e) { v = false; }
+        try { sessionStorage.setItem('ptxero_hubcap:' + origin, JSON.stringify(v)); } catch (e) { /* ignore */ }
+      }
+      return v;
+    })());
+  }
   // headers that prove this request is from this identity (the hub verifies; nothing secret leaves the device)
   async function sign(method, url) {
     const k = await keys(); if (!k) return {};
-    const u = new URL(url, location.href); const ts = Math.floor(Date.now() / 1000); const nonce = Math.random().toString(36).slice(2, 12);
+    const u = new URL(url, location.href); if (!(await capable(u.origin))) return {};
+    const ts = Math.floor(Date.now() / 1000); const nonce = Math.random().toString(36).slice(2, 12);
     const msg = [suffix(), ts, nonce, String(method || 'GET').toUpperCase(), u.pathname].join('\n');
     const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, k.priv, new TextEncoder().encode(msg));
     return { 'X-PX-Uid': suffix(), 'X-PX-Pub': k.spki, 'X-PX-Ts': String(ts), 'X-PX-Nonce': nonce, 'X-PX-Sig': b64u.enc(sig) };
@@ -109,7 +125,7 @@
 
   // ── your data on the hub ──
   const me = () => hubJson('/me');
-  const register = async () => { try { return await hubJson('/id', { method: 'POST', body: { secret: await legacySecret() } }); } catch (e) { return { error: e.message, status: e.status }; } };
+  const register = async () => { try { if (!(await capable(new URL(host().hub).origin))) return { error: 'this hub is not running hub 2.0 yet', status: 404 }; return await hubJson('/id', { method: 'POST', body: { secret: await legacySecret() } }); } catch (e) { return { error: e.message, status: e.status }; } };
   const exportData = () => hubJson('/me/export');
   const deleteMyData = () => hubJson('/me', { method: 'DELETE' });
   const store = {
@@ -216,5 +232,5 @@
     refresh();
   }
 
-  window.PX = { id: playerId, handle, prefix, suffix, pub, sign, keys, legacySecret, host, setHost, isShared, fetch: hubFetch, json: hubJson, me, register, exportData, deleteMyData, store, exportKey, importKey, forgetDevice, panel, DEFAULT_HUB };
+  window.PX = { id: playerId, handle, prefix, suffix, pub, sign, keys, capable, legacySecret, host, setHost, isShared, fetch: hubFetch, json: hubJson, me, register, exportData, deleteMyData, store, exportKey, importKey, forgetDevice, panel, DEFAULT_HUB };
 })();
