@@ -58,7 +58,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
   <a class="brand" href="../">PTXERO HUB<small>YOUR DATA, YOUR CHOICE</small></a>
   <span style="flex:1"></span>
   <a class="hbtn" href="hub-worker.js" target="_blank" rel="noreferrer">WORKER CODE</a>
-  <a class="hbtn" href="hub-setup.sql" target="_blank" rel="noreferrer">DATABASE SQL</a>
+  <a class="hbtn" href="hub-setup.sql.txt" target="_blank" rel="noreferrer">DATABASE SQL</a>
 </div>
 <main>
   <h1>WHERE YOUR DATA LIVES <span class="tag" id="latest">HUB v2.0</span></h1>
@@ -105,7 +105,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
   <div class="step"><div class="n">2</div><div>
     <h3>Paste the database setup</h3>
     <p>In your project: left sidebar <span class="ui">SQL Editor</span> → <span class="ui">New query</span> → paste the whole file → <span class="ui">Run</span>. It creates every table the apps use, read-only access for pages, and the hub's own tables. It is safe to run again later.</p>
-    <div class="row"><button class="btn pri" id="copySql">⧉ COPY THE SQL</button><a class="btn sm" href="hub-setup.sql" target="_blank" rel="noreferrer">OPEN RAW</a><span class="note" id="copySqlMsg"></span></div>
+    <div class="row"><button class="btn pri" id="copySql">⧉ COPY THE SQL</button><a class="btn sm" href="hub-setup.sql.txt" target="_blank" rel="noreferrer">OPEN RAW</a><span class="note" id="copySqlMsg"></span></div>
   </div></div>
 
   <div class="step"><div class="n">3</div><div>
@@ -194,7 +194,7 @@ async function copyFile(file, btn, msg, what) {
   catch (e) { $(msg).innerHTML = 'Couldn\'t copy automatically — open the raw file, select all, copy.'; }
   b.disabled = false;
 }
-$('#copySql').onclick = () => copyFile('hub-setup.sql', '#copySql', '#copySqlMsg', 'SQL — paste into the Supabase SQL editor and Run');
+$('#copySql').onclick = () => copyFile('hub-setup.sql.txt', '#copySql', '#copySqlMsg', 'SQL — paste into the Supabase SQL editor and Run');
 $('#copyWorker').onclick = () => copyFile('hub-worker.js', '#copyWorker', '#copyWorkerMsg', 'JavaScript — paste into the Cloudflare editor and Deploy');
 $('#test').onclick = async () => {
   const st = $('#status'); let u = $('#url').value.trim().replace(/\/+$/, '');

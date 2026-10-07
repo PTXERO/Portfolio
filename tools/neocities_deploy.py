@@ -44,6 +44,7 @@ woff2 xcf xml xsl xslt yaml yml""".split())
 PUBLISH_AS = {
     "reel-vault/install.txt":    "reel-vault/start.ps1",   # Windows (PowerShell)
     "reel-vault/install-sh.txt": "reel-vault/start.sh",    # macOS / Linux
+    "hub/hub-setup.sql.txt":     "hub/hub-setup.sql",      # Neocities refuses .sql; the hub guide fetches this copy
 }
 
 
