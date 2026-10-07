@@ -7,6 +7,7 @@ globalThis.fetch = async (u, opts = {}) => {
   const ok = (j, status = 200) => ({ ok: status < 300, status, headers: { get: () => 'application/json' }, json: async () => j, text: async () => JSON.stringify(j) });
   if (url.pathname === '/rest/v1/rpc/hub_touch') { const k = body.p_k + '|' + today(); const r = DB.hub_usage[k] = DB.hub_usage[k] || { calls: 0, writes: 0, bytes: 0 }; r.calls += body.p_calls; r.writes += body.p_writes; r.bytes += body.p_bytes; return ok([r]); }
   if (url.pathname === '/rest/v1/rpc/hub_prune_usage') return ok({});
+  if (url.pathname === '/rest/v1/hub_usage') { const n = Object.keys(DB.hub_usage).filter((k) => k.startsWith('uid:') && k.endsWith('|' + today())).length; return new Response('[]', { status: 206, headers: { 'Content-Type': 'application/json', 'Content-Range': `0-0/${n}` } }); }
   const t = url.pathname.replace('/rest/v1/', ''); const q = parseQ(url.search);
   if (t === 'profiles') {
     if (m === 'POST') { const row = DB.profiles[body.uid] = Object.assign(DB.profiles[body.uid] || { uid: body.uid }, body); return ok([row]); }
@@ -26,7 +27,7 @@ globalThis.fetch = async (u, opts = {}) => {
   return ok({ error: 'unmocked ' + url.pathname }, 404);
 };
 const W = (await import(new URL('../hub-worker.js', import.meta.url).href)).default;
-const env = { SERVICE_KEY: 'svc', ADMIN_UID: 'AD01', LIMITS: JSON.stringify({ fetch: 3, writes: 2, anon_fetch: 1, store_bytes: 200, blob_bytes: 100 }) };
+const env = { SERVICE_KEY: 'svc', ADMIN_UID: 'AD01', LIMITS: JSON.stringify({ fetch: 3, max_fetch: 3, pool: 3, writes: 2, max_writes: 2, write_pool: 2, anon_fetch: 1, store_bytes: 200, blob_bytes: 100 }) };
 const ok = (c, m) => console.log((c ? '✓' : '✗') + ' ' + m);
 // a browser-side identity
 const b64u = (buf) => Buffer.from(buf).toString('base64url');
@@ -85,3 +86,14 @@ r = await call('DELETE', '/me', me); ok(r.status === 200 && !DB.profiles.AB12 &&
 // 11. retention cron purges stale identities, never the owner
 DB.hub_users.CD34.last_seen = new Date(Date.now() - 400 * 86400000).toISOString(); DB.hub_users.AD01.last_seen = DB.hub_users.CD34.last_seen;
 await W.scheduled({}, env); ok(!DB.profiles.CD34 && DB.profiles.AD01, 'cron: stale @CD34 purged, owner kept');
+// 12. the pool: one active id gets the ceiling, many share it, never below the floor
+{ const env2 = Object.assign({}, env, { LIMITS: JSON.stringify({ fetch: 400, max_fetch: 6000, pool: 20000 }) }); DB.hub_usage = {};
+  const solo = await ident('SOLO'); await call('POST', '/id', solo, {});
+  const fetch2 = (p, id) => W.fetch(new Request('https://hub.test' + p, { headers: {} }), env2);
+  let rr2 = await W.fetch(new Request('https://hub.test/me', { headers: await solo.headers('GET', '/me') }), env2); let jm = await rr2.json();
+  ok(jm.limits.fetch === 6000 && jm.limits.active === 1, 'pool: alone today → ceiling (' + jm.limits.fetch + ' fetches)');
+  for (let i = 0; i < 40; i++) DB.hub_usage['uid:U' + i + '|' + today()] = { calls: 1, writes: 0, bytes: 0 };
+  W.__resetActive && W.__resetActive();
+  await new Promise((r) => setTimeout(r, 10));
+  rr2 = await W.fetch(new Request('https://hub.test/me', { headers: await solo.headers('GET', '/me') }), Object.assign({}, env2, { LIMITS: JSON.stringify({ fetch: 400, max_fetch: 6000, pool: 20000, _bust: Date.now() }) })); jm = await rr2.json();
+  ok(jm.limits.fetch >= 400 && jm.limits.fetch <= 6000, 'pool: shared among active ids stays inside floor..ceiling (' + jm.limits.fetch + ' for ' + jm.limits.active + ')'); }

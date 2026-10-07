@@ -232,7 +232,8 @@
   }
   async function collectForTopic(t, runQs, srcs, job, seen) {
     srcs = srcs.slice();
-    const h = await L.hub(); const budget = +t.settings.max_fetches || (h && h.kind === 'shared' ? 60 : 150); let spent = 0;   // fetches per run (the shared hub has daily limits)
+    const h = await L.hub(); let budget = +t.settings.max_fetches || (h && h.kind === 'shared' ? 60 : 150); let spent = 0;   // fetches per run (the shared hub has daily limits)
+    if (!t.settings.max_fetches && h && h.kind === 'shared' && window.PX) { try { const me = await window.PX.me(); const left = me.limits ? me.limits.fetch - (me.today.fetch || 0) : 1e9; budget = me.owner || left > 2000 ? 150 : Math.max(20, Math.min(60, Math.floor(left / 2))); } catch (e) { /* keep default */ } }
     const byUrl = new Map(); for (const it of await idb.all('items')) if (it.url && ARTICLE_PLATFORMS.has(it.platform)) byUrl.set(it.url, it.id);
     for (const q of runQs) {
       for (const s of srcs.slice()) {

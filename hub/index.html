@@ -82,8 +82,8 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
   <h2>WHAT THE SHARED HUB ALLOWS</h2>
   <table>
     <tr><th>What</th><th>Per day, per identity</th><th>Anonymous (no id)</th></tr>
-    <tr><td>Fetches (SearchNet searches, profiles, follows, media resolving)</td><td>400</td><td>60 per address</td></tr>
-    <tr><td>Writes (posts, likes, follows, comments, shares, backups)</td><td>300</td><td>none</td></tr>
+    <tr><td>Fetches (SearchNet searches, profiles, follows, media resolving)</td><td>a pool of 20,000 a day split among whoever is active, never under 400 or over 6,000 each</td><td>60 per address</td></tr>
+    <tr><td>Writes (posts, likes, follows, comments, shares, backups)</td><td>a pool of 10,000 split the same way, 300 to 3,000 each</td><td>none</td></tr>
     <tr><td>Stored backups (per-person store)</td><td>25 MB total, 512 KB per item</td><td>n/a</td></tr>
     <tr><td>Kept for</td><td>180 days after your last visit, then everything is erased</td><td>n/a</td></tr>
   </table>
@@ -136,7 +136,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
       <tr><td><code>SUPABASE_URL</code></td><td>Text</td><td>your Project URL, e.g. <code>https://abcd1234.supabase.co</code></td></tr>
       <tr><td><code>ADMIN_UID</code></td><td>Text</td><td>your own 4-character suffix (<b id="meSuffix">…</b>). Makes you the owner: no limits, never auto-deleted, moderation rights in Social</td></tr>
       <tr><td><code>ALLOWED_ORIGINS</code></td><td>Text, optional</td><td><code>*</code> to let any page use it, or a comma-separated list of sites. Default: <code>https://ptxero.neocities.org</code> (the hosted apps). Fetch routes answer any site regardless</td></tr>
-      <tr><td><code>LIMITS</code></td><td>Text, optional</td><td>JSON to change the limits for guests, e.g. <code>{"fetch":1000,"writes":500,"store_bytes":104857600,"blob_bytes":1048576,"anon_fetch":100}</code></td></tr>
+      <tr><td><code>LIMITS</code></td><td>Text, optional</td><td>JSON to change the limits for guests, e.g. <code>{"pool":50000,"fetch":1000,"max_fetch":10000,"writes":500,"store_bytes":104857600,"anon_fetch":100}</code>. <code>pool</code> is shared by the day's active ids, <code>fetch</code> is the floor each, <code>max_fetch</code> the ceiling.</td></tr>
       <tr><td><code>RETENTION_DAYS</code></td><td>Text, optional</td><td>how long an unused identity's data is kept (default <code>180</code>, minimum 7)</td></tr>
       <tr><td><code>BUCKET</code></td><td>Text, optional</td><td>storage bucket name; the SQL created <code>renders</code></td></tr>
     </table>

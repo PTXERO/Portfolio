@@ -32,7 +32,25 @@ const DEFAULT_SUPABASE = 'https://tfquiunqquuctgkpmiba.supabase.co';
 const DEFAULT_ALLOWED = ['https://ptxero.neocities.org'];
 const VIEW_BASE = 'https://ptxero.neocities.org/ascii-render/view.html';
 const RF_PROXY  = 'https://rf-proxy.ptxero.workers.dev';
-const DEFAULT_LIMITS = { fetch: 400, writes: 300, store_bytes: 25 * 1024 * 1024, blob_bytes: 512 * 1024, anon_fetch: 60 };
+// Fair use scales with the day: a pool of fetches is split among the identities active today, never below
+// `fetch` each and never above `max_fetch`. One person alone gets the ceiling; a busy day shares the pool.
+// (Cloudflare's free tier is ~100k Worker requests a day; the pool leaves headroom for Social and the rest.)
+const DEFAULT_LIMITS = { fetch: 400, max_fetch: 6000, pool: 20000, writes: 300, max_writes: 3000, write_pool: 10000, store_bytes: 25 * 1024 * 1024, blob_bytes: 512 * 1024, anon_fetch: 60 };
+let activeCache = { n: 1, t: 0 };
+async function activeToday(svc) {                 // identities that touched the hub today (cached a minute per isolate)
+  if (Date.now() - activeCache.t < 60000) return activeCache.n;
+  try {
+    const day = new Date().toISOString().slice(0, 10);
+    const r = await fetch(`${SUPABASE}/rest/v1/hub_usage?day=eq.${day}&k=like.uid:*&select=k`, { headers: { ...svc, Prefer: 'count=exact', Range: '0-0' } });
+    const cr = r.headers.get('Content-Range') || ''; const n = parseInt(cr.split('/')[1] || '1', 10);
+    activeCache = { n: Math.max(1, n || 1), t: Date.now() };
+  } catch (e) { activeCache = { n: 1, t: Date.now() }; }
+  return activeCache.n;
+}
+function dailyCaps(L, active) {
+  const share = (pool, floor, ceil) => Math.max(floor, Math.min(ceil, Math.floor(pool / Math.max(1, active))));
+  return { fetch: share(L.pool, L.fetch, L.max_fetch), writes: share(L.write_pool, L.writes, L.max_writes), active };
+}
 let SUPABASE = DEFAULT_SUPABASE, BUCKET = 'renders', ALLOWED = DEFAULT_ALLOWED, LIMITS = DEFAULT_LIMITS;
 
 const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -186,9 +204,10 @@ async function quota(env, svc, px, scope, bytes) {
   }
   const u = await touch(svc, px.key, 1, scope === 'write' ? 1 : 0, bytes || 0);
   if (!u) return null;
-  const cap = scope === 'fetch' ? (px.verified ? L.fetch : L.anon_fetch) : L.writes;
+  const caps = px.verified ? dailyCaps(L, await activeToday(svc)) : null;
+  const cap = scope === 'fetch' ? (px.verified ? caps.fetch : L.anon_fetch) : caps.writes;
   const used = scope === 'fetch' ? u.calls : u.writes;
-  if (used > cap) return { status: 429, body: { error: 'quota', scope, used, limit: cap, resets_at: resetsAt(), hint: px.verified ? 'Daily fair-use limit on the shared hub. Run your own hub (free) to lift it — see the /hub/ guide.' : 'Anonymous limit. A PTXERO ID (free, no account) gets more; your own hub has no limits.' }, retry: Math.max(60, Math.round((new Date(resetsAt()) - Date.now()) / 1000)) };
+  if (used > cap) return { status: 429, body: { error: 'quota', scope, used, limit: cap, resets_at: resetsAt(), hint: px.verified ? 'Daily limit on the shared hub (today\'s pool split among ' + (caps ? caps.active : 1) + ' active id' + (caps && caps.active === 1 ? '' : 's') + '). Your own hub has no limits, see the /hub/ guide.' : 'Anonymous limit. A PTXERO ID (free, no account) gets more; your own hub has no limits.' }, retry: Math.max(60, Math.round((new Date(resetsAt()) - Date.now()) / 1000)) };
   if (px.verified) fetch(`${SUPABASE}/rest/v1/hub_users`, { method: 'POST', headers: { ...svc, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ uid: px.uid, pubkey: px.pub, last_seen: new Date().toISOString() }) }).catch(() => {});
   return null;
 }
@@ -948,7 +967,7 @@ export default {
       const bytes = blobs.reduce((s, b) => s + (b.bytes || 0), 0);
       const L = limits(env); const owner = !!ADMIN && px.uid === ADMIN;
       return ogJson({ uid: px.uid, owner, since: users[0] ? users[0].created_at : null, last_seen: users[0] ? users[0].last_seen : null, pinned: !!(users[0] && users[0].pinned),
-        today: { fetch: today.calls, writes: today.writes }, limits: owner ? null : { fetch: L.fetch, writes: L.writes, store_bytes: L.store_bytes },
+        today: { fetch: today.calls, writes: today.writes }, limits: owner ? null : Object.assign({ store_bytes: L.store_bytes }, dailyCaps(L, await activeToday(svc))),
         store: { bytes, blobs: blobs.length, by_app: blobs.reduce((m, b) => (m[b.app] = (m[b.app] || 0) + (b.bytes || 0), m), {}) },
         retention_days: Math.max(7, parseInt((env && env.RETENTION_DAYS) || '180', 10) || 180), resets_at: resetsAt() }, 200, request);
     }
