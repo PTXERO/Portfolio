@@ -93,6 +93,15 @@
     if (o.mode === 'local') return Object.assign({}, d, { mode: 'local' });
     return { mode: 'own', hub: String(o.hub || '').replace(/\/+$/, '') || d.hub, supabaseUrl: String(o.supabaseUrl || '').replace(/\/+$/, '') || d.supabaseUrl, supabaseAnonKey: o.supabaseAnonKey || d.supabaseAnonKey, bucket: o.bucket || d.bucket };
   }
+  // where the data actually sits, in words, for the panel and for any app that wants to print it
+  const APP_DATA = { searchnet: 'Your library (posts, topics, ratings) stays on this device. The hub only fetches for you, keeps each search answer for a few minutes so the next person asking the same thing costs nothing (no id attached), and holds backups only if you make them.',
+    social: 'Your profile, posts, likes, comments, follows and reposts.', ascii: 'The renders you choose to share, and the profile behind your handle.', gallery: 'Your gallery profile and anything you publish from it.', hub: 'Whatever the apps store for you: profile, posts, renders, backups.' };
+  function whereLine(app) {
+    const H = host(); const what = APP_DATA[app] || APP_DATA.hub;
+    if (H.mode === 'local') return { title: 'Nothing leaves this device', text: 'No hub is used. ' + what.split('.')[0] + '. Nothing is sent, shared or backed up anywhere.' };
+    if (H.mode === 'own') return { title: 'Hosted by you', text: 'Hub: ' + H.hub + ' (your Cloudflare Worker)' + (H.supabaseUrl ? ' · database: ' + H.supabaseUrl + ' (your Supabase project)' : '') + '. PTXERO holds none of it. ' + what };
+    return { title: 'Hosted on the shared PTXERO hub', text: 'Hub: ' + H.hub + ' (a Cloudflare Worker) and a Supabase database, both run by PTXERO. ' + what + ' The pages on ptxero.neocities.org are static and store nothing.' };
+  }
   function setHost(o) { if (!o || o.mode === 'shared') del(LS.host); else set(LS.host, JSON.stringify(o)); window.dispatchEvent(new CustomEvent('px:host', { detail: host() })); return host(); }
   const isShared = () => host().mode === 'shared';
 
@@ -163,7 +172,7 @@
 .px-panel .px-btn{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;letter-spacing:.08em;padding:7px 11px;border:1px solid var(--b2,#2c2c36);border-radius:2px;background:transparent;color:var(--txt,#e2e2ea);cursor:pointer}
 .px-panel .px-btn:hover{border-color:var(--dim,#7a7a92)}.px-panel .px-btn.danger{color:var(--bad,#ff4d6d);border-color:rgba(255,77,109,.4)}
 .px-panel .px-opt{display:flex;gap:10px;align-items:flex-start;user-select:none;padding:8px 10px;border:1px solid var(--border,#1f1f29);border-radius:6px;cursor:pointer;flex:1 1 220px}
-.px-panel .px-opt>span{flex:1 1 auto;min-width:0}.px-panel .px-opt::after{content:'';flex:0 0 auto;width:10px;height:10px;border-radius:50%;border:1px solid var(--b2,#2c2c36);margin-top:4px}.px-panel .px-opt.on::after{background:var(--acc,#f54242);border-color:var(--acc,#f54242);box-shadow:0 0 10px rgba(var(--acc-rgb,245,66,66),.6)}
+.px-panel .px-opt>span{flex:1 1 auto;min-width:0}.px-panel .px-where{margin:10px 0 4px;padding:8px 10px;border-left:2px solid var(--acc,#f54242);background:var(--panel,#121218);border-radius:0 6px 6px 0;font-size:12.5px;line-height:1.45}.px-panel .px-where .px-note{display:inline;margin:0}.px-panel .px-opt::after{content:'';flex:0 0 auto;width:10px;height:10px;border-radius:50%;border:1px solid var(--b2,#2c2c36);margin-top:4px}.px-panel .px-opt.on::after{background:var(--acc,#f54242);border-color:var(--acc,#f54242);box-shadow:0 0 10px rgba(var(--acc-rgb,245,66,66),.6)}
 .px-panel .px-opt.on{border-color:var(--acc,#f54242)}.px-panel .px-opt b{display:block;font-weight:500}.px-panel .px-opt small{color:var(--dim,#7a7a92);display:block;margin-top:2px}
 .px-panel input[type=text]{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:14px;color:var(--txt,#e2e2ea);background:var(--panel,#121218);border:1px solid var(--b2,#2c2c36);border-radius:8px;padding:8px 10px;width:100%;box-sizing:border-box;margin:4px 0}
 .px-panel .px-bar{height:6px;background:var(--panel2,#17171f);border-radius:3px;overflow:hidden;margin:4px 0}.px-panel .px-bar i{display:block;height:100%;background:var(--acc,#f54242)}
@@ -189,6 +198,7 @@
         <input type="text" class="px-sbk" placeholder="Supabase publishable (anon) key (optional)" value="${esc(H.mode === 'own' ? H.supabaseAnonKey : '')}" autocapitalize="off" spellcheck="false">
         <div class="px-row"><button class="px-btn px-save">SAVE &amp; TEST</button><span class="px-note px-ownmsg"></span></div>
       </div>
+      <div class="px-where"></div>
       <div class="px-usage"><div class="px-note px-umsg">…</div></div>
       <div class="px-row">
         <button class="px-btn px-export">⬇ KEY FILE</button>
@@ -199,7 +209,8 @@
       <div class="px-note">Delete removes everything this id left on the hub (posts, renders, likes, follows, backups) and the id itself. Your key stays on this device so you can start over any time.</div>
     </div>`;
     const $ = (s) => el.querySelector(s);
-    const paint = () => { const h = host(); el.querySelectorAll('.px-opt').forEach((o) => o.classList.toggle('on', o.dataset.mode === h.mode)); $('.px-own').hidden = h.mode !== 'own'; };
+    const paint = () => { const h = host(); el.querySelectorAll('.px-opt').forEach((o) => o.classList.toggle('on', o.dataset.mode === h.mode)); $('.px-own').hidden = h.mode !== 'own'; const w = whereLine(opts.app); $('.px-where').innerHTML = '<b>' + esc(w.title) + '</b> <span class="px-note">' + esc(w.text) + '</span>'; };
+    paint(); window.addEventListener('px:host', paint);   // a change made elsewhere (another panel, the setup screen) shows here too
     el.querySelectorAll('.px-opt').forEach((o) => o.onclick = () => {
       const mode = o.dataset.mode;
       if (mode === 'own') { setHost({ mode: 'own', hub: $('.px-hub').value.trim(), supabaseUrl: $('.px-sb').value.trim(), supabaseAnonKey: $('.px-sbk').value.trim() }); }
@@ -233,5 +244,5 @@
     refresh();
   }
 
-  window.PX = { id: playerId, handle, prefix, suffix, pub, sign, keys, capable, legacySecret, host, setHost, isShared, fetch: hubFetch, json: hubJson, me, register, exportData, deleteMyData, store, exportKey, importKey, forgetDevice, panel, DEFAULT_HUB };
+  window.PX = { id: playerId, handle, prefix, suffix, pub, sign, keys, capable, legacySecret, host, setHost, isShared, fetch: hubFetch, json: hubJson, me, register, exportData, deleteMyData, store, exportKey, importKey, forgetDevice, panel, DEFAULT_HUB, whereLine };
 })();

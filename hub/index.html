@@ -64,7 +64,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
 @media (max-width:600px){.steps .body{padding-left:0}.steps summary{grid-template-columns:30px minmax(0,1fr) 18px}.steps summary .n{font-size:22px}h2{margin-top:22px}}
 @media (max-width:600px){.brand small{display:none}h1{font-size:30px}.hbtn.code{display:none}.top{gap:8px;padding:10px 12px}}
 </style>
-<script src="../ptxero-id.js?v=3"></script>
+<script src="../ptxero-id.js?v=4"></script>
 </head>
 <body>
 <div class="top">
@@ -95,6 +95,18 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
         <p class="note">Before keys, Social proved who you were with a per-device secret. Those profiles move over the first time they post from the same device.</p>
       </details>
     </div>
+    <h2>WHERE IT ACTUALLY SITS</h2>
+    <p class="note">Said plainly, because it's your data. PTXERO stores nothing anywhere except the shared hub, and only what you put there. Switch to your own hub and PTXERO holds nothing of yours at all.</p>
+    <div class="tw"><table>
+      <tr><th>What</th><th>Where</th><th>Who runs it</th></tr>
+      <tr><td>SearchNet library: posts, topics, ratings, the web</td><td>this browser (IndexedDB), or the PC you run the server on (SQLite)</td><td>you</td></tr>
+      <tr><td>Searches</td><td>pass through the hub Worker to the source and back; each answer is kept a few minutes so the next asker costs nothing. No id is attached to a cached answer</td><td>the hub's owner: PTXERO on the shared hub, you on yours</td></tr>
+      <tr><td>Social posts, likes, follows, comments, shared renders, backups you make</td><td>the hub's Supabase database and storage bucket</td><td>the hub's owner</td></tr>
+      <tr><td>Your PTXERO ID key</td><td>this browser only, plus any key file you download</td><td>you</td></tr>
+      <tr><td>LLM briefs</td><td>your key goes from your browser straight to the provider you chose, or to Ollama on your machine. The hub never sees it</td><td>you and that provider</td></tr>
+      <tr><td>The pages (ptxero.neocities.org)</td><td>static files. They store nothing and set no tracking</td><td>Neocities hosts them</td></tr>
+    </table></div>
+    <p class="note" id="whereNow"></p>
     <details class="more"><summary>▸ WHERE THE SWITCH IS</summary><p class="note">SEARCH//NET → <span class="ui">SOURCES → YOUR DATA</span> · SOCIAL → <span class="ui">⚿ MY KEY → YOUR DATA &amp; HUB</span> · the RF gallery's <span class="ui">@ID</span> chip · ASCII//RENDER's <span class="ui">@handle</span> bubble. One choice covers every app on that device, and your key file carries it to other devices.</p></details>
   </section>
 
@@ -237,6 +249,7 @@ $('#url').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#test')
   const m = $('#meStatus'); if (!px) { m.textContent = 'the PTXERO ID script did not load'; return; }
   const H = px.host(); m.textContent = (H.mode === 'own' ? 'your hub · ' : 'shared hub · ') + H.hub;
   px.panel($('#mePanel'), { app: 'hub', local: false, guide: './' });
+  const w = px.whereLine ? px.whereLine('hub') : null; if (w) $('#whereNow').textContent = 'Right now on this device: ' + w.title.toLowerCase() + '. ' + w.text;
 })();
 </script>
 </body>
