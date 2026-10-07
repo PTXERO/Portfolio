@@ -1399,3 +1399,49 @@ class ClaimsNumbersDates(Base):
         tr = SIG.trust(items * 8, s["trend"], dict(s["spread"], platforms=[1, 2, 3], outlets=1), [{"name": "news", "enabled": False, "auto_off": 1}, {"name": "x", "enabled": True}], 14, 5)
         self.assertEqual(tr["label"], "fair")
         self.assertTrue(any("switched off" in r for r in tr["reasons"]) and any("window" in r for r in tr["reasons"]))
+
+
+class DossierTellsOnItself(Base):
+    """The Furnace Fest dossier: every way it misread its own data, pinned."""
+    def test_festivals_and_labels_are_not_people(self):
+        from rv.plan import kind_of
+        self.assertEqual(kind_of(["Furnace Fest"])[0], "event")
+        self.assertEqual(kind_of(["Sub Pop Records"])[0], "general")
+        self.assertEqual(kind_of(["Jane Doe"])[0], "person")
+
+    def test_counts_and_dates_and_shouts_and_reference_pages(self):
+        from rv import signals as SIG
+        n0 = now()
+        D = 86400
+        items = [post("t1", "02 unknown 09 unknown 14 unknown, tracklist from the tape, 11 Boston", "u1", n0 - 3 * D),
+                 post("t2", "A DAY TO REMEMBER will close Saturday's Main Stage following CIRCA SURVIVE and UNDEROATH.", "u2", n0 - 2 * D),
+                 post("t3", "Tkalych with Zelensky (October 2025) and Levkin at Yule Night (December 2025).", "u3", n0 - D),
+                 post("t4", "The gates open October 10 at noon, 200 customers already in line.", "u4", n0 - D + 100),
+                 post("t5", "Only 90 customers left in line by October 10 evening.", "u5", n0 - D + 200),
+                 post("t6", "Power went out at the venue for an hour. NO POWER NO SOUND!!!", "u6", n0 - D + 300),
+                 post("t7", "Power is the word of the day, feel the power of the riff", "u7", n0 - D + 400),
+                 dict(post("w1", "Furnace Fest is a festival in Birmingham", "en.wikipedia.org", n0 - 30 * D, likes=500, views=90000), platform="wikipedia", author_name="Wikipedia"),
+                 dict(post("a1", "CIA reading room document about furnaces", "archive.org", n0 - 14000 * D), platform="archive", author_name="archive.org"),
+                 dict(post("n1", "Furnace Fest announces 2026 lineup", "stereogum.com", n0 - 5 * D), platform="news", author_name="Stereogum")]
+        s = SIG.summarize(items, {"furnace", "fest"})
+        nums = {n["what"] for n in s["numbers"]}
+        self.assertIn("customers", nums)
+        self.assertFalse(any(w in nums for w in ("unknown", "boston")), nums)
+        dts = [e["date_text"] for e in s["dated"]["ahead"] + s["dated"]["past"]]
+        self.assertTrue(all("2025" not in d and d.lower() not in ("october 20", "december 20") for d in dts), dts)
+        self.assertTrue(any(d == "October 10" for d in dts), dts)
+        self.assertTrue(SIG._shouting("NO POWER NO SOUND!!!"))
+        self.assertFalse(SIG._shouting("A DAY TO REMEMBER will close Saturday's Main Stage following CIRCA SURVIVE and UNDEROATH."))
+        self.assertEqual(s["heat"]["parts"][1]["value"], round(1 / 10, 2))       # one shout in ten posts
+        self.assertFalse(SIG._shouting("Lazarus Comin' Home Shovel Stars Scraper If You Are to Bloom"))
+        self.assertFalse(any(i["category"] == "infrastructure / outages" for i in s["issues"]), s["issues"])   # "power" alone is not an outage
+        self.assertEqual(s["spread"]["first_post"]["id"], "x:t1")                      # the 1987 archive scan is not the first voice
+        self.assertEqual(s["spread"]["first_outlet"]["id"], "x:n1")
+        self.assertEqual(s["spread"]["outlets"], 1)
+        self.assertNotIn("archive", [c["from"] for c in s["spread"]["crossover"]] + [c["to"] for c in s["spread"]["crossover"]])
+        self.assertTrue(all(d["platform"] not in ("wikipedia", "archive") for d in s["drivers"]))
+        self.assertEqual(s["arc"]["age_days"], 5)                                      # born with the first real post, not the archive scan
+        self.assertFalse(s["claims"], s["claims"])                                      # one voice each: nothing to confirm
+        tr = SIG.trust(items * 10, s["trend"], s["spread"], [], 0, 0, rated=2)
+        self.assertEqual(tr["label"], "thin")
+        self.assertTrue(any("rated" in r for r in tr["reasons"]))

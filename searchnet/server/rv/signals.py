@@ -11,6 +11,7 @@ from .people import OUTLETS, STOP, _entities, _mentions
 from .util import light_stem, now, tokens
 
 DAY = 86400
+REFERENCE = {"archive", "wikipedia"}      # old documents and encyclopedia pages: context, never the first voice or a driver
 # words people use when they are angry at something, not merely talking about it
 HEAT = set(("outrage outraged outrageous disgusting disgusted disgrace disgraceful shame shameful shameless boycott resign resigns "
             "resignation fired unacceptable scandal backlash protest protests protesters protesting lawsuit sue sued suing furious "
@@ -34,6 +35,13 @@ ISSUES = {
     "immigration": "ice deportation deported deportations border migrants migrant asylum immigration immigrants raid raids detained detention",
 }
 ISSUE_WORDS = {k: set(v.split()) for k, v in ISSUES.items()}
+# words that only mean trouble in context ("power", "fire", "school", "gas"): two of them in a post, or one of the plain ones
+ISSUE_VAGUE = set("power main down internet water fire fires storm ice school schools board campus jobs price prices cost costs bills bill rates "
+                  "fees gas mental sick er missing hate bias border raid raids grid collapse closure closed bridge road shelter rent rents housing "
+                  "union unions students student teacher teachers insurance expensive afford spill smoke drought notice principal classroom "
+                  "tuition premiums groceries assault theft stolen police arrest arrested detained hospital hospitals disease virus flu covid "
+                  "cancer illness infection infected contaminated poisoning".split())
+ISSUE_STRONG = {w for ws in ISSUE_WORDS.values() for w in ws} - ISSUE_VAGUE
 
 
 def _day(ts):
@@ -51,7 +59,7 @@ def _norm(text):
 
 def trend(items, horizon=30):
     """Posts per day over the horizon, the burst (days far above the days before them) and a plain state."""
-    dated = [it for it in items if it.get("posted_at")]
+    dated = [it for it in items if it.get("posted_at") and it.get("platform") not in REFERENCE]
     if not dated:
         return {"series": [], "state": "undated", "why": "the posts carry no dates"}
     end = _day(now())
@@ -107,6 +115,8 @@ def spread(items):
         accts[p].add(str(it.get("author") or "").lower())
         if it.get("posted_at"):
             first[p] = min(first.get(p, it["posted_at"]), it["posted_at"])
+    for p in REFERENCE:
+        first.pop(p, None)
     order = sorted(first, key=first.get)
     crossover = [{"from": order[i], "to": order[i + 1], "hours": round((first[order[i + 1]] - first[order[i]]) / 3600, 1)} for i in range(len(order) - 1)]
     firsts = {}
@@ -114,8 +124,8 @@ def spread(items):
         firsts.setdefault(str(it.get("author") or "").lower(), it["posted_at"])
     cut = now() - 7 * DAY
     new_accts = sum(1 for ts in firsts.values() if ts >= cut)
-    outlets = {str(it.get("author_name") or it.get("author") or "") for it in items if it.get("platform") in OUTLETS}
-    first_outlet = next((it for it in sorted((x for x in items if x.get("posted_at") and x.get("platform") in OUTLETS), key=lambda x: x["posted_at"])), None)
+    outlets = {str(it.get("author_name") or it.get("author") or "") for it in items if it.get("platform") in OUTLETS and it.get("platform") not in REFERENCE}
+    first_outlet = next((it for it in sorted((x for x in items if x.get("posted_at") and x.get("platform") in OUTLETS and x.get("platform") not in REFERENCE), key=lambda x: x["posted_at"])), None)
     first_post = next((it for it in sorted((x for x in items if x.get("posted_at") and x.get("platform") not in OUTLETS), key=lambda x: x["posted_at"])), None)
     why = []
     if order:
@@ -133,7 +143,7 @@ def drivers(items, burst_start=None, top=10):
     """Who moved it: reach (likes, reposts, replies, views), being named by others, posting early, posting a lot."""
     by = defaultdict(list)
     for it in items:
-        if it.get("author"):
+        if it.get("author") and it.get("platform") not in REFERENCE:
             by[(str(it["author"]).lower(), it.get("platform") or "")].append(it)
     named = Counter()
     for it in items:
@@ -166,6 +176,16 @@ def drivers(items, burst_start=None, top=10):
     return out[:top]
 
 
+def _shouting(text):
+    """!!! or a post mostly in capitals. A run of three capitalised words is a name or a title (A DAY TO REMEMBER), not a shout."""
+    t = str(text or "")
+    if t.count("!") >= 3:
+        return True
+    words = re.findall(r"[A-Za-z][A-Za-z'’-]{2,}", t)
+    caps = [w.isupper() for w in words if w.upper() not in ("HTTP", "HTTPS", "NEWS", "USA", "NYC")]
+    return sum(caps) >= 3 and sum(caps) / max(1, len(caps)) >= 0.6     # mostly capitals: a shout. A few: names and titles.
+
+
 def heat(items, seed_words=()):
     """How heated the talk is: anger words, replies swamping likes, shouting, and a 0..100 score with the parts shown."""
     n = max(1, len(items))
@@ -180,8 +200,7 @@ def heat(items, seed_words=()):
             words.update(set(hw))
             if len(examples) < 6:
                 examples.append(dict(_ref(it), words=sorted(set(hw))[:4]))
-        caps = [w for w in re.findall(r"\b[A-Z]{4,}\b", str(it.get("text") or "")) if w not in ("HTTP", "HTTPS", "NEWS")]
-        if len(caps) >= 2 or str(it.get("text") or "").count("!") >= 3:
+        if _shouting(it.get("text")):
             shout += 1
         if (it.get("likes") or 0) >= 10 and it.get("replies") is not None:
             contested.append((it.get("replies") or 0) / max(1, it.get("likes") or 0))
@@ -206,6 +225,8 @@ def issues(items):
         for it in items:
             toks = set(tokens(it.get("text")))
             h = toks & ws
+            if h and not (h & ISSUE_STRONG) and len(h) < 2:
+                continue
             if h:
                 hit += 1
                 words.update(h)
@@ -426,6 +447,7 @@ def build(vault, tid, max_items=3000):
         return {"error": "no such topic"}
     ids = member_ids(vault.db, tid)
     items = list(vault.db.get_many(list(ids)[:max_items]).values())
+    rated_ids = {r["item_id"] for r in vault.db.q("SELECT item_id FROM topic_items WHERE topic_id=? AND label != 0", (tid,))}
     seed_words = {w for s in (t.get("seeds") or []) + [t.get("name") or ""] for w in tokens(s)}
     out = summarize(items, seed_words)
     # topics in the library this one overlaps with (shared member posts)
@@ -441,7 +463,8 @@ def build(vault, tid, max_items=3000):
     from .plan import window_days
     st_ = t.get("settings") or {}
     srcs = [dict(x, auto_off=(x.get("options") or {}).get("auto_off")) for x in vault.list_sources() if x["id"] in set(t.get("sources") or [])]
-    out["trust"] = trust(items, out["trend"], out["spread"], srcs, window_days(st_, st_.get("plan")), out["trend"].get("older") or 0)
+    rated = sum(1 for it in items if it["id"] in rated_ids)
+    out["trust"] = trust(items, out["trend"], out["spread"], srcs, window_days(st_, st_.get("plan")), out["trend"].get("older") or 0, rated)
     return out
 
 
@@ -482,12 +505,17 @@ NUM = re.compile(r"(?<![\w.])(\$|£|€)?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)(?:\s
                  r"(?:\s+(?:of\s+|a\s+|an\s+|per\s+)?([a-z][a-z-]{2,}))?", re.I)
 NUM_SKIP = {"am", "pm", "the", "and", "for", "with", "that", "this", "from", "year", "years", "day", "days", "hour", "hours", "minute", "minutes",
             "week", "weeks", "month", "months", "time", "times", "ago", "today", "yesterday", "tomorrow", "more", "than", "about"}
+UNIT_WORDS = {"%", "percent", "mph", "km/h", "inches", "feet", "ft", "miles", "acres", "degrees", "million", "billion", "thousand", "k", "m", "bn", "b"}
+QTY_WORDS = set("people customers residents homes households families deaths dead killed injured missing cases patients students workers jobs "
+                "employees evacuees acres buildings structures cars vehicles units tickets attendees followers members votes voters troops "
+                "soldiers protesters officers arrests shelters outages complaints calls reports crews trucks flights schools businesses "
+                "inches feet miles percent dollars hours days weeks months years minutes".split())
 MONTHS = {m: i + 1 for i, m in enumerate("january february march april may june july august september october november december".split())}
 MONTHS.update({m[:3]: i for m, i in list(MONTHS.items())})
 MONTHS["sept"] = 9
 WEEKDAYS = {d: i for i, d in enumerate("monday tuesday wednesday thursday friday saturday sunday".split())}
-DATE_RX = re.compile(r"\b(?:(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?"
-                     r"|(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?(?:,?\s+(\d{4}))?"
+DATE_RX = re.compile(r"\b(?:(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?!\d)(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?"
+                     r"|(?<!\d)(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?(?:,?\s+(\d{4}))?"
                      r"|(next|last|this)?\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\b(tonight|tomorrow|yesterday)\b)", re.I)
 PAST_HINT = re.compile(r"\b(was|were|happened|took place|yesterday|last|ago|had|did|\w{3,}ed)\b", re.I)
 
@@ -538,7 +566,7 @@ def claims(items, seed_words=(), top=10):
                     hit["examples"].append(_ref(it))
     res = []
     for c in out:
-        if c["n"] < 2 and not c["outlets"]:
+        if len(c["accounts"]) < 2:
             continue
         status = "disputed" if c["disputed"] else "an outlet confirms" if c["outlets"] else "posts only"
         res.append({"text": c["text"], "first": c["first"], "n": c["n"], "accounts": len(c["accounts"]), "outlets": sorted(x for x in c["outlets"] if x),
@@ -573,6 +601,8 @@ def numbers(items, top=8):
                 continue
             if unit and unit.lower() in ("k", "m", "b", "bn") and not what:
                 continue
+            if not cur and not (unit and unit.lower() in UNIT_WORDS) and what not in QTY_WORDS:
+                continue                                               # "11 Boston", "02 unknown": a track number, not a figure
             key = (cur or "") + ((" " + unit.lower()) if unit and unit.lower() in ("%", "percent", "mph", "km/h", "inches", "feet", "ft", "miles", "acres", "degrees") else "") + (" " + what if what else "")
             key = key.strip()
             if not key or key in ("%", "percent"):
@@ -661,10 +691,14 @@ def dated(items, top=12):
     return {"ahead": ahead, "past": past}
 
 
-def trust(items, tr, sp, sources=None, window_days=0, older=0):
-    """How much to lean on this read: posts, networks, sources that answered, days with nothing, what the window cut."""
+def trust(items, tr, sp, sources=None, window_days=0, older=0, rated=None):
+    """How much to lean on this read: posts, networks, sources that answered, days with nothing, what the window cut,
+    and how much of it you actually rated (unrated membership is the model's guess)."""
     n = len(items)
     reasons, score = [], 0
+    unrated = rated is not None and n >= 10 and rated < max(5, 0.05 * n)
+    if unrated:
+        reasons.append(f"only {rated} of {n} posts rated: what is in the topic is a guess")
     if n >= 60:
         score += 2
         reasons.append(f"{n} posts")
@@ -698,5 +732,5 @@ def trust(items, tr, sp, sources=None, window_days=0, older=0):
         reasons.append(f"the {window_days}-day window left {older} older posts out")
     if sp.get("outlets"):
         score += 1
-    label = "solid" if score >= 3 else "fair" if score >= 1 else "thin"
+    label = "thin" if unrated else "solid" if score >= 3 else "fair" if score >= 1 else "thin"   # unverified membership caps the read at thin
     return {"label": label, "score": score, "reasons": reasons}

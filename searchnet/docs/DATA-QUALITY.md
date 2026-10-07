@@ -208,3 +208,8 @@ The dossier opens with eight lines, each backed by a card below: what it is, sin
 - **Trust**: solid, fair or thin, from posts, networks, sources that switched themselves off, days with nothing, and what the time window cut. Shown on IN SHORT with the reasons. A quiet signal on a thin read is not a quiet topic.
 
 Known gaps: a claim and its paraphrase in different words are two claims; a number with no noun after it is skipped; dates without a month ("the 14th") are skipped; sarcastic disputes read as disputes.
+
+## Update: what the Furnace Fest dossier taught it
+
+A topic named after a festival read as a person, pulled four meanings of "furnace" and graded itself solid. Fixes, each pinned by a test:
+festivals, shows, labels and outlets are never a person's name; archive scans and encyclopedia pages are context, never the first voice, a driver or an outlet; a claim needs two voices before it is listed and an outlet plus another voice before it "confirms"; a figure must count something countable, be a unit, or be money; a day never eats the front of a year, and dates are shown in UTC; a shout is a post mostly in capitals, not a band name; a vague problem word (power, fire, school, gas) needs a partner; and a topic with almost nothing rated reads thin whatever its size, because what is in it is a guess.

@@ -9,14 +9,18 @@ import re
 
 EVENT_WORDS = {"hurricane", "storm", "tornado", "earthquake", "flood", "wildfire", "fire", "shooting", "election",
                "protest", "riot", "crash", "war", "strike", "outbreak", "verdict", "trial", "explosion", "arrest",
-               "ceasefire", "attack", "evacuation", "blackout", "recall", "scandal", "lawsuit", "indictment", "summit"}
+               "ceasefire", "attack", "evacuation", "blackout", "recall", "scandal", "lawsuit", "indictment", "summit",
+               "fest", "festival", "con", "convention", "conference", "expo", "concert", "tour", "cup", "championship", "tournament",
+               "gala", "parade", "marathon", "awards", "finals", "playoffs", "premiere", "launch"}
 TECH_WORDS = {"api", "software", "linux", "python", "javascript", "typescript", "rust", "golang", "kernel", "gpu", "cpu",
               "llm", "ai", "model", "crypto", "bitcoin", "ethereum", "startup", "app", "github", "framework", "database",
               "sql", "server", "cloud", "docker", "kubernetes", "firmware", "chip", "semiconductor", "open-source", "opensource"}
 PLACE_WORDS = {"county", "city", "town", "village", "parish", "borough", "district", "beach", "island", "valley", "harbor",
                "harbour", "bay", "lake", "river", "mountain", "park", "street", "avenue", "neighborhood", "neighbourhood"}
 ORG_WORDS = {"university", "college", "school", "hospital", "church", "company", "inc", "llc", "corp", "corporation",
-             "department", "police", "bank", "airport", "stadium", "museum", "hotel", "restaurant", "club", "band", "fc"}
+             "department", "police", "bank", "airport", "stadium", "museum", "hotel", "restaurant", "club", "band", "fc",
+             "records", "studio", "studios", "league", "group", "labs", "foundation", "association", "society", "institute",
+             "magazine", "radio", "podcast", "network", "press", "times", "news", "gazette", "journal", "herald"}
 STATES = {"alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware", "florida", "georgia",
           "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine", "maryland",
           "massachusetts", "michigan", "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada", "ohio",
