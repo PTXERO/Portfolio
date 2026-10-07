@@ -811,7 +811,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
   let stationsLoaded = false;
 
   // ── Radio Browser API ─────────────────────────────────────────
-  const RF_PROXY = 'https://rf-proxy.chapethan09.workers.dev';
+  const RF_PROXY = 'https://rf.ptxero.net';
   function fetchGeocode(lat, lon){
     return new Promise((resolve)=>{
       const cbName = '_geocb_' + Date.now();

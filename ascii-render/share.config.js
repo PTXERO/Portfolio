@@ -9,5 +9,5 @@ window.SHARE = {
   supabaseAnonKey: 'sb_publishable_-PRQWq6Bv6NrJuqpMkymgw_zORhf-mE',   // ← anon / publishable key (RF project)
   bucket:          'renders',                            // Storage bucket name
   maxSourcePx:     1600,   // source image is downscaled to this before upload (bounds storage; still reproduces well)
-  workerUrl:       'https://share.ptxero.net',     // ← after deploying og-worker.js, put its URL here (e.g. https://ascii-og.chapethan09.workers.dev). Empty = plain view.html links (no rich cards).
+  workerUrl:       'https://share.ptxero.net',     // ← after deploying og-worker.js, put its URL here (e.g. https://ascii-og.<your-subdomain>.workers.dev). Empty = plain view.html links (no rich cards).
 };
