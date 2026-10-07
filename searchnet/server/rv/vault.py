@@ -22,6 +22,8 @@ from .db import DB, Store, norm_tags
 from .embed import Embedder
 from .expand import liked_authors, refresh_expansions
 from .learn import TopicScorer, pick_queries, prior_score, query_stats
+from . import plan as PLAN
+from . import brief as BRIEF
 from .search import search
 from .util import USER_AGENT, now, safe_name, to_float, to_int
 
@@ -448,6 +450,8 @@ class Vault:
                 job.check()
                 if not (self.accept(item, opts) or src.get("kind") in S.ARTICLE_KINDS) or item["id"] in seen:
                     continue
+                if opts.get("since") and item.get("posted_at") and item["posted_at"] < opts["since"]:
+                    continue                                   # older than the topic's time window
                 seen.add(item["id"])
                 res = self.db.upsert(item)
                 job.stats["found"] += 1
@@ -544,6 +548,10 @@ class Vault:
             raise ValueError("a topic needs at least one word")
         tid = uuid.uuid4().hex[:8]
         st = dict(self.TOPIC_DEFAULTS, **(settings or {}))
+        if not sources:
+            p = PLAN.plan_for(seeds, st, self.list_sources())
+            st["plan"] = p
+            sources = p["source_ids"]
         self.db.exec("INSERT INTO topics(id, name, seeds, sources, settings, created) VALUES (?,?,?,?,?,?)",
                      (tid, (name or seeds[0]).strip()[:80], json.dumps(seeds),
                       json.dumps(sources or []), json.dumps(st), now()))
@@ -569,6 +577,9 @@ class Vault:
                          f"AND query NOT IN ({','.join('?' * len(seeds))})", [tid] + seeds)
         if "sources" in d:
             f["sources"] = json.dumps(list(d["sources"] or []))
+        if "sources" in d and (t["settings"].get("plan") or {}).get("auto") and not (d.get("settings") or {}).get("plan"):
+            p = dict(t["settings"]["plan"], auto=False, note="chosen by hand")
+            d = dict(d, settings=dict(d.get("settings") or {}, plan=p))
         if "settings" in d:
             f["settings"] = json.dumps(dict(t["settings"], **(d["settings"] or {})))
         if f:
@@ -638,6 +649,14 @@ class Vault:
         stats = query_stats(self.db, tid)
         k = to_int(st.get("queries_per_run")) or (3 + 2 * breadth)
         queries = pick_queries(stats, k)
+        p = st.get("plan") or {}
+        if p.get("auto") and p.get("presets"):
+            fresh = PLAN.plan_for(t["seeds"], st, self.list_sources())
+            keep = [sid for sid in fresh["source_ids"] if sid not in (p.get("dropped") or {})]
+            if keep != t["sources"]:
+                self.update_topic(tid, {"sources": keep, "settings": {"plan": dict(p, source_ids=keep)}})
+                t = self.topic(tid)
+                st = t["settings"]
         searchable, feeds = self.topic_sources(t)
         if person and person.get("mode") == "account":
             # one @account: only its own feed, plus 'from:' searches where a network supports them.
@@ -647,12 +666,17 @@ class Vault:
         elif person:
             queries = [q for q in queries if q.startswith('"') or q.lower().startswith("from:")
                        or q.lower() == " ".join(x for x in (person.get("first"), person.get("last")) if x).lower()]
+        days = PLAN.window_days(st, st.get("plan"))
         opts = {"media": st.get("media", "video"), "search_tab": st.get("search_tab"),
-                "min_likes": st.get("min_likes"), "lang": st.get("lang")}
+                "min_likes": st.get("min_likes"), "lang": st.get("lang"),
+                "since": int(time.time()) - days * 86400 if days else 0}
+        if days:
+            job.log(f"  time window: last {days} days")
         per = max(1, min(to_int(st.get("per_query"), 15), 200))
         job.total = len(queries) * len(searchable) + len(feeds) + 2
         job.log(f"  {len(queries)} searches × {len(searchable)} sources: " + ", ".join(queries))
         new = []
+        per_src = {s["id"]: 0 for s in searchable}
         for q in queries:
             found_q = 0
             for s in searchable:
@@ -661,6 +685,7 @@ class Vault:
                     self.link(tid, it["id"], q, s["id"])
                     new.append(it["id"])
                     found_q += 1
+                    per_src[s["id"]] = per_src.get(s["id"], 0) + 1
                 job.done += 1
             self.db.exec("UPDATE topic_queries SET runs=runs+1, found=found+?, last_run=? "
                          "WHERE topic_id=? AND query=?", (found_q, now(), tid, q))
@@ -715,6 +740,28 @@ class Vault:
             job.log(f"  {len(sites)} sites mention it (dossier → SITES)")
         n = TopicScorer(self, tid).rescore()
         job.stats["linked"] = n
+        # per-source record → the plan drops what never pays off
+        stats = dict(st.get("source_stats") or {})
+        votes = {r["source_id"]: r for r in self.db.q(
+            "SELECT h.source_id, sum(t.label=1) pos, sum(t.label=-1) neg FROM topic_hits h JOIN topic_items t "
+            "ON t.topic_id=h.topic_id AND t.item_id=h.item_id WHERE h.topic_id=? GROUP BY h.source_id", (tid,))}
+        for sid, found in per_src.items():
+            row = dict(stats.get(sid) or {"runs": 0, "found": 0})
+            row["runs"] += 1
+            row["found"] += found
+            row["pos"], row["neg"] = (votes.get(sid) or {}).get("pos") or 0, (votes.get(sid) or {}).get("neg") or 0
+            stats[sid] = row
+        upd = {"source_stats": stats}
+        p = dict(st.get("plan") or {})
+        keep = PLAN.prune(p, stats, {s["id"]: s for s in searchable})
+        if keep is not None and keep != t["sources"]:
+            for sid, why in p["dropped"].items():
+                if sid in t["sources"]:
+                    job.log(f"  dropped from this topic: {why}")
+            upd["plan"] = dict(p, source_ids=keep)
+            self.update_topic(tid, {"sources": keep, "settings": upd})
+        else:
+            self.update_topic(tid, {"settings": upd})
         job.done += 1
         self.db.exec("UPDATE topics SET last_run=? WHERE id=?", (now(), tid))
         dl = to_int(st.get("auto_download"))

@@ -182,6 +182,8 @@
     } else if (person) {                               // a name: quoted-name searches only, never grown keywords
       runQs = runQs.filter((q) => q.startsWith('"') || /^from:/i.test(q) || q.toLowerCase() === [person.first, person.last].filter(Boolean).join(' ').toLowerCase());
     }
+    const plan = t2.settings.plan;
+    if (plan && plan.auto && (plan.presets || []).length) { const fresh = planFor(t2.seeds, t2.settings, (await L.request('/api/sources')).sources); const keep = fresh.source_ids.filter((id) => !(plan.dropped || {})[id]); t2.sources = keep; t2.settings.plan = Object.assign({}, plan, { source_ids: keep }); await saveTopic(t2); }
     if (t2.sources && t2.sources.length) srcs = srcs.filter((s) => t2.sources.includes(s.id));
     job.total = Math.max(1, runQs.length * srcs.length + 2);
     job.log('  ' + runQs.length + ' searches × ' + srcs.length + ' sources');
@@ -218,25 +220,36 @@
         if (job.cancel) return;
         try {
           const params = new URLSearchParams({ source: s.source, q, limit: t.settings.per_query || 20, media: t.settings.media || 'video' });
+          const days = windowDays(t.settings, t.settings.plan); if (days) params.set('since', String(now() - days * 86400));
           if (s.value && s.param === 'instance') params.set('instance', s.value);
           if (s.value && s.param === 'url') params.set('url', s.value);          // feeds and 'Any site' templates carry their URL
           if (s.value && s.param === 'qx') params.set('qx', s.value);            // Obituaries / Schools / local news: extra terms on every query
           if (s.value && s.param === 'boards') params.set('boards', s.value);
           const r = await workerSearch(params);
           const q2 = (t.queries || []).find((x) => x.query === q);
-          let found = 0;
+          let found = 0; t.settings.source_stats = t.settings.source_stats || {}; const ss = t.settings.source_stats[s.id] = t.settings.source_stats[s.id] || { runs: 0, found: 0, pos: 0, neg: 0 }; if (!(t._runSeen = t._runSeen || new Set()).has(s.id)) { t._runSeen.add(s.id); ss.runs++; }
+          const since = (windowDays(t.settings, t.settings.plan) || 0) ? now() - windowDays(t.settings, t.settings.plan) * 86400 : 0;
           for (const it of (r.items || [])) {
             if (!it.id) continue;
+            if (since && it.posted_at && it.posted_at < since) continue;      // older than the topic's time window
             it.collected_at = now();
             if (!(await idb.get('items', it.id))) { await idb.put('items', it); }
             await link(t.id, it.id, q, s.id); seen.add(it.id); found++;
           }
           if (q2) { q2.runs++; q2.found += found; }
+          ss.found += found;
           job.stats.found += found; job.log('  ' + found + ' · ' + q + ' @ ' + s.name);
         } catch (e) { job.stats.errors++; job.log('  ✕ ' + s.name + ': ' + e.message); if (await L.markFailed(s.id, e.message)) { job.log('    ' + s.name + ' switched off until you turn it back on (SOURCES)'); srcs = srcs.filter((x) => x.id !== s.id); } }
         job.done++;
       }
     }
+    delete t._runSeen;
+    // per-source votes → the plan drops what never pays off
+    const votes = await topicItems(t.id); const stats = t.settings.source_stats || {}; Object.values(stats).forEach((s) => { s.pos = 0; s.neg = 0; });
+    votes.forEach((v) => (v.found_by || []).forEach((f) => { const s = stats[f.source]; if (!s) return; if (v.label > 0) s.pos++; else if (v.label < 0) s.neg++; }));
+    const byId = {}; srcs.forEach((s) => byId[s.id] = s);
+    const keep = prunePlan(t.settings.plan, stats, byId);
+    if (keep && keep.length !== (t.sources || []).length) { Object.entries(t.settings.plan.dropped).forEach(([sid, why]) => { if ((t.sources || []).includes(sid)) job.log('  dropped from this topic: ' + why); }); t.sources = keep; t.settings.plan.source_ids = keep; }
     await saveTopic(t);
   }
   async function workerSearch(params) { return L.workerCall('/search?' + params); }
@@ -355,7 +368,7 @@
 
   // ── the topics request router (mirrors the server) ────────────
   L.learn = {
-    autoRefresh, threshold, isMember, distinctTerms,
+    autoRefresh, threshold, isMember, distinctTerms, kindOf, looksLikeName, planFor, windowDays,
     async vote(tid, iid, label) { return voteItem(tid, iid, label); },
     async itemTopics(iid) { const out = []; for (const t of await allTopics()) { const v = await idb.get('votes', voteKey(t.id, iid)); if (v) out.push({ topic_id: t.id, name: t.name, label: v.label, score: v.score }); } return out; },
     async onItemDeleted(iid) { const vs = (await idb.all('votes')).filter((v) => v.item_id === iid); for (const v of vs) await idb.del('votes', v.k); },
@@ -364,16 +377,18 @@
       const arg = parts[1], sub = parts[2];
       if (!arg) {
         if (method === 'GET') { const out = []; for (const t of await allTopics()) out.push(await dto(t)); return { topics: out.sort((a, b) => (b.last_run || b.created) - (a.last_run || a.created)) }; }
-        if (method === 'POST') { const seeds = (body.seeds || [body.name]).map((s) => String(s).trim()).filter(Boolean); const t = { id: uid(), name: (body.name || seeds[0]).slice(0, 80), seeds, sources: body.sources || [], settings: Object.assign({}, DEF, body.settings || {}), queries: [], created: now(), last_run: null }; await saveTopic(t); if (body.run !== false) { const j = L.newJob('topic', 'topic · ' + t.name); j.topic_id = t.id; L.runSafe(j, () => runTopic(t.id, j)); } return await dto(t); }
+        if (method === 'POST') { const seeds = (body.seeds || [body.name]).map((s) => String(s).trim()).filter(Boolean); const t = { id: uid(), name: (body.name || seeds[0]).slice(0, 80), seeds, sources: body.sources || [], settings: Object.assign({}, DEF, body.settings || {}), queries: [], created: now(), last_run: null }; if (!(body.sources || []).length) { const p = planFor(seeds, t.settings, (await L.request('/api/sources')).sources); t.settings.plan = p; t.sources = p.source_ids; } await saveTopic(t); if (body.run !== false) { const j = L.newJob('topic', 'topic · ' + t.name); j.topic_id = t.id; L.runSafe(j, () => runTopic(t.id, j)); } return await dto(t); }
       }
       const t = await getTopic(arg); if (!t) return { error: 'not found' };
       if (!sub) {
         if (method === 'GET') return await dto(t);
-        if (method === 'PATCH') { if (body.name != null) t.name = String(body.name).slice(0, 80); if (body.seeds) t.seeds = body.seeds.map((s) => s.trim()).filter(Boolean); if (body.sources) t.sources = body.sources; if (body.settings) t.settings = Object.assign({}, t.settings, body.settings); await saveTopic(t); await rescore(t.id); return await dto(t); }
+        if (method === 'PATCH') { if (body.name != null) t.name = String(body.name).slice(0, 80); if (body.seeds) t.seeds = body.seeds.map((s) => s.trim()).filter(Boolean); if (body.sources) { t.sources = body.sources; if (t.settings.plan && t.settings.plan.auto && !(body.settings || {}).plan) t.settings.plan = Object.assign({}, t.settings.plan, { auto: false, note: 'chosen by hand' }); } if (body.settings) t.settings = Object.assign({}, t.settings, body.settings); await saveTopic(t); await rescore(t.id); return await dto(t); }
         if (method === 'DELETE') { for (const v of await topicItems(arg)) await idb.del('votes', v.k); await idb.del('topics', arg); return { ok: true }; }
       }
       if (sub === 'run' && method === 'POST') { const j = L.newJob('topic', 'topic · ' + t.name); j.topic_id = t.id; L.runSafe(j, () => runTopic(t.id, j)); return L.jobDict(j); }
       if (sub === 'feed') return await feed(arg, qs);
+      if (sub === 'brief') return await brief(arg);
+      if (sub === 'plan' && method === 'POST') { const p = planFor(t.seeds, t.settings, (await L.request('/api/sources')).sources); t.settings.plan = p; t.sources = p.source_ids; await saveTopic(t); return await dto(t); }
       if (sub === 'vote' && method === 'POST') { if (body.reasons) { const r = await applyReasons(arg, String(body.item_id), body.reasons, body.label != null ? +body.label : -1); return { counts: counts(await topicItems(arg)), applied: r }; } const vr = await voteItem(arg, String(body.item_id), +body.label); return { counts: vr, surprise: vr.surprise }; }
       if (sub === 'insights') return await insights(arg);
       if (sub === 'queries' && method === 'POST') { const act = body.action, q = String(body.query || '').trim(); t.queries = t.queries || []; if (act === 'add') { if (!t.queries.some((x) => x.query.toLowerCase() === q.toLowerCase())) t.queries.push({ query: q, origin: 'user', enabled: true, locked: true, runs: 0, found: 0, pos: 0, neg: 0 }); } else { const row = t.queries.find((x) => x.query === q); if (row) { if (act === 'delete') t.queries = t.queries.filter((x) => x !== row); else { row.enabled = act === 'enable'; row.locked = true; } } } await saveTopic(t); await rescore(arg); return { ok: true }; }
@@ -405,6 +420,80 @@
   // ── a creator for this topic: one @account on one network. Their own posts are pulled through the
   //    Worker (/account) and linked to the topic; what they post about becomes soft signal + searches.
   //    X / Instagram / TikTok need a login, so they're PC-server only.
+  // ── what a topic is about → which sources fit it (mirror of server/rv/plan.py) ──
+  const EVENT_WORDS = new Set('hurricane storm tornado earthquake flood wildfire fire shooting election protest riot crash war strike outbreak verdict trial explosion arrest ceasefire attack evacuation blackout recall scandal lawsuit indictment summit'.split(' '));
+  const TECH_WORDS = new Set('api software linux python javascript typescript rust golang kernel gpu cpu llm ai model crypto bitcoin ethereum startup app github framework database sql server cloud docker kubernetes firmware chip semiconductor open-source opensource'.split(' '));
+  const PLACE_WORDS = new Set('county city town village parish borough district beach island valley harbor harbour bay lake river mountain park street avenue neighborhood neighbourhood'.split(' '));
+  const ORG_WORDS = new Set('university college school hospital church company inc llc corp corporation department police bank airport stadium museum hotel restaurant club band fc'.split(' '));
+  const STATES = new Set('alabama alaska arizona arkansas california colorado connecticut delaware florida georgia hawaii idaho illinois indiana iowa kansas kentucky louisiana maine maryland massachusetts michigan minnesota mississippi missouri montana nebraska nevada ohio oklahoma oregon pennsylvania tennessee texas utah vermont virginia washington wisconsin wyoming york jersey carolina dakota hampshire mexico london paris berlin tokyo toronto sydney chicago houston miami tampa orlando atlanta boston seattle denver dallas austin phoenix detroit philadelphia nashville orleans angeles francisco vegas'.split(' '));
+  const WINDOW_DAYS = { event: 14, place: 90, person: 0, handle: 0, tech: 0, general: 0 };   // 0 = everything
+  function windowDays(st, plan) { const w = String((st || {}).window || 'auto'); if (w === 'auto') return +((plan || {}).window_days || 0); return w === 'all' ? 0 : Math.max(0, +w || 0); }
+  const PLANS = {
+    person: [['news', 'web', 'obituaries', 'schools', 'archive', 'blogs', 'mastodon', 'bluesky', 'reddit', 'youtube', 'lemmy'], 'a name: papers, obituaries, school and local sites, social posts under the quoted name'],
+    event: [['news', 'gdelt', 'web', 'reddit', 'mastodon', 'bluesky', 'youtube', 'wikipedia', 'fourchan', 'blogs', 'lemmy'], 'an event: news first, then what people posted about it'],
+    place: [['news', 'web', 'reddit', 'youtube', 'mastodon', 'bluesky', 'schools', 'wikipedia', 'blogs', 'lemmy'], 'a place: local news, local sites and schools, posts from there'],
+    tech: [['hn', 'web', 'reddit', 'youtube', 'blogs', 'wikipedia', 'mastodon', 'lemmy', 'fourchan', 'news', 'bluesky'], 'technical: Hacker News, docs and blogs, forums, then news'],
+    general: [['mastodon', 'lemmy', 'reddit', 'bluesky', 'youtube', 'news', 'gdelt', 'web', 'blogs', 'hn', 'archive', 'fourchan', 'wikipedia'], 'a general subject: everything except obituaries and schools'],
+  };
+  const NAME_RE = /^(?:(?:dr|mr|mrs|ms|prof|rev|sgt|lt|capt)\.?\s+)?[A-Z](?:[a-z'’.-]|['’][A-Z])+(?:\s+[A-Z](?:[a-z'’.-]|['’][A-Z])+){1,2}(?:\s+(?:jr|sr|ii|iii|iv)\.?)?$/;
+  const words_ = (s) => String(s || '').toLowerCase().split(/[^a-z0-9#@'’.-]+/).filter(Boolean).map((w) => w.replace(/^[.'’]+|[.'’]+$/g, ''));
+  function looksLikeName(seed) { const s = String(seed || '').trim().replace(/^"|"$/g, ''); if (!NAME_RE.test(s)) return false; return !words_(s).some((w) => EVENT_WORDS.has(w) || PLACE_WORDS.has(w) || ORG_WORDS.has(w) || STATES.has(w) || TECH_WORDS.has(w)); }
+  function kindOf(seeds, settings) {
+    settings = settings || {}; seeds = (seeds || []).filter(Boolean);
+    if (settings.person) return [settings.person.mode === 'account' ? 'handle' : 'person', 'you chose PERSON'];
+    const first = (seeds[0] || '').trim();
+    if (first.startsWith('@') || /^from:/i.test(first)) return ['handle', 'an @account'];
+    const ws = new Set(seeds.flatMap(words_));
+    if (looksLikeName(first)) return ['person', `'${first}' reads like a person's name`];
+    const has = (set) => [...ws].filter((w) => set.has(w)).sort();
+    let h;
+    if ((h = has(EVENT_WORDS)).length) return ['event', 'words like ' + h.slice(0, 2).join(', ')];
+    if ((h = has(TECH_WORDS)).length) return ['tech', 'words like ' + h.slice(0, 2).join(', ')];
+    if ((h = has(STATES).concat(has(PLACE_WORDS))).length) return ['place', 'names a place (' + h.slice(0, 2).join(', ') + ')'];
+    return ['general', 'no strong signal in the words'];
+  }
+  function planFor(seeds, settings, sources) {
+    const [kind, why] = kindOf(seeds, settings); const presets = kind === 'handle' ? [] : PLANS[kind][0];
+    const ids = sources.filter((s) => s.enabled && s.searchable !== false && (presets.includes(s.preset) || !s.preset)).map((s) => s.id);
+    return { kind, why, presets, source_ids: ids, dropped: {}, auto: true, window_days: WINDOW_DAYS[kind] || 0, note: kind === 'handle' ? 'one account, one network' : PLANS[kind][1] };
+  }
+  function prunePlan(plan, stats, byId) {
+    if (!plan || !plan.auto) return null;
+    const keep = [], dropped = Object.assign({}, plan.dropped || {});
+    for (const sid of (plan.source_ids || [])) {
+      const st = stats[sid] || {}; const runs = st.runs || 0, found = st.found || 0, pos = st.pos || 0, neg = st.neg || 0; const name = (byId[sid] || {}).name || sid;
+      if (runs >= 3 && found === 0) dropped[sid] = name + ': nothing in ' + runs + ' runs';
+      else if (pos + neg >= 6 && neg >= 0.85 * (pos + neg)) dropped[sid] = name + ': ' + neg + ' of ' + (pos + neg) + ' rated 👎';
+      else keep.push(sid);
+    }
+    plan.dropped = dropped; return keep;
+  }
+  // ── a brief: the sentences that carry the topic's words, who and where, a timeline, with [n] citations ──
+  async function brief(tid) {
+    const t = await getTopic(tid); if (!t) return { error: 'no such topic' };
+    const sc = await scorer(t); const votes = await topicItems(tid); const tau = threshold(votes);
+    const rows = votes.filter((v) => isMember(v, tau)).sort((a, b) => (b.label - a.label) || (b.score - a.score)).slice(0, 400);
+    const weights = {}; (t.seeds || []).forEach((s) => tokens(s).forEach((w) => weights[stem(w)] = (weights[stem(w)] || 0) + 3));
+    if (sc.pc) Object.entries(sc.pc).filter(([k]) => k[0] === 'w').sort((a, b) => b[1] - a[1]).slice(0, 30).forEach(([k, v]) => weights[k.slice(2)] = (weights[k.slice(2)] || 0) + 1.5 * Math.max(0.1, v));
+    const items = {}; rows.forEach((v) => { const it = sc.itemsById[v.item_id]; if (it) items[v.item_id] = it; });
+    const cands = [];
+    rows.forEach((v, i) => { const it = items[v.item_id]; if (!it) return; let best = null;
+      for (const s of String(it.text || '').split(/(?<=[.!?])\s+(?=[A-Z0-9"“])|\n+/)) { const z = s.trim(); if (z.length < 40 || z.length > 320 || /^(http|rt @)/i.test(z)) continue; const toks = new Set(tokens(z).map(stem)); let w = 0; toks.forEach((x) => w += weights[x] || 0); w /= 1 + 0.02 * toks.size; if (v.label > 0) w *= 1.5; if (!best || w > best[0]) best = [w, z]; }
+      if (best && best[0] > 0) cands.push([best[0], i + 1, best[1], it]); });
+    cands.sort((a, b) => b[0] - a[0]);
+    const out = [], seen = [];
+    for (const [, n, s, it] of cands) { const key = new Set(tokens(s)); if (seen.some((k) => { let inter = 0; key.forEach((x) => { if (k.has(x)) inter++; }); return inter / Math.max(1, new Set([...key, ...k]).size) > 0.6; })) continue; seen.push(key); out.push({ n, text: s, item_id: it.id, url: it.url, author: it.author, platform: it.platform, when: it.posted_at }); if (out.length >= 10) break; }
+    const count = (f) => { const c = {}; Object.values(items).forEach((it) => (f(it) || []).forEach((k) => { if (k) c[k] = (c[k] || 0) + 1; })); return Object.entries(c).sort((a, b) => b[1] - a[1]); };
+    const plats = count((it) => [it.platform || '?']).slice(0, 8), tags = count((it) => (it.hashtags || '').toLowerCase().split(/\s+/)).slice(0, 12);
+    const accounts = count((it) => [(it.author || '?') + '|' + (it.platform || '')]).slice(0, 8).map(([k, n]) => ({ author: k.split('|')[0], platform: k.split('|')[1], n }));
+    const dates = Object.values(items).map((it) => it.posted_at).filter(Boolean).sort((a, b) => a - b);
+    const weeks = {}, heads = {}; Object.values(items).forEach((it) => { if (!it.posted_at) return; const wk = Math.floor(it.posted_at / 604800); weeks[wk] = (weeks[wk] || 0) + 1; if (!heads[wk] || String(it.text || '').length > String(heads[wk].text || '').length) heads[wk] = it; });
+    const timeline = Object.keys(weeks).map(Number).sort((a, b) => a - b).slice(-16).map((wk) => ({ week_start: wk * 604800, n: weeks[wk], headline: String(heads[wk].text || '').slice(0, 140).split('\n')[0], url: heads[wk].url }));
+    const citations = {}; rows.forEach((v, i) => { const it = items[v.item_id]; if (it) citations[i + 1] = { url: it.url, author: it.author, platform: it.platform, when: it.posted_at, text: String(it.text || '').slice(0, 400) }; });
+    const head = `You are summarising a research topic named "${t.name}" (searches: ${(t.seeds || []).join(', ')}).\nBelow are numbered posts and articles collected for it. Write a brief for someone who has not read them:\n1) a 3-sentence summary, 2) key facts as bullets, 3) who is involved and where, 4) a short timeline, 5) open questions or contradictions. Cite posts as [n] after every claim. Use only what is in the posts; say when something is unclear. Plain language, no hype.\n\nPOSTS:\n`;
+    let prompt = head; for (const n of Object.keys(citations).map(Number).sort((a, b) => a - b)) { const c = citations[n]; const line = `[${n}] (${c.platform} · @${c.author}) ${c.text.trim()}\n`; if (prompt.length + line.length > 24000) break; prompt += line; }
+    return { topic: t.name, n_items: Object.keys(items).length, n_liked: rows.filter((v) => v.label > 0).length, first: dates[0] || null, last: dates[dates.length - 1] || null, sentences: out, platforms: plats, accounts, tags, timeline, citations, prompt };
+  }
   const WORKER_ACCOUNT = new Set(['mastodon', 'bluesky', 'reddit', 'youtube', 'lemmy']);
   const ARTICLE_PLATFORMS = new Set(['news', 'web', 'hackernews', 'archive']);
   function creator(t, body) {

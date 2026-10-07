@@ -207,6 +207,7 @@ details.more[open] summary{color:var(--acc)}
 .rinfo{padding:12px 14px 4px}
 .rinfo .txt{-webkit-line-clamp:4;font-size:14px}
 .rinfo .txt.open{-webkit-line-clamp:unset;display:block}
+.brief{margin:6px 0 0;padding-left:18px;line-height:1.5}.brief li{margin:4px 0}.brief a,.aiout a{color:var(--acc2);text-decoration:none;font-family:var(--fmono);font-size:11px}.aiout{margin-top:10px;padding:10px 12px;border:1px solid var(--b2);border-radius:8px;line-height:1.55;font-size:13px}
 .why{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .why span{font-family:var(--fmono);font-size:11px;padding:3px 8px;border-radius:10px;background:var(--panel);border:1px solid var(--b2);color:var(--dim)}
 .why span b{color:var(--acc);font-weight:normal}
@@ -650,6 +651,7 @@ body.noscroll-max{overflow:hidden}
       <label class="field"><span>How wide to search · <b id="ntBreadthL" style="color:var(--acc);font-weight:normal">WIDE</b></span><input type="range" id="ntBreadth" min="1" max="5" value="3"></label>
       <div class="grid2">
         <label class="field"><span>Collect</span><select id="ntMedia"><option value="video">Videos</option><option value="all">Videos + images</option><option value="everything">Everything · posts, replies, comments, media</option></select></label>
+        <label class="field"><span>Time</span><select id="ntWindow"><option value="auto">Auto (from the words)</option><option value="7">Live · last 7 days</option><option value="14">Last 2 weeks</option><option value="30">Last month</option><option value="365">Last year</option><option value="all">Everything</option></select></label>
         <label class="field"><span>Auto-update · keeps collecting new posts on this topic</span><select id="ntRefresh"><option value="0">Off</option><option value="1">Hourly</option><option value="3">Every 3 h</option><option value="6">Every 6 h</option><option value="12">Every 12 h</option><option value="24">Daily</option></select></label>
       </div>
       <div class="note">Searches all your enabled SOURCES. Change per topic later with ⋯.</div>
@@ -1136,6 +1138,7 @@ $('#ntBreadth').oninput = e => $('#ntBreadthL').textContent = BREADTH[e.target.v
 $('#ntPersonBtn').onclick = () => { const on = $('#ntPerson').hidden; $('#ntPerson').hidden = !on; $('#ntPersonBtn').classList.toggle('on', on); if (on) $('#ntFirst').focus(); };
 // a person = first/last (+state, +handles) → quoted-name searches, handle searches, and a PERSON card in the dossier
 $$('[data-pmode]').forEach(b => b.onclick = () => { $$('[data-pmode]').forEach(x => x.classList.toggle('on', x === b)); const acct = b.dataset.pmode === 'account'; $('#ntPAcct').hidden = !acct; $('#ntPName').hidden = acct; (acct ? $('#ntHandle') : $('#ntFirst')).focus(); });
+function looksLikeName(s){ const L = window.SearchNetLocal && window.SearchNetLocal.learn; if (L && L.looksLikeName) return L.looksLikeName(s); return /^[A-Z][a-z'’.-]+(?:\s+[A-Z][a-z'’.-]+){1,2}$/.test(String(s || '').trim()); }
 function personFromForm(){
   if ($('#ntPerson').hidden) return null;
   if (!$('#ntPAcct').hidden){
@@ -1155,14 +1158,18 @@ function personSeeds(p){
 }
 $('#newTopicForm').onsubmit = async e => {
   e.preventDefault();
-  const person = personFromForm();
-  const name = person ? (person.mode === 'account' ? '@' + person.handle : [person.first, person.last].filter(Boolean).join(' ')) : $('#ntName').value.trim();
+  let person = personFromForm();
+  let name = person ? (person.mode === 'account' ? '@' + person.handle : [person.first, person.last].filter(Boolean).join(' ')) : $('#ntName').value.trim();
   if (!name) return (person ? (!$('#ntPAcct').hidden ? $('#ntHandle') : $('#ntFirst')) : $('#ntName')).focus();
   if (!ready()) return toast('Topics need the server, see SETUP', 3500);
+  if (!person && looksLikeName(name)){                 // typed a name, did not press PERSON: ask which they meant
+    const dossier = await confirmSheet('Looks like a person\'s name', 'A dossier searches the quoted name, obituaries, school and local sites, and lists the people-search links. A plain topic treats the words as a subject. Which one?', 'DOSSIER');
+    if (dossier){ const parts = name.replace(/^(dr|mr|mrs|ms|prof)\.?\s+/i, '').split(/\s+/); person = { first: parts[0], last: parts.slice(1).join(' '), state: '', handles: [] }; name = [person.first, person.last].filter(Boolean).join(' '); }
+  }
   const seeds = [...(person ? personSeeds(person) : [name]), ...$('#ntSeeds').value.split('\n').map(s => s.trim()).filter(Boolean)];
   try{
     const soft = $('#ntSoft').value.split(/[,\n]/).map(x => x.trim()).filter(Boolean);
-    const settings = { breadth: person ? 1 : +$('#ntBreadth').value, media: person ? 'everything' : $('#ntMedia').value, refresh_hours: +$('#ntRefresh').value, soft };
+    const settings = { breadth: person ? 1 : +$('#ntBreadth').value, media: person ? 'everything' : $('#ntMedia').value, refresh_hours: +$('#ntRefresh').value, soft, window: $('#ntWindow').value };
     if (person) settings.person = person;
     const body = { name, seeds, settings };
     if (person && person.mode === 'account'){           // only the sources of that one network, nothing cross-site
@@ -1668,6 +1675,70 @@ function personCardHTML(p, T, items, I){
     <div class="note" style="margin:10px 0 4px">People-search &amp; records sites <small>(show addresses, relatives, phone numbers. Open them to see what's public and use each site's opt-out)</small></div><div class="meta">${people.map(([n, u]) => a(n, u, 'a')).join('')}</div>
   </div>`;
 }
+let BRIEF = null;
+const KIND_LABEL = { person: 'a person', handle: 'one account', event: 'an event', place: 'a place', tech: 'technical', general: 'a general subject' };
+function windowLabel(st){ const w = String((st || {}).window || 'auto'); const d = w === 'auto' ? ((st || {}).plan || {}).window_days : (w === 'all' ? 0 : +w); return d ? 'last ' + d + ' days' + (w === 'auto' ? ' (auto)' : '') : 'everything' + (w === 'auto' ? ' (auto)' : ''); }
+function planCard(){
+  const p = (T.settings || {}).plan; if (!p) return '';
+  const dropped = Object.values(p.dropped || {});
+  return `<div class="dcard"><div class="dh">Sources for this topic <span class="note">${p.auto ? 'picked from the words' : 'chosen by hand'}</span></div>
+    <p class="note" style="margin:0 0 6px">Read as <b>${esc(KIND_LABEL[p.kind] || p.kind)}</b> (${esc(p.why || '')}). ${esc(p.note || '')}. Searching <b>${(T.sources || []).length}</b> source${(T.sources || []).length === 1 ? '' : 's'}. Time: <b>${windowLabel(T.settings)}</b>.</p>
+    ${dropped.length ? `<p class="note" style="margin:0 0 6px">Dropped after trying: ${dropped.map(esc).join(' · ')}</p>` : ''}
+    <div class="row wrap"><button class="btn sm" id="plEdit">EDIT SOURCES</button>${p.auto ? '' : '<button class="btn sm" id="plReplan">PICK AGAIN</button>'}</div></div>`;
+}
+function briefText(){
+  const b = BRIEF; if (!b) return '';
+  const when = ts => ts ? new Date(ts * 1000).toLocaleDateString() : '?';
+  return [b.topic.toUpperCase(), `${b.n_items} posts (${b.n_liked} rated 👍), ${when(b.first)} to ${when(b.last)}`, '', ...b.sentences.map(s => `• ${s.text} [${s.n}]`), '', 'WHO: ' + b.accounts.map(a => '@' + a.author + ' (' + a.platform + ', ' + a.n + ')').join(', '), 'WHERE: ' + b.platforms.map(([p, n]) => p + ' ' + n).join(', '), 'TAGS: ' + b.tags.map(([t, n]) => '#' + t + ' ' + n).join(', '), '', 'TIMELINE:', ...b.timeline.map(w => `${when(w.week_start)}: ${w.n} posts. ${w.headline}`), '', 'SOURCES:', ...Object.entries(b.citations).map(([n, c]) => `[${n}] ${c.url || ''}`)].join('\n');
+}
+function briefCard(){
+  const b = BRIEF; if (!b || b.error) return '';
+  const cite = n => { const c = b.citations[n]; return c && c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noreferrer" title="${esc('@' + (c.author || '') + ' · ' + (c.platform || ''))}">[${n}]</a>` : `[${n}]`; };
+  const when = ts => ts ? new Date(ts * 1000).toLocaleDateString() : '?';
+  return `<div class="dcard span2"><div class="dh">Brief <span class="note">${fmtN(b.n_items)} posts in the topic, ${b.n_liked} rated 👍 · ${when(b.first)} to ${when(b.last)}</span></div>
+    ${b.sentences.length ? `<ul class="brief">${b.sentences.map(s => `<li>${esc(s.text)} ${cite(s.n)}</li>`).join('')}</ul>` : '<p class="note">Nothing in the topic yet. Rate a few posts and run it again.</p>'}
+    ${b.timeline.length > 1 ? `<div class="note" style="margin-top:8px"><b>Timeline:</b> ${b.timeline.map(w => `${when(w.week_start)} (${w.n})`).join(' · ')}</div>` : ''}
+    <div id="brAiOut"></div>
+    <div class="row wrap" style="margin-top:10px"><button class="btn sm pri" id="brAi">✦ SUMMARIZE WITH AN LLM</button><button class="btn sm" id="brCopy">COPY BRIEF</button><span class="note">Your key or your machine. The brief above needs neither.</span></div></div>`;
+}
+// ── an LLM over the brief's packet: your Anthropic / OpenAI key from this browser, or Ollama on the PC ──
+const LLM_KEY = 'sn_llm';
+function llmCfg(){ try{ return Object.assign({ provider: 'anthropic', model: '', key: '', url: 'http://127.0.0.1:11434' }, JSON.parse(localStorage.getItem(LLM_KEY) || '{}')); }catch(e){ return { provider: 'anthropic', model: '', key: '', url: 'http://127.0.0.1:11434' }; } }
+const LLM_DEFAULT_MODEL = { anthropic: 'claude-sonnet-5-5', openai: 'gpt-4o-mini', ollama: 'llama3.2' };
+async function aiSummary(){
+  const c = llmCfg();
+  openSheet(`<h3>Summarize with an LLM</h3>
+    <p class="note" style="margin-bottom:10px">The numbered posts in this brief are sent to the model you pick, nothing else. Keys stay in this browser. Ollama runs on your own computer (start it with <code>OLLAMA_ORIGINS=*</code> so a page may call it).</p>
+    <label class="field"><span>Provider</span><select id="llmP"><option value="anthropic">Anthropic (your API key)</option><option value="openai">OpenAI (your API key)</option><option value="ollama">Ollama (local, free)</option></select></label>
+    <label class="field"><span>Model</span><input id="llmM" value="${esc(c.model || '')}" placeholder="${esc(LLM_DEFAULT_MODEL[c.provider])}" autocapitalize="off" spellcheck="false"></label>
+    <label class="field" id="llmKeyRow"><span>API key</span><input id="llmK" type="password" value="${esc(c.key || '')}" placeholder="sk-…" autocapitalize="off" spellcheck="false"></label>
+    <label class="field" id="llmUrlRow"><span>Ollama address</span><input id="llmU" value="${esc(c.url || '')}" placeholder="http://127.0.0.1:11434" autocapitalize="off" spellcheck="false"></label>
+    <div class="row" style="margin-top:12px"><button class="btn" id="llmCancel">CANCEL</button><div class="grow"></div><button class="btn pri" id="llmGo">SUMMARIZE</button></div>`, true);
+  const sync = () => { const p = $('#llmP').value; $('#llmKeyRow').hidden = p === 'ollama'; $('#llmUrlRow').hidden = p !== 'ollama'; $('#llmM').placeholder = LLM_DEFAULT_MODEL[p]; };
+  $('#llmP').value = c.provider; sync(); $('#llmP').onchange = sync; $('#llmCancel').onclick = closeSheet;
+  $('#llmGo').onclick = async () => {
+    const cfg = { provider: $('#llmP').value, model: $('#llmM').value.trim(), key: $('#llmK').value.trim(), url: $('#llmU').value.trim().replace(/\/$/, '') };
+    try{ localStorage.setItem(LLM_KEY, JSON.stringify(cfg)); }catch(e){}
+    closeSheet(); const out = $('#brAiOut'); if (!out) return; out.innerHTML = '<p class="note"><span class="spinner"></span> asking ' + esc(cfg.provider) + '…</p>';
+    try{ const text = await askLLM(cfg, BRIEF.prompt); out.innerHTML = '<div class="aiout">' + esc(text).replace(/\[(\d+)\]/g, (m, n) => { const c2 = BRIEF.citations[n]; return c2 && c2.url ? `<a href="${esc(c2.url)}" target="_blank" rel="noreferrer">[${n}]</a>` : m; }).replace(/\n/g, '<br>') + '</div><p class="note" style="margin-top:6px">Written by ' + esc(cfg.model || LLM_DEFAULT_MODEL[cfg.provider]) + ' from the numbered posts. Check the citations before you rely on it.</p>'; }
+    catch(e){ out.innerHTML = '<p class="note" style="color:var(--bad)">✕ ' + esc(e.message) + '</p>'; }
+  };
+}
+async function askLLM(cfg, prompt){
+  const model = cfg.model || LLM_DEFAULT_MODEL[cfg.provider];
+  if (cfg.provider === 'anthropic'){
+    if (!cfg.key) throw new Error('Anthropic needs an API key');
+    const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': cfg.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model, max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }) });
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error((j.error && j.error.message) || ('HTTP ' + r.status)); return (j.content || []).map(c => c.text || '').join('\n');
+  }
+  if (cfg.provider === 'openai'){
+    if (!cfg.key) throw new Error('OpenAI needs an API key');
+    const r = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + cfg.key }, body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 1500 }) });
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error((j.error && j.error.message) || ('HTTP ' + r.status)); return ((j.choices || [])[0] || {}).message?.content || '';
+  }
+  const r = await fetch((cfg.url || 'http://127.0.0.1:11434') + '/api/generate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model, prompt, stream: false }) });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status + ' from Ollama. Is it running, and started with OLLAMA_ORIGINS=*?')); return j.response || '';
+}
 function sitesCard(){
   const sites = Object.entries((T.settings || {}).sites || {}).sort((a, b) => b[1].n - a[1].n).slice(0, 14);
   if (!sites.length) return '';
@@ -1696,10 +1767,11 @@ async function renderDossier(){
   let items = [], graph = { nodes: [], edges: [] }, wiki = null, views = null;
   const isPerson = !!((T.settings || {}).person);
   try{
-    [items, graph, wiki] = await Promise.all([
+    [items, graph, wiki, BRIEF] = await Promise.all([
       api('/api/search?' + new URLSearchParams({ topic: T.id, topic_all: '1', limit: 2000, fuzzy: '0', synonyms: '0' })).then(r => r.items || []),
       api('/api/graph?' + new URLSearchParams({ topic: T.id, kinds: 'account,hashtag,word', max: 120 })).catch(() => ({ nodes: [], edges: [] })),
       isPerson ? Promise.resolve(null) : wikiSummary(seed),          // an encyclopedia article for a name is almost always someone else
+      api('/api/topics/' + T.id + '/brief').catch(() => null),
     ]);
     views = isPerson ? null : await wikiViews(wiki && wiki.canonical ? wiki.canonical : seed);
   }catch(e){ body.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
@@ -1747,6 +1819,8 @@ async function renderDossier(){
     <div class="dcard"><div class="dh">Who talks about it most</div>${who.length ? who.slice(0, 10).map(a => `<button class="drow tap" data-prof="${esc(a.id)}"><span class="k">@${esc(a.author)} <small>${esc(a.platform)}</small></span><span class="bar"><i style="width:${pct(a.n)}%"></i></span><span class="v">${fmtN(a.n)}${a.liked ? ' · 👍' + a.liked : ''}</span></button>`).join('') : '<p class="note">—</p>'}</div>
     <div class="dcard"><div class="dh">Keywords it goes with</div><div class="chips wrap">${tags.map(t => `<button class="chip" data-focus="${esc(t.label)}">${esc(t.label)} <em>${t.n}</em></button>`).join('')}${words.map(w => `<button class="chip f" data-focus="${esc(w.label.includes(' ') ? '"' + w.label + '"' : w.label)}">${esc(w.label)} <em>${w.n}</em></button>`).join('')}${tags.length + words.length ? '' : '<p class="note">—</p>'}</div></div>
     <div class="dcard"><div class="dh">People it's associated with</div><div class="chips wrap">${people.map(a => `<button class="chip" data-focus="@${esc(a.label)}" data-pid="${esc(a.person_id || '')}">@${esc(a.label)} <em>${a.n}</em></button>`).join('') || '<p class="note">—</p>'}</div><p class="note" style="margin-top:6px">Ordered by how connected they are inside this topic. Tap to centre the web on them.</p></div>
+    ${planCard()}
+    ${briefCard()}
     ${sitesCard()}
     <div class="dcard"><div class="dh">Trend · posts per week</div>${bars(weeks, wmax)}<div class="note" style="margin-top:4px">last 12 weeks · ${fmtN(weeks.reduce((a, b) => a + b, 0))} posts${older ? ' · ' + fmtN(older) + ' older' : ''}</div></div>
     ${isPerson ? '' : `<div class="dcard"><div class="dh">Search interest · Wikipedia views</div>${views && views.length ? bars(views, vmax, 'cyan') + `<div class="note" style="margin-top:4px">last ${views.length} days · ${fmtN(views[views.length - 1])}/day now · peak ${fmtN(vmax)}</div>` : '<p class="note">No page-view data for this name.</p>'}</div>`}
@@ -1757,6 +1831,10 @@ async function renderDossier(){
   $$('[data-focus]', body).forEach(b => b.onclick = () => go('network?' + new URLSearchParams({ topic: T.id, focus: b.dataset.focus })));
   const pIdBtn = $('#paIdent', body); if (pIdBtn) pIdBtn.onclick = () => openIdentity(person.identity_id);
   $$('[data-site]', body).forEach(b => b.onclick = () => addSiteSource(b.dataset.site, b));
+  const rp = $('#plReplan'); if (rp) rp.onclick = async () => { try{ T = await api('/api/topics/' + T.id + '/plan', { method: 'POST' }); toast('Sources chosen again'); renderDossier(); }catch(e){ toast(e.message); } };
+  const pe = $('#plEdit'); if (pe) pe.onclick = () => topicSettings();
+  const ai = $('#brAi'); if (ai) ai.onclick = () => aiSummary();
+  const cp = $('#brCopy'); if (cp) cp.onclick = async () => { try{ await navigator.clipboard.writeText(briefText()); toast('Copied'); }catch(e){ toast('Could not copy'); } };
   $$('[data-restore]', body).forEach(b => b.onclick = async () => { try{ const r = await api('/api/topics/' + T.id + '/person', { method: 'POST', body: { action: 'restore', account: b.dataset.restore } }); T.settings.person = Object.assign({}, T.settings.person, { not_them: r.not_them }); toast('Restored @' + b.dataset.restore.split('|')[0] + ' — found again on the next FIND MORE', 4000); renderDossier(); }catch(e){ toast(e.message); } });
   $$('[data-idlink]', body).forEach(b => b.onclick = async () => {
     try{
@@ -1927,6 +2005,7 @@ async function topicSettings(){
     <label class="field"><span>How wide · <b id="tsBL" style="color:var(--acc);font-weight:normal">${BREADTH[s.breadth]}</b></span><input type="range" id="tsB" min="1" max="5" value="${s.breadth}"></label>
     <div class="grid2">
       <label class="field"><span>Collect</span><select id="tsMedia"><option value="video">Videos</option><option value="all">Videos + images</option><option value="everything">Everything · posts, replies, comments, media</option></select></label>
+        <label class="field"><span>Time</span><select id="tsWindow"><option value="auto">Auto (from the words)</option><option value="7">Live · last 7 days</option><option value="14">Last 2 weeks</option><option value="30">Last month</option><option value="365">Last year</option><option value="all">Everything</option></select></label>
       <label class="field"><span>Auto-update (new posts)</span><select id="tsRef"><option value="0">Off</option><option value="1">Hourly</option><option value="3">3 h</option><option value="6">6 h</option><option value="12">12 h</option><option value="24">Daily</option></select></label>
       <label class="field"><span>Results per search</span><input id="tsPer" type="number" min="1" max="200" value="${s.per_query}" inputmode="numeric"></label>
       <label class="field"><span>Auto-save top N</span><input id="tsDl" type="number" min="0" max="500" value="${s.auto_download || 0}" inputmode="numeric"></label>
@@ -1934,13 +2013,13 @@ async function topicSettings(){
     <div class="field"><span>Search on (nothing ticked = all enabled)</span>
       ${srcs.map(x => `<label class="facet"><input type="checkbox" data-src="${x.id}" ${T.sources.includes(x.id) ? 'checked' : ''}> <span class="v">${esc(x.name)}</span>${x.enabled ? '' : '<span class="n">off</span>'}</label>`).join('')}</div>
     <div class="row" style="margin-top:14px"><button class="btn danger" id="tsDel">DELETE</button><div class="grow"></div><button class="btn pri" id="tsSave">SAVE</button></div>`);
-  $('#tsMedia').value = s.media; $('#tsRef').value = String(s.refresh_hours || 0);
+  $('#tsMedia').value = s.media; $('#tsRef').value = String(s.refresh_hours || 0); $('#tsWindow').value = s.window || 'auto';
   $('#tsB').oninput = e => $('#tsBL').textContent = BREADTH[e.target.value];
   $('#tsSave').onclick = async () => {
     try{
       T = await api('/api/topics/' + T.id, { method: 'PATCH', body: { name: $('#tsName').value, seeds: $('#tsSeeds').value.split('\n'),
         sources: $$('[data-src]').filter(c => c.checked).map(c => c.dataset.src),
-        settings: { breadth: +$('#tsB').value, media: $('#tsMedia').value, refresh_hours: +$('#tsRef').value, per_query: +$('#tsPer').value || 15, auto_download: +$('#tsDl').value || 0, soft: $('#tsSoft').value.split(/[,\n]/).map(x => x.trim()).filter(Boolean) } } });
+        settings: { breadth: +$('#tsB').value, media: $('#tsMedia').value, window: $('#tsWindow').value, refresh_hours: +$('#tsRef').value, per_query: +$('#tsPer').value || 15, auto_download: +$('#tsDl').value || 0, soft: $('#tsSoft').value.split(/[,\n]/).map(x => x.trim()).filter(Boolean) } } });
       closeSheet(); toast('Saved'); renderTopic();
     }catch(e){ toast(e.message); }
   };

@@ -454,9 +454,17 @@ def is_member(row, tau):
 
 
 def member_ids(db, topic_id):
-    rows = db.q("SELECT item_id, label, score, why FROM topic_items WHERE topic_id=?", (topic_id,))
+    rows = db.q("SELECT t.item_id, t.label, t.score, t.why, i.posted_at FROM topic_items t LEFT JOIN items i ON i.id=t.item_id "
+                "WHERE t.topic_id=?", (topic_id,))
     tau = threshold(rows)
-    return {r["item_id"] for r in rows if is_member(r, tau)}
+    since = 0
+    t = db.one("SELECT settings FROM topics WHERE id=?", (topic_id,))
+    if t:
+        from .plan import window_days
+        st = json.loads(t["settings"] or "{}")
+        days = window_days(st, st.get("plan"))
+        since = int(__import__("time").time()) - days * 86400 if days else 0
+    return {r["item_id"] for r in rows if is_member(r, tau) and (r["label"] > 0 or not since or not r.get("posted_at") or r["posted_at"] >= since)}
 
 
 def query_stats(db, topic_id):

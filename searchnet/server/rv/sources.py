@@ -14,6 +14,7 @@ that yields item dicts, and register it in ADAPTERS.
 
 import json
 import re
+import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 
@@ -107,7 +108,7 @@ DEFAULT_SOURCES = ["youtube", "mastodon", "x", "reddit", "bluesky", "news", "gde
 
 
 def is_searchable(src) -> bool:
-    if src["kind"] in ("x", "ytsearch", "mastodon", "reddit"):
+    if src["kind"] in ("x", "ytsearch", "mastodon", "reddit", "news", "gdelt", "web", "hn", "archive", "fourchan", "wikipedia"):
         return True
     if src["kind"] in ("template", "rss"):
         return any(t in (src.get("template") or "") for t in ("{q", "{tag}"))
@@ -593,6 +594,16 @@ def fetch_rss(ctx, src, query, limit):
         yield it
 
 
+def _since(ctx):
+    """unix time the topic wants results after (0 = no limit)"""
+    return to_int((ctx.opts or {}).get("since")) if getattr(ctx, "opts", None) else 0
+
+
+def _days(ctx):
+    s = _since(ctx)
+    return max(1, int((time.time() - s) / 86400) + 1) if s else 0
+
+
 def _extra(src, query):
     """presets like Obituaries carry extra terms in their template; a user's param lands there too"""
     extra = (src.get("template") or "").strip()
@@ -613,12 +624,15 @@ def _article(ctx, link, text, author="", posted_at=None, prefix="web", **kw):
 def fetch_news(ctx, src, query, limit):
     """Google News RSS: global, national and local outlets."""
     region = (ctx.opts.get("region") or "US").upper()[:2]
-    url = (f"https://news.google.com/rss/search?q={urllib.parse.quote(_extra(src, query))}"
+    q_ = _extra(src, query)
+    if _days(ctx):
+        q_ += f" when:{_days(ctx)}d" if _days(ctx) <= 30 else " after:" + time.strftime("%Y-%m-%d", time.gmtime(_since(ctx)))
+    url = (f"https://news.google.com/rss/search?q={urllib.parse.quote(q_)}"
            f"&hl=en-{region}&gl={region}&ceid={region}:en")
     try:
         body, _, _ = http_get(url, timeout=20)
     except Exception:       # noqa: BLE001 — Google refuses some addresses; Bing News carries the same wires and papers
-        url = f"https://www.bing.com/news/search?q={urllib.parse.quote(_extra(src, query))}&format=rss&count={min(limit, 100)}"
+        url = f"https://www.bing.com/news/search?q={urllib.parse.quote(q_)}&format=rss&count={min(limit, 100)}"
         body, _, _ = http_get(url, timeout=20)
     for e in items_from_feed(body, url, ctx.label, True)[:limit]:
         yield _article(ctx, e["url"], e["text"], author=e.get("author") or domain_of(e["url"]),
@@ -629,7 +643,8 @@ def fetch_gdelt(ctx, src, query, limit):
     """GDELT DOC 2.0: world news articles, searchable back years."""
     q = _extra(src, query)
     d = http_json(f"https://api.gdeltproject.org/api/v2/doc/doc?query={urllib.parse.quote(q)}"
-                  f"&mode=ArtList&maxrecords={min(limit, 250)}&format=json&sort=DateDesc&startdatetime=20170101000000", timeout=25)
+                  f"&mode=ArtList&maxrecords={min(limit, 250)}&format=json&sort=DateDesc&startdatetime="
+                  + (time.strftime("%Y%m%d%H%M%S", time.gmtime(_since(ctx))) if _since(ctx) else "20170101000000"), timeout=25)
     for a in (d.get("articles") or [])[:limit]:
         ts = None
         m = re.match(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z", a.get("seendate") or "")
@@ -663,7 +678,7 @@ def fetch_web(ctx, src, query, limit):
 
 def fetch_hn(ctx, src, query, limit):
     d = http_json(f"https://hn.algolia.com/api/v1/search?query={urllib.parse.quote(_extra(src, query))}"
-                  f"&tags=story&hitsPerPage={min(limit, 100)}", timeout=20)
+                  f"&tags=story&hitsPerPage={min(limit, 100)}" + (f"&numericFilters=created_at_i>{_since(ctx)}" if _since(ctx) else ""), timeout=20)
     for h in (d.get("hits") or [])[:limit]:
         link = h.get("url") or f"https://news.ycombinator.com/item?id={h.get('objectID')}"
         it = _article(ctx, link, h.get("title") or "", author=h.get("author") or "", posted_at=h.get("created_at_i"),

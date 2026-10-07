@@ -47,7 +47,9 @@ export default {
         const src = SOURCES[q.source];
         if (!src) return json({ error: `unknown source '${q.source}'`, sources: Object.keys(SOURCES) }, 400);
         const limit = Math.min(parseInt(q.limit || "30", 10) || 30, 100);
-        const items = await src(q, limit);
+        let items = await src(q, limit);
+        const since = parseInt(q.since || "0", 10) || 0;
+        if (since) items = items.filter((it) => !it.posted_at || it.posted_at >= since);   // the topic's time window
         return json({ items });
       }
       if (p === "/account") {                 // an account's own recent posts (for "load more" on a profile)
@@ -118,6 +120,7 @@ const toTs = (v) => { if (!v) return null; if (typeof v === "number") return v >
   const t = Date.parse(v); return isNaN(t) ? null : Math.floor(t / 1000); };
 const tag = (s) => (s || "").toLowerCase().replace(/[^a-z0-9_]+/g, "");
 const wantText = (q) => (q.media || "") === "everything";
+const sinceDays = (q) => { const s = parseInt(q.since || "0", 10); return s ? Math.max(1, Math.floor((Date.now() / 1000 - s) / 86400) + 1) : 0; };
 const withExtra = (q) => [q.q || "", q.qx || ""].map((s) => s.trim()).filter(Boolean).join(" ");   // 'everything' = posts, replies, comments too — not only media
 const vidExt = /\.(mp4|webm|mov|m4v|mkv|gifv)(\?|$)/i;
 const imgExt = /\.(jpe?g|png|gif|webp|avif)(\?|$)/i;
@@ -209,14 +212,15 @@ const SOURCES = {
   // Google News: global, national and local papers, TV, wires. q.region = US, GB, AU … (default US)
   async news(q, limit) {
     const gl = (q.region || "US").toUpperCase().slice(0, 2);
+    const days = sinceDays(q); const qq = withExtra(q) + (days ? (days <= 30 ? ` when:${days}d` : " after:" + new Date((+q.since) * 1000).toISOString().slice(0, 10)) : "");
     let xml;
-    try { xml = await getText(`https://news.google.com/rss/search?q=${encodeURIComponent(withExtra(q))}&hl=en-${gl}&gl=${gl}&ceid=${gl}:en`); }
-    catch (e) { xml = await getText(`https://www.bing.com/news/search?q=${encodeURIComponent(withExtra(q))}&format=rss&count=${Math.min(limit, 100)}`); }   // Google refuses most data-centre addresses; Bing News carries the same wires and papers
+    try { xml = await getText(`https://news.google.com/rss/search?q=${encodeURIComponent(qq)}&hl=en-${gl}&gl=${gl}&ceid=${gl}:en`); }
+    catch (e) { xml = await getText(`https://www.bing.com/news/search?q=${encodeURIComponent(qq)}&format=rss&count=${Math.min(limit, 100)}`); }   // Google refuses most data-centre addresses; Bing News carries the same wires and papers
     return parseFeed(xml, limit, true, "news").map((it) => Object.assign(it, { id: "news:" + hash(canon(it.url)) }));
   },
   // GDELT: a running index of world news articles, searchable back years. Phrases go in quotes.
   async gdelt(q, limit) {
-    const d = await getJSON(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(withExtra(q))}&mode=ArtList&maxrecords=${Math.min(limit, 250)}&format=json&sort=DateDesc&startdatetime=20170101000000`);
+    const d = await getJSON(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(withExtra(q))}&mode=ArtList&maxrecords=${Math.min(limit, 250)}&format=json&sort=DateDesc&startdatetime=${q.since ? new Date((+q.since) * 1000).toISOString().replace(/[-:T]/g, "").slice(0, 14) : "20170101000000"}`);
     return (d.articles || []).map((a) => item({
       id: "news:" + hash(canon(a.url)), platform: "news", media: "post", url: a.url,
       author: a.domain || hostOf(a.url), author_name: a.domain || "", text: a.title || "",
@@ -274,7 +278,7 @@ const SOURCES = {
   },
   // Hacker News (Algolia): tech and startup discussion, free full-text search
   async hn(q, limit) {
-    const d = await getJSON(`https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(withExtra(q))}&tags=story&hitsPerPage=${Math.min(limit, 100)}`);
+    const d = await getJSON(`https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(withExtra(q))}&tags=story&hitsPerPage=${Math.min(limit, 100)}${q.since ? "&numericFilters=created_at_i>" + (+q.since) : ""}`);
     return (d.hits || []).map((h) => item({
       id: "hn:" + h.objectID, platform: "hackernews", media: "post", url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`,
       author: h.author || "", text: h.title || "", posted_at: h.created_at_i || null, likes: h.points || 0, replies: h.num_comments || 0,

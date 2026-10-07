@@ -962,3 +962,85 @@ class WebSourcesAndMembership(Base):
         st = self.v.topic(t["id"])["settings"]
         self.assertIn("storm surge", st["soft"])
         self.assertNotIn("storm", st.get("anti", []))
+
+
+class PlannerWindowBrief(Base):
+    def test_kinds_and_source_plans(self):
+        from rv import plan as P
+        self.assertEqual(P.kind_of(["John Smith"])[0], "person")
+        self.assertEqual(P.kind_of(["Florida Hurricane Isaias"])[0], "event")
+        self.assertEqual(P.kind_of(["rust async runtime"])[0], "tech")
+        self.assertEqual(P.kind_of(["Miami Beach"])[0], "place")
+        self.assertEqual(P.kind_of(["skateboarding"])[0], "general")
+        self.assertEqual(P.kind_of(["@someone"])[0], "handle")
+        self.assertFalse(P.looks_like_name("Tampa General Hospital"))
+        t = self.v.create_topic("John Smith", ["John Smith"])
+        by = {s["id"]: s["preset"] for s in self.v.list_sources()}
+        chosen = {by[i] for i in t["sources"]}
+        self.assertEqual(t["settings"]["plan"]["kind"], "person")
+        self.assertIn("obituaries", chosen)
+        self.assertNotIn("fourchan", chosen)
+        e = self.v.create_topic("Florida Hurricane Isaias", ["florida hurricane isaias"])
+        chosen = {by[i] for i in e["sources"]}
+        self.assertEqual((e["settings"]["plan"]["kind"], e["settings"]["plan"]["window_days"]), ("event", 14))
+        self.assertNotIn("obituaries", chosen)
+        self.assertIn("news", chosen)
+        # choosing sources by hand switches the plan off; PICK AGAIN turns it back on
+        self.v.update_topic(e["id"], {"sources": e["sources"][:2]})
+        self.assertFalse(self.v.topic(e["id"])["settings"]["plan"]["auto"])
+
+    def test_window_drops_old_results_but_keeps_what_you_liked(self):
+        from rv import plan as P
+        t = self.v.create_topic("Hurricane Milton", ["hurricane milton"])
+        self.assertEqual(P.window_days(t["settings"], t["settings"]["plan"]), 14)
+        self.assertEqual(P.window_days({"window": "all"}, t["settings"]["plan"]), 0)
+        self.assertEqual(P.window_days({"window": "7"}, None), 7)
+        old = int(time.time()) - 400 * 86400
+        xml = ('<?xml version="1.0"?><rss><channel><item><title>Milton 2020</title><link>https://a.example/old</link>'
+               '<pubDate>Tue, 01 Sep 2020 10:00:00 GMT</pubDate></item><item><title>Milton now</title><link>https://a.example/new</link>'
+               '<pubDate>' + time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime()) + '</pubDate></item></channel></rss>')
+        og = S.http_get
+        S.http_get = lambda url, **k: (xml, "text/xml", url)
+        self.addCleanup(lambda: setattr(S, "http_get", og))
+        news = next(s for s in self.v.list_sources() if s["preset"] == "news")
+        got = list(self.v.fetch(Job("collect", {}), news, "milton", 10, {"media": "video", "since": int(time.time()) - 14 * 86400}))
+        self.assertEqual([g["text"].split("\n")[0] for g in got], ["Milton now"])
+        # membership: an old unrated post is out, an old 👍 post stays
+        self.add(tweet("1", "hurricane milton 2020 recap", author="a"), tweet("2", "hurricane milton 2020 liked", author="b"))
+        self.v.db.exec("UPDATE items SET posted_at=? WHERE id IN ('x:1','x:2')", (old,))
+        for i in ("x:1", "x:2"):
+            self.v.link(t["id"], i, "hurricane milton", "s")
+        self.v.db.exec("UPDATE topic_items SET score=0.9 WHERE topic_id=?", (t["id"],))
+        self.v.vote(t["id"], "x:2", 1)
+        ids = member_ids(self.v.db, t["id"])
+        self.assertNotIn("x:1", ids)
+        self.assertIn("x:2", ids)
+
+    def test_prune_drops_a_source_that_never_finds_anything(self):
+        from rv import plan as P
+        plan = {"auto": True, "source_ids": ["a", "b"], "dropped": {}}
+        keep = P.prune(plan, {"a": {"runs": 3, "found": 0}, "b": {"runs": 3, "found": 9, "pos": 1, "neg": 0}}, {"a": {"name": "A"}, "b": {"name": "B"}})
+        self.assertEqual(keep, ["b"])
+        self.assertIn("A: nothing in 3 runs", plan["dropped"].values())
+        plan = {"auto": True, "source_ids": ["c"], "dropped": {}}
+        keep = P.prune(plan, {"c": {"runs": 2, "found": 8, "pos": 0, "neg": 7}}, {"c": {"name": "C"}})
+        self.assertEqual(keep, [])
+        self.assertIsNone(P.prune({"auto": False, "source_ids": ["c"]}, {}, {}))
+
+    def test_brief_quotes_the_posts_with_citations(self):
+        from rv import brief as B
+        t = self.v.create_topic("Isaias", ["hurricane isaias"], settings={"window": "all"})
+        self.add(tweet("1", "Hurricane Isaias made landfall near Ocean Isle Beach late Monday. Crews restored power to most homes by Wednesday.", author="wx"),
+                 tweet("2", "Isaias storm surge flooded the pier parking lot. Officials said the damage was limited.", author="city"),
+                 tweet("3", "lunch was good today", author="noise"))
+        for i in ("x:1", "x:2", "x:3"):
+            self.v.link(t["id"], i, "hurricane isaias", "s")
+        self.v.vote(t["id"], "x:1", 1)
+        self.v.vote(t["id"], "x:2", 1)
+        self.v.vote(t["id"], "x:3", -1)
+        b = B.build(self.v, t["id"])
+        self.assertGreaterEqual(len(b["sentences"]), 2)
+        self.assertTrue(all("Isaias" in s["text"] or "surge" in s["text"] for s in b["sentences"]))
+        self.assertNotIn("lunch", b["prompt"])
+        self.assertIn("[1]", b["prompt"])
+        self.assertTrue(any(a["author"] == "wx" for a in b["accounts"]))

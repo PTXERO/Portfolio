@@ -20,6 +20,8 @@ from pathlib import Path
 
 from . import people
 from . import sources as S
+from . import brief as BRIEF
+from . import plan as PLAN
 from .db import norm_tags
 from .related import related
 from .search import search
@@ -559,6 +561,15 @@ class Handler(BaseHTTPRequestHandler):
                 return ok({"counts": c, "surprise": c.pop("surprise", None)})
             if sub == "insights":
                 return ok(v.insights(arg))
+            if sub == "brief":
+                return ok(BRIEF.build(v, arg))
+            if sub == "plan" and method == "POST":           # re-plan: let the kind decide again
+                t = v.topic(arg)
+                if not t:
+                    return self._send(404, {"error": "no such topic"})
+                p = PLAN.plan_for(t["seeds"], t["settings"], v.list_sources())
+                v.update_topic(arg, {"sources": p["source_ids"], "settings": {"plan": p}})
+                return ok(v.topic(arg))
             if sub == "reason" and method == "DELETE":
                 v.clear_reason(arg, anti=params.get("anti"), pref=params.get("pref"))
                 return ok()

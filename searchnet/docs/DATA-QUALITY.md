@@ -127,3 +127,17 @@ Legend · **DONE** shipped · **NEXT** small, this week · **PLAN** needs design
 - Still open: X and Instagram need the PC server with cookies. Bluesky refuses some Cloudflare addresses.
   4plebs blocks API use; desuarchive and live catalogs cover 4chan. Google News caps at ~100 per query;
   time windows (before:/after:) per query are the next step for deep history.
+
+## Update: the topic plans itself
+- When a topic is created the words decide what it is (a person, an @account, an event, a place,
+  something technical, or general) and which sources fit. The dossier shows the reading and the
+  reason; EDIT SOURCES overrides it (then the plan stops touching the list), PICK AGAIN hands it back.
+- A typed name without PERSON asks: dossier or plain topic. Either way the person sources are used.
+- Time window: events default to the last 14 days, places 90, the rest everything. You can set
+  Live / 2 weeks / month / year / everything per topic. It is pushed into Google News (when:/after:),
+  GDELT, Hacker News, and applied to every other source's dated results. Older posts you 👍 stay.
+- After each run a source that found nothing three runs in a row, or whose finds are 85 % 👎 after six
+  votes, is dropped from the topic with the reason shown.
+- BRIEF in the dossier: the sentences that carry the topic's words, who and where, a timeline, each with
+  [n] back to the post. No model needed. SUMMARIZE WITH AN LLM sends the same numbered posts to your own
+  Anthropic or OpenAI key from this browser, or Ollama on your computer. The hub never sees any of it.

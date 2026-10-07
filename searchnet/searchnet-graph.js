@@ -116,7 +116,9 @@
     const votes = await idb.all('votes'); const byItem = new Map();
     const byTopic = {}; votes.forEach((v) => (byTopic[v.topic_id] = byTopic[v.topic_id] || []).push(v));
     const tau = {}; for (const tid in byTopic) tau[tid] = L.learn ? L.learn.threshold(byTopic[tid]) : 0.5;
-    votes.forEach((v) => { v.member = L.learn ? L.learn.isMember(v, tau[v.topic_id]) : v.label >= 0; (byItem.get(v.item_id) || byItem.set(v.item_id, []).get(v.item_id)).push(v); });
+    const tops = {}; (await idb.all('topics')).forEach((t) => tops[t.id] = t); const itemsById = {}; (await idb.all('items')).forEach((it) => itemsById[it.id] = it);
+    const since = {}; for (const tid in byTopic) { const t = tops[tid]; const d = t && L.learn ? L.learn.windowDays(t.settings, (t.settings || {}).plan) : 0; since[tid] = d ? Math.floor(Date.now() / 1000) - d * 86400 : 0; }
+    votes.forEach((v) => { v.member = L.learn ? L.learn.isMember(v, tau[v.topic_id]) : v.label >= 0; const it = itemsById[v.item_id]; if (v.member && v.label <= 0 && since[v.topic_id] && it && it.posted_at && it.posted_at < since[v.topic_id]) v.member = false; (byItem.get(v.item_id) || byItem.set(v.item_id, []).get(v.item_id)).push(v); });
     const topics = {}; (await idb.all('topics')).forEach((t) => topics[t.id] = t.name);
     return { byItem, topics, tau };
   }
