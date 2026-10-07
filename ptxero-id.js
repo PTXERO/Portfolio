@@ -162,8 +162,8 @@
 .px-panel .px-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
 .px-panel .px-btn{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;letter-spacing:.08em;padding:7px 11px;border:1px solid var(--b2,#2c2c36);border-radius:2px;background:transparent;color:var(--txt,#e2e2ea);cursor:pointer}
 .px-panel .px-btn:hover{border-color:var(--dim,#7a7a92)}.px-panel .px-btn.danger{color:var(--bad,#ff4d6d);border-color:rgba(255,77,109,.4)}
-.px-panel .px-opt{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--border,#1f1f29);border-radius:6px;cursor:pointer;flex:1 1 220px}
-.px-panel .px-opt input{flex:0 0 auto;margin:3px 0 0;width:auto;min-width:0}.px-panel .px-opt>span{flex:1 1 auto;min-width:0}
+.px-panel .px-opt{display:flex;gap:10px;align-items:flex-start;user-select:none;padding:8px 10px;border:1px solid var(--border,#1f1f29);border-radius:6px;cursor:pointer;flex:1 1 220px}
+.px-panel .px-opt>span{flex:1 1 auto;min-width:0}.px-panel .px-opt::after{content:'';flex:0 0 auto;width:10px;height:10px;border-radius:50%;border:1px solid var(--b2,#2c2c36);margin-top:4px}.px-panel .px-opt.on::after{background:var(--acc,#f54242);border-color:var(--acc,#f54242);box-shadow:0 0 10px rgba(var(--acc-rgb,245,66,66),.6)}
 .px-panel .px-opt.on{border-color:var(--acc,#f54242)}.px-panel .px-opt b{display:block;font-weight:500}.px-panel .px-opt small{color:var(--dim,#7a7a92);display:block;margin-top:2px}
 .px-panel input[type=text]{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:14px;color:var(--txt,#e2e2ea);background:var(--panel,#121218);border:1px solid var(--b2,#2c2c36);border-radius:8px;padding:8px 10px;width:100%;box-sizing:border-box;margin:4px 0}
 .px-panel .px-bar{height:6px;background:var(--panel2,#17171f);border-radius:3px;overflow:hidden;margin:4px 0}.px-panel .px-bar i{display:block;height:100%;background:var(--acc,#f54242)}
@@ -179,9 +179,9 @@
       <h4>YOUR DATA</h4>
       <div class="px-note">You are <b>@${esc(handle())}</b>. An anonymous id made on this device, backed by a key only this browser holds. No email, no name. Keep the key file if you want the same id on another device.</div>
       <div class="px-row">
-        <div class="px-opt${H.mode === 'shared' ? ' on' : ''}" data-mode="shared"><input type="radio" name="px-mode" ${H.mode === 'shared' ? 'checked' : ''}><span><b>Shared PTXERO hub</b><small>Works out of the box. Daily limits. Anything you leave here gets deleted after <span class="px-ret">a few months</span> without use, so keeping data here is optional.</small></span></div>
-        <div class="px-opt${H.mode === 'own' ? ' on' : ''}" data-mode="own"><input type="radio" name="px-mode" ${H.mode === 'own' ? 'checked' : ''}><span><b>My own hub</b><small>A free Cloudflare Worker + Supabase project you control. No limits. <a href="${esc(root)}hub/" target="_blank" rel="noreferrer">Setup guide →</a></small></span></div>
-        ${canLocal ? `<div class="px-opt${H.mode === 'local' ? ' on' : ''}" data-mode="local"><input type="radio" name="px-mode" ${H.mode === 'local' ? 'checked' : ''}><span><b>This device only</b><small>No hub at all. Nothing leaves this browser, nothing is shared or backed up.</small></span></div>` : ''}
+        <div class="px-opt${H.mode === 'shared' ? ' on' : ''}" data-mode="shared"><span><b>Shared PTXERO hub</b><small>Works out of the box. Daily limits. Anything you leave here gets deleted after <span class="px-ret">a few months</span> without use, so keeping data here is optional.</small></span></div>
+        <div class="px-opt${H.mode === 'own' ? ' on' : ''}" data-mode="own"><span><b>My own hub</b><small>A free Cloudflare Worker + Supabase project you control. No limits. <a href="${esc(root)}hub/" target="_blank" rel="noreferrer">Setup guide →</a></small></span></div>
+        ${canLocal ? `<div class="px-opt${H.mode === 'local' ? ' on' : ''}" data-mode="local"><span><b>This device only</b><small>No hub at all. Nothing leaves this browser, nothing is shared or backed up.</small></span></div>` : ''}
       </div>
       <div class="px-own" ${H.mode === 'own' ? '' : 'hidden'}>
         <input type="text" class="px-hub" placeholder="https://hub.yourname.workers.dev" value="${esc(H.mode === 'own' ? H.hub : '')}" autocapitalize="off" spellcheck="false">
