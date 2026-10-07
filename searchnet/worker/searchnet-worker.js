@@ -290,7 +290,7 @@ const SOURCES = {
     return ((d.response || {}).docs || []).map((x) => item({
       id: "archive:" + x.identifier, platform: "archive", media: "post", url: `https://archive.org/details/${x.identifier}`,
       author: Array.isArray(x.creator) ? x.creator[0] : (x.creator || "archive.org"), text: [x.title, Array.isArray(x.description) ? x.description[0] : x.description].filter(Boolean).join("\n").slice(0, 1500),
-      posted_at: toTs(x.date), hashtags: x.mediatype ? String(x.mediatype) : "",
+      posted_at: toTs(x.date), hashtags: "",
     }));
   },
 

@@ -24,6 +24,7 @@ from rv.expand import morph_variants, refresh_expansions  # noqa: E402
 from rv.learn import TopicScorer, member_ids, pick_queries, query_stats  # noqa: E402
 from rv.people import list_people, word_graph             # noqa: E402
 from rv.vault import Job                                  # noqa: E402
+from rv.util import now                                   # noqa: E402
 from rv.related import related                           # noqa: E402
 from rv.search import parse_query, search                # noqa: E402
 from rv.vault import Vault                               # noqa: E402
@@ -1044,3 +1045,33 @@ class PlannerWindowBrief(Base):
         self.assertNotIn("lunch", b["prompt"])
         self.assertIn("[1]", b["prompt"])
         self.assertTrue(any(a["author"] == "wx" for a in b["accounts"]))
+
+
+class EntitiesAndRoles(Base):
+    def test_named_things_link_an_outlet_and_a_poster_and_outlets_are_not_people(self):
+        from rv.people import _entities, word_graph, list_people
+        self.assertEqual(_entities("Crews from Duke Energy restored power near Ocean Isle Beach, officials said."), ["duke energy", "ocean isle beach"])
+        self.assertEqual(_entities("The Storm hit. Hurricane Isaias moved on.", skip={"hurricane", "isaias"}), [])
+        t = self.v.create_topic("Isaias", ["hurricane isaias"], settings={"window": "all"})
+        self.add(tweet("1", "Duke Energy says 200k customers lost power in Isaias #isaias", author="wxguy"),
+                 tweet("2", "Lost power for 6 hours, Duke Energy crews were quick #isaias", author="neighbor"))
+        art = S._web_item(type("C", (), {"label": "t"})(), "tampabay.com", "https://www.tampabay.com/a1", "post",
+                          "Isaias: Duke Energy restores power to most of Tampa Bay", author="Tampa Bay Times", posted_at=now())
+        art["id"], art["platform"] = "news:a1", "news"
+        self.v.db.upsert(art)
+        for i in ("x:1", "x:2", "news:a1"):
+            self.v.link(t["id"], i, "hurricane isaias", "s")
+            self.v.vote(t["id"], i, 1)
+        g = word_graph(self.v, topic=t["id"], kinds="account,entity", max_nodes=60)
+        ent = next((n for n in g["nodes"] if n["kind"] == "entity" and n["label"] == "Duke Energy"), None)
+        self.assertIsNotNone(ent)
+        self.assertEqual(ent["n"], 3)
+        linked = {e["a"] if e["b"] == ent["id"] else e["b"] for e in g["edges"] if ent["id"] in (e["a"], e["b"])}
+        self.assertTrue(any(k.endswith("|news") for k in linked) and any(k.endswith("|x") for k in linked))   # outlet ↔ posters through the same name
+        roles = {n["label"]: n["role"] for n in g["nodes"] if n["kind"] == "account"}
+        self.assertEqual((roles.get("tampa bay times"), roles.get("wxguy")), ("outlet", "person"))
+        people = list_people(self.v, topic=t["id"], role="person")
+        rows = people["people"] if isinstance(people, dict) else people
+        self.assertEqual({p["author"] for p in rows}, {"wxguy", "neighbor"})
+        g2 = word_graph(self.v, topic=t["id"], kinds="account,entity", max_nodes=60, role="outlet")
+        self.assertEqual({n["label"] for n in g2["nodes"] if n["kind"] == "account"}, {"tampa bay times"})

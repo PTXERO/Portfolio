@@ -699,7 +699,7 @@ def fetch_archive(ctx, src, query, limit):
         it = _article(ctx, f"https://archive.org/details/{x['identifier']}",
                       "\n".join(s for s in (x.get("title"), desc) if s)[:1500], author=creator,
                       posted_at=parse_date(x.get("date")), prefix="archive", platform="archive",
-                      hashtags=str(x.get("mediatype") or ""))
+                      hashtags="")
         it["id"] = f"archive:{x['identifier']}"
         yield it
 

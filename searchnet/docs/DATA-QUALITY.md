@@ -141,3 +141,14 @@ Legend · **DONE** shipped · **NEXT** small, this week · **PLAN** needs design
 - BRIEF in the dossier: the sentences that carry the topic's words, who and where, a timeline, each with
   [n] back to the post. No model needed. SUMMARIZE WITH AN LLM sends the same numbered posts to your own
   Anthropic or OpenAI key from this browser, or Ollama on your computer. The hub never sees any of it.
+
+## Update: real links in the web
+- Named things (people, places, organisations written in posts: "Duke Energy", "Ocean Isle Beach") are
+  nodes now (◆). An outlet's article and a Mastodon post that both name the same thing are linked through
+  it. That is the one cross-source link articles offer, and it is drawn and weighted (pull 4) like a mention.
+- Outlets (news, web, archive, Wikipedia) are marked as outlets, drawn as hexagons, and can be hidden with
+  "People only" in the WEB toolbar. The dossier lists "Named in the posts" and "Outlets covering it"
+  separately from people.
+- Internet Archive uploads no longer carry their media type as a hashtag (that is what glued unrelated TV
+  stations into a #movies community).
+- Topics open on the dossier.

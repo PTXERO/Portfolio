@@ -30,6 +30,21 @@
   const mentionsIn = (t) => [...new Set((String(t || '').replace(/https?:\/\/\S+/g, ' ').match(/(?:^|[^\w@])@([a-z0-9_.]{2,})/gi) || []).map((m) => m.replace(/.*@/, '').toLowerCase().replace(/[.]+$/, '')))];
   const hashSet = (it) => { const h = new Set((it.hashtags || '').toLowerCase().split(/\s+/).filter(Boolean)); if (!h.size) (String(it.text || '').match(/(?:^|\s)#([\p{L}\p{N}_]{2,})/gu) || []).forEach((m) => h.add(m.replace(/.*#/, '').toLowerCase())); return h; };
   const pid = (it) => String(it.author || '?').toLowerCase() + '|' + (it.platform || '?');
+  const OUTLETS = new Set(['news', 'web', 'archive', 'wikipedia']);          // publishers, not people
+  const CONNECT = new Set(['of', 'the', 'and', 'de', 'du', 'von', 'van', '&', 'da', 'del', 'la', 'le']);
+  const ENT_LEAD = new Set('the a an this that our my his her their its i we you it in on at for to from by with as but and or if so when after before breaking update watch live new video photo photos read more here now just why how what'.split(' '));
+  // named things written in a post: runs of 2–4 capitalised words. The one real cross-source link articles offer.
+  function entitiesIn(text, skip) {
+    const out = [], seen = new Set(); skip = new Set([...(skip || [])].map((w) => String(w).toLowerCase()));
+    for (const sentence of String(text || '').split(/[.!?\n:;,()\[\]"“”|]+| [—–-] /)) {
+      const words = sentence.match(/[A-Za-z][\w'’.-]*|&/g) || []; let run = [];
+      const flush = () => { while (run.length && (ENT_LEAD.has(run[0].toLowerCase()) || CONNECT.has(run[0].toLowerCase()))) run.shift(); while (run.length && CONNECT.has(run[run.length - 1].toLowerCase())) run.pop();
+        if (run.length >= 2 && run.length <= 4) { const low = run.map((w) => w.toLowerCase().replace(/^[.'’]+|[.'’]+$/g, '')).join(' '); if (!seen.has(low) && !low.split(' ').every((w) => skip.has(w) || STOP.has(w)) && out.length < 8) { seen.add(low); out.push(low); } } run = []; };
+      for (const w of words) { if (/^[A-Z]/.test(w) || (run.length && CONNECT.has(w.toLowerCase()))) run.push(w); else flush(); }
+      flush();
+    }
+    return out;
+  }
   // a tweet with four images is four items; counts of "posts" should count the tweet once
   const postKey = (it) => it.post_id ? (it.platform || '') + ':' + it.post_id : String(it.id || '').replace(/_\d+$/, '');
   const nPosts = (items) => new Set(items.map(postKey)).size;
@@ -201,6 +216,7 @@
     const { by, idf, hDF, wDF } = await build();
     const { byItem } = await voteIndex();
     let accounts = [...by.values()];
+    if (opts.role === 'person') accounts = accounts.filter((a) => !OUTLETS.has(a.platform)); else if (opts.role === 'outlet') accounts = accounts.filter((a) => OUTLETS.has(a.platform));
     if (opts.topic) accounts = accounts.filter((a) => a.items.some((it) => (byItem.get(it.id) || []).some((v) => v.topic_id === opts.topic && v.member)));
     if (opts.platform) accounts = accounts.filter((a) => a.platform === opts.platform);
     accounts.sort((a, b) => nPosts(b.items) - nPosts(a.items));
@@ -233,6 +249,7 @@
     const { byItem, topics } = await voteIndex();
     const meta = await allMeta();
     let rows = [...by.values()];
+    if (opts.role === 'person') rows = rows.filter((a) => !OUTLETS.has(a.platform)); else if (opts.role === 'outlet') rows = rows.filter((a) => OUTLETS.has(a.platform));
     if (opts.topic) rows = rows.filter((a) => a.items.some((it) => (byItem.get(it.id) || []).some((v) => v.topic_id === opts.topic && v.member)));
     if (opts.q) { const q = opts.q.toLowerCase(); rows = rows.filter((a) => (a.author + ' ' + a.author_name).toLowerCase().includes(q)); }
     if (opts.platform) rows = rows.filter((a) => a.platform === opts.platform);
@@ -263,18 +280,20 @@
   const BOILER = new Set('video videos watch watching subscribe subscribed follow following like likes liked share shares comment comments channel link links bio click clicks free download full official episode part parts live stream streaming streamed check today tonight tomorrow yesterday week weekend month year years day days hours minutes time new news music song songs sound sounds audio youtube tiktok instagram twitter facebook reddit mastodon bluesky shorts short reel reels post posts posted thread update updates premiere viral trending credit credits source sources original repost reposted http https www com'.split(' '));
   async function wordGraph(opts = {}) {
     const { by, idf, hDF, wDF } = await build();
-    const kinds = new Set((opts.kinds || 'account,hashtag,word').split(',').filter(Boolean));
+    const kinds = new Set((opts.kinds || 'account,hashtag,word,entity').split(',').filter(Boolean));
     const cap = Math.min(opts.max || 80, 160);
     const focus = parseFocus(opts.focus);
     let items = await idb.all('items');
     if (opts.platform) items = items.filter((it) => it.platform === opts.platform);
+    if (opts.role === 'person') items = items.filter((it) => !OUTLETS.has(it.platform)); else if (opts.role === 'outlet') items = items.filter((it) => OUTLETS.has(it.platform));
+    let seedWords = new Set(); if (opts.topic) { const tt = await idb.get('topics', opts.topic); if (tt) seedWords = new Set((tt.seeds || []).concat([tt.name]).flatMap((s) => tokens(s))); }
     if (opts.topic) { const { byItem } = await voteIndex(); items = items.filter((it) => (byItem.get(it.id) || []).some((v) => v.topic_id === opts.topic && v.member)); }   // only what is in this topic: 👍, or unrated above the bar; never 👎
     // per-post term sets → co-occurrence; per-account usage counts
     const nodeW = {}, edgeW = {}; const kindOf = {}; const nodeN = {};          // nodeN = posts behind each node
     const bump = (k, w) => { nodeW[k] = (nodeW[k] || 0) + w; nodeN[k] = (nodeN[k] || 0) + 1; };
     const edgeT = {};   // best (lowest) tier seen for the pair
     const edgeP = {};   // how much of the weight came from each kind: m mention · f follow · h shared hashtag · s shared words
-    const link = (a, b, w, t = 3, kind = 's') => { if (a === b) return; const k = a < b ? a + '\u0001' + b : b + '\u0001' + a; edgeW[k] = (edgeW[k] || 0) + w; edgeT[k] = Math.min(edgeT[k] || 9, t); const P = edgeP[k] || (edgeP[k] = { m: 0, f: 0, h: 0, s: 0, i: 0 }); P[kind] += w; };
+    const link = (a, b, w, t = 3, kind = 's') => { if (a === b) return; const k = a < b ? a + '\u0001' + b : b + '\u0001' + a; edgeW[k] = (edgeW[k] || 0) + w; edgeT[k] = Math.min(edgeT[k] || 9, t); const P = edgeP[k] || (edgeP[k] = { m: 0, f: 0, h: 0, s: 0, i: 0, e: 0 }); P[kind] += w; };
     const acctId = (it) => '@' + String(it.author || '').toLowerCase() + '|' + (it.platform || '');
     // words that appear in more than a third of all posts are boilerplate here ("video", "new"…):
     // they'd bridge every community into one blob, so they're left out of the web
@@ -292,7 +311,10 @@
     for (const it of items) {
       if (!it.author) continue;
       const A = acctId(it); kindOf[A] = 'account';
-      const tags = [...hashSet(it)].map((h) => '#' + h);
+      const tags = it.platform === 'archive' ? [] : [...hashSet(it)].map((h) => '#' + h);   // archive's "tags" are media types
+      const ents = entitiesIn(it.text, new Set([...seedWords, String(it.author || '').toLowerCase()])).map((e) => 'e:' + e);
+      ents.forEach((e) => { kindOf[e] = 'entity'; bump(e, 1); link(A, e, 1.5, 2, 'e'); });
+      for (let i = 0; i < ents.length; i++) for (let j = i + 1; j < ents.length; j++) link(ents[i], ents[j], 1, 2, 'e');
       const words = [...new Set(tokens(it.text).filter((w) => w.length > WORD_MIN && !STOP.has(w) && !generic(w)))].map((w) => 'w:' + w);
       if (focus && focus.kind === 'word' && focus.phrase) {              // a quoted phrase is its own node
         const txt = String(it.text || '').toLowerCase(); if (txt.includes(focus.key)) { words.push('w:' + focus.key); }
@@ -331,6 +353,7 @@
     const scored = wordIds.filter((k) => (nodeN[k] || 0) >= minOcc || isFocusWord(k)).map((k) => [k, (nodeN[k] || 0) * Math.log((nAcc + 1) / ((acctDF[k.slice(2)] || 0) + 1))]).sort((a, b) => b[1] - a[1]);
     scored.slice(0, Math.max(10, Math.ceil(scored.length * 0.6))).forEach(([k]) => keepW.add(k)); scored.forEach(([k]) => { if (isFocusWord(k)) keepW.add(k); });
     for (const k of wordIds) if (!keepW.has(k)) { delete kindOf[k]; delete nodeW[k]; }
+    for (const k of Object.keys(kindOf).filter((k) => kindOf[k] === 'entity')) { const accts = new Set(); for (const ek in edgeW) { const [a, b] = ek.split('\u0001'); if (a === k && kindOf[b] === 'account') accts.add(b); else if (b === k && kindOf[a] === 'account') accts.add(a); } if ((nodeN[k] || 0) < 2 && accts.size < 2) { delete kindOf[k]; delete nodeW[k]; } }
     for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (!kindOf[a] || !kindOf[b]) delete edgeW[k]; }
     // ── edge weights (association strength): co-occurrence vs. what chance predicts from each term's frequency ──
     for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (kindOf[a] === 'account' || kindOf[b] === 'account') continue;
@@ -346,7 +369,7 @@
     const hopOf = {};
     if (focusId && (kindOf[focusId] || nodeW[focusId])) {
       // a word's own relationships ARE shared words, so a word focus walks them too unless told otherwise
-      const hops = Math.max(1, Math.min(6, +opts.hops || 2)), via = new Set((opts.via || (kindOf[focusId] === 'word' ? 'm,f,h,s' : 'm,f,h')).split(',').filter(Boolean));
+      const hops = Math.max(1, Math.min(6, +opts.hops || 2)), via = new Set((opts.via || (kindOf[focusId] === 'word' ? 'm,f,h,e,s' : 'm,f,h,e')).split(',').filter(Boolean));
       const steps = (k) => { const P = edgeP[k]; return P ? [...via].some((v) => P[v] > 0) : (edgeT[k] || 3) <= 2; };
       const nbVia = (id) => { const out = []; for (const k in edgeW) { if (!steps(k)) continue; const [x, y] = k.split('\u0001'); if (x === id) out.push([y, edgeW[k], edgeT[k]]); else if (y === id) out.push([x, edgeW[k], edgeT[k]]); } return out.sort((p, q) => (q[1] - p[1]) || (p[2] - q[2])); };
       hopOf[focusId] = 0; ids = [focusId]; let frontier = [focusId];
@@ -356,9 +379,9 @@
         frontier = next; if (!frontier.length) break;
       }
     } else {
-      const per = { account: Math.round(cap * 0.4), hashtag: Math.round(cap * 0.3), word: Math.round(cap * 0.3) };
+      const per = { account: Math.round(cap * 0.35), hashtag: Math.round(cap * 0.2), word: Math.round(cap * 0.2), entity: Math.round(cap * 0.25) };
       ids = [];
-      for (const kind of ['account', 'hashtag', 'word']) if (kinds.has(kind)) ids.push(...Object.keys(nodeW).filter((k) => kindOf[k] === kind).sort((a, b) => nodeW[b] - nodeW[a]).slice(0, per[kind]));
+      for (const kind of ['account', 'hashtag', 'word', 'entity']) if (kinds.has(kind)) ids.push(...Object.keys(nodeW).filter((k) => kindOf[k] === kind).sort((a, b) => nodeW[b] - nodeW[a]).slice(0, per[kind]));
     }
     // MERGE: collapse each person's accounts into one node named after them (links re-routed, counts summed)
     const personName = {}, personMembers = {};
@@ -368,10 +391,10 @@
       const nids = [], seenN = new Set();
       for (const k of ids) { const m = A(k); if (m !== k) { kindOf[m] = 'account'; nodeN[m] = (nodeN[m] || 0) + (nodeN[k] || 0); nodeW[m] = (nodeW[m] || 0) + (nodeW[k] || 0); if (hopOf[k] !== undefined) hopOf[m] = Math.min(hopOf[m] === undefined ? 99 : hopOf[m], hopOf[k]); personName[m] = personOf[k].name; (personMembers[m] = personMembers[m] || []).push(k.slice(1)); } if (!seenN.has(m)) { seenN.add(m); nids.push(m); } }
       ids = nids; if (focusId) focusId = A(focusId);
-      for (const k of Object.keys(edgeW)) { const [a, b] = k.split('\u0001'); const a2 = A(a), b2 = A(b); if (a2 === a && b2 === b) continue; const w = edgeW[k], t = edgeT[k], P = edgeP[k]; delete edgeW[k]; delete edgeT[k]; delete edgeP[k]; if (a2 === b2) continue; const k2 = a2 < b2 ? a2 + '\u0001' + b2 : b2 + '\u0001' + a2; edgeW[k2] = (edgeW[k2] || 0) + w; edgeT[k2] = Math.min(edgeT[k2] || 9, t || 3); const Q = edgeP[k2] || (edgeP[k2] = { m: 0, f: 0, h: 0, s: 0, i: 0 }); if (P) for (const kk in P) Q[kk] = (Q[kk] || 0) + P[kk]; }
+      for (const k of Object.keys(edgeW)) { const [a, b] = k.split('\u0001'); const a2 = A(a), b2 = A(b); if (a2 === a && b2 === b) continue; const w = edgeW[k], t = edgeT[k], P = edgeP[k]; delete edgeW[k]; delete edgeT[k]; delete edgeP[k]; if (a2 === b2) continue; const k2 = a2 < b2 ? a2 + '\u0001' + b2 : b2 + '\u0001' + a2; edgeW[k2] = (edgeW[k2] || 0) + w; edgeT[k2] = Math.min(edgeT[k2] || 9, t || 3); const Q = edgeP[k2] || (edgeP[k2] = { m: 0, f: 0, h: 0, s: 0, i: 0, e: 0 }); if (P) for (const kk in P) Q[kk] = (Q[kk] || 0) + P[kk]; }
     }
     const idset = new Set(ids);
-    const edges = []; for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (idset.has(a) && idset.has(b)) { const P = edgeP[k] || { m: 0, f: 0, h: 0, s: edgeW[k], i: 0 }; edges.push({ a, b, w: +edgeW[k].toFixed(2), t: edgeT[k] || 3, p: { m: +P.m.toFixed(2), f: +P.f.toFixed(2), h: +P.h.toFixed(2), s: +P.s.toFixed(2), i: +(P.i || 0).toFixed(2) } }); } }
+    const edges = []; for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (idset.has(a) && idset.has(b)) { const P = edgeP[k] || { m: 0, f: 0, h: 0, s: edgeW[k], i: 0, e: 0 }; edges.push({ a, b, w: +edgeW[k].toFixed(2), t: edgeT[k] || 3, p: { m: +P.m.toFixed(2), f: +P.f.toFixed(2), h: +P.h.toFixed(2), s: +P.s.toFixed(2), i: +(P.i || 0).toFixed(2), e: +(P.e || 0).toFixed(2) } }); } }
     // keep the strongest links overall PLUS every node's own strongest few, so nothing is left dangling
     edges.sort((p, q) => (p.t - q.t) || (q.w - p.w));
     const keep = new Set(edges.filter((e) => e.t === 1).concat(edges.slice(0, cap * 4))); const per = {};
@@ -380,10 +403,10 @@
     const E = [...keep];
     const deg = {}; E.forEach((e) => { deg[e.a] = (deg[e.a] || 0) + e.w; deg[e.b] = (deg[e.b] || 0) + e.w; });
     const meta = await allMeta();
-    const nodes = ids.map((id) => { const kind = kindOf[id] || 'word'; const isPerson = id.startsWith('person:'); const label = isPerson ? personName[id] : kind === 'account' ? id.slice(1).split('|')[0] : kind === 'hashtag' ? id : id.slice(2);
+    const nodes = ids.map((id) => { const kind = kindOf[id] || 'word'; const isPerson = id.startsWith('person:'); const label = isPerson ? personName[id] : kind === 'account' ? id.slice(1).split('|')[0] : kind === 'hashtag' ? id : kind === 'entity' ? id.slice(2).replace(/\b\w/g, (c) => c.toUpperCase()) : id.slice(2);
       if (isPerson) { const first = (personMembers[id] || [])[0]; return { id, kind: 'account', label, n: nodeN[id] || 0, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), hop: hopOf[id] === undefined ? null : hopOf[id], person_id: first ? ([...by.values()].find((a) => a.id.toLowerCase() === first)?.id || first) : null, identity_id: id.slice(7), identity: label, accounts: personMembers[id] || [], attrs: [] }; }
       const I = personOf[id];
-      return { id, kind, label, identity: I ? I.name : null, identity_id: I ? I.id : null, n: nodeN[id] || 0, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), hop: hopOf[id] === undefined ? null : hopOf[id], person_id: kind === 'account' ? [...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id || null : null, attrs: kind === 'account' ? ((meta[[...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id]?.attrs) || []).slice(0, 3) : [] }; });
+      return { id, kind, label, role: kind === 'account' ? (OUTLETS.has(id.split('|').pop()) ? 'outlet' : 'person') : null, identity: I ? I.name : null, identity_id: I ? I.id : null, n: nodeN[id] || 0, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), hop: hopOf[id] === undefined ? null : hopOf[id], person_id: kind === 'account' ? [...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id || null : null, attrs: kind === 'account' ? ((meta[[...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id]?.attrs) || []).slice(0, 3) : [] }; });
     return { nodes, edges: E, focus: focusId && idset.has(focusId) ? focusId : null, focus_asked: opts.focus || '', kinds: [...kinds], hops: focusId ? Math.max(0, ...Object.values(hopOf)) : null, generated: now() };
   }
 
@@ -458,10 +481,10 @@
       }
       const id = parts[1] ? decodeURIComponent(parts[1]) : null;
       if (parts[0] === 'graph') {
-        if (P.focus !== undefined || P.kinds !== undefined) return wordGraph({ focus: P.focus || '', kinds: P.kinds || 'account,hashtag,word', max: +P.max || 80, platform: P.platform || '', topic: P.topic || '', hops: P.hops, via: P.via, merge: P.merge === '1' });
-        return graph({ topic: P.topic || null, max: +P.max || 60, min: +P.min || 1.5, platform: P.platform || '' });
+        if (P.focus !== undefined || P.kinds !== undefined) return wordGraph({ focus: P.focus || '', kinds: P.kinds || 'account,hashtag,word,entity', max: +P.max || 80, platform: P.platform || '', topic: P.topic || '', hops: P.hops, via: P.via, merge: P.merge === '1', role: P.role || '' });
+        return graph({ topic: P.topic || null, max: +P.max || 60, min: +P.min || 1.5, platform: P.platform || '', role: P.role || '' });
       }
-      if (!id) return list({ topic: P.topic || null, q: P.q || '', sort: P.sort || '', platform: P.platform || '' });
+      if (!id) return list({ topic: P.topic || null, q: P.q || '', sort: P.sort || '', platform: P.platform || '', role: P.role || '' });
       if (parts[2] === 'more' && method === 'POST') return loadMore(id, body || {});
       if (parts[2] === 'follows' && method === 'POST') return loadFollows(id);
       if (method === 'GET') return profile(id);

@@ -53,6 +53,41 @@ def _hashes(it):
     return h
 
 
+OUTLETS = {"news", "web", "archive", "wikipedia"}          # publishers, not people
+_CONNECT = {"of", "the", "and", "de", "du", "von", "van", "&", "da", "del", "la", "le"}
+_ENT_LEAD = {"the", "a", "an", "this", "that", "our", "my", "his", "her", "their", "its", "i", "we", "you", "it", "in", "on",
+             "at", "for", "to", "from", "by", "with", "as", "but", "and", "or", "if", "so", "when", "after", "before", "breaking",
+             "update", "watch", "live", "new", "video", "photo", "photos", "read", "more", "here", "now", "just", "why", "how", "what"}
+
+
+def _entities(text, skip=()):
+    """Named things written in a post: runs of 2–4 capitalised words ("Ocean Isle Beach", "Duke Energy",
+    "Gov. Ron DeSantis"). The one real cross-source link articles offer. skip = the topic's own words."""
+    out, seen = [], set()
+    skip = {w.lower() for w in skip}
+    for sentence in re.split(r"[.!?\n:;,()\[\]\"“”|]+| [—–-] ", str(text or "")):
+        words = re.findall(r"[A-Za-z][\w'’.-]*|&", sentence)
+        run = []
+        def flush():
+            while run and run[0].lower() in _ENT_LEAD | _CONNECT:
+                run.pop(0)
+            while run and run[-1].lower() in _CONNECT:
+                run.pop()
+            if 2 <= len(run) <= 4:
+                low = " ".join(w.lower().strip(".'’") for w in run)
+                if low not in seen and not all(w in skip or w in STOP for w in low.split()) and len(out) < 8:
+                    seen.add(low)
+                    out.append(low)
+            run.clear()
+        for w in words:
+            if w[0].isupper() or (run and w.lower() in _CONNECT):
+                run.append(w)
+            else:
+                flush()
+        flush()
+    return out
+
+
 def _pid(it):
     return f"{str(it.get('author') or '?').lower()}|{it.get('platform') or '?'}"   # one handle = one account, any case
 
@@ -396,8 +431,12 @@ def profile(v, pid):
     }
 
 
-def graph(v, topic=None, max_nodes=60, min_w=1.5, platform=""):
+def graph(v, topic=None, max_nodes=60, min_w=1.5, platform="", role=""):
     by, idf, h_df, w_df = _build(v)
+    if role == "person":
+        by = {k: a for k, a in by.items() if a.platform not in OUTLETS}
+    elif role == "outlet":
+        by = {k: a for k, a in by.items() if a.platform in OUTLETS}
     by_item, _ = _vote_index(v)
     accts = list(by.values())
     if topic:
@@ -432,8 +471,12 @@ def graph(v, topic=None, max_nodes=60, min_w=1.5, platform=""):
     return {"nodes": nodes, "edges": edges, "total_accounts": len(by), "shown": len(nodes), "generated": _now()}
 
 
-def list_people(v, topic=None, q="", sort="", platform=""):
+def list_people(v, topic=None, q="", sort="", platform="", role=""):
     by, idf, h_df, w_df = _build(v)
+    if role == "person":
+        by = {k: a for k, a in by.items() if a.platform not in OUTLETS}
+    elif role == "outlet":
+        by = {k: a for k, a in by.items() if a.platform in OUTLETS}
     by_item, names = _vote_index(v)
     meta = _all_meta(v)
     rows = list(by.values())
@@ -492,7 +535,7 @@ def _parse_focus(f):
     return {"kind": "word", "key": txt, "phrase": " " in txt}
 
 
-def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform="", topic="", hops=2, via="", merge=False):
+def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, platform="", topic="", hops=2, via="", merge=False, role=""):
     by, idf, h_df, w_df = _build(v)
     if platform:
         by = {k: a for k, a in by.items() if a.platform == platform}
@@ -504,6 +547,15 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
             if a.items:
                 kept[k] = a
         by = kept
+    if role == "person":
+        by = {k: a for k, a in by.items() if a.platform not in OUTLETS}
+    elif role == "outlet":
+        by = {k: a for k, a in by.items() if a.platform in OUTLETS}
+    seed_words = set()
+    if topic:
+        trow = v.db.one("SELECT seeds, name FROM topics WHERE id=?", (topic,))
+        if trow:
+            seed_words = {w for s in json.loads(trow["seeds"] or "[]") + [trow["name"]] for w in _tokens(s)}
     kinds = {k for k in str(kinds).split(",") if k}
     cap = min(int(max_nodes or 80), 160)
     fz = _parse_focus(focus)
@@ -517,7 +569,7 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
             k = (a, b) if a < b else (b, a)
             edge_w[k] += w
             edge_t[k] = min(edge_t.get(k, 9), t)
-            edge_p.setdefault(k, {"m": 0.0, "f": 0.0, "h": 0.0, "s": 0.0, "i": 0.0})[kind] += w
+            edge_p.setdefault(k, {"m": 0.0, "f": 0.0, "h": 0.0, "s": 0.0, "i": 0.0, "e": 0.0})[kind] += w
 
     acct_key = {}
     # words in more than a third of all posts are boilerplate here ("video", "new"…) and would
@@ -546,7 +598,16 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
     for a in by.values():
         aid = f"@{a.author.lower()}|{a.platform}"
         for it in a.items:
-            tags = ["#" + h for h in _hashes(it)]
+            tags = [] if it.get("platform") == "archive" else ["#" + h for h in _hashes(it)]   # archive's "tags" are media types
+            ents = ["e:" + e for e in _entities(it.get("text"), seed_words | {str(it.get("author") or "").lower()})]
+            for e in ents:
+                kind_of[e] = "entity"
+                node_w[e] += 1.0
+                node_n[e] += 1
+                link(aid, e, 1.5, 2, "e")
+            for i in range(len(ents)):
+                for j in range(i + 1, len(ents)):
+                    link(ents[i], ents[j], 1.0, 2, "e")
             words = ["w:" + w for w in {w for w in _tokens(it.get("text"))
                                         if len(w) > _WORD_MIN and w not in STOP and not generic(w)}]
             words_set = set(words)
@@ -626,6 +687,11 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
         if k not in keep_w:
             kind_of.pop(k, None)
             node_w.pop(k, None)
+    for k in [k for k, kind in kind_of.items() if kind == "entity"]:
+        accts = {a for (a, b) in edge_w if (a == k or b == k) for a in ((a if b == k else b),) if kind_of.get(a) == "account"}
+        if node_n[k] < 2 and len(accts) < 2:
+            kind_of.pop(k, None)
+            node_w.pop(k, None)
     for (a, b) in list(edge_w):
         if a not in kind_of or b not in kind_of:
             del edge_w[(a, b)]
@@ -658,7 +724,7 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
     if focus_id and (focus_id in kind_of or focus_id in node_w):
         hops = max(1, min(6, int(hops or 2)))
         # a word's own relationships ARE shared words, so a word focus walks them too unless told otherwise
-        via_set = {x for x in str(via or ("m,f,h,s" if kind_of.get(focus_id) == "word" else "m,f,h")).split(",") if x}
+        via_set = {x for x in str(via or ("m,f,h,e,s" if kind_of.get(focus_id) == "word" else "m,f,h,e")).split(",") if x}
 
         def steps(k):
             p = edge_p.get(k)
@@ -688,9 +754,9 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
             if not frontier:
                 break
     else:
-        per = {"account": round(cap * 0.4), "hashtag": round(cap * 0.3), "word": round(cap * 0.3)}
+        per = {"account": round(cap * 0.35), "hashtag": round(cap * 0.2), "word": round(cap * 0.2), "entity": round(cap * 0.25)}
         ids = []
-        for kind in ("account", "hashtag", "word"):
+        for kind in ("account", "hashtag", "word", "entity"):
             if kind in kinds:
                 ids += sorted((k for k in node_w if kind_of.get(k) == kind), key=lambda k: -node_w[k])[:per[kind]]
     # MERGE: collapse each person's accounts into one node named after them (links re-routed, counts summed)
@@ -725,13 +791,13 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
             k2 = (a2, b2) if a2 < b2 else (b2, a2)
             edge_w[k2] += w
             edge_t[k2] = min(edge_t.get(k2, 9), t)
-            q = edge_p.setdefault(k2, {"m": 0.0, "f": 0.0, "h": 0.0, "s": 0.0, "i": 0.0})
+            q = edge_p.setdefault(k2, {"m": 0.0, "f": 0.0, "h": 0.0, "s": 0.0, "i": 0.0, "e": 0.0})
             if p:
                 for kk, pv in p.items():
                     q[kk] = q.get(kk, 0) + pv
     idset = set(ids)
     all_edges = sorted(({"a": a, "b": b, "w": round(w, 2), "t": edge_t.get((a, b), 3),
-                         "p": {kk: round(pv, 2) for kk, pv in edge_p.get((a, b), {"m": 0, "f": 0, "h": 0, "s": w, "i": 0}).items()}}
+                         "p": {kk: round(pv, 2) for kk, pv in edge_p.get((a, b), {"m": 0, "f": 0, "h": 0, "s": w, "i": 0, "e": 0}).items()}}
                         for (a, b), w in edge_w.items() if a in idset and b in idset),
                        key=lambda e: (e["t"], -e["w"]))
     # keep every real relationship, the strongest links overall, PLUS every node's own strongest few
@@ -761,10 +827,12 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
                           "person_id": first, "identity_id": nid[7:], "identity": person_name.get(nid, ""),
                           "accounts": members, "attrs": []})
             continue
-        label = nid[1:].split("|")[0] if kind == "account" else nid if kind == "hashtag" else nid[2:]
+        label = nid[1:].split("|")[0] if kind == "account" else nid if kind == "hashtag" else nid[2:].title() if kind == "entity" else nid[2:]
         pid = acct_key.get(nid) if kind == "account" else None
         i = person_of.get(nid)
+        plat = nid.split("|")[-1] if kind == "account" else ""
         nodes.append({"id": nid, "kind": kind, "label": label, "n": node_n[nid], "w": round(node_w[nid], 2),
+                      "role": ("outlet" if plat in OUTLETS else "person") if kind == "account" else None,
                       "strength": round(deg[nid], 1), "hop": hop_of.get(nid),
                       "identity": i["name"] if i else None, "identity_id": i["id"] if i else None,
                       "person_id": pid, "attrs": ((meta.get(pid) or {}).get("attrs", [])[:3] if pid else [])})
@@ -941,15 +1009,15 @@ def handle(v, method, parts, params, body):
         return {"error": "identities route not available"}
     if parts[0] == "graph":
         if "focus" in params or "kinds" in params:
-            return word_graph(v, params.get("focus") or "", params.get("kinds") or "account,hashtag,word",
+            return word_graph(v, params.get("focus") or "", params.get("kinds") or "account,hashtag,word,entity",
                               int(params.get("max") or 80), params.get("platform") or "", params.get("topic") or "",
-                              params.get("hops") or 2, params.get("via") or "", params.get("merge") == "1")
+                              params.get("hops") or 2, params.get("via") or "", params.get("merge") == "1", params.get("role") or "")
         return graph(v, params.get("topic") or None, int(params.get("max") or 60), float(params.get("min") or 1.5),
-                     params.get("platform") or "")
+                     params.get("platform") or "", params.get("role") or "")
     pid = parts[1] if len(parts) > 1 else None
     if not pid:
         return list_people(v, params.get("topic") or None, params.get("q") or "", params.get("sort") or "",
-                           params.get("platform") or "")
+                           params.get("platform") or "", params.get("role") or "")
     if len(parts) > 2 and parts[2] == "follows" and method == "POST":
         return load_follows(v, pid)
     if len(parts) > 2 and parts[2] == "more" and method == "POST":
