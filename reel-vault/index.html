@@ -617,7 +617,7 @@ body.noscroll-max{overflow:hidden}
     <button class="btn pri" type="submit">GO</button>
   </form>
   <div class="row wrap" style="gap:8px;margin:12px 0 10px;align-items:center">
-    <button type="button" class="chip" id="ntPersonBtn" title="Build a dossier on a person — yourself or family — from what is publicly online">◉ A PERSON</button>
+    <button type="button" class="chip" id="ntPersonBtn" title="Build a dossier on a person (you, or family) from what is public online">◉ A PERSON</button>
     <span class="note">Dossier on a name: what's publicly findable about you or your family, in one place.</span>
   </div>
   <div class="card pad" id="ntPerson" hidden style="margin-bottom:12px">
@@ -627,7 +627,7 @@ body.noscroll-max{overflow:hidden}
         <label class="field"><span>Handle</span><input id="ntHandle" placeholder="@username" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
         <label class="field"><span>Network</span><select id="ntNet"><option value="x">X / Twitter</option><option value="mastodon">Mastodon (user@server)</option><option value="bluesky">Bluesky</option><option value="youtube">YouTube</option><option value="reddit">Reddit</option><option value="tiktok">TikTok</option><option value="instagram">Instagram</option></select></label>
       </div>
-      <p class="note" style="margin:0">Starts from this one account only: its own posts are pulled in, and from there it builds outward through <b>real links</b> — who it follows / mentions, and other accounts it links to in its own posts. It does <b>not</b> guess the same username on other networks.</p>
+      <p class="note" style="margin:0">Starts from this one account only: its own posts are pulled in, and from there it builds outward through <b>real links</b>: who it follows or mentions, and accounts it links to in its own posts. It does <b>not</b> guess the same username on other networks.</p>
     </div>
     <div id="ntPName">
     <div class="grid2">
@@ -635,17 +635,17 @@ body.noscroll-max{overflow:hidden}
       <label class="field"><span>Last name</span><input id="ntLast" placeholder="e.g. Smith" autocapitalize="words" autocorrect="off"></label>
     </div>
     <div class="grid2">
-      <label class="field"><span>State / region <small class="note">(optional — narrows a common name)</small></span><input id="ntState" placeholder="e.g. a state or region" autocapitalize="words" autocorrect="off"></label>
+      <label class="field"><span>State / region <small class="note">(optional, narrows a common name)</small></span><input id="ntState" placeholder="e.g. a state or region" autocapitalize="words" autocorrect="off"></label>
       <label class="field"><span>Known accounts <small class="note">(optional · links or handles, comma-separated · a bare @name means X)</small></span><input id="ntHandles" placeholder="e.g. x.com/johnsmith, youtube.com/@johnsmith, @john@mastodon.social, john.bsky.social" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
     </div>
-    <p class="note" style="margin:0">It searches the name (in quotes, with the state), any handles you give, and links out to the public people-search sites so you can see what's exposed. Nothing is scraped from those sites, and no home addresses are stored — only links. Everything stays on this device.</p>
+    <p class="note" style="margin:0">It searches the name (in quotes, with the state), any handles you give, and links out to the public people-search sites so you can see what's exposed. Nothing is scraped from those sites and no home addresses are stored, only links. Everything stays on this device.</p>
     </div>
   </div>
   <details class="more">
     <summary>▸ MORE OPTIONS</summary>
     <div class="card pad" style="margin-top:4px">
       <label class="field"><span>Extra starting searches (one per line)</span><textarea id="ntSeeds" rows="3" placeholder="kickflip&#10;skatepark&#10;#skatelife"></textarea></label>
-      <label class="field"><span>Soft keywords — related, nice-to-have (comma or line separated)</span><textarea id="ntSoft" rows="2" placeholder="street, night, slow motion"></textarea></label>
+      <label class="field"><span>Soft keywords: related, nice to have (comma or line separated)</span><textarea id="ntSoft" rows="2" placeholder="street, night, slow motion"></textarea></label>
       <div class="note" style="margin:-6px 0 12px">Main searches above decide what's pulled in. Soft keywords get searched too and <b>boost</b> a video's score when they show up, but are never required.</div>
       <label class="field"><span>How wide to search · <b id="ntBreadthL" style="color:var(--acc);font-weight:normal">WIDE</b></span><input type="range" id="ntBreadth" min="1" max="5" value="3"></label>
       <div class="grid2">
@@ -716,8 +716,8 @@ body.noscroll-max{overflow:hidden}
 
 <!-- ══════════ NETWORK / WEB ══════════ -->
 <section class="view" id="vNetwork">
-  <h2 class="h" title="Accounts, hashtags and words from what you've collected, and how they connect through shared content. Size = posts · inner = more connected · colour = community. Built only from public posts on this device; it never guesses who anyone is — any label is one you add yourself.">WEB</h2>
-  <p class="note" style="margin:6px 0 10px">Accounts you've collected and how they connect through shared content — follow the links to related creators. Built only from public posts on this device. It never guesses who anyone is; any label is one you add yourself.</p>
+  <h2 class="h" title="Accounts, hashtags and words from what you've collected, and how they connect through shared content. Size = posts · inner = more connected · colour = community. Built only from public posts on this device. It never guesses who anyone is. Any label is one you added.">WEB</h2>
+  <p class="note" style="margin:6px 0 10px">Accounts you've collected and how they connect through shared content. Follow the links to related creators. Built only from public posts on this device. It never guesses who anyone is. Any label is one you added.</p>
   <div class="row wrap" style="gap:8px;margin-bottom:10px">
     <form id="nwFocusF" class="row grow" style="gap:8px;min-width:240px" autocomplete="off">
       <input id="nwQ" placeholder='centre on  @account · #hashtag · "a phrase" · word' autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" style="flex:1;min-width:160px">
@@ -788,7 +788,7 @@ body.noscroll-max{overflow:hidden}
   <div class="card pad">
     <label class="field"><span>Cookies file (cookies.txt) path</span><input id="sCookiesFile" placeholder="/Users/me/cookies.txt" autocapitalize="off" autocorrect="off"></label>
     <label class="field"><span>Or read cookies from browser</span><select id="sCookiesBrowser"><option value="">— none —</option><option>firefox</option><option>chrome</option><option>safari</option><option>edge</option><option>brave</option><option>chromium</option><option>opera</option><option>vivaldi</option></select></label>
-    <p class="note" style="margin:-4px 0 10px">Reading from a browser only works while that browser is <b>fully closed</b> (Windows locks its cookie file while it runs — you'll see "Permission denied … Cookies"). If you'd rather keep it open, export a cookies.txt with a browser extension such as "Get cookies.txt LOCALLY" and put its path above.</p>
+    <p class="note" style="margin:-4px 0 10px">Reading from a browser only works while that browser is <b>fully closed</b> (Windows locks the cookie file while it runs, you'll see "Permission denied … Cookies"). If you'd rather keep it open, export a cookies.txt with a browser extension such as "Get cookies.txt LOCALLY" and put its path above.</p>
     <div class="grid2">
       <label class="field"><span>Speech model</span><select id="sWhisper"><option value="tiny">Tiny</option><option value="base">Base</option><option value="small">Small</option><option value="medium">Medium</option><option value="large-v3">Large</option></select></label>
       <label class="field"><span>OCR every N sec</span><input id="sOcr" type="number" min="0" inputmode="numeric"></label>
@@ -834,7 +834,7 @@ curl -fsSL https://ptxero.neocities.org/reel-vault/install-sh.txt | bash
     <div class="ob-choices">
       <button class="ob-choice" data-ob="browser">
         <b>📱 This browser</b>
-        <span>No computer needed. Nothing to install: searches run through the shared hub (or your own) and everything is saved on this device.</span>
+        <span>No computer needed. Searches run through the shared hub (or your own) and everything is saved on this device.</span>
         <small>Best on a phone or if you don't want a PC running.</small>
       </button>
       <button class="ob-choice" data-ob="pc">
@@ -848,7 +848,7 @@ curl -fsSL https://ptxero.neocities.org/reel-vault/install-sh.txt | bash
 </div>
 
 <div class="reasonbar" id="reasonBar"><div class="rb-in">
-  <span class="rb-label">👎 why? <small>(optional — teaches the topic)</small></span>
+  <span class="rb-label">👎 why? <small>(optional, teaches the topic)</small></span>
   <div class="rb-chips" id="rbChips"></div>
 </div></div>
 
@@ -974,10 +974,10 @@ async function connect(){
       const st = $('#status'); st.textContent = '◆ ' + fmtN(STATUS.counts?.n || 0); st.className = 'chip-status live';
       if (!STATUS.worker_url){
         const b = $('#banner');
-        b.innerHTML = 'BROWSER MODE: nowhere to fetch from yet — reload to use the shared hub, or paste a Worker URL in <a href="#sources">SOURCES</a>.';
+        b.innerHTML = 'BROWSER MODE: nowhere to fetch from yet. Reload to use the shared hub, or paste a Worker URL in <a href="#sources">SOURCES</a>.';
         b.classList.add('on');
       }
-      window.addEventListener('px:quota', e => { const d = e.detail || {}; toast(d.wait > 60 ? ('Daily fair-use limit reached on the hub (' + d.used + '/' + d.limit + '). It resets at midnight UTC — or run your own hub (SOURCES → YOUR DATA).') : ('Hub is busy — waiting ' + d.wait + 's…'), 6000); });
+      window.addEventListener('px:quota', e => { const d = e.detail || {}; toast(d.wait > 60 ? ('Daily limit on the hub hit (' + d.used + '/' + d.limit + '). Resets at midnight UTC. Or run your own hub (SOURCES → YOUR DATA).') : ('Hub is busy, waiting ' + d.wait + 's…'), 6000); });
       return;
     }catch(e){ LOCAL = false; }   // fall through to server/demo if IndexedDB is unavailable
   }
@@ -1027,7 +1027,7 @@ function showPair(){
     </form>
     <div class="note" style="margin:16px 0 8px;text-align:center">— or —</div>
     <button class="btn" style="width:100%" id="useBrowser">📱 USE THIS BROWSER ONLY</button>
-    <p class="note" style="margin-top:8px">No computer needed. Searches run through a hub (PTXERO's shared one, or your own) and everything is saved on this device. Nothing is tracked.</p>`, false);
+    <p class="note" style="margin-top:8px">No computer needed. Searches run through a hub (the shared one, or your own) and everything is saved on this device. Nothing is tracked.</p>`, false);
   const ub = $('#useBrowser'); if (ub) ub.onclick = () => { store.set('localMode', true); toast('Browser mode on ✓'); setTimeout(() => location.reload(), 400); };
   $('#pairF').onsubmit = async e => {
     e.preventDefault();
@@ -1042,7 +1042,7 @@ function showPair(){
       const r = await fetch(base + '/api/pair', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
       if (r.ok){ store.set('serverUrl', base.replace(/\/$/, '')); setKey(key); toast('Connected ✓'); setTimeout(() => location.reload(), 500); }
       else toast('Wrong key for that server');
-    }catch(err){ toast('Could not reach ' + base + ' — check the address and that the server is running'); }
+    }catch(err){ toast('Could not reach ' + base + '. Check the address and that the server is running'); }
   };
 }
 
@@ -1288,9 +1288,9 @@ function showCard(){
         ${it.why?.lower && it.why.lower.length ? `<div class="whynot"><b>you tend to 👎:</b>${it.why.lower.map(w => `<span>${esc(w)}</span>`).join('')}</div>` : ''}
       </div>
       <div class="ractions">
-        <button class="big no" id="vNo" aria-label="${isPersonTopic() ? 'Not this person (comma key)' : 'Not relevant (comma key)'}" title="${isPersonTopic() ? 'Not them — drops this account and all its posts from the dossier · press ,' : 'Not relevant — press ,'}"><span class="emo">${isPersonTopic() ? '✕' : '👎'}</span><span class="key"><kbd>,</kbd><small>${isPersonTopic() ? 'NOT THEM' : 'NOPE'}</small></span></button>
-        <div class="mid"><button class="btn sm" id="vSkip" title="Skip — press ↓">SKIP</button><button class="btn sm" id="vOpen">OPEN</button></div>
-        <button class="big yes" id="vYes" aria-label="${isPersonTopic() ? 'That is them (period key)' : 'Relevant (period key)'}" title="${isPersonTopic() ? 'That\'s them — confirms this account as the person · press .' : 'Relevant — press .'}"><span class="emo">${isPersonTopic() ? '◉' : '👍'}</span><span class="key"><kbd>.</kbd><small>${isPersonTopic() ? "THAT'S THEM" : 'YES'}</small></span></button>
+        <button class="big no" id="vNo" aria-label="${isPersonTopic() ? 'Not this person (comma key)' : 'Not relevant (comma key)'}" title="${isPersonTopic() ? 'Not them. Drops this account and all its posts from the dossier · press ,' : 'Not relevant · press ,'}"><span class="emo">${isPersonTopic() ? '✕' : '👎'}</span><span class="key"><kbd>,</kbd><small>${isPersonTopic() ? 'NOT THEM' : 'NOPE'}</small></span></button>
+        <div class="mid"><button class="btn sm" id="vSkip" title="Skip · press ↓">SKIP</button><button class="btn sm" id="vOpen">OPEN</button></div>
+        <button class="big yes" id="vYes" aria-label="${isPersonTopic() ? 'That is them (period key)' : 'Relevant (period key)'}" title="${isPersonTopic() ? 'That\'s them. Confirms this account as the person · press .' : 'Relevant · press .'}"><span class="emo">${isPersonTopic() ? '◉' : '👍'}</span><span class="key"><kbd>.</kbd><small>${isPersonTopic() ? "THAT'S THEM" : 'YES'}</small></span></button>
       </div>
     </div></div>
     <div class="deckbar"><span class="grow">${fmtN(T.counts.unrated)} to review · learned from ${fmtN(T.counts.pos + T.counts.neg)} votes</span>${lastVote ? '<button class="btn sm" id="vUndo">↺ UNDO</button>' : ''}</div>`;
@@ -1396,7 +1396,7 @@ async function personVerdict(it, label){
       if (person.identity_id){ try{ await linkAccount(account, person.identity_id, 'name match'); }catch(e){} }
       else { try{ const I = await api('/api/identities', { method: 'POST', body: { name: T.name.replace(/^@/, ''), topic_id: T.id, accounts: [{ id: account, how: 'name match' }] } }); if (I.id){ person.identity_id = I.id; T = await api('/api/topics/' + T.id, { method: 'PATCH', body: { settings: { person } } }); } }catch(e){} }
       api('/api/topics/' + T.id + '/creator', { method: 'POST', body: { handle: it.author, platform: it.platform } }).catch(() => {});
-      toast(`◉ @${it.author} confirmed as ${T.name} — their posts are being pulled in`, 4500);
+      toast(`◉ @${it.author} confirmed as ${T.name}. Pulling their posts in`, 4500);
     }
     if (r.counts){ T.counts.pos = r.counts.pos || 0; T.counts.neg = r.counts.neg || 0; T.counts.unrated = Math.max(0, (r.counts.n || 0) - T.counts.pos - T.counts.neg); }
     const bar = $('.deckbar .grow'); if (bar) bar.textContent = fmtN(T.counts.unrated) + ' to review';
@@ -1440,7 +1440,7 @@ function offerReasons(it){
   $('#rbChips [data-radd]').onclick = async () => {
     clearTimeout(reasonTimer);
     const r = await ask('Why not? (one word or short phrase)', { placeholder: 'e.g. too loud, a man, reaction video', ok: 'ADD' });
-    if (r){ await send(r); toast('Noted — it learns this'); }
+    if (r){ await send(r); toast('Noted. It learns this'); }
     hideReasons();
   };
 }
@@ -1603,13 +1603,13 @@ function personAccountCardHTML(p, items, I){
       <a class="btn sm" href="${esc(url)}" target="_blank" rel="noreferrer noopener">↗ OPEN PROFILE</a>
       <button class="btn sm" data-prof="${esc(pid)}">◉ DOSSIER PROFILE</button>
       <button class="btn sm" id="paPull">⬇ PULL 50 POSTS</button>
-      ${['mastodon', 'bluesky'].includes(p.platform) ? `<button class="btn sm" id="paFollows">↔ LOAD FOLLOWS</button><button class="btn sm" id="paCrawl">⟲ CRAWL HOPS</button>` : `<span class="note">${esc(p.platform)} publishes no follow list — links come from mentions and what they post.</span>`}
+      ${['mastodon', 'bluesky'].includes(p.platform) ? `<button class="btn sm" id="paFollows">↔ LOAD FOLLOWS</button><button class="btn sm" id="paCrawl">⟲ CRAWL HOPS</button>` : `<span class="note">${esc(p.platform)} publishes no follow list. Links come from mentions and what they post.</span>`}
       <span class="note grow" id="paMsg">${fmtN(own.length)} of their posts in the library</span>
     </div>
     <div class="note" style="margin-bottom:4px">Who they tag <small>(in their own posts · times tagged · <b>+</b> pulls that account in as a creator of this topic, same network)</small></div>
     <div class="meta">${tags.length ? tags.map(([h, n]) => { const have = !!creators[h]; return `<span class="pill${have ? ' a' : ''}"><button class="lnk" data-focus="@${esc(h)}">@${esc(h)} ×${n}</button>${have ? ' ✓' : ` <button class="lnk" data-addc="${esc(h)}" data-n="${n}" title="Pull @${esc(h)}'s own ${esc(p.platform)} posts into this topic">+</button>`}</span>`; }).join('') : '<span class="note">nothing yet — pull their posts first</span>'}</div>
-    ${tags.some(([h, n]) => n >= 2 && !creators[h]) ? `<div class="row wrap" style="gap:8px;margin-top:6px"><button class="btn sm" id="paExpand">⇶ EXPAND 1 HOP <small>· add everyone tagged 2+ times (${tags.filter(([h, n]) => n >= 2 && !creators[h]).length})</small></button><span class="note">Each becomes a creator here; their tags then show up too — repeat to go another hop.</span></div>` : ''}
-    <div class="note" style="margin:10px 0 4px">Linked elsewhere <small>(URLs they posted themselves — the only cross-network evidence used)</small></div>
+    ${tags.some(([h, n]) => n >= 2 && !creators[h]) ? `<div class="row wrap" style="gap:8px;margin-top:6px"><button class="btn sm" id="paExpand">⇶ EXPAND 1 HOP <small>· add everyone tagged 2+ times (${tags.filter(([h, n]) => n >= 2 && !creators[h]).length})</small></button><span class="note">Each becomes a creator here and their tags show up too. Repeat to go another hop.</span></div>` : ''}
+    <div class="note" style="margin:10px 0 4px">Linked elsewhere <small>(URLs they posted themselves. The only cross-network evidence used)</small></div>
     <div class="meta">${linked.length ? linked.map(l => { const aid = l.handle.replace(/^@/, '') + '|' + siteToPlatform(l.site); const have = identAccts.has(aid.toLowerCase()); return `<span class="pill${have ? ' a' : ''}"><a class="lnk" href="${esc(l.url)}" target="_blank" rel="noreferrer noopener">${esc(l.site)} · ${esc(l.handle)}${l.n > 1 ? ' ×' + l.n : ''}</a>${have ? ' ✓' : ` <button class="lnk" data-idlink="${esc(aid)}" title="They linked this themselves — tie it to this person">+ same person</button>`}</span>`; }).join('') : '<span class="note">no links to other networks in their posts so far</span>'}</div>
     ${identCard}
     ${notThemHTML(p)}
@@ -1640,15 +1640,15 @@ function personCardHTML(p, T, items, I){
   const a = (label, href, cls = '') => `<a class="pill ${cls}" href="${esc(href)}" target="_blank" rel="noreferrer noopener">${esc(label)}</a>`;
   return `<div class="dcard span2 person">
     <div class="dh">◉ PERSON · ${esc(full)}${p.state ? ` <span class="note">· ${esc(p.state)}</span>` : ''} <span class="note">· self-dossier: what's publicly findable about this name</span></div>
-    <p class="note" style="margin:4px 0 10px">Everything here is a link you open yourself. SEARCH//NET collects posts for the name and handles (REVIEW / WEB), but pulls nothing from people-search sites and never stores a home address — those links are there so you can see what's exposed and ask for removal.</p>
+    <p class="note" style="margin:4px 0 10px">Everything here is a link you open yourself. SEARCH//NET collects posts for the name and handles (REVIEW / WEB), but pulls nothing from people-search sites and never stores a home address. Those links are there so you can see what's exposed and ask for removal.</p>
     <div class="note" style="margin-bottom:4px">Handles to check <small>(guesses from the name${(p.handles || []).length ? ' + yours' : ''}) · tap a network</small></div>
     <table class="ptab">${guesses.map(h => `<tr><th>@${esc(h)}</th><td>${nets.map(([n, f]) => a(n, f(h))).join('')}</td></tr>`).join('')}</table>
     ${Object.keys((T.settings || {}).creators || {}).length ? `<div class="note" style="margin:8px 0 4px">Known accounts <small>(their own feeds are sources of this dossier)</small></div><div class="meta">${Object.values(T.settings.creators).map(c => `<span class="pill a"><b class="l1">━</b> @${esc(c.handle)} · ${esc(c.platform)}${c.n != null || c.collected != null ? ' · ' + fmtN(c.n != null ? c.n : c.collected) : ''}</span>`).join('')}</div>` : ''}
-    <div class="row wrap" style="gap:8px;margin:6px 0 10px"><button class="btn sm" id="pAddHandle">+ ADD A KNOWN ACCOUNT</button><span class="note">Paste a profile link (any network) or an @handle (X). Only that account's own posts are pulled in — nothing is searched by name elsewhere.</span></div>
+    <div class="row wrap" style="gap:8px;margin:6px 0 10px"><button class="btn sm" id="pAddHandle">+ ADD A KNOWN ACCOUNT</button><span class="note">Paste a profile link (any network) or an @handle (X). Only that account's own posts are pulled in. Nothing is searched by name elsewhere.</span></div>
     <div class="note" style="margin-bottom:4px">Name searches</div><div class="meta">${searches.map(([n, u]) => a(n, u)).join('')}</div>
     ${identityCardHTML(I)}
     ${notThemHTML(p)}
-    <div class="note" style="margin:10px 0 4px">People-search &amp; records sites <small>(show addresses, relatives, phone numbers — open them to see what's public and use each site's opt-out)</small></div><div class="meta">${people.map(([n, u]) => a(n, u, 'a')).join('')}</div>
+    <div class="note" style="margin:10px 0 4px">People-search &amp; records sites <small>(show addresses, relatives, phone numbers. Open them to see what's public and use each site's opt-out)</small></div><div class="meta">${people.map(([n, u]) => a(n, u, 'a')).join('')}</div>
   </div>`;
 }
 async function renderDossier(){
@@ -1695,15 +1695,15 @@ async function renderDossier(){
     <div class="dcard span2">
       <div class="dh">${esc(name)} <span class="note">${fmtN(n)} posts · ${fmtN(who.length)} accounts · ${plats.length} sites${T.counts && (T.counts.pos || T.counts.neg) ? ' · you rated ' + fmtN(T.counts.pos + T.counts.neg) : ''}</span></div>
       ${wiki ? `<div class="wiki">${wiki.thumb ? `<img src="${esc(wiki.thumb)}" alt="" referrerpolicy="no-referrer">` : ''}<div><p>${esc(wiki.extract)}</p><a class="note" href="${esc(wiki.url)}" target="_blank" rel="noreferrer">Wikipedia · ${esc(wiki.title)} →</a></div></div>`
-             : isPerson ? `<p class="note">Built from their posts only. ${esc(((T.settings || {}).person || {}).platform || 'The network')} gives us no profile fields (bio, location, join date, follower counts), so none are shown — and no encyclopedia lookup is made for a person's name, since it would almost always be someone else.</p>`
-             : `<p class="note">No encyclopedia entry for “${esc(seed)}” — below is what your collected posts say about it.</p>`}
+             : isPerson ? `<p class="note">Built from their posts only. ${esc(((T.settings || {}).person || {}).platform || 'The network')} gives us no profile fields (bio, location, join date, follower counts), so none are shown. No encyclopedia lookup is made for a person's name either, it would almost always be someone else.</p>`
+             : `<p class="note">No encyclopedia entry for “${esc(seed)}”. Below is what your collected posts say about it.</p>`}
       <div class="row wrap" style="margin-top:12px">
         <button class="btn pri" id="dIntegrate" ${who.length ? '' : 'disabled'}>⇶ INTEGRATE ALL ASSOCIATED <small>· top ${Math.min(100, who.length)} accounts</small></button>
         <button class="btn" id="dWeb">◕ OPEN IN WEB</button>
         <button class="btn" id="dReview">REVIEW ${T.counts ? fmtN(T.counts.unrated) : ''}</button>
         <span class="note grow" id="dIntMsg"></span>
       </div>
-      <p class="note" style="margin-top:6px">Integrate pulls each associated account's recent posts in (no rating needed) and opens the web for this topic — a live mesh of the people around it and what they connect on. Your 👍/👎 then teach it how the edges relate.</p>
+      <p class="note" style="margin-top:6px">Integrate pulls each associated account's recent posts in (no rating needed) and opens the web for this topic: the people around it and what they connect on. Your 👍/👎 then teach it how the edges relate.</p>
     </div>
     <div class="dcard"><div class="dh">Where it's talked about</div>${plats.length ? plats.map(([p, c]) => `<div class="drow"><span class="k">${esc(p)}</span><span class="bar"><i style="width:${pct(c)}%"></i></span><span class="v">${fmtN(c)} · ${pct(c)}%</span></div>`).join('') : '<p class="note">Nothing collected yet.</p>'}</div>
     <div class="dcard"><div class="dh">Who talks about it most</div>${who.length ? who.slice(0, 10).map(a => `<button class="drow tap" data-prof="${esc(a.id)}"><span class="k">@${esc(a.author)} <small>${esc(a.platform)}</small></span><span class="bar"><i style="width:${pct(a.n)}%"></i></span><span class="v">${fmtN(a.n)}${a.liked ? ' · 👍' + a.liked : ''}</span></button>`).join('') : '<p class="note">—</p>'}</div>
@@ -1822,7 +1822,7 @@ async function renderBrain(){
   const saveAttrs = async handle => {
     const box = $(`[data-attrs="${CSS.escape(handle)}"]`); if (!box) return;
     const attrs = $$('.attrrow', box).map(r => ({ k: $('.attr-k', r).value.trim(), v: $('.attr-v', r).value.trim(), boost: $('.attr-boost', r).classList.contains('on') })).filter(a => a.k || a.v);
-    try{ await api('/api/topics/' + T.id + '/creator', { method: 'PATCH', body: { handle, attrs } }); toast('Attributes saved — search updated'); }catch(e){ toast(e.message); }
+    try{ await api('/api/topics/' + T.id + '/creator', { method: 'PATCH', body: { handle, attrs } }); toast('Attributes saved. Search updated'); }catch(e){ toast(e.message); }
   };
   const bindRow = (row, handle) => {
     $('.attr-x', row).onclick = () => { row.remove(); saveAttrs(handle); };
@@ -1846,10 +1846,10 @@ function creatorsHTML(creators){
     ${when(p) ? `<div class="note">posts ${when(p)}</div>` : ''}
     ${p.languages && p.languages.length ? `<div class="note">language: ${p.languages.map(esc).join(', ')}</div>` : ''}
     ${p.top_hashtags && p.top_hashtags.length ? `<div class="why" style="margin-top:6px">${p.top_hashtags.slice(0, 6).map(h => `<span>#${esc(h)}</span>`).join('')}</div>` : ''}
-    <div class="s" style="margin:12px 0 6px">Your attributes — labels you add to tune the search</div>
+    <div class="s" style="margin:12px 0 6px">Your attributes: labels you add to tune the search</div>
     <div class="attrs" data-attrs="${esc(p.handle)}">${(p.attrs || []).map(attrRow).join('')}</div>
     <div class="row" style="margin-top:4px;flex-wrap:wrap;gap:5px">${['gender', 'sexuality', 'politics', 'region', 'style', 'language'].map(k => `<button class="chip" data-attradd="${esc(p.handle)}" data-k="${k}">+ ${k}</button>`).join('')}<button class="chip" data-attradd="${esc(p.handle)}" data-k="">+ custom</button></div>
-    <div class="note" style="margin-top:6px">Values with ✦ on are added to this topic's soft keywords, so they shape what's found and ranked. Nothing is guessed — only what you enter.</div>
+    <div class="note" style="margin-top:6px">Values with ✦ on are added to this topic's soft keywords, so they shape what's found and ranked. Nothing is guessed, only what you enter.</div>
     <label class="field" style="margin:10px 0 0"><span>Free notes</span><textarea data-cnotes="${esc(p.handle)}" rows="2" placeholder="anything else to remember">${esc(p.notes || '')}</textarea></label>
   </div>`).join('');
 }
@@ -1883,7 +1883,7 @@ async function topicSettings(){
   openSheet(`<h3>${esc(T.name)}</h3>
     <label class="field"><span>Name</span><input id="tsName" value="${esc(T.name)}"></label>
     <label class="field"><span>Main keywords / searches (one per line)</span><textarea id="tsSeeds" rows="3">${esc(T.seeds.join('\n'))}</textarea></label>
-    <label class="field"><span>Soft keywords — related, boost but not required</span><textarea id="tsSoft" rows="2" placeholder="street, night, slow motion">${esc((s.soft || []).join(', '))}</textarea></label>
+    <label class="field"><span>Soft keywords: related, boost but not required</span><textarea id="tsSoft" rows="2" placeholder="street, night, slow motion">${esc((s.soft || []).join(', '))}</textarea></label>
     <label class="field"><span>How wide · <b id="tsBL" style="color:var(--acc);font-weight:normal">${BREADTH[s.breadth]}</b></span><input type="range" id="tsB" min="1" max="5" value="${s.breadth}"></label>
     <div class="grid2">
       <label class="field"><span>Collect</span><select id="tsMedia"><option value="video">Videos</option><option value="all">Videos + images</option><option value="everything">Everything · posts, replies, comments, media</option></select></label>
@@ -2349,7 +2349,7 @@ let webAnim = null;
 function drawWeb(box, graph){
   if (webAnim){ cancelAnimationFrame(webAnim.raf); webAnim.ro && webAnim.ro.disconnect(); webAnim = null; }
   const nodes = (graph.nodes || []).map(n => Object.assign({ kind: n.kind || 'account', label: n.label || n.author || n.id, n: n.n || 0 }, n));
-  if (!nodes.length){ box.innerHTML = '<div class="empty">Nothing to connect yet. Collect more posts, or widen a topic — things link up when they share hashtags, words or mentions.</div>'; return; }
+  if (!nodes.length){ box.innerHTML = '<div class="empty">Nothing to connect yet. Collect more posts or widen a topic. Things link up when they share hashtags, words or mentions.</div>'; return; }
   const idx = {}; nodes.forEach((n, i) => idx[n.id] = i);
   const edges = (graph.edges || []).filter(e => idx[e.a] != null && idx[e.b] != null && e.a !== e.b);
   const focus = graph.focus && idx[graph.focus] != null ? graph.focus : null;
@@ -2419,7 +2419,7 @@ function drawWeb(box, graph){
   const H = webHops();
   const fb = nwFocusNode ? `<div class="focus">◎ ${nwFocusNode.kind === 'account' && !String(nwFocusNode.id).startsWith('person:') ? '@' : ''}${esc(nwFocusNode.label)}${nwFocusNode.identity && !String(nwFocusNode.id).startsWith('person:') ? ` <small class="note">· ${esc(nwFocusNode.identity)}</small>` : ''} <button class="hbtn" data-fhops title="How far from the centre to show: 1 hop = direct links, 2 = friends of friends, 3 = the classic three degrees, ALL = everything reachable. Only links that pull (see WEIGHTS) count as a hop.">${H >= 6 ? 'ALL' : H + ' HOP' + (H > 1 ? 'S' : '')} ▾</button>${nwFocusNode.kind === 'account' && nwFocusNode.person_id ? ' <button class="hbtn" data-fprof>PROFILE</button> <button class="hbtn" data-fcrawl title="Log this account\'s follows / followers / mutuals outward, hop by hop">CRAWL</button>' : ''} <button class="hbtn" data-fclear title="Show everything again">✕</button></div>` : '';
   box.innerHTML = `<canvas></canvas><div class="legend" id="webLegend"></div>${fb}
-    <div class="strip"><div class="wtb"><button data-wm="3d" title="3-D: the floating web you can spin">3D</button><button data-wm="2d" title="2-D: the organized map — rings by connection, arcs by community — you can drag around">2D</button><span class="sep"></span><button data-wc="community" title="Colour by community (clusters found from the links)">COMMUNITY</button><button data-wc="kind" title="Colour by kind: account / tag / word">KIND</button><span class="sep"></span><button data-ws="posts" title="Size by number of posts">POSTS</button><button data-ws="influence" title="Size by influence: terms and accounts that bridge different parts of the web (betweenness centrality)">INFLUENCE</button><span class="sep"></span><button data-wmg title="Collapse each person's accounts (the ones you linked) into one node named after them">MERGE</button><span class="sep"></span><button data-ww title="How hard each kind of connection pulls (mentions / follows / shared tags / shared words)">WEIGHTS</button><span class="sep"></span><button data-wf title="Full screen">⛶</button></div><div class="hint" id="webHint"></div></div>
+    <div class="strip"><div class="wtb"><button data-wm="3d" title="3-D: the floating web you can spin">3D</button><button data-wm="2d" title="2-D: the organized map. Rings by connection, arcs by community. You can drag around">2D</button><span class="sep"></span><button data-wc="community" title="Colour by community (clusters found from the links)">COMMUNITY</button><button data-wc="kind" title="Colour by kind: account / tag / word">KIND</button><span class="sep"></span><button data-ws="posts" title="Size by number of posts">POSTS</button><button data-ws="influence" title="Size by influence: terms and accounts that bridge different parts of the web (betweenness centrality)">INFLUENCE</button><span class="sep"></span><button data-wmg title="Collapse each person's accounts (the ones you linked) into one node named after them">MERGE</button><span class="sep"></span><button data-ww title="How hard each kind of connection pulls (mentions / follows / shared tags / shared words)">WEIGHTS</button><span class="sep"></span><button data-wf title="Full screen">⛶</button></div><div class="hint" id="webHint"></div></div>
     <div class="wpop" id="webWeights" hidden><div class="t">PULL STRENGTH <small>0 = drawn, but doesn't move or rank anything</small></div>${['i', 'm', 'f', 'h', 's'].map(k => `<label><span><b class="l${k === 'i' || k === 'm' || k === 'f' ? 1 : k === 'h' ? 2 : 3}">${k === 'i' ? '╌' : '━'}</b> ${PULL_NAMES[k]}</span><input type="range" min="0" max="10" step="1" data-pw="${k}" value="${PW[k]}"><em>${PW[k]}</em></label>`).join('')}<div class="row" style="justify-content:flex-end;gap:8px;margin-top:6px"><button class="hbtn" data-pwreset>DEFAULTS</button><button class="hbtn" data-pwclose>DONE</button></div></div>`;
   const syncChrome = () => { $('#webLegend', box).innerHTML = legendHTML(); $('#webHint', box).textContent = hintHTML(); const mg = $('[data-wmg]', box); if (mg) mg.classList.toggle('on', !!store.get('webMerge', false)); $$('[data-wm]', box).forEach(b => b.classList.toggle('on', b.dataset.wm === st.mode)); $$('[data-wc]', box).forEach(b => b.classList.toggle('on', b.dataset.wc === st.color)); $$('[data-ws]', box).forEach(b => b.classList.toggle('on', b.dataset.ws === st.sizeBy)); };
   const cv = $('canvas', box), ctx = cv.getContext('2d');
@@ -2546,7 +2546,7 @@ function webNodeTap(n){
   renderNetwork();
 }
 // ── one person, several accounts. Links are yours; each remembers why. ──
-const HOW_LABEL = { you: 'you linked it', 'post link': 'they linked it in a post', 'bio link': 'they linked it in their bio', 'name match': 'same name — you accepted' };
+const HOW_LABEL = { you: 'you linked it', 'post link': 'they linked it in a post', 'bio link': 'they linked it in their bio', 'name match': 'same name, you accepted' };
 function siteToPlatform(site){ site = String(site || '').toLowerCase(); return /x\.com|twitter/.test(site) ? 'x' : /instagram/.test(site) ? 'instagram' : /tiktok/.test(site) ? 'tiktok' : /youtu/.test(site) ? 'youtube' : /bsky/.test(site) ? 'bluesky' : /threads/.test(site) ? 'threads' : /reddit/.test(site) ? 'reddit' : /github/.test(site) ? 'github' : /twitch/.test(site) ? 'twitch' : /facebook/.test(site) ? 'facebook' : /linkedin/.test(site) ? 'linkedin' : 'mastodon'; }
 // "x.com/name", "@name@server", "name.bsky.social", "@name" (X) → "handle|platform"
 function accountIdFromText(t){
@@ -2561,7 +2561,7 @@ async function openIdentity(id){
   let I; try{ I = await api('/api/identities/' + encodeURIComponent(id)); }catch(e){ return toast(e.message); }
   if (!I || I.error) return toast('No such person');
   openSheet(`<h3>◉ ${esc(I.name)} <span class="note" style="font-weight:400">· one person · ${I.accounts.length} account${I.accounts.length === 1 ? '' : 's'}</span></h3>
-    <p class="note" style="margin-bottom:8px">Accounts you've tied to this name. Every link here is one you made — the app never merges on its own. The web draws them with a dashed white line, or as one node with MERGE on.</p>
+    <p class="note" style="margin-bottom:8px">Accounts you've tied to this name. Every link here is one you made. The app never merges on its own. The web draws them with a dashed white line, or as one node with MERGE on.</p>
     <div class="meta" id="idAccts">${I.accounts.map(a => `<span class="pill a" title="${esc(HOW_LABEL[a.how] || a.how)}"><button class="lnk" data-open="${esc(a.id)}">@${esc(a.handle)} · ${esc(a.platform)}</button> <small class="note">${esc(a.how)}</small> <button class="lnk" data-unlink="${esc(a.id)}" title="Unlink">✕</button></span>`).join('') || '<span class="note">no accounts yet</span>'}</div>
     <div class="row wrap" style="gap:8px;margin:10px 0">
       <button class="btn sm" id="idAdd">+ LINK AN ACCOUNT</button>
@@ -2624,22 +2624,22 @@ async function openProfile(id){
     ${p.follows ? `<h3 class="s">Follows <small class="note">(from ${esc(p.platform)}'s public list)</small></h3>
       ${p.follows_loaded ? `<div class="note" style="margin-bottom:6px">Follows ${fmtN(p.follows.n)} · followed by ${fmtN(p.followed_by.n)} · loaded ${ago(p.follows_loaded)}</div>
       <div class="meta">${p.follows.known.map(k => `<span class="pill a" data-open="${esc(k.id)}" style="cursor:pointer" title="in your library"><b class="l1">━</b> @${esc(k.author)} ${k.n}</span>`).join('')}${p.followed_by.known.filter(k => !p.follows.known.some(f => f.id === k.id)).map(k => `<span class="pill a" data-open="${esc(k.id)}" style="cursor:pointer" title="follows this account · in your library"><b class="l1">━</b> @${esc(k.author)} ↙</span>`).join('')}${p.follows.unknown.slice(0, 20).map(u => `<span class="pill" data-pull="${esc(u.id)}" style="cursor:pointer" title="not in your library yet — tap to pull their posts in">@${esc(u.handle)}${u.posts ? ' ' + fmtN(u.posts) : ''} +</span>`).join('')}</div>
-      ${p.follows.n + p.followed_by.n === 0 ? '<p class="note">Nothing public — the account hides its lists, or follows no one.</p>' : ''}` : `<p class="note">${p.follows_supported ? 'Not loaded yet. LOAD FOLLOWS reads who they follow and who follows them — accounts already in your library become white lines in the web; others can be pulled in with one tap.' : esc(p.platform || 'this network') + ' has no public follow list to read; connections here come from mentions and shared content.'}</p>`}` : ''}
+      ${p.follows.n + p.followed_by.n === 0 ? '<p class="note">Nothing public. The account hides its lists, or follows no one.</p>' : ''}` : `<p class="note">${p.follows_supported ? 'Not loaded yet. LOAD FOLLOWS reads who they follow and who follows them. Accounts already in your library become white lines in the web. Others can be pulled in with one tap.' : esc(p.platform || 'this network') + ' has no public follow list to read; connections here come from mentions and shared content.'}</p>`}` : ''}
     ${p.mentions_out && p.mentions_out.length ? `<h3 class="s">Mentions</h3><div class="meta">${p.mentions_out.map(m => `<span class="pill${m.known ? ' a' : ''}" ${m.known ? `data-open="${esc(m.handle + '|' + p.platform)}" style="cursor:pointer"` : ''}>@${esc(m.handle)} ${m.count}</span>`).join('')}</div>` : ''}
     <h3 class="s">Same person <small class="note">(accounts you tied together)</small></h3>
     ${p.identity ? `<div class="meta"><button class="pill a" id="pIdent">◉ ${esc(p.identity.name)} · ${p.identity.accounts.length} account${p.identity.accounts.length === 1 ? '' : 's'}</button>${p.identity.accounts.filter(a => a.id.toLowerCase() !== String(p.id).toLowerCase()).map(a => `<span class="pill" data-open="${esc(a.id)}" style="cursor:pointer" title="${esc(HOW_LABEL[a.how] || a.how)}"><b class="l1">╌</b> @${esc(a.handle)} · ${esc(a.platform)}</span>`).join('')}</div>`
       : `<div class="row wrap" style="gap:8px"><button class="btn sm" id="pLink">◉ LINK TO A PERSON</button><span class="note">Group this with their other accounts (other networks too) under one name.</span></div>`}
     <h3 class="s">Your notes <small class="note">(private to this device)</small></h3>
-    <p class="note" style="margin-bottom:6px">Labels and notes you add here are your own — the app never guesses them. Use them to shape your searches.</p>
+    <p class="note" style="margin-bottom:6px">Labels and notes you add here are your own. The app never guesses them. Use them to shape your searches.</p>
     <input id="pAttrs" placeholder="your labels, comma-separated (e.g. artist, favourite)" value="${esc((p.meta.attrs || []).join(', '))}" autocapitalize="none">
     <textarea id="pNotes" rows="3" placeholder="notes…" style="margin-top:8px">${esc(p.meta.notes || '')}</textarea>
     <div class="row wrap" style="margin-top:10px">
       <button class="btn pri sm" id="pSave">SAVE NOTES</button>
       <button class="btn sm" id="pPosts">▦ THEIR POSTS</button>
-      <button class="btn sm" id="pMore" title="Pull this account's recent posts into your library — no rating needed. They show in LIBRARY and the WEB right away.">⬇ LOAD 50 MORE POSTS</button>
+      <button class="btn sm" id="pMore" title="Pull this account's recent posts into your library. No rating needed. They show in LIBRARY and the WEB right away.">⬇ LOAD 50 MORE POSTS</button>
       ${p.follows_supported ? `<button class="btn sm" id="pFollows" title="Read the account's public follow lists so the web can draw real follow links">↔ ${p.follows_loaded ? 'RELOAD' : 'LOAD'} FOLLOWS</button> <button class="btn sm" id="pCrawl" title="Log their mutuals / follows / followers outward, hop by hop">⟲ CRAWL HOPS</button>` : ''}
     </div>
-    <p class="note" style="margin-top:8px">LOAD MORE pulls their recent posts straight in — nothing to rate. More of an account at once makes its patterns show up in the WEB.</p>`);
+    <p class="note" style="margin-top:8px">LOAD MORE pulls their recent posts straight in, nothing to rate. More of an account at once makes its patterns show up in the WEB.</p>`);
   $('#pMore').onclick = async () => {
     const b = $('#pMore'); b.disabled = true; b.textContent = '⏳ LOADING…';
     try{
@@ -2742,22 +2742,22 @@ function renderWorkerBox(){
   const own = !!st.worker_url, px = !!window.PX;
   box.innerHTML = `<div class="card pad" style="margin:6px 0 14px">
     <b>◆ Browser mode · where fetching happens</b>
-    <p class="note" style="margin:6px 0 10px">Your library stays on this device. The searching itself runs through a <b>hub</b>: PTXERO's shared one by default (nothing to set up, fair-use daily limits), or your own (<a href="../hub/" target="_blank" rel="noreferrer">free, 15 minutes</a>). Requests are signed with your anonymous PTXERO ID so limits are per person and nobody can act as you.</p>
+    <p class="note" style="margin:6px 0 10px">Your library stays on this device. The searching runs through a <b>hub</b>. By default that's the shared PTXERO hub (daily limits per person). Or run <a href="../hub/" target="_blank" rel="noreferrer">your own</a>, it's free and takes about 15 minutes. Requests are signed with your PTXERO ID so limits are per person and nobody can post as you.</p>
     <div id="pxPanel"></div>
     <details style="margin-top:10px"${own ? ' open' : ''}><summary class="note" style="cursor:pointer">Advanced: a SearchNet-only Worker (fetching only, no hub features)</summary>
-      <p class="note" style="margin:8px 0">If you deployed <code>worker/searchnet-worker.js</code> on its own, paste it here and it is used instead of the hub. <a href="worker/" target="_blank" rel="noreferrer">Guide →</a></p>
+      <p class="note" style="margin:8px 0">If you deployed <code>worker/searchnet-worker.js</code> on its own, paste it here. It gets used instead of the hub. <a href="worker/" target="_blank" rel="noreferrer">Guide →</a></p>
       <label class="field"><span>Worker URL</span><input id="wkUrl" value="${esc(st.worker_url || '')}" placeholder="https://searchnet.you.workers.dev (blank = use the hub above)" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"></label>
       <label class="field"><span>Shared secret (optional, if you set one)</span><input id="wkKey" value="${esc(st.worker_key || '')}" placeholder="leave blank if none" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
       <div class="row wrap" style="margin-top:8px"><button class="btn pri sm" id="wkSave">SAVE</button><button class="btn sm" id="wkTest">TEST</button></div>
     </details>
     <div style="margin-top:12px"><b>Backup on the hub</b>
-      <p class="note" style="margin:6px 0 8px">Saves your topics, votes, sources and identities (not the media) under your PTXERO ID, so another device or a cleared browser can pick up where you left off. Optional — and gone when you delete your data.</p>
+      <p class="note" style="margin:6px 0 8px">Saves your topics, votes, sources and identities (not the media) under your PTXERO ID. Another device, or this one after clearing the browser, can pick up where you left off. Optional. Gone when you delete your data.</p>
       <div class="row wrap"><button class="btn sm" id="bkSave">⬆ BACK UP NOW</button><button class="btn sm" id="bkLoad">⬇ RESTORE</button><span class="note" id="bkMsg"></span></div></div></div>`;
   if (px) PX.panel($('#pxPanel'), { app: 'searchnet', local: false, guide: '../hub/', onChange: () => { toast('Hub changed'); refreshStatusChip && refreshStatusChip(); } });
-  else $('#pxPanel').innerHTML = '<p class="note">(the PTXERO ID script did not load — only the Worker option below is available here)</p>';
+  else $('#pxPanel').innerHTML = '<p class="note">(the PTXERO ID script did not load, so only the Worker option below works here)</p>';
   $('#wkSave').onclick = async () => {
     const worker_url = $('#wkUrl').value.trim().replace(/\/$/, ''), worker_key = $('#wkKey').value.trim();
-    try{ STATUS.settings = await api('/api/settings', { method: 'PUT', body: { worker_url, worker_key } }); STATUS = await api('/api/status'); toast(worker_url ? 'Saved — using your Worker' : 'Saved — using the hub'); renderSources(); const b = $('#banner'); if (STATUS.worker_url) b.classList.remove('on'); }
+    try{ STATUS.settings = await api('/api/settings', { method: 'PUT', body: { worker_url, worker_key } }); STATUS = await api('/api/status'); toast(worker_url ? 'Saved. Using your Worker' : 'Saved. Using the hub'); renderSources(); const b = $('#banner'); if (STATUS.worker_url) b.classList.remove('on'); }
     catch(e){ toast(e.message); }
   };
   $('#wkTest').onclick = async () => {
@@ -2769,7 +2769,7 @@ function renderWorkerBox(){
     if (!px) return toast('PTXERO ID not loaded');
     const m = $('#bkMsg'); m.textContent = 'backing up…';
     try{ const d = await BK.backup(); const r = await PX.store.put('searchnet', 'backup', d); m.textContent = '✓ backed up · ' + Math.round(r.bytes / 1024) + ' KB · ' + new Date().toLocaleString(); }
-    catch(e){ m.textContent = '✕ ' + (e.status === 413 ? 'too big for one backup (over 512 KB) — delete old topics first' : e.message); }
+    catch(e){ m.textContent = '✕ ' + (e.status === 413 ? 'too big for one backup (over 512 KB). Delete old topics first' : e.message); }
   };
   $('#bkLoad').onclick = async () => {
     if (!px) return toast('PTXERO ID not loaded');
@@ -2908,7 +2908,7 @@ async function renderSetup(){
   if (LOCAL){
     const s = STATUS || {}; const st = s.settings || {};
     pb.innerHTML = `<div class="card pad"><b>◆ Browser mode</b>
-      <p class="note" style="margin:6px 0 10px">This device is your whole library — stored in your browser (IndexedDB), nothing on any server, nothing tracked. Fetching runs through ${s.hub ? (s.hub.kind === 'worker' ? 'your Worker <b>' + esc(s.hub.base) + '</b>' : s.hub.kind === 'own' ? 'your own hub <b>' + esc(s.hub.base) + '</b>' : 'PTXERO\'s shared hub (fair-use limits)') : 'nothing yet'} — change it in <a href="#sources">SOURCES → where fetching happens</a>.</p>
+      <p class="note" style="margin:6px 0 10px">This device is your whole library. It's stored in your browser (IndexedDB), nothing on any server, nothing tracked. Fetching runs through ${s.hub ? (s.hub.kind === 'worker' ? 'your Worker <b>' + esc(s.hub.base) + '</b>' : s.hub.kind === 'own' ? 'your own hub <b>' + esc(s.hub.base) + '</b>' : 'the shared PTXERO hub (daily limits)') : 'nothing yet'}. Change it in <a href="#sources">SOURCES → where fetching happens</a>.</p>
       <div class="note">Library: <b>${fmtN(s.counts?.n || 0)}</b> items · <b>${fmtN(s.topics || 0)}</b> topics · ${s.counts?.speech || 0} with speech</div>
       <p class="note" style="margin-top:10px">Add this page to your home screen (Firefox ⋯ → Share → Add to Home Screen) to use it like an app.</p>
       <div class="row wrap" style="margin-top:10px"><button class="btn sm" id="switchServer">USE A COMPUTER INSTEAD</button></div></div>`;
@@ -3108,8 +3108,8 @@ function showOnboarding(){
     if (which === 'browser'){
       const px = !!window.PX;
       step.innerHTML = `<div class="card pad">
-        <b>Nothing to install</b>
-        <p class="note" style="margin:6px 0 10px">Your library lives in this browser. The fetching runs through a hub — PTXERO's shared hub by default (fair-use daily limits; anything you leave there is deleted after a few months unused), or your own free one later. You get an anonymous <b>PTXERO ID</b>${px ? ' (<b>@' + esc(PX.handle()) + '</b>)' : ''} — no e-mail, no name — that signs your requests so limits are per person and nobody can act as you.</p>
+        <b>Ready to go</b>
+        <p class="note" style="margin:6px 0 10px">Your library lives in this browser. The fetching runs through a hub. By default that's the shared PTXERO hub (daily limits per person, and anything left there gets deleted after a few months unused). You can run your own later. You get an anonymous <b>PTXERO ID</b>${px ? ' (<b>@' + esc(PX.handle()) + '</b>)' : ''}, no email or name, that signs your requests so nobody can post as you.</p>
         <div id="obPx"></div>
         <details style="margin-top:8px"><summary class="note" style="cursor:pointer">Advanced: use a SearchNet-only Worker instead</summary>
           <label class="field" style="margin-top:8px"><span>Worker URL</span><input id="obWk" placeholder="https://searchnet.you.workers.dev" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"></label>
@@ -3125,9 +3125,9 @@ function showOnboarding(){
           let url, headers = {};
           if (base){ if (!/^https?:\/\//.test(base)) throw new Error('Paste the full https:// address'); url = base + '/search?' + new URLSearchParams({ source: 'mastodon', q: 'cat', limit: 3, instance: 'mastodon.social' }) + (key ? '&key=' + encodeURIComponent(key) : ''); if (key) headers = { 'X-SN-Key': key }; }
           else if (px){ url = PX.host().hub + '/search?' + new URLSearchParams({ source: 'mastodon', q: 'cat', limit: 3, instance: 'mastodon.social' }); headers = await PX.sign('GET', url); }
-          else throw new Error('No hub available here — paste a Worker URL');
+          else throw new Error('No hub available here. Paste a Worker URL');
           const r = await fetch(url, { headers }); const j = await r.json().catch(() => ({}));
-          if (!r.ok) throw new Error(j.error === 'quota' ? 'fair-use limit reached — try later or use your own hub' : (j.error || ('HTTP ' + r.status)));
+          if (!r.ok) throw new Error(j.error === 'quota' ? 'daily limit hit. Try later or use your own hub' : (j.error || ('HTTP ' + r.status)));
           msg.textContent = '✓ ' + (base ? 'Worker' : 'hub') + ' reachable · ' + (j.items || []).length + ' test results'; msg.className = 'note ob-ok'; return true;
         }catch(e){ msg.textContent = '✕ ' + (e.message || 'could not reach it'); msg.className = 'note ob-bad'; return false; }
       };
@@ -3166,7 +3166,7 @@ function showOnboarding(){
           if (!r.ok){ msg.textContent = '✕ Wrong key for that server'; msg.className = 'note ob-bad'; return; }
           store.set('serverUrl', base.replace(/\/$/, '')); setKey(key); store.set('localMode', false); store.set('setupDone', true);
           msg.textContent = '✓ Connected'; msg.className = 'note ob-ok'; location.hash = '#topics'; setTimeout(() => location.reload(), 400);
-        }catch(err){ msg.textContent = '✕ Could not reach ' + base + ' — is it running, and are you on the same Wi-Fi / VPN?'; msg.className = 'note ob-bad'; }
+        }catch(err){ msg.textContent = '✕ Could not reach ' + base + '. Is it running? Same Wi-Fi / VPN?'; msg.className = 'note ob-bad'; }
       };
       setTimeout(() => $($('#obSrv') ? '#obSrv' : '#obPk').focus(), 50);
     }

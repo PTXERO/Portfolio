@@ -147,7 +147,7 @@
   async function runTopic(tid, job) {
     const t = await getTopic(tid); if (!t) throw new Error('topic gone');
     const person = (t.settings || {}).person;
-    job.topic_id = tid; job.log('◎ ' + t.name + (person ? ': person dossier — accounts\' own feeds' : ': expanding searches'));
+    job.topic_id = tid; job.log('◎ ' + t.name + (person ? ': person dossier, the accounts\' own feeds' : ': expanding searches'));
     if (!person) await expand(tid);
     const t2 = await getTopic(tid);
     const queries = (t2.queries || []).filter((q) => q.enabled).map((q) => q.query);
@@ -376,7 +376,7 @@
     handle = handle.replace(/^@/, '');
     if (!handle) return { error: 'enter a username or profile link' };
     if (!platform) platform = handle.includes('@') ? 'mastodon' : /\.bsky\.social$|\./.test(handle) ? 'bluesky' : 'x';
-    if (!WORKER_ACCOUNT.has(platform)) return { error: platform + ' needs a login to read a profile — run the PC server (SETUP → cookies) for ' + platform + ' accounts. Mastodon, Bluesky, Reddit and YouTube work from the browser.' };
+    if (!WORKER_ACCOUNT.has(platform)) return { error: platform + ' needs a login to read a profile. Run the PC server (SETUP → cookies) for ' + platform + ' accounts. Mastodon, Bluesky, Reddit and YouTube work from the browser.' };
     const j = L.newJob('creator', 'profile @' + handle); j.topic_id = t.id;
     L.runSafe(j, async () => {
       j.total = 3; j.log('◎ learning @' + handle + ' (' + platform + ') for this topic');

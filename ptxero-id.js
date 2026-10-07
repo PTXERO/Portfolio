@@ -97,7 +97,7 @@
   const isShared = () => host().mode === 'shared';
 
   // ── signed, queued fetch to the current hub ──
-  //  Hits a 429 (fair-use) → waits for Retry-After (capped) and retries once; everything else is returned as-is.
+  //  Hits a 429 (daily limit) → waits for Retry-After (capped) and retries once; everything else is returned as-is.
   let gate = Promise.resolve();
   async function hubFetch(path, opts) {
     opts = opts || {};
@@ -121,7 +121,7 @@
     };
     const p = gate.then(run, run); gate = p.catch(() => {}); return p;
   }
-  async function hubJson(path, opts) { const r = await hubFetch(path, opts); const j = await r.json().catch(() => ({})); if (!r.ok) { const e = new Error(j.error === 'quota' ? ('Fair-use limit reached on the shared hub (' + j.used + '/' + j.limit + ' today). ' + (j.hint || '')) : (j.error || ('HTTP ' + r.status))); e.status = r.status; e.info = j; throw e; } return j; }
+  async function hubJson(path, opts) { const r = await hubFetch(path, opts); const j = await r.json().catch(() => ({})); if (!r.ok) { const e = new Error(j.error === 'quota' ? ('Daily limit hit on the shared hub (' + j.used + '/' + j.limit + ' today). ' + (j.hint || '')) : (j.error || ('HTTP ' + r.status))); e.status = r.status; e.info = j; throw e; } return j; }
 
   // ── your data on the hub ──
   const me = () => hubJson('/me');
@@ -176,16 +176,16 @@
     const root = (location.pathname.indexOf('/reel-vault/') >= 0 || location.pathname.indexOf('/ascii-render/') >= 0 || location.pathname.indexOf('/gallery/') >= 0 || location.pathname.indexOf('/rf/') >= 0) ? '../' : './';
     el.innerHTML = `<div class="px-panel">
       <h4>YOUR DATA</h4>
-      <div class="px-note">You are <b>@${esc(handle())}</b> — an anonymous id made on this device, backed by a key only this browser holds. No e-mail, no name. Keep the key file to use the same id elsewhere.</div>
+      <div class="px-note">You are <b>@${esc(handle())}</b>. An anonymous id made on this device, backed by a key only this browser holds. No email, no name. Keep the key file if you want the same id on another device.</div>
       <div class="px-row">
-        <div class="px-opt${H.mode === 'shared' ? ' on' : ''}" data-mode="shared"><input type="radio" name="px-mode" ${H.mode === 'shared' ? 'checked' : ''}><span><b>PTXERO's shared hub</b><small>Nothing to set up. Fair-use daily limits. Anything you leave here is deleted automatically after <span class="px-ret">a few months</span> without use — keeping data here is optional.</small></span></div>
-        <div class="px-opt${H.mode === 'own' ? ' on' : ''}" data-mode="own"><input type="radio" name="px-mode" ${H.mode === 'own' ? 'checked' : ''}><span><b>My own hub</b><small>A free Cloudflare Worker + Supabase project you control: no limits, your rules. <a href="${esc(root)}hub/" target="_blank" rel="noreferrer">Setup guide →</a></small></span></div>
-        ${canLocal ? `<div class="px-opt${H.mode === 'local' ? ' on' : ''}" data-mode="local"><input type="radio" name="px-mode" ${H.mode === 'local' ? 'checked' : ''}><span><b>This device only</b><small>No hub at all. Nothing leaves this browser; nothing is shared or backed up.</small></span></div>` : ''}
+        <div class="px-opt${H.mode === 'shared' ? ' on' : ''}" data-mode="shared"><input type="radio" name="px-mode" ${H.mode === 'shared' ? 'checked' : ''}><span><b>Shared PTXERO hub</b><small>Works out of the box. Daily limits. Anything you leave here gets deleted after <span class="px-ret">a few months</span> without use, so keeping data here is optional.</small></span></div>
+        <div class="px-opt${H.mode === 'own' ? ' on' : ''}" data-mode="own"><input type="radio" name="px-mode" ${H.mode === 'own' ? 'checked' : ''}><span><b>My own hub</b><small>A free Cloudflare Worker + Supabase project you control. No limits. <a href="${esc(root)}hub/" target="_blank" rel="noreferrer">Setup guide →</a></small></span></div>
+        ${canLocal ? `<div class="px-opt${H.mode === 'local' ? ' on' : ''}" data-mode="local"><input type="radio" name="px-mode" ${H.mode === 'local' ? 'checked' : ''}><span><b>This device only</b><small>No hub at all. Nothing leaves this browser, nothing is shared or backed up.</small></span></div>` : ''}
       </div>
       <div class="px-own" ${H.mode === 'own' ? '' : 'hidden'}>
         <input type="text" class="px-hub" placeholder="https://hub.yourname.workers.dev" value="${esc(H.mode === 'own' ? H.hub : '')}" autocapitalize="off" spellcheck="false">
-        <input type="text" class="px-sb" placeholder="https://yourproject.supabase.co  (optional — only Social / ASCII need it)" value="${esc(H.mode === 'own' ? H.supabaseUrl : '')}" autocapitalize="off" spellcheck="false">
-        <input type="text" class="px-sbk" placeholder="Supabase publishable (anon) key — optional" value="${esc(H.mode === 'own' ? H.supabaseAnonKey : '')}" autocapitalize="off" spellcheck="false">
+        <input type="text" class="px-sb" placeholder="https://yourproject.supabase.co  (optional, only Social / ASCII need it)" value="${esc(H.mode === 'own' ? H.supabaseUrl : '')}" autocapitalize="off" spellcheck="false">
+        <input type="text" class="px-sbk" placeholder="Supabase publishable (anon) key (optional)" value="${esc(H.mode === 'own' ? H.supabaseAnonKey : '')}" autocapitalize="off" spellcheck="false">
         <div class="px-row"><button class="px-btn px-save">SAVE &amp; TEST</button><span class="px-note px-ownmsg"></span></div>
       </div>
       <div class="px-usage"><div class="px-note px-umsg">…</div></div>
@@ -195,7 +195,7 @@
         <button class="px-btn px-dl">⬇ EXPORT MY DATA</button>
         <button class="px-btn danger px-erase">✕ DELETE MY DATA ON THIS HUB</button>
       </div>
-      <div class="px-note">Delete removes everything this id left on the hub (posts, renders, likes, follows, backups) and the id itself. Your key stays on this device, so you can start again any time.</div>
+      <div class="px-note">Delete removes everything this id left on the hub (posts, renders, likes, follows, backups) and the id itself. Your key stays on this device so you can start over any time.</div>
     </div>`;
     const $ = (s) => el.querySelector(s);
     const paint = () => { const h = host(); el.querySelectorAll('.px-opt').forEach((o) => o.classList.toggle('on', o.dataset.mode === h.mode)); $('.px-own').hidden = h.mode !== 'own'; };
@@ -215,7 +215,7 @@
       refresh(); if (opts.onChange) opts.onChange(host());
     };
     $('.px-export').onclick = () => exportKey(opts.exportExtra ? opts.exportExtra() : null);
-    $('.px-import').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; try { const d = JSON.parse(await f.text()); const r = importKey(d); alert('Key imported — you are now @' + r.handle + '. Reloading.'); location.reload(); } catch (err) { alert(err.message); } };
+    $('.px-import').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; try { const d = JSON.parse(await f.text()); const r = importKey(d); alert('Key imported. You are now @' + r.handle + '. Reloading.'); location.reload(); } catch (err) { alert(err.message); } };
     $('.px-dl').onclick = async () => { try { const d = await exportData(); const blob = new Blob([JSON.stringify(d, null, 1)], { type: 'application/json' }); const u = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = u; a.download = 'ptxero-data-' + handle() + '.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1500); } catch (err) { alert(err.message); } };
     $('.px-erase').onclick = async () => { if (!confirm('Delete everything @' + handle() + ' has on ' + host().hub + '? Posts, renders, likes, follows and backups go. This cannot be undone.')) return; try { const r = await deleteMyData(); alert('Erased. (' + (r.erased ? r.erased.posts + ' posts, ' + r.erased.renders + ' renders' : 'done') + ')'); refresh(); } catch (err) { alert(err.message); } };
     async function refresh() {
@@ -227,7 +227,7 @@
         const ret = el.querySelector('.px-ret'); if (ret) ret.textContent = u.retention_days + ' days';
         const lim = u.limits; const pct = lim ? Math.min(100, Math.round(100 * (u.store.bytes || 0) / lim.store_bytes)) : 0;
         m.innerHTML = `${h.mode === 'own' ? 'Your hub' : 'Shared hub'} · ${u.owner ? '<b>owner · no limits</b>' : `today: ${u.today.fetch}/${lim.fetch} fetches · ${u.today.writes}/${lim.writes} writes`} · stored ${fmtB(u.store.bytes)}${lim ? ' of ' + fmtB(lim.store_bytes) : ''}${u.last_seen ? ' · last seen ' + new Date(u.last_seen).toLocaleDateString() : ''}${lim ? `<div class="px-bar"><i style="width:${pct}%"></i></div>` : ''}`;
-      } catch (err) { m.textContent = err.status === 400 ? 'This hub stores nothing (fetch-only).' : err.status === 401 ? 'Could not sign in to this hub yet.' : err.status === 404 ? 'This hub is an older version (no identity or storage yet) — its owner needs to redeploy it with hub-worker.js.' : ('Hub unreachable: ' + err.message); }
+      } catch (err) { m.textContent = err.status === 400 ? 'This hub stores nothing (fetch-only).' : err.status === 401 ? 'Could not sign in to this hub yet.' : err.status === 404 ? 'This hub is an older version (no identity or storage yet). Its owner needs to redeploy it with hub-worker.js.' : ('Hub unreachable: ' + err.message); }
     }
     refresh();
   }

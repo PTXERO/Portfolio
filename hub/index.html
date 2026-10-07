@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>PTXERO HUB · your data, your choice</title>
-<meta name="description" content="How PTXERO apps store your data: one anonymous id, the shared hub by default, or your own free Cloudflare Worker + Supabase hub in about 15 minutes.">
+<title>PTXERO HUB · where your data lives</title>
+<meta name="description" content="How the PTXERO apps store your data. One anonymous id, the shared hub by default, or your own free Cloudflare Worker + Supabase hub.">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
 <style>
 :root{--bg:#07070a;--surface:#0d0d12;--panel:#121218;--panel2:#17171f;--border:#1f1f29;--b2:#2c2c36;--acc:#f54242;--acc-rgb:245,66,66;--acc2:#42d4f5;--acc4:#f5a542;--good:#44ff88;--bad:#ff4d6d;--txt:#e2e2ea;--dim:#7a7a92;--mut:#3a3a48;--fmono:'Share Tech Mono',ui-monospace,monospace;--fdisp:'Bebas Neue',Impact,sans-serif;--fbody:'DM Mono',ui-monospace,monospace}
@@ -55,28 +55,28 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
 <body>
 <div class="top">
   <a class="hbtn" href="../">← HOME</a>
-  <a class="brand" href="../">PTXERO HUB<small>YOUR DATA, YOUR CHOICE</small></a>
+  <a class="brand" href="../">PTXERO HUB<small>WHERE YOUR DATA LIVES</small></a>
   <span style="flex:1"></span>
   <a class="hbtn" href="hub-worker.js" target="_blank" rel="noreferrer">WORKER CODE</a>
   <a class="hbtn" href="hub-setup.sql.txt" target="_blank" rel="noreferrer">DATABASE SQL</a>
 </div>
 <main>
   <h1>WHERE YOUR DATA LIVES <span class="tag" id="latest">HUB v2.0</span></h1>
-  <p class="lead">Every PTXERO app — SEARCH//NET, SOCIAL, ASCII//RENDER, the RF gallery — talks to one small server called a <b>hub</b>. It does the fetching a browser can't, and it keeps what you choose to keep: Social posts, shared renders, SearchNet backups. You pick which hub, per device, and can change your mind any time. Nothing here needs an e-mail, a password or a name.</p>
+  <p class="lead">Every app on this site (SEARCH//NET, SOCIAL, ASCII//RENDER, RF) talks to one small server I call a <b>hub</b>. It does the fetching a browser can't do on its own, and it keeps what you choose to keep: Social posts, shared renders, SearchNet backups. You pick which hub, per device, and can change it whenever. No email, password or name needed.</p>
 
   <h2>THE THREE CHOICES</h2>
   <div class="opts">
-    <div class="opt"><b>PTXERO's shared hub <span class="tag">default</span></b><p class="note">Nothing to set up. Fair-use daily limits per person (table below). Anything you leave there is <b>deleted automatically after 180 days without use</b>, so keeping data on it is optional by design. You can export or erase everything yourself at any moment.</p></div>
-    <div class="opt"><b>My own hub</b><p class="note">A free Cloudflare Worker plus a free Supabase project that <b>you</b> own. No limits, your rules, your retention. Set up once in about 15 minutes (below), then point every app at it with one setting.</p></div>
-    <div class="opt"><b>This device only</b><p class="note">Offered where an app can work without any hub (Social and SearchNet's library already keep their data in the browser). Nothing leaves the device; nothing is shared or backed up.</p></div>
+    <div class="opt"><b>Shared PTXERO hub <span class="tag">default</span></b><p class="note">Works out of the box. Daily limits per person (table below). Anything you leave there is <b>deleted after 180 days without use</b>. Keeping data on it is optional. You can export or delete everything yourself at any time.</p></div>
+    <div class="opt"><b>My own hub</b><p class="note">A free Cloudflare Worker plus a free Supabase project that <b>you</b> own. No limits, you decide how long data is kept. Set it up once (steps below, about 15 minutes), then point the apps at it with one setting.</p></div>
+    <div class="opt"><b>This device only</b><p class="note">Offered where an app can work with no hub at all. Nothing leaves the device, nothing is shared or backed up.</p></div>
   </div>
-  <p class="note">The switch is in each app: SEARCH//NET → <span class="ui">SOURCES → YOUR DATA</span> · SOCIAL → <span class="ui">⚿ MY KEY → YOUR DATA &amp; HUB</span> · the RF gallery's <span class="ui">@ID</span> chip · ASCII//RENDER's <span class="ui">@handle</span> bubble (it opens Social). One choice covers all of them on that device, and it travels with your key file.</p>
+  <p class="note">The switch is in each app: SEARCH//NET → <span class="ui">SOURCES → YOUR DATA</span> · SOCIAL → <span class="ui">⚿ MY KEY → YOUR DATA &amp; HUB</span> · the RF gallery's <span class="ui">@ID</span> chip · ASCII//RENDER's <span class="ui">@handle</span> bubble (it opens Social). One choice covers all of them on that device, and your key file carries it to other devices.</p>
 
   <h2>YOUR PTXERO ID</h2>
   <div class="card">
-    <p>You are <b id="meHandle">@…</b> on this device — a short anonymous handle (a 2-letter prefix you can change, and a 4-character suffix). Behind it sits a cryptographic key made <b>in this browser</b> the first time an app loaded. Every request that stores something is signed with it, and the hub binds that key to your handle on first use. From then on <b>only a device holding the key can act as you</b> — there is nothing to guess and no secret on the server to leak. The hub counts fair use per identity, so nobody can burn through your limit either.</p>
-    <p><b>The key file is your account.</b> Download it once (⬇ KEY FILE in any app's YOUR DATA panel or Social's MY KEY) and import it on another device or after clearing your browser. Lose it and the handle can't be recovered — you'd simply start again as a new one.</p>
-    <p class="note">Before keys existed, Social proved identity with a per-device secret. Those profiles migrate the first time they post from the same device: the old secret is presented once, the key gets bound, and the secret stops mattering.</p>
+    <p>You are <b id="meHandle">@…</b> on this device. A short anonymous handle: a 2-letter prefix you can change and a 4-character suffix. Behind it is a key made <b>in this browser</b> the first time one of the apps loaded. Every request that stores something is signed with that key, and the hub ties the key to your handle the first time it sees it. After that <b>only a device with the key can act as you</b>. There's nothing to guess and no password on the server to leak. Limits are counted per id, so nobody can burn through yours.</p>
+    <p><b>The key file is your account.</b> Download it once (⬇ KEY FILE in any app's YOUR DATA panel, or MY KEY in Social) and import it on another device or after clearing your browser. Lose it and the handle can't be recovered. You'd just start over as a new one.</p>
+    <p class="note">Before keys, Social proved who you were with a per-device secret. Those profiles move over the first time they post from the same device: the old secret is sent once, the key gets tied to the handle, and the secret stops mattering.</p>
   </div>
 
   <h2>WHAT THE SHARED HUB ALLOWS</h2>
@@ -84,22 +84,22 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
     <tr><th>What</th><th>Per day, per identity</th><th>Anonymous (no id)</th></tr>
     <tr><td>Fetches (SearchNet searches, profiles, follows, media resolving)</td><td>400</td><td>60 per address</td></tr>
     <tr><td>Writes (posts, likes, follows, comments, shares, backups)</td><td>300</td><td>none</td></tr>
-    <tr><td>Stored backups (per-person store)</td><td>25 MB total, 512 KB per item</td><td>—</td></tr>
-    <tr><td>Kept for</td><td>180 days after your last visit, then everything is erased</td><td>—</td></tr>
+    <tr><td>Stored backups (per-person store)</td><td>25 MB total, 512 KB per item</td><td>n/a</td></tr>
+    <tr><td>Kept for</td><td>180 days after your last visit, then everything is erased</td><td>n/a</td></tr>
   </table>
-  <p class="note">When a limit is reached the app waits politely if it's a short pause, or tells you that the daily cap is hit and when it resets (midnight UTC). The hub's owner is exempt and never auto-deleted; anyone else can ask to be pinned.</p>
+  <p class="note">When you hit a limit the app waits if it's a short one, or tells you the daily cap is hit and when it resets (midnight UTC). The hub's owner has no limits and is never auto-deleted. Anyone else can ask to be pinned.</p>
   <div class="card">
     <div class="row"><b>Your usage right now</b><span class="note" id="meStatus">checking the hub you're set to use…</span></div>
     <div id="mePanel" style="margin-top:12px"></div>
   </div>
 
   <h2>SET UP YOUR OWN HUB</h2>
-  <p class="lead">Two free accounts, one paste each. No command line. Allow about 15 minutes the first time.</p>
+  <p class="lead">Two free accounts, one paste each. No command line. About 15 minutes the first time.</p>
 
   <div class="step"><div class="n">1</div><div>
     <h3>Create a database at Supabase</h3>
     <p>Go to <a href="https://supabase.com" target="_blank" rel="noreferrer">supabase.com</a> → <span class="ui">Start your project</span> (sign in with GitHub or e-mail) → <span class="ui">New project</span>. Any name and region; set a database password and keep it somewhere safe (you won't need it again for this).</p>
-    <p class="note">The free tier is plenty. Supabase pauses free projects after a week without traffic — the hub's daily housekeeping keeps it awake.</p>
+    <p class="note">The free tier is plenty. Supabase pauses free projects after a week with no traffic. The hub's daily housekeeping keeps it awake.</p>
   </div></div>
 
   <div class="step"><div class="n">2</div><div>
@@ -114,8 +114,8 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
     <table>
       <tr><th>Value</th><th>Looks like</th><th>Where it goes</th></tr>
       <tr><td>Project URL</td><td><code>https://abcd1234.supabase.co</code></td><td>Worker variable <code>SUPABASE_URL</code>, and the apps' "Supabase URL" box</td></tr>
-      <tr><td>Publishable / anon key</td><td><code>sb_publishable_…</code> or a long <code>eyJ…</code></td><td>The apps' "publishable key" box (safe in a browser — it can only read)</td></tr>
-      <tr><td>Secret / service_role key</td><td><code>sb_secret_…</code> or a long <code>eyJ…</code></td><td>Worker <b>secret</b> <code>SERVICE_KEY</code> — <b>only</b> there, never in a page</td></tr>
+      <tr><td>Publishable / anon key</td><td><code>sb_publishable_…</code> or a long <code>eyJ…</code></td><td>The apps' "publishable key" box (safe in a browser, it can only read)</td></tr>
+      <tr><td>Secret / service_role key</td><td><code>sb_secret_…</code> or a long <code>eyJ…</code></td><td>Worker <b>secret</b> <code>SERVICE_KEY</code>. <b>Only</b> there, never in a page</td></tr>
     </table>
   </div></div>
 
@@ -134,9 +134,9 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
       <tr><th>Name</th><th>Type</th><th>Value</th></tr>
       <tr><td><code>SERVICE_KEY</code></td><td><b>Secret</b></td><td>the Supabase secret / service_role key from step 3</td></tr>
       <tr><td><code>SUPABASE_URL</code></td><td>Text</td><td>your Project URL, e.g. <code>https://abcd1234.supabase.co</code></td></tr>
-      <tr><td><code>ADMIN_UID</code></td><td>Text</td><td>your own 4-character suffix (<b id="meSuffix">…</b>) — makes you the owner: no limits, never auto-deleted, moderation rights in Social</td></tr>
-      <tr><td><code>ALLOWED_ORIGINS</code></td><td>Text, optional</td><td><code>*</code> to let any page use it, or a comma-separated list of sites. Default: <code>https://ptxero.neocities.org</code> (the hosted apps) — fetch routes answer any site regardless</td></tr>
-      <tr><td><code>LIMITS</code></td><td>Text, optional</td><td>JSON to change fair use for guests, e.g. <code>{"fetch":1000,"writes":500,"store_bytes":104857600,"blob_bytes":1048576,"anon_fetch":100}</code></td></tr>
+      <tr><td><code>ADMIN_UID</code></td><td>Text</td><td>your own 4-character suffix (<b id="meSuffix">…</b>). Makes you the owner: no limits, never auto-deleted, moderation rights in Social</td></tr>
+      <tr><td><code>ALLOWED_ORIGINS</code></td><td>Text, optional</td><td><code>*</code> to let any page use it, or a comma-separated list of sites. Default: <code>https://ptxero.neocities.org</code> (the hosted apps). Fetch routes answer any site regardless</td></tr>
+      <tr><td><code>LIMITS</code></td><td>Text, optional</td><td>JSON to change the limits for guests, e.g. <code>{"fetch":1000,"writes":500,"store_bytes":104857600,"blob_bytes":1048576,"anon_fetch":100}</code></td></tr>
       <tr><td><code>RETENTION_DAYS</code></td><td>Text, optional</td><td>how long an unused identity's data is kept (default <code>180</code>, minimum 7)</td></tr>
       <tr><td><code>BUCKET</code></td><td>Text, optional</td><td>storage bucket name; the SQL created <code>renders</code></td></tr>
     </table>
@@ -151,27 +151,27 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
     <h3>Test it</h3>
     <div class="row"><input id="url" placeholder="https://hub.yourname.workers.dev" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"><button class="btn pri" id="test">TEST</button></div>
     <div class="status" id="status"></div>
-    <p class="note">A good answer says the hub's version, that it <b>stores</b> (SERVICE_KEY is set), and signs you in as <span id="meHandle2">@…</span>. "Stores nothing" means the secret isn't there yet; a 5xx usually means <code>SUPABASE_URL</code> is wrong or the SQL hasn't run.</p>
+    <p class="note">A good answer shows the hub version, says it <b>stores</b> (SERVICE_KEY is set), and signs you in as <span id="meHandle2">@…</span>. "Stores nothing" means the secret isn't there yet. A 5xx usually means <code>SUPABASE_URL</code> is wrong or the SQL hasn't run.</p>
   </div></div>
 
   <div class="step"><div class="n">8</div><div>
     <h3>Point the apps at it</h3>
-    <p>Open <a href="../reel-vault/#sources">SEARCH//NET → SOURCES → YOUR DATA</a> (or Social → ⚿ MY KEY → YOUR DATA &amp; HUB), choose <span class="ui">My own hub</span>, paste the Worker address, your Supabase Project URL and the publishable key, press <span class="ui">SAVE &amp; TEST</span>. Done: every PTXERO app on this device now uses your hub, and a key file exported afterwards carries the setting to your other devices.</p>
-    <p class="note">Posts, renders and backups you made on the shared hub stay there (you can <span class="ui">EXPORT MY DATA</span> and <span class="ui">DELETE MY DATA</span> on it first). Hubs are separate worlds: Social on your hub shows the people on <i>your</i> hub.</p>
+    <p>Open <a href="../reel-vault/#sources">SEARCH//NET → SOURCES → YOUR DATA</a> (or Social → ⚿ MY KEY → YOUR DATA &amp; HUB), choose <span class="ui">My own hub</span>, paste the Worker address, your Supabase Project URL and the publishable key, press <span class="ui">SAVE &amp; TEST</span>. Every PTXERO app on this device now uses your hub. A key file exported after that carries the setting to your other devices.</p>
+    <p class="note">Posts, renders and backups you made on the shared hub stay there (you can <span class="ui">EXPORT MY DATA</span> and <span class="ui">DELETE MY DATA</span> on it first). Hubs are separate. Social on your hub shows the people on <i>your</i> hub.</p>
   </div></div>
 
   <h2>KEEPING, MOVING AND ERASING</h2>
   <div class="card">
-    <p><b>⬇ KEY FILE</b> — your identity (and your hub choice). Keep it like a password.</p>
-    <p><b>⬇ EXPORT MY DATA</b> — one JSON with everything the hub holds for you: profile, posts, likes, comments, follows, reposts, renders and backups.</p>
-    <p><b>✕ DELETE MY DATA ON THIS HUB</b> — erases all of it, including uploaded images and audio, and the identity's row. Your key stays on the device, so you can start fresh under the same handle.</p>
-    <p><b>Automatic</b> — on the shared hub, an identity unused for 180 days is erased the same way by the daily housekeeping. Visiting any PTXERO app with your key counts as use.</p>
+    <p><b>⬇ KEY FILE</b>: your identity (and your hub choice). Keep it like a password.</p>
+    <p><b>⬇ EXPORT MY DATA</b>: one JSON with everything the hub holds for you. Profile, posts, likes, comments, follows, reposts, renders and backups.</p>
+    <p><b>✕ DELETE MY DATA ON THIS HUB</b>: erases all of it, including uploaded images and audio, and the id itself. Your key stays on the device so you can start fresh under the same handle.</p>
+    <p><b>Automatic</b>: on the shared hub, an id unused for 180 days is erased the same way by the daily housekeeping. Opening any PTXERO app with your key counts as use.</p>
   </div>
 
   <h2>UPDATING LATER</h2>
-  <p class="note">New app features sometimes need a newer hub. The apps tell you ("your hub is older than this app"); then repeat step 4's paste on the same Worker and Deploy — settings and data are untouched. The version is in <code>/health</code>.</p>
+  <p class="note">New app features sometimes need a newer hub. The apps tell you ("your hub is older than this app"). Repeat the paste from step 4 on the same Worker and Deploy. Settings and data are untouched. The version is in <code>/health</code>.</p>
 
-  <details><summary>API, for the curious</summary>
+  <details><summary>API</summary>
     <pre>GET  /health                         version, hub version, whether it stores
 GET  /search /account /follows /resolve /fetch     SearchNet fetchers (fair-use scope "fetch")
 POST /id            { secret? }      bind this device's key to @you (TOFU; legacy secret migrates)
@@ -181,7 +181,7 @@ DELETE /me                           erase everything about you              (si
 GET  /store/&lt;app&gt;                     list your blobs · PUT/GET/DELETE /store/&lt;app&gt;/&lt;key&gt;   (signed)
 POST /profile /post /like /comment /follow /repost /report /delete /share   Social + ASCII (signed or legacy secret)
 GET  /r/&lt;slug&gt; /p/&lt;id&gt;                 rich link previews · GET /status · GET /presence</pre>
-    <p class="note">Signed = headers <code>X-PX-Uid · X-PX-Pub · X-PX-Ts · X-PX-Nonce · X-PX-Sig</code> (ECDSA P-256 over <code>uid\nts\nnonce\nMETHOD\npath</code>, 5-minute window). <code>ptxero-id.js</code> does this for the apps; the Worker binds the first key it sees for a handle and rejects any other.</p>
+    <p class="note">Signed = headers <code>X-PX-Uid · X-PX-Pub · X-PX-Ts · X-PX-Nonce · X-PX-Sig</code> (ECDSA P-256 over <code>uid\nts\nnonce\nMETHOD\npath</code>, 5-minute window). <code>ptxero-id.js</code> does this for the apps. The Worker ties the first key it sees to the handle and rejects any other.</p>
   </details>
 </main>
 <script>
@@ -191,11 +191,11 @@ if (px) { $('#meHandle').textContent = '@' + px.handle(); $('#meHandle2').textCo
 async function copyFile(file, btn, msg, what) {
   const b = $(btn); b.disabled = true;
   try { const code = await (await fetch(file, { cache: 'no-store' })).text(); await navigator.clipboard.writeText(code); $(msg).textContent = '✓ copied ' + code.split('\n').length + ' lines of ' + what; }
-  catch (e) { $(msg).innerHTML = 'Couldn\'t copy automatically — open the raw file, select all, copy.'; }
+  catch (e) { $(msg).innerHTML = 'Couldn\'t copy automatically. Open the raw file, select all, copy.'; }
   b.disabled = false;
 }
-$('#copySql').onclick = () => copyFile('hub-setup.sql.txt', '#copySql', '#copySqlMsg', 'SQL — paste into the Supabase SQL editor and Run');
-$('#copyWorker').onclick = () => copyFile('hub-worker.js', '#copyWorker', '#copyWorkerMsg', 'JavaScript — paste into the Cloudflare editor and Deploy');
+$('#copySql').onclick = () => copyFile('hub-setup.sql.txt', '#copySql', '#copySqlMsg', 'SQL. Paste into the Supabase SQL editor and Run');
+$('#copyWorker').onclick = () => copyFile('hub-worker.js', '#copyWorker', '#copyWorkerMsg', 'JavaScript. Paste into the Cloudflare editor and Deploy');
 $('#test').onclick = async () => {
   const st = $('#status'); let u = $('#url').value.trim().replace(/\/+$/, '');
   if (!u) { st.innerHTML = '<span class="warn">Paste your hub address first.</span>'; return; }
@@ -204,18 +204,18 @@ $('#test').onclick = async () => {
   try {
     const r = await fetch(u + '/health'); const j = await r.json().catch(() => ({}));
     if (!r.ok || j.worker !== 'searchnet') { st.innerHTML = '<span class="bad">That address answers, but not as a PTXERO hub (' + (j.error || 'HTTP ' + r.status) + '). Check step 4 was deployed.</span>'; return; }
-    if (!j.hub) { st.innerHTML = '<span class="warn">That is a SearchNet-only Worker (v' + j.version + '), not a hub — fetching works, nothing is stored. Paste hub-worker.js instead (step 4).</span>'; return; }
+    if (!j.hub) { st.innerHTML = '<span class="warn">That is a SearchNet-only Worker (v' + j.version + '), not a hub. Fetching works, nothing is stored. Paste hub-worker.js instead (step 4).</span>'; return; }
     let me = '';
     if (px) {
       try { const h = await px.sign('GET', u + '/me'); const rm = await fetch(u + '/me', { headers: h }); const jm = await rm.json().catch(() => ({}));
         if (rm.status === 400) me = ' · <span class="warn">stores nothing yet: add the SERVICE_KEY secret (step 5)</span>';
         else if (rm.status === 401) { await fetch(u + '/id', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, await px.sign('POST', u + '/id')), body: JSON.stringify({ secret: await px.legacySecret() }) }); const r2 = await fetch(u + '/me', { headers: await px.sign('GET', u + '/me') }); const j2 = await r2.json().catch(() => ({})); me = r2.ok ? ' · signed in as @' + px.handle() + (j2.owner ? ' <b>(owner)</b>' : '') : ' · <span class="warn">could not sign in: ' + (j2.error || r2.status) + '</span>'; }
-        else if (rm.ok) me = ' · signed in as @' + px.handle() + (jm.owner ? ' <b>(owner — no limits)</b>' : ' · ' + jm.today.fetch + '/' + jm.limits.fetch + ' fetches today') + ' · keeps data ' + jm.retention_days + ' days';
-        else me = ' · <span class="warn">/me said ' + (jm.error || rm.status) + ' — check SUPABASE_URL and that the SQL ran</span>';
+        else if (rm.ok) me = ' · signed in as @' + px.handle() + (jm.owner ? ' <b>(owner, no limits)</b>' : ' · ' + jm.today.fetch + '/' + jm.limits.fetch + ' fetches today') + ' · keeps data ' + jm.retention_days + ' days';
+        else me = ' · <span class="warn">/me said ' + (jm.error || rm.status) + '. Check SUPABASE_URL and that the SQL ran</span>';
       } catch (e) { me = ' · <span class="warn">could not reach /me (' + e.message + ')</span>'; }
     }
     st.innerHTML = '<span class="ok">✓ PTXERO hub ' + j.hub + ' (SearchNet ' + j.version + ')</span>' + me + ' <a href="../reel-vault/#sources">Use it in the apps →</a>';
-  } catch (e) { st.innerHTML = '<span class="bad">No answer — check the address (it should end in .workers.dev), that you pressed Deploy, and that the Worker isn\'t paused.</span>'; }
+  } catch (e) { st.innerHTML = '<span class="bad">No answer. Check the address (it should end in .workers.dev), that you pressed Deploy, and that the Worker isn\'t paused.</span>'; }
 };
 $('#url').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#test').click(); });
 // your usage on the hub this device is set to use

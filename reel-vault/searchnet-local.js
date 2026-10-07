@@ -168,9 +168,9 @@
     const r = h.signed ? await window.PX.fetch(url) : await fetch(url, { headers: h.key ? { 'X-SN-Key': h.key } : {} });
     const j = await r.json().catch(() => ({}));
     if (h.signed && r.status === 404 && /not found/i.test(j.error || ''))
-      throw new Error((h.kind === 'own' ? 'Your hub' : 'The shared hub') + ' at ' + h.base + ' is not running hub 2.0 yet' + (h.kind === 'own' ? ' — paste hub/hub-worker.js into that Worker and Deploy (see the hub guide)' : ' — the owner has to redeploy it; meanwhile SOURCES → Advanced lets you paste your own Worker URL'));
+      throw new Error((h.kind === 'own' ? 'Your hub' : 'The shared hub') + ' at ' + h.base + ' is not on hub 2.0 yet. ' + (h.kind === 'own' ? 'Paste hub/hub-worker.js into that Worker and Deploy (see the hub guide)' : 'The owner has to redeploy it. Until then, SOURCES → Advanced takes your own Worker URL'));
     if (r.status === 404 && (j.error === 'not found' || !j.error) && !/^\/(search|health)/.test(path))
-      throw new Error('Your Worker is older than this app — paste the new worker/searchnet-worker.js into Cloudflare (SOURCES → your Worker → how to update)');
+      throw new Error('Your Worker is older than this app. Paste the new worker/searchnet-worker.js into Cloudflare (SOURCES → your Worker → how to update)');
     if (r.status === 429 && j.error === 'quota') throw new Error('Fair-use limit on the ' + (h.kind === 'own' ? 'hub' : 'shared hub') + ': ' + j.used + '/' + j.limit + ' ' + j.scope + ' today. ' + (j.hint || ''));
     if (!r.ok) throw new Error(j.error || ('Hub HTTP ' + r.status));
     return j;
@@ -357,7 +357,7 @@
     const dom = text.replace(/^https?:\/\//, '').replace(/\/.*/, '');
     if (/^https?:\/\//.test(text)) {                       // a search URL from any site: the word you typed becomes {q}
       const tpl = text.includes('{q}') ? text : searchUrlToTemplate(text);
-      if (tpl) out.push({ name: dom, source: 'html', param: 'url', value: tpl, searchable: true, why: "your search URL — the word you typed becomes {q}" });
+      if (tpl) out.push({ name: dom, source: 'html', param: 'url', value: tpl, searchable: true, why: "your search URL. The word you typed becomes {q}" });
     }
     if (/mastodon|social|\.art$|fediverse/.test(dom)) out.push({ name: 'Mastodon · ' + dom, source: 'mastodon', param: 'instance', value: dom, searchable: true, why: 'looks like a Mastodon server' });
     if (/lemmy/.test(dom)) out.push({ name: 'Lemmy · ' + dom, source: 'lemmy', param: 'instance', value: dom, searchable: true, why: 'Lemmy instance' });

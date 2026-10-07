@@ -23,7 +23,7 @@ On a computer that stays on, run **one command**. It does everything:
 4. installs / updates the Python packages (yt-dlp, gallery-dl, fastembed)
 5. starts the auto-updating launcher
 
-**Windows** — paste into PowerShell (no admin window needed):
+**Windows**: paste into PowerShell (no admin window needed):
 
 ```powershell
 irm https://ptxero.neocities.org/reel-vault/install.txt | iex
@@ -31,7 +31,7 @@ irm https://ptxero.neocities.org/reel-vault/install.txt | iex
 
 After the first time, just **double-click `reel-vault\start.cmd`**.
 
-**Mac / Linux** — paste into Terminal:
+**Mac / Linux**: paste into Terminal:
 
 ```bash
 curl -fsSL https://ptxero.neocities.org/reel-vault/install-sh.txt | bash
@@ -56,7 +56,7 @@ Optional extras, if you want them: `pip install faster-whisper` (search what is 
 tesseract from your package manager (on-screen text).
 
 **While it runs** it keeps the server up, checks GitHub for new commits on a loop, and pulls +
-restarts when there are updates — your phone reconnects on its own. Prefer doing it by hand?
+restarts when there are updates. Your phone reconnects on its own. Prefer doing it by hand?
 `python reel-vault/server/run.py` is the launcher on its own (`--interval 30` changes how often it
 checks, `--no-update` stops it pulling, other options such as `--port`, `--phone-host`, `--data`
 go to the server).
@@ -71,16 +71,16 @@ reach the PC. If the printed phone link shows a VPN address (10.64.x.x and up) i
 address (usually 192.168.x.x), start with `--phone-host 192.168.x.x`. Run `ipconfig` to find
 your Wi-Fi adapter's IPv4 address.
 
-### Remote access from another network — safely
+### Remote access from another network, safely
 
 The server is **private by design**: it only accepts connections from your own LAN and your own
 VPN, and refuses the public internet (and tunnels) unless you pass `--expose`. So don't port-forward
 or expose it with a public Cloudflare/ngrok tunnel. To reach it from anywhere, put your phone and PC
-on the same **private mesh VPN** — [Tailscale](https://tailscale.com) is the easy choice:
+on the same **private mesh VPN**. [Tailscale](https://tailscale.com) is the easy choice:
 
 1. Install Tailscale on the PC and the iPhone, sign in to both with the same account.
 2. The PC gets a private address like `100.x.y.z` that only your own devices can reach.
-3. For a real HTTPS address (no browser "not secure"), run `tailscale serve --bg 8765` on the PC —
+3. For a real HTTPS address (no browser "not secure"), run `tailscale serve --bg 8765` on the PC.
    it gives `https://<pc-name>.<tailnet>.ts.net`, reachable only inside your tailnet.
 4. On the phone open that address (or the `100.x.y.z:8765` one) with `?key=YOUR_KEY` once to pair.
 
@@ -102,18 +102,17 @@ Don't want to leave a computer running? Open the page and choose
 **CONNECT → 📱 Use this browser only**. Everything then runs on the device you're
 holding:
 
-- Your whole library lives in the browser (IndexedDB) — no server, no account, nothing
+- Your whole library lives in the browser (IndexedDB). No server, no account, nothing
   sent anywhere.
-- Collecting runs through a **hub**: PTXERO's shared one by default (nothing to set up;
-  fair-use daily limits per person; anything you leave there is auto-deleted after 180 days
-  unused), or **your own** free Cloudflare Worker + Supabase hub with no limits — the
-  [hub guide](../hub/index.html) walks through it in about 15 minutes. Requests are signed
-  with your anonymous PTXERO ID (a key made in your browser), so nobody can act as you.
-  SOURCES → YOUR DATA switches hubs, backs up your topics/votes to the hub, exports or
-  erases everything. A bare SearchNet-only [Worker](worker/README.md) still works too
-  (SOURCES → Advanced).
+- Collecting runs through a **hub**. By default that's the shared PTXERO hub (daily limits
+  per person, data auto-deleted after 180 days unused). Or run **your own** free Cloudflare
+  Worker + Supabase hub with no limits, the [hub guide](../hub/index.html) takes about 15
+  minutes. Requests are signed with your anonymous PTXERO ID (a key made in your browser) so
+  nobody can act as you. SOURCES → YOUR DATA switches hubs, backs up your topics and votes to
+  the hub, exports or deletes everything. A bare SearchNet-only [Worker](worker/README.md)
+  still works too (SOURCES → Advanced).
 - The same self-learning topics, 👍/👎 training, soft/anti keywords, 👎-reasons and review
-  deck work here — the relevance engine is ported to run in the page.
+  deck work here. The relevance engine is ported to run in the page.
 - To go back to the PC server later, SETUP → **Use a computer instead**. Your browser
   library stays saved.
 
@@ -122,14 +121,14 @@ transcription, on-screen-text OCR, semantic meaning-matching, and sites that req
 login (X, Instagram). It plays videos straight from their source URL instead of proxying
 them.
 
-## The web — accounts and how they connect
+## The web: accounts and how they connect
 
 **WEB** turns the accounts you've collected into a map for finding related
 creators. For each account it summarises, from their **public posts only**:
 what they post about (topics, hashtags, distinctive words), their media mix,
 how often and when they post, and typical engagement. The spiderweb links
-accounts that share content — shared hashtags, shared vocabulary, or
-mentions — and the more they share, the stronger (and thicker) the link, so
+accounts that share content (shared hashtags, shared vocabulary, or
+mentions). The more they share, the stronger (and thicker) the link, so
 you can hop from one creator to related ones. Tap a node for the profile;
 tap a connected account to jump to theirs; **▦ THEIR POSTS** opens everything
 of theirs in your library.
@@ -141,7 +140,7 @@ deliberately limited:
   your device.
 - It **never guesses** who someone is or any sensitive trait (sexuality,
   politics, religion, health, identity). Any label on a profile is one **you**
-  typed, kept locally, and shown as your own note — it just helps shape your
+  typed, kept locally, and shown as your own note. It just helps shape your
   searches.
 - **No cross-platform de-anonymising.** Each account is profiled on its own;
   "same person" is only ever a link you add by hand.
@@ -150,7 +149,7 @@ deliberately limited:
 
 ## Start fresh (wipe)
 
-Erase the whole library — every collected video, topic, vote and download — and start over:
+Erase the whole library (every collected video, topic, vote and download) and start over:
 
 - In the app: **SETUP → Danger zone → Wipe everything** (optionally keep your ★ starred videos).
 - On the computer: `python reel-vault/server/reelvault.py --wipe` (asks you to type WIPE; add `--yes` to skip).

@@ -44,7 +44,7 @@ const SITE = {
       id:     'hub',
       title:  'PTXERO//HUB',
       sub:    'v2.0',
-      desc:   'Your data, your choice. One anonymous PTXERO ID across every app, backed by a key made in your browser. Use the shared hub (fair-use limits, auto-deleted when unused) or set up your own free Cloudflare Worker + Supabase hub in 15 minutes. Export or erase everything any time.',
+      desc:   'One anonymous PTXERO ID for every app here, backed by a key made in your browser. Use the shared hub, or set up your own (free, about 15 minutes). Export or delete your data whenever.',
       tags:   ['identity', 'privacy', 'self-host', 'guide'],
       url:    './hub/',
       status: 'live',
