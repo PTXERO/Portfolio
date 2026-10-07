@@ -523,7 +523,7 @@ class Vault:
             for it in items[:5]]}
 
     # ═════════ topics ═════════
-    TOPIC_DEFAULTS = {"visibility": "private", "breadth": 3, "media": "video", "refresh_hours": 0, "per_query": 15,
+    TOPIC_DEFAULTS = {"visibility": "open", "breadth": 3, "media": "video", "refresh_hours": 0, "per_query": 15,
                       "queries_per_run": 0, "auto_download": 0, "web": True, "soft": [], "creators": {},
                       "anti": [], "prefs": {}, "reasons_recent": []}
 
@@ -546,6 +546,13 @@ class Vault:
         return [self.topic(r["id"]) for r in
                 self.db.q("SELECT id FROM topics ORDER BY coalesce(last_run, created) DESC")]
 
+    @staticmethod
+    def visibility_for(st):
+        """Open by default; a topic about a named person is never open (private at most), whatever was asked."""
+        want = st.get("visibility") or "open"
+        person = bool((st.get("person") or {}) and (st.get("person") or {}).get("mode") != "account") or (st.get("plan") or {}).get("kind") == "person"
+        return "private" if person and want == "open" else want
+
     def create_topic(self, name, seeds=None, settings=None, sources=None):
         seeds = [s.strip() for s in (seeds or [name]) if s and s.strip()]
         if not seeds:
@@ -556,6 +563,7 @@ class Vault:
             p = PLAN.plan_for(seeds, st, self.list_sources())
             st["plan"] = p
             sources = p["source_ids"]
+        st["visibility"] = self.visibility_for(st)
         self.db.exec("INSERT INTO topics(id, name, seeds, sources, settings, created) VALUES (?,?,?,?,?,?)",
                      (tid, (name or seeds[0]).strip()[:80], json.dumps(seeds),
                       json.dumps(sources or []), json.dumps(st), now()))
@@ -584,8 +592,12 @@ class Vault:
         if "sources" in d and (t["settings"].get("plan") or {}).get("auto") and not (d.get("settings") or {}).get("plan"):
             p = dict(t["settings"]["plan"], auto=False, note="chosen by hand")
             d = dict(d, settings=dict(d.get("settings") or {}, plan=p))
-        if "settings" in d:
-            f["settings"] = json.dumps(dict(t["settings"], **(d["settings"] or {})))
+        if "settings" in d or "seeds" in d:
+            st = dict(t["settings"], **((d.get("settings") or {})))
+            if "seeds" in d and st.get("plan"):                         # new words may make it a person's name, or stop it being one
+                st["plan"] = dict(st["plan"], kind=PLAN.kind_of(json.loads(f["seeds"]), st)[0])
+            st["visibility"] = self.visibility_for(st)
+            f["settings"] = json.dumps(st)
         if f:
             self.db.exec(f"UPDATE topics SET {', '.join(k + '=?' for k in f)} WHERE id=?",
                          list(f.values()) + [tid])

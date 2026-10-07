@@ -405,12 +405,12 @@
       const arg = parts[1], sub = parts[2];
       if (!arg) {
         if (method === 'GET') { const out = []; for (const t of await allTopics()) out.push(await dto(t)); return { topics: out.sort((a, b) => (b.last_run || b.created) - (a.last_run || a.created)) }; }
-        if (method === 'POST') { const seeds = (body.seeds || [body.name]).map((s) => String(s).trim()).filter(Boolean); const t = { id: uid(), name: (body.name || seeds[0]).slice(0, 80), seeds, sources: body.sources || [], settings: Object.assign({}, DEF, body.settings || {}), queries: [], created: now(), last_run: null }; if (!(body.sources || []).length) { const p = planFor(seeds, t.settings, (await L.request('/api/sources')).sources); t.settings.plan = p; t.sources = p.source_ids; } await saveTopic(t); if (body.run !== false) { const j = L.newJob('topic', 'topic · ' + t.name); j.topic_id = t.id; L.runSafe(j, () => runTopic(t.id, j)); } return await dto(t); }
+        if (method === 'POST') { const seeds = (body.seeds || [body.name]).map((s) => String(s).trim()).filter(Boolean); const t = { id: uid(), name: (body.name || seeds[0]).slice(0, 80), seeds, sources: body.sources || [], settings: Object.assign({}, DEF, body.settings || {}), queries: [], created: now(), last_run: null }; if (!(body.sources || []).length) { const p = planFor(seeds, t.settings, (await L.request('/api/sources')).sources); t.settings.plan = p; t.sources = p.source_ids; } t.settings.visibility = visibilityFor(t); await saveTopic(t); if (body.run !== false) { const j = L.newJob('topic', 'topic · ' + t.name); j.topic_id = t.id; L.runSafe(j, () => runTopic(t.id, j)); } return await dto(t); }
       }
       const t = await getTopic(arg); if (!t) return { error: 'not found' };
       if (!sub) {
         if (method === 'GET') return await dto(t);
-        if (method === 'PATCH') { if (body.name != null) t.name = String(body.name).slice(0, 80); if (body.seeds) t.seeds = body.seeds.map((s) => s.trim()).filter(Boolean); if (body.sources) { t.sources = body.sources; if (t.settings.plan && t.settings.plan.auto && !(body.settings || {}).plan) t.settings.plan = Object.assign({}, t.settings.plan, { auto: false, note: 'chosen by hand' }); } if (body.settings) t.settings = Object.assign({}, t.settings, body.settings); await saveTopic(t); await rescore(t.id); return await dto(t); }
+        if (method === 'PATCH') { if (body.name != null) t.name = String(body.name).slice(0, 80); if (body.seeds) t.seeds = body.seeds.map((s) => s.trim()).filter(Boolean); if (body.sources) { t.sources = body.sources; if (t.settings.plan && t.settings.plan.auto && !(body.settings || {}).plan) t.settings.plan = Object.assign({}, t.settings.plan, { auto: false, note: 'chosen by hand' }); } if (body.settings) t.settings = Object.assign({}, t.settings, body.settings); if (body.seeds || body.settings) { if (body.seeds && t.settings.plan) t.settings.plan = Object.assign({}, t.settings.plan, { kind: kindOf(t.seeds, t.settings)[0] }); t.settings.visibility = visibilityFor(t); } await saveTopic(t); await rescore(t.id); return await dto(t); }
         if (method === 'DELETE') { for (const v of await topicItems(arg)) await idb.del('votes', v.k); await idb.del('topics', arg); return { ok: true }; }
       }
       if (sub === 'run' && method === 'POST') { const j = L.newJob('topic', 'topic · ' + t.name); j.topic_id = t.id; L.runSafe(j, () => runTopic(t.id, j)); return L.jobDict(j); }
@@ -467,6 +467,8 @@
   const NAME_RE = /^(?:(?:dr|mr|mrs|ms|prof|rev|sgt|lt|capt)\.?\s+)?[A-Z](?:[a-z'’.-]|['’][A-Z])+(?:\s+[A-Z](?:[a-z'’.-]|['’][A-Z])+){1,2}(?:\s+(?:jr|sr|ii|iii|iv)\.?)?$/;
   const words_ = (s) => String(s || '').toLowerCase().split(/[^a-z0-9#@'’.-]+/).filter(Boolean).map((w) => w.replace(/^[.'’]+|[.'’]+$/g, ''));
   function looksLikeName(seed) { const s = String(seed || '').trim().replace(/^"|"$/g, ''); if (!NAME_RE.test(s)) return false; return !words_(s).some((w) => EVENT_WORDS.has(w) || PLACE_WORDS.has(w) || ORG_WORDS.has(w) || STATES.has(w) || TECH_WORDS.has(w)); }
+  // open by default; a topic about a named person is never open (private at most), whatever was asked
+  function visibilityFor(t) { const st = t.settings || {}; const want = st.visibility || 'open'; const person = (st.person && st.person.mode !== 'account') || ((st.plan || {}).kind === 'person'); return person && want === 'open' ? 'private' : want; }
   function kindOf(seeds, settings) {
     settings = settings || {}; seeds = (seeds || []).filter(Boolean);
     if (settings.person) return [settings.person.mode === 'account' ? 'handle' : 'person', 'you chose PERSON'];

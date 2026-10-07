@@ -1466,3 +1466,17 @@ class Islands(Base):
         g2 = word_graph(self.v, topic=t["id"], kinds="account,hashtag,entity", max_nodes=80, islands=True)
         self.assertTrue(any(n["label"].startswith("chip") for n in g2["nodes"]))     # asked for, shown
         self.assertEqual(g2["islands_hidden"], 0)
+
+
+class Visibility(Base):
+    def test_open_by_default_never_for_a_named_person(self):
+        t = self.v.create_topic("Furnace Fest", ["furnace fest"])
+        self.assertEqual(t["settings"]["visibility"], "open")
+        j = self.v.create_topic("Jane Doe", ["Jane Doe"], settings={"visibility": "open"})
+        self.assertEqual(j["settings"]["visibility"], "private")                       # a name is never open
+        d = self.v.create_topic("Quiet", ["quiet"], settings={"visibility": "device"})
+        self.assertEqual(d["settings"]["visibility"], "device")
+        t2 = self.v.update_topic(t["id"], {"seeds": ["John Smith"]})                     # edited into a name: closes
+        self.assertEqual((t2["settings"]["plan"]["kind"], t2["settings"]["visibility"]), ("person", "private"))
+        t3 = self.v.update_topic(t2["id"], {"seeds": ["furnace fest"], "settings": {"visibility": "open"}})
+        self.assertEqual(t3["settings"]["visibility"], "open")

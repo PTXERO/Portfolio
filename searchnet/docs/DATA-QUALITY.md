@@ -224,4 +224,4 @@ festivals, shows, labels and outlets are never a person's name; archive scans an
 
 ## Update: where a topic may go
 
-Every topic is private: yours, backed up to your hub under your id, never shared. Per topic (⋯ settings) you can go further: "this device only" keeps it out of backups and off the hub entirely, with a lock on its card. SOURCES has a default for new topics. Sharing, when it comes, is opt-in per topic, and a topic about a named person can never be shared.
+Three settings per topic (⋯): open (the default: eligible for pooling with others once sharing exists, backed up to your hub), private (never shared), and this device only (left out of backups, never leaves the browser, lock on the card). SOURCES sets what new topics start as. A topic about a named person is never open; the planner's kind and the PERSON choice both force it to private.
