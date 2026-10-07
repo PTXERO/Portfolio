@@ -33,5 +33,12 @@ await p.reload({ waitUntil: 'domcontentloaded' }); await p.waitForTimeout(4500);
 ok(log.filter((l) => l === 'PUT /store/searchnet/backup').length > puts0 && (stored.topics || []).some((t) => t.name === 'Hurricane Isaias'), 'with the last backup over a week old, the library is backed up on its own');
 await p.evaluate(() => { location.hash = '#sources'; }); await p.waitForTimeout(1200);
 ok(/last backup .* automatic weekly/.test(await p.textContent('#bkMsg').catch(() => '')), 'SOURCES shows when the last backup was');
+// a topic marked "this device only" is left out of the backup
+const api = (path, opts) => p.evaluate(([path, opts]) => window.SearchNetLocal.request(path, opts), [path, opts]);
+const t2 = await api('/api/topics', { method: 'POST', body: { name: 'Private thing', seeds: ['private thing'], settings: { visibility: 'device' }, run: false } });
+const d = await p.evaluate(() => window.SearchNetLocal.backup());
+ok(!(d.topics || []).some((t) => t.id === t2.id) && d.left_out === 1 && (d.topics || []).some((t) => t.name === 'Hurricane Isaias'), 'a "this device only" topic stays out of the backup (' + d.left_out + ' left out)');
+await p.evaluate(() => { location.hash = '#topics'; }); await p.waitForTimeout(800);
+ok(/this device only/.test(await p.textContent('#topicList').catch(() => '')), 'the topic card shows the lock');
 ok(errs.length === 0, 'no page errors' + (errs.length ? ' → ' + errs.slice(0, 3).join(' | ') : ''));
 await browser.close(); srv.kill(); process.exit(bad ? 1 : 0);

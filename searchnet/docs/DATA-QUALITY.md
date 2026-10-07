@@ -221,3 +221,7 @@ festivals, shows, labels and outlets are never a person's name; archive scans an
 - **A hub that is behind.** When the hub answers for an older Worker than the app expects, a banner says which version it runs, what is missing (pool, cache, bylines) and who has to update it.
 - **Replay.** A signed request's nonce is remembered at the edge for five minutes across isolates, so a captured request cannot be sent again.
 - **CI.** Every push runs the server suite, the hub harness, the Worker sandbox and the browser checks, and fails if the committed hub Worker does not match its sources.
+
+## Update: where a topic may go
+
+Every topic is private: yours, backed up to your hub under your id, never shared. Per topic (⋯ settings) you can go further: "this device only" keeps it out of backups and off the hub entirely, with a lock on its card. SOURCES has a default for new topics. Sharing, when it comes, is opt-in per topic, and a topic about a named person can never be shared.

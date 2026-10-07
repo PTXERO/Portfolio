@@ -523,7 +523,7 @@ class Vault:
             for it in items[:5]]}
 
     # ═════════ topics ═════════
-    TOPIC_DEFAULTS = {"breadth": 3, "media": "video", "refresh_hours": 0, "per_query": 15,
+    TOPIC_DEFAULTS = {"visibility": "private", "breadth": 3, "media": "video", "refresh_hours": 0, "per_query": 15,
                       "queries_per_run": 0, "auto_download": 0, "web": True, "soft": [], "creators": {},
                       "anti": [], "prefs": {}, "reasons_recent": []}
 

@@ -1134,7 +1134,7 @@ async function renderTopics(){
     const c = t.counts;
     return `<div class="tcard" data-tid="${t.id}" role="link" tabindex="0">
       <div class="name">${esc(t.name)}</div>
-      <div class="seeds">${t.seeds.map(esc).join(' · ')} · ${BREADTH[t.settings.breadth] || ''}${t.settings.refresh_hours > 0 ? ' · ⟳ ' + t.settings.refresh_hours + 'h' : ''}</div>
+      <div class="seeds">${t.settings.visibility === 'device' ? '🔒 this device only · ' : ''}${t.seeds.map(esc).join(' · ')} · ${BREADTH[t.settings.breadth] || ''}${t.settings.refresh_hours > 0 ? ' · ⟳ ' + t.settings.refresh_hours + 'h' : ''}</div>
       ${sigBadges(t.settings.signal)}
       <div class="nums"><span class="todo"><b>${fmtN(c.unrated)}</b> to review</span><span><b>${fmtN(c.pos)}</b> 👍</span><span><b>${fmtN(c.neg)}</b> 👎</span><span>${t.running ? '<span class="spinner"></span> searching' : t.last_run ? 'updated ' + ago(t.last_run) + ' ago' : 'not run yet'}</span></div>
       <button class="btn sm run" data-run="${t.id}" ${t.running ? 'disabled' : ''} aria-label="Find more">▶</button>
@@ -1215,7 +1215,7 @@ $('#newTopicForm').onsubmit = async e => {
   const seeds = [...(person ? personSeeds(person) : [name]), ...$('#ntSeeds').value.split('\n').map(s => s.trim()).filter(Boolean)];
   try{
     const soft = $('#ntSoft').value.split(/[,\n]/).map(x => x.trim()).filter(Boolean);
-    const settings = { breadth: person ? 1 : +$('#ntBreadth').value, media: person ? 'everything' : $('#ntMedia').value, refresh_hours: +$('#ntRefresh').value, soft, window: $('#ntWindow').value };
+    const settings = { visibility: store.get('topicsDeviceOnly', false) ? 'device' : 'private', breadth: person ? 1 : +$('#ntBreadth').value, media: person ? 'everything' : $('#ntMedia').value, refresh_hours: +$('#ntRefresh').value, soft, window: $('#ntWindow').value };
     if (person) settings.person = person;
     const body = { name, seeds, settings };
     if (person && person.mode === 'account'){           // only the sources of that one network, nothing cross-site
@@ -2173,6 +2173,10 @@ async function topicSettings(){
     </div>
     <div class="field"><span>Search on (nothing ticked = all enabled)</span>
       ${srcs.map(x => `<label class="facet"><input type="checkbox" data-src="${x.id}" ${T.sources.includes(x.id) ? 'checked' : ''}> <span class="v">${esc(x.name)}</span>${x.enabled ? '' : '<span class="n">off</span>'}</label>`).join('')}</div>
+    <div class="field"><span>Where this topic may go</span>
+      <label class="facet"><input type="radio" name="tsVis" value="private" ${s.visibility !== 'device' ? 'checked' : ''}> <span class="v">Private · mine, backed up to my hub, never shared</span></label>
+      <label class="facet"><input type="radio" name="tsVis" value="device" ${s.visibility === 'device' ? 'checked' : ''}> <span class="v">This device only · left out of backups, never leaves this browser</span></label>
+      <p class="note" style="margin-top:4px">Nothing is ever shared unless you choose it per topic, and sharing is not built yet. Topics about a named person can never be shared.</p></div>
     <div class="row" style="margin-top:14px"><button class="btn danger" id="tsDel">DELETE</button><div class="grow"></div><button class="btn pri" id="tsSave">SAVE</button></div>`);
   $('#tsMedia').value = s.media; $('#tsRef').value = String(s.refresh_hours || 0); $('#tsWindow').value = s.window || 'auto';
   $('#tsB').oninput = e => $('#tsBL').textContent = BREADTH[e.target.value];
@@ -2180,7 +2184,7 @@ async function topicSettings(){
     try{
       T = await api('/api/topics/' + T.id, { method: 'PATCH', body: { name: $('#tsName').value, seeds: $('#tsSeeds').value.split('\n'),
         sources: $$('[data-src]').filter(c => c.checked).map(c => c.dataset.src),
-        settings: { breadth: +$('#tsB').value, media: $('#tsMedia').value, window: $('#tsWindow').value, refresh_hours: +$('#tsRef').value, per_query: +$('#tsPer').value || 15, auto_download: +$('#tsDl').value || 0, soft: $('#tsSoft').value.split(/[,\n]/).map(x => x.trim()).filter(Boolean) } } });
+        settings: { visibility: ($('input[name=tsVis]:checked') || {}).value || 'private', breadth: +$('#tsB').value, media: $('#tsMedia').value, window: $('#tsWindow').value, refresh_hours: +$('#tsRef').value, per_query: +$('#tsPer').value || 15, auto_download: +$('#tsDl').value || 0, soft: $('#tsSoft').value.split(/[,\n]/).map(x => x.trim()).filter(Boolean) } } });
       closeSheet(); toast('Saved'); renderTopic();
     }catch(e){ toast(e.message); }
   };
@@ -3109,7 +3113,8 @@ function renderWorkerBox(){
     </details>
     <div style="margin-top:12px"><b>Backup on the hub</b>
       <p class="note" style="margin:6px 0 8px">Saves your topics, votes, sources and identities (not the media) under your PTXERO ID. Another device, or this one after clearing the browser, can pick up where you left off. Optional. Gone when you delete your data.</p>
-      <div class="row wrap"><button class="btn sm" id="bkSave">⬆ BACK UP NOW</button><button class="btn sm" id="bkLoad">⬇ RESTORE</button><span class="note" id="bkMsg"></span></div></div></div>`;
+      <div class="row wrap"><button class="btn sm" id="bkSave">⬆ BACK UP NOW</button><button class="btn sm" id="bkLoad">⬇ RESTORE</button><span class="note" id="bkMsg"></span></div>
+      <label class="facet" style="margin-top:8px"><input type="checkbox" id="bkDevOnly" ${store.get('topicsDeviceOnly', false) ? 'checked' : ''}> <span class="v">New topics stay on this device only (left out of backups). You can change it per topic in its ⋯ settings.</span></label></div></div>`;
   if (px) PX.panel($('#pxPanel'), { app: 'searchnet', local: false, guide: '../hub/', onChange: () => { toast('Hub changed'); refreshStatusChip && refreshStatusChip(); } });
   else $('#pxPanel').innerHTML = '<p class="note">(the PTXERO ID script did not load, so only the Worker option below works here)</p>';
   $('#wkSave').onclick = async () => {
@@ -3123,6 +3128,7 @@ function renderWorkerBox(){
     }catch(e){ toast('✕ ' + e.message, 6000); }
   };
   { const m0 = $('#bkMsg'); if (m0 && !m0.textContent) m0.textContent = backupLine(); }
+  { const c = $('#bkDevOnly'); if (c) c.onchange = () => store.set('topicsDeviceOnly', c.checked); }
   $('#bkSave').onclick = async () => {
     if (!px) return toast('PTXERO ID not loaded');
     const m = $('#bkMsg'); m.textContent = 'backing up…';

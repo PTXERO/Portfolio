@@ -191,6 +191,9 @@
   async function backupData() {
     const out = { _type: 'searchnet-backup', version: 1, made: Math.floor(Date.now() / 1000) };
     for (const st of BACKUP_STORES) out[st] = await idb.all(st);
+    // a topic marked "this device only" never leaves this browser: not it, not its ratings
+    const keepOut = new Set(out.topics.filter((t) => t && t.settings && t.settings.visibility === 'device').map((t) => t.id));
+    out.topics = out.topics.filter((t) => !keepOut.has(t.id)); out.votes = out.votes.filter((v) => !keepOut.has(v.topic_id)); out.left_out = keepOut.size;
     out.kv = out.kv.map((r) => (r && r.k === 'settings' && r.v) ? { k: r.k, v: Object.assign({}, r.v, { worker_key: '' }) } : r);  // never back up a Worker secret
     return out;
   }
