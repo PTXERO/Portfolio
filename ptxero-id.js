@@ -163,6 +163,7 @@
 .px-panel .px-btn{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:11px;letter-spacing:.08em;padding:7px 11px;border:1px solid var(--b2,#2c2c36);border-radius:2px;background:transparent;color:var(--txt,#e2e2ea);cursor:pointer}
 .px-panel .px-btn:hover{border-color:var(--dim,#7a7a92)}.px-panel .px-btn.danger{color:var(--bad,#ff4d6d);border-color:rgba(255,77,109,.4)}
 .px-panel .px-opt{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--border,#1f1f29);border-radius:6px;cursor:pointer;flex:1 1 220px}
+.px-panel .px-opt input{flex:0 0 auto;margin:3px 0 0;width:auto;min-width:0}.px-panel .px-opt>span{flex:1 1 auto;min-width:0}
 .px-panel .px-opt.on{border-color:var(--acc,#f54242)}.px-panel .px-opt b{display:block;font-weight:500}.px-panel .px-opt small{color:var(--dim,#7a7a92);display:block;margin-top:2px}
 .px-panel input[type=text]{font-family:var(--fmono,'Share Tech Mono',monospace);font-size:14px;color:var(--txt,#e2e2ea);background:var(--panel,#121218);border:1px solid var(--b2,#2c2c36);border-radius:8px;padding:8px 10px;width:100%;box-sizing:border-box;margin:4px 0}
 .px-panel .px-bar{height:6px;background:var(--panel2,#17171f);border-radius:3px;overflow:hidden;margin:4px 0}.px-panel .px-bar i{display:block;height:100%;background:var(--acc,#f54242)}

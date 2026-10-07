@@ -9,14 +9,14 @@
 <style>
 :root{--bg:#07070a;--surface:#0d0d12;--panel:#121218;--panel2:#17171f;--border:#1f1f29;--b2:#2c2c36;--acc:#f54242;--acc-rgb:245,66,66;--acc2:#42d4f5;--acc4:#f5a542;--good:#44ff88;--bad:#ff4d6d;--txt:#e2e2ea;--dim:#7a7a92;--mut:#3a3a48;--fmono:'Share Tech Mono',ui-monospace,monospace;--fdisp:'Bebas Neue',Impact,sans-serif;--fbody:'DM Mono',ui-monospace,monospace}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--fbody);font-size:14px;line-height:1.5}
+html,body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--fbody);font-size:14px;line-height:1.5;max-width:100vw;overflow-x:hidden}
 a{color:var(--acc)}
 .top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:14px;padding:12px 16px;background:rgba(7,7,10,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
 .brand{font-family:var(--fdisp);font-size:24px;letter-spacing:.1em;color:var(--acc);text-decoration:none;white-space:nowrap}
 .brand small{font-family:var(--fmono);font-size:10px;color:var(--dim);letter-spacing:.15em;margin-left:8px}
 .hbtn{display:inline-flex;align-items:center;padding:5px 11px;border:1px solid var(--b2);border-radius:2px;color:var(--dim);font-family:var(--fmono);font-size:10px;letter-spacing:.07em;text-decoration:none;white-space:nowrap}
 .hbtn:hover{color:var(--txt);border-color:var(--dim)}
-main{max-width:860px;margin:0 auto;padding:22px 16px 80px}
+main{max-width:860px;width:100%;margin:0 auto;padding:16px 16px 80px}
 h1{font-family:var(--fdisp);font-size:40px;letter-spacing:.06em;margin:6px 0 4px;font-weight:400}
 h2{font-family:var(--fdisp);font-size:24px;letter-spacing:.08em;margin:34px 0 10px;font-weight:400;color:var(--txt)}
 .lead{color:var(--dim);margin:0 0 18px}
@@ -26,7 +26,7 @@ h2{font-family:var(--fdisp);font-size:24px;letter-spacing:.08em;margin:34px 0 10
 .step h3{margin:4px 0 6px;font-size:15px;font-weight:500}
 .step p,.card p{margin:6px 0;color:var(--txt)}
 .note{color:var(--dim);font-size:13px}
-kbd,code{font-family:var(--fmono);font-size:12.5px;background:var(--panel2);border:1px solid var(--b2);border-radius:4px;padding:1px 6px;color:var(--txt)}
+kbd,code{font-family:var(--fmono);font-size:12.5px;background:var(--panel2);border:1px solid var(--b2);border-radius:4px;padding:1px 6px;color:var(--txt);overflow-wrap:anywhere}
 kbd{color:var(--acc2)}
 .ui{color:var(--acc4)}
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border:1px solid var(--acc);border-radius:2px;background:transparent;color:var(--acc);font-family:var(--fmono);font-size:12px;letter-spacing:.1em;cursor:pointer;text-decoration:none}
@@ -35,10 +35,12 @@ kbd{color:var(--acc2)}
 .btn:disabled{opacity:.5;cursor:default}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin:14px 0}
 .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-input{font-family:var(--fmono);font-size:16px;color:var(--txt);background:var(--panel);border:1px solid var(--b2);border-radius:8px;outline:none;padding:10px 12px;flex:1;min-width:220px}
-input:focus{border-color:var(--acc)}
+input#url{font-family:var(--fmono);font-size:16px;color:var(--txt);background:var(--panel);border:1px solid var(--b2);border-radius:8px;outline:none;padding:10px 12px;flex:1;min-width:0;width:100%}
+input#url:focus{border-color:var(--acc)}
 pre{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;font-family:var(--fmono);font-size:12.5px;color:var(--txt);margin:8px 0}
 table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0}
+.tw{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+td:first-child code{white-space:nowrap;overflow-wrap:normal}
 td,th{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:top}
 th{color:var(--dim);font-weight:400;font-family:var(--fmono);font-size:11px;letter-spacing:.1em}
 .ok{color:var(--good)}.bad{color:var(--bad)}.warn{color:var(--acc4)}
@@ -48,89 +50,83 @@ th{color:var(--dim);font-weight:400;font-family:var(--fmono);font-size:11px;lett
 .opt{border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--surface)}
 .opt b{display:block;font-weight:500;margin-bottom:4px}.opt .note{margin:0}
 details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
-@media (max-width:600px){.brand small{display:none}h1{font-size:32px}.step{grid-template-columns:34px 1fr;gap:10px}.n{font-size:28px}}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:4px 0 10px;margin:0 -16px;padding-left:16px;padding-right:16px;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto;padding:8px 14px;border:1px solid var(--b2);border-radius:2px;background:transparent;color:var(--dim);font-family:var(--fmono);font-size:11px;letter-spacing:.1em;cursor:pointer;white-space:nowrap}
+.tab.on{color:var(--acc);border-color:var(--acc);box-shadow:0 0 12px rgba(var(--acc-rgb),.25)}
+.pane{display:none}.pane.on{display:block}
+.steps details{margin:0;border-top:1px solid var(--border)}.steps details:last-child{border-bottom:1px solid var(--border)}
+.steps summary{list-style:none;display:grid;grid-template-columns:40px minmax(0,1fr) 18px;gap:12px;align-items:center;padding:12px 0;color:var(--txt);font-weight:500}
+.steps summary::-webkit-details-marker{display:none}.steps summary::after{content:'▸';color:var(--dim);justify-self:end}.steps details[open] summary::after{content:'▾'}
+.steps summary .n{font-size:26px}.steps .body{padding:0 0 14px 52px}
+.more{margin:8px 0 0}.more summary{font-family:var(--fmono);font-size:11px;letter-spacing:.1em}
+.choice{display:grid;grid-template-columns:1fr;gap:8px;margin:10px 0}
+.choice .opt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.choice .opt .note{grid-column:1/-1}
+@media (max-width:600px){.steps .body{padding-left:0}.steps summary{grid-template-columns:30px minmax(0,1fr) 18px}.steps summary .n{font-size:22px}h2{margin-top:22px}}
+@media (max-width:600px){.brand small{display:none}h1{font-size:30px}.hbtn.code{display:none}.top{gap:8px;padding:10px 12px}}
 </style>
-<script src="../ptxero-id.js?v=1"></script>
+<script src="../ptxero-id.js?v=2"></script>
 </head>
 <body>
 <div class="top">
   <a class="hbtn" href="../">← HOME</a>
   <a class="brand" href="../">PTXERO HUB<small>WHERE YOUR DATA LIVES</small></a>
   <span style="flex:1"></span>
-  <a class="hbtn" href="hub-worker.js" target="_blank" rel="noreferrer">WORKER CODE</a>
-  <a class="hbtn" href="hub-setup.sql.txt" target="_blank" rel="noreferrer">DATABASE SQL</a>
+  <a class="hbtn code" href="hub-worker.js" target="_blank" rel="noreferrer">WORKER CODE</a>
+  <a class="hbtn code" href="hub-setup.sql.txt" target="_blank" rel="noreferrer">DATABASE SQL</a>
 </div>
 <main>
   <h1>WHERE YOUR DATA LIVES <span class="tag" id="latest">HUB v2.0</span></h1>
-  <p class="lead">Every app on this site (SEARCH//NET, SOCIAL, ASCII//RENDER, RF) talks to one small server I call a <b>hub</b>. It does the fetching a browser can't do on its own, and it keeps what you choose to keep: Social posts, shared renders, SearchNet backups. You pick which hub, per device, and can change it whenever. No email, password or name needed.</p>
-
-  <h2>THE THREE CHOICES</h2>
-  <div class="opts">
-    <div class="opt"><b>Shared PTXERO hub <span class="tag">default</span></b><p class="note">Works out of the box. Daily limits per person (table below). Anything you leave there is <b>deleted after 180 days without use</b>. Keeping data on it is optional. You can export or delete everything yourself at any time.</p></div>
-    <div class="opt"><b>My own hub</b><p class="note">A free Cloudflare Worker plus a free Supabase project that <b>you</b> own. No limits, you decide how long data is kept. Set it up once (steps below, about 15 minutes), then point the apps at it with one setting.</p></div>
-    <div class="opt"><b>This device only</b><p class="note">Offered where an app can work with no hub at all. Nothing leaves the device, nothing is shared or backed up.</p></div>
-  </div>
-  <p class="note">The switch is in each app: SEARCH//NET → <span class="ui">SOURCES → YOUR DATA</span> · SOCIAL → <span class="ui">⚿ MY KEY → YOUR DATA &amp; HUB</span> · the RF gallery's <span class="ui">@ID</span> chip · ASCII//RENDER's <span class="ui">@handle</span> bubble (it opens Social). One choice covers all of them on that device, and your key file carries it to other devices.</p>
-
-  <h2>YOUR PTXERO ID</h2>
-  <div class="card">
-    <p>You are <b id="meHandle">@…</b> on this device. A short anonymous handle: a 2-letter prefix you can change and a 4-character suffix. Behind it is a key made <b>in this browser</b> the first time one of the apps loaded. Every request that stores something is signed with that key, and the hub ties the key to your handle the first time it sees it. After that <b>only a device with the key can act as you</b>. There's nothing to guess and no password on the server to leak. Limits are counted per id, so nobody can burn through yours.</p>
-    <p><b>The key file is your account.</b> Download it once (⬇ KEY FILE in any app's YOUR DATA panel, or MY KEY in Social) and import it on another device or after clearing your browser. Lose it and the handle can't be recovered. You'd just start over as a new one.</p>
-    <p class="note">Before keys, Social proved who you were with a per-device secret. Those profiles move over the first time they post from the same device: the old secret is sent once, the key gets tied to the handle, and the secret stops mattering.</p>
+  <p class="lead">Every PTXERO app talks to one small server, the <b>hub</b>. It fetches what a browser can't and keeps what you choose to keep. You pick which hub, per device. No email, password or name.</p>
+  <div class="tabs" role="tablist">
+    <button class="tab on" data-tab="you">YOU</button>
+    <button class="tab" data-tab="setup">SET UP YOUR OWN</button>
+    <button class="tab" data-tab="limits">LIMITS</button>
+    <button class="tab" data-tab="keep">KEEP · MOVE · ERASE</button>
+    <button class="tab" data-tab="api">API</button>
   </div>
 
-  <h2>WHAT THE SHARED HUB ALLOWS</h2>
-  <table>
-    <tr><th>What</th><th>Per day, per identity</th><th>Anonymous (no id)</th></tr>
-    <tr><td>Fetches (SearchNet searches, profiles, follows, media resolving)</td><td>a pool of 20,000 a day split among whoever is active, never under 400 or over 6,000 each</td><td>60 per address</td></tr>
-    <tr><td>Writes (posts, likes, follows, comments, shares, backups)</td><td>a pool of 10,000 split the same way, 300 to 3,000 each</td><td>none</td></tr>
-    <tr><td>Stored backups (per-person store)</td><td>25 MB total, 512 KB per item</td><td>n/a</td></tr>
-    <tr><td>Kept for</td><td>180 days after your last visit, then everything is erased</td><td>n/a</td></tr>
-  </table>
-  <p class="note">When you hit a limit the app waits if it's a short one, or tells you the daily cap is hit and when it resets (midnight UTC). The hub's owner has no limits and is never auto-deleted. Anyone else can ask to be pinned.</p>
-  <div class="card">
-    <div class="row"><b>Your usage right now</b><span class="note" id="meStatus">checking the hub you're set to use…</span></div>
-    <div id="mePanel" style="margin-top:12px"></div>
-  </div>
+  <section class="pane on" id="pane-you">
+    <div class="card">
+      <div class="row"><b>You are <span id="meHandle">@…</span></b><span class="note" id="meStatus">checking the hub you're set to use…</span></div>
+      <div id="mePanel" style="margin-top:12px"></div>
+      <details class="more"><summary>▸ WHAT THE ID IS</summary>
+        <p>A short anonymous handle: a 2-letter prefix you can change and a 4-character suffix. Behind it is a key made <b>in this browser</b> the first time one of the apps loaded. Every request that stores something is signed with that key, and the hub ties the key to your handle the first time it sees it. After that <b>only a device with the key can act as you</b>. Nothing to guess, no password on the server to leak. Limits are counted per id.</p>
+        <p><b>The key file is your account.</b> Download it once (⬇ KEY FILE) and import it on another device or after clearing your browser. Lose it and the handle can't be recovered. You'd start over as a new one.</p>
+        <p class="note">Before keys, Social proved who you were with a per-device secret. Those profiles move over the first time they post from the same device.</p>
+      </details>
+    </div>
+    <details class="more"><summary>▸ WHERE THE SWITCH IS</summary><p class="note">SEARCH//NET → <span class="ui">SOURCES → YOUR DATA</span> · SOCIAL → <span class="ui">⚿ MY KEY → YOUR DATA &amp; HUB</span> · the RF gallery's <span class="ui">@ID</span> chip · ASCII//RENDER's <span class="ui">@handle</span> bubble. One choice covers every app on that device, and your key file carries it to other devices.</p></details>
+  </section>
 
-  <h2>SET UP YOUR OWN HUB</h2>
-  <p class="lead">Two free accounts, one paste each. No command line. About 15 minutes the first time.</p>
-
-  <div class="step"><div class="n">1</div><div>
-    <h3>Create a database at Supabase</h3>
-    <p>Go to <a href="https://supabase.com" target="_blank" rel="noreferrer">supabase.com</a> → <span class="ui">Start your project</span> (sign in with GitHub or e-mail) → <span class="ui">New project</span>. Any name and region; set a database password and keep it somewhere safe (you won't need it again for this).</p>
+  <section class="pane" id="pane-setup">
+    <p class="lead">Two free accounts, one paste each. No command line. About 15 minutes the first time. Open a step, do it, move on.</p>
+    <div class="steps">
+  <details open><summary><span class="n">1</span><span>Create a database at Supabase</span></summary><div class="body">
+<p>Go to <a href="https://supabase.com" target="_blank" rel="noreferrer">supabase.com</a> → <span class="ui">Start your project</span> (sign in with GitHub or e-mail) → <span class="ui">New project</span>. Any name and region; set a database password and keep it somewhere safe (you won't need it again for this).</p>
     <p class="note">The free tier is plenty. Supabase pauses free projects after a week with no traffic. The hub's daily housekeeping keeps it awake.</p>
-  </div></div>
-
-  <div class="step"><div class="n">2</div><div>
-    <h3>Paste the database setup</h3>
-    <p>In your project: left sidebar <span class="ui">SQL Editor</span> → <span class="ui">New query</span> → paste the whole file → <span class="ui">Run</span>. It creates every table the apps use, read-only access for pages, and the hub's own tables. It is safe to run again later.</p>
+  </div></details>
+  <details><summary><span class="n">2</span><span>Paste the database setup</span></summary><div class="body">
+<p>In your project: left sidebar <span class="ui">SQL Editor</span> → <span class="ui">New query</span> → paste the whole file → <span class="ui">Run</span>. It creates every table the apps use, read-only access for pages, and the hub's own tables. It is safe to run again later.</p>
     <div class="row"><button class="btn pri" id="copySql">⧉ COPY THE SQL</button><a class="btn sm" href="hub-setup.sql.txt" target="_blank" rel="noreferrer">OPEN RAW</a><span class="note" id="copySqlMsg"></span></div>
-  </div></div>
-
-  <div class="step"><div class="n">3</div><div>
-    <h3>Copy three values from Supabase</h3>
-    <p><span class="ui">Project Settings</span> (gear icon) → <span class="ui">API</span>:</p>
-    <table>
+  </div></details>
+  <details><summary><span class="n">3</span><span>Copy three values from Supabase</span></summary><div class="body">
+<p><span class="ui">Project Settings</span> (gear icon) → <span class="ui">API</span>:</p>
+    <div class="tw"><table>
       <tr><th>Value</th><th>Looks like</th><th>Where it goes</th></tr>
       <tr><td>Project URL</td><td><code>https://abcd1234.supabase.co</code></td><td>Worker variable <code>SUPABASE_URL</code>, and the apps' "Supabase URL" box</td></tr>
       <tr><td>Publishable / anon key</td><td><code>sb_publishable_…</code> or a long <code>eyJ…</code></td><td>The apps' "publishable key" box (safe in a browser, it can only read)</td></tr>
       <tr><td>Secret / service_role key</td><td><code>sb_secret_…</code> or a long <code>eyJ…</code></td><td>Worker <b>secret</b> <code>SERVICE_KEY</code>. <b>Only</b> there, never in a page</td></tr>
-    </table>
-  </div></div>
-
-  <div class="step"><div class="n">4</div><div>
-    <h3>Create the Worker at Cloudflare</h3>
-    <p><a href="https://dash.cloudflare.com/sign-up/workers-and-pages" target="_blank" rel="noreferrer">dash.cloudflare.com</a> → sign up (free; it asks you to pick a <code>*.workers.dev</code> subdomain the first time) → <span class="ui">Workers &amp; Pages</span> → <span class="ui">Create</span> → <span class="ui">Start with Hello World</span> → name it (<code>hub</code> is fine) → <span class="ui">Deploy</span>.</p>
+    </table></div>
+  </div></details>
+  <details><summary><span class="n">4</span><span>Create the Worker at Cloudflare</span></summary><div class="body">
+<p><a href="https://dash.cloudflare.com/sign-up/workers-and-pages" target="_blank" rel="noreferrer">dash.cloudflare.com</a> → sign up (free; it asks you to pick a <code>*.workers.dev</code> subdomain the first time) → <span class="ui">Workers &amp; Pages</span> → <span class="ui">Create</span> → <span class="ui">Start with Hello World</span> → name it (<code>hub</code> is fine) → <span class="ui">Deploy</span>.</p>
     <p>Then <span class="ui">Edit code</span>, select everything in the editor (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>A</kbd>), delete it, paste the hub, and press <span class="ui">Deploy</span>.</p>
     <div class="row"><button class="btn pri" id="copyWorker">⧉ COPY THE WORKER</button><a class="btn sm" href="hub-worker.js" target="_blank" rel="noreferrer">OPEN RAW</a><span class="note" id="copyWorkerMsg"></span></div>
     <p class="note">The Worker file contains no secrets. Your address is shown on the Worker's page: <code>https://hub.&lt;your-subdomain&gt;.workers.dev</code>.</p>
-  </div></div>
-
-  <div class="step"><div class="n">5</div><div>
-    <h3>Give it its settings</h3>
-    <p>On the Worker's page: <span class="ui">Settings</span> → <span class="ui">Variables and Secrets</span> → <span class="ui">Add</span>, one at a time, then <span class="ui">Deploy</span>:</p>
-    <table>
+  </div></details>
+  <details><summary><span class="n">5</span><span>Give it its settings</span></summary><div class="body">
+<p>On the Worker's page: <span class="ui">Settings</span> → <span class="ui">Variables and Secrets</span> → <span class="ui">Add</span>, one at a time, then <span class="ui">Deploy</span>:</p>
+    <div class="tw"><table>
       <tr><th>Name</th><th>Type</th><th>Value</th></tr>
       <tr><td><code>SERVICE_KEY</code></td><td><b>Secret</b></td><td>the Supabase secret / service_role key from step 3</td></tr>
       <tr><td><code>SUPABASE_URL</code></td><td>Text</td><td>your Project URL, e.g. <code>https://abcd1234.supabase.co</code></td></tr>
@@ -139,39 +135,48 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
       <tr><td><code>LIMITS</code></td><td>Text, optional</td><td>JSON to change the limits for guests, e.g. <code>{"pool":50000,"fetch":1000,"max_fetch":10000,"writes":500,"store_bytes":104857600,"anon_fetch":100}</code>. <code>pool</code> is shared by the day's active ids, <code>fetch</code> is the floor each, <code>max_fetch</code> the ceiling.</td></tr>
       <tr><td><code>RETENTION_DAYS</code></td><td>Text, optional</td><td>how long an unused identity's data is kept (default <code>180</code>, minimum 7)</td></tr>
       <tr><td><code>BUCKET</code></td><td>Text, optional</td><td>storage bucket name; the SQL created <code>renders</code></td></tr>
-    </table>
-  </div></div>
-
-  <div class="step"><div class="n">6</div><div>
-    <h3>Turn on the daily housekeeping</h3>
-    <p><span class="ui">Settings</span> → <span class="ui">Triggers</span> → <span class="ui">Cron Triggers</span> → <span class="ui">Add</span> → <code>0 4 * * *</code> (once a day). This is what erases identities nobody has used for <code>RETENTION_DAYS</code>, trims the usage counters, and keeps the Supabase project from pausing.</p>
-  </div></div>
-
-  <div class="step"><div class="n">7</div><div>
-    <h3>Test it</h3>
-    <div class="row"><input id="url" placeholder="https://hub.yourname.workers.dev" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"><button class="btn pri" id="test">TEST</button></div>
+    </table></div>
+  </div></details>
+  <details><summary><span class="n">6</span><span>Turn on the daily housekeeping</span></summary><div class="body">
+<p><span class="ui">Settings</span> → <span class="ui">Triggers</span> → <span class="ui">Cron Triggers</span> → <span class="ui">Add</span> → <code>0 4 * * *</code> (once a day). This is what erases identities nobody has used for <code>RETENTION_DAYS</code>, trims the usage counters, and keeps the Supabase project from pausing.</p>
+  </div></details>
+  <details><summary><span class="n">7</span><span>Test it</span></summary><div class="body">
+<div class="row"><input id="url" placeholder="https://hub.yourname.workers.dev" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"><button class="btn pri" id="test">TEST</button></div>
     <div class="status" id="status"></div>
     <p class="note">A good answer shows the hub version, says it <b>stores</b> (SERVICE_KEY is set), and signs you in as <span id="meHandle2">@…</span>. "Stores nothing" means the secret isn't there yet. A 5xx usually means <code>SUPABASE_URL</code> is wrong or the SQL hasn't run.</p>
-  </div></div>
-
-  <div class="step"><div class="n">8</div><div>
-    <h3>Point the apps at it</h3>
-    <p>Open <a href="../searchnet/#sources">SEARCH//NET → SOURCES → YOUR DATA</a> (or Social → ⚿ MY KEY → YOUR DATA &amp; HUB), choose <span class="ui">My own hub</span>, paste the Worker address, your Supabase Project URL and the publishable key, press <span class="ui">SAVE &amp; TEST</span>. Every PTXERO app on this device now uses your hub. A key file exported after that carries the setting to your other devices.</p>
+  </div></details>
+  <details><summary><span class="n">8</span><span>Point the apps at it</span></summary><div class="body">
+<p>Open <a href="../searchnet/#sources">SEARCH//NET → SOURCES → YOUR DATA</a> (or Social → ⚿ MY KEY → YOUR DATA &amp; HUB), choose <span class="ui">My own hub</span>, paste the Worker address, your Supabase Project URL and the publishable key, press <span class="ui">SAVE &amp; TEST</span>. Every PTXERO app on this device now uses your hub. A key file exported after that carries the setting to your other devices.</p>
     <p class="note">Posts, renders and backups you made on the shared hub stay there (you can <span class="ui">EXPORT MY DATA</span> and <span class="ui">DELETE MY DATA</span> on it first). Hubs are separate. Social on your hub shows the people on <i>your</i> hub.</p>
-  </div></div>
+  </div></details>
+    </div>
+    <details class="more"><summary>▸ UPDATING LATER</summary><p class="note">New app features sometimes need a newer hub. The apps tell you ("your hub is older than this app"). Repeat the paste from step 4 on the same Worker and Deploy. Settings and data are untouched. The version is in <code>/health</code>.</p></details>
+  </section>
 
-  <h2>KEEPING, MOVING AND ERASING</h2>
-  <div class="card">
-    <p><b>⬇ KEY FILE</b>: your identity (and your hub choice). Keep it like a password.</p>
-    <p><b>⬇ EXPORT MY DATA</b>: one JSON with everything the hub holds for you. Profile, posts, likes, comments, follows, reposts, renders and backups.</p>
-    <p><b>✕ DELETE MY DATA ON THIS HUB</b>: erases all of it, including uploaded images and audio, and the id itself. Your key stays on the device so you can start fresh under the same handle.</p>
-    <p><b>Automatic</b>: on the shared hub, an id unused for 180 days is erased the same way by the daily housekeeping. Opening any PTXERO app with your key counts as use.</p>
-  </div>
+  <section class="pane" id="pane-limits">
+    <h2>WHAT THE SHARED HUB ALLOWS</h2>
+    <div class="tw"><table>
+    <tr><th>What</th><th>Per day, per identity</th><th>Anonymous (no id)</th></tr>
+    <tr><td>Fetches (SearchNet searches, profiles, follows, media resolving)</td><td>a pool of 20,000 a day split among whoever is active, never under 400 or over 6,000 each</td><td>60 per address</td></tr>
+    <tr><td>Writes (posts, likes, follows, comments, shares, backups)</td><td>a pool of 10,000 split the same way, 300 to 3,000 each</td><td>none</td></tr>
+    <tr><td>Stored backups (per-person store)</td><td>25 MB total, 512 KB per item</td><td>n/a</td></tr>
+    <tr><td>Kept for</td><td>180 days after your last visit, then everything is erased</td><td>n/a</td></tr>
+  </table></div>
+    <p class="note">Hit a short limit and the app waits. Hit the daily cap and it tells you when it resets (midnight UTC). The hub's owner has no limits and is never auto-deleted. Anyone else can ask to be pinned.</p>
+  </section>
 
-  <h2>UPDATING LATER</h2>
-  <p class="note">New app features sometimes need a newer hub. The apps tell you ("your hub is older than this app"). Repeat the paste from step 4 on the same Worker and Deploy. Settings and data are untouched. The version is in <code>/health</code>.</p>
+  <section class="pane" id="pane-keep">
+    <div class="card">
+      <p><b>⬇ KEY FILE</b>: your identity and your hub choice. Keep it like a password.</p>
+      <p><b>⬇ EXPORT MY DATA</b>: one JSON with everything the hub holds for you. Profile, posts, likes, comments, follows, reposts, renders and backups.</p>
+      <p><b>✕ DELETE MY DATA ON THIS HUB</b>: erases all of it, uploaded images and audio included, and the id itself. Your key stays on the device, so you can start fresh under the same handle.</p>
+      <p><b>Automatic</b>: on the shared hub, an id unused for 180 days is erased the same way by the daily housekeeping. Opening any PTXERO app with your key counts as use.</p>
+    </div>
+    <p class="note">The buttons are in the YOU tab and in every app's YOUR DATA panel.</p>
+  </section>
 
-  <details><summary>API</summary>
+  <section class="pane" id="pane-api">
+    
     <pre>GET  /health                         version, hub version, whether it stores
 GET  /search /account /follows /resolve /fetch     SearchNet fetchers (fair-use scope "fetch")
 POST /id            { secret? }      bind this device's key to @you (TOFU; legacy secret migrates)
@@ -182,10 +187,19 @@ GET  /store/&lt;app&gt;                     list your blobs · PUT/GET/DELETE /s
 POST /profile /post /like /comment /follow /repost /report /delete /share   Social + ASCII (signed or legacy secret)
 GET  /r/&lt;slug&gt; /p/&lt;id&gt;                 rich link previews · GET /status · GET /presence</pre>
     <p class="note">Signed = headers <code>X-PX-Uid · X-PX-Pub · X-PX-Ts · X-PX-Nonce · X-PX-Sig</code> (ECDSA P-256 over <code>uid\nts\nnonce\nMETHOD\npath</code>, 5-minute window). <code>ptxero-id.js</code> does this for the apps. The Worker ties the first key it sees to the handle and rejects any other.</p>
-  </details>
+  
+  </section>
 </main>
 <script>
 const $ = (s) => document.querySelector(s);
+// tabs: one on screen at a time; the hash remembers which (hub/#setup opens the guide)
+const tabs = [...document.querySelectorAll('.tab')];
+function showTab(id) { if (!document.getElementById('pane-' + id)) id = 'you'; tabs.forEach((b) => b.classList.toggle('on', b.dataset.tab === id)); document.querySelectorAll('.pane').forEach((p) => p.classList.toggle('on', p.id === 'pane-' + id)); if (location.hash !== '#' + id && !(id === 'you' && !location.hash)) history.replaceState(null, '', '#' + id); window.scrollTo({ top: 0 }); }
+tabs.forEach((b) => b.onclick = () => showTab(b.dataset.tab));
+window.addEventListener('hashchange', () => showTab(location.hash.slice(1) || 'you'));
+showTab(location.hash.slice(1) || 'you');
+document.querySelectorAll('a[href="#setup"]').forEach((a) => a.onclick = (e) => { e.preventDefault(); showTab('setup'); });
+
 const px = window.PX || null;
 if (px) { $('#meHandle').textContent = '@' + px.handle(); $('#meHandle2').textContent = '@' + px.handle(); $('#meSuffix').textContent = px.suffix(); }
 async function copyFile(file, btn, msg, what) {
@@ -221,7 +235,7 @@ $('#url').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#test')
 // your usage on the hub this device is set to use
 (async () => {
   const m = $('#meStatus'); if (!px) { m.textContent = 'the PTXERO ID script did not load'; return; }
-  const H = px.host(); m.textContent = (H.mode === 'own' ? 'your hub ' : 'shared hub ') + H.hub;
+  const H = px.host(); m.textContent = (H.mode === 'own' ? 'your hub · ' : 'shared hub · ') + H.hub;
   px.panel($('#mePanel'), { app: 'hub', local: false, guide: './' });
 })();
 </script>
