@@ -609,97 +609,97 @@ class TestPeople(Base):
 
     def test_identity_hygiene(self):
         """Same handle on another network is NOT a link; @ inside a URL is not a mention;
-        CloneStoo and clonestoo are one account; a 4-image tweet is one post."""
+        JohnSmith and johnsmith are one account; a 4-image tweet is one post."""
         from rv import people
         up = self.v.db.upsert
-        up({"id": "x:1_1", "platform": "x", "post_id": "1", "author": "CloneStoo", "text": "pic 1 of 4", "media": "image", "url": "u1"})
-        up({"id": "x:1_2", "platform": "x", "post_id": "1", "author": "clonestoo", "text": "pic 2 of 4", "media": "image", "url": "u1"})
-        up({"id": "x:1_3", "platform": "x", "post_id": "1", "author": "CloneStoo", "text": "pic 3 of 4", "media": "image", "url": "u1"})
-        up({"id": "x:2", "platform": "x", "post_id": "2", "author": "CloneStoo",
+        up({"id": "x:1_1", "platform": "x", "post_id": "1", "author": "JohnSmith", "text": "pic 1 of 4", "media": "image", "url": "u1"})
+        up({"id": "x:1_2", "platform": "x", "post_id": "1", "author": "johnsmith", "text": "pic 2 of 4", "media": "image", "url": "u1"})
+        up({"id": "x:1_3", "platform": "x", "post_id": "1", "author": "JohnSmith", "text": "pic 3 of 4", "media": "image", "url": "u1"})
+        up({"id": "x:2", "platform": "x", "post_id": "2", "author": "JohnSmith",
             "text": "watch https://youtube.com/@ytperson and thanks @realfriend", "media": "video", "url": "u2"})
         up({"id": "x:3", "platform": "x", "post_id": "3", "author": "realfriend", "text": "hey", "media": "video", "url": "u3"})
         up({"id": "x:4", "platform": "x", "post_id": "4", "author": "ytperson", "text": "yo", "media": "video", "url": "u4"})
-        up({"id": "m:5", "platform": "mastodon", "post_id": "5", "author": "clonestoo", "text": "different person entirely", "media": "video", "url": "u5"})
-        up({"id": "m:6", "platform": "mastodon", "post_id": "6", "author": "someone", "text": "cc @clonestoo", "media": "video", "url": "u6"})
-        p = people.profile(self.v, "CloneStoo|x")
+        up({"id": "m:5", "platform": "mastodon", "post_id": "5", "author": "johnsmith", "text": "different person entirely", "media": "video", "url": "u5"})
+        up({"id": "m:6", "platform": "mastodon", "post_id": "6", "author": "someone", "text": "cc @johnsmith", "media": "video", "url": "u6"})
+        p = people.profile(self.v, "JohnSmith|x")
         self.assertEqual((p["n"], p["items_n"]), (2, 4))                      # 2 posts, 4 attachments, one account
-        self.assertEqual(people.profile(self.v, "clonestoo|x")["id"], "clonestoo|x")
+        self.assertEqual(people.profile(self.v, "johnsmith|x")["id"], "johnsmith|x")
         conn = {c["id"]: c for c in p["connected"]}
         self.assertIn("realfriend|x", conn)                                   # a real @mention on the same network
         self.assertTrue(any(w["kind"] == "mentions" for w in conn["realfriend|x"]["why"]))
         self.assertNotIn("ytperson|x", conn)                                  # youtube.com/@ytperson is a link, not a tag
-        self.assertNotIn("clonestoo|mastodon", conn)                          # same name elsewhere is not a link
+        self.assertNotIn("johnsmith|mastodon", conn)                          # same name elsewhere is not a link
         self.assertFalse(any(w["kind"] == "mentions" for c in conn.values() for w in c["why"] if c["platform"] != "x"))
         g = people.word_graph(self.v, kinds="account")
         ids = {n["id"] for n in g["nodes"]}
-        self.assertIn("@clonestoo|x", ids)
-        self.assertEqual(sum(1 for n in g["nodes"] if n["id"].endswith("|x") and "clonestoo" in n["id"]), 1)
+        self.assertIn("@johnsmith|x", ids)
+        self.assertEqual(sum(1 for n in g["nodes"] if n["id"].endswith("|x") and "johnsmith" in n["id"]), 1)
         mention_edges = {frozenset((e["a"], e["b"])) for e in g["edges"] if e["p"]["m"] > 0}
-        self.assertIn(frozenset(("@clonestoo|x", "@realfriend|x")), mention_edges)
-        self.assertNotIn(frozenset(("@clonestoo|x", "@ytperson|x")), mention_edges)
-        self.assertNotIn(frozenset(("@clonestoo|x", "@clonestoo|mastodon")), mention_edges)
-        self.assertNotIn(frozenset(("@someone|mastodon", "@clonestoo|x")), mention_edges)
-        self.assertEqual(next(n for n in g["nodes"] if n["id"] == "@clonestoo|x")["n"], 2)
+        self.assertIn(frozenset(("@johnsmith|x", "@realfriend|x")), mention_edges)
+        self.assertNotIn(frozenset(("@johnsmith|x", "@ytperson|x")), mention_edges)
+        self.assertNotIn(frozenset(("@johnsmith|x", "@johnsmith|mastodon")), mention_edges)
+        self.assertNotIn(frozenset(("@someone|mastodon", "@johnsmith|x")), mention_edges)
+        self.assertEqual(next(n for n in g["nodes"] if n["id"] == "@johnsmith|x")["n"], 2)
 
     def test_identities_tie_accounts_under_one_name(self):
         """One person, several accounts on several networks: only the user links them, each link keeps its
         reason, the web draws them as tier-1 'same person' links, and MERGE collapses them into one node."""
         from rv import people
         up = self.v.db.upsert
-        up({"id": "x:1", "platform": "x", "post_id": "1", "author": "clonestoo", "text": "hi #a", "hashtags": "a", "media": "video", "url": "u1"})
-        up({"id": "ig:2", "platform": "instagram", "post_id": "2", "author": "clone.stoo", "text": "yo #b", "hashtags": "b", "media": "image", "url": "u2"})
-        up({"id": "x:3", "platform": "x", "post_id": "3", "author": "other", "text": "thanks @clonestoo", "media": "video", "url": "u3"})
+        up({"id": "x:1", "platform": "x", "post_id": "1", "author": "johnsmith", "text": "hi #a", "hashtags": "a", "media": "video", "url": "u1"})
+        up({"id": "ig:2", "platform": "instagram", "post_id": "2", "author": "john.smith", "text": "yo #b", "hashtags": "b", "media": "image", "url": "u2"})
+        up({"id": "x:3", "platform": "x", "post_id": "3", "author": "other", "text": "thanks @johnsmith", "media": "video", "url": "u3"})
         # nothing links the X and Instagram accounts on their own
-        self.assertNotIn("clone.stoo|instagram", {c["id"] for c in people.profile(self.v, "clonestoo|x")["connected"]})
-        I = people.handle(self.v, "POST", ["identities"], {}, {"name": "Clone Stoo", "accounts": [{"id": "clonestoo|x", "how": "you"}]})
-        I = people.handle(self.v, "PATCH", ["identities", I["id"]], {}, {"add": [{"id": "clone.stoo|instagram", "how": "post link"}]})
+        self.assertNotIn("john.smith|instagram", {c["id"] for c in people.profile(self.v, "johnsmith|x")["connected"]})
+        I = people.handle(self.v, "POST", ["identities"], {}, {"name": "John Smith", "accounts": [{"id": "johnsmith|x", "how": "you"}]})
+        I = people.handle(self.v, "PATCH", ["identities", I["id"]], {}, {"add": [{"id": "john.smith|instagram", "how": "post link"}]})
         self.assertEqual([(a["handle"], a["platform"], a["how"]) for a in I["accounts"]],
-                         [("clonestoo", "x", "you"), ("clone.stoo", "instagram", "post link")])
+                         [("johnsmith", "x", "you"), ("john.smith", "instagram", "post link")])
         self.assertTrue((self.tmp / "identities.json").exists())           # stays on this machine
-        p = people.profile(self.v, "clonestoo|x")
-        self.assertEqual(p["identity"]["name"], "Clone Stoo")
-        c = next(c for c in p["connected"] if c["id"] == "clone.stoo|instagram")
+        p = people.profile(self.v, "johnsmith|x")
+        self.assertEqual(p["identity"]["name"], "John Smith")
+        c = next(c for c in p["connected"] if c["id"] == "john.smith|instagram")
         self.assertEqual((c["t"], c["p"]["i"]), (1, 5))
         self.assertTrue(any(w["kind"] == "identity" for w in c["why"]))
         g = people.word_graph(self.v, kinds="account")
-        e = next(e for e in g["edges"] if {e["a"], e["b"]} == {"@clonestoo|x", "@clone.stoo|instagram"})
+        e = next(e for e in g["edges"] if {e["a"], e["b"]} == {"@johnsmith|x", "@john.smith|instagram"})
         self.assertGreater(e["p"]["i"], 0)
-        self.assertEqual(next(n for n in g["nodes"] if n["id"] == "@clonestoo|x")["identity"], "Clone Stoo")
+        self.assertEqual(next(n for n in g["nodes"] if n["id"] == "@johnsmith|x")["identity"], "John Smith")
         gm = people.word_graph(self.v, kinds="account", merge=True)
         ids = {n["id"] for n in gm["nodes"]}
-        self.assertNotIn("@clonestoo|x", ids)
+        self.assertNotIn("@johnsmith|x", ids)
         node = next(n for n in gm["nodes"] if n["id"].startswith("person:"))
-        self.assertEqual((node["label"], node["n"], sorted(node["accounts"])), ("Clone Stoo", 2, ["clone.stoo|instagram", "clonestoo|x"]))
+        self.assertEqual((node["label"], node["n"], sorted(node["accounts"])), ("John Smith", 2, ["john.smith|instagram", "johnsmith|x"]))
         self.assertTrue(any({e["a"], e["b"]} == {node["id"], "@other|x"} and e["p"]["m"] > 0 for e in gm["edges"]))   # the mention follows into the merged node
         # an account belongs to one person: moving it removes it from the other
-        J = people.handle(self.v, "POST", ["identities"], {}, {"name": "Someone Else", "accounts": ["clone.stoo|instagram"]})
-        self.assertEqual([a["id"] for a in people.handle(self.v, "GET", ["identities", I["id"]], {}, {})["accounts"]], ["clonestoo|x"])
+        J = people.handle(self.v, "POST", ["identities"], {}, {"name": "Someone Else", "accounts": ["john.smith|instagram"]})
+        self.assertEqual([a["id"] for a in people.handle(self.v, "GET", ["identities", I["id"]], {}, {})["accounts"]], ["johnsmith|x"])
         self.assertEqual(people.handle(self.v, "DELETE", ["identities", J["id"]], {}, {}), {"ok": True})
 
     def test_person_verdicts_keep_namesakes_out(self):
         """A name search pulls in a namesake. 'Not them' drops that account's posts from the dossier and
         keeps future ones out; 'them' confirms; 'restore' lets it back."""
-        tid = self.v.create_topic("Ethan Chapman", seeds=['"Ethan Chapman"'],
-                                  settings={"person": {"mode": "name", "first": "Ethan", "last": "Chapman"}})["id"]
-        for i, (who, txt) in enumerate((("ethan_c", "Ethan Chapman here, skating"), ("ethan_c", "another by the real one"),
-                                        ("chapman_ethan_fl", "Ethan Chapman realtor, call me"))):
+        tid = self.v.create_topic("John Smith", seeds=['"John Smith"'],
+                                  settings={"person": {"mode": "name", "first": "John", "last": "Smith"}})["id"]
+        for i, (who, txt) in enumerate((("john_s", "John Smith here, skating"), ("john_s", "another by the real one"),
+                                        ("smith_john_2", "John Smith realtor, call me"))):
             self.v.db.upsert({"id": f"p{i}", "platform": "x", "post_id": str(i), "author": who, "text": txt, "media": "video", "url": f"u{i}"})
-            self.v.link(tid, f"p{i}", '"Ethan Chapman"', "x")
+            self.v.link(tid, f"p{i}", '"John Smith"', "x")
         self.assertEqual(self.v.db.one("SELECT count(*) n FROM topic_items WHERE topic_id=?", (tid,))["n"], 3)
-        r = self.v.person_verdict(tid, "not_them", "chapman_ethan_fl|x", "p2")
-        self.assertEqual((r["removed"], r["not_them"]), (1, ["chapman_ethan_fl|x"]))
+        r = self.v.person_verdict(tid, "not_them", "smith_john_2|x", "p2")
+        self.assertEqual((r["removed"], r["not_them"]), (1, ["smith_john_2|x"]))
         self.assertEqual(self.v.db.one("SELECT count(*) n FROM topic_items WHERE topic_id=?", (tid,))["n"], 2)
         # a later run finds the namesake again: it never gets linked
-        self.v.db.upsert({"id": "p9", "platform": "x", "post_id": "9", "author": "Chapman_Ethan_FL", "text": "Ethan Chapman open house", "media": "video", "url": "u9"})
-        self.v.link(tid, "p9", '"Ethan Chapman"', "x")
+        self.v.db.upsert({"id": "p9", "platform": "x", "post_id": "9", "author": "Smith_John_2", "text": "John Smith open house", "media": "video", "url": "u9"})
+        self.v.link(tid, "p9", '"John Smith"', "x")
         self.assertEqual(self.v.db.one("SELECT count(*) n FROM topic_items WHERE topic_id=?", (tid,))["n"], 2)
         # confirming the real one labels the post and clears nothing else
-        r = self.v.person_verdict(tid, "them", "ethan_c|x", "p0")
+        r = self.v.person_verdict(tid, "them", "john_s|x", "p0")
         self.assertEqual(self.v.db.one("SELECT label FROM topic_items WHERE topic_id=? AND item_id='p0'", (tid,))["label"], 1)
         # restore → the namesake can be linked again
-        r = self.v.person_verdict(tid, "restore", "chapman_ethan_fl|x")
+        r = self.v.person_verdict(tid, "restore", "smith_john_2|x")
         self.assertEqual(r["not_them"], [])
-        self.v.link(tid, "p9", '"Ethan Chapman"', "x")
+        self.v.link(tid, "p9", '"John Smith"', "x")
         self.assertEqual(self.v.db.one("SELECT count(*) n FROM topic_items WHERE topic_id=?", (tid,))["n"], 3)
         # the HTTP route exists and validates
         from rv.web import parse_creator  # noqa: F401 — module import sanity
@@ -828,9 +828,9 @@ class TestWordWebWeights(Base):
         from rv import people
         # "canopy roads" are adjacent in every post; "canopy" and "kayaking" are far apart in the same posts
         for i in range(24):
-            self.add(tweet(str(i), "Tallahassee canopy roads trip; later some kayaking on the springs #florida",
-                           author="acct%d" % (i % 6), tags=["florida"]))
-        self.add(tweet("x1", "one-off word zyxw here #florida", author="acct0", tags=["florida"]))
+            self.add(tweet(str(i), "Weekend canopy roads trip; later some kayaking on the springs #hiking",
+                           author="acct%d" % (i % 6), tags=["hiking"]))
+        self.add(tweet("x1", "one-off word zyxw here #hiking", author="acct0", tags=["hiking"]))
         g = people.word_graph(self.v, focus="canopy")
         w = {frozenset((e["a"], e["b"])): e["w"] for e in g["edges"]}
         near = w.get(frozenset(("w:canopy", "w:roads")), 0)

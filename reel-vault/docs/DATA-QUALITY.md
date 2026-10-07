@@ -1,6 +1,6 @@
 # SEARCH//NET · data-quality review and remediation plan
 
-Scope: looking a person up by one handle on one network (worked example: `@CloneStoo` on X) and
+Scope: looking a person up by one handle on one network (worked example: `@johnsmith` on X) and
 building outward. This lists every way the result can mislead, what is already fixed, and what is
 planned — so the tool says what it knows, says what it doesn't, and never invents a link.
 
@@ -15,8 +15,8 @@ Legend · **DONE** shipped · **NEXT** small, this week · **PLAN** needs design
 |---|---|---|---|
 | 1.1 | Handle renames and reuse: old mentions of `@x` may be a previous owner | LIMIT → PLAN | Store `first_seen` / `last_seen` per account and show the span on the profile; when a handle's user-id is known (X `rest_id`, Mastodon `id`, Bluesky `did`), key the account by that id and show "handle changed" when the same id appears under a new handle. |
 | 1.2 | Impersonators / look-alike handles | PLAN | Look-alike flag: Levenshtein ≤ 1, confusable glyphs (`l/1/I`, `0/O`), trailing `_`/digits → show "⚠ similar to @…" on cards and in the web hover; never merge. |
-| 1.3 | Case splits (`CloneStoo` vs `clonestoo` became two accounts) | **DONE** | Account ids are lower-cased in both engines; display keeps the first spelling seen. |
-| 1.4 | Cross-platform name collision (`@clonestoo` on Mastodon drawn as a real link to the X account) | **DONE** | Mention matching and the pairwise model are platform-scoped. A cross-network link now needs a URL the person posted, a follow list, or your own hand link. |
+| 1.3 | Case splits (`JohnSmith` vs `johnsmith` became two accounts) | **DONE** | Account ids are lower-cased in both engines; display keeps the first spelling seen. |
+| 1.4 | Cross-platform name collision (`@johnsmith` on Mastodon drawn as a real link to the X account) | **DONE** | Mention matching and the pairwise model are platform-scoped. A cross-network link now needs a URL the person posted, a follow list, or your own hand link. |
 | 1.5 | Display name vs handle keyed separately | NEXT | Profile header shows `display name · @handle · network`; BY NAME dossiers suggest "same person?" only when a known account's display name equals the dossier name — as a prompt, never automatic. |
 | 1.6 | Protected / suspended / deleted account looks like "0 posts" | NEXT | Surface the fetcher's reason (`AuthRequired`, `Protected`, `NotFound`, `Suspended`) as a status pill on the PERSON card, not only in the job log. |
 
