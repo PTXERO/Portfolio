@@ -147,6 +147,8 @@
     { preset: 'schools', name: 'Schools & universities', source: 'web', param: 'qx', param_default: 'site:.edu OR site:.k12.*.us OR school', searchable: true },
     { preset: 'blogs', name: 'Blogs', source: 'web', param: 'qx', param_default: 'blog OR site:substack.com OR site:medium.com OR site:wordpress.com OR site:blogspot.com', searchable: true },
     { preset: 'hn', name: 'Hacker News', source: 'hn', searchable: true },
+    { preset: 'fourchan', name: '4chan', source: 'fourchan', param: 'boards', param_default: 'pol,news,b,g,x,tv,v,biz,int,k', searchable: true, note: 'desuarchive full-text search plus the live catalogs of these boards.' },
+    { preset: 'wikipedia', name: 'Wikipedia', source: 'wikipedia', searchable: true },
     { preset: 'archive', name: 'Internet Archive', source: 'archive', searchable: true, note: 'Books, newspapers, recordings, old sites.' },
   ];
   // 'https://site/search?q=cats' (or '?q=') → 'https://site/search?q={q}'; also /search/cats → /search/{q}
@@ -216,6 +218,7 @@
           if (s.param === 'instance' && s.value) params.set('instance', s.value);
           if (s.param === 'qx' && s.value) params.set('qx', s.value);
           if (s.param === 'url' && s.value) params.set('url', s.value);
+          if (s.param === 'boards' && s.value) params.set('boards', s.value);
           job.log('▶ ' + s.name + ' · ' + q);
           const r = await workerCall('/search?' + params);
           const items = (r.items || []).filter((it) => it && it.id && !seen.has(it.id));
@@ -227,7 +230,7 @@
             found++;
           }
           job.log('  ' + items.length + ' from ' + s.name);
-        } catch (e) { job.stats.errors++; job.log('  ✕ ' + s.name + ': ' + e.message); }
+        } catch (e) { job.stats.errors++; job.log('  ✕ ' + s.name + ': ' + e.message); if (await markFailed(s.id, e.message)) job.log('    ' + s.name + ' switched off until you turn it back on (SOURCES)'); }
         job.done++;
       }
     }
@@ -244,7 +247,23 @@
   }
 
   // ── sources (stored in kv) ────────────────────────────────────
-  async function listSources() { const row = await idb.get('kv', 'sources'); return (row && row.v) || []; }
+  const DEFAULT_PRESETS = ['mastodon', 'lemmy', 'reddit', 'bluesky', 'youtube', 'news', 'gdelt', 'web', 'obituaries', 'schools', 'blogs', 'hn', 'archive', 'fourchan', 'wikipedia'];
+  function fromPreset(p, param) { return { id: Math.random().toString(36).slice(2, 10), source: p.source, kind: p.source, name: p.name + (param && p.param !== 'qx' ? ' · ' + param : ''), param: p.param, value: param || p.param_default || '', searchable: p.searchable, preset: p.preset, enabled: true, limit_per: 30 }; }
+  async function listSources() {
+    const row = await idb.get('kv', 'sources'); let all = (row && row.v) || [];
+    // every built-in source is on from the start; ones added later join once (a source you removed stays removed)
+    const seenRow = await idb.get('kv', 'sources_seeded'); const seeded = new Set((seenRow && seenRow.v) || []);
+    const add = DEFAULT_PRESETS.filter((k) => !seeded.has(k) && !all.some((s) => s.preset === k));
+    if (add.length) { add.forEach((k) => { const p = WORKER_SOURCES.find((x) => x.preset === k); if (p) all.push(fromPreset(p, p.param_default || '')); }); await saveSources(all); }
+    if (add.length || !seenRow) await idb.put('kv', { k: 'sources_seeded', v: [...new Set([...seeded, ...DEFAULT_PRESETS])] });
+    return all;
+  }
+  // a source that errors (not a quota wait, not the hub being down) turns itself off; the switch in SOURCES turns it back on
+  async function markFailed(id, msg) {
+    if (!id || /quota|limit|busy|Failed to fetch|NetworkError|hub 2\.0/i.test(msg || '')) return false;
+    const all = await listSources(); const s = all.find((x) => x.id === id); if (!s || !s.enabled) return false;
+    s.enabled = false; s.auto_off = Math.floor(Date.now() / 1000); s.last_error = String(msg || '').slice(0, 200); await saveSources(all); return true;
+  }
   async function saveSources(arr) { await idb.put('kv', { k: 'sources', v: arr }); return arr; }
 
   // ── jobs (in-memory, mirror the server's job shape) ───────────
@@ -339,7 +358,7 @@
           if (method === 'POST') { const p = WORKER_SOURCES.find((x) => x.preset === body.preset); const s = p ? { source: p.source, name: body.name || (p.name + (body.param ? ' · ' + body.param : '')), param: p.param, value: body.param || p.param_default || '', searchable: p.searchable, preset: p.preset } : body; s.id = Math.random().toString(36).slice(2, 10); s.enabled = true; s.kind = s.source; s.limit_per = s.limit_per || 30; all.push(s); await saveSources(all); return s; }
         }
         const s = all.find((x) => x.id === arg);
-        if (s && method === 'PATCH') { Object.assign(s, body); await saveSources(all); return s; }
+        if (s && method === 'PATCH') { Object.assign(s, body); if (body.enabled) { delete s.auto_off; s.last_error = ''; } await saveSources(all); return s; }
         if (s && method === 'DELETE') { await saveSources(all.filter((x) => x.id !== arg)); return { ok: true }; }
         if (s && sub === 'test' && method === 'POST') { const j = newJob('test', 'test ' + s.name); runSafe(j, async () => { const params = new URLSearchParams({ source: s.source, q: body.query || 'cat', limit: 5 }); if (s.value) params.set('instance', s.value); if (s.param === 'url') { params.delete('instance'); params.set('url', s.value || ''); } const r = await workerCall('/search?' + params); j.result = { count: (r.items || []).length, items: (r.items || []).slice(0, 5).map((i) => ({ id: i.id, text: i.text, thumbnail: i.thumbnail, media: i.media, url: i.url, author: i.author })) }; }); return jobDict(j); }
       }
@@ -379,6 +398,6 @@
   // expose internals the learn module needs
   Local.idb = idb; Local.settings = settings; Local.runSearch = runSearch; Local.loadSyn = loadSyn;
   Local.getSyn = () => SYN; Local.newJob = newJob; Local.jobDict = jobDict; Local.runSafe = runSafe;
-  Local.jobs = JOBS; Local.workerCall = workerCall; Local.hub = hubInfo; Local.backup = backupData; Local.restore = restoreData;
+  Local.jobs = JOBS; Local.workerCall = workerCall; Local.markFailed = markFailed; Local.hub = hubInfo; Local.backup = backupData; Local.restore = restoreData;
   window.SearchNetLocal = Local;
 })();

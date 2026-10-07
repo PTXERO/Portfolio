@@ -204,6 +204,16 @@ class Vault:
         if not self.db.one("SELECT 1 FROM sources LIMIT 1"):
             for key in S.DEFAULT_SOURCES:
                 self.add_source(S.source_from_preset(key))
+        else:        # defaults added in later versions join once (a source you removed stays removed)
+            have = {r["preset"] for r in self.db.q("SELECT preset FROM sources")}
+            row = self.db.one("SELECT value FROM cache WHERE key='sources_seeded'")
+            seeded = set(json.loads(row["value"]) if row else [])
+            missing = [k for k in S.DEFAULT_SOURCES if k not in have and k not in seeded]
+            for key in missing:
+                self.add_source(S.source_from_preset(key))
+            if missing or not row:
+                self.db.exec("INSERT OR REPLACE INTO cache(key, value, ts) VALUES ('sources_seeded', ?, ?)",
+                             (json.dumps(sorted(set(S.DEFAULT_SOURCES) | seeded)), now()))
         if start_threads:
             threading.Thread(target=self._worker, daemon=True).start()
             threading.Thread(target=self._learner, daemon=True).start()
@@ -398,6 +408,12 @@ class Vault:
                 f[k] = str(d[k])
         if "enabled" in d:
             f["enabled"] = 1 if d["enabled"] else 0
+            if d["enabled"]:          # turned back on by hand: forget the failure
+                cur = self.get_source(sid) or {}
+                o = dict(cur.get("options") or {})
+                if o.pop("auto_off", None) is not None and "options" not in d:
+                    f["options"] = json.dumps(o)
+                f["last_error"] = ""
         if "limit_per" in d:
             f["limit_per"] = max(1, min(to_int(d["limit_per"], 20), 500))
         if "options" in d:
@@ -446,6 +462,11 @@ class Vault:
             err = str(e)[:300]
             job.stats["errors"] += 1
             job.log(f"  ✕ {label}: {err}")
+            if src.get("id") and not re.search(r"quota|rate limit|429|timed out", err, re.I):
+                opts_ = dict(src.get("options") or {})
+                opts_["auto_off"] = now()
+                self.db.exec("UPDATE sources SET enabled=0, options=? WHERE id=?", (json.dumps(opts_), src["id"]))
+                job.log(f"    {src['name']} switched off until you turn it back on (SOURCES)")
         if src.get("id"):
             self.db.exec("UPDATE sources SET last_run=?, last_found=? WHERE id=?",
                          (now(), got, src["id"]))

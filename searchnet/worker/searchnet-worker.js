@@ -21,8 +21,8 @@
  *  the way the optional local PC server does.
  * ───────────────────────────────────────────────────────────────── */
 
-const VERSION = "1.4";
-const UA = "SearchNetWorker/1.0 (+https://github.com/)";
+const VERSION = "1.5";
+const UA = "SearchNetWorker/1.5 (+https://ptxero.neocities.org/searchnet/; open-source research tool)";
 const INVIDIOUS = ["https://yewtu.be", "https://invidious.nerdvpn.de", "https://invidious.jing.rocks"];
 
 export default {
@@ -90,15 +90,26 @@ function cors(res) {
 function json(obj, status = 200) {
   return cors(new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } }));
 }
+async function fetchRetry(u, init) {           // one retry on a 5xx or a dropped connection
+  let r; try { r = await fetch(u, init); } catch (e) { r = null; }
+  if (!r || r.status >= 500) { await new Promise((x) => setTimeout(x, 600)); r = await fetch(u, init); }
+  return r;
+}
 async function getJSON(u, headers) {
-  const r = await fetch(u, { headers: { "User-Agent": UA, Accept: "application/json", ...(headers || {}) } });
+  const r = await fetchRetry(u, { headers: { "User-Agent": UA, Accept: "application/json", ...(headers || {}) } });
   if (!r.ok) throw new Error(`${new URL(u).hostname} → HTTP ${r.status}`);
   return r.json();
 }
 async function getText(u, headers) {
-  const r = await fetch(u, { headers: { "User-Agent": UA, ...(headers || {}) } });
+  const r = await fetchRetry(u, { headers: { "User-Agent": UA, ...(headers || {}) } });
   if (!r.ok) throw new Error(`${new URL(u).hostname} → HTTP ${r.status}`);
   return r.text();
+}
+// the same article reached by two links (utm tags, trailing slash, m. host) is one item
+function canon(u) {
+  try { const x = new URL(u); x.hash = ""; x.hostname = x.hostname.toLowerCase().replace(/^(www|m|amp)\./, "");
+    for (const k of [...x.searchParams.keys()]) if (/^(utm_|fbclid|gclid|mc_|ref$|ref_|igshid|si$|feature$)/i.test(k)) x.searchParams.delete(k);
+    x.pathname = x.pathname.replace(/\/+$/, "") || "/"; return x.href.replace(/^https?:\/\//, ""); } catch (e) { return u || ""; }
 }
 const stripHtml = (s) => (s || "").replace(/<br\s*\/?>(?=)|<\/p>\s*<p[^>]*>/gi, "\n")
   .replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
@@ -153,8 +164,14 @@ const SOURCES = {
   async reddit(q, limit) {
     const sub = (q.subreddit || "").replace(/^r\//, "");
     const base = sub ? `https://www.reddit.com/r/${sub}/search.json` : "https://www.reddit.com/search.json";
-    const d = await getJSON(`${base}?q=${encodeURIComponent(q.q || "")}&limit=${limit}&sort=relevance&type=link${sub ? "&restrict_sr=1" : ""}`);
-    return ((d.data || {}).children || []).map((c) => redditItem(c.data || {}, q)).filter(Boolean);
+    try {
+      const d = await getJSON(`${base}?q=${encodeURIComponent(q.q || "")}&limit=${limit}&sort=relevance&type=link${sub ? "&restrict_sr=1" : ""}`);
+      return ((d.data || {}).children || []).map((c) => redditItem(c.data || {}, q)).filter(Boolean);
+    } catch (e) {
+      // reddit.com refuses most data-centre addresses; PullPush keeps a searchable archive (lags hours to days)
+      const d = await getJSON(`https://api.pullpush.io/reddit/search/submission/?q=${encodeURIComponent(q.q || "")}&size=${Math.min(limit, 100)}${sub ? "&subreddit=" + encodeURIComponent(sub) : ""}`);
+      return (d.data || []).map((o) => redditItem(o, q)).filter(Boolean);
+    }
   },
 
   // Bluesky public search (video/image posts)
@@ -193,13 +210,13 @@ const SOURCES = {
   async news(q, limit) {
     const gl = (q.region || "US").toUpperCase().slice(0, 2);
     const xml = await getText(`https://news.google.com/rss/search?q=${encodeURIComponent(withExtra(q))}&hl=en-${gl}&gl=${gl}&ceid=${gl}:en`);
-    return parseFeed(xml, limit, true, "news");
+    return parseFeed(xml, limit, true, "news").map((it) => Object.assign(it, { id: "news:" + hash(canon(it.url)) }));
   },
   // GDELT: a running index of world news articles, searchable back years. Phrases go in quotes.
   async gdelt(q, limit) {
-    const d = await getJSON(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(withExtra(q))}&mode=ArtList&maxrecords=${Math.min(limit, 250)}&format=json&sort=DateDesc`);
+    const d = await getJSON(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(withExtra(q))}&mode=ArtList&maxrecords=${Math.min(limit, 250)}&format=json&sort=DateDesc&startdatetime=20170101000000`);
     return (d.articles || []).map((a) => item({
-      id: "gdelt:" + hash(a.url), platform: "news", media: "post", url: a.url,
+      id: "news:" + hash(canon(a.url)), platform: "news", media: "post", url: a.url,
       author: a.domain || hostOf(a.url), author_name: a.domain || "", text: a.title || "",
       posted_at: a.seendate ? toTs(a.seendate.replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/, "$1-$2-$3T$4:$5:$6Z")) : null,
       lang: a.language || null, thumbnail: a.socialimage || null,
@@ -207,8 +224,51 @@ const SOURCES = {
   },
   // The open web through Bing's RSS output: blogs, forums, school and company sites, obituaries, anything indexed.
   async web(q, limit) {
-    const xml = await getText(`https://www.bing.com/search?format=rss&q=${encodeURIComponent(withExtra(q))}&count=${Math.min(limit, 50)}`);
-    return parseFeed(xml, limit, true, "web");
+    const out = []; const seen = new Set();
+    for (let first = 1; out.length < limit && first <= 151; first += 50) {   // pages of 50, up to 4 pages
+      const xml = await getText(`https://www.bing.com/search?format=rss&q=${encodeURIComponent(withExtra(q))}&count=50&first=${first}`);
+      const page = parseFeed(xml, 50, true, "web"); let fresh = 0;
+      for (const it of page) { const k = canon(it.url); if (seen.has(k)) continue; seen.add(k); it.id = "web:" + hash(k); out.push(it); fresh++; }
+      if (!fresh || page.length < 10) break;
+    }
+    return out.slice(0, limit);
+  },
+  // 4chan: desuarchive's full-text search (a, g, co, tv, …) plus the live catalogs of the boards you name
+  async fourchan(q, limit) {
+    const out = []; const words = (q.q || "").toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+    try {
+      const d = await getJSON(`https://desuarchive.org/_/api/chan/search/?text=${encodeURIComponent(withExtra(q))}&order=desc`, { "User-Agent": "Mozilla/5.0 " + UA });
+      for (const p of ((d["0"] || {}).posts || [])) {
+        const board = (p.board || {}).shortname || "";
+        out.push(item({ id: "4chan:" + board + ":" + p.num, platform: "4chan", media: p.media && p.media.media_link ? (vidExt.test(p.media.media_link) ? "video" : "image") : "post",
+          url: `https://desuarchive.org/${board}/post/${p.num}/`, media_url: p.media && vidExt.test(p.media.media_link || "") ? p.media.media_link : null, thumbnail: p.media ? p.media.thumb_link : null,
+          author: p.name || "Anonymous", text: [p.title, stripHtml(p.comment_processed || p.comment || "")].filter(Boolean).join("\n"), hashtags: "/" + board + "/", posted_at: +p.timestamp || null }));
+        if (out.length >= limit) break;
+      }
+    } catch (e) { /* archive down: live boards below */ }
+    const boards = String(q.boards || "pol,news,b,g,x,tv,v,biz,int,k").split(/[,\s]+/).filter(Boolean).slice(0, 12);
+    for (const b of boards) {
+      if (out.length >= limit) break;
+      let pages; try { pages = await getJSON(`https://a.4cdn.org/${b}/catalog.json`); } catch (e) { continue; }
+      for (const pg of pages) for (const t of (pg.threads || [])) {
+        const text = stripHtml([t.sub, t.com].filter(Boolean).join("\n")); const low = text.toLowerCase();
+        if (!words.length || !words.every((w) => low.includes(w))) continue;
+        out.push(item({ id: "4chan:" + b + ":" + t.no, platform: "4chan", media: t.ext ? (/webm|mp4/.test(t.ext) ? "video" : "image") : "post",
+          url: `https://boards.4chan.org/${b}/thread/${t.no}`, media_url: t.ext && /webm|mp4/.test(t.ext) ? `https://i.4cdn.org/${b}/${t.tim}${t.ext}` : null,
+          thumbnail: t.tim ? `https://i.4cdn.org/${b}/${t.tim}s.jpg` : null, author: t.name || "Anonymous", text, hashtags: "/" + b + "/", posted_at: t.time || null, replies: t.replies || 0 }));
+        if (out.length >= limit) break;
+      }
+    }
+    return out.slice(0, limit);
+  },
+  // Wikipedia: article search (any language edition via q.lang)
+  async wikipedia(q, limit) {
+    const lang = (q.lang || "en").replace(/[^a-z-]/gi, "") || "en";
+    const d = await getJSON(`https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(withExtra(q))}&format=json&srlimit=${Math.min(limit, 50)}&srprop=snippet|timestamp|wordcount`, { "Api-User-Agent": UA });
+    return (((d.query || {}).search) || []).map((s) => item({
+      id: "wikipedia:" + lang + ":" + s.pageid, platform: "wikipedia", media: "post", url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(s.title.replace(/ /g, "_"))}`,
+      author: lang + ".wikipedia.org", text: s.title + "\n" + stripHtml(s.snippet || ""), posted_at: toTs(s.timestamp), views: s.wordcount || 0,
+    }));
   },
   // Hacker News (Algolia): tech and startup discussion, free full-text search
   async hn(q, limit) {
@@ -511,8 +571,8 @@ const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); 
 function hash(s) { let h = 0; for (let i = 0; i < (s || "").length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 
 async function discoverSite(u) {
-  const origin = new URL(u).origin; const out = { url: u, host: hostOf(u), feeds: [], search: null };
-  let html = ""; try { html = (await getText(origin + "/", { "Accept-Language": "en" })).slice(0, 400000); } catch (e) { out.error = e.message; }
+  const origin = new URL(u).origin; const out = { url: u, host: hostOf(u), feeds: [], search: null, candidates: [], platform: "" };
+  let html = ""; try { html = (await getText(origin + "/", { "Accept-Language": "en" })).slice(0, 600000); } catch (e) { out.error = e.message; }
   const abs = (h) => { try { return new URL(h, origin).href; } catch (e) { return null; } };
   for (const m of html.matchAll(/<link[^>]+>/gi)) {
     const t = m[0]; if (!/application\/(?:rss|atom)\+xml/i.test(t)) continue;
@@ -520,20 +580,43 @@ async function discoverSite(u) {
     if (href && out.feeds.length < 6) out.feeds.push({ url: abs(href), title: stripHtml(title) });
   }
   if (!out.feeds.length) {
-    for (const path of ["/feed", "/rss", "/feed.xml", "/rss.xml", "/atom.xml", "/?feed=rss2", "/feeds/posts/default"]) {
+    for (const path of ["/feed", "/rss", "/feed.xml", "/rss.xml", "/atom.xml", "/?feed=rss2", "/feeds/posts/default", "/index.xml"]) {
       try { const r = await fetch(origin + path, { headers: { "User-Agent": UA }, redirect: "follow" }); const ct = r.headers.get("Content-Type") || "";
         if (r.ok && /xml|rss|atom/i.test(ct)) { out.feeds.push({ url: r.url, title: "" }); break; } } catch (e) { /* next */ }
     }
   }
-  // a search form: <form action=…><input name=q|s|search|query>
+  const cands = [];
+  // 1. OpenSearch description (the standard way a site declares its search)
+  const os = html.match(/<link[^>]+type=["']application\/opensearchdescription\+xml["'][^>]+>/i);
+  if (os) { const href = (os[0].match(/href=["']([^"']+)/i) || [])[1]; if (href) { try { const xml = await getText(abs(href)); const tpl = (xml.match(/<Url[^>]+type=["']text\/html["'][^>]+template=["']([^"']+)/i) || xml.match(/<Url[^>]+template=["']([^"']+)["'][^>]+type=["']text\/html["']/i) || [])[1]; if (tpl) cands.push({ tpl: abs(tpl.replace(/\{searchTerms\}/g, "{q}").replace(/&amp;/g, "&")), why: "OpenSearch" }); } catch (e) { /* ignore */ } } }
+  // 2. the platform behind the site
+  const fp = [[/wp-content|wp-includes|wp-json/i, "wordpress", "/?s={q}"], [/discourse|data-discourse/i, "discourse", "/search?q={q}"], [/mediawiki|wgCanonicalNamespace|\/wiki\/Special:/i, "mediawiki", "/index.php?search={q}"],
+    [/Shopify\.theme|cdn\.shopify/i, "shopify", "/search?q={q}"], [/xenforo|XF\.config/i, "xenforo", "/search/search?keywords={q}"], [/vbulletin/i, "vbulletin", "/search.php?do=process&query={q}"], [/ghost-url|content\/images\/|ghost\.io/i, "ghost", ""],
+    [/squarespace/i, "squarespace", "/search?q={q}"], [/wix\.com|wixstatic/i, "wix", ""], [/invision|ipsSettings/i, "invision", "/search/?q={q}"], [/phpbb/i, "phpbb", "/search.php?keywords={q}"], [/substack/i, "substack", "/search/{q}"]];
+  for (const [re, name, tpl] of fp) if (re.test(html)) { out.platform = name; if (tpl) cands.push({ tpl: origin + tpl, why: name }); break; }
+  // 3. a search form, any field name
   for (const f of html.matchAll(/<form[^>]*>([\s\S]*?)<\/form>/gi)) {
     const open = f[0].match(/<form[^>]*>/i)[0]; const inner = f[1];
-    const inp = inner.match(/<input[^>]+(?:type=["']search["']|name=["'](?:q|s|search|query|keyword|keywords|term)["'])[^>]*>/i); if (!inp) continue;
+    const inp = inner.match(/<input[^>]+(?:type=["']search["']|name=["'](?:q|s|search|query|keyword|keywords|term|text|k|wd|search_query|searchterm|search_term|p)["'])[^>]*>/i) || (/search/i.test(open + inner) ? inner.match(/<input[^>]+name=["']([^"']+)["'][^>]*>/i) : null);
+    if (!inp) continue;
     const name = (inp[0].match(/name=["']([^"']+)/i) || [])[1]; if (!name) continue;
+    if (/get|^\s*$/i.test((open.match(/method=["']([^"']+)/i) || [, "get"])[1]) === false) continue;
     const action = (open.match(/action=["']([^"']*)/i) || [])[1] || "/";
-    const a = abs(action) || origin + "/"; out.search = a + (a.includes("?") ? "&" : "?") + name + "={q}"; break;
+    const a = abs(action) || origin + "/"; cands.push({ tpl: a + (a.includes("?") ? "&" : "?") + name + "={q}", why: "search form" });
   }
-  if (!out.search) out.search_guess = origin + "/?s={q}";
+  // 4. the usual suspects
+  for (const tpl of ["/search?q={q}", "/?s={q}", "/search/{q}", "/search?query={q}", "/?q={q}", "/search?s={q}", "/results?search_query={q}"]) cands.push({ tpl: origin + tpl, why: "common pattern" });
+  // verify: the page must come back 200 and mention the word we searched for (not just a 404 in disguise)
+  const seen = new Set(); const probe = "news";
+  for (const c of cands) {
+    if (!c.tpl || seen.has(c.tpl) || out.candidates.length >= 6) continue; seen.add(c.tpl);
+    let okc = false;
+    try { const r = await fetch(c.tpl.replace(/\{q\}/g, probe), { headers: { "User-Agent": UA, "Accept-Language": "en" }, redirect: "follow" });
+      if (r.ok) { const body = (await r.text()).slice(0, 300000); const links = (body.match(/<a\s/gi) || []).length; okc = links >= 5 && new RegExp(probe, "i").test(stripHtml(body)) && !/404|not found/i.test((body.match(/<title[^>]*>([^<]*)/i) || [, ""])[1]); } } catch (e) { okc = false; }
+    out.candidates.push({ template: c.tpl, why: c.why, verified: okc });
+    if (okc && !out.search) out.search = c.tpl;
+  }
+  if (!out.search) out.search_guess = (out.candidates[0] || {}).template || origin + "/?s={q}";
   return out;
 }
 

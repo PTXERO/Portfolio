@@ -2754,7 +2754,7 @@ async function renderSources(){
     const srcs = (await api('/api/sources')).sources;
     const have = new Set(srcs.map(s => s.preset).filter(Boolean));
     $('#presets').innerHTML = presetsCache.map(p => { const added = have.has(p.preset) && !p.param;
-      return `<button data-preset="${p.preset}"${added ? ' style="border-color:var(--acc)"' : ''}>${esc(p.name)}<small>${added ? '<span style="color:var(--acc)">✓ added</span>' : p.param ? (p.param === 'qx' ? 'extra terms, optional' : 'enter ' + esc(p.param)) : p.searchable ? 'searches' : 'follows'}${p.needs_login ? ' · login' : ''}</small></button>`; }).join('');
+      return `<button data-preset="${p.preset}"${added ? ' style="border-color:var(--acc)"' : ''}>${esc(p.name)}<small>${added ? '<span style="color:var(--acc)">✓ added</span>' : p.param ? (p.param === 'qx' ? 'extra terms, optional' : p.param === 'boards' ? 'boards, optional' : 'enter ' + esc(p.param)) : p.searchable ? 'searches' : 'follows'}${p.needs_login ? ' · login' : ''}</small></button>`; }).join('');
     $$('[data-preset]').forEach(b => b.onclick = () => {
       const p = presetsCache.find(x => x.preset === b.dataset.preset);
       const existing = srcs.find(s => s.preset === p.preset);
@@ -2765,7 +2765,7 @@ async function renderSources(){
       <div class="h"><div class="name">${esc(s.name)}</div><label class="switch"><input type="checkbox" data-en="${s.id}" ${s.enabled ? 'checked' : ''} aria-label="Enabled"><span></span></label></div>
       <div class="row wrap" style="margin-top:6px;gap:6px"><span class="kind">${esc(s.kind)}</span><span class="kind" style="color:${s.searchable ? 'var(--acc)' : 'var(--acc4)'}">${s.searchable ? 'searches' : 'follows'}</span>${s.needs_login ? '<span class="kind" style="color:var(--acc3)">login</span>' : ''}${s.options && s.options.topic ? '<span class="kind">one topic</span>' : ''}</div>
       ${s.template ? `<div class="tpl">${esc(s.template)}</div>` : ''}
-      <div class="st${s.last_error ? ' err' : ''}">${s.last_error ? '✕ ' + esc(s.last_error) : s.last_run ? 'last run ' + ago(s.last_run) + ' ago · ' + s.last_found + ' found' : 'not used yet'}</div>
+      <div class="st${s.last_error ? ' err' : ''}">${(s.auto_off || (s.options && s.options.auto_off)) ? '⏻ switched itself off after an error' + (s.last_error ? ': ' + esc(s.last_error) : '') + '. Flip the switch to try it again.' : s.last_error ? '✕ ' + esc(s.last_error) : s.last_run ? 'last run ' + ago(s.last_run) + ' ago · ' + s.last_found + ' found' : 'not used yet'}</div>
       <div class="row" style="margin-top:8px">${s.needs_login && s.last_error ? '<button class="btn sm pri" data-login>SET UP LOGIN</button>' : ''}<button class="btn sm" data-test="${s.id}">TEST</button><button class="btn sm" data-edit="${s.id}">EDIT</button><div class="grow"></div><button class="btn sm danger" data-del="${s.id}" aria-label="Remove">✕</button></div>
     </div>`).join('') : '<div class="empty">NO SOURCES. TAP A ONE-TAP SOURCE ABOVE.</div>';
     $$('[data-en]').forEach(c => c.onchange = async () => { try{ await api('/api/sources/' + c.dataset.en, { method: 'PATCH', body: { enabled: c.checked } }); }catch(e){ toast(e.message); } });
@@ -2831,7 +2831,7 @@ function sourceInfo(s, p){
 }
 async function addPreset(p){
   let param = '';
-  if (p.param){ param = await ask(p.name, { placeholder: p.param === 'qx' ? 'extra terms added to every search, e.g. a place (optional)' : p.param, value: p.param_default || '', ok: 'ADD', note: p.note || '' }); if (param == null) return; if (!param && p.param !== 'qx') return; }
+  if (p.param){ param = await ask(p.name, { placeholder: p.param === 'qx' ? 'extra terms added to every search, e.g. a place (optional)' : p.param, value: p.param_default || '', ok: 'ADD', note: p.note || '' }); if (param == null) return; if (!param && p.param !== 'qx' && p.param !== 'boards') return; }
   try{ await api('/api/sources', { method: 'POST', body: { preset: p.preset, param } }); toast('Added ' + p.name + ' (see Your sources)'); await renderSources(); const last = $$('.src').pop(); if (last) last.scrollIntoView({ behavior: 'smooth', block: 'center' }); }catch(e){ toast(e.message); }
 }
 async function testSource(s){

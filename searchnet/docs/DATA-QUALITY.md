@@ -115,3 +115,15 @@ Legend · **DONE** shipped · **NEXT** small, this week · **PLAN** needs design
 - Known limits: generic grown queries ("florida") still pull unrelated posts into REVIEW; pruning
   queries by precision is the next step. Scores are per topic, so the same post can be in one topic
   and out of another.
+
+- Sources: every built-in source is on from the start (Mastodon, Lemmy, Reddit, Bluesky, YouTube, News,
+  GDELT, the web, Obituaries, Schools, Blogs, Hacker News, Internet Archive, 4chan, Wikipedia; X on the
+  PC server). A source that errors switches itself off and says why in SOURCES; the switch turns it back
+  on. Quota waits and the hub being down do not count as failures.
+- Harvest gaps closed: Bing paged up to 200 results, GDELT searched back to 2017, one retry on 5xx,
+  canonical URLs so the same article is one item, Reddit through PullPush when reddit.com refuses the
+  Worker, verified search-page discovery (OpenSearch, platform fingerprints, forms, common paths, each
+  candidate tested with a real query).
+- Still open: X and Instagram need the PC server with cookies. Bluesky refuses some Cloudflare addresses.
+  4plebs blocks API use; desuarchive and live catalogs cover 4chan. Google News caps at ~100 per query;
+  time windows (before:/after:) per query are the next step for deep history.

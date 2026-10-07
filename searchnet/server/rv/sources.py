@@ -17,7 +17,7 @@ import re
 import urllib.parse
 import xml.etree.ElementTree as ET
 
-from .util import (domain_of, fill_template, hashtag_form, http_get, http_json,
+from .util import (APP_AGENT, domain_of, fill_template, hashtag_form, http_get, http_json,
                    parse_date, short_hash, strip_html, to_float, to_int)
 
 VIDEO_EXT = ("mp4", "webm", "mov", "m4v", "mkv", "m3u8", "gifv", "avi")
@@ -92,13 +92,18 @@ PRESETS = [
     {"preset": "blogs", "name": "Blogs", "kind": "web", "template": "blog OR site:substack.com OR site:medium.com OR site:wordpress.com OR site:blogspot.com",
      "searchable": True, "domains": [], "note": "Web search steered at blogs and newsletters."},
     {"preset": "hn", "name": "Hacker News", "kind": "hn", "template": "", "searchable": True, "domains": ["news.ycombinator.com"]},
+    {"preset": "fourchan", "name": "4chan", "kind": "fourchan", "template": "{param}", "param": "boards",
+     "param_default": "pol,news,b,g,x,tv,v,biz,int,k", "searchable": True, "domains": ["4chan.org", "4channel.org", "desuarchive.org"],
+     "note": "desuarchive full-text search plus the live catalogs of these boards."},
+    {"preset": "wikipedia", "name": "Wikipedia", "kind": "wikipedia", "template": "", "searchable": True, "domains": ["wikipedia.org"]},
     {"preset": "archive", "name": "Internet Archive", "kind": "archive", "template": "", "searchable": True, "domains": ["archive.org"],
      "note": "Books, newspapers, recordings, old sites."},
     {"preset": "custom", "name": "Custom search URL", "kind": "template", "engine": "auto",
      "template": "{param}", "param": "URL with {q}", "searchable": True, "domains": []},
 ]
 PRESET_BY_KEY = {p["preset"]: p for p in PRESETS}
-DEFAULT_SOURCES = ["youtube", "mastodon", "x", "reddit"]
+DEFAULT_SOURCES = ["youtube", "mastodon", "x", "reddit", "bluesky", "news", "gdelt", "web", "obituaries", "schools",
+                   "blogs", "hn", "archive", "fourchan", "wikipedia"]
 
 
 def is_searchable(src) -> bool:
@@ -599,7 +604,7 @@ def _extra(src, query):
 def _article(ctx, link, text, author="", posted_at=None, prefix="web", **kw):
     dom = domain_of(link)
     it = _web_item(ctx, dom, link, "post", text, posted_at=posted_at, author=author or dom)
-    it["id"] = f"{prefix}:{short_hash(link)}"
+    it["id"] = f"{prefix}:{short_hash(canon_url(link))}"
     it["platform"] = kw.pop("platform", prefix)
     it.update(kw)
     return it
@@ -620,22 +625,36 @@ def fetch_gdelt(ctx, src, query, limit):
     """GDELT DOC 2.0: world news articles, searchable back years."""
     q = _extra(src, query)
     d = http_json(f"https://api.gdeltproject.org/api/v2/doc/doc?query={urllib.parse.quote(q)}"
-                  f"&mode=ArtList&maxrecords={min(limit, 250)}&format=json&sort=DateDesc", timeout=25)
+                  f"&mode=ArtList&maxrecords={min(limit, 250)}&format=json&sort=DateDesc&startdatetime=20170101000000", timeout=25)
     for a in (d.get("articles") or [])[:limit]:
         ts = None
         m = re.match(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z", a.get("seendate") or "")
         if m:
             ts = parse_date("%s-%s-%sT%s:%s:%sZ" % m.groups())
         yield _article(ctx, a["url"], a.get("title") or "", author=a.get("domain") or "", posted_at=ts,
-                       prefix="gdelt", platform="news", lang=a.get("language"), thumbnail=a.get("socialimage"))
+                       prefix="news", platform="news", lang=a.get("language"), thumbnail=a.get("socialimage"))
 
 
 def fetch_web(ctx, src, query, limit):
     """The open web through Bing's RSS output: blogs, forums, school and company sites, obituaries."""
-    url = f"https://www.bing.com/search?format=rss&q={urllib.parse.quote(_extra(src, query))}&count={min(limit, 50)}"
-    body, _, _ = http_get(url, timeout=20)
-    for e in items_from_feed(body, url, ctx.label, True)[:limit]:
-        yield _article(ctx, e["url"], e["text"], posted_at=e.get("posted_at"), prefix="web", platform="web")
+    seen, got, first = set(), 0, 1
+    while got < limit and first <= 151:          # pages of 50, up to 4 pages
+        url = f"https://www.bing.com/search?format=rss&q={urllib.parse.quote(_extra(src, query))}&count=50&first={first}"
+        body, _, _ = http_get(url, timeout=20)
+        page, fresh = items_from_feed(body, url, ctx.label, True), 0
+        for e in page:
+            k = canon_url(e["url"])
+            if k in seen:
+                continue
+            seen.add(k)
+            fresh += 1
+            yield _article(ctx, e["url"], e["text"], posted_at=e.get("posted_at"), prefix="web", platform="web")
+            got += 1
+            if got >= limit:
+                break
+        if not fresh or len(page) < 10:
+            break
+        first += 50
 
 
 def fetch_hn(ctx, src, query, limit):
@@ -666,25 +685,103 @@ def fetch_archive(ctx, src, query, limit):
         yield it
 
 
-ARTICLE_KINDS = {"news", "gdelt", "web", "hn", "archive"}
+def canon_url(u):
+    """the same page reached by two links (utm tags, trailing slash, m. host) is one item"""
+    try:
+        p = urllib.parse.urlsplit(u)
+        host = p.netloc.lower()
+        host = re.sub(r"^(www|m|amp)\.", "", host)
+        qs = [(k, v) for k, v in urllib.parse.parse_qsl(p.query, keep_blank_values=True)
+              if not re.match(r"^(utm_|fbclid|gclid|mc_|ref$|ref_|igshid|si$|feature$)", k, re.I)]
+        return host + (p.path.rstrip("/") or "/") + ("?" + urllib.parse.urlencode(qs) if qs else "")
+    except Exception:       # noqa: BLE001
+        return u or ""
+
+
+def fetch_fourchan(ctx, src, query, limit):
+    """desuarchive search (a, g, co, tv, …) + the live catalogs of the boards in the template."""
+    out, words = 0, [w for w in (query or "").lower().split() if len(w) > 2]
+    try:
+        d = http_json(f"https://desuarchive.org/_/api/chan/search/?text={urllib.parse.quote(query or '')}&order=desc",
+                      timeout=20, headers={"User-Agent": "Mozilla/5.0 " + APP_AGENT})
+        for p in (d.get("0") or {}).get("posts") or []:
+            board = (p.get("board") or {}).get("shortname") or ""
+            media = p.get("media") or {}
+            link = f"https://desuarchive.org/{board}/post/{p.get('num')}/"
+            it = _web_item(ctx, "4chan", link, "video" if media_kind(media.get("media_link") or "") == "video" else "image" if media.get("media_link") else "post",
+                           "\n".join(x for x in (p.get("title"), strip_html(p.get("comment_processed") or p.get("comment") or "")) if x),
+                           author=p.get("name") or "Anonymous", posted_at=to_int(p.get("timestamp")) or None, hashtags=f"/{board}/",
+                           media_url=media.get("media_link") if media_kind(media.get("media_link") or "") == "video" else None,
+                           thumbnail=media.get("thumb_link"))
+            it["id"], it["platform"] = f"4chan:{board}:{p.get('num')}", "4chan"
+            yield it
+            out += 1
+            if out >= limit:
+                return
+    except Exception:       # noqa: BLE001 — archive down: live boards below
+        pass
+    boards = [b for b in re.split(r"[,\s]+", (src.get("template") or "") if "{" not in (src.get("template") or "") else "") if b][:12] \
+        or ["pol", "news", "b", "g", "x", "tv", "v", "biz", "int", "k"]
+    for b in boards:
+        if out >= limit:
+            return
+        try:
+            pages = http_json(f"https://a.4cdn.org/{b}/catalog.json", timeout=15)
+        except Exception:   # noqa: BLE001
+            continue
+        for pg in pages:
+            for t in pg.get("threads") or []:
+                text = strip_html("\n".join(x for x in (t.get("sub"), t.get("com")) if x))
+                low = text.lower()
+                if words and not all(w in low for w in words):
+                    continue
+                ext = t.get("ext") or ""
+                it = _web_item(ctx, "4chan", f"https://boards.4chan.org/{b}/thread/{t.get('no')}",
+                               "video" if ext in (".webm", ".mp4") else "image" if ext else "post", text,
+                               author=t.get("name") or "Anonymous", posted_at=t.get("time"), hashtags=f"/{b}/", replies=t.get("replies") or 0,
+                               media_url=f"https://i.4cdn.org/{b}/{t.get('tim')}{ext}" if ext in (".webm", ".mp4") else None,
+                               thumbnail=f"https://i.4cdn.org/{b}/{t.get('tim')}s.jpg" if t.get("tim") else None)
+                it["id"], it["platform"] = f"4chan:{b}:{t.get('no')}", "4chan"
+                yield it
+                out += 1
+                if out >= limit:
+                    return
+
+
+def fetch_wikipedia(ctx, src, query, limit):
+    lang = re.sub(r"[^a-z-]", "", (ctx.opts.get("lang") or "en").lower()) or "en"
+    d = http_json(f"https://{lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch={urllib.parse.quote(_extra(src, query))}"
+                  f"&format=json&srlimit={min(limit, 50)}&srprop=snippet|timestamp|wordcount", timeout=20,
+                  headers={"Api-User-Agent": APP_AGENT})
+    for s in ((d.get("query") or {}).get("search") or [])[:limit]:
+        link = f"https://{lang}.wikipedia.org/wiki/{urllib.parse.quote(s['title'].replace(' ', '_'))}"
+        it = _web_item(ctx, f"{lang}.wikipedia.org", link, "post", s["title"] + "\n" + strip_html(s.get("snippet") or ""),
+                       author=f"{lang}.wikipedia.org", posted_at=parse_date(s.get("timestamp")), views=s.get("wordcount") or 0)
+        it["id"], it["platform"] = f"wikipedia:{lang}:{s['pageid']}", "wikipedia"
+        yield it
+
+
+ARTICLE_KINDS = {"news", "gdelt", "web", "hn", "archive", "fourchan", "wikipedia"}
 
 ADAPTERS = {
     "x": fetch_x, "ytsearch": fetch_ytsearch, "template": fetch_template, "url": fetch_url,
     "mastodon": fetch_mastodon, "reddit": fetch_reddit, "rss": fetch_rss,
     "news": fetch_news, "gdelt": fetch_gdelt, "web": fetch_web, "hn": fetch_hn, "archive": fetch_archive,
+    "fourchan": fetch_fourchan, "wikipedia": fetch_wikipedia,
 }
 
 
-def discover(url: str):
-    """A site → its feeds and its search page, so it can be followed or searched."""
+def discover(url: str, verify=True):
+    """A site → its feeds and a verified search-page template, so it can be followed or searched."""
     url = url if re.match(r"^https?://", url) else "https://" + url
     origin = "{0.scheme}://{0.netloc}".format(urllib.parse.urlparse(url))
-    out = {"url": url, "host": domain_of(url), "feeds": [], "search": None}
+    out = {"url": url, "host": domain_of(url), "feeds": [], "search": None, "candidates": [], "platform": ""}
     html = ""
     try:
-        html, _, _ = http_get(origin + "/", timeout=15, max_bytes=400_000)
+        html, _, _ = http_get(origin + "/", timeout=15, max_bytes=600_000)
     except Exception as e:      # noqa: BLE001
         out["error"] = str(e)[:200]
+    absu = lambda h: urllib.parse.urljoin(origin, h)   # noqa: E731
     for m in re.finditer(r"<link[^>]+>", html, re.I):
         t = m.group(0)
         if not re.search(r"application/(?:rss|atom)\+xml", t, re.I):
@@ -692,9 +789,9 @@ def discover(url: str):
         href = re.search(r"href=[\"']([^\"']+)", t, re.I)
         title = re.search(r"title=[\"']([^\"']+)", t, re.I)
         if href and len(out["feeds"]) < 6:
-            out["feeds"].append({"url": urllib.parse.urljoin(origin, href.group(1)), "title": strip_html(title.group(1)) if title else ""})
+            out["feeds"].append({"url": absu(href.group(1)), "title": strip_html(title.group(1)) if title else ""})
     if not out["feeds"]:
-        for path in ("/feed", "/rss", "/feed.xml", "/rss.xml", "/atom.xml", "/?feed=rss2", "/feeds/posts/default"):
+        for path in ("/feed", "/rss", "/feed.xml", "/rss.xml", "/atom.xml", "/?feed=rss2", "/feeds/posts/default", "/index.xml"):
             try:
                 body, ctype, final = http_get(origin + path, timeout=8, max_bytes=200_000)
                 if re.search(r"xml|rss|atom", ctype or "", re.I) or body.lstrip().startswith("<?xml") or "<rss" in body[:500]:
@@ -702,20 +799,69 @@ def discover(url: str):
                     break
             except Exception:   # noqa: BLE001
                 continue
+    cands = []
+    # 1. OpenSearch description
+    os_ = re.search(r"<link[^>]+type=[\"']application/opensearchdescription\+xml[\"'][^>]+>", html, re.I)
+    if os_:
+        href = re.search(r"href=[\"']([^\"']+)", os_.group(0), re.I)
+        if href:
+            try:
+                xml, _, _ = http_get(absu(href.group(1)), timeout=10, max_bytes=100_000)
+                tpl = re.search(r"<Url[^>]+type=[\"']text/html[\"'][^>]+template=[\"']([^\"']+)", xml, re.I) or \
+                    re.search(r"<Url[^>]+template=[\"']([^\"']+)[\"'][^>]+type=[\"']text/html[\"']", xml, re.I)
+                if tpl:
+                    cands.append((absu(tpl.group(1).replace("{searchTerms}", "{q}").replace("&amp;", "&")), "OpenSearch"))
+            except Exception:   # noqa: BLE001
+                pass
+    # 2. the platform behind the site
+    for rx, name, tpl in ((r"wp-content|wp-includes|wp-json", "wordpress", "/?s={q}"), (r"discourse|data-discourse", "discourse", "/search?q={q}"),
+                          (r"mediawiki|wgCanonicalNamespace|/wiki/Special:", "mediawiki", "/index.php?search={q}"), (r"Shopify\.theme|cdn\.shopify", "shopify", "/search?q={q}"),
+                          (r"xenforo|XF\.config", "xenforo", "/search/search?keywords={q}"), (r"vbulletin", "vbulletin", "/search.php?do=process&query={q}"),
+                          (r"squarespace", "squarespace", "/search?q={q}"), (r"invision|ipsSettings", "invision", "/search/?q={q}"), (r"phpbb", "phpbb", "/search.php?keywords={q}"),
+                          (r"substack", "substack", "/search/{q}"), (r"ghost-url|ghost\.io", "ghost", ""), (r"wix\.com|wixstatic", "wix", "")):
+        if re.search(rx, html, re.I):
+            out["platform"] = name
+            if tpl:
+                cands.append((origin + tpl, name))
+            break
+    # 3. a search form, whatever the field is called
     for f in re.finditer(r"<form[^>]*>([\s\S]*?)</form>", html, re.I):
-        inner = f.group(1)
-        inp = re.search(r"<input[^>]+(?:type=[\"']search[\"']|name=[\"'](?:q|s|search|query|keyword|keywords|term)[\"'])[^>]*>", inner, re.I)
+        open_tag, inner = f.group(0)[:f.group(0).find(">") + 1], f.group(1)
+        if re.search(r"method=[\"']post", open_tag, re.I):
+            continue
+        inp = re.search(r"<input[^>]+(?:type=[\"']search[\"']|name=[\"'](?:q|s|search|query|keyword|keywords|term|text|k|wd|search_query|searchterm|search_term|p)[\"'])[^>]*>", inner, re.I)
+        if not inp and re.search(r"search", open_tag + inner, re.I):
+            inp = re.search(r"<input[^>]+name=[\"']([^\"']+)[\"'][^>]*>", inner, re.I)
         if not inp:
             continue
         name = re.search(r"name=[\"']([^\"']+)", inp.group(0), re.I)
         if not name:
             continue
-        action = re.search(r"action=[\"']([^\"']*)", f.group(0)[:f.group(0).find(">") + 1], re.I)
-        a = urllib.parse.urljoin(origin, action.group(1) if action else "/")
-        out["search"] = a + ("&" if "?" in a else "?") + name.group(1) + "={q}"
-        break
+        action = re.search(r"action=[\"']([^\"']*)", open_tag, re.I)
+        a = absu(action.group(1) if action else "/")
+        cands.append((a + ("&" if "?" in a else "?") + name.group(1) + "={q}", "search form"))
+    # 4. the usual suspects
+    for tpl in ("/search?q={q}", "/?s={q}", "/search/{q}", "/search?query={q}", "/?q={q}", "/search?s={q}"):
+        cands.append((origin + tpl, "common pattern"))
+    seen = set()
+    for tpl, why in cands:
+        if tpl in seen or len(out["candidates"]) >= 6:
+            continue
+        seen.add(tpl)
+        okc = False
+        if verify:
+            try:
+                body, _, _ = http_get(tpl.replace("{q}", "news"), timeout=10, max_bytes=300_000)
+                title = re.search(r"<title[^>]*>([^<]*)", body, re.I)
+                okc = len(re.findall(r"<a\s", body, re.I)) >= 5 and re.search(r"news", strip_html(body), re.I) is not None \
+                    and not re.search(r"404|not found", title.group(1) if title else "", re.I)
+            except Exception:   # noqa: BLE001
+                okc = False
+        out["candidates"].append({"template": tpl, "why": why, "verified": okc})
+        if okc and not out["search"]:
+            out["search"] = tpl
     if not out["search"]:
-        out["search_guess"] = origin + "/?s={q}"
+        out["search_guess"] = out["candidates"][0]["template"] if out["candidates"] else origin + "/?s={q}"
     return out
 
 

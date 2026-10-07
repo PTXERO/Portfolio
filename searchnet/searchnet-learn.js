@@ -212,14 +212,16 @@
     job.result = { topic_id: tid, new: seen.size, queries: runQs };
   }
   async function collectForTopic(t, runQs, srcs, job, seen) {
+    srcs = srcs.slice();
     for (const q of runQs) {
-      for (const s of srcs) {
+      for (const s of srcs.slice()) {
         if (job.cancel) return;
         try {
           const params = new URLSearchParams({ source: s.source, q, limit: t.settings.per_query || 20, media: t.settings.media || 'video' });
           if (s.value && s.param === 'instance') params.set('instance', s.value);
           if (s.value && s.param === 'url') params.set('url', s.value);          // feeds and 'Any site' templates carry their URL
           if (s.value && s.param === 'qx') params.set('qx', s.value);            // Obituaries / Schools / local news: extra terms on every query
+          if (s.value && s.param === 'boards') params.set('boards', s.value);
           const r = await workerSearch(params);
           const q2 = (t.queries || []).find((x) => x.query === q);
           let found = 0;
@@ -231,7 +233,7 @@
           }
           if (q2) { q2.runs++; q2.found += found; }
           job.stats.found += found; job.log('  ' + found + ' · ' + q + ' @ ' + s.name);
-        } catch (e) { job.stats.errors++; job.log('  ✕ ' + s.name + ': ' + e.message); }
+        } catch (e) { job.stats.errors++; job.log('  ✕ ' + s.name + ': ' + e.message); if (await L.markFailed(s.id, e.message)) { job.log('    ' + s.name + ' switched off until you turn it back on (SOURCES)'); srcs = srcs.filter((x) => x.id !== s.id); } }
         job.done++;
       }
     }

@@ -888,10 +888,44 @@ class WebSourcesAndMembership(Base):
     def test_discover_finds_feed_and_search_form(self):
         html = ('<html><head><link rel="alternate" type="application/rss+xml" title="Feed" href="/feed.xml"></head>'
                 '<body><form action="/search"><input type="text" name="q"></form></body></html>')
-        self._mock(get=lambda url, **k: (html, "text/html", url))
+        results = "<html><title>Results</title><body>news " + "<a href=x>r</a>" * 8 + "</body></html>"
+        self._mock(get=lambda url, **k: ((results if "news" in url else html), "text/html", url))
         d = S.discover("blog.example")
         self.assertEqual(d["feeds"][0]["url"], "https://blog.example/feed.xml")
-        self.assertEqual(d["search"], "https://blog.example/search?q={q}")
+        self.assertEqual(d["search"], "https://blog.example/search?q={q}")      # the form, verified with a real query
+        self.assertTrue(d["candidates"][0]["verified"])
+        # a WordPress site with no form still gets its platform's search page
+        wp = "<html><head><link rel='stylesheet' href='/wp-content/themes/x.css'></head><body></body></html>"
+        self._mock(get=lambda url, **k: ((results if "news" in url else wp), "text/html", url))
+        d = S.discover("wp.example")
+        self.assertEqual((d["platform"], d["search"]), ("wordpress", "https://wp.example/?s={q}"))
+
+    def test_every_default_source_is_on_and_a_failing_one_turns_itself_off(self):
+        presets = {s["preset"] for s in self.v.list_sources()}
+        for k in ("news", "web", "fourchan", "wikipedia", "reddit", "bluesky", "obituaries"):
+            self.assertIn(k, presets)
+        self.assertTrue(all(s["enabled"] for s in self.v.list_sources()))
+        # an older install: a missing default joins once, a removed one stays removed
+        self.v.db.exec("DELETE FROM sources WHERE preset IN ('wikipedia', 'hn')")
+        self.v.db.exec("DELETE FROM cache WHERE key='sources_seeded'")
+        v2 = Vault(self.tmp, start_threads=False)
+        self.assertIn("wikipedia", {s["preset"] for s in v2.list_sources()})
+        v2.db.exec("DELETE FROM sources WHERE preset='hn'")
+        v3 = Vault(self.tmp, start_threads=False)
+        self.assertNotIn("hn", {s["preset"] for s in v3.list_sources()})
+        v2.db.conn.close(); v3.db.conn.close()
+        # a source that errors switches itself off; flipping it back on clears the failure
+        def boom(url, **k):
+            raise RuntimeError("bing.com → HTTP 403")
+        self._mock(get=boom)
+        web = next(s for s in self.v.list_sources() if s["preset"] == "web")
+        list(self.v.fetch(Job("collect", {}), web, "x", 5, {"media": "video"}))
+        web = self.v.get_source(web["id"])
+        self.assertEqual(web["enabled"], 0)
+        self.assertTrue(web["options"].get("auto_off"))
+        self.assertIn("403", web["last_error"])
+        web = self.v.update_source(web["id"], {"enabled": True})
+        self.assertEqual((web["enabled"], web["options"].get("auto_off"), web["last_error"]), (1, None, ""))
 
     def test_thumbs_down_and_low_scores_stay_out_of_the_web(self):
         t = self.v.create_topic("Florida Hurricane Isaias", ["florida hurricane isaias"])
