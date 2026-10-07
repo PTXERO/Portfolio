@@ -31,6 +31,8 @@
   const hashSet = (it) => { const h = new Set((it.hashtags || '').toLowerCase().split(/\s+/).filter(Boolean)); if (!h.size) (String(it.text || '').match(/(?:^|\s)#([\p{L}\p{N}_]{2,})/gu) || []).forEach((m) => h.add(m.replace(/.*#/, '').toLowerCase())); return h; };
   const pid = (it) => String(it.author || '?').toLowerCase() + '|' + (it.platform || '?');
   const OUTLETS = new Set(['news', 'web', 'archive', 'wikipedia']);          // publishers, not people
+  const WRITER_PLAT = 'press';                                                 // a byline is an account here; its "network" is the outlet that printed it
+  const bylineOf = (it) => (Array.isArray(it.byline) ? it.byline : []).map(String).filter((x) => x.trim()).slice(0, 4);
   const CONNECT = new Set(['of', 'the', 'and', 'de', 'du', 'von', 'van', '&', 'da', 'del', 'la', 'le']);
   const ENT_LEAD = new Set('the a an this that our my his her their its i we you it in on at for to from by with as but and or if so when after before breaking update watch live new video photo photos read more here now just why how what'.split(' '));
   // named things written in a post: runs of 2–4 capitalised words. The one real cross-source link articles offer.
@@ -38,8 +40,10 @@
     const out = [], seen = new Set(); skip = new Set([...(skip || [])].map((w) => String(w).toLowerCase()));
     for (const sentence of String(text || '').split(/[.!?\n:;,()\[\]"“”|]+| [—–-] /)) {
       const words = sentence.match(/[A-Za-z][\w'’.-]*|&/g) || []; let run = [];
-      const flush = () => { while (run.length && (ENT_LEAD.has(run[0].toLowerCase()) || CONNECT.has(run[0].toLowerCase()))) run.shift(); while (run.length && CONNECT.has(run[run.length - 1].toLowerCase())) run.pop();
-        if (run.length >= 2 && run.length <= 4) { const low = run.map((w) => w.toLowerCase().replace(/^[.'’]+|[.'’]+$/g, '')).join(' '); if (!seen.has(low) && !low.split(' ').every((w) => skip.has(w) || STOP.has(w)) && out.length < 8) { seen.add(low); out.push(low); } } run = []; };
+      const emit = (run) => { while (run.length && (ENT_LEAD.has(run[0].toLowerCase()) || CONNECT.has(run[0].toLowerCase()))) run.shift(); while (run.length && CONNECT.has(run[run.length - 1].toLowerCase())) run.pop();
+        if (run.length > 4) { const parts = [[]]; for (const w of run) { if (CONNECT.has(w.toLowerCase())) parts.push([]); else parts[parts.length - 1].push(w); } if (parts.length > 1) { parts.forEach(emit); return; } }   // "Jane Doe of the Naples Daily News": two names joined by connectors
+        if (run.length >= 2 && run.length <= 4) { const low = run.map((w) => w.toLowerCase().replace(/^[.'’]+|[.'’]+$/g, '')).join(' '); if (!seen.has(low) && !low.split(' ').every((w) => skip.has(w) || STOP.has(w)) && out.length < 8) { seen.add(low); out.push(low); } } };
+      const flush = () => { emit(run.slice()); run = []; };
       for (const w of words) { if (/^[A-Z]/.test(w) || (run.length && CONNECT.has(w.toLowerCase()))) run.push(w); else flush(); }
       flush();
     }
@@ -285,7 +289,7 @@
     const focus = parseFocus(opts.focus);
     let items = await idb.all('items');
     if (opts.platform) items = items.filter((it) => it.platform === opts.platform);
-    if (opts.role === 'person') items = items.filter((it) => !OUTLETS.has(it.platform)); else if (opts.role === 'outlet') items = items.filter((it) => OUTLETS.has(it.platform));
+    if (opts.role === 'person') items = items.filter((it) => !OUTLETS.has(it.platform)); else if (opts.role === 'outlet' || opts.role === 'writer') items = items.filter((it) => OUTLETS.has(it.platform));
     let seedWords = new Set(); if (opts.topic) { const tt = await idb.get('topics', opts.topic); if (tt) seedWords = new Set((tt.seeds || []).concat([tt.name]).flatMap((s) => tokens(s))); }
     if (opts.topic) { const { byItem } = await voteIndex(); items = items.filter((it) => (byItem.get(it.id) || []).some((v) => v.topic_id === opts.topic && v.member)); }   // only what is in this topic: 👍, or unrated above the bar; never 👎
     // per-post term sets → co-occurrence; per-account usage counts
@@ -295,7 +299,7 @@
     const edgeP = {};   // how much of the weight came from each kind: m mention · f follow · h shared hashtag · s shared words
     const edgeEv = {};   // the how / why / where: posts [{id,url,text}], tags, names, words, follow direction, person
     const postRef = (it) => ({ id: it.id, url: it.url, text: String(it.text || '').slice(0, 90) });
-    const link = (a, b, w, t = 3, kind = 's', ev = null) => { if (a === b) return; const k = a < b ? a + '\u0001' + b : b + '\u0001' + a; edgeW[k] = (edgeW[k] || 0) + w; edgeT[k] = Math.min(edgeT[k] || 9, t); const P = edgeP[k] || (edgeP[k] = { m: 0, f: 0, h: 0, s: 0, i: 0, e: 0 }); P[kind] += w;
+    const link = (a, b, w, t = 3, kind = 's', ev = null) => { if (a === b) return; const k = a < b ? a + '\u0001' + b : b + '\u0001' + a; edgeW[k] = (edgeW[k] || 0) + w; edgeT[k] = Math.min(edgeT[k] || 9, t); const P = edgeP[k] || (edgeP[k] = { m: 0, f: 0, h: 0, s: 0, i: 0, e: 0, b: 0 }); P[kind] += w;
       if (ev) { const E = edgeEv[k] || (edgeEv[k] = {}); for (const key in ev) { const val = ev[key]; if (Array.isArray(val)) { const cur = E[key] || (E[key] = []); for (const x of val) if (cur.length < 3 && !cur.some((y) => JSON.stringify(y) === JSON.stringify(x))) cur.push(x); } else if (key === 'follow' && E.follow && E.follow !== val) E.follow = 'mutual'; else if (E[key] === undefined) E[key] = val; } } };
     const acctId = (it) => '@' + String(it.author || '').toLowerCase() + '|' + (it.platform || '');
     // words that appear in more than a third of all posts are boilerplate here ("video", "new"…):
@@ -314,16 +318,24 @@
     // an account's own name (an outlet's masthead, a poster's display name) is never a named thing of its own:
     // named by someone else it is a mention of that account, named by itself it is nothing
     const acctNames = {}; for (const it of items) { if (!it.author) continue; for (const nm of [String(it.author).toLowerCase(), String(it.author_name || '').toLowerCase()]) if (nm.length > 3 && acctNames[nm] === undefined) acctNames[nm] = acctId(it); }
+    // the people who wrote the articles: a byline is an account on the "press" platform, tied to its outlet
+    const writerDisp = {};
+    for (const it of items) if (it.author && OUTLETS.has(it.platform)) for (const nm of bylineOf(it)) { const wid = '@' + nm.toLowerCase() + '|' + WRITER_PLAT; writerDisp[wid] = nm; kindOf[wid] = 'account'; if (acctNames[nm.toLowerCase()] === undefined) acctNames[nm.toLowerCase()] = wid; }
     for (const it of items) {
       if (!it.author) continue;
       const A = acctId(it); kindOf[A] = 'account';
       const tags = it.platform === 'archive' ? [] : [...hashSet(it)].map((h) => '#' + h);   // archive's "tags" are media types
       const own = new Set([String(it.author || '').toLowerCase(), String(it.author_name || '').toLowerCase()]);
+      const wids = OUTLETS.has(it.platform) ? bylineOf(it).map((nm) => '@' + nm.toLowerCase() + '|' + WRITER_PLAT) : [];
+      wids.forEach((w) => own.add(w.slice(1).split('|')[0]));
+      const outlet = it.author_name || it.author;
+      wids.forEach((w) => { link(w, A, 2.5, 1, 'b', { posts: [postRef(it)], byline: writerDisp[w] + ' writes for ' + outlet }); if (!seenPost.has(postKey(it))) bump(w, 1); });
+      for (let i = 0; i < wids.length; i++) for (let j = i + 1; j < wids.length; j++) link(wids[i], wids[j], 2, 1, 'b', { posts: [postRef(it)], byline: writerDisp[wids[i]] + ' and ' + writerDisp[wids[j]] + ' share a byline' });
       let rawE = entitiesIn(it.text, new Set([...seedWords, ...[...own].flatMap((n) => n.split(' '))])).filter((e) => !own.has(e));
       rawE.filter((e) => acctNames[e] && acctNames[e] !== A).forEach((e) => link(A, acctNames[e], 2, 1, 'm', { posts: [postRef(it)], mention: A.split('|')[0] + ' names ' + e }));
       rawE = rawE.filter((e) => !acctNames[e]);
       const ents = rawE.filter((e) => !rawE.some((o) => o !== e && o.includes(e))).map((e) => 'e:' + e);   // 'tampa bay' inside 'tampa bay times' is one name
-      ents.forEach((e) => { kindOf[e] = 'entity'; bump(e, 1); link(A, e, 1.5, 2, 'e', { posts: [postRef(it)], names: [e.slice(2)] }); });
+      ents.forEach((e) => { kindOf[e] = 'entity'; bump(e, 1); link(A, e, 1.5, 2, 'e', { posts: [postRef(it)], names: [e.slice(2)] }); wids.forEach((w) => link(w, e, 1, 2, 'e', { posts: [postRef(it)], names: [e.slice(2)] })); });
       for (let i = 0; i < ents.length; i++) for (let j = i + 1; j < ents.length; j++) link(ents[i], ents[j], 1, 2, 'e', { posts: [postRef(it)] });
       const words = [...new Set(tokens(it.text).filter((w) => w.length > WORD_MIN && !STOP.has(w) && !generic(w)))].map((w) => 'w:' + w);
       if (focus && focus.kind === 'word' && focus.phrase) {              // a quoted phrase is its own node
@@ -393,7 +405,8 @@
     } else {
       const per = { account: Math.round(cap * 0.35), hashtag: Math.round(cap * 0.2), word: Math.round(cap * 0.2), entity: Math.round(cap * 0.25) };
       ids = [];
-      for (const kind of ['account', 'hashtag', 'word', 'entity']) if (kinds.has(kind)) ids.push(...Object.keys(nodeW).filter((k) => kindOf[k] === kind).sort((a, b) => nodeW[b] - nodeW[a]).slice(0, per[kind]));
+      for (const kind of ['account', 'hashtag', 'word', 'entity']) if (kinds.has(kind)) ids.push(...Object.keys(nodeW).filter((k) => kindOf[k] === kind && (opts.role !== 'writer' || kind !== 'account' || k.endsWith('|' + WRITER_PLAT))).sort((a, b) => nodeW[b] - nodeW[a]).slice(0, per[kind]));
+      if (opts.role === 'writer') { const have = new Set(ids); const ride = new Set(); for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (have.has(a) !== have.has(b) && (edgeP[k] || {}).b > 0) ride.add(have.has(a) ? b : a); } ids.push(...[...ride].sort((a, b) => nodeW[b] - nodeW[a]).slice(0, Math.max(4, Math.floor(cap / 6)))); }   // the outlets each writer writes for ride along, so the tie shows
     }
     // MERGE: collapse each person's accounts into one node named after them (links re-routed, counts summed)
     const personName = {}, personMembers = {};
@@ -403,10 +416,10 @@
       const nids = [], seenN = new Set();
       for (const k of ids) { const m = A(k); if (m !== k) { kindOf[m] = 'account'; nodeN[m] = (nodeN[m] || 0) + (nodeN[k] || 0); nodeW[m] = (nodeW[m] || 0) + (nodeW[k] || 0); if (hopOf[k] !== undefined) hopOf[m] = Math.min(hopOf[m] === undefined ? 99 : hopOf[m], hopOf[k]); personName[m] = personOf[k].name; (personMembers[m] = personMembers[m] || []).push(k.slice(1)); } if (!seenN.has(m)) { seenN.add(m); nids.push(m); } }
       ids = nids; if (focusId) focusId = A(focusId);
-      for (const k of Object.keys(edgeW)) { const [a, b] = k.split('\u0001'); const a2 = A(a), b2 = A(b); if (a2 === a && b2 === b) continue; const w = edgeW[k], t = edgeT[k], P = edgeP[k]; delete edgeW[k]; delete edgeT[k]; delete edgeP[k]; if (a2 === b2) continue; const k2 = a2 < b2 ? a2 + '\u0001' + b2 : b2 + '\u0001' + a2; if (edgeEv[k]) { edgeEv[k2] = Object.assign({}, edgeEv[k], edgeEv[k2] || {}); delete edgeEv[k]; } edgeW[k2] = (edgeW[k2] || 0) + w; edgeT[k2] = Math.min(edgeT[k2] || 9, t || 3); const Q = edgeP[k2] || (edgeP[k2] = { m: 0, f: 0, h: 0, s: 0, i: 0, e: 0 }); if (P) for (const kk in P) Q[kk] = (Q[kk] || 0) + P[kk]; }
+      for (const k of Object.keys(edgeW)) { const [a, b] = k.split('\u0001'); const a2 = A(a), b2 = A(b); if (a2 === a && b2 === b) continue; const w = edgeW[k], t = edgeT[k], P = edgeP[k]; delete edgeW[k]; delete edgeT[k]; delete edgeP[k]; if (a2 === b2) continue; const k2 = a2 < b2 ? a2 + '\u0001' + b2 : b2 + '\u0001' + a2; if (edgeEv[k]) { edgeEv[k2] = Object.assign({}, edgeEv[k], edgeEv[k2] || {}); delete edgeEv[k]; } edgeW[k2] = (edgeW[k2] || 0) + w; edgeT[k2] = Math.min(edgeT[k2] || 9, t || 3); const Q = edgeP[k2] || (edgeP[k2] = { m: 0, f: 0, h: 0, s: 0, i: 0, e: 0, b: 0 }); if (P) for (const kk in P) Q[kk] = (Q[kk] || 0) + P[kk]; }
     }
     const idset = new Set(ids);
-    const edges = []; for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (idset.has(a) && idset.has(b)) { const P = edgeP[k] || { m: 0, f: 0, h: 0, s: edgeW[k], i: 0, e: 0 }; edges.push({ a, b, w: +edgeW[k].toFixed(2), t: edgeT[k] || 3, p: { m: +P.m.toFixed(2), f: +P.f.toFixed(2), h: +P.h.toFixed(2), s: +P.s.toFixed(2), i: +(P.i || 0).toFixed(2), e: +(P.e || 0).toFixed(2) }, ev: edgeEv[k] || {} }); } }
+    const edges = []; for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (idset.has(a) && idset.has(b)) { const P = edgeP[k] || { m: 0, f: 0, h: 0, s: edgeW[k], i: 0, e: 0 }; edges.push({ a, b, w: +edgeW[k].toFixed(2), t: edgeT[k] || 3, p: { m: +P.m.toFixed(2), f: +P.f.toFixed(2), h: +P.h.toFixed(2), s: +P.s.toFixed(2), i: +(P.i || 0).toFixed(2), e: +(P.e || 0).toFixed(2), b: +(P.b || 0).toFixed(2) }, ev: edgeEv[k] || {} }); } }
     // keep the strongest links overall PLUS every node's own strongest few, so nothing is left dangling
     edges.sort((p, q) => (p.t - q.t) || (q.w - p.w));
     const keep = new Set(edges.filter((e) => e.t === 1).concat(edges.slice(0, cap * 4))); const per = {};
@@ -419,10 +432,10 @@
     ids = ids.filter((id) => id === focusId || (wordFocus && kindOf[id] === 'word') || bestT[id] === undefined || bestT[id] <= 2); const idset2 = new Set(ids); E = E.filter((e) => idset2.has(e.a) && idset2.has(e.b));
     const deg = {}; E.forEach((e) => { deg[e.a] = (deg[e.a] || 0) + e.w; deg[e.b] = (deg[e.b] || 0) + e.w; });
     const meta = await allMeta();
-    const nodes = ids.map((id) => { const kind = kindOf[id] || 'word'; const isPerson = id.startsWith('person:'); const label = isPerson ? personName[id] : kind === 'account' ? id.slice(1).split('|')[0] : kind === 'hashtag' ? id : kind === 'entity' ? id.slice(2).replace(/\b\w/g, (c) => c.toUpperCase()) : id.slice(2);
+    const nodes = ids.map((id) => { const kind = kindOf[id] || 'word'; const isPerson = id.startsWith('person:'); const label = isPerson ? personName[id] : writerDisp[id] ? writerDisp[id] : kind === 'account' ? id.slice(1).split('|')[0] : kind === 'hashtag' ? id : kind === 'entity' ? id.slice(2).replace(/\b\w/g, (c) => c.toUpperCase()) : id.slice(2);
       if (isPerson) { const first = (personMembers[id] || [])[0]; return { id, kind: 'account', label, n: nodeN[id] || 0, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), hop: hopOf[id] === undefined ? null : hopOf[id], person_id: first ? ([...by.values()].find((a) => a.id.toLowerCase() === first)?.id || first) : null, identity_id: id.slice(7), identity: label, accounts: personMembers[id] || [], attrs: [] }; }
       const I = personOf[id];
-      return { id, kind, label, role: kind === 'account' ? (OUTLETS.has(id.split('|').pop()) ? 'outlet' : 'person') : null, identity: I ? I.name : null, identity_id: I ? I.id : null, n: nodeN[id] || 0, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), hop: hopOf[id] === undefined ? null : hopOf[id], person_id: kind === 'account' ? [...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id || null : null, attrs: kind === 'account' ? ((meta[[...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id]?.attrs) || []).slice(0, 3) : [] }; });
+      return { id, kind, label, role: kind === 'account' ? (id.endsWith('|' + WRITER_PLAT) ? 'writer' : OUTLETS.has(id.split('|').pop()) ? 'outlet' : 'person') : null, identity: I ? I.name : null, identity_id: I ? I.id : null, n: nodeN[id] || 0, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), hop: hopOf[id] === undefined ? null : hopOf[id], person_id: kind === 'account' ? [...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id || null : null, attrs: kind === 'account' ? ((meta[[...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id]?.attrs) || []).slice(0, 3) : [] }; });
     return { nodes, edges: E, focus: focusId && idset.has(focusId) ? focusId : null, focus_asked: opts.focus || '', kinds: [...kinds], hops: focusId ? Math.max(0, ...Object.values(hopOf)) : null, generated: now() };
   }
 
@@ -487,8 +500,54 @@
   }
 
   // ── router (mirrors the server-style API the app calls) ──
+  // ── writers: bylines alone. Outlets over time, co-authors, who names them, what they name, where the stories were
+  //    filed from (datelines), and the handles the outlet's own author page lists. Nothing is looked up anywhere else.
+  async function writerRows(topic) {
+    let items = (await idb.all('items')).filter((it) => bylineOf(it).length);
+    if (topic) { const { byItem } = await voteIndex(); items = items.filter((it) => (byItem.get(it.id) || []).some((v) => v.topic_id === topic && v.member)); }
+    return items.sort((a, b) => (a.posted_at || 0) - (b.posted_at || 0));
+  }
+  const top = (c, n, key) => Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => ({ [key]: k, n: v }));
+  async function listWriters(opts = {}) {
+    const W = {};
+    for (const it of await writerRows(opts.topic)) { const names = bylineOf(it); for (const nm of names) { const w = W[nm.toLowerCase()] || (W[nm.toLowerCase()] = { id: nm.toLowerCase() + '|' + WRITER_PLAT, name: nm, n: 0, outlets: {}, with: {}, datelines: {}, first: null, last: null });
+      w.n++; const o = it.author_name || it.author || ''; w.outlets[o] = (w.outlets[o] || 0) + 1; names.forEach((x) => { if (x !== nm) w.with[x] = (w.with[x] || 0) + 1; }); if (it.dateline) w.datelines[it.dateline] = (w.datelines[it.dateline] || 0) + 1;
+      const ts = it.posted_at || 0; if (ts) { w.first = Math.min(w.first || ts, ts); w.last = Math.max(w.last || 0, ts); } } }
+    const q = String(opts.q || '').toLowerCase();
+    const writers = Object.values(W).filter((w) => !q || w.name.toLowerCase().includes(q)).map((w) => Object.assign({}, w, { outlets: top(w.outlets, 6, 'name'), with: top(w.with, 6, 'name'), datelines: top(w.datelines, 6, 'place') })).sort((a, b) => b.n - a.n);
+    return { writers, count: writers.length };
+  }
+  async function writer(name, topic) {
+    const key = String(name || '').toLowerCase().split('|')[0].trim();
+    const arts = [], others = [];
+    for (const it of await writerRows(topic)) (bylineOf(it).some((n) => n.toLowerCase() === key) ? arts : others).push(it);
+    if (!arts.length) return { error: 'no articles with this byline' };
+    const disp = bylineOf(arts[arts.length - 1]).find((n) => n.toLowerCase() === key);
+    const outlets = {}, co = {}, named = {}, places = {}, byYear = {};
+    for (const it of arts) { const o = it.author_name || it.author || ''; const e = outlets[o] || (outlets[o] = { name: o, host: it.author || '', n: 0, first: null, last: null }); e.n++; const ts = it.posted_at || 0;
+      if (ts) { e.first = Math.min(e.first || ts, ts); e.last = Math.max(e.last || 0, ts); const y = new Date(ts * 1000).getUTCFullYear(); byYear[y] = (byYear[y] || 0) + 1; }
+      bylineOf(it).forEach((n) => { if (n.toLowerCase() !== key) co[n] = (co[n] || 0) + 1; }); if (it.dateline) places[it.dateline] = (places[it.dateline] || 0) + 1;
+      entitiesIn(it.text, new Set(key.split(' '))).forEach((n) => named[n] = (named[n] || 0) + 1); }
+    // who names this writer in their own posts (a citation, a reply, a share), and never a byline of theirs
+    const cites = {}, citePosts = [];
+    for (const it of await idb.all('items')) { if (!String(it.text || '').toLowerCase().includes(key) || bylineOf(it).some((n) => n.toLowerCase() === key)) continue;
+      const who = (OUTLETS.has(it.platform) ? (it.author_name || it.author) : (it.author || it.author_name)) || ''; const k = who + '\u0001' + (it.platform || ''); cites[k] = (cites[k] || 0) + 1;
+      if (citePosts.length < 12) citePosts.push({ id: it.id, url: it.url, who, platform: it.platform, text: String(it.text || '').slice(0, 140), posted_at: it.posted_at }); }
+    const page = await idb.get('kv', 'author:' + key).catch(() => null);
+    const idents = await identities(); const linked = idents.find((I) => (I.accounts || []).some((x) => accKey(x.id) === key + '|' + WRITER_PLAT));
+    const span = arts.map((a) => a.posted_at).filter(Boolean);
+    return { id: key + '|' + WRITER_PLAT, name: disp, role: 'writer', n: arts.length, first: span.length ? Math.min(...span) : null, last: span.length ? Math.max(...span) : null,
+      outlets: Object.values(outlets).sort((a, b) => b.n - a.n), by_year: Object.entries(byYear).sort().map(([year, n]) => ({ year, n })),
+      coauthors: top(co, 12, 'name'), names: top(named, 16, 'name'),
+      coverage: top(places, 8, 'place'),                               // where the stories were filed from. Says where they report, not where they live.
+      cited_by: Object.entries(cites).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, n]) => ({ who: k.split('\u0001')[0], platform: k.split('\u0001')[1], n })), cite_posts: citePosts,
+      page: page && page.v ? { url: page.v.url, bio: page.v.bio, handles: page.v.handles || [] } : null,
+      identity: linked ? identityDTO(linked) : null,
+      articles: arts.slice().reverse().slice(0, 40).map((a) => ({ id: a.id, url: a.url, outlet: a.author_name || a.author, text: String(a.text || '').split('\n')[0].slice(0, 140), posted_at: a.posted_at, dateline: a.dateline || '', with: bylineOf(a).filter((n) => n.toLowerCase() !== key) })) };
+  }
+
   L.people = {
-    profile, graph, list, setMeta, getMeta, identities, identityWrite,
+    profile, graph, list, setMeta, getMeta, identities, identityWrite, listWriters, writer,
     async request(method, parts, qs, body) {
       const P = Object.fromEntries(new URLSearchParams(qs || ''));
       if (parts[0] === 'identities') {
@@ -496,6 +555,7 @@
         else { const iid = decodeURIComponent(parts[1]); if (method === 'GET') { const I = (await identities()).find((x) => x.id === iid); return I ? identityDTO(I) : { error: 'no such person' }; } return identityWrite(method, iid, body || {}); }
       }
       const id = parts[1] ? decodeURIComponent(parts[1]) : null;
+      if (parts[0] === 'writers') return id ? writer(id, P.topic || null) : listWriters({ topic: P.topic || null, q: P.q || '' });
       if (parts[0] === 'graph') {
         if (P.focus !== undefined || P.kinds !== undefined) return wordGraph({ focus: P.focus || '', kinds: P.kinds || 'account,hashtag,word,entity', max: +P.max || 80, platform: P.platform || '', topic: P.topic || '', hops: P.hops, via: P.via, merge: P.merge === '1', role: P.role || '' });
         return graph({ topic: P.topic || null, max: +P.max || 60, min: +P.min || 1.5, platform: P.platform || '', role: P.role || '' });

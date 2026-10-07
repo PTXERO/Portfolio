@@ -56,7 +56,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
   <a class="hbtn" href="searchnet-worker.js" target="_blank" rel="noreferrer">RAW CODE</a>
 </div>
 <main>
-  <h1>YOUR OWN WORKER <span class="tag" id="latest">LATEST v1.7</span></h1>
+  <h1>YOUR OWN WORKER <span class="tag" id="latest">LATEST v1.8</span></h1>
   <p class="note" style="border:1px solid var(--b2,#2c2c36);padding:10px 12px;border-radius:6px"><b>You probably don't need this page anymore.</b> SEARCH//NET fetches through the shared PTXERO hub by default (daily limits). If you want your own with no limits, use the <a href="../../hub/">hub guide</a> instead. That one also runs Social and ASCII//RENDER. This page is for a bare SearchNet-only Worker: fetching only, no identity, no backups.</p>
   <p class="lead">The Worker is a tiny fetcher that runs in <b>your</b> Cloudflare account, for free. The app (in your browser) asks it for posts; it fetches from open APIs and hands them back. It stores nothing and logs nothing. Your library stays in your browser. Setting it up takes about five minutes, once.</p>
 
@@ -151,7 +151,7 @@ GET /fetch?url=…        CORS proxy</pre>
   </details>
 </main>
 <script>
-const LATEST = '1.7';
+const LATEST = '1.8';
 const $ = (s) => document.querySelector(s);
 $('#copy').onclick = async () => {
   const b = $('#copy'); b.disabled = true;

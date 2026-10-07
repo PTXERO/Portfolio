@@ -68,16 +68,32 @@ def _entities(text, skip=()):
     for sentence in re.split(r"[.!?\n:;,()\[\]\"“”|]+| [—–-] ", str(text or "")):
         words = re.findall(r"[A-Za-z][\w'’.-]*|&", sentence)
         run = []
-        def flush():
+        def emit(run):
             while run and run[0].lower() in _ENT_LEAD | _CONNECT:
                 run.pop(0)
             while run and run[-1].lower() in _CONNECT:
                 run.pop()
+            if len(run) > 4:                 # "Jane Doe of the Naples Daily News": two names joined by connectors
+                parts, cur = [], []
+                for w in run:
+                    if w.lower() in _CONNECT:
+                        parts.append(cur)
+                        cur = []
+                    else:
+                        cur.append(w)
+                parts.append(cur)
+                if len(parts) > 1:
+                    for p_ in parts:
+                        emit(p_)
+                    return
             if 2 <= len(run) <= 4:
                 low = " ".join(w.lower().strip(".'’") for w in run)
                 if low not in seen and not all(w in skip or w in STOP for w in low.split()) and len(out) < 8:
                     seen.add(low)
                     out.append(low)
+
+        def flush():
+            emit(list(run))
             run.clear()
         for w in words:
             if w[0].isupper() or (run and w.lower() in _CONNECT):
@@ -216,6 +232,116 @@ def identity_write(v, method, iid, body):
     return identity_dto(i)
 
 
+WRITER_PLAT = "press"      # a byline is an account here; its "network" is the outlet that printed it
+
+
+def _byline(it):
+    try:
+        b = json.loads(it.get("byline") or "[]") if isinstance(it.get("byline"), str) else (it.get("byline") or [])
+    except ValueError:
+        b = []
+    return [str(x) for x in b if str(x).strip()][:4]
+
+
+def _writer_rows(v, topic=None):
+    """Every article with a byline (in this topic, or the whole library), oldest first."""
+    if topic:
+        ids = member_ids(v.db, topic)
+        rows = [it for it in v.db.get_many(ids).values() if it.get("byline") and it["byline"] != "[]"]
+    else:
+        rows = v.db.q("SELECT * FROM items WHERE byline IS NOT NULL AND byline != '[]'")
+    return sorted(rows, key=lambda r: r.get("posted_at") or 0)
+
+
+def list_writers(v, topic=None, q=""):
+    """The bylines seen, most prolific first: outlets, co-authors, where they file from, when."""
+    W = {}
+    for it in _writer_rows(v, topic):
+        names = _byline(it)
+        for nm in names:
+            w = W.setdefault(nm.lower(), {"id": nm.lower() + "|" + WRITER_PLAT, "name": nm, "n": 0, "outlets": Counter(), "with": Counter(),
+                                          "datelines": Counter(), "first": None, "last": None})
+            w["n"] += 1
+            w["outlets"][it.get("author_name") or it.get("author") or ""] += 1
+            for o in names:
+                if o != nm:
+                    w["with"][o] += 1
+            if it.get("dateline"):
+                w["datelines"][it["dateline"]] += 1
+            ts = it.get("posted_at") or 0
+            if ts:
+                w["first"] = min(w["first"] or ts, ts)
+                w["last"] = max(w["last"] or 0, ts)
+    out = []
+    for w in W.values():
+        if q and q.lower() not in w["name"].lower():
+            continue
+        out.append(dict(w, outlets=[{"name": k, "n": n} for k, n in w["outlets"].most_common(6)],
+                        with_=None, **{"with": [{"name": k, "n": n} for k, n in w["with"].most_common(6)]},
+                        datelines=[{"place": k, "n": n} for k, n in w["datelines"].most_common(6)]))
+        out[-1].pop("with_", None)
+    return {"writers": sorted(out, key=lambda w: -w["n"]), "count": len(out)}
+
+
+def writer(v, name, topic=None):
+    """One writer's dossier, from the bylines alone: outlets over time, co-authors, who names them, what they
+    name, where their stories are filed from (datelines) and the handles the outlet's own author page lists.
+    Nothing here is looked up outside the collected articles and that page."""
+    key = str(name or "").lower().split("|")[0].strip()
+    arts, others = [], []
+    for it in _writer_rows(v, topic):
+        (arts if key in [n.lower() for n in _byline(it)] else others).append(it)
+    if not arts:
+        return {"error": "no articles with this byline"}
+    disp = next(n for n in _byline(arts[-1]) if n.lower() == key)
+    outlets, co, named, places, by_year = {}, Counter(), Counter(), Counter(), Counter()
+    for it in arts:
+        o = it.get("author_name") or it.get("author") or ""
+        e = outlets.setdefault(o, {"name": o, "host": it.get("author") or "", "n": 0, "first": None, "last": None})
+        e["n"] += 1
+        ts = it.get("posted_at") or 0
+        if ts:
+            e["first"] = min(e["first"] or ts, ts)
+            e["last"] = max(e["last"] or 0, ts)
+            by_year[time.strftime("%Y", time.gmtime(ts))] += 1
+        for n_ in _byline(it):
+            if n_.lower() != key:
+                co[n_] += 1
+        if it.get("dateline"):
+            places[it["dateline"]] += 1
+        named.update(_entities(it.get("text"), {w for w in key.split()}))
+    # who names this writer in their own posts (a citation, a reply, a share), and never a byline of theirs
+    cites = Counter()
+    rows = v.db.q("SELECT id, platform, author, author_name, url, text, posted_at, byline FROM items WHERE lower(text) LIKE ?", (f"%{key}%",))
+    cite_posts = []
+    for it in rows:
+        if key in [n.lower() for n in _byline(it)]:
+            continue
+        who = ((it.get("author_name") or it.get("author")) if it.get("platform") in OUTLETS else (it.get("author") or it.get("author_name"))) or ""
+        cites[(who, it.get("platform") or "")] += 1
+        if len(cite_posts) < 12:
+            cite_posts.append({"id": it["id"], "url": it.get("url"), "who": who, "platform": it.get("platform"), "text": str(it.get("text") or "")[:140], "posted_at": it.get("posted_at")})
+    page = v.db.one("SELECT value FROM cache WHERE key=?", ("author:" + key,))
+    page = json.loads(page["value"]) if page else {}
+    linked = next((i for i in identities(v) if any(_acc_key(x["id"]) == key + "|" + WRITER_PLAT for x in i.get("accounts") or [])), None)
+    span = [a.get("posted_at") for a in arts if a.get("posted_at")]
+    return {"id": key + "|" + WRITER_PLAT, "name": disp, "role": "writer", "n": len(arts),
+            "first": min(span) if span else None, "last": max(span) if span else None,
+            "outlets": sorted(outlets.values(), key=lambda o: -o["n"]),
+            "by_year": [{"year": y, "n": n} for y, n in sorted(by_year.items())],
+            "coauthors": [{"name": k, "n": n} for k, n in co.most_common(12)],
+            "names": [{"name": k, "n": n} for k, n in named.most_common(16)],
+            # where the stories were filed from. Says where they report, not where they live.
+            "coverage": [{"place": k, "n": n} for k, n in places.most_common(8)],
+            "cited_by": [{"who": k[0], "platform": k[1], "n": n} for k, n in cites.most_common(12)],
+            "cite_posts": cite_posts,
+            "page": {"url": page.get("url"), "bio": page.get("bio"), "handles": page.get("handles") or []} if page else None,
+            "identity": identity_dto(linked) if linked else None,
+            "articles": [{"id": a["id"], "url": a.get("url"), "outlet": a.get("author_name") or a.get("author"), "text": str(a.get("text") or "").split("\n")[0][:140],
+                          "posted_at": a.get("posted_at"), "dateline": a.get("dateline") or "", "with": [n for n in _byline(a) if n.lower() != key]}
+                         for a in reversed(arts)][:40]}
+
+
 # ── aggregates over collected items ──
 class _Acct:
     __slots__ = ("id", "author", "platform", "author_url", "author_name", "items", "H", "W", "M",
@@ -231,7 +357,7 @@ class _Acct:
 
 def _build(v):
     rows = v.db.q("SELECT id, platform, author, author_name, url, media_url, text, hashtags, lang, post_id, "
-                  "posted_at, duration, likes, views, media, thumbnail, transcript, tags FROM items "
+                  "posted_at, duration, likes, views, media, thumbnail, transcript, tags, byline, dateline FROM items "
                   "WHERE coalesce(author,'') != ''")
     by = {}
     for it in rows:
@@ -549,7 +675,7 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
         by = kept
     if role == "person":
         by = {k: a for k, a in by.items() if a.platform not in OUTLETS}
-    elif role == "outlet":
+    elif role in ("outlet", "writer"):
         by = {k: a for k, a in by.items() if a.platform in OUTLETS}
     seed_words = set()
     if topic:
@@ -573,7 +699,7 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
             k = (a, b) if a < b else (b, a)
             edge_w[k] += w
             edge_t[k] = min(edge_t.get(k, 9), t)
-            edge_p.setdefault(k, {"m": 0.0, "f": 0.0, "h": 0.0, "s": 0.0, "i": 0.0, "e": 0.0})[kind] += w
+            edge_p.setdefault(k, {"m": 0.0, "f": 0.0, "h": 0.0, "s": 0.0, "i": 0.0, "e": 0.0, "b": 0.0})[kind] += w
             if ev:
                 E = edge_ev.setdefault(k, {})
                 for key, val in ev.items():
@@ -620,11 +746,32 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
         for nm in {str(a.author or "").lower()} | {str(it.get("author_name") or "").lower() for it in a.items}:
             if len(nm) > 3:
                 acct_names.setdefault(nm, aid_)
+    # the people who wrote the articles: a byline is an account on the "press" platform, tied to its outlet
+    writer_disp = {}
+    for a in by.values():
+        if a.platform in OUTLETS:
+            for it in a.items:
+                for nm in _byline(it):
+                    wid = f"@{nm.lower()}|{WRITER_PLAT}"
+                    writer_disp[wid] = nm
+                    kind_of[wid] = "account"
+                    acct_names.setdefault(nm.lower(), wid)
     for a in by.values():
         aid = f"@{a.author.lower()}|{a.platform}"
         for it in a.items:
             tags = [] if it.get("platform") == "archive" else ["#" + h for h in _hashes(it)]   # archive's "tags" are media types
             own = {str(it.get("author") or "").lower(), str(it.get("author_name") or "").lower()}
+            wids = [f"@{nm.lower()}|{WRITER_PLAT}" for nm in _byline(it)] if a.platform in OUTLETS else []
+            own |= {w[1:].split("|")[0] for w in wids}
+            for w_ in wids:
+                outlet = a.author_name or a.author
+                link(w_, aid, 2.5, 1, "b", {"posts": [post_ref(it)], "byline": f"{writer_disp[w_]} writes for {outlet}"})
+                if _post_key(it) not in seen_posts:
+                    node_w[w_] += 1
+                    node_n[w_] += 1
+            for i_ in range(len(wids)):
+                for j_ in range(i_ + 1, len(wids)):
+                    link(wids[i_], wids[j_], 2, 1, "b", {"posts": [post_ref(it)], "byline": f"{writer_disp[wids[i_]]} and {writer_disp[wids[j_]]} share a byline"})
             raw_e = [e for e in _entities(it.get("text"), seed_words | {w for n_ in own for w in n_.split()}) if e not in own]
             for e in [e for e in raw_e if e in acct_names and acct_names[e] != aid]:
                 link(aid, acct_names[e], 2, 1, "m", {"posts": [post_ref(it)], "mention": f"{aid.split('|')[0]} names {e}"})
@@ -635,6 +782,8 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
                 node_w[e] += 1.0
                 node_n[e] += 1
                 link(aid, e, 1.5, 2, "e", {"posts": [post_ref(it)], "names": [e[2:]]})
+                for w_ in wids:
+                    link(w_, e, 1.0, 2, "e", {"posts": [post_ref(it)], "names": [e[2:]]})
             for i in range(len(ents)):
                 for j in range(i + 1, len(ents)):
                     link(ents[i], ents[j], 1.0, 2, "e", {"posts": [post_ref(it)]})
@@ -794,7 +943,11 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
         ids = []
         for kind in ("account", "hashtag", "word", "entity"):
             if kind in kinds:
-                ids += sorted((k for k in node_w if kind_of.get(k) == kind), key=lambda k: -node_w[k])[:per[kind]]
+                pool = [k for k in node_w if kind_of.get(k) == kind and (role != "writer" or kind != "account" or k.endswith("|" + WRITER_PLAT))]
+                ids += sorted(pool, key=lambda k: -node_w[k])[:per[kind]]
+        if role == "writer":                        # the outlets each writer writes for ride along, so the tie shows
+            ids += sorted({b if a in set(ids) else a for (a, b) in edge_w if (a in set(ids)) != (b in set(ids))
+                           and edge_p.get((a, b), {}).get("b", 0) > 0}, key=lambda k: -node_w[k])[:max(4, cap // 6)]
     # MERGE: collapse each person's accounts into one node named after them (links re-routed, counts summed)
     person_name, person_members = {}, {}
     if merge:
@@ -827,7 +980,7 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
             k2 = (a2, b2) if a2 < b2 else (b2, a2)
             edge_w[k2] += w
             edge_t[k2] = min(edge_t.get(k2, 9), t)
-            q = edge_p.setdefault(k2, {"m": 0.0, "f": 0.0, "h": 0.0, "s": 0.0, "i": 0.0, "e": 0.0})
+            q = edge_p.setdefault(k2, {"m": 0.0, "f": 0.0, "h": 0.0, "s": 0.0, "i": 0.0, "e": 0.0, "b": 0.0})
             if p:
                 for kk, pv in p.items():
                     q[kk] = q.get(kk, 0) + pv
@@ -836,7 +989,7 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
                 edge_ev.setdefault(k2, {}).update({kk: vv for kk, vv in ev0.items() if kk not in edge_ev.get(k2, {})})
     idset = set(ids)
     all_edges = sorted(({"a": a, "b": b, "w": round(w, 2), "t": edge_t.get((a, b), 3),
-                         "p": {kk: round(pv, 2) for kk, pv in edge_p.get((a, b), {"m": 0, "f": 0, "h": 0, "s": w, "i": 0, "e": 0}).items()},
+                         "p": {kk: round(pv, 2) for kk, pv in edge_p.get((a, b), {"m": 0, "f": 0, "h": 0, "s": w, "i": 0, "e": 0, "b": 0}).items()},
                          "ev": edge_ev.get((a, b), {})}
                         for (a, b), w in edge_w.items() if a in idset and b in idset),
                        key=lambda e: (e["t"], -e["w"]))
@@ -876,12 +1029,12 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
                           "person_id": first, "identity_id": nid[7:], "identity": person_name.get(nid, ""),
                           "accounts": members, "attrs": []})
             continue
-        label = nid[1:].split("|")[0] if kind == "account" else nid if kind == "hashtag" else nid[2:].title() if kind == "entity" else nid[2:]
+        label = writer_disp.get(nid) or (nid[1:].split("|")[0] if kind == "account" else nid if kind == "hashtag" else nid[2:].title() if kind == "entity" else nid[2:])
         pid = acct_key.get(nid) if kind == "account" else None
         i = person_of.get(nid)
         plat = nid.split("|")[-1] if kind == "account" else ""
         nodes.append({"id": nid, "kind": kind, "label": label, "n": node_n[nid], "w": round(node_w[nid], 2),
-                      "role": ("outlet" if plat in OUTLETS else "person") if kind == "account" else None,
+                      "role": ("writer" if plat == WRITER_PLAT else "outlet" if plat in OUTLETS else "person") if kind == "account" else None,
                       "strength": round(deg[nid], 1), "hop": hop_of.get(nid),
                       "identity": i["name"] if i else None, "identity_id": i["id"] if i else None,
                       "person_id": pid, "attrs": ((meta.get(pid) or {}).get("attrs", [])[:3] if pid else [])})
@@ -1056,6 +1209,10 @@ def handle(v, method, parts, params, body):
                 return identity_dto(i) if i else {"error": "no such person"}
             return identity_write(v, method, parts[1], body)
         return {"error": "identities route not available"}
+    if parts[0] == "writers":
+        if len(parts) > 1 and parts[1]:
+            return writer(v, urllib.parse.unquote(parts[1]), params.get("topic") or None)
+        return list_writers(v, params.get("topic") or None, params.get("q") or "")
     if parts[0] == "graph":
         if "focus" in params or "kinds" in params:
             return word_graph(v, params.get("focus") or "", params.get("kinds") or "account,hashtag,word,entity",

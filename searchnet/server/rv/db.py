@@ -20,12 +20,13 @@ ITEM_FIELDS = [
     "author_url", "text", "hashtags", "lang", "posted_at", "duration", "width", "height",
     "likes", "reposts", "replies", "views", "thumbnail", "file", "thumb_file",
     "transcript", "segments", "ocr", "tags", "notes", "starred", "source", "collected_at",
+    "byline", "dateline",
 ]
 # refreshed when an item is collected again; user data is kept
 META_FIELDS = [
     "platform", "post_id", "url", "media_url", "media", "author", "author_name", "author_url",
     "text", "hashtags", "lang", "posted_at", "duration", "width", "height", "likes",
-    "reposts", "replies", "views", "thumbnail",
+    "reposts", "replies", "views", "thumbnail", "byline", "dateline",
 ]
 
 _FTS_VALUES = ("{p}.rowid, coalesce({p}.text,''), coalesce({p}.hashtags,''), "
@@ -97,7 +98,7 @@ CREATE TABLE IF NOT EXISTS vectors(item_id TEXT PRIMARY KEY, model TEXT, dim INT
 
 # columns added after v1 (ALTER TABLE for existing libraries)
 MIGRATIONS = {
-    "items": [("media", "TEXT DEFAULT 'video'"), ("author_url", "TEXT")],
+    "items": [("media", "TEXT DEFAULT 'video'"), ("author_url", "TEXT"), ("byline", "TEXT"), ("dateline", "TEXT")],
     "topic_queries": [("locked", "INTEGER DEFAULT 0")],
 }
 

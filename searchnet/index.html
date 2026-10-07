@@ -729,7 +729,7 @@ body.noscroll-max{overflow:hidden}
       <button class="chip on" data-kind="account">@ ACCOUNTS</button><button class="chip on" data-kind="hashtag"># TAGS</button><button class="chip on" data-kind="word">WORDS</button><button class="chip on" data-kind="entity">◆ NAMED</button>
     </div>
     <select id="nwTopic" class="sel"><option value="">All topics</option></select>
-    <select id="nwRole" class="sel" title="People who post, or the outlets that publish"><option value="">People + outlets</option><option value="person">People only</option><option value="outlet">Outlets only</option></select>
+    <select id="nwRole" class="sel" title="People who post, or the outlets that publish"><option value="">People + outlets</option><option value="person">People only</option><option value="outlet">Outlets only</option><option value="writer">Writers only</option></select>
     <select id="nwNet" class="sel" title="Only accounts from one social network"><option value="">All networks</option></select>
     <select id="nwSort" class="sel"><option value="">Most posts</option><option value="network">By network</option><option value="follows">Most follows</option><option value="active">Recently active</option><option value="cadence">Posts most often</option><option value="name">Name</option></select>
   </div>
@@ -1788,6 +1788,7 @@ async function renderDossier(){
   const words = graph.nodes.filter(x => x.kind === 'word').sort((a, b) => (b.n || 0) - (a.n || 0)).slice(0, 14);
   const people = graph.nodes.filter(x => x.kind === 'account' && x.role !== 'outlet').sort((a, b) => (b.strength || 0) - (a.strength || 0)).slice(0, 12);
   const outlets = graph.nodes.filter(x => x.kind === 'account' && x.role === 'outlet').sort((a, b) => (b.n || 0) - (a.n || 0)).slice(0, 12);
+  const writers = graph.nodes.filter(x => x.kind === 'account' && x.role === 'writer').sort((a, b) => (b.n || 0) - (a.n || 0) || (b.strength || 0) - (a.strength || 0)).slice(0, 12);
   const named = graph.nodes.filter(x => x.kind === 'entity').sort((a, b) => (b.n || 0) - (a.n || 0)).slice(0, 18);
   // trend: posts per week over the last 12 weeks
   const now_ = Date.now() / 1000, weeks = Array(12).fill(0), W = 7 * 86400;
@@ -1826,6 +1827,7 @@ async function renderDossier(){
     ${briefCard()}
     <div class="dcard"><div class="dh">Named in the posts <span class="note">people, places, organisations the posts mention</span></div><div class="chips wrap">${named.map(e => `<button class="chip" data-focus="${esc('"' + e.label.toLowerCase() + '"')}">◆ ${esc(e.label)} <em>${e.n}</em></button>`).join('') || '<p class="note">Nothing named twice yet.</p>'}</div></div>
     <div class="dcard"><div class="dh">Outlets covering it</div><div class="chips wrap">${outlets.map(o => `<button class="chip" data-focus="@${esc(o.label)}">${esc(o.label)} <em>${o.n}</em></button>`).join('') || '<p class="note">No news or web sources in this topic yet.</p>'}</div></div>
+    <div class="dcard"><div class="dh">Who writes about it <span class="note">bylines on the articles collected</span></div><div class="chips wrap">${writers.map(w => `<button class="chip" data-writer="${esc(w.label)}">▲ ${esc(w.label)} <em>${w.n}</em></button>`).join('') || '<p class="note">No bylines read yet. They come in when the full articles are read after a run.</p>'}</div>${writers.length ? '<p class="note" style="margin-top:6px">Tap a name: outlets over time, co-authors, who cites them, where their stories are filed from.</p>' : ''}</div>
     ${sitesCard()}
     <div class="dcard"><div class="dh">Trend · posts per week</div>${bars(weeks, wmax)}<div class="note" style="margin-top:4px">last 12 weeks · ${fmtN(weeks.reduce((a, b) => a + b, 0))} posts${older ? ' · ' + fmtN(older) + ' older' : ''}</div></div>
     ${isPerson ? '' : `<div class="dcard"><div class="dh">Search interest · Wikipedia views</div>${views && views.length ? bars(views, vmax, 'cyan') + `<div class="note" style="margin-top:4px">last ${views.length} days · ${fmtN(views[views.length - 1])}/day now · peak ${fmtN(vmax)}</div>` : '<p class="note">No page-view data for this name.</p>'}</div>`}
@@ -1833,6 +1835,7 @@ async function renderDossier(){
       ${circles.length ? `<div class="circles">${circles.map((c, ci) => `<button class="circle" data-focus="${esc(c.tags[0] ? c.tags[0].label : '@' + c.accounts[0]?.label)}" style="--c:${COMM[ci % COMM.length]}"><b>${esc(c.name)}</b><span>${c.accounts.length} accounts · ${c.tags.length} tags · ${c.words.length} words</span><small>${c.accounts.slice(0, 4).map(a => '@' + esc(a.label)).join(' · ')}${c.accounts.length > 4 ? ' …' : ''}</small></button>`).join('')}</div>` : '<p class="note">Circles appear once there are enough linked posts — try INTEGRATE.</p>'}</div>
   </div>`;
   $$('[data-prof]', body).forEach(b => b.onclick = () => openProfile(b.dataset.prof));
+  $$('[data-writer]', body).forEach(b => b.onclick = () => openWriter(b.dataset.writer));
   $$('[data-focus]', body).forEach(b => b.onclick = () => go('network?' + new URLSearchParams({ topic: T.id, focus: b.dataset.focus })));
   const pIdBtn = $('#paIdent', body); if (pIdBtn) pIdBtn.onclick = () => openIdentity(person.identity_id);
   $$('[data-site]', body).forEach(b => b.onclick = () => addSiteSource(b.dataset.site, b));
@@ -2417,6 +2420,7 @@ async function renderNetwork(){
   if (route.view === 'network' && route.qs && (route.qs.has('topic') || route.qs.has('focus'))){   // deep link from a dossier
     if (route.qs.has('topic')) tsel.value = route.qs.get('topic');
     if (route.qs.has('focus')) $('#nwQ').value = route.qs.get('focus');
+    if (route.qs.has('role')) $('#nwRole').value = route.qs.get('role');
     history.replaceState(history.state, '', '#network');
   }
   const topic = tsel.value, sort = $('#nwSort').value, q = $('#nwQ').value.trim(), platform = $('#nwNet').value, role = $('#nwRole').value;
@@ -2456,11 +2460,11 @@ const KIND_COLOR = { account: '#f54242', hashtag: '#42d4f5', word: '#f5a542' };
 // how hard each kind of connection pulls in the layout and counts in the ordering (0–10, yours to tune in WEIGHTS):
 // mentions are the strongest signal, a follow half that, shared hashtags a little, shared words nothing by default —
 // grey word links are still drawn, they just don't drag the circles around or decide who sits in the middle.
-const PULL_DEFAULT = { i: 10, m: 10, f: 5, e: 4, h: 3, s: 0 };
-const PULL_NAMES = { i: 'same person (you)', m: 'mentions', f: 'follows', e: 'named together', h: 'shared tags', s: 'shared words' };
+const PULL_DEFAULT = { i: 10, m: 10, b: 9, f: 5, e: 4, h: 3, s: 0 };
+const PULL_NAMES = { i: 'same person (you)', m: 'mentions', b: 'writes for / co-wrote', f: 'follows', e: 'named together', h: 'shared tags', s: 'shared words' };
 function pullWeights(){ return Object.assign({}, PULL_DEFAULT, store.get('webWeights', {})); }
 function edgePull(e, W){
-  if (e.p) return ((e.p.i || 0) * (W.i == null ? 10 : W.i) + e.p.m * W.m + e.p.f * W.f + e.p.h * W.h + e.p.s * W.s) / 10;
+  if (e.p) return ((e.p.i || 0) * (W.i == null ? 10 : W.i) + e.p.m * W.m + (e.p.b || 0) * (W.b == null ? 9 : W.b) + e.p.f * W.f + e.p.h * W.h + e.p.s * W.s) / 10;
   const t = e.t || (e.m ? 1 : 2); return e.w * (t === 1 ? W.m : t === 2 ? W.h : W.s) / 10;   // older servers: by tier
 }
 // community palette (neon family, distinct hues)
@@ -2544,11 +2548,11 @@ function drawWeb(box, graph){
   // chrome
   const legendHTML = () => (st.color === 'kind'
     ? ['account', 'hashtag', 'word'].map(k => `<span><i style="background:${KIND_COLOR[k]}"></i>${k === 'account' ? '@ accounts' : k === 'hashtag' ? '# tags' : 'words'} <em>${nodes.filter(n => n.kind === k).length}</em></span>`).join('')
-    : comms.map((c, ci) => `<span><i style="background:${COMM[ci % COMM.length]}"></i>${esc(c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name)} <em>${c.ids.length}</em></span>`).join('')) + '<span class="shapes">● account &nbsp;■ tag &nbsp;○ word</span><span class="shapes"><b class="l1">━</b> mentions / follows &nbsp;<b class="l2">━</b> shared tags &nbsp;<b class="l3">━</b> shared words</span>';
+    : comms.map((c, ci) => `<span><i style="background:${COMM[ci % COMM.length]}"></i>${esc(c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name)} <em>${c.ids.length}</em></span>`).join('')) + '<span class="shapes">● account &nbsp;▲ writer &nbsp;⬣ outlet &nbsp;◆ named &nbsp;■ tag &nbsp;○ word</span><span class="shapes"><b class="l1">━</b> mentions / follows &nbsp;<b class="l2">━</b> shared tags &nbsp;<b class="l3">━</b> shared words</span>';
   const hintHTML = () => 'size = ' + (st.sizeBy === 'influence' ? 'influence' : 'posts') + ' · colour = ' + (st.color === 'kind' ? 'kind' : 'community') + (st.mode === '2d' ? (focus && hopRing ? ' · rings = hops from the centre' : ' · inner = more strong links') + ' · drag to move around' : ' · drag to spin') + ' · pull @' + PW.m + ' ↔' + PW.f + ' #' + PW.h + ' w' + PW.s + ' · wheel to zoom · tap a node';
   nwFocusNode = focus ? nodes[idx[focus]] : null;
   const H = webHops();
-  const fb = nwFocusNode ? `<div class="focus">◎ ${nwFocusNode.kind === 'account' && !String(nwFocusNode.id).startsWith('person:') ? '@' : ''}${esc(nwFocusNode.label)}${nwFocusNode.identity && !String(nwFocusNode.id).startsWith('person:') ? ` <small class="note">· ${esc(nwFocusNode.identity)}</small>` : ''} <button class="hbtn" data-fhops title="How far from the centre to show: 1 hop = direct links, 2 = friends of friends, 3 = the classic three degrees, ALL = everything reachable. Only links that pull (see WEIGHTS) count as a hop.">${H >= 6 ? 'ALL' : H + ' HOP' + (H > 1 ? 'S' : '')} ▾</button>${nwFocusNode.kind === 'account' && nwFocusNode.person_id ? ' <button class="hbtn" data-fprof>PROFILE</button> <button class="hbtn" data-fcrawl title="Log this account\'s follows / followers / mutuals outward, hop by hop">CRAWL</button>' : ''} <button class="hbtn" data-fclear title="Show everything again">✕</button></div>` : '';
+  const fb = nwFocusNode ? `<div class="focus">◎ ${nwFocusNode.kind === 'account' && !String(nwFocusNode.id).startsWith('person:') ? '@' : ''}${esc(nwFocusNode.label)}${nwFocusNode.identity && !String(nwFocusNode.id).startsWith('person:') ? ` <small class="note">· ${esc(nwFocusNode.identity)}</small>` : ''} <button class="hbtn" data-fhops title="How far from the centre to show: 1 hop = direct links, 2 = friends of friends, 3 = the classic three degrees, ALL = everything reachable. Only links that pull (see WEIGHTS) count as a hop.">${H >= 6 ? 'ALL' : H + ' HOP' + (H > 1 ? 'S' : '')} ▾</button>${nwFocusNode.kind === 'account' && nwFocusNode.role === 'writer' ? ' <button class="hbtn" data-fwriter>WRITER</button>' : ''}${nwFocusNode.kind === 'account' && nwFocusNode.person_id ? ' <button class="hbtn" data-fprof>PROFILE</button> <button class="hbtn" data-fcrawl title="Log this account\'s follows / followers / mutuals outward, hop by hop">CRAWL</button>' : ''} <button class="hbtn" data-fclear title="Show everything again">✕</button></div>` : '';
   box.innerHTML = `<canvas></canvas><div class="legend" id="webLegend"></div>${fb}
     <div class="strip"><div class="wtb"><button data-wm="3d" title="3-D: the floating web you can spin">3D</button><button data-wm="2d" title="2-D: the organized map. Rings by connection, arcs by community. You can drag around">2D</button><span class="sep"></span><button data-wc="community" title="Colour by community (clusters found from the links)">COMMUNITY</button><button data-wc="kind" title="Colour by kind: account / tag / word">KIND</button><span class="sep"></span><button data-ws="posts" title="Size by number of posts">POSTS</button><button data-ws="influence" title="Size by influence: terms and accounts that bridge different parts of the web (betweenness centrality)">INFLUENCE</button><span class="sep"></span><button data-wmg title="Collapse each person's accounts (the ones you linked) into one node named after them">MERGE</button><span class="sep"></span><button data-ww title="How hard each kind of connection pulls (mentions / follows / shared tags / shared words)">WEIGHTS</button><span class="sep"></span><button data-wf title="Full screen">⛶</button></div><div class="hint" id="webHint"></div></div>
     <div class="wpop" id="webWeights" hidden><div class="t">PULL STRENGTH <small>0 = drawn, but doesn't move or rank anything</small></div>${['i', 'm', 'f', 'e', 'h', 's'].map(k => `<label><span><b class="l${k === 'i' || k === 'm' || k === 'f' ? 1 : k === 'h' ? 2 : 3}">${k === 'i' ? '╌' : '━'}</b> ${PULL_NAMES[k]}</span><input type="range" min="0" max="10" step="1" data-pw="${k}" value="${PW[k]}"><em>${PW[k]}</em></label>`).join('')}<div class="row" style="justify-content:flex-end;gap:8px;margin-top:6px"><button class="hbtn" data-pwreset>DEFAULTS</button><button class="hbtn" data-pwclose>DONE</button></div></div>`;
@@ -2573,7 +2577,7 @@ function drawWeb(box, graph){
     const cy = Math.cos(st.ry), sy = Math.sin(st.ry), cx = Math.cos(st.rx), sx = Math.sin(st.rx), F = 520;
     st.proj = nodes.map(n => { const x1 = n.sx * cy + n.sz * sy, z1 = -n.sx * sy + n.sz * cy, y1 = n.sy * cx - z1 * sx, z2 = n.sy * sx + z1 * cx; const p = F / (F + z2); return { n, X: st.W/2 + x1 * p * scale, Y: st.H/2 + y1 * p * scale, p, z: z2, s: scale }; });
   };
-  const shape = (q, r, kind, role) => { ctx.beginPath(); if (kind === 'hashtag'){ ctx.rect(q.X - r, q.Y - r, 2 * r, 2 * r); } else if (kind === 'entity'){ ctx.moveTo(q.X, q.Y - r * 1.25); ctx.lineTo(q.X + r * 1.25, q.Y); ctx.lineTo(q.X, q.Y + r * 1.25); ctx.lineTo(q.X - r * 1.25, q.Y); ctx.closePath(); } else if (role === 'outlet'){ const k = r * 0.9; ctx.moveTo(q.X - k, q.Y - r); ctx.lineTo(q.X + k, q.Y - r); ctx.lineTo(q.X + r, q.Y); ctx.lineTo(q.X + k, q.Y + r); ctx.lineTo(q.X - k, q.Y + r); ctx.lineTo(q.X - r, q.Y); ctx.closePath(); } else { ctx.arc(q.X, q.Y, r, 0, 7); } };
+  const shape = (q, r, kind, role) => { ctx.beginPath(); if (kind === 'hashtag'){ ctx.rect(q.X - r, q.Y - r, 2 * r, 2 * r); } else if (kind === 'entity'){ ctx.moveTo(q.X, q.Y - r * 1.25); ctx.lineTo(q.X + r * 1.25, q.Y); ctx.lineTo(q.X, q.Y + r * 1.25); ctx.lineTo(q.X - r * 1.25, q.Y); ctx.closePath(); } else if (role === 'writer'){ ctx.moveTo(q.X, q.Y - r * 1.2); ctx.lineTo(q.X + r * 1.1, q.Y + r * 0.8); ctx.lineTo(q.X - r * 1.1, q.Y + r * 0.8); ctx.closePath(); } else if (role === 'outlet'){ const k = r * 0.9; ctx.moveTo(q.X - k, q.Y - r); ctx.lineTo(q.X + k, q.Y - r); ctx.lineTo(q.X + r, q.Y); ctx.lineTo(q.X + k, q.Y + r); ctx.lineTo(q.X - k, q.Y + r); ctx.lineTo(q.X - r, q.Y); ctx.closePath(); } else { ctx.arc(q.X, q.Y, r, 0, 7); } };
   const draw = () => {
     project(); ctx.clearRect(0, 0, st.W, st.H);
     const P = st.proj, hv = st.hover, fi = focus ? idx[focus] : -1, hi = hv >= 0 ? hv : fi;
@@ -2648,6 +2652,7 @@ function drawWeb(box, graph){
   cv.onwheel = e => { e.preventDefault(); st.zoom = Math.max(.6, Math.min(3.5, st.zoom * (e.deltaY < 0 ? 1.1 : 0.9))); };
   cv.ondblclick = () => { if (st.mode === '2d'){ st.panX = st.panY = 0; st.zoom = 1; } else st.auto = !st.auto; };
   const fp = $('[data-fprof]', box); if (fp) fp.onclick = () => openProfile(nwFocusNode.person_id);
+  const fw = $('[data-fwriter]', box); if (fw) fw.onclick = () => openWriter(nwFocusNode.label);
   const fh = $('[data-fhops]', box); if (fh) fh.onclick = () => { const seq = [1, 2, 3, 6]; store.set('webHops', seq[(seq.indexOf(webHops()) + 1) % seq.length]); renderNetwork(); };
   const fcr = $('[data-fcrawl]', box); if (fcr) fcr.onclick = () => openCrawl(nwFocusNode.person_id);
   const fc = $('[data-fclear]', box); if (fc) fc.onclick = () => { $('#nwQ').value = ''; renderNetwork(); };
@@ -2681,6 +2686,7 @@ function edgeReason(e, A, B){
   const nm = n => n.kind === 'account' ? '@' + n.label : n.kind === 'hashtag' ? n.label : n.label;
   const a = nm(A), b = nm(B);
   if (p.i > 0) out.push('same person' + (ev.person ? ': ' + ev.person : '') + ' (your link)');
+  if (p.b > 0) out.push((ev.byline || 'byline') + (ev.posts && ev.posts.length > 1 ? ' · ' + ev.posts.length + ' articles' : ''));
   if (p.m > 0) out.push(ev.mention ? ev.mention.replace(/^@?/, '@') + (ev.posts && ev.posts.length > 1 ? ' in ' + ev.posts.length + ' posts' : '') : 'one mentions the other');
   if (p.f > 0) out.push(ev.follow === 'mutual' ? a + ' and ' + b + ' follow each other' : ev.follow === 'a>b' ? (e.a === A.id ? a + ' follows ' + b : b + ' follows ' + a) : ev.follow === 'b>a' ? (e.a === A.id ? b + ' follows ' + a : a + ' follows ' + b) : 'follows');
   if (p.e > 0) out.push((A.kind === 'entity' || B.kind === 'entity') ? (ev.posts ? 'named in ' + ev.posts.length + ' post' + (ev.posts.length === 1 ? '' : 's') : 'named') : 'both name ' + ((ev.names || []).join(', ') || 'the same thing'));
@@ -2700,7 +2706,7 @@ function whyPanel(box, graph, nodes, idx, nb, deg){
 function webNodeTap(n){
   nwSel = n.id;
   // every kind of node centres the web on itself; tapping the account you're already centred on opens its profile
-  if (n.kind === 'account' && nwFocusNode && nwFocusNode.id === n.id){ if (n.id.startsWith('person:') && n.identity_id) openIdentity(n.identity_id); else if (n.person_id) openProfile(n.person_id); return; }
+  if (n.kind === 'account' && nwFocusNode && nwFocusNode.id === n.id){ if (n.id.startsWith('person:') && n.identity_id) openIdentity(n.identity_id); else if (n.role === 'writer') openWriter(n.label); else if (n.person_id) openProfile(n.person_id); return; }
   $('#nwQ').value = n.kind === 'account' ? '@' + n.label : n.kind === 'hashtag' ? n.label : (n.label.includes(' ') ? '"' + n.label + '"' : n.label);
   renderNetwork();
 }
@@ -2715,6 +2721,44 @@ function accountIdFromText(t){
   if (t.includes('|')) return t.replace(/^@/, '');
   const h = t.replace(/^@/, '');
   return h + '|' + (h.includes('@') ? 'mastodon' : /\.bsky\.social$/.test(h) ? 'bluesky' : 'x');
+}
+// ── a writer, from the bylines alone: outlets over time, co-authors, who names them, what they name,
+//    where their stories were filed from. Only what the collected articles and the outlet's own author page say.
+async function openWriter(name){
+  let w; try{ w = await api('/api/writers/' + encodeURIComponent(String(name).split('|')[0]) + (T && route.view !== 'network' ? '?topic=' + encodeURIComponent(T.id) : '')); }catch(e){ return toast(e.message); }
+  if (!w || w.error) return toast(w && w.error || 'No writer');
+  const when = ts => ts ? new Date(ts * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }) : '?';
+  const ymax = Math.max(1, ...w.by_year.map(y => y.n));
+  openSheet(`<h3>▲ ${esc(w.name)} <span class="note" style="font-weight:400">· writer · ${fmtN(w.n)} article${w.n === 1 ? '' : 's'}${w.first ? ' · ' + when(w.first) + ' → ' + when(w.last) : ''}</span></h3>
+    <p class="note">Built from bylines on articles you collected. Nothing here was looked up about the person.</p>
+    <h3 class="s">Writes for</h3><div class="meta">${w.outlets.map(o => `<span class="pill" title="${esc(o.host)}">${esc(o.name)} · ${o.n}${o.first ? ' · ' + when(o.first) + (o.last && when(o.last) !== when(o.first) ? ' → ' + when(o.last) : '') : ''}</span>`).join('')}</div>
+    ${w.by_year.length > 1 ? `<div class="spark" style="margin-top:6px">${w.by_year.map(y => `<i style="height:${Math.round(100 * y.n / ymax)}%" title="${y.year}: ${y.n}"></i>`).join('')}</div><div class="note">${w.by_year[0].year} → ${w.by_year[w.by_year.length - 1].year}</div>` : ''}
+    ${w.coauthors.length ? `<h3 class="s">Shares bylines with</h3><div class="meta">${w.coauthors.map(c => `<button class="pill a" data-writer="${esc(c.name)}">▲ ${esc(c.name)} · ${c.n}</button>`).join('')}</div>` : ''}
+    ${w.coverage.length ? `<h3 class="s">Files stories from <small class="note">(datelines)</small></h3><div class="meta">${w.coverage.map(c => `<span class="pill">${esc(c.place)} · ${c.n}</span>`).join('')}</div><p class="note">Where the stories say they were reported from. It says where they work, nothing more.</p>` : ''}
+    ${w.cited_by.length ? `<h3 class="s">Named by</h3><div class="meta">${w.cited_by.map(c => `<span class="pill">${c.platform === 'news' || c.platform === 'web' ? '' : '@'}${esc(c.who)} <small class="note">${esc(c.platform)}</small> · ${c.n}</span>`).join('')}</div>
+      <div class="meta" style="margin-top:6px">${w.cite_posts.filter(p => p.url).slice(0, 6).map(p => `<a class="pill" href="${esc(p.url)}" target="_blank" rel="noreferrer noopener" title="${esc(p.text)}">↗ ${esc(p.who)}</a>`).join('')}</div>` : ''}
+    ${w.names.length ? `<h3 class="s">Names in their articles</h3><div class="meta">${w.names.map(n => `<button class="pill" data-focus="${esc('"' + n.name + '"')}">◆ ${esc(n.name.replace(/\b\w/g, c => c.toUpperCase()))} · ${n.n}</button>`).join('')}</div>` : ''}
+    <h3 class="s">Author page <small class="note">(the outlet's own)</small></h3>
+    ${w.page ? `${w.page.url ? `<a class="note" href="${esc(w.page.url)}" target="_blank" rel="noreferrer" style="word-break:break-all">${esc(w.page.url)}</a>` : ''}${w.page.bio ? `<p class="note" style="margin:6px 0">${esc(w.page.bio)}</p>` : ''}
+      ${w.page.handles.length ? `<div class="note" style="margin-bottom:4px">Handles the outlet lists for them. Tap one to tie it to this writer. It is your link, the app never makes it alone.</div><div class="meta">${w.page.handles.map(h => `<button class="pill a" data-handle="${esc(h.handle + '|' + h.platform)}" title="${esc(h.url)}">@${esc(h.handle)} <small class="note">${esc(h.platform)}</small></button>`).join('')}</div>` : '<p class="note">No handles listed on it.</p>'}`
+      : '<p class="note">Not read yet. It is read once, after a run, when the article names its author page.</p>'}
+    <h3 class="s">Same person <small class="note">(accounts you tied together)</small></h3>
+    ${w.identity ? `<div class="meta"><button class="pill a" id="wIdent">◉ ${esc(w.identity.name)} · ${w.identity.accounts.length} account${w.identity.accounts.length === 1 ? '' : 's'}</button></div>` : `<div class="row wrap" style="gap:8px"><button class="btn sm" id="wLink">◉ LINK TO A PERSON</button><span class="note">Group this byline with accounts under one name.</span></div>`}
+    <h3 class="s">Articles</h3>
+    <div class="meta" style="flex-direction:column;align-items:stretch">${w.articles.map(a => `<a class="drow" href="${esc(a.url || '#')}" target="_blank" rel="noreferrer noopener"><span class="k">${a.posted_at ? when(a.posted_at) : ''}${a.dateline ? ' · ' + esc(a.dateline) : ''}</span><span class="note grow">${esc(a.text)}</span><span class="v">${esc(a.outlet || '')}${a.with.length ? ' · with ' + esc(a.with.join(', ')) : ''}</span></a>`).join('')}</div>
+    <div class="row wrap" style="gap:8px;margin-top:10px"><button class="btn sm" id="wWeb">◕ SHOW IN WEB</button></div>`);
+  $$('#sheet [data-writer]').forEach(b => b.onclick = () => openWriter(b.dataset.writer));
+  $$('#sheet [data-focus]').forEach(b => b.onclick = () => { closeSheet(); go('network?' + new URLSearchParams(Object.assign({ focus: b.dataset.focus }, T ? { topic: T.id } : {}))); });
+  $$('#sheet [data-handle]').forEach(b => b.onclick = async () => {
+    try{
+      let I = w.identity;
+      if (!I){ I = await api('/api/identities', { method: 'POST', body: { name: w.name, accounts: [{ id: w.id, how: 'you' }] } }); if (I.error) throw new Error(I.error); }
+      await linkAccount(b.dataset.handle, I.id, 'bio link'); openWriter(w.name);
+    }catch(e){ toast(e.message); }
+  });
+  const wi = $('#wIdent'); if (wi) wi.onclick = () => openIdentity(w.identity.id);
+  const wl = $('#wLink'); if (wl) wl.onclick = async () => { try{ const I = await api('/api/identities', { method: 'POST', body: { name: w.name, accounts: [{ id: w.id, how: 'you' }] } }); if (I.error) throw new Error(I.error); openIdentity(I.id); }catch(e){ toast(e.message); } };
+  $('#wWeb').onclick = () => { closeSheet(); go('network?' + new URLSearchParams(Object.assign({ focus: '@' + w.name, role: 'writer' }, T ? { topic: T.id } : {}))); };
 }
 async function openIdentity(id){
   let I; try{ I = await api('/api/identities/' + encodeURIComponent(id)); }catch(e){ return toast(e.message); }

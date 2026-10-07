@@ -25,7 +25,7 @@
  * ───────────────────────────────────────────────────────────────── */
 
 const HUB_VERSION = "2.0";
-const SN_VERSION = "1.7";
+const SN_VERSION = "1.8";
 const UA = "SearchNetWorker/1.5 (+https://ptxero.neocities.org/searchnet/; open-source research tool)";
 const INVIDIOUS = ["https://yewtu.be", "https://invidious.nerdvpn.de", "https://invidious.jing.rocks"];
 const DEFAULT_SUPABASE = 'https://tfquiunqquuctgkpmiba.supabase.co';
@@ -731,8 +731,54 @@ const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); 
 function hash(s) { let h = 0; for (let i = 0; i < (s || "").length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 
 // readability, small: JSON-LD articleBody → the densest run of <p> inside <article>/<main> → meta description
+// ── bylines: who wrote an article, where it was filed from, what the outlet's author page lists ──
+const NOT_A_NAME = /(staff|report|editor|desk|news|press|associated|reuters|bureau|team|contributor|correspondent|service|wire|agency|media|network|http|www\.|@|\d|\b(herald|times|post|tribune|gazette|journal|daily|sun|star|chronicle|observer|courier|dispatch|register|sentinel|ledger|review|today|weekly|globe|examiner|mirror|telegraph|guardian|independent|standard|record|inquirer|bulletin|cbs|nbc|abc|fox|cnn|bbc|npr|tv|radio|fm|com|org)\b)/i;
+function parseByline(raw) {
+  if (Array.isArray(raw)) { const out = []; for (const x of raw) out.push(...parseByline(typeof x === "string" ? x : (x && x.name) || "")); return [...new Set(out)].slice(0, 4); }
+  let s = stripHtml(String(raw || "")).trim().replace(/^\s*(by|from|written by|story by|reporting by)\b[:\s]*/i, "").replace(/\s*[|•·]\s*.*$/, "");
+  const out = [];
+  for (let part of s.split(/\s*(?:,|;|&| and | with )\s*/)) {
+    part = part.replace(/\s+/g, " ").replace(/^[ .]+|[ .]+$/g, ""); const words = part.split(" ");
+    if (words.length < 2 || words.length > 4 || NOT_A_NAME.test(part)) continue;
+    if (!words.every((w) => /^[A-Za-zÀ-ÿ'’.-]+$/.test(w)) || !words.some((w) => /^[A-Z]/.test(w))) continue;
+    if (part === part.toUpperCase()) part = part.toLowerCase().replace(/(^|[\s'-])\S/g, (c) => c.toUpperCase());
+    if (!out.includes(part)) out.push(part);
+  }
+  return out.slice(0, 4);
+}
+const DATELINE = /^\s*([A-Z][A-Z .'’-]{2,28}?)(?:,\s*([A-Z][A-Za-z.]{1,14}))?\s*(?:\([A-Z]{2,8}\))?\s*(?:—|–|--|-)\s+(?=[A-Z"“])/;
+function parseDateline(text) {
+  for (const line of String(text || "").split("\n").slice(0, 3)) {
+    const m = line.trim().match(DATELINE); if (!m) continue;
+    const city = m[1].trim(); const n = city.split(/\s+/).length; if (!((n >= 2 && n <= 3) || city.length >= 4)) continue;
+    return (city.toLowerCase().replace(/(^|[\s'-])\S/g, (c) => c.toUpperCase()) + (m[2] ? ", " + m[2] : "")).slice(0, 40);
+  }
+  return "";
+}
+const SOCIAL_END = "/?(?=[\"'?#\\s<]|$)";
+const SOCIAL = [["x", "https?://(?:www\\.)?(?:twitter|x)\\.com/([A-Za-z0-9_]{2,15})" + SOCIAL_END], ["bluesky", "https?://bsky\\.app/profile/([A-Za-z0-9.-]+?)" + SOCIAL_END], ["mastodon", "https?://([a-z0-9.-]+)/@([A-Za-z0-9_]+)" + SOCIAL_END],
+  ["instagram", "https?://(?:www\\.)?instagram\\.com/([A-Za-z0-9_.]{2,30})" + SOCIAL_END], ["threads", "https?://(?:www\\.)?threads\\.net/@([A-Za-z0-9_.]{2,30})" + SOCIAL_END], ["youtube", "https?://(?:www\\.)?youtube\\.com/@([A-Za-z0-9_.-]{2,40})" + SOCIAL_END]];
+const SOCIAL_SKIP = new Set(["share", "intent", "home", "login", "search", "hashtag", "i", "explore", "privacy", "settings"]);
+// an outlet's own page for one of its writers: the handles it lists and the bio it prints. Nothing is looked up anywhere else.
+async function readAuthorPage(u) {
+  const out = { url: u, name: "", bio: "", handles: [] };
+  let html; try { html = (await getText(u, { "Accept-Language": "en" })).slice(0, 800000); } catch (e) { out.error = e.message; return out; }
+  const scope = html.replace(/<(script|style|nav|footer)[\s\S]*?<\/\1>/gi, " ");
+  out.name = stripHtml((scope.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [, ""])[1]).slice(0, 80);
+  const m = html.match(/<meta[^>]+(?:name|property)=["'](?:description|og:description)["'][^>]+content=["']([^"']*)/i); out.bio = m ? stripHtml(m[1]).slice(0, 400) : "";
+  if (!out.bio) for (const pm of scope.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)) { const t = stripHtml(pm[1]).trim(); if (t.length > 60 && t.length < 600 && !/cookie|subscribe|newsletter|sign up/i.test(t)) { out.bio = t.slice(0, 400); break; } }
+  const seen = new Set();
+  for (const [plat, rx] of SOCIAL) for (const mm of html.matchAll(new RegExp(rx, "g"))) {
+    const handle = plat === "mastodon" ? mm[2] + "@" + mm[1] : mm[1];
+    if (plat === "mastodon" && !/rel=["'][^"']*\bme\b/i.test(html.slice(Math.max(0, mm.index - 200), mm.index))) continue;   // only a declared rel=me mastodon link counts
+    if (SOCIAL_SKIP.has(handle.toLowerCase()) || seen.has(plat + handle.toLowerCase()) || out.handles.length >= 8) continue;
+    seen.add(plat + handle.toLowerCase()); out.handles.push({ platform: plat, handle, url: mm[0].replace(/\/$/, "") });
+  }
+  return out;
+}
+
 async function readArticle(u) {
-  const out = { url: u, canonical: null, title: "", text: "", published: null, author: "" };
+  const out = { url: u, canonical: null, title: "", text: "", published: null, author: "", byline: [], author_url: "", dateline: "" };
   let html; try { html = (await getText(u, { "Accept-Language": "en" })).slice(0, 1500000); } catch (e) { out.error = e.message; return out; }
   const meta = (p) => { const m = html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${p}["'][^>]+content=["']([^"']*)`, "i")) || html.match(new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']${p}["']`, "i")); return m ? stripHtml(m[1]) : ""; };
   const can = (html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)/i) || [])[1] || meta("og:url"); if (can) { try { out.canonical = new URL(can, u).href; } catch (e) { /* ignore */ } }
@@ -742,7 +788,7 @@ async function readArticle(u) {
   for (const m of html.matchAll(/<script[^>]+ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
     let d; try { d = JSON.parse(m[1]); } catch (e) { continue; }
     const stack = Array.isArray(d) ? [...d] : [d];
-    while (stack.length) { const n = stack.pop(); if (!n || typeof n !== "object") continue; if (Array.isArray(n["@graph"])) stack.push(...n["@graph"]); if (typeof n.articleBody === "string" && n.articleBody.length > 200) { out.text = stripHtml(n.articleBody); if (!out.published) out.published = toTs(n.datePublished); if (!out.author && n.author) out.author = (Array.isArray(n.author) ? n.author[0] : n.author).name || ""; break; } }
+    while (stack.length) { const n = stack.pop(); if (!n || typeof n !== "object") continue; if (Array.isArray(n["@graph"])) stack.push(...n["@graph"]); if (typeof n.articleBody === "string" && n.articleBody.length > 200) { out.text = stripHtml(n.articleBody); if (!out.published) out.published = toTs(n.datePublished); const aus = Array.isArray(n.author) ? n.author : n.author ? [n.author] : []; out.byline = parseByline(aus.map((x) => (x && typeof x === "object") ? x.name : x)); for (const x of aus) if (x && typeof x === "object" && typeof x.url === "string" && !out.author_url) { try { out.author_url = new URL(x.url, u).href; } catch (e) { /* ignore */ } } if (!out.author && aus[0]) out.author = (typeof aus[0] === "object" ? aus[0].name : aus[0]) || ""; break; } }
     if (out.text) break;
   }
   if (!out.text) {
@@ -752,6 +798,13 @@ async function readArticle(u) {
   }
   if (!out.text) out.text = meta("og:description") || meta("description");
   out.text = out.text.replace(/\s+\n/g, "\n").slice(0, 6000);
+  // the byline: JSON-LD first (above), then meta author, then the page's own byline / rel=author link
+  if (!out.byline.length) out.byline = parseByline(out.author);
+  if (!out.byline.length) { const bm = html.match(/<[^>]+class=["'][^"']*\b(?:byline|author-name|author__name|c-byline|story-byline)[^"']*["'][^>]*>([\s\S]{0,400}?)<\//i); if (bm) out.byline = parseByline(bm[1]); }
+  const am = html.match(/<a[^>]+rel=["']author["'][^>]+href=["']([^"']+)["'][^>]*>([\s\S]{0,120}?)<\/a>/i) || html.match(/<a[^>]+href=["']([^"']+)["'][^>]+rel=["']author["'][^>]*>([\s\S]{0,120}?)<\/a>/i);
+  if (am) { if (!out.author_url) { try { out.author_url = new URL(am[1], u).href; } catch (e) { /* ignore */ } } if (!out.byline.length) out.byline = parseByline(am[2]); }
+  if (!out.author && out.byline.length) out.author = out.byline[0];
+  out.dateline = parseDateline(out.text);
   return out;
 }
 
@@ -878,6 +931,10 @@ async function searchnetRoutes(request, env, url, q) {
         if (!/^https?:\/\//.test(q.url || "")) return snJson({ error: "bad url" }, 400);
         return snJson(await readArticle(q.url));
       }
+      if (p === "/author") {                   // an outlet's page for one of its writers: listed handles + bio
+        if (!/^https?:\/\//.test(q.url || "")) return snJson({ error: "bad url" }, 400);
+        return snJson(await readAuthorPage(q.url));
+      }
       if (p === "/discover") {                 // a site → its feeds and search page, so it can become a source
         if (!/^https?:\/\//.test(q.url || "")) return snJson({ error: "bad url" }, 400);
         return snJson(await discoverSite(q.url));
@@ -895,7 +952,7 @@ async function searchnetRoutes(request, env, url, q) {
     return snJson({ error: String(e && e.message || e) }, 502);
   }
 }
-const SN_PATHS = new Set(['/search', '/account', '/follows', '/resolve', '/fetch', '/discover', '/article', '/health']);
+const SN_PATHS = new Set(['/search', '/account', '/follows', '/resolve', '/fetch', '/discover', '/article', '/author', '/health']);
 
 export default {
   async scheduled(event, env) {

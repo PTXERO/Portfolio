@@ -792,10 +792,100 @@ ADAPTERS = {
     "fourchan": fetch_fourchan, "wikipedia": fetch_wikipedia,
 }
 
+_NOT_A_NAME = re.compile(r"(staff|report|editor|desk|news|press|associated|reuters|bureau|team|contributor|correspondent|"
+                         r"service|wire|agency|media|network|http|www\.|@|\d|"
+                         r"\b(herald|times|post|tribune|gazette|journal|daily|sun|star|chronicle|observer|courier|dispatch|"
+                         r"register|sentinel|ledger|review|today|weekly|globe|examiner|mirror|telegraph|guardian|independent|"
+                         r"standard|record|inquirer|bulletin|cbs|nbc|abc|fox|cnn|bbc|npr|tv|radio|fm|com|org)\b)", re.I)
+
+
+def parse_byline(raw) -> list:
+    """'By Ana Ceballos and Mary Ellen Klas, Miami Herald' → ['Ana Ceballos', 'Mary Ellen Klas'].
+    A list of names (JSON-LD) is taken as is. Desks, wires and outlets are not writers."""
+    if isinstance(raw, list):
+        out = []
+        for x in raw:
+            out += parse_byline(x if isinstance(x, str) else (x or {}).get("name") if isinstance(x, dict) else "")
+        return list(dict.fromkeys(out))[:4]
+    s = strip_html(str(raw or "")).strip()
+    s = re.sub(r"^\s*(by|from|written by|story by|reporting by)\b[:\s]*", "", s, flags=re.I)
+    s = re.sub(r"\s*[|•·]\s*.*$", "", s)                       # 'Name | Outlet'
+    out = []
+    for part in re.split(r"\s*(?:,|;|&| and | with )\s*", s):
+        part = re.sub(r"\s+", " ", part).strip(" .")
+        words = part.split(" ")
+        if not (2 <= len(words) <= 4) or _NOT_A_NAME.search(part):
+            continue
+        if not all(re.match(r"^[A-Za-zÀ-ÿ'’.-]+$", w) for w in words) or not any(w[:1].isupper() for w in words):
+            continue
+        if part.isupper():
+            part = part.title()
+        out.append(part)
+    return list(dict.fromkeys(out))[:4]
+
+
+_DATELINE = re.compile(r"^\s*([A-Z][A-Z .'’-]{2,28}?)(?:,\s*([A-Z][A-Za-z.]{1,14}))?\s*(?:\([A-Z]{2,8}\))?\s*(?:—|–|--|-)\s+(?=[A-Z\"“])")
+
+
+def parse_dateline(text) -> str:
+    """'NAPLES, Fla. — Residents…' → 'Naples, Fla.' (where the story was filed from). Only the classic
+    all-caps dateline counts; a sentence that happens to start with a capitalised word does not."""
+    for line in str(text or "").split("\n")[:3]:
+        m = _DATELINE.match(line.strip())
+        if m:
+            city = m.group(1).strip()
+            if not (2 <= len(city.split()) <= 3 or len(city) >= 4):
+                continue
+            return (city.title() + (", " + m.group(2) if m.group(2) else ""))[:40]
+    return ""
+
+
+_END = r"/?(?=[\"'?#\s<]|$)"
+_SOCIAL = [("x", r"https?://(?:www\.)?(?:twitter|x)\.com/([A-Za-z0-9_]{2,15})" + _END),
+           ("bluesky", r"https?://bsky\.app/profile/([A-Za-z0-9.-]+?)" + _END),
+           ("mastodon", r"https?://([a-z0-9.-]+)/@([A-Za-z0-9_]+)" + _END),
+           ("instagram", r"https?://(?:www\.)?instagram\.com/([A-Za-z0-9_.]{2,30})" + _END),
+           ("threads", r"https?://(?:www\.)?threads\.net/@([A-Za-z0-9_.]{2,30})" + _END),
+           ("youtube", r"https?://(?:www\.)?youtube\.com/@([A-Za-z0-9_.-]{2,40})" + _END)]
+_SOCIAL_SKIP = {"share", "intent", "home", "login", "search", "hashtag", "i", "explore", "privacy", "settings"}
+
+
+def read_author_page(url: str):
+    """An outlet's own page for one of its writers: the social handles it lists and the short bio it prints.
+    Only what the outlet publishes about the byline; nothing is looked up anywhere else."""
+    out = {"url": url, "name": "", "bio": "", "handles": []}
+    try:
+        html, _, _ = http_get(url, timeout=20, max_bytes=800_000)
+    except Exception as e:      # noqa: BLE001
+        out["error"] = str(e)[:200]
+        return out
+    scope = re.sub(r"<(script|style|nav|footer)[\s\S]*?</\1>", " ", html, flags=re.I)
+    out["name"] = strip_html((re.search(r"<h1[^>]*>([\s\S]*?)</h1>", scope, re.I) or [None, ""])[1])[:80]
+    m = re.search(r"<meta[^>]+(?:name|property)=[\"'](?:description|og:description)[\"'][^>]+content=[\"']([^\"']*)", html, re.I)
+    out["bio"] = strip_html(m.group(1))[:400] if m else ""
+    if not out["bio"]:
+        for p in re.findall(r"<p[^>]*>([\s\S]*?)</p>", scope, re.I):
+            t = strip_html(p).strip()
+            if 60 < len(t) < 600 and not re.search(r"cookie|subscribe|newsletter|sign up", t, re.I):
+                out["bio"] = t[:400]
+                break
+    seen = set()
+    for plat, rx in _SOCIAL:
+        for m in re.finditer(rx, html):
+            handle = (m.group(2) + "@" + m.group(1)) if plat == "mastodon" else m.group(1)
+            if plat == "mastodon" and ("<" in m.group(0) or not re.search(r"rel=[\"'][^\"']*\bme\b", html[max(0, m.start() - 200):m.start()], re.I)):
+                continue                                             # only a declared rel=me mastodon link counts
+            if handle.lower() in _SOCIAL_SKIP or (plat, handle.lower()) in seen or len(out["handles"]) >= 8:
+                continue
+            seen.add((plat, handle.lower()))
+            out["handles"].append({"platform": plat, "handle": handle, "url": m.group(0).rstrip("/")})
+    return out
+
 
 def read_article(url: str):
     """The full text of one article: JSON-LD articleBody, else the <p> run inside <article>/<main>, else the description."""
-    out = {"url": url, "canonical": None, "title": "", "text": "", "published": None, "author": ""}
+    out = {"url": url, "canonical": None, "title": "", "text": "", "published": None, "author": "",
+           "byline": [], "author_url": "", "dateline": ""}
     try:
         html, _, _ = http_get(url, timeout=20, max_bytes=1_500_000)
     except Exception as e:      # noqa: BLE001
@@ -830,7 +920,12 @@ def read_article(url: str):
                 out["text"] = strip_html(body)
                 out["published"] = out["published"] or parse_date(n.get("datePublished"))
                 au = n.get("author")
-                au = au[0] if isinstance(au, list) and au else au
+                aus = au if isinstance(au, list) else [au] if au else []
+                out["byline"] = parse_byline([x.get("name") if isinstance(x, dict) else x for x in aus])
+                for x in aus:
+                    if isinstance(x, dict) and isinstance(x.get("url"), str) and not out["author_url"]:
+                        out["author_url"] = urllib.parse.urljoin(url, x["url"])
+                au = aus[0] if aus else None
                 if not out["author"] and isinstance(au, dict):
                     out["author"] = au.get("name") or ""
                 break
@@ -845,6 +940,21 @@ def read_article(url: str):
     if not out["text"]:
         out["text"] = meta("og:description") or meta("description")
     out["text"] = out["text"][:6000]
+    # the byline: JSON-LD first (above), then meta author, then the page's own byline / rel=author link
+    if not out["byline"]:
+        out["byline"] = parse_byline(out["author"])
+    if not out["byline"]:
+        m = re.search(r"<[^>]+class=[\"'][^\"']*\b(?:byline|author-name|author__name|c-byline|story-byline)[^\"']*[\"'][^>]*>([\s\S]{0,400}?)</", html, re.I)
+        if m:
+            out["byline"] = parse_byline(m.group(1))
+    am = re.search(r"<a[^>]+rel=[\"']author[\"'][^>]+href=[\"']([^\"']+)[\"'][^>]*>([\s\S]{0,120}?)</a>", html, re.I) or \
+        re.search(r"<a[^>]+href=[\"']([^\"']+)[\"'][^>]+rel=[\"']author[\"'][^>]*>([\s\S]{0,120}?)</a>", html, re.I)
+    if am:
+        out["author_url"] = out["author_url"] or urllib.parse.urljoin(url, am.group(1))
+        out["byline"] = out["byline"] or parse_byline(am.group(2))
+    if not out["author"] and out["byline"]:
+        out["author"] = out["byline"][0]
+    out["dateline"] = parse_dateline(out["text"])
     return out
 
 

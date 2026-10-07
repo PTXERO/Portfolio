@@ -13,6 +13,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -1158,3 +1159,83 @@ class OutletNames(Base):
         self.assertIsNotNone(e)
         self.assertEqual(e["t"], 1)
         self.assertIn("names naples daily news", e["ev"]["mention"])
+
+
+class Writers(Base):
+    def _article(self, id_, host, outlet, title, body, byline, dateline="", ts=None):
+        art = S._web_item(type("C", (), {"label": "t"})(), host, f"https://www.{host}/{id_}", "post",
+                          title + "\n\n" + body, author=outlet, posted_at=ts or now())
+        art["id"], art["platform"], art["byline"], art["dateline"] = "news:" + id_, "news", json.dumps(byline), dateline
+        self.v.db.upsert(art)
+        return art
+
+    def test_bylines_are_parsed_and_datelines_say_where_a_story_was_filed(self):
+        self.assertEqual(S.parse_byline("By Ana Ceballos and Mary Ellen Klas, Miami Herald"), ["Ana Ceballos", "Mary Ellen Klas"])
+        self.assertEqual(S.parse_byline(["Jane Doe", {"name": "Staff Reports"}, "Naples Daily News"]), ["Jane Doe"])
+        self.assertEqual(S.parse_byline("By JOHN SMITH | Associated Press"), ["John Smith"])
+        self.assertEqual(S.parse_dateline("NAPLES, Fla. — Residents along the coast braced."), "Naples, Fla.")
+        self.assertEqual(S.parse_dateline("WASHINGTON (AP) — The agency said."), "Washington")
+        self.assertEqual(S.parse_dateline("The storm — which hit on Sunday — was gone by noon."), "")
+        html = ('<html><head><title>Storm</title><script type="application/ld+json">{"@type":"NewsArticle","author":[{"@type":"Person","name":"Jane Doe","url":"/staff/jane-doe"},'
+                '{"@type":"Person","name":"Bob Roe"}],"articleBody":"NAPLES, Fla. — ' + "Power crews worked through the night. " * 12 + '"}</script></head><body></body></html>')
+        with patch.object(S, "http_get", return_value=(html, {}, "https://www.naplesnews.com/a")):
+            art = S.read_article("https://www.naplesnews.com/a")
+        self.assertEqual(art["byline"], ["Jane Doe", "Bob Roe"])
+        self.assertEqual(art["author_url"], "https://www.naplesnews.com/staff/jane-doe")
+        self.assertEqual(art["dateline"], "Naples, Fla.")
+        page = '<html><head><meta name="description" content="Jane Doe covers the coast for the Daily News."></head><body><h1>Jane Doe</h1>' \
+               '<a href="https://twitter.com/janedoe">Twitter</a> <a href="https://twitter.com/share">share</a> <a href="https://bsky.app/profile/jane.bsky.social">Bluesky</a></body></html>'
+        with patch.object(S, "http_get", return_value=(page, {}, "")):
+            ap = S.read_author_page("https://www.naplesnews.com/staff/jane-doe")
+        self.assertEqual([(h["platform"], h["handle"]) for h in ap["handles"]], [("x", "janedoe"), ("bluesky", "jane.bsky.social")])
+        self.assertIn("covers the coast", ap["bio"])
+
+    def test_a_writer_is_a_node_tied_to_the_outlet_with_co_authors_and_a_dossier(self):
+        from rv.people import word_graph, list_writers, writer, handle
+        t = self.v.create_topic("Isaias", ["hurricane isaias"], settings={"window": "all"})
+        a1 = self._article("a1", "naplesnews.com", "Naples Daily News", "Isaias: Duke Energy restores power",
+                           "NAPLES, Fla. — Duke Energy crews restored power across Collier County.", ["Jane Doe", "Bob Roe"], "Naples, Fla.", ts=now() - 86400 * 400)
+        a2 = self._article("a2", "naplesnews.com", "Naples Daily News", "Isaias moves north",
+                           "FORT MYERS — Duke Energy said Isaias was past.", ["Jane Doe"], "Fort Myers", ts=now() - 86400 * 2)
+        a3 = self._article("a3", "tampabay.com", "Tampa Bay Times", "Isaias aftermath",
+                           "Reporting by Jane Doe of the Naples Daily News showed Duke Energy was slow.", [], "", ts=now() - 86400)
+        self.add(tweet("1", "Great piece by Jane Doe on the Isaias outages #isaias", author="wxguy"))
+        for i in (a1["id"], a2["id"], a3["id"], "x:1"):
+            self.v.link(t["id"], i, "hurricane isaias", "s")
+            self.v.vote(t["id"], i, 1)
+        g = word_graph(self.v, topic=t["id"], kinds="account,entity", max_nodes=60)
+        roles = {n["label"]: n["role"] for n in g["nodes"] if n["kind"] == "account"}
+        self.assertEqual(roles.get("Jane Doe"), "writer")
+        self.assertEqual(roles.get("naples daily news"), "outlet")
+        jd = "@jane doe|press"
+        E = {(e["a"], e["b"]): e for e in g["edges"]}
+        ties = {k: e for k, e in E.items() if jd in k}
+        outlet = next(e for k, e in ties.items() if "@naples daily news|news" in k)
+        self.assertEqual(outlet["t"], 1)
+        self.assertIn("writes for Naples Daily News", outlet["ev"]["byline"])
+        co = next(e for k, e in ties.items() if "@bob roe|press" in k)
+        self.assertEqual((co["t"], co["p"]["b"] > 0), (1, True))
+        self.assertIn("share a byline", co["ev"]["byline"])
+        self.assertTrue(any("@wxguy|x" in k for k in ties), "a poster naming the writer is a mention of the writer")   # tier-1 mention
+        self.assertTrue(any("@tampa bay times|news" in k for k in ties), "another outlet naming the writer is a mention too")
+        self.assertFalse(any(n["kind"] == "entity" and n["label"] == "Jane Doe" for n in g["nodes"]))   # never a diamond of her own
+        gw = word_graph(self.v, topic=t["id"], kinds="account,entity", max_nodes=60, role="writer")
+        acc = {n["label"] for n in gw["nodes"] if n["kind"] == "account"}
+        self.assertIn("Jane Doe", acc)
+        self.assertIn("Bob Roe", acc)
+        self.assertNotIn("wxguy", acc)
+        lst = list_writers(self.v, t["id"])
+        self.assertEqual([w["name"] for w in lst["writers"]], ["Jane Doe", "Bob Roe"])
+        self.assertEqual(lst["writers"][0]["datelines"][0]["place"], "Naples, Fla.")
+        d = handle(self.v, "GET", ["writers", "jane%20doe"], {"topic": t["id"]}, {})
+        self.assertEqual((d["name"], d["n"], d["role"]), ("Jane Doe", 2, "writer"))
+        self.assertEqual([o["name"] for o in d["outlets"]], ["Naples Daily News"])
+        self.assertEqual(d["coauthors"], [{"name": "Bob Roe", "n": 1}])
+        self.assertEqual([c["place"] for c in d["coverage"]], ["Naples, Fla.", "Fort Myers"])
+        self.assertEqual({(c["who"], c["platform"]) for c in d["cited_by"]}, {("Tampa Bay Times", "news"), ("wxguy", "x")})
+        self.assertEqual(sum(y["n"] for y in d["by_year"]), 2)
+        self.assertTrue(any(n["name"] == "duke energy" for n in d["names"]))
+        self.assertIsNone(d["page"])
+        self.assertEqual(d["articles"][0]["with"], [])
+        self.assertEqual(d["articles"][1]["with"], ["Bob Roe"])
+        self.assertEqual(writer(self.v, "nobody")["error"], "no articles with this byline")

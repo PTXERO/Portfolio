@@ -733,22 +733,34 @@ class Vault:
                 swept += 1
         job.log(f"  + {swept} matches from your library")
         # full text for the articles in this topic (titles and snippets are too thin for names and briefs)
-        read = 0
+        read, writers = 0, 0
         for r in self.db.q("SELECT t.item_id FROM topic_items t JOIN items i ON i.id=t.item_id WHERE t.topic_id=? AND t.label>=0 "
-                           "AND i.platform IN ('news','web','hackernews') AND i.url LIKE 'http%' AND length(coalesce(i.text,''))<600 "
+                           "AND i.platform IN ('news','web','hackernews') AND i.url LIKE 'http%' "
+                           "AND (length(coalesce(i.text,''))<600 OR i.byline IS NULL) "
                            "ORDER BY t.label DESC, t.score DESC LIMIT 25", (tid,)):
             job.check()
             it = self.db.get(r["item_id"])
-            if not it or self.db.one("SELECT 1 FROM cache WHERE key=?", ("body:" + it["id"],)):
+            if not it or self.db.one("SELECT 1 FROM cache WHERE key=?", ("read:" + it["id"],)):
                 continue
-            self.db.exec("INSERT OR REPLACE INTO cache(key, value, ts) VALUES (?, '1', ?)", ("body:" + it["id"], now()))
+            self.db.exec("INSERT OR REPLACE INTO cache(key, value, ts) VALUES (?, '1', ?)", ("read:" + it["id"], now()))
             art = S.read_article(it["url"])
+            upd = {"byline": json.dumps(art.get("byline") or []), "dateline": art.get("dateline") or ""}
             if art.get("text") and len(art["text"]) > len(it.get("text") or ""):
                 head = (it.get("text") or "").split("\n")[0]
-                self.db.upsert(dict(it, text=(head + "\n\n" + art["text"])[:8000], posted_at=it.get("posted_at") or art.get("published")))
+                upd.update(text=(head + "\n\n" + art["text"])[:8000], posted_at=it.get("posted_at") or art.get("published"))
                 read += 1
-        if read:
-            job.log(f"  read {read} full articles")
+            self.db.exec("UPDATE items SET byline=?, dateline=?" + (", text=?, posted_at=?" if "text" in upd else "") + " WHERE id=?",
+                         [upd["byline"], upd["dateline"]] + ([upd["text"], upd["posted_at"]] if "text" in upd else []) + [it["id"]])
+            # the outlet's own page for the writer (handles it lists, the bio it prints): read once per writer
+            if art.get("byline") and art.get("author_url") and writers < 8:
+                key = "author:" + art["byline"][0].lower()
+                if not self.db.one("SELECT 1 FROM cache WHERE key=?", (key,)):
+                    page = S.read_author_page(art["author_url"])
+                    page["outlet"] = it.get("author") or ""
+                    self.db.exec("INSERT OR REPLACE INTO cache(key, value, ts) VALUES (?, ?, ?)", (key, json.dumps(page), now()))
+                    writers += 1
+        if read or writers:
+            job.log(f"  read {read} full articles" + (f", {writers} writer pages" if writers else ""))
         # grown searches that keep bringing junk are switched off (yours never are)
         for q_ in query_stats(self.db, tid):
             if q_["enabled"] and q_["origin"] not in ("seed", "user") and q_["pos"] + q_["neg"] >= 6 and q_["precision"] < 0.25:

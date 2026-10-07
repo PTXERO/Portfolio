@@ -352,6 +352,7 @@
         if (arg === 'presets') return { presets: WORKER_SOURCES };
         if (arg === 'discover' && method === 'POST') return await workerCall('/discover?url=' + encodeURIComponent(body.url || ''));
         if (arg === 'article' && method === 'POST') return await workerCall('/article?url=' + encodeURIComponent(body.url || ''));
+        if (arg === 'author' && method === 'POST') return await workerCall('/author?url=' + encodeURIComponent(body.url || ''));
         if (arg === 'probe' && method === 'POST') return { candidates: probe(body.text) };
         const all = await listSources();
         if (!arg) {
@@ -374,7 +375,7 @@
       // topics are handled by the learn module when present
       if (route === 'topics' && this.learn) return this.learn.request(method, parts, qs || '', body);
       // account profiles + connection web (searchnet-graph.js)
-      if ((route === 'people' || route === 'graph' || route === 'identities') && this.people) return this.people.request(method, parts, qs || '', body);
+      if ((route === 'people' || route === 'graph' || route === 'identities' || route === 'writers') && this.people) return this.people.request(method, parts, qs || '', body);
 
       return { error: 'not available in browser mode: ' + path };
     },

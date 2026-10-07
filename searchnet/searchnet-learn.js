@@ -195,15 +195,18 @@
     // full text for the articles in this topic (titles and snippets are too thin for names and briefs)
     try {
       const votes = (await topicItems(tid)).filter((v) => v.label >= 0).sort((a, b) => (b.label - a.label) || (b.score - a.score));
-      let read = 0;
+      let read = 0, writers = 0;
       for (const v of votes) {
         if (read >= 15 || job.cancel) break;
         const it = await idb.get('items', v.item_id);
         if (!it || !ARTICLE_PLATFORMS.has(it.platform) || it.platform === 'archive' || !/^http/.test(it.url || '') || it.body_at || String(it.text || '').length >= 600) continue;
         it.body_at = now(); await idb.put('items', it);
-        try { const art = await L.workerCall('/article?url=' + encodeURIComponent(it.url)); if (art.text && art.text.length > String(it.text || '').length) { it.text = (String(it.text || '').split('\n')[0] + '\n\n' + art.text).slice(0, 8000); if (!it.posted_at && art.published) it.posted_at = art.published; await idb.put('items', it); read++; } } catch (e) { /* next */ }
+        try { const art = await L.workerCall('/article?url=' + encodeURIComponent(it.url)); it.byline = art.byline || []; it.dateline = art.dateline || ''; if (art.text && art.text.length > String(it.text || '').length) { it.text = (String(it.text || '').split('\n')[0] + '\n\n' + art.text).slice(0, 8000); if (!it.posted_at && art.published) it.posted_at = art.published; read++; } await idb.put('items', it);
+          // the outlet's own page for the writer (handles it lists, the bio it prints): read once per writer
+          if (it.byline.length && art.author_url && writers < 8) { const key = 'author:' + it.byline[0].toLowerCase(); if (!(await idb.get('kv', key))) { const page = await L.workerCall('/author?url=' + encodeURIComponent(art.author_url)); page.outlet = it.author || ''; await idb.put('kv', { k: key, v: page, ts: now() }); writers++; } }
+        } catch (e) { /* next */ }
       }
-      if (read) job.log('  read ' + read + ' full articles');
+      if (read || writers) job.log('  read ' + read + ' full articles' + (writers ? ', ' + writers + ' writer pages' : ''));
     } catch (e) { /* enrichment only */ }
     // grown searches that keep bringing junk are switched off (yours never are)
     (t2.queries || []).forEach((q) => { const n = (q.pos || 0) + (q.neg || 0); if (q.enabled && !['seed', 'user'].includes(q.origin) && n >= 6 && (q.pos || 0) / n < 0.25) { q.enabled = false; job.log("  search '" + q.query + "' switched off: " + q.neg + ' of ' + n + ' rated 👎'); } });

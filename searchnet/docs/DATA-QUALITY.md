@@ -164,3 +164,20 @@ Legend · **DONE** shipped · **NEXT** small, this week · **PLAN** needs design
   on the model, outlets show as articles on the review card.
 - The hub counts a signed read as a visit (retention), caches identical article-source searches for ten
   minutes (shared-address rate limits), and deploys from GitHub instead of a paste.
+
+## Update: writers
+
+A byline is now an account on the `press` platform. It is read from the full article after a run (JSON-LD author, meta author, the page's byline, a rel=author link). Desks, wires and outlet names are not writers.
+
+What the web draws for a writer:
+
+- a tier-1 "writes for" link to the outlet that printed the piece, with the articles behind it
+- a tier-1 link to each co-author on a shared byline
+- a tier-1 mention whenever a post or another outlet names the writer (the name is never a separate diamond)
+- tier-2 links to the names in their own articles
+
+WRITERS ONLY in the web keeps the writers and the outlets they write for. Tap a writer node twice (or WRITER in the focus bar) for the dossier. The topic dossier has a "Who writes about it" card.
+
+The writer dossier is built from the collected articles and the outlet's own author page, nothing else: outlets over time, co-authors, who names them, what they name, the datelines their stories carry (where they report from, never where they live), the handles the outlet lists for them, and the articles. A listed handle is offered as a tap-to-link. It becomes a link only when you tap it. The app never ties a byline to an account by itself.
+
+Known gaps: outlets that print no byline in the HTML, bylines with titles ("Staff Writer Jane Doe"), and the same writer spelled two ways (J. Doe / Jane Doe) are two nodes. Link them under one person if they are.
