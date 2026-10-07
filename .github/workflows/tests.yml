@@ -1,0 +1,30 @@
+# Every push runs what used to run by hand: the SearchNet server suite, the hub harness, the Worker sandbox and the browser checks.
+name: Tests
+on:
+  push:
+  pull_request:
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m unittest discover -s searchnet/server -p 'test_*.py'
+  hub-and-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: python3 hub/build/gen_hub.py && git diff --exit-code -- hub/hub-worker.js   # the generated Worker is committed; it must match its sources
+      - run: node hub/build/test_hub.mjs | tee out.txt && ! grep -q '✗' out.txt
+      - run: node searchnet/tests/worker.cjs | tee out2.txt && ! grep -q '✗' out2.txt
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm i --no-save playwright@1.49.1 && npx playwright install --with-deps chromium
+      - run: for f in searchnet/tests/browser/*.mjs; do echo "== $f"; node "$f" | tee o.txt || exit 1; grep -q '✗' o.txt && exit 1; done; true

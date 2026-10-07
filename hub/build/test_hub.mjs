@@ -78,6 +78,9 @@ DB.hub_usage = {}; // a new day
   r = await call('GET', '/search?source=bluesky&q=dog', null, undefined, { 'CF-Connecting-IP': '8.8.8.8' }); const r2 = await call('GET', '/search?source=bluesky&q=dog', null, undefined, { 'CF-Connecting-IP': '8.8.8.8' });
   ok(r.status === 200 && r.j.cached === true && r2.status === 200, 'an anonymous asker gets the shared hit without spending their one fetch');
   r = await call('GET', '/search?source=bluesky&q=dog&limit=5', me); ok(r.status === 200 && r.j.cached === false, 'a different limit is a different key');
+  // 6c. replay: the same signed request twice is refused when the edge cache remembers the nonce
+  const hdr = await me.headers('GET', '/me'); const a1 = await W.fetch(new Request('https://hub.test/me', { headers: hdr }), env); const a2 = await W.fetch(new Request('https://hub.test/me', { headers: hdr }), env);
+  ok(a1.status === 200 && a2.status === 401, 'a replayed signed request is refused (' + a1.status + ' then ' + a2.status + ')');
   delete globalThis.caches; DB.hub_usage = {}; }
 // 7. legacy Social form posts still work, and a bound key blocks legacy writes
 const fd = new FormData(); fd.append('uid', 'CD34'); fd.append('secret', 's3cret'); fd.append('handle', 'RF-CD34'); fd.append('body', 'hello legacy');

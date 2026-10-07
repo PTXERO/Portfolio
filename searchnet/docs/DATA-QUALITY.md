@@ -213,3 +213,11 @@ Known gaps: a claim and its paraphrase in different words are two claims; a numb
 
 A topic named after a festival read as a person, pulled four meanings of "furnace" and graded itself solid. Fixes, each pinned by a test:
 festivals, shows, labels and outlets are never a person's name; archive scans and encyclopedia pages are context, never the first voice, a driver or an outlet; a claim needs two voices before it is listed and an outlet plus another voice before it "confirms"; a figure must count something countable, be a unit, or be money; a day never eats the front of a year, and dates are shown in UTC; a shout is a post mostly in capitals, not a band name; a vague problem word (power, fire, school, gas) needs a partner; and a topic with almost nothing rated reads thin whatever its size, because what is in it is a guess.
+
+## Update: islands, backups, a hub that is behind
+
+- **Islands.** A cluster with no mention, follow, shared name or shared tag linking it to the main body of the web is about something else that shares a word with the topic. It is dropped from the web and counted ("12 unconnected hidden"). ISLANDS in the strip shows them. A word focus keeps everything, since the words are the point there.
+- **Backups.** Safari forgets a site's storage after a week unused. Topics, ratings, sources, identities and settings now go to the hub's per-person store once a week on their own, and an empty device is offered the backup back. Posts are refetched when the topics run. SOURCES shows when the last backup was. iPhones get one nudge to add the app to the home screen, which is exempt from the wipe.
+- **A hub that is behind.** When the hub answers for an older Worker than the app expects, a banner says which version it runs, what is missing (pool, cache, bylines) and who has to update it.
+- **Replay.** A signed request's nonce is remembered at the edge for five minutes across isolates, so a captured request cannot be sent again.
+- **CI.** Every push runs the server suite, the hub harness, the Worker sandbox and the browser checks, and fails if the committed hub Worker does not match its sources.

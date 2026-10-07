@@ -661,7 +661,7 @@ def _parse_focus(f):
     return {"kind": "word", "key": txt, "phrase": " " in txt}
 
 
-def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, platform="", topic="", hops=2, via="", merge=False, role=""):
+def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, platform="", topic="", hops=2, via="", merge=False, role="", islands=False):
     by, idf, h_df, w_df = _build(v)
     if platform:
         by = {k: a for k, a in by.items() if a.platform == platform}
@@ -1023,6 +1023,31 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
     ids = [nid for nid in ids if nid == focus_id or (word_focus and kind_of.get(nid) == "word") or nid not in best_t or best_t[nid] <= 2]
     idset = set(ids)
     edges = [e for e in edges if e["a"] in idset and e["b"] in idset]
+    # islands: a cluster with no real link (mention, follow, name, tag) to the main body of the web is about something
+    # else that shares a word with the topic. Out, unless asked for (islands=True), and counted so the view can say so.
+    islands_hidden = 0
+    if not islands and not word_focus and len(ids) > 3:
+        parent = {nid: nid for nid in ids}
+
+        def find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+        for e in edges:
+            if e["t"] <= 2:
+                ra, rb = find(e["a"]), find(e["b"])
+                if ra != rb:
+                    parent[ra] = rb
+        comp_w = Counter()
+        for nid in ids:
+            comp_w[find(nid)] += node_w.get(nid, 0) + (1 if kind_of.get(nid) == "account" else 0)
+        main = find(focus_id) if focus_id in parent else (comp_w.most_common(1)[0][0] if comp_w else None)
+        keep_ids = [nid for nid in ids if find(nid) == main]
+        islands_hidden = len(ids) - len(keep_ids)
+        ids = keep_ids
+        idset = set(ids)
+        edges = [e for e in edges if e["a"] in idset and e["b"] in idset]
     deg = Counter()
     for e in edges:
         deg[e["a"]] += e["w"]
@@ -1049,7 +1074,7 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
                       "identity": i["name"] if i else None, "identity_id": i["id"] if i else None,
                       "person_id": pid, "attrs": ((meta.get(pid) or {}).get("attrs", [])[:3] if pid else [])})
     return {"nodes": nodes, "edges": edges, "focus": focus_id if focus_id in idset else None,
-            "focus_asked": focus or "", "kinds": sorted(kinds), "hops": max(hop_of.values()) if hop_of else None,
+            "focus_asked": focus or "", "kinds": sorted(kinds), "hops": max(hop_of.values()) if hop_of else None, "islands_hidden": islands_hidden,
             "generated": _now()}
 
 
@@ -1227,7 +1252,7 @@ def handle(v, method, parts, params, body):
         if "focus" in params or "kinds" in params:
             return word_graph(v, params.get("focus") or "", params.get("kinds") or "account,hashtag,word,entity",
                               int(params.get("max") or 80), params.get("platform") or "", params.get("topic") or "",
-                              params.get("hops") or 2, params.get("via") or "", params.get("merge") == "1", params.get("role") or "")
+                              params.get("hops") or 2, params.get("via") or "", params.get("merge") == "1", params.get("role") or "", params.get("islands") == "1")
         return graph(v, params.get("topic") or None, int(params.get("max") or 60), float(params.get("min") or 1.5),
                      params.get("platform") or "", params.get("role") or "")
     pid = parts[1] if len(parts) > 1 else None

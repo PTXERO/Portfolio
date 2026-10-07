@@ -1,0 +1,17 @@
+const pw = (await import(process.env.PW_MODULE || 'playwright')).default; const ROOT = new URL('../../..', import.meta.url).pathname;
+import { spawn } from 'node:child_process';
+const srv = spawn('python3', ['-m', 'http.server', '8772', '--bind', '127.0.0.1'], { cwd: ROOT, stdio: 'ignore' }); await new Promise((r) => setTimeout(r, 800));
+const browser = await pw.chromium.launch(); const ctx = await browser.newContext({ ...pw.devices['iPhone 14 Pro'] });
+await ctx.route(/share\.ptxero\.net|fonts\./, (r) => r.abort());
+const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+await p.goto('http://127.0.0.1:8772/hub/', { waitUntil: 'domcontentloaded' }); await p.waitForTimeout(800);
+const t = await p.textContent('#pane-you');
+console.log(/Hosted on the shared PTXERO hub/.test(t) ? '✓ panel says where' : '✗ panel missing where line', /WHERE IT ACTUALLY SITS/.test(t) ? '✓ table present' : '✗ table missing', /Right now on this device/.test(t) ? '✓ live line' : '✗ live line missing');
+await p.evaluate(() => window.PX.setHost({ mode: 'own', hub: 'https://hub.me.workers.dev', supabaseUrl: 'https://abc.supabase.co' })); await p.waitForTimeout(300);
+const t2 = await p.textContent('.px-where'); console.log(/Hosted by you/.test(t2) && /hub.me.workers.dev/.test(t2) && /PTXERO holds none of it/.test(t2) ? '✓ own hub wording' : '✗ own: ' + t2);
+await p.evaluate(() => window.PX.setHost({ mode: 'shared' }));
+const el = await p.$('.px-panel'); await el.screenshot({ path: '/tmp/where.png' });
+await p.goto('http://127.0.0.1:8772/searchnet/index.html?mode=browser#sources', { waitUntil: 'domcontentloaded' }); await p.waitForTimeout(1500);
+const t3 = await p.textContent('body'); console.log(/Your library \(posts, topics, ratings\) stays on this device/.test(t3) ? '✓ searchnet panel says where the library is' : '✗ searchnet wording missing');
+console.log('errors', errs);
+await browser.close(); srv.kill();

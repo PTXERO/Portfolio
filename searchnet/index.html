@@ -990,6 +990,7 @@ async function connect(){
         b.innerHTML = 'BROWSER MODE: nowhere to fetch from yet. Reload to use the shared hub, or paste a Worker URL in <a href="#sources">SOURCES</a>.';
         b.classList.add('on');
       }
+      setTimeout(() => { keepSafe().catch(() => {}); hubBehind().catch(() => {}); }, 3000);
       window.addEventListener('px:quota', e => { const d = e.detail || {}; toast(d.wait > 60 ? ('Daily limit on the hub hit (' + d.used + '/' + d.limit + '). Resets at midnight UTC. Or run your own hub (SOURCES → YOUR DATA).') : ('Hub is busy, waiting ' + d.wait + 's…'), 6000); });
       return;
     }catch(e){ LOCAL = false; }   // fall through to server/demo if IndexedDB is unavailable
@@ -1141,6 +1142,39 @@ async function renderTopics(){
   }).join('');
   $$('.tcard', el).forEach(c => c.onclick = e => { if (e.target.closest('[data-run]')) return; go('topic/' + c.dataset.tid + '/review'); });
   $$('[data-run]', el).forEach(b => b.onclick = async e => { e.stopPropagation(); b.disabled = true; await runTopic(b.dataset.run); renderTopics(); });
+}
+// ── keeping the library safe. Safari forgets a site's storage after a week unused, so the topics, ratings and settings
+//    go to the hub's per-person store once a week on their own (posts are refetched on restore). Offered back when the library is empty.
+const NEED_WORKER = '1.8';
+const vcmp = (a, b) => { const x = String(a || '0').split('.').map(Number), y = String(b || '0').split('.').map(Number); for (let i = 0; i < Math.max(x.length, y.length); i++){ const d = (x[i] || 0) - (y[i] || 0); if (d) return d; } return 0; };
+async function keepSafe(){
+  const px = window.PX; if (!px || !BK || px.host().mode === 'local') return;
+  const counts = (STATUS && STATUS.counts) || {}; const topics = (await BK.request('/api/topics')).topics || [];
+  const last = store.get('lastBackup', 0), now_ = Date.now() / 1000;
+  if (topics.length && now_ - last > 7 * 86400){
+    try{ const d = await BK.backup(); const r = await PX.store.put('searchnet', 'backup', d); store.set('lastBackup', now_); store.set('lastBackupBytes', r.bytes || 0); const m = $('#bkMsg'); if (m) m.textContent = backupLine(); }
+    catch(e){ if (e.status === 413) toast('Weekly backup skipped: over 512 KB. Delete old topics or back up by hand in SETUP.', 7000); }
+  } else if (!topics.length && !(counts.n || 0) && !store.get('restoreOffered', false)){
+    store.set('restoreOffered', true);
+    try{ const r = await PX.store.get('searchnet', 'backup'); const d = r && r.data; if (d && (d.topics || []).length){
+      if (await confirmSheet('Restore your backup?', 'This device has an empty library, and your hub holds a backup from ' + new Date((d.made || 0) * 1000).toLocaleString() + ' with ' + d.topics.length + ' topics and ' + (d.votes || []).length + ' ratings. Posts are fetched again when you run the topics.', 'RESTORE')){
+        const res = await BK.request('/api/backup', { method: 'POST', body: d }); await loadTopics(); render(); toast('✓ restored ' + res.restored + ' records'); } } }catch(e){ /* no backup, fine */ }
+  }
+  // iPhone: a home-screen app is exempt from Safari's seven-day storage wipe
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent) && !/CriOS|FxiOS/.test(navigator.userAgent), standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+  if (ios && !standalone && !store.get('homeNudged', false)){ store.set('homeNudged', true); toast('Tip: Share → Add to Home Screen. Safari wipes a site\'s storage after 7 days unused; a home-screen app is exempt. Weekly backups go to your hub either way.', 9000); }
+}
+function backupLine(){ const t = store.get('lastBackup', 0); return t ? 'last backup ' + ago(t) + ' ago · ' + Math.round((store.get('lastBackupBytes', 0) || 0) / 1024) + ' KB · automatic weekly' : 'no backup yet · automatic weekly once you have topics'; }
+// the hub answers for an older Worker than this app expects: say what is missing, once per version
+async function hubBehind(){
+  const h = await BK.hub().catch(() => null); if (!h || !h.base) return;
+  const j = await fetch(h.base + '/health').then(r => r.json()).catch(() => null); if (!j || !j.version) return;
+  if (vcmp(j.version, NEED_WORKER) >= 0 || store.get('hubBehindSeen', '') === j.version + '>' + NEED_WORKER) return;
+  store.set('hubBehindSeen', j.version + '>' + NEED_WORKER);
+  const who = h.kind === 'own' ? 'Your hub' : 'The shared hub';
+  const b = $('#banner'); if (!b || b.classList.contains('on')) return;
+  b.innerHTML = `${who} at ${esc(h.base.replace(/^https?:\/\//, ''))} runs Worker ${esc(j.version)}; this app expects ${NEED_WORKER}. Missing until it is updated: ${vcmp(j.version, '1.7') < 0 ? 'the fair-use pool, ' : ''}the shared search cache, bylines and author pages. ${h.kind === 'own' ? 'Paste <a href="../hub/#setup">hub/hub-worker.js</a> into your Worker and Deploy.' : 'The owner has to redeploy it.'} <button class="lnk" onclick="this.parentNode.classList.remove('on')">✕</button>`;
+  b.classList.add('on');
 }
 async function runTopic(id){
   try{ await api('/api/topics/' + id + '/run', { method: 'POST' }); toast('Searching… finds appear as they come in'); pollJobs(); return true; }
@@ -2550,7 +2584,7 @@ async function renderNetwork(){
   const extra = Object.assign(topic ? { topic } : {}, platform ? { platform } : {}, role ? { role } : {});
   try{
     [graph, people] = await Promise.all([
-      api('/api/graph?' + new URLSearchParams(Object.assign({ max: 80, focus: q, kinds }, q ? { hops: webHops(), via: hopVia(q) } : {}, store.get('webMerge', false) ? { merge: '1' } : {}, extra))),
+      api('/api/graph?' + new URLSearchParams(Object.assign({ max: 80, focus: q, kinds }, q ? { hops: webHops(), via: hopVia(q) } : {}, store.get('webMerge', false) ? { merge: '1' } : {}, store.get('webIslands', false) ? { islands: '1' } : {}, extra))),
       api('/api/people?' + new URLSearchParams(Object.assign(sort ? { sort } : {}, extra, listQ ? { q: listQ } : {}))),
     ]);
   }catch(e){ web.innerHTML = `<div class="empty">${esc(e.message)}</div>`; listEl.innerHTML = ''; return; }
@@ -2668,12 +2702,12 @@ function drawWeb(box, graph){
   const legendHTML = () => (st.color === 'kind'
     ? ['account', 'hashtag', 'word'].map(k => `<span><i style="background:${KIND_COLOR[k]}"></i>${k === 'account' ? '@ accounts' : k === 'hashtag' ? '# tags' : 'words'} <em>${nodes.filter(n => n.kind === k).length}</em></span>`).join('')
     : comms.map((c, ci) => `<span><i style="background:${COMM[ci % COMM.length]}"></i>${esc(c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name)} <em>${c.ids.length}</em></span>`).join('')) + '<span class="shapes">● account &nbsp;▲ writer &nbsp;⬣ outlet &nbsp;◆ named &nbsp;■ tag &nbsp;○ word</span><span class="shapes"><b class="l1">━</b> mentions / follows &nbsp;<b class="l2">━</b> shared tags &nbsp;<b class="l3">━</b> shared words</span>';
-  const hintHTML = () => 'size = ' + (st.sizeBy === 'influence' ? 'influence' : 'posts') + ' · colour = ' + (st.color === 'kind' ? 'kind' : 'community') + (st.mode === '2d' ? (focus && hopRing ? ' · rings = hops from the centre' : ' · inner = more strong links') + ' · drag to move around' : ' · drag to spin') + ' · pull @' + PW.m + ' ↔' + PW.f + ' #' + PW.h + ' w' + PW.s + ' · wheel to zoom · tap a node';
+  const hintHTML = () => (graph.islands_hidden ? graph.islands_hidden + ' unconnected hidden · ' : '') + 'size = ' + (st.sizeBy === 'influence' ? 'influence' : 'posts') + ' · colour = ' + (st.color === 'kind' ? 'kind' : 'community') + (st.mode === '2d' ? (focus && hopRing ? ' · rings = hops from the centre' : ' · inner = more strong links') + ' · drag to move around' : ' · drag to spin') + ' · pull @' + PW.m + ' ↔' + PW.f + ' #' + PW.h + ' w' + PW.s + ' · wheel to zoom · tap a node';
   nwFocusNode = focus ? nodes[idx[focus]] : null;
   const H = webHops();
   const fb = nwFocusNode ? `<div class="focus">◎ ${nwFocusNode.kind === 'account' && !String(nwFocusNode.id).startsWith('person:') ? '@' : ''}${esc(nwFocusNode.label)}${nwFocusNode.identity && !String(nwFocusNode.id).startsWith('person:') ? ` <small class="note">· ${esc(nwFocusNode.identity)}</small>` : ''} <button class="hbtn" data-fhops title="How far from the centre to show: 1 hop = direct links, 2 = friends of friends, 3 = the classic three degrees, ALL = everything reachable. Only links that pull (see WEIGHTS) count as a hop.">${H >= 6 ? 'ALL' : H + ' HOP' + (H > 1 ? 'S' : '')} ▾</button>${nwFocusNode.kind === 'account' && nwFocusNode.role === 'writer' ? ' <button class="hbtn" data-fwriter>WRITER</button>' : ''}${nwFocusNode.kind === 'account' && nwFocusNode.person_id ? ' <button class="hbtn" data-fprof>PROFILE</button> <button class="hbtn" data-fcrawl title="Log this account\'s follows / followers / mutuals outward, hop by hop">CRAWL</button>' : ''} <button class="hbtn" data-fclear title="Show everything again">✕</button></div>` : '';
   box.innerHTML = `<canvas></canvas><div class="legend" id="webLegend"></div>${fb}
-    <div class="strip"><div class="wtb"><button data-wm="3d" title="3-D: the floating web you can spin">3D</button><button data-wm="2d" title="2-D: the organized map. Rings by connection, arcs by community. You can drag around">2D</button><span class="sep"></span><button data-wc="community" title="Colour by community (clusters found from the links)">COMMUNITY</button><button data-wc="kind" title="Colour by kind: account / tag / word">KIND</button><span class="sep"></span><button data-ws="posts" title="Size by number of posts">POSTS</button><button data-ws="influence" title="Size by influence: terms and accounts that bridge different parts of the web (betweenness centrality)">INFLUENCE</button><span class="sep"></span><button data-wmg title="Collapse each person's accounts (the ones you linked) into one node named after them">MERGE</button><span class="sep"></span><button data-ww title="How hard each kind of connection pulls (mentions / follows / shared tags / shared words)">WEIGHTS</button><span class="sep"></span><button data-wf title="Full screen">⛶</button></div><div class="hint" id="webHint"></div></div>
+    <div class="strip"><div class="wtb"><button data-wm="3d" title="3-D: the floating web you can spin">3D</button><button data-wm="2d" title="2-D: the organized map. Rings by connection, arcs by community. You can drag around">2D</button><span class="sep"></span><button data-wc="community" title="Colour by community (clusters found from the links)">COMMUNITY</button><button data-wc="kind" title="Colour by kind: account / tag / word">KIND</button><span class="sep"></span><button data-ws="posts" title="Size by number of posts">POSTS</button><button data-ws="influence" title="Size by influence: terms and accounts that bridge different parts of the web (betweenness centrality)">INFLUENCE</button><span class="sep"></span><button data-wmg title="Collapse each person's accounts (the ones you linked) into one node named after them">MERGE</button><button data-wis title="Show the islands: clusters with no real link to the main body of the web (about something else that shares a word with the topic). Hidden by default">ISLANDS</button><span class="sep"></span><button data-ww title="How hard each kind of connection pulls (mentions / follows / shared tags / shared words)">WEIGHTS</button><span class="sep"></span><button data-wf title="Full screen">⛶</button></div><div class="hint" id="webHint"></div></div>
     <div class="wpop" id="webWeights" hidden><div class="t">PULL STRENGTH <small>0 = drawn, but doesn't move or rank anything</small></div>${['i', 'm', 'f', 'e', 'h', 's'].map(k => `<label><span><b class="l${k === 'i' || k === 'm' || k === 'f' ? 1 : k === 'h' ? 2 : 3}">${k === 'i' ? '╌' : '━'}</b> ${PULL_NAMES[k]}</span><input type="range" min="0" max="10" step="1" data-pw="${k}" value="${PW[k]}"><em>${PW[k]}</em></label>`).join('')}<div class="row" style="justify-content:flex-end;gap:8px;margin-top:6px"><button class="hbtn" data-pwreset>DEFAULTS</button><button class="hbtn" data-pwclose>DONE</button></div></div>`;
   const syncChrome = () => { $('#webLegend', box).innerHTML = legendHTML(); $('#webHint', box).textContent = hintHTML(); const mg = $('[data-wmg]', box); if (mg) mg.classList.toggle('on', !!store.get('webMerge', false)); $$('[data-wm]', box).forEach(b => b.classList.toggle('on', b.dataset.wm === st.mode)); $$('[data-wc]', box).forEach(b => b.classList.toggle('on', b.dataset.wc === st.color)); $$('[data-ws]', box).forEach(b => b.classList.toggle('on', b.dataset.ws === st.sizeBy)); };
   const cv = $('canvas', box), ctx = cv.getContext('2d');
@@ -2779,6 +2813,7 @@ function drawWeb(box, graph){
   $$('[data-wc]', box).forEach(b => b.onclick = () => { st.color = b.dataset.wc; store.set('webColor', st.color); syncChrome(); draw(); });
   $$('[data-ws]', box).forEach(b => b.onclick = () => { st.sizeBy = b.dataset.ws; store.set('webSize', st.sizeBy); sizeNodes(); syncChrome(); draw(); });
   const mgBtn = $('[data-wmg]', box); if (mgBtn) mgBtn.onclick = () => { store.set('webMerge', !store.get('webMerge', false)); renderNetwork(); };
+  const isBtn = $('[data-wis]', box); if (isBtn) { isBtn.classList.toggle('on', !!store.get('webIslands', false)); isBtn.onclick = () => { store.set('webIslands', !store.get('webIslands', false)); renderNetwork(); }; }
   // WEIGHTS: slide, release → the web re-lays itself out with the new pull (stays open while you tune)
   const wpop = $('#webWeights', box); if (box._weightsOpen) wpop.hidden = false;
   $('[data-ww]', box).onclick = () => { wpop.hidden = !wpop.hidden; box._weightsOpen = !wpop.hidden; };
@@ -3087,10 +3122,11 @@ function renderWorkerBox(){
       const h = await BK.hub(); toast('✓ ' + (h.kind === 'worker' ? 'Worker' : h.kind === 'own' ? 'Your hub' : 'Shared hub') + ' reachable · ' + ((j.items || []).length) + ' test items', 5000);
     }catch(e){ toast('✕ ' + e.message, 6000); }
   };
+  { const m0 = $('#bkMsg'); if (m0 && !m0.textContent) m0.textContent = backupLine(); }
   $('#bkSave').onclick = async () => {
     if (!px) return toast('PTXERO ID not loaded');
     const m = $('#bkMsg'); m.textContent = 'backing up…';
-    try{ const d = await BK.backup(); const r = await PX.store.put('searchnet', 'backup', d); m.textContent = '✓ backed up · ' + Math.round(r.bytes / 1024) + ' KB · ' + new Date().toLocaleString(); }
+    try{ const d = await BK.backup(); const r = await PX.store.put('searchnet', 'backup', d); store.set('lastBackup', Date.now() / 1000); store.set('lastBackupBytes', r.bytes || 0); m.textContent = '✓ backed up · ' + Math.round(r.bytes / 1024) + ' KB · ' + new Date().toLocaleString(); }
     catch(e){ m.textContent = '✕ ' + (e.status === 413 ? 'too big for one backup (over 512 KB). Delete old topics first' : e.message); }
   };
   $('#bkLoad').onclick = async () => {

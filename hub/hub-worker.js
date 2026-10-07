@@ -142,6 +142,9 @@ async function who(request) {
   if (!uid || !pub || !ts || !sig) return out;
   if (Math.abs(Date.now() / 1000 - ts) > 300) return out;
   const nk = uid + ':' + nonce; if (nonce && seenNonces.has(nk)) return out;
+  // the same nonce seen by another isolate inside the window: the edge cache remembers it for five minutes
+  const nreq = (nonce && typeof caches !== 'undefined') ? new Request('https://px.nonce/' + encodeURIComponent(nk)) : null;
+  if (nreq) { try { if (await caches.default.match(nreq)) return out; } catch (e) { /* no cache here */ } }
   try {
     const key = await crypto.subtle.importKey('spki', b64u.dec(pub), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
     const u = new URL(request.url);
@@ -149,6 +152,7 @@ async function who(request) {
     const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, b64u.dec(sig), msg);
     if (!ok) return out;
   } catch (e) { return out; }
+  if (nreq) { try { await caches.default.put(nreq, new Response('1', { headers: { 'Cache-Control': 'max-age=300' } })); } catch (e) { /* ignore */ } }
   if (nonce) { seenNonces.set(nk, Date.now()); if (seenNonces.size > 5000) { const cut = Date.now() - 600000; for (const [k, t] of seenNonces) if (t < cut) seenNonces.delete(k); } }
   return { uid, pub, verified: true, ip, key: 'uid:' + uid };
 }

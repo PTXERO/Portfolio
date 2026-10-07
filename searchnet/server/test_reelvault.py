@@ -1445,3 +1445,24 @@ class DossierTellsOnItself(Base):
         tr = SIG.trust(items * 10, s["trend"], s["spread"], [], 0, 0, rated=2)
         self.assertEqual(tr["label"], "thin")
         self.assertTrue(any("rated" in r for r in tr["reasons"]))
+
+
+class Islands(Base):
+    def test_a_cluster_with_no_real_link_to_the_web_is_dropped_and_counted(self):
+        from rv.people import word_graph
+        t = self.v.create_topic("Furnace Fest", ["furnace fest"], settings={"window": "all"})
+        posts = [post(f"f{i}", f"Furnace Fest at Sloss Furnaces this weekend, Underoath headlining #furnacefest {i}", f"fan{i}", now() - i * 3600) for i in range(5)]
+        posts += [post(f"c{i}", f"New chiptune made in Furnace tracker, OPL2 patches #chiptune #furnace {i}", f"chip{i}", now() - i * 3600) for i in range(3)]
+        for it in posts:
+            self.v.db.upsert(it)
+            self.v.link(t["id"], it["id"], "furnace fest", "s")
+            self.v.vote(t["id"], it["id"], 1)
+        g = word_graph(self.v, topic=t["id"], kinds="account,hashtag,entity", max_nodes=80)
+        labels = {n["label"] for n in g["nodes"]}
+        self.assertTrue(any(l.startswith("fan") for l in labels))
+        self.assertFalse(any(l.startswith("chip") for l in labels), labels)          # the chiptune island is gone
+        self.assertNotIn("#chiptune", labels)
+        self.assertGreaterEqual(g["islands_hidden"], 4)
+        g2 = word_graph(self.v, topic=t["id"], kinds="account,hashtag,entity", max_nodes=80, islands=True)
+        self.assertTrue(any(n["label"].startswith("chip") for n in g2["nodes"]))     # asked for, shown
+        self.assertEqual(g2["islands_hidden"], 0)
