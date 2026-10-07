@@ -314,6 +314,112 @@ def lead_lag(items, burst):
     return out[:8]
 
 
+PLACE_HINT = re.compile(r"\b(?:in|at|near|outside|across|around)\s+([A-Z][\w'’.-]*(?:\s+(?:of\s+)?[A-Z][\w'’.-]*){0,3})")
+PLACE_WORD = re.compile(r"\b(county|city|beach|island|park|street|avenue|river|lake|bay|valley|village|town|township|parish|district|downtown|harbor|harbour|heights|springs|falls|hills|coast|fla|calif|tex|ala|ga|n\.?c|s\.?c|va|pa|ny|nj|ohio|texas|florida|california|georgia|alabama|carolina|virginia|london|paris|tokyo)\b", re.I)
+
+
+def places(items, seed_words=()):
+    """Where it is, physically: datelines, and names written after in / at / near / from. Counted, with examples."""
+    c, ex = Counter(), {}
+    for it in items:
+        if it.get("dateline"):
+            c[it["dateline"]] += 2
+            ex.setdefault(it["dateline"], _ref(it))
+        text = str(it.get("text") or "")
+        seen = set()
+        for m in PLACE_HINT.finditer(text):
+            name = m.group(1).strip(" .")
+            low = name.lower()
+            if len(name) < 3 or low in seen or all(w in seed_words or w in STOP for w in low.split()):
+                continue
+            if low.split()[0] in ("the", "a", "an", "my", "our", "this", "that", "least", "first", "last", "all", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+                                  "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"):
+                continue
+            seen.add(low)
+            c[name] += 2 if PLACE_WORD.search(name) else 1
+            ex.setdefault(name, _ref(it))
+    # the same place in two spellings ("Naples" / "Naples, Fla.") counts once, under the fuller one
+    out = []
+    for name, n in c.most_common(40):
+        if any(name != o["place"] and name.lower() in o["place"].lower() for o in out):
+            continue
+        if n >= 2:
+            out.append({"place": name, "n": n, "example": ex.get(name)})
+    return out[:10]
+
+
+def top_posts(items, k=3):
+    """The single posts that did the work: most reach, one per account."""
+    reach = lambda it: (it.get("likes") or 0) + 2 * (it.get("reposts") or 0) + (it.get("replies") or 0) + (it.get("views") or 0) / 100   # noqa: E731
+    out, seen = [], set()
+    for it in sorted(items, key=lambda x: -reach(x)):
+        a = str(it.get("author") or "").lower()
+        if a in seen or reach(it) <= 0:
+            continue
+        seen.add(a)
+        out.append(dict(_ref(it), reach=int(reach(it))))
+        if len(out) >= k:
+            break
+    return out
+
+
+def momentum(tr, sp, st):
+    """The slope, not a prediction: this week against last, voices joining, storylines new or dying, outlets in or not."""
+    parts, score = [], 0
+    v = tr.get("velocity")
+    if tr.get("state") in ("surging", "rising"):
+        parts.append("growing: " + tr["why"])
+        score += 2
+    elif tr.get("state") in ("fading", "quiet"):
+        parts.append(tr["state"] + ": " + tr["why"])
+        score -= 2
+    elif tr.get("state") == "new":
+        parts.append("new this week")
+        score += 1
+    else:
+        parts.append("steady")
+    if sp.get("new_accounts_7d"):
+        parts.append(f"{sp['new_accounts_7d']} new voices this week")
+        score += 1
+    fresh = [x for x in st if x.get("last7") and x["last7"] >= max(2, 0.5 * x["n"])]
+    dying = [x for x in st if x.get("n", 0) >= 4 and not x.get("last7")]
+    if fresh:
+        parts.append("new storyline" + ("s" if len(fresh) > 1 else "") + ": " + ", ".join(x["name"] for x in fresh[:2]))
+        score += 1
+    if dying:
+        parts.append("gone quiet: " + ", ".join(x["name"] for x in dying[:2]))
+        score -= 1
+    if sp.get("outlets"):
+        parts.append(f"{sp['outlets']} outlet{'s' if sp['outlets'] != 1 else ''} on it")
+    elif sp.get("accounts", 0) >= 10:
+        parts.append("no outlet has picked it up yet")
+    label = "picking up" if score >= 2 else "holding" if score >= -1 else "winding down"
+    return {"label": label, "score": score, "why": "; ".join(parts)}
+
+
+def arc(tr):
+    """Born, peaked, now."""
+    if not tr.get("first"):
+        return None
+    return {"born": tr["first"], "peak": tr.get("peak"), "last": tr.get("last"), "state": tr.get("state"),
+            "age_days": max(0, (now() - tr["first"]) // DAY), "silent_days": max(0, (now() - tr["last"]) // DAY)}
+
+
+def origin(items, sp, burst):
+    """What started it, as far as the posts show: the first post, the first article, and what kicked off the burst."""
+    o = {"first_post": sp.get("first_post"), "first_outlet": sp.get("first_outlet"), "news_led": None, "kickoff": None}
+    fp, fo = sp.get("first_post"), sp.get("first_outlet")
+    if fp and fo and fp.get("posted_at") and fo.get("posted_at"):
+        o["news_led"] = fo["posted_at"] <= fp["posted_at"]
+    if burst:
+        t0 = burst.get("takeoff") or burst["start"]
+        before = [it for it in items if it.get("posted_at") and t0 - 2 * DAY <= it["posted_at"] <= t0]
+        if before:
+            best = max(before, key=lambda it: (it.get("likes") or 0) + 2 * (it.get("reposts") or 0) + (1000 if it.get("platform") in OUTLETS else 0))
+            o["kickoff"] = dict(_ref(best), hours_before=round((t0 - best["posted_at"]) / 3600, 1))
+    return o
+
+
 def build(vault, tid, max_items=3000):
     t = vault.topic(tid)
     if not t:
@@ -321,7 +427,18 @@ def build(vault, tid, max_items=3000):
     ids = member_ids(vault.db, tid)
     items = list(vault.db.get_many(list(ids)[:max_items]).values())
     seed_words = {w for s in (t.get("seeds") or []) + [t.get("name") or ""] for w in tokens(s)}
-    return summarize(items, seed_words)
+    out = summarize(items, seed_words)
+    # topics in the library this one overlaps with (shared member posts)
+    ov = Counter()
+    if ids:
+        marks = ",".join("?" * min(len(ids), 900))
+        for r in vault.db.q(f"SELECT topic_id, count(*) n FROM topic_items WHERE item_id IN ({marks}) AND topic_id != ? AND label >= 0 GROUP BY topic_id",
+                            list(ids)[:900] + [tid]):
+            ov[r["topic_id"]] = r["n"]
+    names = {r["id"]: r["name"] for r in vault.db.q("SELECT id, name FROM topics")}
+    out["overlaps"] = [{"topic_id": k, "name": names.get(k, k), "n": n} for k, n in ov.most_common(6) if n >= 2 and k in names]
+    out["kind"] = ((t.get("settings") or {}).get("plan") or {}).get("kind") or "general"
+    return out
 
 
 def summarize(items, seed_words=()):
@@ -346,4 +463,6 @@ def summarize(items, seed_words=()):
         headline.append(f"{co['copies'][0]['accounts']} accounts posting the same words")
     return {"n": len(items), "trend": tr, "spread": sp, "drivers": dr, "heat": ht, "issues": iss, "storylines": st,
             "coordination": co, "lead_lag": lead_lag(items, burst), "headline": "; ".join(headline) or "nothing out of the ordinary",
+            "places": places(items, seed_words), "top_posts": top_posts(items), "momentum": momentum(tr, sp, st), "arc": arc(tr),
+            "origin": origin(items, sp, burst),
             "badge": {"state": tr["state"], "heat": ht["level"], "score": ht["score"], "velocity": tr.get("velocity")}, "generated": now()}

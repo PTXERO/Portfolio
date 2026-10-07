@@ -1710,6 +1710,46 @@ function sigBadges(sg){
   const heat = sg.heat && sg.heat !== 'calm' ? `<span class="sig ${esc(sg.heat)}" title="heat ${sg.score}/100">${sg.heat === 'uproar' ? '🔥🔥' : sg.heat === 'hot' ? '🔥' : '♨'} ${esc(sg.heat)}</span>` : '';
   return `<div class="sigbar" title="${esc(sg.headline || '')}"><span class="sig ${esc(sg.state)}">${SIG_ICON[sg.state] || ''} ${esc(sg.state)}${sg.velocity && sg.velocity !== 1 && isFinite(sg.velocity) ? ' · ' + sg.velocity + '× last week' : ''}</span>${heat}</div>`;
 }
+// ── IN SHORT: the eight questions, one line each, every line pointing at the card that backs it
+function inShortCard(circles, wiki){
+  const S = SIGNALS; if (!S || S.error || !S.n) return '';
+  const when = ts => ts ? new Date(ts * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '?';
+  const link = (r, label) => r && r.url ? `<a class="pill" href="${esc(r.url)}" target="_blank" rel="noreferrer noopener" title="${esc(r.text || '')}">${esc(label)}</a>` : '';
+  const KIND = { person: 'a person', handle: 'an account', event: 'an event', place: 'a place', tech: 'a product or tool', general: 'a subject' };
+  const tr = S.trend, a = S.arc, o = S.origin, m = S.momentum, sp = S.spread;
+  const what = (wiki && wiki.extract ? wiki.extract.split(/(?<=\.)\s/)[0] : '') || (BRIEF && BRIEF.sentences && BRIEF.sentences[0] ? BRIEF.sentences[0].text : '') || 'nothing written about it yet beyond the posts';
+  const since = a ? `first seen ${when(a.born)} (${a.age_days < 1 ? 'today' : a.age_days + ' days ago'})${a.peak ? ', peak ${a.peak.n} posts on ' + when(a.peak.day) : ''}${a.silent_days >= 7 ? ', nothing for ' + a.silent_days + ' days' : ''}`.replace('${a.peak.n}', a.peak ? a.peak.n : '') : 'no dates on the posts';
+  const originLine = o && (o.kickoff || o.first_post || o.first_outlet) ? [
+      o.kickoff ? `the burst followed ${o.kickoff.platform === 'news' || o.kickoff.platform === 'web' ? '' : '@'}${esc(o.kickoff.author || '')} by ${o.kickoff.hours_before}h ${link(o.kickoff, '↗')}` : '',
+      o.news_led === true ? 'news came first' : o.news_led === false ? 'the posts came first, news followed' : '',
+      o.first_post ? `first post ${when(o.first_post.posted_at)} ${link(o.first_post, '↗')}` : '', o.first_outlet ? `first article ${when(o.first_outlet.posted_at)} ${link(o.first_outlet, '↗')}` : ''].filter(Boolean).join(' · ') : 'no burst to trace';
+  const why = [S.drivers && S.drivers[0] ? `carried by ${S.drivers[0].role === 'outlet' ? '' : '@'}${esc(S.drivers[0].author)}${S.drivers[1] ? ' and ' + (S.drivers[1].role === 'outlet' ? '' : '@') + esc(S.drivers[1].author) : ''}` : '',
+      S.top_posts && S.top_posts[0] ? `biggest post ${link(S.top_posts[0], '↗ ' + fmtN(S.top_posts[0].reach) + ' reach')}` : '',
+      S.heat && S.heat.level !== 'calm' ? `tone ${S.heat.level}${S.heat.words[0] ? ' (' + S.heat.words.slice(0, 2).map(w => w.word).join(', ') + ')' : ''}` : 'tone calm',
+      S.coordination && S.coordination.copies[0] && S.coordination.copies[0].accounts >= 3 ? `${S.coordination.copies[0].accounts} accounts posting the same words` : ''].filter(Boolean).join(' · ');
+  const who = circles && circles.length ? circles.slice(0, 3).map(c => `${esc(c.name)} <em>${c.accounts.length}</em>`).join(' · ') + ` · ${fmtN(sp.accounts)} voices on ${sp.platforms.map(p => p.platform).slice(0, 3).join(', ')}` : `${fmtN(sp.accounts)} voices on ${sp.platforms.map(p => p.platform).slice(0, 3).join(', ')}`;
+  const where = S.places && S.places.length ? S.places.slice(0, 5).map(p => `<button class="chip" data-focus="${esc('"' + p.place.toLowerCase() + '"')}">${esc(p.place)} <em>${p.n}</em></button>`).join('') : '<span class="note">no place named twice</span>';
+  const next = [];
+  if (S.spread && !S.spread.outlets && S.spread.accounts >= 10) next.push('no outlet has it yet: add a news or local-paper source');
+  const sites = Object.entries((T.settings || {}).sites || {}).filter(([, v]) => !v.added).sort((a, b) => b[1].n - a[1].n);
+  if (sites.length) next.push(`${sites.length} site${sites.length > 1 ? 's' : ''} talk about it and aren't sources yet (${esc(sites[0][0])}…)`);
+  if (S.drivers && S.drivers[0] && S.drivers[0].n <= 2 && S.drivers[0].role !== 'outlet') next.push(`pull more of @${esc(S.drivers[0].author)}: they carried it with ${S.drivers[0].n} post${S.drivers[0].n === 1 ? '' : 's'}`);
+  const named = graphTopEntity(); if (named) next.push(`"${esc(named)}" keeps coming up: worth its own dossier`);
+  if (S.storylines && S.storylines.length >= 3) next.push(`${S.storylines.length} storylines run inside this: rate a few posts in each so the model learns which you mean`);
+  return `<div class="dcard span2" style="border-color:rgba(var(--acc-rgb),.35)"><div class="dh">In short <span class="note">${KIND[S.kind] || 'a subject'} · ${fmtN(S.n)} posts</span></div>
+    <div class="drow"><span class="k">What</span><span class="grow">${esc(what)}</span></div>
+    <div class="drow"><span class="k">Since when</span><span class="grow">${since}</span></div>
+    <div class="drow"><span class="k">What started it</span><span class="grow">${originLine}</span></div>
+    <div class="drow"><span class="k">Why it moves</span><span class="grow">${why || '—'}</span></div>
+    <div class="drow"><span class="k">Who cares</span><span class="grow">${who}</span></div>
+    <div class="drow"><span class="k">Where</span><span class="grow chips wrap" style="display:flex">${where}</span></div>
+    <div class="drow"><span class="k">Momentum</span><span class="grow"><span class="sig ${m.label === 'picking up' ? 'rising' : m.label === 'winding down' ? 'fading' : 'steady'}">${esc(m.label)}</span> ${esc(m.why)}</span></div>
+    ${S.overlaps && S.overlaps.length ? `<div class="drow"><span class="k">Overlaps with</span><span class="grow chips wrap" style="display:flex">${S.overlaps.map(ov => `<a class="chip" href="#topic/${esc(ov.topic_id)}">${esc(ov.name)} <em>${ov.n}</em></a>`).join('')}</span></div>` : ''}
+    <div class="drow"><span class="k">Next</span><span class="grow">${next.length ? next.map(x => '· ' + x).join('<br>') : 'nothing obvious. Rate posts and run it again.'}</span></div>
+    <p class="note" style="margin-top:8px">Each line comes from a card below. The slope is this week against last, not a forecast.</p></div>`;
+}
+let _dossierGraph = null;
+function graphTopEntity(){ const g = _dossierGraph; if (!g) return null; const e = g.nodes.filter(x => x.kind === 'entity').sort((a, b) => (b.n || 0) - (a.n || 0))[0]; return e && (e.n || 0) >= 5 ? e.label : null; }
 function signalCards(){
   const S = SIGNALS; if (!S || S.error || !S.n) return '';
   const when = ts => ts ? new Date(ts * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '?';
@@ -1854,7 +1894,7 @@ async function renderDossier(){
   items.forEach(i => { if (!i.posted_at) return; const k = Math.floor((now_ - i.posted_at) / W); if (k >= 0 && k < 12) weeks[11 - k]++; });
   const older = items.filter(i => i.posted_at && now_ - i.posted_at >= 12 * W).length;
   const wmax = Math.max(1, ...weeks), vmax = Math.max(1, ...(views || [1]));
-  const circles = communitiesOf(graph);
+  const circles = communitiesOf(graph); _dossierGraph = graph;
   const bars = (arr, max, cls) => `<div class="spark ${cls || ''}">${arr.map(v => `<i style="height:${Math.max(2, Math.round(100 * v / max))}%" title="${v}"></i>`).join('')}</div>`;
   const pct = v => Math.round(100 * v / Math.max(1, n));
   const person = (T.settings || {}).person || null;
@@ -1878,6 +1918,7 @@ async function renderDossier(){
       </div>
       <p class="note" style="margin-top:6px">Integrate pulls each associated account's recent posts in (no rating needed) and opens the web for this topic: the people around it and what they connect on. Your 👍/👎 then teach it how the edges relate.</p>
     </div>
+    ${inShortCard(circles, wiki)}
     ${signalCards()}
     <div class="dcard"><div class="dh">Where it's talked about</div>${plats.length ? plats.map(([p, c]) => `<div class="drow"><span class="k">${esc(p)}</span><span class="bar"><i style="width:${pct(c)}%"></i></span><span class="v">${fmtN(c)} · ${pct(c)}%</span></div>`).join('') : '<p class="note">Nothing collected yet.</p>'}</div>
     <div class="dcard"><div class="dh">Who talks about it most</div>${who.length ? who.slice(0, 10).map(a => `<button class="drow tap" data-prof="${esc(a.id)}"><span class="k">@${esc(a.author)} <small>${esc(a.platform)}</small></span><span class="bar"><i style="width:${pct(a.n)}%"></i></span><span class="v">${fmtN(a.n)}${a.liked ? ' · 👍' + a.liked : ''}</span></button>`).join('') : '<p class="note">—</p>'}</div>

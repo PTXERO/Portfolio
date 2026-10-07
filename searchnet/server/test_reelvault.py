@@ -1334,3 +1334,30 @@ class FocusOnAName(Base):
         self.assertNotIn("w:duke energy", ids)
         self.assertEqual(next(n for n in g["nodes"] if n["id"] == g["focus"])["hop"], 0)
         self.assertTrue(all(n["hop"] is not None for n in g["nodes"]))
+
+
+class InShort(Base):
+    def test_places_top_posts_momentum_origin_and_overlaps(self):
+        from rv import signals as SIG
+        n0 = now()
+        items = [post(f"a{i}", "Power is out in Collier County and at Naples Beach after Isaias, crews from Duke Energy on site", f"u{i}", n0 - i * 3600, likes=10 * i) for i in range(6)]
+        items.append(dict(post("d1", "Crews worked overnight", "nd", n0 - 7200), platform="news", dateline="Naples, Fla.", author_name="Naples Daily News"))
+        s = SIG.summarize(items, {"isaias"})
+        pl = [p["place"] for p in s["places"]]
+        self.assertEqual(pl[:2], ["Collier County", "Naples Beach"])
+        self.assertNotIn("Duke Energy", pl)                       # "from X" is too often an organisation
+        self.assertEqual(s["top_posts"][0]["author"], "u5")
+        self.assertEqual(s["momentum"]["label"], "picking up")
+        self.assertIn("outlet on it", s["momentum"]["why"])
+        self.assertEqual(s["arc"]["age_days"], 0)
+        self.assertIs(s["origin"]["news_led"], False)
+        t1 = self.v.create_topic("Isaias", ["isaias"], settings={"window": "all"})
+        t2 = self.v.create_topic("Collier outages", ["collier"], settings={"window": "all"})
+        for it in items:
+            self.v.db.upsert(it)
+            for t in (t1, t2):
+                self.v.link(t["id"], it["id"], "x", "s")
+                self.v.vote(t["id"], it["id"], 1)
+        b = SIG.build(self.v, t1["id"])
+        self.assertEqual(b["overlaps"], [{"topic_id": t2["id"], "name": "Collier outages", "n": 7}])
+        self.assertEqual(b["kind"], "general")

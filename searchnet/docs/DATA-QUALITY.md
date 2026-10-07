@@ -195,3 +195,7 @@ A topic is now read as a whole, not only post by post. Dossier → SIGNALS, and 
 - **Same words, same links**: three or more accounts with the same text or the same link. A sign, not proof. The note says so.
 
 Known gaps: sarcasm reads as heat; a share button that copies text reads as a copy; a topic with no dates has no trend; the lexicons are English.
+
+## Update: in short
+
+The dossier opens with eight lines, each backed by a card below: what it is, since when (born, peak, silence), what started it (the post or article the burst followed, whether news or posts came first), why it moves (who carried it, the biggest post, the tone, same-words posting), who cares (the circles and the networks), where (datelines and places named after in / at / near), momentum (this week against last, voices joining, storylines appearing or dying, outlets on it or not; a slope, not a forecast), overlaps with other topics in the library, and next (sources to add, accounts to pull, a name worth its own dossier).

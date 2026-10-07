@@ -640,6 +640,36 @@
     const after = {}; for (const it of items) if ((it.posted_at || 0) >= t0) { const a = who(it); after[a] = (after[a] || 0) + 1; for (const e of ents(it.text)) after['name ' + e] = (after['name ' + e] || 0) + 1; }
     return Object.entries(firsts).filter(([k, [ts]]) => t0 - ts >= 0 && t0 - ts <= 2 * DAY && ((after[k] || 0) >= 3 || t0 - ts >= 2 * 3600)).map(([k, [ts, it]]) => ({ what: k, first: ts, hours_before: +((t0 - ts) / 3600).toFixed(1), after: after[k] || 0, example: ref(it) })).sort((a, b) => b.after - a.after).slice(0, 8);
   }
+  const PLACE_HINT = /\b(?:in|at|near|outside|across|around)\s+([A-Z][\w'’.-]*(?:\s+(?:of\s+)?[A-Z][\w'’.-]*){0,3})/g;
+  const PLACE_WORD = /\b(county|city|beach|island|park|street|avenue|river|lake|bay|valley|village|town|township|parish|district|downtown|harbor|harbour|heights|springs|falls|hills|coast|fla|calif|tex|ala|ga|n\.?c|s\.?c|va|pa|ny|nj|ohio|texas|florida|california|georgia|alabama|carolina|virginia|london|paris|tokyo)\b/i;
+  const NOT_PLACE = new Set('the a an my our this that least first last all monday tuesday wednesday thursday friday saturday sunday january february march april may june july august september october november december'.split(' '));
+  function sigPlaces(items, seedWords) {
+    const c = {}, ex = {}; const seeds = new Set(seedWords || []);
+    for (const it of items) { if (it.dateline) { c[it.dateline] = (c[it.dateline] || 0) + 2; ex[it.dateline] = ex[it.dateline] || ref(it); }
+      const seen = new Set(); for (const m of String(it.text || '').matchAll(PLACE_HINT)) { const name = m[1].replace(/^[ .]+|[ .]+$/g, ''); const low = name.toLowerCase(); if (name.length < 3 || seen.has(low) || low.split(' ').every((w) => seeds.has(w) || STOP.has(w)) || NOT_PLACE.has(low.split(' ')[0])) continue; seen.add(low); c[name] = (c[name] || 0) + (PLACE_WORD.test(name) ? 2 : 1); ex[name] = ex[name] || ref(it); } }
+    const out = []; for (const [name, n] of top(c, 40)) { if (out.some((o) => name !== o.place && o.place.toLowerCase().includes(name.toLowerCase()))) continue; if (n >= 2) out.push({ place: name, n, example: ex[name] }); }
+    return out.slice(0, 10);
+  }
+  const reachOf = (it) => (it.likes || 0) + 2 * (it.reposts || 0) + (it.replies || 0) + (it.views || 0) / 100;
+  function sigTopPosts(items, k = 3) { const out = [], seen = new Set(); for (const it of items.slice().sort((a, b) => reachOf(b) - reachOf(a))) { const a = String(it.author || '').toLowerCase(); if (seen.has(a) || reachOf(it) <= 0) continue; seen.add(a); out.push(Object.assign(ref(it), { reach: Math.round(reachOf(it)) })); if (out.length >= k) break; } return out; }
+  function sigMomentum(tr, sp, st) {
+    const parts = []; let score = 0;
+    if (tr.state === 'surging' || tr.state === 'rising') { parts.push('growing: ' + tr.why); score += 2; } else if (tr.state === 'fading' || tr.state === 'quiet') { parts.push(tr.state + ': ' + tr.why); score -= 2; } else if (tr.state === 'new') { parts.push('new this week'); score += 1; } else parts.push('steady');
+    if (sp.new_accounts_7d) { parts.push(sp.new_accounts_7d + ' new voices this week'); score += 1; }
+    const fresh = st.filter((x) => x.last7 && x.last7 >= Math.max(2, 0.5 * x.n)), dying = st.filter((x) => x.n >= 4 && !x.last7);
+    if (fresh.length) { parts.push('new storyline' + (fresh.length > 1 ? 's' : '') + ': ' + fresh.slice(0, 2).map((x) => x.name).join(', ')); score += 1; }
+    if (dying.length) { parts.push('gone quiet: ' + dying.slice(0, 2).map((x) => x.name).join(', ')); score -= 1; }
+    if (sp.outlets) parts.push(sp.outlets + ' outlet' + (sp.outlets !== 1 ? 's' : '') + ' on it'); else if (sp.accounts >= 10) parts.push('no outlet has picked it up yet');
+    return { label: score >= 2 ? 'picking up' : score >= -1 ? 'holding' : 'winding down', score, why: parts.join('; ') };
+  }
+  const sigArc = (tr) => tr.first ? { born: tr.first, peak: tr.peak, last: tr.last, state: tr.state, age_days: Math.max(0, Math.floor((now() - tr.first) / DAY)), silent_days: Math.max(0, Math.floor((now() - tr.last) / DAY)) } : null;
+  function sigOrigin(items, sp, burst) {
+    const o = { first_post: sp.first_post, first_outlet: sp.first_outlet, news_led: null, kickoff: null }; const O = OUT();
+    if (sp.first_post && sp.first_outlet && sp.first_post.posted_at && sp.first_outlet.posted_at) o.news_led = sp.first_outlet.posted_at <= sp.first_post.posted_at;
+    if (burst) { const t0 = burst.takeoff || burst.start; const before = items.filter((it) => it.posted_at && t0 - 2 * DAY <= it.posted_at && it.posted_at <= t0);
+      if (before.length) { const best = before.reduce((a, b) => ((b.likes || 0) + 2 * (b.reposts || 0) + (O.has(b.platform) ? 1000 : 0)) > ((a.likes || 0) + 2 * (a.reposts || 0) + (O.has(a.platform) ? 1000 : 0)) ? b : a); o.kickoff = Object.assign(ref(best), { hours_before: +((t0 - best.posted_at) / 3600).toFixed(1) }); } }
+    return o;
+  }
   function summarizeSignals(items, seedWords) {
     const tr = sigTrend(items); const burst = tr.bursts.length ? tr.bursts[tr.bursts.length - 1] : null;
     const sp = sigSpread(items), ht = sigHeat(items), st = sigStorylines(items, seedWords), co = sigCoordination(items), dr = sigDrivers(items, burst ? (burst.takeoff || burst.start) : null), iss = sigIssues(items);
@@ -648,14 +678,20 @@
     if (ht.level === 'hot' || ht.level === 'uproar') headline.push(ht.level + ': ' + ht.words.slice(0, 3).map((w) => w.word).join(', '));
     if (iss.length) headline.push('reads as ' + iss[0].category + (iss[1] ? ' and ' + iss[1].category : ''));
     if (co.copies.length && co.copies[0].accounts >= 5) headline.push(co.copies[0].accounts + ' accounts posting the same words');
-    return { n: items.length, trend: tr, spread: sp, drivers: dr, heat: ht, issues: iss, storylines: st, coordination: co, lead_lag: sigLeadLag(items, burst), headline: headline.join('; ') || 'nothing out of the ordinary', badge: { state: tr.state, heat: ht.level, score: ht.score, velocity: tr.velocity }, generated: now() };
+    return { n: items.length, trend: tr, spread: sp, drivers: dr, heat: ht, issues: iss, storylines: st, coordination: co, lead_lag: sigLeadLag(items, burst), headline: headline.join('; ') || 'nothing out of the ordinary', places: sigPlaces(items, seedWords), top_posts: sigTopPosts(items), momentum: sigMomentum(tr, sp, st), arc: sigArc(tr), origin: sigOrigin(items, sp, burst), badge: { state: tr.state, heat: ht.level, score: ht.score, velocity: tr.velocity }, generated: now() };
   }
   async function signals(tid) {
     const t = await getTopic(tid); if (!t) return { error: 'no such topic' };
     const votes = await topicItems(tid); const tau = threshold(votes); const ids = votes.filter((v) => isMember(v, tau)).map((v) => v.item_id).slice(0, 3000);
     const items = (await Promise.all(ids.map((id) => idb.get('items', id)))).filter(Boolean);
     const seedWords = new Set((t.seeds || []).concat([t.name || '']).flatMap((s) => tokens(s)));
-    return summarizeSignals(items, seedWords);
+    const out = summarizeSignals(items, seedWords);
+    // topics in the library this one overlaps with (shared member posts)
+    const idset = new Set(ids); const ov = {}; for (const v of await idb.all('votes')) if (v.topic_id !== tid && v.label >= 0 && idset.has(v.item_id)) ov[v.topic_id] = (ov[v.topic_id] || 0) + 1;
+    const tops = {}; (await idb.all('topics')).forEach((x) => tops[x.id] = x.name);
+    out.overlaps = top(ov, 6).filter(([k, n]) => n >= 2 && tops[k]).map(([k, n]) => ({ topic_id: k, name: tops[k], n }));
+    out.kind = ((t.settings || {}).plan || {}).kind || 'general';
+    return out;
   }
   L.signals = { summarize: summarizeSignals, trend: sigTrend, heat: sigHeat, storylines: sigStorylines, coordination: sigCoordination };
 
