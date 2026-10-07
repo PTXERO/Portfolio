@@ -68,6 +68,16 @@ r = await call('GET', '/search?source=bluesky&q=cat', null, undefined, { 'CF-Con
 r = await call('GET', '/search?source=bluesky&q=cat', null, undefined, { 'CF-Connecting-IP': '9.9.9.9' }); ok(r.status === 429 && /Anonymous/.test(r.j.hint), 'anonymous search #2 → 429 (anon_fetch 1)');
 let last; for (let i = 0; i < 4; i++) last = await call('GET', '/search?source=bluesky&q=cat', me); ok(last.status === 429 && /own hub/.test(last.j.hint), 'identity: 4th search → 429 (fetch 3)');
 DB.hub_usage = {}; // a new day
+// 6b. shared result cache: a search someone already made recently is free for the next asker
+{ const store = new Map(); globalThis.caches = { default: { match: async (req) => { const v = store.get(req.url); return v ? new Response(v) : undefined; }, put: async (req, res) => { store.set(req.url, await res.text()); } } };
+  r = await call('GET', '/search?source=bluesky&q=dog', me); const m1 = await call('GET', '/me', me);
+  ok(r.status === 200 && r.j.cached === false && m1.j.today.fetch === 1, 'first search of "dog" goes upstream and costs one fetch (' + m1.j.today.fetch + ')');
+  r = await call('GET', '/search?source=bluesky&q=dog', me); const m2 = await call('GET', '/me', me);
+  ok(r.status === 200 && r.j.cached === true && m2.j.today.fetch === 1, 'the same search again is a cache hit and costs nothing (' + m2.j.today.fetch + ')');
+  r = await call('GET', '/search?source=bluesky&q=dog', null, undefined, { 'CF-Connecting-IP': '8.8.8.8' }); const r2 = await call('GET', '/search?source=bluesky&q=dog', null, undefined, { 'CF-Connecting-IP': '8.8.8.8' });
+  ok(r.status === 200 && r.j.cached === true && r2.status === 200, 'an anonymous asker gets the shared hit without spending their one fetch');
+  r = await call('GET', '/search?source=bluesky&q=dog&limit=5', me); ok(r.status === 200 && r.j.cached === false, 'a different limit is a different key');
+  delete globalThis.caches; DB.hub_usage = {}; }
 // 7. legacy Social form posts still work, and a bound key blocks legacy writes
 const fd = new FormData(); fd.append('uid', 'CD34'); fd.append('secret', 's3cret'); fd.append('handle', 'RF-CD34'); fd.append('body', 'hello legacy');
 let rr = await W.fetch(new Request('https://hub.test/post', { method: 'POST', body: fd }), env); ok(rr.status === 200 && DB.profiles.CD34 && DB.profiles.CD34.secret_hash, 'legacy /post (uid+secret) still works and TOFU-registers');

@@ -207,6 +207,11 @@ export default {
 
     // ── SearchNet: compute only (quota scope 'fetch'; / and /health are free) ──
     if (path === '/' || SN_PATHS.has(path)) {
+      // a search someone else already made recently is served from the shared cache and costs nothing (a visit is still a visit)
+      if (path === '/search' && SOURCES[q.source]) {
+        const ck = searchCacheKey(q, Math.min(parseInt(q.limit || '30', 10) || 30, 100)); const hit = ck ? await searchCacheGet(ck) : null;
+        if (hit) { await quota(env, svc, px, 'read', 0); const since = parseInt(q.since || '0', 10) || 0; return ogJson({ items: since ? hit.filter((it) => !it.posted_at || it.posted_at >= since) : hit, cached: true }, 200, request); }
+      }
       if (path !== '/' && path !== '/health') { const d = await quota(env, svc, px, 'fetch', 0); if (d) return deny(d); }
       const r = await searchnetRoutes(request, env, url, q);
       if (r) return r;

@@ -47,15 +47,13 @@ export default {
         const src = SOURCES[q.source];
         if (!src) return json({ error: `unknown source '${q.source}'`, sources: Object.keys(SOURCES) }, 400);
         const limit = Math.min(parseInt(q.limit || "30", 10) || 30, 100);
-        // the same search from many people in ten minutes is one upstream call (GDELT, PullPush and Bing rate-limit per address)
-        const cacheable = ["news", "gdelt", "web", "hn", "archive", "wikipedia", "fourchan"].includes(q.source) && typeof caches !== "undefined";
-        const ckey = cacheable ? new Request("https://searchnet.cache/" + encodeURIComponent(JSON.stringify([q.source, q.q, q.qx, q.since, q.region, q.boards, limit]))) : null;
-        let items = null;
-        if (ckey) { try { const hit = await caches.default.match(ckey); if (hit) items = (await hit.json()).items; } catch (e) { items = null; } }
-        if (!items) { items = await src(q, limit); if (ckey) { try { await caches.default.put(ckey, new Response(JSON.stringify({ items }), { headers: { "Content-Type": "application/json", "Cache-Control": "max-age=600" } })); } catch (e) { /* ignore */ } } }
+        // the same search from everyone who asks it for a while is one upstream call (see searchCacheKey)
+        const ckey = searchCacheKey(q, limit);
+        let items = ckey ? await searchCacheGet(ckey) : null; const cached = !!items;
+        if (!items) { items = await src(q, limit); if (ckey) await searchCachePut(ckey, items, CACHE_TTL[q.source] || 300); }
         const since = parseInt(q.since || "0", 10) || 0;
         if (since) items = items.filter((it) => !it.posted_at || it.posted_at >= since);   // the topic's time window
-        return json({ items });
+        return json({ items, cached });
       }
       if (p === "/account") {                 // an account's own recent posts (for "load more" on a profile)
         const limit = Math.min(parseInt(q.limit || "50", 10) || 50, 100);
@@ -139,6 +137,17 @@ const vidExt = /\.(mp4|webm|mov|m4v|mkv|gifv)(\?|$)/i;
 const imgExt = /\.(jpe?g|png|gif|webp|avif)(\?|$)/i;
 
 // ── sources: each returns an array of normalized items ───────────
+// ── shared result cache: one upstream call serves everyone who asks the same thing for a while.
+//    News and web ten minutes, social three, reference an hour. A hit costs the asker nothing on the hub.
+const CACHE_TTL = { news: 600, gdelt: 600, web: 600, hn: 600, archive: 1800, wikipedia: 3600, fourchan: 300, mastodon: 180, lemmy: 180, reddit: 300, bluesky: 180, youtube: 600, rss: 300, html: 600 };
+function searchCacheKey(q, limit) {
+  if (typeof caches === "undefined" || !q || !q.source) return null;
+  const parts = Object.keys(q).filter((k) => !["key", "_", "t", "limit"].includes(k)).sort().map((k) => [k, String(q[k])]);
+  return new Request("https://searchnet.cache/" + encodeURIComponent(JSON.stringify([parts, limit])));
+}
+async function searchCacheGet(ckey) { try { const hit = await caches.default.match(ckey); return hit ? (await hit.json()).items || null : null; } catch (e) { return null; } }
+async function searchCachePut(ckey, items, ttl) { try { await caches.default.put(ckey, new Response(JSON.stringify({ items }), { headers: { "Content-Type": "application/json", "Cache-Control": "max-age=" + (ttl || 300) } })); } catch (e) { /* no cache here */ } }
+
 const SOURCES = {
   // Mastodon / Fediverse hashtag timelines (also catches bridged Bluesky)
   async mastodon(q, limit) {
