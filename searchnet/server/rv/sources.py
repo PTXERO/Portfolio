@@ -615,7 +615,11 @@ def fetch_news(ctx, src, query, limit):
     region = (ctx.opts.get("region") or "US").upper()[:2]
     url = (f"https://news.google.com/rss/search?q={urllib.parse.quote(_extra(src, query))}"
            f"&hl=en-{region}&gl={region}&ceid={region}:en")
-    body, _, _ = http_get(url, timeout=20)
+    try:
+        body, _, _ = http_get(url, timeout=20)
+    except Exception:       # noqa: BLE001 — Google refuses some addresses; Bing News carries the same wires and papers
+        url = f"https://www.bing.com/news/search?q={urllib.parse.quote(_extra(src, query))}&format=rss&count={min(limit, 100)}"
+        body, _, _ = http_get(url, timeout=20)
     for e in items_from_feed(body, url, ctx.label, True)[:limit]:
         yield _article(ctx, e["url"], e["text"], author=e.get("author") or domain_of(e["url"]),
                        posted_at=e.get("posted_at"), prefix="news", platform="news")

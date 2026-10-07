@@ -260,7 +260,7 @@
   }
   // a source that errors (not a quota wait, not the hub being down) turns itself off; the switch in SOURCES turns it back on
   async function markFailed(id, msg) {
-    if (!id || /quota|limit|busy|Failed to fetch|NetworkError|hub 2\.0/i.test(msg || '')) return false;
+    if (!id || /quota|limit|busy|Failed to fetch|NetworkError|hub 2\.0|HTTP (?:429|500|502|503|504)|timed out/i.test(msg || '')) return false;   // transient: try again next run
     const all = await listSources(); const s = all.find((x) => x.id === id); if (!s || !s.enabled) return false;
     s.enabled = false; s.auto_off = Math.floor(Date.now() / 1000); s.last_error = String(msg || '').slice(0, 200); await saveSources(all); return true;
   }

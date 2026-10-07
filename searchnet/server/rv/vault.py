@@ -462,7 +462,7 @@ class Vault:
             err = str(e)[:300]
             job.stats["errors"] += 1
             job.log(f"  ✕ {label}: {err}")
-            if src.get("id") and not re.search(r"quota|rate limit|429|timed out", err, re.I):
+            if src.get("id") and not re.search(r"quota|rate limit|HTTP (?:429|500|502|503|504)|timed out|Temporary failure|Connection", err, re.I):
                 opts_ = dict(src.get("options") or {})
                 opts_["auto_off"] = now()
                 self.db.exec("UPDATE sources SET enabled=0, options=? WHERE id=?", (json.dumps(opts_), src["id"]))

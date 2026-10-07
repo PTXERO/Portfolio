@@ -343,7 +343,9 @@ const SOURCES = {
   // Google News: global, national and local papers, TV, wires. q.region = US, GB, AU … (default US)
   async news(q, limit) {
     const gl = (q.region || "US").toUpperCase().slice(0, 2);
-    const xml = await getText(`https://news.google.com/rss/search?q=${encodeURIComponent(withExtra(q))}&hl=en-${gl}&gl=${gl}&ceid=${gl}:en`);
+    let xml;
+    try { xml = await getText(`https://news.google.com/rss/search?q=${encodeURIComponent(withExtra(q))}&hl=en-${gl}&gl=${gl}&ceid=${gl}:en`); }
+    catch (e) { xml = await getText(`https://www.bing.com/news/search?q=${encodeURIComponent(withExtra(q))}&format=rss&count=${Math.min(limit, 100)}`); }   // Google refuses most data-centre addresses; Bing News carries the same wires and papers
     return parseFeed(xml, limit, true, "news").map((it) => Object.assign(it, { id: "news:" + hash(canon(it.url)) }));
   },
   // GDELT: a running index of world news articles, searchable back years. Phrases go in quotes.
