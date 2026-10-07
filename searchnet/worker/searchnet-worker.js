@@ -21,7 +21,7 @@
  *  the way the optional local PC server does.
  * ───────────────────────────────────────────────────────────────── */
 
-const VERSION = "1.6";
+const VERSION = "1.7";
 const UA = "SearchNetWorker/1.5 (+https://ptxero.neocities.org/searchnet/; open-source research tool)";
 const INVIDIOUS = ["https://yewtu.be", "https://invidious.nerdvpn.de", "https://invidious.jing.rocks"];
 
@@ -208,7 +208,9 @@ const SOURCES = {
         }));
       } catch (e) { lastErr = e; }
     }
-    throw new Error("no working Invidious instance (" + (lastErr && lastErr.message) + ")");
+    // every Invidious instance down: read YouTube's own results page (ytInitialData), which answers data-centre addresses
+    try { return (await ytResultsPage(q.q || "")).slice(0, limit); } catch (e) { lastErr = e; }
+    throw new Error("no working Invidious instance and the results page failed (" + (lastErr && lastErr.message) + ")");
   },
 
   // Any RSS/Atom feed, incl. a YouTube channel:
@@ -607,6 +609,26 @@ async function readArticle(u) {
   }
   if (!out.text) out.text = meta("og:description") || meta("description");
   out.text = out.text.replace(/\s+\n/g, "\n").slice(0, 6000);
+  return out;
+}
+
+// YouTube search without an API: the results page embeds ytInitialData with every videoRenderer
+async function ytResultsPage(query) {
+  const html = await getText(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=en&gl=US`, { Cookie: "CONSENT=YES+1; SOCS=CAI", "Accept-Language": "en" });
+  const m = html.match(/ytInitialData\s*=\s*(\{[\s\S]*?\});\s*<\/script>/); if (!m) throw new Error("youtube: no ytInitialData");
+  const data = JSON.parse(m[1]); const out = [], seen = new Set(); const stack = [data];
+  const txt = (o) => !o ? "" : o.simpleText || (o.runs || []).map((r) => r.text).join("") || "";
+  const dur = (s) => { const p = String(s || "").split(":").map(Number); return p.length ? p.reduce((a, b) => a * 60 + b, 0) : null; };
+  const views = (s) => { const n = String(s || "").replace(/[^0-9.KMB]/gi, ""); const k = /K/i.test(n) ? 1e3 : /M/i.test(n) ? 1e6 : /B/i.test(n) ? 1e9 : 1; return Math.round(parseFloat(n) * k) || 0; };
+  while (stack.length && out.length < 60) {
+    const n = stack.pop(); if (!n || typeof n !== "object") continue;
+    if (n.videoRenderer && n.videoRenderer.videoId) { const v = n.videoRenderer; if (seen.has(v.videoId)) continue; seen.add(v.videoId);
+      out.push(item({ id: "youtube:" + v.videoId, platform: "youtube", media: "video", url: "https://www.youtube.com/watch?v=" + v.videoId, author: txt(v.ownerText) || txt(v.shortBylineText), author_name: txt(v.ownerText),
+        author_url: "https://www.youtube.com" + ((((v.ownerText || {}).runs || [])[0] || {}).navigationEndpoint || {}).browseEndpoint?.canonicalBaseUrl || "", text: txt(v.title) + ((v.detailedMetadataSnippets || [])[0] ? "\n" + txt(v.detailedMetadataSnippets[0].snippetText) : ""),
+        posted_at: null, duration: dur(txt(v.lengthText)), views: views(txt(v.viewCountText)), thumbnail: (((v.thumbnail || {}).thumbnails || []).slice(-1)[0] || {}).url || null }));
+      continue; }
+    for (const k in n) { const v = n[k]; if (v && typeof v === "object") stack.push(v); }
+  }
   return out;
 }
 
