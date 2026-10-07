@@ -156,7 +156,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
 
   <div class="step"><div class="n">8</div><div>
     <h3>Point the apps at it</h3>
-    <p>Open <a href="../reel-vault/#sources">SEARCH//NET → SOURCES → YOUR DATA</a> (or Social → ⚿ MY KEY → YOUR DATA &amp; HUB), choose <span class="ui">My own hub</span>, paste the Worker address, your Supabase Project URL and the publishable key, press <span class="ui">SAVE &amp; TEST</span>. Every PTXERO app on this device now uses your hub. A key file exported after that carries the setting to your other devices.</p>
+    <p>Open <a href="../searchnet/#sources">SEARCH//NET → SOURCES → YOUR DATA</a> (or Social → ⚿ MY KEY → YOUR DATA &amp; HUB), choose <span class="ui">My own hub</span>, paste the Worker address, your Supabase Project URL and the publishable key, press <span class="ui">SAVE &amp; TEST</span>. Every PTXERO app on this device now uses your hub. A key file exported after that carries the setting to your other devices.</p>
     <p class="note">Posts, renders and backups you made on the shared hub stay there (you can <span class="ui">EXPORT MY DATA</span> and <span class="ui">DELETE MY DATA</span> on it first). Hubs are separate. Social on your hub shows the people on <i>your</i> hub.</p>
   </div></div>
 
@@ -214,7 +214,7 @@ $('#test').onclick = async () => {
         else me = ' · <span class="warn">/me said ' + (jm.error || rm.status) + '. Check SUPABASE_URL and that the SQL ran</span>';
       } catch (e) { me = ' · <span class="warn">could not reach /me (' + e.message + ')</span>'; }
     }
-    st.innerHTML = '<span class="ok">✓ PTXERO hub ' + j.hub + ' (SearchNet ' + j.version + ')</span>' + me + ' <a href="../reel-vault/#sources">Use it in the apps →</a>';
+    st.innerHTML = '<span class="ok">✓ PTXERO hub ' + j.hub + ' (SearchNet ' + j.version + ')</span>' + me + ' <a href="../searchnet/#sources">Use it in the apps →</a>';
   } catch (e) { st.innerHTML = '<span class="bad">No answer. Check the address (it should end in .workers.dev), that you pressed Deploy, and that the Worker isn\'t paused.</span>'; }
 };
 $('#url').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#test').click(); });

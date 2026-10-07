@@ -173,7 +173,7 @@
   async function panel(el, opts) {
     opts = opts || {}; ensureCss();
     const H = host(); const canLocal = !!opts.local; const guide = opts.guide || '/hub/';
-    const root = (location.pathname.indexOf('/reel-vault/') >= 0 || location.pathname.indexOf('/ascii-render/') >= 0 || location.pathname.indexOf('/gallery/') >= 0 || location.pathname.indexOf('/rf/') >= 0) ? '../' : './';
+    const root = (location.pathname.indexOf('/searchnet/') >= 0 || location.pathname.indexOf('/ascii-render/') >= 0 || location.pathname.indexOf('/gallery/') >= 0 || location.pathname.indexOf('/rf/') >= 0) ? '../' : './';
     el.innerHTML = `<div class="px-panel">
       <h4>YOUR DATA</h4>
       <div class="px-note">You are <b>@${esc(handle())}</b>. An anonymous id made on this device, backed by a key only this browser holds. No email, no name. Keep the key file if you want the same id on another device.</div>

@@ -13,7 +13,7 @@ your own Supabase).
 ## Deploy (pick one)
 
 **Dashboard (no install):** the illustrated step-by-step lives at
-<https://ptxero.neocities.org/reel-vault/worker/> (this folder's `index.html`). In short:
+<https://ptxero.neocities.org/searchnet/worker/> (this folder's `index.html`). In short:
 dash.cloudflare.com → Compute (Workers) → Workers & Pages → Create → *Start with Hello
 World!* → name it `searchnet` → Deploy → *Edit code* → select all, paste
 `searchnet-worker.js` → Deploy. Your address is `https://searchnet.<yourname>.workers.dev`.
@@ -50,7 +50,7 @@ Pass `media=everything` to get text posts, replies and comments as well as media
 It **cannot** run yt-dlp or ffmpeg, so it returns metadata and direct media
 links where sites expose them — not downloaded/merged video files. For the full
 "download anything" experience, run the optional local PC server instead
-(`reel-vault/server/reelvault.py`). You can use both.
+(`searchnet/server/reelvault.py`). You can use both.
 
 ## API
 

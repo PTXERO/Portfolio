@@ -26,8 +26,8 @@ from .search import search
 from .util import to_int
 from .vault import Vault
 
-HERE = Path(__file__).resolve().parent.parent      # reel-vault/server
-APP_DIR = HERE.parent                              # reel-vault/
+HERE = Path(__file__).resolve().parent.parent      # searchnet/server
+APP_DIR = HERE.parent                              # searchnet/
 SITE_ROOT = APP_DIR.parent                         # portfolio root
 EXPORT_COLS = ["id", "platform", "media", "url", "author", "author_name", "posted_at", "duration",
                "likes", "reposts", "replies", "views", "hashtags", "tags", "starred", "file",
@@ -295,7 +295,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(401, {"error": "access key required"})
                 return self._file(self.vault.media_dir, path[7:])
             if path in ("/", ""):
-                return self._send(302, body=b"", headers={"Location": "/reel-vault/"})
+                return self._send(302, body=b"", headers={"Location": "/searchnet/"})
+            if path == "/reel-vault" or path.startswith("/reel-vault/"):      # the app's old name: phones with the old bookmark
+                q = self.path.split("?", 1)[1] if "?" in self.path else ""
+                return self._send(302, body=b"", headers={"Location": "/searchnet/" + path[len("/reel-vault/"):] + ("?" + q if q else "")})
             return self._file(SITE_ROOT, path.lstrip("/"))
         except ValueError as e:
             self._send(400, {"error": str(e)})
@@ -347,7 +350,7 @@ class Handler(BaseHTTPRequestHandler):
             f = f / "index.html"
         rel_parts = f.relative_to(root).parts
         if not f.is_file() or any(p.startswith(".") for p in rel_parts) or \
-                (root == SITE_ROOT.resolve() and "data" in rel_parts and "reel-vault" in rel_parts):
+                (root == SITE_ROOT.resolve() and "data" in rel_parts and "searchnet" in rel_parts):
             return self._send(404, {"error": "not found"})
         ctype = mimetypes.guess_type(str(f))[0] or "application/octet-stream"
         size = f.stat().st_size
@@ -407,7 +410,7 @@ class Handler(BaseHTTPRequestHandler):
                        "semantic_error": v.embed.error, "data_dir": str(v.data_dir),
                        "settings": v.store.settings,
                        "topics": v.db.one("SELECT count(*) n FROM topics")["n"],
-                       "phone_url": f"http://{lan_ip()}:{self.port}/reel-vault/?key={v.store.access_key}",
+                       "phone_url": f"http://{lan_ip()}:{self.port}/searchnet/?key={v.store.access_key}",
                        "key": v.store.access_key})
 
         if route == "search":
@@ -668,7 +671,7 @@ def main(argv=None):
                     help="0.0.0.0 = reachable from your phone on the same Wi-Fi (default); "
                          "127.0.0.1 = this computer only")
     ap.add_argument("--data", default=str(APP_DIR / "data"),
-                    help="where the database and videos are stored (default: reel-vault/data)")
+                    help="where the database and videos are stored (default: searchnet/data)")
     ap.add_argument("--allow-origin", action="append", default=[],
                     help="extra web origin allowed to call the API, e.g. https://you.github.io")
     ap.add_argument("--no-browser", action="store_true", help="don't open a browser tab")
@@ -708,9 +711,9 @@ def main(argv=None):
     srv.daemon_threads = True
     key = Handler.vault.store.access_key
     print("\n  SEARCH//NET")
-    print(f"  this computer : http://127.0.0.1:{a.port}/reel-vault/")
+    print(f"  this computer : http://127.0.0.1:{a.port}/searchnet/")
     if a.host != "127.0.0.1":
-        print(f"  your phone    : http://{lan_ip()}:{a.port}/reel-vault/?key={key}")
+        print(f"  your phone    : http://{lan_ip()}:{a.port}/searchnet/?key={key}")
         print("                  (same Wi-Fi, or your own VPN like Tailscale; scan the QR in SETUP)")
     if a.expose:
         print("  ⚠ --expose is ON: the public internet can reach this server. Only do this behind "
@@ -723,7 +726,7 @@ def main(argv=None):
     if not a.no_browser:
         try:
             import webbrowser
-            webbrowser.open(f"http://127.0.0.1:{a.port}/reel-vault/#setup")
+            webbrowser.open(f"http://127.0.0.1:{a.port}/searchnet/#setup")
         except Exception:        # noqa: BLE001
             pass
     try:

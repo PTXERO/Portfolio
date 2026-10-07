@@ -1,4 +1,4 @@
 # REEL//VAULT local library (database + downloaded videos)
-reel-vault/data/
+searchnet/data/
 __pycache__/
-reel-vault/.venv/
+searchnet/.venv/

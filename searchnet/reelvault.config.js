@@ -4,7 +4,7 @@
 
 const REELVAULT = {
 
-  // Where the local server listens (python reel-vault/server/reelvault.py).
+  // Where the local server listens (python searchnet/server/reelvault.py).
   // When the page is opened from the server itself this is ignored.
   apiBase: 'http://127.0.0.1:8765',
 

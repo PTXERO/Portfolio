@@ -9,10 +9,10 @@
 #    5. starts the auto-updating launcher (run.py)
 #
 #  First time, paste this into PowerShell (no download needed):
-#    irm https://ptxero.neocities.org/reel-vault/install.txt | iex
-#  (same file on GitHub: https://raw.githubusercontent.com/PTXERO/Portfolio/main/reel-vault/start.ps1)
+#    irm https://ptxero.neocities.org/searchnet/install.txt | iex
+#  (same file on GitHub: https://raw.githubusercontent.com/PTXERO/Portfolio/main/searchnet/start.ps1)
 #
-#  After that, just double-click  reel-vault\start.cmd  (or run this file again).
+#  After that, just double-click  searchnet\start.cmd  (or run this file again).
 #
 #  Settings (optional, set before running):
 #    $env:REELVAULT_DIR    = 'D:\Portfolio'   # where the project lives (default: ~\Portfolio)
@@ -149,22 +149,22 @@
   }
 
   # if the tracked branch doesn't carry the app yet (not merged), follow the branch that does
-  if (-not (Test-Path (Join-Path $Repo 'reel-vault/server/run.py')) -and $Branch -ne $DevBranch) {
+  if (-not (Test-Path (Join-Path $Repo 'searchnet/server/run.py')) -and $Branch -ne $DevBranch) {
     Warn "branch '$Branch' doesn't contain SEARCH//NET yet - using '$DevBranch' instead."
     $Branch = $DevBranch
     Run git -C $Repo fetch origin $Branch
     Run git -C $Repo checkout -B $Branch "origin/$Branch"
-    if (-not (Test-Path (Join-Path $Repo 'reel-vault/server/run.py'))) { Fail "Could not find reel-vault/server/run.py on any branch. Check $RepoUrl." }
+    if (-not (Test-Path (Join-Path $Repo 'searchnet/server/run.py'))) { Fail "Could not find searchnet/server/run.py on any branch. Check $RepoUrl." }
   }
 
   # -- 4. Python packages ---------------------------------------
   Say 'installing / updating packages (yt-dlp, gallery-dl, fastembed)...'
   & $Py -m pip install -q --upgrade pip 2>&1 | Out-Null
-  Run $Py -m pip install -q --upgrade -r (Join-Path $Repo 'reel-vault/server/requirements.txt') fastembed
+  Run $Py -m pip install -q --upgrade -r (Join-Path $Repo 'searchnet/server/requirements.txt') fastembed
   if ($LASTEXITCODE -ne 0) { Warn 'Some packages failed to install; the app will tell you what is missing in SETUP.' }
 
   # -- 5. start -------------------------------------------------
   Write-Host "`n  Starting SEARCH//NET. Leave this window open; close it to stop.`n" -ForegroundColor Red
   Set-Location $Repo
-  & $Py (Join-Path $Repo 'reel-vault/server/run.py') --branch $Branch @ServerArgs
+  & $Py (Join-Path $Repo 'searchnet/server/run.py') --branch $Branch @ServerArgs
 } @args

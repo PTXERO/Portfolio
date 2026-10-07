@@ -6,7 +6,7 @@ Reddit, Bluesky, Tumblr, Instagram, any site or feed). Then you 👍 / 👎 what
 Every vote teaches it what you mean, and it rewrites its own searches to find more of it.
 
 ```
-iPhone (Firefox) ──Wi-Fi──▶ your computer: python reel-vault/server/reelvault.py
+iPhone (Firefox) ──Wi-Fi──▶ your computer: python searchnet/server/reelvault.py
                                ├─ sources ── gallery-dl · yt-dlp · Mastodon API · Reddit · RSS · any URL
                                ├─ library ── SQLite full-text index + optional semantic vectors
                                ├─ learning ─ per-topic classifier + taste profile + query bandit
@@ -26,19 +26,19 @@ On a computer that stays on, run **one command**. It does everything:
 **Windows**: paste into PowerShell (no admin window needed):
 
 ```powershell
-irm https://ptxero.neocities.org/reel-vault/install.txt | iex
+irm https://ptxero.neocities.org/searchnet/install.txt | iex
 ```
 
-After the first time, just **double-click `reel-vault\start.cmd`**.
+After the first time, just **double-click `searchnet\start.cmd`**.
 
 **Mac / Linux**: paste into Terminal:
 
 ```bash
-curl -fsSL https://ptxero.neocities.org/reel-vault/install-sh.txt | bash
+curl -fsSL https://ptxero.neocities.org/searchnet/install-sh.txt | bash
 ```
 
-After the first time: `bash ~/Portfolio/reel-vault/start.sh`. (Mac needs [Homebrew](https://brew.sh);
-on Mac/Linux the packages go in a private `reel-vault/.venv`, so nothing touches your system Python.)
+After the first time: `bash ~/Portfolio/searchnet/start.sh`. (Mac needs [Homebrew](https://brew.sh);
+on Mac/Linux the packages go in a private `searchnet/.venv`, so nothing touches your system Python.)
 
 Run the same command again whenever you like: it updates Python, the project and the packages
 (yt-dlp in particular needs frequent updates as sites change), then starts.
@@ -57,7 +57,7 @@ tesseract from your package manager (on-screen text).
 
 **While it runs** it keeps the server up, checks GitHub for new commits on a loop, and pulls +
 restarts when there are updates. Your phone reconnects on its own. Prefer doing it by hand?
-`python reel-vault/server/run.py` is the launcher on its own (`--interval 30` changes how often it
+`python searchnet/server/run.py` is the launcher on its own (`--interval 30` changes how often it
 checks, `--no-update` stops it pulling, other options such as `--port`, `--phone-host`, `--data`
 go to the server).
 
@@ -87,7 +87,7 @@ on the same **private mesh VPN**. [Tailscale](https://tailscale.com) is the easy
 Nothing is published to the internet; the traffic is end-to-end encrypted by the VPN. The access key
 is still required, and pairing attempts are rate-limited.
 
-Options: `--port 8765`, `--data PATH` (database and videos; default `reel-vault/data/`, git-ignored),
+Options: `--port 8765`, `--data PATH` (database and videos; default `searchnet/data/`, git-ignored),
 `--host 127.0.0.1` (this computer only), `--allow-origin https://you.neocities.org` (lets a
 copy of the page hosted elsewhere talk to the server running on the same computer), `--no-browser`.
 
@@ -152,7 +152,7 @@ deliberately limited:
 Erase the whole library (every collected video, topic, vote and download) and start over:
 
 - In the app: **SETUP → Danger zone → Wipe everything** (optionally keep your ★ starred videos).
-- On the computer: `python reel-vault/server/reelvault.py --wipe` (asks you to type WIPE; add `--yes` to skip).
+- On the computer: `python searchnet/server/reelvault.py --wipe` (asks you to type WIPE; add `--yes` to skip).
 
 Your pairing, settings and word groups are kept, so the phone stays connected.
 
@@ -237,7 +237,7 @@ and authors. Select items to tag, star, save, analyze, export, delete, or 👍-t
   - `related.py`: more like this
   - `search.py`: library search
   - `db.py`: storage
-- `server/test_reelvault.py`: tests. Run `python -m unittest discover reel-vault/server`.
+- `server/test_reelvault.py`: tests. Run `python -m unittest discover searchnet/server`.
 
 YouTube sometimes asks servers to "confirm you're not a bot". From a home connection it
 normally works; if not, set browser cookies in SETUP.

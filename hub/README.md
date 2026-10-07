@@ -4,7 +4,7 @@ One Cloudflare Worker that serves every PTXERO app:
 
 | Routes | From | For |
 |---|---|---|
-| `/search /account /follows /resolve /fetch /health` | `reel-vault/worker/searchnet-worker.js` | SEARCH//NET fetching (browser mode) |
+| `/search /account /follows /resolve /fetch /health` | `searchnet/worker/searchnet-worker.js` | SEARCH//NET fetching (browser mode) |
 | `/profile /post /like /comment /follow /repost /report /delete /share /r/ /p/ /status /presence /notifications` | `ascii-render/og-worker.js` | SOCIAL, ASCII//RENDER, RF presence |
 | `/id /me /me/export /store/*` + fair-use limits + retention cron | `hub/build/hub-template.js` | PTXERO ID, per-person data, auto-deletion |
 

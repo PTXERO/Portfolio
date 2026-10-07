@@ -5,11 +5,11 @@
     NEOCITIES_API_KEY=xxxx python tools/neocities_deploy.py --dry-run  # just show what would change
     NEOCITIES_API_KEY=xxxx python tools/neocities_deploy.py --delete   # also remove deleted files (scoped)
 
-SCOPE: this only ever touches the reel-vault/ subtree (minus reel-vault/server/).
+SCOPE: this only ever touches the searchnet/ subtree (minus searchnet/server/).
 The rest of ptxero.neocities.org — the homepage, site.config.js, gallery, about,
 exposed, ascii-render, rf, social.html, icons — is hand-maintained in the Neocities
 editor and is NEVER read, uploaded, or deleted by this tool. --delete likewise only
-removes orphans under reel-vault/, so it can't wipe the hand-maintained site.
+removes orphans under searchnet/, so it can't wipe the hand-maintained site.
 
 Get the key at neocities.org → Settings → (your site) → API. Standard library only.
 """
@@ -27,24 +27,28 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 API = os.environ.get("NEOCITIES_API_URL", "https://neocities.org/api")
 
-# This tool manages ONLY the reel-vault app on the static host. Everything else on
+# This tool manages ONLY the searchnet app on the static host. Everything else on
 # the site is hand-maintained in the Neocities editor and must not be touched here.
-PUBLISH_ROOTS = ("reel-vault/", "hub/", "ptxero-id.js")   # the only paths this tool publishes
+PUBLISH_ROOTS = ("searchnet/", "hub/", "ptxero-id.js")   # the only paths this tool publishes
 # never published: tooling, the local server's code, private data
 SKIP_DIRS = {".git", ".github", ".claude", ".venv", "tools", "node_modules", "__pycache__", "data", "models"}
 SKIP_FILES = {".gitignore", ".DS_Store", "Thumbs.db"}
-SKIP_PATTERNS = ("reel-vault/server/", "hub/build/")   # server code runs on the PC; the hub build tooling stays in the repo
+SKIP_PATTERNS = ("searchnet/server/", "hub/build/")   # server code runs on the PC; the hub build tooling stays in the repo
 # Neocities (free plan) accepts these; anything else is skipped with a note
 ALLOWED = set("""apng asc atom avif bin cjs css csv dae eot epub geojson gif glb glsl gltf gpg htm html
 ico jpeg jpg js json jxl key kml knowl less manifest map markdown md mf mid midi mjs mtl obj opml osdx
 otf pdf pgp pls png py rdf rss sass scss sf2 svg text toml ts tsv ttf txt webapp webmanifest webp woff
 woff2 xcf xml xsl xslt yaml yml""".split())
 # files Neocities won't take under their real type, published as .txt copies so the
-# one-line installers can live on the site:  irm https://ptxero.neocities.org/reel-vault/install.txt | iex
+# one-line installers can live on the site:  irm https://ptxero.neocities.org/searchnet/install.txt | iex
 PUBLISH_AS = {
-    "reel-vault/install.txt":    "reel-vault/start.ps1",   # Windows (PowerShell)
-    "reel-vault/install-sh.txt": "reel-vault/start.sh",    # macOS / Linux
+    "searchnet/install.txt":    "searchnet/start.ps1",   # Windows (PowerShell)
+    "searchnet/install-sh.txt": "searchnet/start.sh",    # macOS / Linux
     "hub/hub-setup.sql.txt":     "hub/hub-setup.sql",      # Neocities refuses .sql; the hub guide fetches this copy
+    # the app used to live at /reel-vault/: old bookmarks and old one-line installers still land somewhere useful
+    "reel-vault/index.html":     "searchnet/legacy-redirect.html",
+    "reel-vault/install.txt":    "searchnet/start.ps1",
+    "reel-vault/install-sh.txt": "searchnet/start.sh",
 }
 
 

@@ -6,20 +6,20 @@
 #    1. installs Python (or updates it) — Homebrew on Mac, apt/dnf/pacman on Linux
 #    2. installs Git and ffmpeg if they're missing
 #    3. downloads the project, or updates it if you already have it
-#    4. installs / updates the Python packages in a private venv (reel-vault/.venv)
+#    4. installs / updates the Python packages in a private venv (searchnet/.venv)
 #    5. starts the auto-updating launcher (run.py)
 #
 #  First time, paste this into Terminal:
-#    curl -fsSL https://ptxero.neocities.org/reel-vault/install-sh.txt | bash
-#  (same file on GitHub: https://raw.githubusercontent.com/PTXERO/Portfolio/main/reel-vault/start.sh)
+#    curl -fsSL https://ptxero.neocities.org/searchnet/install-sh.txt | bash
+#  (same file on GitHub: https://raw.githubusercontent.com/PTXERO/Portfolio/main/searchnet/start.sh)
 #
-#  After that:  bash reel-vault/start.sh   (from the project folder)
+#  After that:  bash searchnet/start.sh   (from the project folder)
 #
 #  Settings (optional):
 #    REELVAULT_DIR=~/Portfolio          where the project lives
 #    REELVAULT_BRANCH=main              branch to track
 #    REELVAULT_NO_SYSTEM_UPDATE=1       skip the Python / Git / ffmpeg update check
-#  Anything you pass goes to the server, e.g.  bash reel-vault/start.sh --port 9000
+#  Anything you pass goes to the server, e.g.  bash searchnet/start.sh --port 9000
 # ─────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -90,15 +90,15 @@ else
   git -C "$REPO" pull --ff-only origin "$BRANCH" || warn "couldn't fast-forward (local changes?). Starting with what you have."
 fi
 # if the tracked branch doesn't carry the app yet (not merged), follow the branch that does
-if [ ! -f "$REPO/reel-vault/server/run.py" ] && [ "$BRANCH" != "$DEV_BRANCH" ]; then
+if [ ! -f "$REPO/searchnet/server/run.py" ] && [ "$BRANCH" != "$DEV_BRANCH" ]; then
   warn "branch '$BRANCH' doesn't contain SEARCH//NET yet - using '$DEV_BRANCH' instead."
   BRANCH="$DEV_BRANCH"
   git -C "$REPO" fetch origin "$BRANCH" && git -C "$REPO" checkout -B "$BRANCH" "origin/$BRANCH"
-  [ -f "$REPO/reel-vault/server/run.py" ] || fail "Could not find reel-vault/server/run.py on any branch. Check $REPO_URL."
+  [ -f "$REPO/searchnet/server/run.py" ] || fail "Could not find searchnet/server/run.py on any branch. Check $REPO_URL."
 fi
 
 # ── 4. Python packages (private venv) ───────────────────────
-VENV="$REPO/reel-vault/.venv"
+VENV="$REPO/searchnet/.venv"
 if ! "$VENV/bin/python" -c 'import sys' >/dev/null 2>&1; then   # missing, or broken by a Python upgrade
   say "creating a private Python environment…"
   rm -rf "$VENV"; python3 -m venv "$VENV"
@@ -106,10 +106,10 @@ fi
 PY="$VENV/bin/python"
 say "installing / updating packages (yt-dlp, gallery-dl, fastembed)…"
 "$PY" -m pip install -q --upgrade pip >/dev/null 2>&1 || true
-"$PY" -m pip install -q --upgrade -r "$REPO/reel-vault/server/requirements.txt" fastembed \
+"$PY" -m pip install -q --upgrade -r "$REPO/searchnet/server/requirements.txt" fastembed \
   || warn "some packages failed to install; the app will tell you what's missing in SETUP."
 
 # ── 5. start ────────────────────────────────────────────────
 printf '\n  \033[31mStarting SEARCH//NET. Leave this window open; Ctrl+C to stop.\033[0m\n\n'
 cd "$REPO"
-exec "$PY" "$REPO/reel-vault/server/run.py" --branch "$BRANCH" "$@"
+exec "$PY" "$REPO/searchnet/server/run.py" --branch "$BRANCH" "$@"

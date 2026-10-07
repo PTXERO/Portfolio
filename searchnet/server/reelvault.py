@@ -2,11 +2,11 @@
 # ─────────────────────────────────────────────────────────────────
 #  SEARCH//NET — find, learn, sort and save videos from the social web.
 #
-#  python reel-vault/server/reelvault.py      → open the printed link
+#  python searchnet/server/reelvault.py      → open the printed link
 #
 #  Standard library only; optional tools are detected at startup
 #  (gallery-dl, yt-dlp, ffmpeg, fastembed, faster-whisper, tesseract).
-#  See reel-vault/README.md.
+#  See searchnet/README.md.
 # ─────────────────────────────────────────────────────────────────
 import sys
 from pathlib import Path

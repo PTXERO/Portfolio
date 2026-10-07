@@ -806,12 +806,12 @@ body.noscroll-max{overflow:hidden}
   <div class="card pad">
     <p class="note" style="margin-bottom:8px">One command sets up everything: it installs or updates Python, Git and ffmpeg, downloads or updates SEARCH//NET, installs the packages, and starts it. Run the same thing again any time to update.</p>
 <pre class="cmd"><i># Windows: paste into PowerShell</i>
-irm https://ptxero.neocities.org/reel-vault/install.txt | iex
-<i># after the first time: double-click reel-vault\start.cmd</i>
+irm https://ptxero.neocities.org/searchnet/install.txt | iex
+<i># after the first time: double-click searchnet\start.cmd</i>
 
 <i># Mac / Linux: paste into Terminal</i>
-curl -fsSL https://ptxero.neocities.org/reel-vault/install-sh.txt | bash
-<i># after the first time: bash ~/Portfolio/reel-vault/start.sh</i></pre>
+curl -fsSL https://ptxero.neocities.org/searchnet/install-sh.txt | bash
+<i># after the first time: bash ~/Portfolio/searchnet/start.sh</i></pre>
     <p class="note" style="margin-top:8px">Leave that window open. Then scan the QR code on this page with your iPhone (same Wi-Fi). In Firefox on iPhone: ⋯ → Share → <b>Add to Home Screen</b> to use it like an app.</p>
   </div>
   <h3 class="s">Danger zone</h3>
@@ -1019,7 +1019,7 @@ function showPair(){
   if ($('#onboard') && !$('#onboard').hidden) return;     // the first-run guide owns pairing until it's done
   const remote = !API || /github\.io$|neocities\.org$/.test(location.hostname);
   openSheet(`<h3>CONNECT TO YOUR SERVER</h3>
-    <p class="note" style="margin-bottom:12px">${remote ? 'Paste your server link (the one your computer prints, or your HTTPS tunnel address). It can include the key, e.g. <code>https://rv.example.com/reel-vault/?key=…</code>' : 'Scan the QR code in SETUP on the computer, or type the access key it printed.'}</p>
+    <p class="note" style="margin-bottom:12px">${remote ? 'Paste your server link (the one your computer prints, or your HTTPS tunnel address). It can include the key, e.g. <code>https://rv.example.com/searchnet/?key=…</code>' : 'Scan the QR code in SETUP on the computer, or type the access key it printed.'}</p>
     <form id="pairF">
       ${remote ? '<input id="pairUrl" placeholder="https://your-server-address" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url" style="margin-bottom:8px">' : ''}
       <input id="pairKey" placeholder="access key" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
@@ -3094,7 +3094,7 @@ document.addEventListener('keydown', e => {
 //  Once a device has been set up it never comes back (a PC that's off later shows the
 //  normal reconnect UI instead).
 // ══════════════════════════════════════════════════════
-const INSTALL = { win: 'irm https://ptxero.neocities.org/reel-vault/install.txt | iex', nix: 'curl -fsSL https://ptxero.neocities.org/reel-vault/install-sh.txt | bash' };
+const INSTALL = { win: 'irm https://ptxero.neocities.org/searchnet/install.txt | iex', nix: 'curl -fsSL https://ptxero.neocities.org/searchnet/install-sh.txt | bash' };
 function showOnboarding(){
   const ob = $('#onboard'); if (!ob) return;
   const setUp = store.get('setupDone', false);
@@ -3149,7 +3149,7 @@ function showOnboarding(){
         <b style="display:block;margin-top:14px">2 · Connect this device</b>
         <p class="note" style="margin:6px 0 10px">${remoteHost ? 'When it\'s running, it prints a link with a key. Paste that link (or the address + key) here. From another network, put both devices on your own VPN (Tailscale) first.' : 'Scan the QR code the computer shows, or type the key it printed.'}</p>
         <form id="obPcF">
-          ${remoteHost || !API ? '<label class="field"><span>Server link or address</span><input id="obSrv" placeholder="http://192.168.1.20:8765/reel-vault/?key=…" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"></label>' : ''}
+          ${remoteHost || !API ? '<label class="field"><span>Server link or address</span><input id="obSrv" placeholder="http://192.168.1.20:8765/searchnet/?key=…" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"></label>' : ''}
           <label class="field"><span>Access key</span><input id="obPk" placeholder="access key" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go"></label>
           <div class="ob-foot"><span class="note" id="obPcMsg"></span><span class="grow"></span><button class="btn pri" type="submit">CONNECT</button></div>
         </form></div>`;

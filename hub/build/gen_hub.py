@@ -1,11 +1,11 @@
-"""Build hub/hub-worker.js = ascii-render/og-worker.js (Social/ASCII routes) + reel-vault/worker/searchnet-worker.js
+"""Build hub/hub-worker.js = ascii-render/og-worker.js (Social/ASCII routes) + searchnet/worker/searchnet-worker.js
 (SearchNet fetchers) + hub/build/hub-template.js (PTXERO ID, fair-use limits, per-person store, retention).
 Run from anywhere:  python3 hub/build/gen_hub.py   then   node hub/build/test_hub.mjs
 Re-run it whenever either source worker changes; never edit hub/hub-worker.js by hand."""
 import re, pathlib, sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 og = (ROOT / 'ascii-render/og-worker.js').read_text()
-sn = (ROOT / 'reel-vault/worker/searchnet-worker.js').read_text()
+sn = (ROOT / 'searchnet/worker/searchnet-worker.js').read_text()
 J = r'(?<![.\w])json\('          # the helper, never a .json() method call
 
 sn_body = sn[sn.index('// ── helpers'):sn.index('// Node test shim')]

@@ -1,4 +1,4 @@
-"""SEARCH//NET tests.  Run:  python -m unittest discover reel-vault/server
+"""SEARCH//NET tests.  Run:  python -m unittest discover searchnet/server
 
 Offline: gallery-dl and yt-dlp are replaced by stub scripts that print
 output in the exact formats the real tools produce; media and web pages
@@ -478,11 +478,11 @@ class TestPipeline(Base):
                     return None
             op = urllib.request.build_opener(NoRedirect)
             try:
-                op.open(urllib.request.Request(base + f"/reel-vault/?key={key}", headers=phone))
+                op.open(urllib.request.Request(base + f"/searchnet/?key={key}", headers=phone))
             except urllib.error.HTTPError as e:
                 self.assertEqual(e.code, 302)
                 self.assertIn(f"rv_key={key}", e.headers["Set-Cookie"])
-                self.assertEqual(e.headers["Location"], "/reel-vault/")
+                self.assertEqual(e.headers["Location"], "/searchnet/")
             # pairing by typing the key
             code, _, hdr = call("/api/pair", "POST", {"key": key}, phone)
             self.assertEqual(code, 200)
@@ -506,9 +506,9 @@ class TestPipeline(Base):
             self.assertEqual(json.loads(body)["template"], "r/skateboarding")
             self.assertEqual(call("/api/sources", "POST", {"kind": "rss", "template": "nope"})[0], 400)
             # UI, media guard, path traversal
-            self.assertIn(b"SEARCH//NET", call("/reel-vault/")[1])
+            self.assertIn(b"SEARCH//NET", call("/searchnet/")[1])
             self.assertEqual(call("/media/../vault.db")[0], 403)
-            self.assertEqual(call("/reel-vault/data/vault.db")[0], 404)
+            self.assertEqual(call("/searchnet/data/vault.db")[0], 404)
         finally:
             srv.shutdown()
 

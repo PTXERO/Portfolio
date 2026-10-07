@@ -9,10 +9,10 @@
 #    • restarts the server if it ever crashes.
 #  Your phone reconnects on its own when the server comes back.
 #
-#    python reel-vault/server/run.py
-#    python reel-vault/server/run.py --port 8765 --phone-host 192.168.1.20
-#    python reel-vault/server/run.py --interval 30        # seconds between update checks
-#    python reel-vault/server/run.py --no-update          # just keep it running, don't pull
+#    python searchnet/server/run.py
+#    python searchnet/server/run.py --port 8765 --phone-host 192.168.1.20
+#    python searchnet/server/run.py --interval 30        # seconds between update checks
+#    python searchnet/server/run.py --no-update          # just keep it running, don't pull
 #
 #  Any option you don't recognize is passed straight to the server.
 # ─────────────────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ def main():
                         import webbrowser
                         port = next((passthrough[i + 1] for i, a in enumerate(passthrough)
                                      if a == "--port"), "8765")
-                        webbrowser.open(f"http://127.0.0.1:{port}/reel-vault/#setup")
+                        webbrowser.open(f"http://127.0.0.1:{port}/searchnet/#setup")
                     except Exception:      # noqa: BLE001
                         pass
             if not update:
