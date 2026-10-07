@@ -111,6 +111,10 @@ holding:
   nobody can act as you. SOURCES → YOUR DATA switches hubs, backs up your topics and votes to
   the hub, exports or deletes everything. A bare SearchNet-only [Worker](worker/README.md)
   still works too (SOURCES → Advanced).
+- Sources now reach past social media: News (Google News), a news archive (GDELT), the open
+  web (Bing: blogs, forums, school and company sites), Obituaries, Schools, Blogs, Hacker News
+  and the Internet Archive. After a run the dossier lists the sites that mentioned the topic,
+  one tap follows their feed or searches them directly.
 - The same self-learning topics, 👍/👎 training, soft/anti keywords, 👎-reasons and review
   deck work here. The relevance engine is ported to run in the page.
 - To go back to the PC server later, SETUP → **Use a computer instead**. Your browser

@@ -75,6 +75,25 @@ PRESETS = [
      "template": "https://www.youtube.com/@{param}/videos", "param": "handle", "domains": []},
     {"preset": "rss", "name": "RSS / Atom feed", "kind": "rss", "template": "{param}",
      "param": "feed URL", "domains": []},
+    # the open web: articles are always kept (media setting does not apply)
+    {"preset": "news", "name": "News (Google News)", "kind": "news", "template": "{param}", "searchable": True,
+     "param": "extra terms (optional)", "domains": ["news.google.com"],
+     "note": "Global, national and local papers, TV and wires. Add a place as extra terms for local news."},
+    {"preset": "gdelt", "name": "News archive (GDELT)", "kind": "gdelt", "template": "{param}", "searchable": True,
+     "param": "extra terms (optional)", "domains": ["gdeltproject.org"],
+     "note": "World news index going back years. Phrases in quotes."},
+    {"preset": "web", "name": "Websites & blogs (Bing)", "kind": "web", "template": "{param}", "searchable": True,
+     "param": "extra terms (optional)", "domains": ["bing.com"],
+     "note": "Anything indexed: blogs, forums, company and school sites."},
+    {"preset": "obituaries", "name": "Obituaries", "kind": "web", "template": "obituary OR obituaries OR \"passed away\"",
+     "searchable": True, "domains": [], "note": "Web search with obituary terms added to every query."},
+    {"preset": "schools", "name": "Schools & universities", "kind": "web", "template": "site:.edu OR site:.k12.*.us OR school",
+     "searchable": True, "domains": [], "note": "Web search limited to school and university sites."},
+    {"preset": "blogs", "name": "Blogs", "kind": "web", "template": "blog OR site:substack.com OR site:medium.com OR site:wordpress.com OR site:blogspot.com",
+     "searchable": True, "domains": [], "note": "Web search steered at blogs and newsletters."},
+    {"preset": "hn", "name": "Hacker News", "kind": "hn", "template": "", "searchable": True, "domains": ["news.ycombinator.com"]},
+    {"preset": "archive", "name": "Internet Archive", "kind": "archive", "template": "", "searchable": True, "domains": ["archive.org"],
+     "note": "Books, newspapers, recordings, old sites."},
     {"preset": "custom", "name": "Custom search URL", "kind": "template", "engine": "auto",
      "template": "{param}", "param": "URL with {q}", "searchable": True, "domains": []},
 ]
@@ -343,8 +362,8 @@ def items_from_feed(xml_text: str, feed_url: str, source: str, all_entries=False
             "id": f"youtube:{vid}" if vid else f"{plat}:{short_hash(link or murl)}",
             "platform": plat, "post_id": vid or short_hash(link or murl), "media": mk,
             "url": link or murl, "media_url": murl if mk == "video" and murl and not vid else None,
-            "author": t("author/name", "atom:author/atom:name", "dc:creator", "author"),
-            "author_name": t("atom:author/atom:name", "dc:creator"),
+            "author": t("author/name", "atom:author/atom:name", "dc:creator", "author", "source"),
+            "author_name": t("atom:author/atom:name", "dc:creator", "source"),
             "author_url": t("atom:author/atom:uri"),
             "text": "\n".join(x for x in (t("title", "atom:title"), strip_html(
                 t("description", "atom:summary", "atom:content", "media:group/media:description")))
@@ -569,10 +588,135 @@ def fetch_rss(ctx, src, query, limit):
         yield it
 
 
+def _extra(src, query):
+    """presets like Obituaries carry extra terms in their template; a user's param lands there too"""
+    extra = (src.get("template") or "").strip()
+    if extra.startswith("http") or "{" in extra:
+        extra = ""
+    return " ".join(x for x in (query or "", extra) if x).strip()
+
+
+def _article(ctx, link, text, author="", posted_at=None, prefix="web", **kw):
+    dom = domain_of(link)
+    it = _web_item(ctx, dom, link, "post", text, posted_at=posted_at, author=author or dom)
+    it["id"] = f"{prefix}:{short_hash(link)}"
+    it["platform"] = kw.pop("platform", prefix)
+    it.update(kw)
+    return it
+
+
+def fetch_news(ctx, src, query, limit):
+    """Google News RSS: global, national and local outlets."""
+    region = (ctx.opts.get("region") or "US").upper()[:2]
+    url = (f"https://news.google.com/rss/search?q={urllib.parse.quote(_extra(src, query))}"
+           f"&hl=en-{region}&gl={region}&ceid={region}:en")
+    body, _, _ = http_get(url, timeout=20)
+    for e in items_from_feed(body, url, ctx.label, True)[:limit]:
+        yield _article(ctx, e["url"], e["text"], author=e.get("author") or domain_of(e["url"]),
+                       posted_at=e.get("posted_at"), prefix="news", platform="news")
+
+
+def fetch_gdelt(ctx, src, query, limit):
+    """GDELT DOC 2.0: world news articles, searchable back years."""
+    q = _extra(src, query)
+    d = http_json(f"https://api.gdeltproject.org/api/v2/doc/doc?query={urllib.parse.quote(q)}"
+                  f"&mode=ArtList&maxrecords={min(limit, 250)}&format=json&sort=DateDesc", timeout=25)
+    for a in (d.get("articles") or [])[:limit]:
+        ts = None
+        m = re.match(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z", a.get("seendate") or "")
+        if m:
+            ts = parse_date("%s-%s-%sT%s:%s:%sZ" % m.groups())
+        yield _article(ctx, a["url"], a.get("title") or "", author=a.get("domain") or "", posted_at=ts,
+                       prefix="gdelt", platform="news", lang=a.get("language"), thumbnail=a.get("socialimage"))
+
+
+def fetch_web(ctx, src, query, limit):
+    """The open web through Bing's RSS output: blogs, forums, school and company sites, obituaries."""
+    url = f"https://www.bing.com/search?format=rss&q={urllib.parse.quote(_extra(src, query))}&count={min(limit, 50)}"
+    body, _, _ = http_get(url, timeout=20)
+    for e in items_from_feed(body, url, ctx.label, True)[:limit]:
+        yield _article(ctx, e["url"], e["text"], posted_at=e.get("posted_at"), prefix="web", platform="web")
+
+
+def fetch_hn(ctx, src, query, limit):
+    d = http_json(f"https://hn.algolia.com/api/v1/search?query={urllib.parse.quote(_extra(src, query))}"
+                  f"&tags=story&hitsPerPage={min(limit, 100)}", timeout=20)
+    for h in (d.get("hits") or [])[:limit]:
+        link = h.get("url") or f"https://news.ycombinator.com/item?id={h.get('objectID')}"
+        it = _article(ctx, link, h.get("title") or "", author=h.get("author") or "", posted_at=h.get("created_at_i"),
+                      prefix="hn", platform="hackernews", likes=h.get("points") or 0, replies=h.get("num_comments") or 0)
+        it["id"] = f"hn:{h.get('objectID')}"
+        yield it
+
+
+def fetch_archive(ctx, src, query, limit):
+    d = http_json("https://archive.org/advancedsearch.php?q=" + urllib.parse.quote(_extra(src, query))
+                  + "&fl[]=identifier&fl[]=title&fl[]=description&fl[]=date&fl[]=mediatype&fl[]=creator"
+                  + f"&rows={min(limit, 100)}&output=json", timeout=25)
+    for x in ((d.get("response") or {}).get("docs") or [])[:limit]:
+        desc = x.get("description")
+        desc = desc[0] if isinstance(desc, list) else (desc or "")
+        creator = x.get("creator")
+        creator = creator[0] if isinstance(creator, list) else (creator or "archive.org")
+        it = _article(ctx, f"https://archive.org/details/{x['identifier']}",
+                      "\n".join(s for s in (x.get("title"), desc) if s)[:1500], author=creator,
+                      posted_at=parse_date(x.get("date")), prefix="archive", platform="archive",
+                      hashtags=str(x.get("mediatype") or ""))
+        it["id"] = f"archive:{x['identifier']}"
+        yield it
+
+
+ARTICLE_KINDS = {"news", "gdelt", "web", "hn", "archive"}
+
 ADAPTERS = {
     "x": fetch_x, "ytsearch": fetch_ytsearch, "template": fetch_template, "url": fetch_url,
     "mastodon": fetch_mastodon, "reddit": fetch_reddit, "rss": fetch_rss,
+    "news": fetch_news, "gdelt": fetch_gdelt, "web": fetch_web, "hn": fetch_hn, "archive": fetch_archive,
 }
+
+
+def discover(url: str):
+    """A site → its feeds and its search page, so it can be followed or searched."""
+    url = url if re.match(r"^https?://", url) else "https://" + url
+    origin = "{0.scheme}://{0.netloc}".format(urllib.parse.urlparse(url))
+    out = {"url": url, "host": domain_of(url), "feeds": [], "search": None}
+    html = ""
+    try:
+        html, _, _ = http_get(origin + "/", timeout=15, max_bytes=400_000)
+    except Exception as e:      # noqa: BLE001
+        out["error"] = str(e)[:200]
+    for m in re.finditer(r"<link[^>]+>", html, re.I):
+        t = m.group(0)
+        if not re.search(r"application/(?:rss|atom)\+xml", t, re.I):
+            continue
+        href = re.search(r"href=[\"']([^\"']+)", t, re.I)
+        title = re.search(r"title=[\"']([^\"']+)", t, re.I)
+        if href and len(out["feeds"]) < 6:
+            out["feeds"].append({"url": urllib.parse.urljoin(origin, href.group(1)), "title": strip_html(title.group(1)) if title else ""})
+    if not out["feeds"]:
+        for path in ("/feed", "/rss", "/feed.xml", "/rss.xml", "/atom.xml", "/?feed=rss2", "/feeds/posts/default"):
+            try:
+                body, ctype, final = http_get(origin + path, timeout=8, max_bytes=200_000)
+                if re.search(r"xml|rss|atom", ctype or "", re.I) or body.lstrip().startswith("<?xml") or "<rss" in body[:500]:
+                    out["feeds"].append({"url": final or origin + path, "title": ""})
+                    break
+            except Exception:   # noqa: BLE001
+                continue
+    for f in re.finditer(r"<form[^>]*>([\s\S]*?)</form>", html, re.I):
+        inner = f.group(1)
+        inp = re.search(r"<input[^>]+(?:type=[\"']search[\"']|name=[\"'](?:q|s|search|query|keyword|keywords|term)[\"'])[^>]*>", inner, re.I)
+        if not inp:
+            continue
+        name = re.search(r"name=[\"']([^\"']+)", inp.group(0), re.I)
+        if not name:
+            continue
+        action = re.search(r"action=[\"']([^\"']*)", f.group(0)[:f.group(0).find(">") + 1], re.I)
+        a = urllib.parse.urljoin(origin, action.group(1) if action else "/")
+        out["search"] = a + ("&" if "?" in a else "?") + name.group(1) + "={q}"
+        break
+    if not out["search"]:
+        out["search_guess"] = origin + "/?s={q}"
+    return out
 
 
 def source_from_preset(key, param=""):

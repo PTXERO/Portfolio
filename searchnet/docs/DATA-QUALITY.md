@@ -98,3 +98,20 @@ Legend · **DONE** shipped · **NEXT** small, this week · **PLAN** needs design
 - Every number names its basis (posts vs media, fetched range, as-of date, which login).
 - Absence is labelled ("no public follow list"), not shown as zero.
 - Nothing sensitive is inferred; people-search sites are links the user opens, never fetched.
+
+
+## Update: what is "in" a topic, and why
+
+- The web, the people list and the dossier only show what is **in** the topic: 👍 always, 👎 never,
+  unrated only when its score clears the bar (halfway between what you liked and what you didn't once
+  both have a few votes, else 0.5) and no anti keyword hits. A 👎 post, its account and its tags drop
+  out of the web immediately. The REVIEW deck still shows everything found, that is its job.
+- Every card says why it scores what it does: what it matched, which of its words look like your 👍,
+  which look like your 👎, and any anti keyword hit. A post that only a search engine returned, with
+  nothing in the text matching, says so.
+- A vote the model did not expect (👍 under 35%, 👎 over 65%) asks why and offers the post's own words
+  as chips. 👎 reasons become anti keywords, 👍 reasons become soft keywords. Ignoring it is fine, the
+  vote still trains the model.
+- Known limits: generic grown queries ("florida") still pull unrelated posts into REVIEW; pruning
+  queries by precision is the next step. Scores are per topic, so the same post can be in one topic
+  and out of another.

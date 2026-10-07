@@ -486,6 +486,8 @@ class Handler(BaseHTTPRequestHandler):
                 return ok({"presets": S.PRESETS})
             if arg == "probe" and method == "POST":
                 return ok({"candidates": v.probe(self._body().get("text", ""))})
+            if arg == "discover" and method == "POST":
+                return ok(S.discover(self._body().get("url", "")))
             if not arg:
                 if method == "GET":
                     return ok({"sources": v.list_sources()})
@@ -553,7 +555,8 @@ class Handler(BaseHTTPRequestHandler):
                     return ok({"counts": v.db.one("SELECT count(*) n, sum(label=1) pos, "
                                                   "sum(label=-1) neg FROM topic_items WHERE topic_id=?",
                                                   (arg,)), "applied": r})
-                return ok({"counts": v.vote(arg, str(b["item_id"]), to_int(b.get("label")))})
+                c = v.vote(arg, str(b["item_id"]), to_int(b.get("label")))
+                return ok({"counts": c, "surprise": c.pop("surprise", None)})
             if sub == "insights":
                 return ok(v.insights(arg))
             if sub == "reason" and method == "DELETE":

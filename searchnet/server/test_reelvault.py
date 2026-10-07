@@ -21,7 +21,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from rv import learn, sources as S                       # noqa: E402
 from rv.expand import morph_variants, refresh_expansions  # noqa: E402
-from rv.learn import TopicScorer, pick_queries, query_stats  # noqa: E402
+from rv.learn import TopicScorer, member_ids, pick_queries, query_stats  # noqa: E402
+from rv.people import list_people, word_graph             # noqa: E402
+from rv.vault import Job                                  # noqa: E402
 from rv.related import related                           # noqa: E402
 from rv.search import parse_query, search                # noqa: E402
 from rv.vault import Vault                               # noqa: E402
@@ -838,3 +840,91 @@ class TestWordWebWeights(Base):
         self.assertGreater(near, far)                                   # window proximity counts more
         self.assertNotIn("w:zyxw", {n["id"] for n in g["nodes"]})       # below the minimum occurrences
         self.assertEqual(g["focus"], "w:canopy")
+
+
+class WebSourcesAndMembership(Base):
+    """News / web sources, site discovery, what counts as 'in' a topic, surprise votes."""
+
+    RSS = ('<?xml version="1.0"?><rss><channel>%s</channel></rss>')
+    ITEM = ('<item><title>%s</title><link>%s</link><pubDate>Tue, 07 Oct 2026 10:00:00 GMT</pubDate>'
+            '<description>%s</description><source url="https://x">%s</source></item>')
+
+    def _mock(self, get=None, js=None):
+        self._og, self._oj = S.http_get, S.http_json
+        if get:
+            S.http_get = get
+        if js:
+            S.http_json = js
+        self.addCleanup(self._unmock)
+
+    def _unmock(self):
+        S.http_get, S.http_json = self._og, self._oj
+
+    def test_news_and_web_adapters_make_post_items_with_the_outlet_as_author(self):
+        seen = []
+        def get(url, **k):
+            seen.append(url)
+            xml = self.RSS % (self.ITEM % ("Isaias nears the coast", "https://www.tampabay.com/isaias", "storm", "Tampa Bay Times"))
+            return xml, "text/xml", url
+        self._mock(get=get)
+        src = S.source_from_preset("news", "Florida")
+        ctx = type("C", (), {"opts": {}, "label": "t"})()
+        items = list(S.fetch_news(ctx, src, "hurricane isaias", 10))
+        self.assertEqual(len(items), 1)
+        self.assertEqual((items[0]["platform"], items[0]["media"], items[0]["author"]), ("news", "post", "Tampa Bay Times"))
+        self.assertTrue(items[0]["id"].startswith("news:"))
+        self.assertIn("hurricane%20isaias%20Florida", seen[0])        # extra terms ride along
+        obits = S.source_from_preset("obituaries")
+        list(S.fetch_web(ctx, obits, "john smith", 5))
+        self.assertIn("obituary", urllib.parse.unquote(seen[-1]))
+
+    def test_articles_are_kept_even_when_the_topic_only_wants_video(self):
+        self._mock(get=lambda url, **k: (self.RSS % (self.ITEM % ("A", "https://a.example/1", "", "A")), "text/xml", url))
+        src = self.v.add_source(S.source_from_preset("news"))
+        got = list(self.v.fetch(Job("collect", {}), src, "x", 10, {"media": "video"}))
+        self.assertEqual(len(got), 1)
+        self.assertIsNotNone(self.v.db.get(got[0]["id"]))
+
+    def test_discover_finds_feed_and_search_form(self):
+        html = ('<html><head><link rel="alternate" type="application/rss+xml" title="Feed" href="/feed.xml"></head>'
+                '<body><form action="/search"><input type="text" name="q"></form></body></html>')
+        self._mock(get=lambda url, **k: (html, "text/html", url))
+        d = S.discover("blog.example")
+        self.assertEqual(d["feeds"][0]["url"], "https://blog.example/feed.xml")
+        self.assertEqual(d["search"], "https://blog.example/search?q={q}")
+
+    def test_thumbs_down_and_low_scores_stay_out_of_the_web(self):
+        t = self.v.create_topic("Florida Hurricane Isaias", ["florida hurricane isaias"])
+        self.add(tweet("1", "Isaias storm surge hits Tampa #isaias", author="storm"), tweet("2", "ICE deportations in Florida continue #ice", author="ice"),
+                 tweet("3", "random post about florida beaches", author="junk"))
+        for i in ("x:1", "x:2", "x:3"):
+            self.v.link(t["id"], i, "florida", "s")
+        self.v.vote(t["id"], "x:1", 1)
+        self.v.vote(t["id"], "x:2", -1)
+        self.v.db.exec("UPDATE topic_items SET score=0.2 WHERE topic_id=? AND item_id='x:3'", (t["id"],))
+        ids = member_ids(self.v.db, t["id"])
+        self.assertIn("x:1", ids)
+        self.assertNotIn("x:2", ids)
+        self.assertNotIn("x:3", ids)
+        g = word_graph(self.v, topic=t["id"], kinds="account,hashtag,word", max_nodes=50)
+        labels = {n["label"] for n in g["nodes"]}
+        self.assertNotIn("ice", labels)
+        self.assertFalse(any(n["kind"] == "account" and n["label"] == "ice" for n in g["nodes"]))
+        people = list_people(self.v, topic=t["id"])
+        rows = people["people"] if isinstance(people, dict) else people
+        self.assertEqual({p["author"] for p in rows}, {"storm"})
+
+    def test_a_surprising_vote_hands_back_the_posts_own_words(self):
+        t = self.v.create_topic("Isaias", ["hurricane isaias"])
+        self.add(tweet("1", "ICE deportation raids expand #ice", author="a"))
+        self.v.link(t["id"], "x:1", "florida", "s")
+        self.v.db.exec("UPDATE topic_items SET score=0.9 WHERE topic_id=? AND item_id='x:1'", (t["id"],))
+        r = self.v.vote(t["id"], "x:1", -1)
+        self.assertTrue(r["surprise"])
+        self.assertIn("#ice", r["surprise"]["terms"])
+        self.assertTrue(any(w in r["surprise"]["terms"] for w in ("deportation", "raids")))
+        # 👍 with a reason becomes a soft keyword, never an anti keyword
+        self.v.apply_reasons(t["id"], "x:1", ["storm surge"], vote=1)
+        st = self.v.topic(t["id"])["settings"]
+        self.assertIn("storm surge", st["soft"])
+        self.assertNotIn("storm", st.get("anti", []))

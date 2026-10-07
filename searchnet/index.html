@@ -1285,7 +1285,7 @@ function showCard(){
         <div class="who"><b>@${esc(it.author || '?')}</b><span>· ${ago(it.posted_at)}</span>${it.likes ? `<span>· ♥ ${fmtN(it.likes)}</span>` : ''}${it.views ? `<span>· ▶ ${fmtN(it.views)}</span>` : ''}</div>
         <div class="txt" id="rtxt" style="margin-top:6px">${hl(it.text || '(no caption)', re)}</div>
         <div class="why">${found}${it.why?.meaning != null ? `<span>meaning <b>${Math.round(it.why.meaning*100)}%</b></span>` : ''}${it.why?.taste != null ? `<span>your taste <b>${Math.round(it.why.taste*100)}%</b></span>` : ''}</div>
-        ${it.why?.lower && it.why.lower.length ? `<div class="whynot"><b>you tend to 👎:</b>${it.why.lower.map(w => `<span>${esc(w)}</span>`).join('')}</div>` : ''}
+        ${whyLine(it)}
       </div>
       <div class="ractions">
         <button class="big no" id="vNo" aria-label="${isPersonTopic() ? 'Not this person (comma key)' : 'Not relevant (comma key)'}" title="${isPersonTopic() ? 'Not them. Drops this account and all its posts from the dossier · press ,' : 'Not relevant · press ,'}"><span class="emo">${isPersonTopic() ? '✕' : '👎'}</span><span class="key"><kbd>,</kbd><small>${isPersonTopic() ? 'NOT THEM' : 'NOPE'}</small></span></button>
@@ -1403,6 +1403,16 @@ async function personVerdict(it, label){
     updateSegs('review');
   }catch(e){ toast(e.message); }
 }
+// why this post scores what it does: what it matched, what pulls it up, what pulls it down
+function whyLine(it){
+  const w = it.why || {}; const parts = [];
+  if (w.matched && w.matched.length) parts.push(`<span><b>matches</b> ${w.matched.map(esc).join(', ')}</span>`);
+  if (w.raise && w.raise.length) parts.push(`<span><b>like your 👍</b> ${w.raise.map(esc).join(', ')}</span>`);
+  if (w.lower && w.lower.length) parts.push(`<span><b>like your 👎</b> ${w.lower.map(esc).join(', ')}</span>`);
+  if (w.anti && w.anti.length) parts.push(`<span><b>unwanted word</b> ${w.anti.map(esc).join(', ')}</span>`);
+  if (!parts.length && it.t_score) parts.push('<span>only found by a search, nothing in the text matches yet</span>');
+  return parts.length ? `<div class="whynot">${parts.join('')}</div>` : '';
+}
 async function vote(label){
   const it = deck.shift(); if (!it) return;
   deckSeen.push(it.id);
@@ -1410,9 +1420,10 @@ async function vote(label){
   buzz();
   showCard();
   if (isPersonTopic()){ hideReasons(); await personVerdict(it, label); if (deck.length < 4) setTimeout(loadDeck, 1200); return; }
-  if (label < 0) offerReasons(it); else hideReasons();
+  if (label < 0) offerReasons(it, -1); else hideReasons();
   try{
     const r = await api('/api/topics/' + T.id + '/vote', { method: 'POST', body: { item_id: it.id, label } });
+    if (r.surprise) offerReasons(it, label, r.surprise);      // the model expected the opposite: ask what made the difference
     T.counts.pos = r.counts.pos || 0; T.counts.neg = r.counts.neg || 0; T.counts.unrated = Math.max(0, T.counts.unrated - 1);
     const bar = $('.deckbar .grow'); if (bar) bar.textContent = fmtN(T.counts.unrated) + ' to review · learned from ' + fmtN(T.counts.pos + T.counts.neg) + ' votes';
     updateSegs('review');
@@ -1421,16 +1432,22 @@ async function vote(label){
 }
 let reasonTimer = null, reasonFor = null;
 const REASONS = [['unrelated', 'unrelated'], ['dislike', "don't like it"], ['ai', 'AI'], ['ad', 'ad'], ['short', 'too short'], ['long', 'too long']];
-function offerReasons(it){
+function offerReasons(it, label = -1, surprise = null){
   reasonFor = it;
   const recent = ((T.settings && T.settings.reasons_recent) || []).filter(r => !REASONS.some(x => x[0] === r));
   const picked = new Set();
-  $('#rbChips').innerHTML = REASONS.map(([k, lbl]) => `<button class="rchip" data-r="${k}">${esc(lbl)}</button>`).join('')
-    + recent.slice(0, 5).map(r => `<button class="rchip" data-r="${esc(r)}">${esc(r)}</button>`).join('')
+  const terms = (surprise && surprise.terms) || [];
+  const lbl = $('#reasonBar .rb-label');
+  if (lbl) lbl.innerHTML = label > 0
+    ? `👍 why? <small>it expected ${Math.round((surprise?.expected || 0) * 100)}%. Pick what made this one relevant</small>`
+    : surprise ? `👎 why? <small>it expected ${Math.round(surprise.expected * 100)}%. Pick what gives it away</small>` : '👎 why? <small>(optional, teaches the topic)</small>';
+  $('#rbChips').innerHTML = (label > 0 ? '' : REASONS.map(([k, l]) => `<button class="rchip" data-r="${k}">${esc(l)}</button>`).join(''))
+    + terms.slice(0, 8).map(w => `<button class="rchip term" data-r="${esc(w)}">${esc(w)}</button>`).join('')
+    + (label > 0 ? '' : recent.slice(0, 5).map(r => `<button class="rchip" data-r="${esc(r)}">${esc(r)}</button>`).join(''))
     + '<button class="rchip add" data-radd>+ reason</button>';
   $('#reasonBar').classList.add('on');
-  clearTimeout(reasonTimer); reasonTimer = setTimeout(hideReasons, 6000);
-  const send = async r => { try{ await api('/api/topics/' + T.id + '/vote', { method: 'POST', body: { item_id: it.id, label: -1, reasons: [r] } }); }catch(e){ toast(e.message); } };
+  clearTimeout(reasonTimer); reasonTimer = setTimeout(hideReasons, surprise ? 12000 : 6000);
+  const send = async r => { try{ await api('/api/topics/' + T.id + '/vote', { method: 'POST', body: { item_id: it.id, label, reasons: [r] } }); T.settings = (await api('/api/topics/' + T.id)).settings || T.settings; }catch(e){ toast(e.message); } };
   // pick one reason → it's sent and the bar goes away. (Ignore it → it slides away by itself.)
   $$('#rbChips [data-r]').forEach(b => b.onclick = () => {
     const r = b.dataset.r;
@@ -1439,8 +1456,8 @@ function offerReasons(it){
   });
   $('#rbChips [data-radd]').onclick = async () => {
     clearTimeout(reasonTimer);
-    const r = await ask('Why not? (one word or short phrase)', { placeholder: 'e.g. too loud, a man, reaction video', ok: 'ADD' });
-    if (r){ await send(r); toast('Noted. It learns this'); }
+    const r = await ask(label > 0 ? 'What made it relevant? (a word or short phrase)' : 'Why not? (one word or short phrase)', { placeholder: label > 0 ? 'e.g. storm surge, tampa' : 'e.g. too loud, a man, reaction video', ok: 'ADD' });
+    if (r){ await send(r); toast(label > 0 ? 'Noted. Added as a soft keyword' : 'Noted. It learns this'); }
     hideReasons();
   };
 }
@@ -1651,6 +1668,27 @@ function personCardHTML(p, T, items, I){
     <div class="note" style="margin:10px 0 4px">People-search &amp; records sites <small>(show addresses, relatives, phone numbers. Open them to see what's public and use each site's opt-out)</small></div><div class="meta">${people.map(([n, u]) => a(n, u, 'a')).join('')}</div>
   </div>`;
 }
+function sitesCard(){
+  const sites = Object.entries((T.settings || {}).sites || {}).sort((a, b) => b[1].n - a[1].n).slice(0, 14);
+  if (!sites.length) return '';
+  return `<div class="dcard"><div class="dh">Sites that mention it <span class="note">from news and web results</span></div>
+    ${sites.map(([h, s]) => `<div class="drow"><span class="k"><a href="https://${esc(h)}" target="_blank" rel="noreferrer">${esc(s.title || h)}</a><small> ${esc(h)}</small></span><span class="v">${fmtN(s.n)}</span>${s.added ? '<span class="v">✓ source</span>' : `<button class="btn sm" data-site="${esc(h)}">+ SOURCE</button>`}</div>`).join('')}
+    <p class="note" style="margin-top:6px">+ SOURCE follows the site's feed if it has one, or searches the site directly. Then it's pulled in every run.</p></div>`;
+}
+async function addSiteSource(host, btn){
+  btn.disabled = true; btn.textContent = '…';
+  try{
+    const d = await api('/api/sources/discover', { method: 'POST', body: { url: 'https://' + host } });
+    const added = [];
+    if (d.feeds && d.feeds[0]){ const s = await api('/api/sources', { method: 'POST', body: { preset: 'rss', param: d.feeds[0].url, name: (d.feeds[0].title || host) + ' · feed' } }); added.push(s); }
+    if (d.search){ const s = await api('/api/sources', { method: 'POST', body: LOCAL ? { preset: 'html', param: d.search, name: host + ' · search' } : { preset: 'custom', param: d.search, name: host + ' · search' } }); added.push(s); }
+    if (!added.length) throw new Error('no feed or search page found on ' + host);
+    if (T.sources && T.sources.length){ T.sources = T.sources.concat(added.map(s => s.id)); await api('/api/topics/' + T.id, { method: 'PATCH', body: { sources: T.sources } }); }
+    const sites = Object.assign({}, (T.settings || {}).sites); if (sites[host]) sites[host] = Object.assign({}, sites[host], { added: true });
+    T.settings.sites = sites; await api('/api/topics/' + T.id, { method: 'PATCH', body: { settings: { sites } } });
+    toast('Added: ' + added.map(s => s.name).join(' + ')); btn.replaceWith(Object.assign(document.createElement('span'), { className: 'v', textContent: '✓ source' }));
+  }catch(e){ toast('✕ ' + e.message, 5000); btn.disabled = false; btn.textContent = '+ SOURCE'; }
+}
 async function renderDossier(){
   const body = $('#tBody');
   body.innerHTML = '<div class="empty"><span class="spinner"></span> building the dossier…</div>';
@@ -1709,6 +1747,7 @@ async function renderDossier(){
     <div class="dcard"><div class="dh">Who talks about it most</div>${who.length ? who.slice(0, 10).map(a => `<button class="drow tap" data-prof="${esc(a.id)}"><span class="k">@${esc(a.author)} <small>${esc(a.platform)}</small></span><span class="bar"><i style="width:${pct(a.n)}%"></i></span><span class="v">${fmtN(a.n)}${a.liked ? ' · 👍' + a.liked : ''}</span></button>`).join('') : '<p class="note">—</p>'}</div>
     <div class="dcard"><div class="dh">Keywords it goes with</div><div class="chips wrap">${tags.map(t => `<button class="chip" data-focus="${esc(t.label)}">${esc(t.label)} <em>${t.n}</em></button>`).join('')}${words.map(w => `<button class="chip f" data-focus="${esc(w.label.includes(' ') ? '"' + w.label + '"' : w.label)}">${esc(w.label)} <em>${w.n}</em></button>`).join('')}${tags.length + words.length ? '' : '<p class="note">—</p>'}</div></div>
     <div class="dcard"><div class="dh">People it's associated with</div><div class="chips wrap">${people.map(a => `<button class="chip" data-focus="@${esc(a.label)}" data-pid="${esc(a.person_id || '')}">@${esc(a.label)} <em>${a.n}</em></button>`).join('') || '<p class="note">—</p>'}</div><p class="note" style="margin-top:6px">Ordered by how connected they are inside this topic. Tap to centre the web on them.</p></div>
+    ${sitesCard()}
     <div class="dcard"><div class="dh">Trend · posts per week</div>${bars(weeks, wmax)}<div class="note" style="margin-top:4px">last 12 weeks · ${fmtN(weeks.reduce((a, b) => a + b, 0))} posts${older ? ' · ' + fmtN(older) + ' older' : ''}</div></div>
     ${isPerson ? '' : `<div class="dcard"><div class="dh">Search interest · Wikipedia views</div>${views && views.length ? bars(views, vmax, 'cyan') + `<div class="note" style="margin-top:4px">last ${views.length} days · ${fmtN(views[views.length - 1])}/day now · peak ${fmtN(vmax)}</div>` : '<p class="note">No page-view data for this name.</p>'}</div>`}
     <div class="dcard span2"><div class="dh">Social circles <span class="note">clusters of accounts, tags and words that go together</span></div>
@@ -1717,6 +1756,7 @@ async function renderDossier(){
   $$('[data-prof]', body).forEach(b => b.onclick = () => openProfile(b.dataset.prof));
   $$('[data-focus]', body).forEach(b => b.onclick = () => go('network?' + new URLSearchParams({ topic: T.id, focus: b.dataset.focus })));
   const pIdBtn = $('#paIdent', body); if (pIdBtn) pIdBtn.onclick = () => openIdentity(person.identity_id);
+  $$('[data-site]', body).forEach(b => b.onclick = () => addSiteSource(b.dataset.site, b));
   $$('[data-restore]', body).forEach(b => b.onclick = async () => { try{ const r = await api('/api/topics/' + T.id + '/person', { method: 'POST', body: { action: 'restore', account: b.dataset.restore } }); T.settings.person = Object.assign({}, T.settings.person, { not_them: r.not_them }); toast('Restored @' + b.dataset.restore.split('|')[0] + ' — found again on the next FIND MORE', 4000); renderDossier(); }catch(e){ toast(e.message); } });
   $$('[data-idlink]', body).forEach(b => b.onclick = async () => {
     try{
@@ -2714,7 +2754,7 @@ async function renderSources(){
     const srcs = (await api('/api/sources')).sources;
     const have = new Set(srcs.map(s => s.preset).filter(Boolean));
     $('#presets').innerHTML = presetsCache.map(p => { const added = have.has(p.preset) && !p.param;
-      return `<button data-preset="${p.preset}"${added ? ' style="border-color:var(--acc)"' : ''}>${esc(p.name)}<small>${added ? '<span style="color:var(--acc)">✓ added</span>' : p.param ? 'enter ' + esc(p.param) : p.searchable ? 'searches' : 'follows'}${p.needs_login ? ' · login' : ''}</small></button>`; }).join('');
+      return `<button data-preset="${p.preset}"${added ? ' style="border-color:var(--acc)"' : ''}>${esc(p.name)}<small>${added ? '<span style="color:var(--acc)">✓ added</span>' : p.param ? (p.param === 'qx' ? 'extra terms, optional' : 'enter ' + esc(p.param)) : p.searchable ? 'searches' : 'follows'}${p.needs_login ? ' · login' : ''}</small></button>`; }).join('');
     $$('[data-preset]').forEach(b => b.onclick = () => {
       const p = presetsCache.find(x => x.preset === b.dataset.preset);
       const existing = srcs.find(s => s.preset === p.preset);
@@ -2791,7 +2831,7 @@ function sourceInfo(s, p){
 }
 async function addPreset(p){
   let param = '';
-  if (p.param){ param = await ask(p.name, { placeholder: p.param, value: p.param_default || '', ok: 'ADD', note: p.note || '' }); if (!param) return; }
+  if (p.param){ param = await ask(p.name, { placeholder: p.param === 'qx' ? 'extra terms added to every search, e.g. a place (optional)' : p.param, value: p.param_default || '', ok: 'ADD', note: p.note || '' }); if (param == null) return; if (!param && p.param !== 'qx') return; }
   try{ await api('/api/sources', { method: 'POST', body: { preset: p.preset, param } }); toast('Added ' + p.name + ' (see Your sources)'); await renderSources(); const last = $$('.src').pop(); if (last) last.scrollIntoView({ behavior: 'smooth', block: 'center' }); }catch(e){ toast(e.message); }
 }
 async function testSource(s){

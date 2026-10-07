@@ -139,6 +139,15 @@
     { preset: 'youtube', name: 'YouTube search', source: 'youtube', searchable: true },
     { preset: 'rss', name: 'RSS / channel feed', source: 'rss', param: 'url', searchable: false },
     { preset: 'html', name: 'Any site (its search page)', source: 'html', param: 'url', searchable: true, note: "The site's search URL with {q} where the word goes, e.g. https://site.com/search?q={q}" },
+    // the open web (articles are always kept, the media setting does not apply)
+    { preset: 'news', name: 'News (Google News)', source: 'news', param: 'qx', searchable: true, note: 'Global, national and local papers, TV and wires. Put a place in the box for local news.' },
+    { preset: 'gdelt', name: 'News archive (GDELT)', source: 'gdelt', param: 'qx', searchable: true, note: 'World news index going back years. Phrases in quotes.' },
+    { preset: 'web', name: 'Websites & blogs (Bing)', source: 'web', param: 'qx', searchable: true, note: 'Anything indexed: blogs, forums, company and school sites.' },
+    { preset: 'obituaries', name: 'Obituaries', source: 'web', param: 'qx', param_default: 'obituary OR obituaries OR "passed away"', searchable: true },
+    { preset: 'schools', name: 'Schools & universities', source: 'web', param: 'qx', param_default: 'site:.edu OR site:.k12.*.us OR school', searchable: true },
+    { preset: 'blogs', name: 'Blogs', source: 'web', param: 'qx', param_default: 'blog OR site:substack.com OR site:medium.com OR site:wordpress.com OR site:blogspot.com', searchable: true },
+    { preset: 'hn', name: 'Hacker News', source: 'hn', searchable: true },
+    { preset: 'archive', name: 'Internet Archive', source: 'archive', searchable: true, note: 'Books, newspapers, recordings, old sites.' },
   ];
   // 'https://site/search?q=cats' (or '?q=') → 'https://site/search?q={q}'; also /search/cats → /search/{q}
   const Q_PARAMS = new Set(['q', 's', 'search', 'query', 'term', 'keyword', 'keywords', 'k', 'text', 'search_query', 'wd', 'p']);
@@ -205,6 +214,8 @@
         try {
           const params = new URLSearchParams({ source: s.source, q, limit, media: body.media || 'video' });
           if (s.param === 'instance' && s.value) params.set('instance', s.value);
+          if (s.param === 'qx' && s.value) params.set('qx', s.value);
+          if (s.param === 'url' && s.value) params.set('url', s.value);
           job.log('▶ ' + s.name + ' · ' + q);
           const r = await workerCall('/search?' + params);
           const items = (r.items || []).filter((it) => it && it.id && !seen.has(it.id));
@@ -320,11 +331,12 @@
 
       if (route === 'sources') {
         if (arg === 'presets') return { presets: WORKER_SOURCES };
+        if (arg === 'discover' && method === 'POST') return await workerCall('/discover?url=' + encodeURIComponent(body.url || ''));
         if (arg === 'probe' && method === 'POST') return { candidates: probe(body.text) };
         const all = await listSources();
         if (!arg) {
           if (method === 'GET') return { sources: all };
-          if (method === 'POST') { const p = WORKER_SOURCES.find((x) => x.preset === body.preset); const s = p ? { source: p.source, name: p.name + (body.param ? ' · ' + body.param : ''), param: p.param, value: body.param || p.param_default || '', searchable: p.searchable, preset: p.preset } : body; s.id = Math.random().toString(36).slice(2, 10); s.enabled = true; s.kind = s.source; s.limit_per = s.limit_per || 30; all.push(s); await saveSources(all); return s; }
+          if (method === 'POST') { const p = WORKER_SOURCES.find((x) => x.preset === body.preset); const s = p ? { source: p.source, name: body.name || (p.name + (body.param ? ' · ' + body.param : '')), param: p.param, value: body.param || p.param_default || '', searchable: p.searchable, preset: p.preset } : body; s.id = Math.random().toString(36).slice(2, 10); s.enabled = true; s.kind = s.source; s.limit_per = s.limit_per || 30; all.push(s); await saveSources(all); return s; }
         }
         const s = all.find((x) => x.id === arg);
         if (s && method === 'PATCH') { Object.assign(s, body); await saveSources(all); return s; }

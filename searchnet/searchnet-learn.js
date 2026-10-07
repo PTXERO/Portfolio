@@ -94,7 +94,13 @@
           if (nc) { const lower = []; for (const k of Object.keys(x)) { if ((k[0] === 'w' || k[0] === '#') && nc[k] && (!pc || !pc[k])) lower.push(k); } why._lowerRaw = lower; }
         }
         const have = itemStems(it); const flags = [];
-        if (anti.size) { const hit = [...anti].filter((a) => have.has(a)); if (hit.length) { final *= Math.max(0.1, 1 - 0.6 * Math.min(3, hit.length)); flags.push(...hit.slice(0, 3)); } }
+        if (anti.size) { const hit = [...anti].filter((a) => have.has(a)); if (hit.length) { final *= Math.max(0.1, 1 - 0.6 * Math.min(3, hit.length)); flags.push(...hit.slice(0, 3)); why.anti = hit.slice(0, 3); } }
+        if (pc) {   // why it scores up: this post's own words that liked posts share (and disliked ones don't)
+          const x2 = feats(it); const up = [];
+          for (const k of Object.keys(x2)) if ((k[0] === 'w' || k[0] === '#') && pc[k] && !(nc && nc[k] > pc[k])) up.push([x2[k] * pc[k], k]);
+          up.sort((a, b) => b[0] - a[0]); const r2 = up.slice(0, 4).map(([, k]) => readable(k)).filter((w) => !seedStems.has(stem(String(w).replace(/^[#@]/, ''))));
+          if (r2.length) why.raise = r2.slice(0, 3);
+        }
         const d = it.duration || 0;
         if (prefs.avoid_short && d > 0 && d < 30) { final *= 0.4; flags.push('short'); }
         if (prefs.avoid_long && d > 180) { final *= 0.5; flags.push('long'); }
@@ -106,6 +112,23 @@
     };
   }
   function readable(k) { const [kind, val] = [k[0], k.slice(2)]; return kind === '#' ? '#' + val : kind === '@' ? '@' + val : val; }
+  // ── what counts as "in" the topic (the web, the dossier): 👍 always; unrated only when the score clears the bar
+  //    and no anti keyword hit; 👎 never. The bar sits between what you liked and what you didn't once both exist.
+  function threshold(votes) {
+    const pos = votes.filter((v) => v.label > 0 && v.score != null), neg = votes.filter((v) => v.label < 0 && v.score != null);
+    if (pos.length >= 3 && neg.length >= 3) { const m = (a) => a.reduce((s, v) => s + v.score, 0) / a.length; return clip((m(pos) + m(neg)) / 2, 0.35, 0.65); }
+    return 0.5;
+  }
+  function isMember(v, tau) { if (!v) return false; if (v.label > 0) return true; if (v.label < 0) return false; if (v.why && v.why.anti && v.why.anti.length) return false; return (v.score || 0) >= tau; }
+  // this post's own distinctive words: the chips offered when a vote needs a reason
+  function distinctTerms(it, t) {
+    const seedStems = new Set(); (t.seeds || []).concat(t.settings.soft || [], t.settings.anti || []).forEach((s) => tokens(s).forEach((w) => seedStems.add(stem(w))));
+    const out = []; const seen = new Set();
+    ((it.hashtags || '').toLowerCase().split(/\s+/).filter(Boolean).concat(((it.text || '').match(/#(\w+)/g) || []).map((h) => h.slice(1).toLowerCase()))).forEach((h) => { if (!seedStems.has(stem(h)) && !seen.has(h)) { seen.add(h); out.push('#' + h); } });
+    const freq = {}; tokens(it.text).forEach((w) => { if (w.length > 3 && !STOP.has(w) && !seedStems.has(stem(w))) freq[w] = (freq[w] || 0) + 1; });
+    Object.entries(freq).sort((a, b) => b[1] - a[1] || b[0].length - a[0].length).forEach(([w]) => { if (!seen.has(w)) { seen.add(w); out.push(w); } });
+    return out.slice(0, 8);
+  }
 
   async function rescore(tid) {
     const t = await getTopic(tid); if (!t) return;
@@ -165,6 +188,12 @@
     const seen = new Set();
     // collect directly (synchronously), then link everything matching
     await collectForTopic(t2, runQs, srcs, job, seen);
+    // which sites talked about it (news / web results) → offered as sources in the dossier
+    try {
+      const sites = Object.assign({}, t2.settings.sites || {}); let added = 0;
+      for (const id of seen) { const it = await idb.get('items', id); if (!it || !ARTICLE_PLATFORMS.has(it.platform) || !it.url) continue; let host = ''; try { host = new URL(it.url).hostname.replace(/^www\./, ''); } catch (e) { continue; } if (!host || /google\.com$|bing\.com$/.test(host)) continue; const s = sites[host] = sites[host] || { n: 0, first: now() }; s.n++; s.last = now(); if (!s.title && it.author_name) s.title = it.author_name; added++; }
+      if (added) { t2.settings.sites = sites; await saveTopic(t2); job.log('  ' + Object.keys(sites).length + ' sites mention it (dossier → SITES)'); }
+    } catch (e) { /* tally only */ }
     // creators (person dossiers): refresh each account's own feed through the Worker and keep it linked
     for (const c of Object.values(t2.settings.creators || {})) {
       if (job.cancel) break;
@@ -190,6 +219,7 @@
           const params = new URLSearchParams({ source: s.source, q, limit: t.settings.per_query || 20, media: t.settings.media || 'video' });
           if (s.value && s.param === 'instance') params.set('instance', s.value);
           if (s.value && s.param === 'url') params.set('url', s.value);          // feeds and 'Any site' templates carry their URL
+          if (s.value && s.param === 'qx') params.set('qx', s.value);            // Obituaries / Schools / local news: extra terms on every query
           const r = await workerSearch(params);
           const q2 = (t.queries || []).find((x) => x.query === q);
           let found = 0;
@@ -290,6 +320,7 @@
     for (let r of (reasons || [])) {
       const key = String(r).trim().toLowerCase().replace(/[^a-z0-9 ]/g, '');
       if (!key) continue;
+      if (vote > 0) { st.soft = st.soft || []; const w = key.replace(/^#/, ''); if (w.length > 1 && !st.soft.includes(w)) st.soft.push(w); st.soft = st.soft.slice(0, 40); st.anti = st.anti.filter((a) => a !== w); continue; }   // 👍 + why → a soft keyword
       if (REASON_PREFS[key]) { st.prefs[REASON_PREFS[key]] = true; (REASON_ANTI[key] || []).forEach((w) => { if (!st.anti.includes(w)) st.anti.push(w); }); }
       else if (['unrelated', 'dislike', 'notmytype', 'low quality', 'lowquality'].includes(key)) { /* the 👎 teaches it */ }
       else { key.split(' ').forEach((w) => { if (w.length > 1 && !st.anti.includes(w)) st.anti.push(w); }); st.reasons_recent = [key].concat(st.reasons_recent.filter((x) => x !== key)).slice(0, 12); }
@@ -304,21 +335,25 @@
     label = label > 0 ? 1 : label < 0 ? -1 : 0;
     const k = voteKey(tid, iid); let v = await idb.get('votes', k);
     if (!v) v = { k, topic_id: tid, item_id: iid, label: 0, score: 0, why: {}, added: now(), found_by: [] };
+    const expected = v.score || 0;
     v.label = label; v.labeled_at = now(); await idb.put('votes', v);
     // update per-query precision tallies
     const t = await getTopic(tid);
+    // a vote the model did not see coming: ask why, offering this post's own words
+    let surprise = null;
+    if ((label > 0 && expected < 0.35) || (label < 0 && expected > 0.65)) { const it = await idb.get('items', iid); surprise = { expected: +expected.toFixed(2), terms: it ? distinctTerms(it, t) : [] }; }
     (v.found_by || []).forEach((f) => { const q = (t.queries || []).find((x) => x.query === f.query); if (q) { if (label > 0) q.pos = (q.pos || 0) + 1; else if (label < 0) q.neg = (q.neg || 0) + 1; } });
     await saveTopic(t);
     await rescore(tid);
     const votes = await topicItems(tid);
-    return { n: votes.length, pos: votes.filter((x) => x.label > 0).length, neg: votes.filter((x) => x.label < 0).length };
+    return { n: votes.length, pos: votes.filter((x) => x.label > 0).length, neg: votes.filter((x) => x.label < 0).length, surprise };
   }
 
   function counts(votes) { return { n: votes.length, pos: votes.filter((v) => v.label > 0).length, neg: votes.filter((v) => v.label < 0).length, unrated: votes.filter((v) => !v.label).length, good: votes.filter((v) => !v.label && v.score >= 0.5).length }; }
 
   // ── the topics request router (mirrors the server) ────────────
   L.learn = {
-    autoRefresh,
+    autoRefresh, threshold, isMember, distinctTerms,
     async vote(tid, iid, label) { return voteItem(tid, iid, label); },
     async itemTopics(iid) { const out = []; for (const t of await allTopics()) { const v = await idb.get('votes', voteKey(t.id, iid)); if (v) out.push({ topic_id: t.id, name: t.name, label: v.label, score: v.score }); } return out; },
     async onItemDeleted(iid) { const vs = (await idb.all('votes')).filter((v) => v.item_id === iid); for (const v of vs) await idb.del('votes', v.k); },
@@ -337,7 +372,7 @@
       }
       if (sub === 'run' && method === 'POST') { const j = L.newJob('topic', 'topic · ' + t.name); j.topic_id = t.id; L.runSafe(j, () => runTopic(t.id, j)); return L.jobDict(j); }
       if (sub === 'feed') return await feed(arg, qs);
-      if (sub === 'vote' && method === 'POST') { if (body.reasons) { const r = await applyReasons(arg, String(body.item_id), body.reasons, body.label != null ? +body.label : -1); return { counts: counts(await topicItems(arg)), applied: r }; } return { counts: await voteItem(arg, String(body.item_id), +body.label) }; }
+      if (sub === 'vote' && method === 'POST') { if (body.reasons) { const r = await applyReasons(arg, String(body.item_id), body.reasons, body.label != null ? +body.label : -1); return { counts: counts(await topicItems(arg)), applied: r }; } const vr = await voteItem(arg, String(body.item_id), +body.label); return { counts: vr, surprise: vr.surprise }; }
       if (sub === 'insights') return await insights(arg);
       if (sub === 'queries' && method === 'POST') { const act = body.action, q = String(body.query || '').trim(); t.queries = t.queries || []; if (act === 'add') { if (!t.queries.some((x) => x.query.toLowerCase() === q.toLowerCase())) t.queries.push({ query: q, origin: 'user', enabled: true, locked: true, runs: 0, found: 0, pos: 0, neg: 0 }); } else { const row = t.queries.find((x) => x.query === q); if (row) { if (act === 'delete') t.queries = t.queries.filter((x) => x !== row); else { row.enabled = act === 'enable'; row.locked = true; } } } await saveTopic(t); await rescore(arg); return { ok: true }; }
       if (sub === 'reason' && method === 'DELETE') { const P = Object.fromEntries(new URLSearchParams(qs)); if (P.anti) t.settings.anti = (t.settings.anti || []).filter((w) => w !== P.anti); if (P.pref) delete (t.settings.prefs || {})[P.pref]; await saveTopic(t); await rescore(arg); return { ok: true }; }
@@ -369,6 +404,7 @@
   //    Worker (/account) and linked to the topic; what they post about becomes soft signal + searches.
   //    X / Instagram / TikTok need a login, so they're PC-server only.
   const WORKER_ACCOUNT = new Set(['mastodon', 'bluesky', 'reddit', 'youtube', 'lemmy']);
+  const ARTICLE_PLATFORMS = new Set(['news', 'web', 'hackernews', 'archive']);
   function creator(t, body) {
     let handle = String(body.handle || body.author || '').trim(), platform = String(body.platform || '').toLowerCase();
     const m = handle.match(/^https?:\/\/(?:www\.)?([^/]+)\/(?:profile\/|user\/|@)?([^/?#]+)/i);

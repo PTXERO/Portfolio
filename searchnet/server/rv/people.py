@@ -22,6 +22,7 @@ import statistics
 import time
 import urllib.parse
 import uuid
+from .learn import member_ids
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -400,7 +401,8 @@ def graph(v, topic=None, max_nodes=60, min_w=1.5, platform=""):
     by_item, _ = _vote_index(v)
     accts = list(by.values())
     if topic:
-        accts = [a for a in accts if any(r["topic_id"] == topic for it in a.items for r in by_item.get(it["id"], []))]
+        ids = member_ids(v.db, topic)
+        accts = [a for a in accts if any(it["id"] in ids for it in a.items)]
     if platform:
         accts = [a for a in accts if a.platform == platform]
     accts.sort(key=lambda a: -_n_posts(a.items))
@@ -437,7 +439,8 @@ def list_people(v, topic=None, q="", sort="", platform=""):
     rows = list(by.values())
     platforms = dict(Counter(a.platform for a in rows))
     if topic:
-        rows = [a for a in rows if any(r["topic_id"] == topic for it in a.items for r in by_item.get(it["id"], []))]
+        ids = member_ids(v.db, topic)
+        rows = [a for a in rows if any(it["id"] in ids for it in a.items)]
     if platform:
         rows = [a for a in rows if a.platform == platform]
     if q:
@@ -493,8 +496,8 @@ def word_graph(v, focus="", kinds="account,hashtag,word", max_nodes=80, platform
     by, idf, h_df, w_df = _build(v)
     if platform:
         by = {k: a for k, a in by.items() if a.platform == platform}
-    if topic:                                   # only what this topic found
-        ids = {r["item_id"] for r in v.db.q("SELECT item_id FROM topic_items WHERE topic_id=?", (topic,))}
+    if topic:                                   # only what is in this topic: 👍, or unrated above the bar; never 👎
+        ids = member_ids(v.db, topic)
         kept = {}
         for k, a in by.items():
             a.items = [it for it in a.items if it["id"] in ids]

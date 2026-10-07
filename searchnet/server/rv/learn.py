@@ -13,6 +13,7 @@ No stopword list: common words get low weight through learning/IDF.
 
 import json
 import math
+import re
 import random
 from collections import Counter, defaultdict
 
@@ -269,6 +270,9 @@ class TopicScorer:
         alpha = min(0.85, n / (n + 4))
         final = (1 - alpha) * base + alpha * learned
         final = self._apply_reasons(it, final, why)
+        up = self._why_raise(x)
+        if up:
+            why["raise"] = up
         why["lower"] = self._why_lower(x) + why.get("lower", [])
         # dedupe, drop the topic's own words, cap
         out, seen = [], set()
@@ -293,6 +297,7 @@ class TopicScorer:
             if hit:
                 score *= max(0.1, 1 - 0.6 * min(3, len(hit)))
                 flags += sorted(hit)[:3]
+                why["anti"] = sorted(hit)[:3]
         d = it.get("duration") or 0
         if self.prefs.get("avoid_short") and 0 < d < 30:
             score *= 0.4
@@ -303,6 +308,46 @@ class TopicScorer:
         if flags:
             why["lower"] = flags + why.get("lower", [])
         return score
+
+    def _why_raise(self, x, n=3):
+        """This item's own words/tags that pull its score UP: the classifier's positive weights,
+        else the liked profile. The 'why yes' half of the explanation."""
+        src = self.w if self.w else dict(self.pc)
+        if not src:
+            return []
+        scored = sorted(((x[k] * src[k], k) for k in x if src.get(k, 0) > 0), reverse=True)
+        out, seen = [], set()
+        for contrib, k in scored:
+            if contrib <= 0.02:
+                break
+            if k[0] in "sdmq":
+                continue
+            label = self.readable(k)
+            base = label.lstrip("#@").lower()
+            if base in seen or light_stem(base) in self.seed_stems:
+                continue
+            seen.add(base)
+            out.append(label)
+            if len(out) >= n:
+                break
+        return out
+
+    def distinct_terms(self, it, n=8):
+        """The post's own distinctive words (not the topic's): offered as reasons when a vote surprises the model."""
+        skip = set(self.seed_stems) | set(self.anti)
+        out, seen = [], set()
+        tags = (it.get("hashtags") or "").lower().split() + [m.lower() for m in re.findall(r"#(\w+)", it.get("text") or "")]
+        for h in tags:
+            if light_stem(h) not in skip and h not in seen:
+                seen.add(h)
+                out.append("#" + h)
+        freq = Counter(t for t in tokens(it.get("text")) if len(t) > 3 and light_stem(t) not in skip
+                       and self.scale(light_stem(t)) > 0.3)
+        for w, _ in sorted(freq.items(), key=lambda kv: (-kv[1], -len(kv[0]))):
+            if w not in seen:
+                seen.add(w)
+                out.append(w)
+        return out[:n]
 
     def _why_lower(self, x, n=3):
         """This item's own words/tags that you tend to 👎 — the 'why not' hint.
@@ -381,6 +426,37 @@ class TopicScorer:
         fmt = lambda lst: [{"feature": k, "label": self.readable(k), "weight": round(v, 3)}  # noqa: E731
                            for k, v in lst]
         return fmt(pos), fmt(neg)
+
+
+# ── what counts as "in" a topic (the web, the dossier, people lists) ──────────
+#  👍 always · 👎 never · unrated only when its score clears the bar and no anti keyword hit.
+#  The bar sits halfway between what you liked and what you didn't once both have a few votes.
+def threshold(rows):
+    pos = [r["score"] for r in rows if r["label"] > 0 and r["score"] is not None]
+    neg = [r["score"] for r in rows if r["label"] < 0 and r["score"] is not None]
+    if len(pos) >= 3 and len(neg) >= 3:
+        return clip((sum(pos) / len(pos) + sum(neg) / len(neg)) / 2, 0.35, 0.65)
+    return 0.5
+
+
+def is_member(row, tau):
+    if row["label"] > 0:
+        return True
+    if row["label"] < 0:
+        return False
+    try:
+        why = json.loads(row.get("why") or "{}") if isinstance(row.get("why"), str) else (row.get("why") or {})
+    except ValueError:
+        why = {}
+    if why.get("anti"):
+        return False
+    return (row["score"] or 0) >= tau
+
+
+def member_ids(db, topic_id):
+    rows = db.q("SELECT item_id, label, score, why FROM topic_items WHERE topic_id=?", (topic_id,))
+    tau = threshold(rows)
+    return {r["item_id"] for r in rows if is_member(r, tau)}
 
 
 def query_stats(db, topic_id):

@@ -114,9 +114,11 @@
   // votes → which topics an account's items sit in
   async function voteIndex() {
     const votes = await idb.all('votes'); const byItem = new Map();
-    votes.forEach((v) => { (byItem.get(v.item_id) || byItem.set(v.item_id, []).get(v.item_id)).push(v); });
+    const byTopic = {}; votes.forEach((v) => (byTopic[v.topic_id] = byTopic[v.topic_id] || []).push(v));
+    const tau = {}; for (const tid in byTopic) tau[tid] = L.learn ? L.learn.threshold(byTopic[tid]) : 0.5;
+    votes.forEach((v) => { v.member = L.learn ? L.learn.isMember(v, tau[v.topic_id]) : v.label >= 0; (byItem.get(v.item_id) || byItem.set(v.item_id, []).get(v.item_id)).push(v); });
     const topics = {}; (await idb.all('topics')).forEach((t) => topics[t.id] = t.name);
-    return { byItem, topics };
+    return { byItem, topics, tau };
   }
 
   function cadence(items) {
@@ -197,7 +199,7 @@
     const { by, idf, hDF, wDF } = await build();
     const { byItem } = await voteIndex();
     let accounts = [...by.values()];
-    if (opts.topic) accounts = accounts.filter((a) => a.items.some((it) => (byItem.get(it.id) || []).some((v) => v.topic_id === opts.topic)));
+    if (opts.topic) accounts = accounts.filter((a) => a.items.some((it) => (byItem.get(it.id) || []).some((v) => v.topic_id === opts.topic && v.member)));
     if (opts.platform) accounts = accounts.filter((a) => a.platform === opts.platform);
     accounts.sort((a, b) => nPosts(b.items) - nPosts(a.items));
     const cap = Math.min(opts.max || 60, 120);
@@ -229,7 +231,7 @@
     const { byItem, topics } = await voteIndex();
     const meta = await allMeta();
     let rows = [...by.values()];
-    if (opts.topic) rows = rows.filter((a) => a.items.some((it) => (byItem.get(it.id) || []).some((v) => v.topic_id === opts.topic)));
+    if (opts.topic) rows = rows.filter((a) => a.items.some((it) => (byItem.get(it.id) || []).some((v) => v.topic_id === opts.topic && v.member)));
     if (opts.q) { const q = opts.q.toLowerCase(); rows = rows.filter((a) => (a.author + ' ' + a.author_name).toLowerCase().includes(q)); }
     if (opts.platform) rows = rows.filter((a) => a.platform === opts.platform);
     const platforms = {}; for (const a of by.values()) platforms[a.platform] = (platforms[a.platform] || 0) + 1;
@@ -264,7 +266,7 @@
     const focus = parseFocus(opts.focus);
     let items = await idb.all('items');
     if (opts.platform) items = items.filter((it) => it.platform === opts.platform);
-    if (opts.topic) { const { byItem } = await voteIndex(); items = items.filter((it) => (byItem.get(it.id) || []).some((v) => v.topic_id === opts.topic)); }   // only what this topic found
+    if (opts.topic) { const { byItem } = await voteIndex(); items = items.filter((it) => (byItem.get(it.id) || []).some((v) => v.topic_id === opts.topic && v.member)); }   // only what is in this topic: 👍, or unrated above the bar; never 👎
     // per-post term sets → co-occurrence; per-account usage counts
     const nodeW = {}, edgeW = {}; const kindOf = {}; const nodeN = {};          // nodeN = posts behind each node
     const bump = (k, w) => { nodeW[k] = (nodeW[k] || 0) + w; nodeN[k] = (nodeN[k] || 0) + 1; };

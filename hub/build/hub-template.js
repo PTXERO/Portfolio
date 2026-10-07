@@ -155,7 +155,7 @@ async function searchnetRoutes(request, env, url, q) {
     return snJson({ error: String(e && e.message || e) }, 502);
   }
 }
-const SN_PATHS = new Set(['/search', '/account', '/follows', '/resolve', '/fetch', '/health']);
+const SN_PATHS = new Set(['/search', '/account', '/follows', '/resolve', '/fetch', '/discover', '/health']);
 
 export default {
   async scheduled(event, env) {

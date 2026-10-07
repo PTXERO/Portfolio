@@ -25,7 +25,7 @@
  * ───────────────────────────────────────────────────────────────── */
 
 const HUB_VERSION = "2.0";
-const SN_VERSION = "1.3";
+const SN_VERSION = "1.4";
 const UA = "SearchNetWorker/1.0 (+https://github.com/)";
 const INVIDIOUS = ["https://yewtu.be", "https://invidious.nerdvpn.de", "https://invidious.jing.rocks"];
 const DEFAULT_SUPABASE = 'https://tfquiunqquuctgkpmiba.supabase.co';
@@ -240,7 +240,8 @@ const stripHtml = (s) => (s || "").replace(/<br\s*\/?>(?=)|<\/p>\s*<p[^>]*>/gi, 
 const toTs = (v) => { if (!v) return null; if (typeof v === "number") return v > 1e12 ? Math.floor(v / 1000) : v;
   const t = Date.parse(v); return isNaN(t) ? null : Math.floor(t / 1000); };
 const tag = (s) => (s || "").toLowerCase().replace(/[^a-z0-9_]+/g, "");
-const wantText = (q) => (q.media || "") === "everything";   // 'everything' = posts, replies, comments too — not only media
+const wantText = (q) => (q.media || "") === "everything";
+const withExtra = (q) => [q.q || "", q.qx || ""].map((s) => s.trim()).filter(Boolean).join(" ");   // 'everything' = posts, replies, comments too — not only media
 const vidExt = /\.(mp4|webm|mov|m4v|mkv|gifv)(\?|$)/i;
 const imgExt = /\.(jpe?g|png|gif|webp|avif)(\?|$)/i;
 
@@ -320,6 +321,45 @@ const SOURCES = {
   async rss(q, limit) {
     const xml = await getText(q.url);
     return parseFeed(xml, limit, q.media === "all" || wantText(q));
+  },
+
+  // Google News: global, national and local papers, TV, wires. q.region = US, GB, AU … (default US)
+  async news(q, limit) {
+    const gl = (q.region || "US").toUpperCase().slice(0, 2);
+    const xml = await getText(`https://news.google.com/rss/search?q=${encodeURIComponent(withExtra(q))}&hl=en-${gl}&gl=${gl}&ceid=${gl}:en`);
+    return parseFeed(xml, limit, true, "news");
+  },
+  // GDELT: a running index of world news articles, searchable back years. Phrases go in quotes.
+  async gdelt(q, limit) {
+    const d = await getJSON(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(withExtra(q))}&mode=ArtList&maxrecords=${Math.min(limit, 250)}&format=json&sort=DateDesc`);
+    return (d.articles || []).map((a) => item({
+      id: "gdelt:" + hash(a.url), platform: "news", media: "post", url: a.url,
+      author: a.domain || hostOf(a.url), author_name: a.domain || "", text: a.title || "",
+      posted_at: a.seendate ? toTs(a.seendate.replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/, "$1-$2-$3T$4:$5:$6Z")) : null,
+      lang: a.language || null, thumbnail: a.socialimage || null,
+    }));
+  },
+  // The open web through Bing's RSS output: blogs, forums, school and company sites, obituaries, anything indexed.
+  async web(q, limit) {
+    const xml = await getText(`https://www.bing.com/search?format=rss&q=${encodeURIComponent(withExtra(q))}&count=${Math.min(limit, 50)}`);
+    return parseFeed(xml, limit, true, "web");
+  },
+  // Hacker News (Algolia): tech and startup discussion, free full-text search
+  async hn(q, limit) {
+    const d = await getJSON(`https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(withExtra(q))}&tags=story&hitsPerPage=${Math.min(limit, 100)}`);
+    return (d.hits || []).map((h) => item({
+      id: "hn:" + h.objectID, platform: "hackernews", media: "post", url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`,
+      author: h.author || "", text: h.title || "", posted_at: h.created_at_i || null, likes: h.points || 0, replies: h.num_comments || 0,
+    }));
+  },
+  // Internet Archive: books, newspapers, recordings, old sites, full-text search over its catalogue
+  async archive(q, limit) {
+    const d = await getJSON(`https://archive.org/advancedsearch.php?q=${encodeURIComponent(withExtra(q))}&fl[]=identifier&fl[]=title&fl[]=description&fl[]=date&fl[]=mediatype&fl[]=creator&rows=${Math.min(limit, 100)}&output=json`);
+    return ((d.response || {}).docs || []).map((x) => item({
+      id: "archive:" + x.identifier, platform: "archive", media: "post", url: `https://archive.org/details/${x.identifier}`,
+      author: Array.isArray(x.creator) ? x.creator[0] : (x.creator || "archive.org"), text: [x.title, Array.isArray(x.description) ? x.description[0] : x.description].filter(Boolean).join("\n").slice(0, 1500),
+      posted_at: toTs(x.date), hashtags: x.mediatype ? String(x.mediatype) : "",
+    }));
   },
 
   // Any site with a search-results page: read the page itself (JSON-LD entries, result links, plain media).
@@ -569,7 +609,7 @@ function item(o) {
 }
 const num = (v) => { const n = Number(v); return isFinite(n) ? Math.round(n) : 0; };
 
-function parseFeed(xml, limit, allMedia) {
+function parseFeed(xml, limit, allMedia, brand) {
   const out = [];
   const blocks = xml.split(/<(?:item|entry)[\s>]/i).slice(1);
   for (const raw of blocks) {
@@ -587,11 +627,13 @@ function parseFeed(xml, limit, allMedia) {
     if (!vid && /youtu\.?be|vimeo|tiktok|streamable/.test(link)) media = "video";
     if (media === "post" && !allMedia) continue;
     const thumb = attr(/<media:thumbnail[^>]*url=["']([^"']+)/i);
+    const srcName = pick(/<source[^>]*>([^<]+)<\/source>/i);
     out.push(item({
-      id: vid ? "youtube:" + vid : "rss:" + hash(link || mediaUrl),
-      platform: vid ? "youtube" : "rss", media,
+      id: vid ? "youtube:" + vid : (brand || "rss") + ":" + hash(link || mediaUrl),
+      platform: vid ? "youtube" : (brand || "rss"), media,
       url: link || mediaUrl, media_url: !vid && media === "video" ? mediaUrl : null,
-      author: pick(/<(?:author|dc:creator)[^>]*>(?:<name>)?([^<]+)/i),
+      author: pick(/<(?:author|dc:creator)[^>]*>(?:<name>)?([^<]+)/i) || srcName || (brand ? hostOf(link) : ""),
+      author_name: srcName || "",
       text: [pick(/<title[^>]*>([^<]+)/i), pick(/<(?:description|summary|media:description)[^>]*>([\s\S]*?)<\//i)].filter(Boolean).join("\n"),
       posted_at: toTs(pick(/<(?:pubDate|published|updated|dc:date)[^>]*>([^<]+)/i)),
       thumbnail: thumb || null,
@@ -599,7 +641,35 @@ function parseFeed(xml, limit, allMedia) {
   }
   return out;
 }
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return ""; } };
 function hash(s) { let h = 0; for (let i = 0; i < (s || "").length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+
+async function discoverSite(u) {
+  const origin = new URL(u).origin; const out = { url: u, host: hostOf(u), feeds: [], search: null };
+  let html = ""; try { html = (await getText(origin + "/", { "Accept-Language": "en" })).slice(0, 400000); } catch (e) { out.error = e.message; }
+  const abs = (h) => { try { return new URL(h, origin).href; } catch (e) { return null; } };
+  for (const m of html.matchAll(/<link[^>]+>/gi)) {
+    const t = m[0]; if (!/application\/(?:rss|atom)\+xml/i.test(t)) continue;
+    const href = (t.match(/href=["']([^"']+)/i) || [])[1]; const title = (t.match(/title=["']([^"']+)/i) || [])[1] || "";
+    if (href && out.feeds.length < 6) out.feeds.push({ url: abs(href), title: stripHtml(title) });
+  }
+  if (!out.feeds.length) {
+    for (const path of ["/feed", "/rss", "/feed.xml", "/rss.xml", "/atom.xml", "/?feed=rss2", "/feeds/posts/default"]) {
+      try { const r = await fetch(origin + path, { headers: { "User-Agent": UA }, redirect: "follow" }); const ct = r.headers.get("Content-Type") || "";
+        if (r.ok && /xml|rss|atom/i.test(ct)) { out.feeds.push({ url: r.url, title: "" }); break; } } catch (e) { /* next */ }
+    }
+  }
+  // a search form: <form action=…><input name=q|s|search|query>
+  for (const f of html.matchAll(/<form[^>]*>([\s\S]*?)<\/form>/gi)) {
+    const open = f[0].match(/<form[^>]*>/i)[0]; const inner = f[1];
+    const inp = inner.match(/<input[^>]+(?:type=["']search["']|name=["'](?:q|s|search|query|keyword|keywords|term)["'])[^>]*>/i); if (!inp) continue;
+    const name = (inp[0].match(/name=["']([^"']+)/i) || [])[1]; if (!name) continue;
+    const action = (open.match(/action=["']([^"']*)/i) || [])[1] || "/";
+    const a = abs(action) || origin + "/"; out.search = a + (a.includes("?") ? "&" : "?") + name + "={q}"; break;
+  }
+  if (!out.search) out.search_guess = origin + "/?s={q}";
+  return out;
+}
 
 async function resolveMedia(u) {
   if (!u) return null;
@@ -643,6 +713,10 @@ async function searchnetRoutes(request, env, url, q) {
       if (p === "/resolve") {                 // best-effort direct media URL for an item link
         return snJson({ url: await resolveMedia(q.url) });
       }
+      if (p === "/discover") {                 // a site → its feeds and search page, so it can become a source
+        if (!/^https?:\/\//.test(q.url || "")) return snJson({ error: "bad url" }, 400);
+        return snJson(await discoverSite(q.url));
+      }
       if (p === "/fetch") {                    // CORS proxy for a page/API the browser can't reach
         if (!/^https?:\/\//.test(q.url || "")) return snJson({ error: "bad url" }, 400);
         const r = await fetch(q.url, { headers: { "User-Agent": UA, Accept: "*/*" } });
@@ -656,7 +730,7 @@ async function searchnetRoutes(request, env, url, q) {
     return snJson({ error: String(e && e.message || e) }, 502);
   }
 }
-const SN_PATHS = new Set(['/search', '/account', '/follows', '/resolve', '/fetch', '/health']);
+const SN_PATHS = new Set(['/search', '/account', '/follows', '/resolve', '/fetch', '/discover', '/health']);
 
 export default {
   async scheduled(event, env) {

@@ -430,7 +430,7 @@ class Vault:
         try:
             for item in adapter(ctx, src, query, limit):
                 job.check()
-                if not self.accept(item, opts) or item["id"] in seen:
+                if not (self.accept(item, opts) or src.get("kind") in S.ARTICLE_KINDS) or item["id"] in seen:
                     continue
                 seen.add(item["id"])
                 res = self.db.upsert(item)
@@ -676,6 +676,22 @@ class Vault:
                 self.link(tid, iid, "meaning", "library")
                 swept += 1
         job.log(f"  + {swept} matches from your library")
+        # which sites talked about it (news / web results) → offered as sources in the dossier
+        sites = dict(st.get("sites") or {})
+        for it in self.db.get_many(set(new)).values():
+            if it.get("platform") not in ("news", "web", "hackernews", "archive") or not it.get("url"):
+                continue
+            host = S.domain_of(it["url"])
+            if not host or host.endswith(("google.com", "bing.com")):
+                continue
+            s = sites.setdefault(host, {"n": 0, "first": now()})
+            s["n"] += 1
+            s["last"] = now()
+            if not s.get("title") and it.get("author_name"):
+                s["title"] = it["author_name"]
+        if sites:
+            self.update_topic(tid, {"settings": {"sites": sites}})
+            job.log(f"  {len(sites)} sites mention it (dossier → SITES)")
         n = TopicScorer(self, tid).rescore()
         job.stats["linked"] = n
         job.done += 1
@@ -730,11 +746,21 @@ class Vault:
         label = 1 if label > 0 else -1 if label < 0 else 0
         self.db.exec("INSERT OR IGNORE INTO topic_items(topic_id, item_id, added) VALUES (?,?,?)",
                      (tid, item_id, now()))
+        prev = self.db.one("SELECT score FROM topic_items WHERE topic_id=? AND item_id=?", (tid, item_id))
+        expected = (prev or {}).get("score") or 0
         self.db.exec("UPDATE topic_items SET label=?, labeled_at=? WHERE topic_id=? AND item_id=?",
                      (label, now(), tid, item_id))
         self.relearn(tid)
-        return self.db.one("SELECT count(*) n, sum(label=1) pos, sum(label=-1) neg FROM topic_items "
-                           "WHERE topic_id=?", (tid,))
+        counts = self.db.one("SELECT count(*) n, sum(label=1) pos, sum(label=-1) neg FROM topic_items "
+                             "WHERE topic_id=?", (tid,))
+        # a vote the model did not see coming: hand back the post's own words so the UI can ask why
+        surprise = None
+        if (label > 0 and expected < 0.35) or (label < 0 and expected > 0.65):
+            it = self.db.get(item_id)
+            surprise = {"expected": round(expected, 2),
+                        "terms": TopicScorer(self, tid).distinct_terms(it) if it else []}
+        counts["surprise"] = surprise
+        return counts
 
     # Built-in downvote reasons → signals the scorer understands. "unrelated"
     # and "dislike" are just a normal 👎 (the model learns the item's features);
@@ -753,10 +779,16 @@ class Vault:
         st = t["settings"]
         prefs = dict(st.get("prefs") or {})
         anti = list(st.get("anti") or [])
+        soft = list(st.get("soft") or [])
         recent = list(st.get("reasons_recent") or [])
         for r in reasons or []:
             key = re.sub(r"[^a-z0-9 ]", "", str(r).strip().lower())
             if not key:
+                continue
+            if vote is not None and vote > 0:          # 👍 + why → a soft keyword (boosts, never required)
+                if len(key) > 1 and key not in soft:
+                    soft.append(key)
+                anti = [a for a in anti if a != key]
                 continue
             if key in self.REASON_PREFS:
                 prefs[self.REASON_PREFS[key]] = True
@@ -770,13 +802,13 @@ class Vault:
                     if len(w) > 1 and w not in anti:
                         anti.append(w)
                 recent = [key] + [x for x in recent if x != key]
-        self.update_topic(tid, {"settings": {"prefs": prefs, "anti": anti[:60],
+        self.update_topic(tid, {"settings": {"prefs": prefs, "anti": anti[:60], "soft": soft[:40],
                                               "reasons_recent": recent[:12]}})
         if vote is not None:
             self.vote(tid, item_id, vote)
         else:
             self.relearn(tid)
-        return {"prefs": prefs, "anti": anti, "reasons_recent": recent[:12]}
+        return {"prefs": prefs, "anti": anti, "soft": soft[:40], "reasons_recent": recent[:12]}
 
     def clear_reason(self, tid, anti=None, pref=None):
         """Remove a reason-based filter (an anti-keyword or a preference)."""
