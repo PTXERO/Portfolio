@@ -26,7 +26,7 @@ const ALLOWED_ORIGIN = 'https://ptxero.neocities.org';
 const SUPABASE  = 'https://tfquiunqquuctgkpmiba.supabase.co'; // ptxero-rf project
 const BUCKET    = 'renders';
 const VIEW_BASE = 'https://ptxero.neocities.org/ascii-render/view.html';
-const RF_PROXY  = 'https://rf.ptxero.net'; // probed by /status (server-side; URL never reaches the client)
+const RF_PROXY  = 'https://rf-proxy.ptxero.workers.dev'; // probed by /status (server-side; URL never reaches the client)
 
 const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function corsHeaders(request) {
