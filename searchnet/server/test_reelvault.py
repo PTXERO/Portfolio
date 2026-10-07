@@ -785,9 +785,12 @@ class TestWordWeb(Base):
         self._seed()
         g = people.word_graph(self.v)
         kinds = {n["kind"] for n in g["nodes"]}
-        self.assertEqual(kinds, {"account", "hashtag", "word"})
+        self.assertEqual(kinds, {"account", "hashtag"})               # words only have grey links: shown when centred on a word
         ids = {n["id"] for n in g["nodes"]}
         self.assertIn("#film", ids)
+        g = people.word_graph(self.v, focus="golden")
+        ids = {n["id"] for n in g["nodes"]}
+        self.assertIn("word", {n["kind"] for n in g["nodes"]})
         self.assertIn("w:golden", ids)
         self.assertTrue(any(e["a"] == "#film" or e["b"] == "#film" for e in g["edges"]))
         # @account focus
@@ -1075,3 +1078,29 @@ class EntitiesAndRoles(Base):
         self.assertEqual({p["author"] for p in rows}, {"wxguy", "neighbor"})
         g2 = word_graph(self.v, topic=t["id"], kinds="account,entity", max_nodes=60, role="outlet")
         self.assertEqual({n["label"] for n in g2["nodes"] if n["kind"] == "account"}, {"tampa bay times"})
+
+
+class LinkEvidence(Base):
+    def test_every_link_says_how_and_where_and_grey_only_nodes_are_gone(self):
+        from rv.people import word_graph
+        t = self.v.create_topic("Isaias", ["hurricane isaias"], settings={"window": "all"})
+        self.add(tweet("1", "@neighbor stay safe, Isaias surge is real #isaias", author="wxguy"),
+                 tweet("2", "Duke Energy crews rolling out after Isaias #isaias", author="neighbor"),
+                 tweet("3", "random words about weather and surge today", author="lurker"))
+        for i in ("x:1", "x:2", "x:3"):
+            self.v.link(t["id"], i, "hurricane isaias", "s")
+            self.v.vote(t["id"], i, 1)
+        self.v.db.exec("INSERT OR REPLACE INTO relations(src, dst, kind, ts) VALUES ('neighbor|x', 'wxguy|x', 'follows', 1)")
+        g = word_graph(self.v, topic=t["id"], kinds="account,hashtag,entity", max_nodes=60)
+        by_pair = {tuple(sorted((e["a"], e["b"]))): e for e in g["edges"]}
+        e = by_pair.get(("@neighbor|x", "@wxguy|x"))
+        self.assertIsNotNone(e)
+        self.assertEqual(e["t"], 1)
+        self.assertEqual(e["ev"]["posts"][0]["id"], "x:1")                      # where: the post with the mention
+        self.assertIn("mention", e["ev"])
+        self.assertIn(e["ev"].get("follow"), ("a>b", "b>a", "mutual"))            # how: the follow and its direction
+        tag = by_pair.get(("#isaias", "@wxguy|x"))
+        self.assertEqual(tag["ev"]["tags"], ["isaias"])
+        labels = {n["label"] for n in g["nodes"]}
+        self.assertNotIn("lurker", labels)                                        # only shared words → not shown
+        self.assertIn("wxguy", labels)

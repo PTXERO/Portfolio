@@ -2483,6 +2483,7 @@ function drawWeb(box, graph){
   edges.forEach(e => { e.pull = edgePull(e, PW); });
   edges.forEach(e => { const a = idx[e.a], b = idx[e.b]; const t = e.t || (e.m ? 1 : 2); deg[a] += e.pull; deg[b] += e.pull; nb[a].push([b, e.pull, t, e]); nb[b].push([a, e.pull, t, e]); });
   nb.forEach(l => l.sort((x, y) => (y[1] - x[1]) || (x[2] - y[2])));   // strongest pull first (then real relationships)
+  whyPanel(box, graph, nodes, idx, nb, deg);
   const maxPull = Math.max(1e-9, ...edges.map(e => e.pull));
   // communities: label propagation over accounts + hashtags only (generic words bridge everything and
   // would smear it into one blob), with hub-normalised weights so big nodes don't swallow the map;
@@ -2607,6 +2608,11 @@ function drawWeb(box, graph){
     ctx.textAlign = 'center';
     for (const L of labels){ const n = L.q.n, txt = (n.kind === 'account' ? '@' : '') + (n.label.length > 18 ? n.label.slice(0, 17) + '…' : n.label); const fs = Math.round(Math.min(13, 9 + 3 * L.q.p)); ctx.font = `${fs}px 'Share Tech Mono', monospace`; const w = ctx.measureText(txt).width + 8, h = fs + 4, x = L.q.X, y = L.q.Y + L.r + 4; if (placed.some(b => Math.abs(b.x - x) < (b.w + w) / 2 && Math.abs(b.y - y) < h)) continue; placed.push({ x, y, w }); ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(7,7,10,.72)'; ctx.fillRect(x - w / 2, y, w, h); ctx.fillStyle = L.i === hi || L.i === fi ? '#fff' : '#c9c9d6'; ctx.fillText(txt, x, y + fs); if (placed.length >= Math.max(12, Math.min(80, Math.floor(st.W * st.H / 9000)))) break; }
     box.dataset.labels = placed.length; box.dataset.edges = drawn.size; box.dataset.zoom = st.zoom.toFixed(2);   // (read by tests / debugging)
+    // hovered link: redraw it bright and say how the two are connected, and where
+    if (hv < 0 && st.hoverEdge && idx[st.hoverEdge.a] != null && idx[st.hoverEdge.b] != null){ const e = st.hoverEdge, a = P[idx[e.a]], b = P[idx[e.b]]; ctx.globalAlpha = 1; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(a.X, a.Y); ctx.lineTo(b.X, b.Y); ctx.stroke();
+      const A = nodes[idx[e.a]], B = nodes[idx[e.b]]; const where = ((e.ev || {}).posts || [])[0]; const lines = [(A.kind === 'account' ? '@' : '') + A.label + '  —  ' + (B.kind === 'account' ? '@' : '') + B.label, edgeReason(e, A, B)]; if (where && where.text) lines.push('“' + where.text.slice(0, 70) + (where.text.length > 70 ? '…' : '') + '”');
+      ctx.font = `12px 'Share Tech Mono', monospace`; const w = Math.min(st.W - 12, Math.max(...lines.map(l => ctx.measureText(l).width)) + 16), h = 14 + 16 * lines.length, x = Math.min(st.W - w - 6, Math.max(6, (a.X + b.X) / 2 + 12)), y = Math.max(6, (a.Y + b.Y) / 2 - h / 2);
+      ctx.fillStyle = '#15151b'; ctx.fillRect(x, y, w, h); ctx.strokeStyle = '#c9c9d6'; ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, w - 1, h - 1); ctx.textAlign = 'left'; lines.forEach((l, k) => { ctx.fillStyle = k === 0 ? '#e2e2ea' : k === 1 ? '#42d4f5' : '#9a9ab0'; ctx.fillText(l, x + 8, y + 16 + 16 * k); }); }
     // hover card
     if (hv >= 0){ const q = P[hv], n = q.n; const cnt = k => nb[hv].filter(l => l[3] && l[3].p && l[3].p[k] > 0).length; const bits = [['m', '@'], ['f', '↔'], ['e', '◆'], ['h', '#'], ['s', 'w']].map(([k, g]) => cnt(k) ? cnt(k) + ' ' + g : '').filter(Boolean).join(' · '); const lines = [(n.kind === 'account' ? '@' : n.kind === 'hashtag' ? '' : '"') + n.label + (n.kind === 'word' ? '"' : ''), `${n.n} post${n.n === 1 ? '' : 's'} · ${nb[hv].length} links${bits ? ' (' + bits + ')' : ''} · pull ${deg[hv].toFixed(1)} · ${comms[commOf[hv]].name}`]; ctx.font = `12px 'Share Tech Mono', monospace`; const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16, x = Math.min(st.W - w - 6, Math.max(6, q.X + 14)), y = Math.max(6, q.Y - 44); ctx.globalAlpha = 1; ctx.fillStyle = '#15151b'; ctx.fillRect(x, y, w, 40); ctx.strokeStyle = colorOf(hv); ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, w - 1, 39); ctx.textAlign = 'left'; ctx.fillStyle = '#e2e2ea'; ctx.fillText(lines[0], x + 8, y + 16); ctx.fillStyle = '#9a9ab0'; ctx.fillText(lines[1], x + 8, y + 32); }
     ctx.globalAlpha = 1;
@@ -2614,6 +2620,7 @@ function drawWeb(box, graph){
   const loop = ts => { webAnim.raf = requestAnimationFrame(loop); if (document.hidden || !box.isConnected) return; if (ts - st.last < 33) return; st.last = ts; if (st.frame < st.settle){ step(); st.frame++; } else if (st.mode === '3d' && st.auto && !st.dragging && st.hover < 0) st.ry += 0.003; draw(); };
   webAnim = { raf: requestAnimationFrame(loop), ro: window.ResizeObserver ? new ResizeObserver(() => { size(); draw(); }) : null }; webAnim.ro && webAnim.ro.observe(box);
   const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  const edgeHit = (x, y) => { const P = st.proj; let best = null, bd = 49; for (const e of edges){ const a = P[idx[e.a]], b = P[idx[e.b]]; if (!a || !b) continue; const dx = b.X - a.X, dy = b.Y - a.Y, L = dx * dx + dy * dy || 1; let u = ((x - a.X) * dx + (y - a.Y) * dy) / L; u = Math.max(0, Math.min(1, u)); const d = (a.X + u * dx - x) ** 2 + (a.Y + u * dy - y) ** 2; if (d < bd){ bd = d; best = e; } } return best; };
   const hit = (x, y) => { let best = -1, bd = 18 * 18; st.proj.forEach((q, i) => { const d = (q.X - x) ** 2 + (q.Y - y) ** 2, rr = Math.max(bd, (q.n.r * q.p + 6) ** 2); if (d < rr && (best < 0 || d < bd)){ bd = d; best = i; } }); return best; };
   const touches = new Map(); let pinch = null;
   const pinchState = () => { const [a, b] = [...touches.values()]; return { d: Math.hypot(a[0] - b[0], a[1] - b[1]), mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2 }; };
@@ -2629,8 +2636,8 @@ function drawWeb(box, graph){
       if (st.mode === '2d'){ const sc = Math.min(st.W, st.H) / 440 * st.zoom; st.panX = pinch.panX + (now.mx - pinch.mx) / sc; st.panY = pinch.panY + (now.my - pinch.my) / sc; }
       st.moved = 99; return;
     }
-    if (st.dragging){ if (st.mode === '2d'){ const sc = Math.min(st.W, st.H) / 440 * st.zoom; st.panX += (x - st.px) / sc; st.panY += (y - st.py) / sc; } else { st.ry += (x - st.px) * 0.008; st.rx = Math.max(-1.4, Math.min(1.4, st.rx + (y - st.py) * 0.006)); st.auto = false; } st.moved += Math.abs(x - st.px) + Math.abs(y - st.py); st.px = x; st.py = y; } else { st.hover = hit(x, y); cv.style.cursor = st.hover >= 0 ? 'pointer' : 'grab'; } };
-  cv.onpointerleave = () => { st.hover = -1; };
+    if (st.dragging){ if (st.mode === '2d'){ const sc = Math.min(st.W, st.H) / 440 * st.zoom; st.panX += (x - st.px) / sc; st.panY += (y - st.py) / sc; } else { st.ry += (x - st.px) * 0.008; st.rx = Math.max(-1.4, Math.min(1.4, st.rx + (y - st.py) * 0.006)); st.auto = false; } st.moved += Math.abs(x - st.px) + Math.abs(y - st.py); st.px = x; st.py = y; } else { st.hover = hit(x, y); st.hoverEdge = st.hover < 0 ? edgeHit(x, y) : null; cv.style.cursor = st.hover >= 0 ? 'pointer' : 'grab'; } };
+  cv.onpointerleave = () => { st.hover = -1; st.hoverEdge = null; };
   cv.onpointerup = cv.onpointercancel = e => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; if (e.type === 'pointercancel'){ st.dragging = false; cv.classList.remove('drag'); return; } st.dragging = false; cv.classList.remove('drag'); if (st.moved > 6) return; const [x, y] = pos(e); const i = hit(x, y); if (i >= 0) webNodeTap(nodes[i]); };
   cv.onwheel = e => { e.preventDefault(); st.zoom = Math.max(.6, Math.min(3.5, st.zoom * (e.deltaY < 0 ? 1.1 : 0.9))); };
   cv.ondblclick = () => { if (st.mode === '2d'){ st.panX = st.panY = 0; st.zoom = 1; } else st.auto = !st.auto; };
@@ -2662,6 +2669,28 @@ function drawWeb(box, graph){
   draw();
 }
 let nwFocusNode = null;   // the node the web is currently centred on (set by drawWeb)
+// how two nodes are connected, in words, from the link's evidence
+function edgeReason(e, A, B){
+  const ev = e.ev || {}, p = e.p || {}, out = [];
+  const nm = n => n.kind === 'account' ? '@' + n.label : n.kind === 'hashtag' ? n.label : n.label;
+  const a = nm(A), b = nm(B);
+  if (p.i > 0) out.push('same person' + (ev.person ? ': ' + ev.person : '') + ' (your link)');
+  if (p.m > 0) out.push(ev.mention ? ev.mention.replace(/^@?/, '@') + (ev.posts && ev.posts.length > 1 ? ' in ' + ev.posts.length + ' posts' : '') : 'one mentions the other');
+  if (p.f > 0) out.push(ev.follow === 'mutual' ? a + ' and ' + b + ' follow each other' : ev.follow === 'a>b' ? (e.a === A.id ? a + ' follows ' + b : b + ' follows ' + a) : ev.follow === 'b>a' ? (e.a === A.id ? b + ' follows ' + a : a + ' follows ' + b) : 'follows');
+  if (p.e > 0) out.push((A.kind === 'entity' || B.kind === 'entity') ? (ev.posts ? 'named in ' + ev.posts.length + ' post' + (ev.posts.length === 1 ? '' : 's') : 'named') : 'both name ' + ((ev.names || []).join(', ') || 'the same thing'));
+  if (p.h > 0) out.push((A.kind === 'hashtag' || B.kind === 'hashtag') ? 'uses the tag' + (ev.posts ? ' in ' + ev.posts.length + ' post' + (ev.posts.length === 1 ? '' : 's') : '') : 'both use ' + ((ev.tags || []).map(t => '#' + t).join(' ') || 'the same tags'));
+  if (!out.length && p.s > 0) out.push('similar words' + ((ev.words || []).length ? ': ' + ev.words.join(', ') : ''));
+  return out.join(' · ') || 'linked';
+}
+function whyPanel(box, graph, nodes, idx, nb, deg){
+  const old = $('#nwWhy'); if (old) old.remove();
+  const fi = graph.focus && idx[graph.focus] != null ? idx[graph.focus] : -1; if (fi < 0) return;
+  const F = nodes[fi]; const rows = nb[fi].slice(0, 24).map(([j, pull, t, e]) => { const N = nodes[j]; const ev = e.ev || {}; const posts = (ev.posts || []).filter(p => p.url);
+    return `<div class="drow"><span class="k"><b class="l${t}">${t === 1 ? '━' : t === 2 ? '─' : '┄'}</b> ${N.kind === 'account' ? '@' : N.kind === 'entity' ? '◆ ' : ''}${esc(N.label)}</span><span class="note grow">${esc(edgeReason(e, F, N))}</span>${posts.map(p => `<a class="pill" href="${esc(p.url)}" target="_blank" rel="noreferrer noopener" title="${esc(p.text)}">↗</a>`).join('')}</div>`; }).join('');
+  const el = document.createElement('div'); el.id = 'nwWhy'; el.className = 'card pad';
+  el.innerHTML = `<b>How ${F.kind === 'account' ? '@' : ''}${esc(F.label)} is connected</b> <span class="note">· ${nb[fi].length} links · ━ real relationship · ─ shared name or tag · ┄ shared words · ↗ the post it comes from</span><div style="margin-top:8px">${rows || '<p class="note">No links yet. Pull more of this account in, or load its follows.</p>'}</div>`;
+  box.insertAdjacentElement('afterend', el);
+}
 function webNodeTap(n){
   nwSel = n.id;
   // every kind of node centres the web on itself; tapping the account you're already centred on opens its profile
