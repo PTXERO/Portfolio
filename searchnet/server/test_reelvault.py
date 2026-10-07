@@ -1317,3 +1317,20 @@ class Signals(Base):
         r = SIG.build(self.v, t["id"])
         self.assertEqual(r["n"], 6)
         self.assertIn("badge", r)
+
+
+class FocusOnAName(Base):
+    def test_centring_on_a_named_thing_uses_its_diamond_not_a_second_word_node(self):
+        from rv.people import word_graph
+        t = self.v.create_topic("Isaias", ["isaias"], settings={"window": "all"})
+        for i in range(5):
+            self.v.db.upsert(post(f"d{i}", f"Duke Energy crews restored power in Collier County after Isaias #isaias {i}", f"u{i}", now() - i * 3600))
+            self.v.link(t["id"], f"x:d{i}", "isaias", "s")
+            self.v.vote(t["id"], f"x:d{i}", 1)
+        g = word_graph(self.v, focus='"duke energy"', topic=t["id"], kinds="account,hashtag,word,entity", max_nodes=60)
+        self.assertEqual(g["focus"], "e:duke energy")
+        ids = [n["id"] for n in g["nodes"]]
+        self.assertIn("e:duke energy", ids)
+        self.assertNotIn("w:duke energy", ids)
+        self.assertEqual(next(n for n in g["nodes"] if n["id"] == g["focus"])["hop"], 0)
+        self.assertTrue(all(n["hop"] is not None for n in g["nodes"]))

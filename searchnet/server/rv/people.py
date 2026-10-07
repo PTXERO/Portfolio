@@ -861,6 +861,14 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
             for y in range(x + 1, len(members)):
                 link(members[x], members[y], 5, 1, "i", {"person": i.get("name") or ""})
 
+    # centred on a named thing ("duke energy"): the diamond itself is the centre, not a second word node for the phrase
+    if fz and fz["kind"] == "word" and ("e:" + fz["key"]) in kind_of:
+        wk = "w:" + fz["key"]
+        kind_of.pop(wk, None)
+        node_w.pop(wk, None)
+        for k in [k for k in edge_w if wk in k]:
+            del edge_w[k]
+        fz = dict(fz, kind="entity")
     # ── term selection (VOSviewer): minimum occurrences, then keep the most *relevant* 60% ──
     min_occ = max(2, round(n_posts * 0.01))
     is_focus_word = lambda k: bool(fz and fz["kind"] == "word" and k == "w:" + fz["key"])  # noqa: E731
@@ -874,7 +882,7 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
             node_w.pop(k, None)
     for k in [k for k, kind in kind_of.items() if kind == "entity"]:
         accts = {a for (a, b) in edge_w if (a == k or b == k) for a in ((a if b == k else b),) if kind_of.get(a) == "account"}
-        if node_n[k] < 2 and len(accts) < 2 and n_acc > 3:      # a small view keeps its names
+        if node_n[k] < 2 and len(accts) < 2 and n_acc > 3 and not (fz and fz["kind"] == "entity" and k == "e:" + fz["key"]):      # a small view keeps its names; the centre always stays
             kind_of.pop(k, None)
             node_w.pop(k, None)
     for (a, b) in list(edge_w):
@@ -900,6 +908,8 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
             focus_id = next((k for k in kind_of if k.startswith("@" + fz["key"] + "|")), None)
         elif fz["kind"] == "hashtag":
             focus_id = "#" + fz["key"]
+        elif fz["kind"] == "entity":
+            focus_id = "e:" + fz["key"]
         else:
             focus_id = "w:" + fz["key"]
     # ego network: everything within `hops` of the focus, walking only links of the kinds in `via`

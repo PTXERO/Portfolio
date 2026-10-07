@@ -377,7 +377,7 @@
     const scored = wordIds.filter((k) => (nodeN[k] || 0) >= minOcc || isFocusWord(k)).map((k) => [k, (nodeN[k] || 0) * Math.log((nAcc + 1) / ((acctDF[k.slice(2)] || 0) + 1))]).sort((a, b) => b[1] - a[1]);
     scored.slice(0, Math.max(10, Math.ceil(scored.length * 0.6))).forEach(([k]) => keepW.add(k)); scored.forEach(([k]) => { if (isFocusWord(k)) keepW.add(k); });
     for (const k of wordIds) if (!keepW.has(k)) { delete kindOf[k]; delete nodeW[k]; }
-    for (const k of Object.keys(kindOf).filter((k) => kindOf[k] === 'entity')) { const accts = new Set(); for (const ek in edgeW) { const [a, b] = ek.split('\u0001'); if (a === k && kindOf[b] === 'account') accts.add(b); else if (b === k && kindOf[a] === 'account') accts.add(a); } if ((nodeN[k] || 0) < 2 && accts.size < 2 && nAcc > 3) { delete kindOf[k]; delete nodeW[k]; } }
+    for (const k of Object.keys(kindOf).filter((k) => kindOf[k] === 'entity')) { const accts = new Set(); for (const ek in edgeW) { const [a, b] = ek.split('\u0001'); if (a === k && kindOf[b] === 'account') accts.add(b); else if (b === k && kindOf[a] === 'account') accts.add(a); } if ((nodeN[k] || 0) < 2 && accts.size < 2 && nAcc > 3 && !(focus && focus.kind === 'word' && k === 'e:' + focus.key)) { delete kindOf[k]; delete nodeW[k]; } }
     for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (!kindOf[a] || !kindOf[b]) delete edgeW[k]; }
     // ── edge weights (association strength): co-occurrence vs. what chance predicts from each term's frequency ──
     for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (kindOf[a] === 'account' || kindOf[b] === 'account') continue;
@@ -385,7 +385,9 @@
       const nw = Math.sqrt(co) * Math.log(1 + as), P = edgeP[k]; if (P && co) for (const kk in P) P[kk] *= nw / co; edgeW[k] = nw; }
     // pick nodes: around the focus, else the heaviest of each kind
     let ids;
-    let focusId = focus ? (focus.kind === 'account' ? Object.keys(kindOf).find((k) => k.startsWith('@' + focus.key + '|')) : focus.kind === 'hashtag' ? '#' + focus.key : 'w:' + focus.key) : null;
+    // centred on a named thing ("duke energy"): the diamond itself is the centre, not a second word node for the phrase
+    if (focus && focus.kind === 'word' && kindOf['e:' + focus.key]) { const wk = 'w:' + focus.key; delete kindOf[wk]; delete nodeW[wk]; for (const k in edgeW) if (k.split('\u0001').includes(wk)) { delete edgeW[k]; delete edgeT[k]; delete edgeP[k]; delete edgeEv[k]; } focus.kind = 'entity'; }
+    let focusId = focus ? (focus.kind === 'account' ? Object.keys(kindOf).find((k) => k.startsWith('@' + focus.key + '|')) : focus.kind === 'hashtag' ? '#' + focus.key : focus.kind === 'entity' ? 'e:' + focus.key : 'w:' + focus.key) : null;
     const nb = (id) => { const out = []; for (const k in edgeW) { const [x, y] = k.split('\u0001'); if (x === id) out.push([y, edgeW[k], edgeT[k]]); else if (y === id) out.push([x, edgeW[k], edgeT[k]]); } return out.sort((p, q) => (p[2] - q[2]) || (q[1] - p[1])); };
     // ego network: everything within `hops` of the focus, walking only links of the kinds in `via`
     // (default: mentions, follows, shared tags — a shared word is not a hop). Nearer hops fill first,
