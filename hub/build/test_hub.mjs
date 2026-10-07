@@ -36,7 +36,8 @@ async function ident(uid) {
   const spki = b64u(await crypto.subtle.exportKey('spki', kp.publicKey));
   return { uid, kp, spki, async headers(method, path, extra) { const ts = Math.floor(Date.now() / 1000), nonce = Math.random().toString(36).slice(2); const msg = new TextEncoder().encode([uid, ts, nonce, method, path].join('\n')); const sig = b64u(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, kp.privateKey, msg)); return Object.assign({ 'X-PX-Uid': uid, 'X-PX-Pub': spki, 'X-PX-Ts': String(ts), 'X-PX-Nonce': nonce, 'X-PX-Sig': sig }, extra || {}); } };
 }
-const call = async (method, path, id, body, extraHeaders) => { const headers = id ? await id.headers(method, path.split('?')[0], extraHeaders) : (extraHeaders || {});   // signed over the pathname, like ptxero-id.js const init = { method, headers }; if (body !== undefined) { init.body = typeof body === 'string' ? body : JSON.stringify(body); headers['Content-Type'] = headers['Content-Type'] || 'application/json'; } const r = await W.fetch(new Request('https://hub.test' + path, init), env); let j = null; try { j = await r.clone().json(); } catch (e) {} return { status: r.status, j, r }; };
+// requests are signed over the pathname, like ptxero-id.js does
+const call = async (method, path, id, body, extraHeaders) => { const headers = id ? await id.headers(method, path.split('?')[0], extraHeaders) : (extraHeaders || {}); const init = { method, headers }; if (body !== undefined) { init.body = typeof body === 'string' ? body : JSON.stringify(body); headers['Content-Type'] = headers['Content-Type'] || 'application/json'; } const r = await W.fetch(new Request('https://hub.test' + path, init), env); let j = null; try { j = await r.clone().json(); } catch (e) {} return { status: r.status, j, r }; };
 
 const me = await ident('AB12'), other = await ident('AB12'), admin = await ident('AD01');
 // 1. health is free and says it's a hub
