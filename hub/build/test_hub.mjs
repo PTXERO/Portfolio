@@ -36,7 +36,7 @@ async function ident(uid) {
   const spki = b64u(await crypto.subtle.exportKey('spki', kp.publicKey));
   return { uid, kp, spki, async headers(method, path, extra) { const ts = Math.floor(Date.now() / 1000), nonce = Math.random().toString(36).slice(2); const msg = new TextEncoder().encode([uid, ts, nonce, method, path].join('\n')); const sig = b64u(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, kp.privateKey, msg)); return Object.assign({ 'X-PX-Uid': uid, 'X-PX-Pub': spki, 'X-PX-Ts': String(ts), 'X-PX-Nonce': nonce, 'X-PX-Sig': sig }, extra || {}); } };
 }
-const call = async (method, path, id, body, extraHeaders) => { const headers = id ? await id.headers(method, path, extraHeaders) : (extraHeaders || {}); const init = { method, headers }; if (body !== undefined) { init.body = typeof body === 'string' ? body : JSON.stringify(body); headers['Content-Type'] = headers['Content-Type'] || 'application/json'; } const r = await W.fetch(new Request('https://hub.test' + path, init), env); let j = null; try { j = await r.clone().json(); } catch (e) {} return { status: r.status, j, r }; };
+const call = async (method, path, id, body, extraHeaders) => { const headers = id ? await id.headers(method, path.split('?')[0], extraHeaders) : (extraHeaders || {});   // signed over the pathname, like ptxero-id.js const init = { method, headers }; if (body !== undefined) { init.body = typeof body === 'string' ? body : JSON.stringify(body); headers['Content-Type'] = headers['Content-Type'] || 'application/json'; } const r = await W.fetch(new Request('https://hub.test' + path, init), env); let j = null; try { j = await r.clone().json(); } catch (e) {} return { status: r.status, j, r }; };
 
 const me = await ident('AB12'), other = await ident('AB12'), admin = await ident('AD01');
 // 1. health is free and says it's a hub
@@ -66,7 +66,7 @@ globalThis.__sn = 0; const origFetch = globalThis.fetch; // SearchNet routes cal
 globalThis.fetch = async (u, o) => (String(u).includes('bsky.app') ? { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ posts: [] }), text: async () => '{}' } : origFetch(u, o));
 r = await call('GET', '/search?source=bluesky&q=cat', null, undefined, { 'CF-Connecting-IP': '9.9.9.9' }); ok(r.status === 200, 'anonymous search #1 ok');
 r = await call('GET', '/search?source=bluesky&q=cat', null, undefined, { 'CF-Connecting-IP': '9.9.9.9' }); ok(r.status === 429 && /Anonymous/.test(r.j.hint), 'anonymous search #2 → 429 (anon_fetch 1)');
-let last; for (let i = 0; i < 4; i++) last = await call('GET', '/search?source=bluesky&q=cat', me); ok(last.status === 429 && /own hub/.test(last.j.hint), 'identity: 4th search → 429 (fetch 3)');
+let last; for (let i = 0; i < 4; i++) last = await call('GET', '/search?source=bluesky&q=cat', me); ok(last.status === 429 && /pool/.test(last.j.hint), 'identity: 4th search → 429 (fetch 3)');
 DB.hub_usage = {}; // a new day
 // 6b. shared result cache: a search someone already made recently is free for the next asker
 { const store = new Map(); globalThis.caches = { default: { match: async (req) => { const v = store.get(req.url); return v ? new Response(v) : undefined; }, put: async (req, res) => { store.set(req.url, await res.text()); } } };
