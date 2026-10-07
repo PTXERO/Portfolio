@@ -2490,7 +2490,13 @@ function drawWeb(box, graph){
   // words then join whichever community most of their neighbours are in.
   const core = i => nodes[i].kind !== 'word';
   let lab = nodes.map((_, i) => i);
-  const order = nodes.map((_, i) => i).sort((x, y) => deg[y] - deg[x]);
+  // what pulls a node to the centre: its real relationships (tier 1) count in full, shared names and tags (tier 2)
+  // about half, shared words barely. Many strong links → inside; a few weak ones → the rim.
+  const TIER_W = { 1: 1, 2: 0.45, 3: 0.08 };
+  const strong = new Array(nodes.length).fill(0);
+  edges.forEach(e => { const a = idx[e.a], b = idx[e.b]; const w = e.pull * (TIER_W[e.t] || 0.08) + (e.t === 1 ? 2 : e.t === 2 ? 0.6 : 0); strong[a] += w; strong[b] += w; });
+  const maxStrong = Math.max(1e-9, ...strong);
+  const order = nodes.map((_, i) => i).sort((x, y) => (strong[y] - strong[x]) || (deg[y] - deg[x]));
   const nw = (i, j, w) => w / Math.sqrt((deg[i] || 1) * (deg[j] || 1));
   for (let it = 0; it < 25; it++){ let changed = 0; for (const i of order){ if (!core(i) || !nb[i].length) continue; const sc = {}; nb[i].forEach(([j, w]) => { if (core(j)) sc[lab[j]] = (sc[lab[j]] || 0) + nw(i, j, w); }); let best = lab[i], bs = -1; for (const k in sc) if (sc[k] > bs || (sc[k] === bs && +k < best)){ bs = sc[k]; best = +k; } if (best !== lab[i]){ lab[i] = best; changed++; } } if (!changed) break; }
   // accounts follow the tags they use most (keeps an account with its subject, not with a stray mention)
@@ -2515,7 +2521,7 @@ function drawWeb(box, graph){
     hopRing = i => { const h = nodes[i].hop || maxHop; return 38 + R * ((h - 1 + 0.15 + 0.7 * (posIn[i] || 0)) / maxHop); };
   }
   let ang = 0; const gap = 0.18;
-  comms.forEach(c => { const span = Math.max(0.25, 2 * Math.PI * (c.ids.length / total)) - gap; c.a0 = ang; c.a1 = ang + span; c.ids.sort((x, y) => deg[y] - deg[x]); c.ids.forEach((i, k) => { const t = c.ids.length > 1 ? k / (c.ids.length - 1) : .5; nodes[i].ta = c.a0 + t * span; nodes[i].tr = focus && nodes[i].id === focus ? 0 : hopRing ? hopRing(i) : 38 + R * Math.pow(rankByDeg[i] / Math.max(1, total - 1), .7); }); ang += span + gap; });
+  comms.forEach(c => { const span = Math.max(0.25, 2 * Math.PI * (c.ids.length / total)) - gap; c.a0 = ang; c.a1 = ang + span; c.ids.sort((x, y) => (strong[y] - strong[x]) || (deg[y] - deg[x])); c.ids.forEach((i, k) => { const t = c.ids.length > 1 ? k / (c.ids.length - 1) : .5; nodes[i].ta = c.a0 + t * span; nodes[i].tr = focus && nodes[i].id === focus ? 0 : hopRing ? hopRing(i) : 38 + R * (0.4 * Math.pow(rankByDeg[i] / Math.max(1, total - 1), .7) + 0.6 * (1 - Math.sqrt(strong[i] / maxStrong))); }); ang += span + gap; });
   // influence = betweenness centrality (Brandes): the nodes that bridge different parts of the web
   const between = (() => { const bc = new Array(total).fill(0); for (let sIdx = 0; sIdx < total; sIdx++){ const S = [], P2 = nodes.map(() => []), sig = new Array(total).fill(0), dist = new Array(total).fill(-1); sig[sIdx] = 1; dist[sIdx] = 0; const Q = [sIdx]; while (Q.length){ const v = Q.shift(); S.push(v); for (const [w] of nb[v]){ if (dist[w] < 0){ dist[w] = dist[v] + 1; Q.push(w); } if (dist[w] === dist[v] + 1){ sig[w] += sig[v]; P2[w].push(v); } } } const delta = new Array(total).fill(0); while (S.length){ const w = S.pop(); for (const v of P2[w]) delta[v] += sig[v] / sig[w] * (1 + delta[w]); if (w !== sIdx) bc[w] += delta[w]; } } return bc; })();
   const maxN = Math.max(1, ...nodes.map(n => n.n)), maxB = Math.max(1e-9, ...between);
@@ -2528,7 +2534,7 @@ function drawWeb(box, graph){
     for (let s = 0; s < steps; s++){
       for (let i = 0; i < total; i++) for (let j = i + 1; j < total; j++){ const a = nodes[i], b = nodes[j]; const dx = a.sx - b.sx, dy = a.sy - b.sy, dz = a.sz - b.sz, d2 = dx*dx + dy*dy + dz*dz + 1, d = Math.sqrt(d2), f = 2600 / d2; a.wx += f*dx/d; a.wy += f*dy/d; a.wz += f*dz/d; b.wx -= f*dx/d; b.wy -= f*dy/d; b.wz -= f*dz/d; }
       edges.forEach(e => { if (e.pull <= 0) return; const a = nodes[idx[e.a]], b = nodes[idx[e.b]]; const dx = b.sx - a.sx, dy = b.sy - a.sy, dz = b.sz - a.sz, d = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1, k = 0.01 * (0.3 + e.pull / maxPull) * (d - 70); a.wx += k*dx/d; a.wy += k*dy/d; a.wz += k*dz/d; b.wx -= k*dx/d; b.wy -= k*dy/d; b.wz -= k*dz/d; });
-      nodes.forEach(n => { if (focus && n.id === focus){ n.wx = n.wy = n.wz = 0; return; } n.wx -= n.sx * 0.004; n.wy -= n.sy * 0.004; n.wz -= n.sz * 0.004; n.sx += Math.max(-9, Math.min(9, n.wx)); n.sy += Math.max(-9, Math.min(9, n.wy)); n.sz += Math.max(-9, Math.min(9, n.wz)); n.wx *= 0.8; n.wy *= 0.8; n.wz *= 0.8; });
+      nodes.forEach((n, i) => { if (focus && n.id === focus){ n.wx = n.wy = n.wz = 0; return; } const g = 0.002 + 0.007 * Math.sqrt(strong[i] / maxStrong); n.wx -= n.sx * g; n.wy -= n.sy * g; n.wz -= n.sz * g; n.sx += Math.max(-9, Math.min(9, n.wx)); n.sy += Math.max(-9, Math.min(9, n.wy)); n.sz += Math.max(-9, Math.min(9, n.wz)); n.wx *= 0.8; n.wy *= 0.8; n.wz *= 0.8; });
     }
     // fit: whatever the clusters did, the ball sits inside the view (centred, furthest node at ~R0)
     let cxm = 0, cym = 0, czm = 0; nodes.forEach(n => { cxm += n.sx; cym += n.sy; czm += n.sz; }); cxm /= total; cym /= total; czm /= total;
@@ -2539,7 +2545,7 @@ function drawWeb(box, graph){
   const legendHTML = () => (st.color === 'kind'
     ? ['account', 'hashtag', 'word'].map(k => `<span><i style="background:${KIND_COLOR[k]}"></i>${k === 'account' ? '@ accounts' : k === 'hashtag' ? '# tags' : 'words'} <em>${nodes.filter(n => n.kind === k).length}</em></span>`).join('')
     : comms.map((c, ci) => `<span><i style="background:${COMM[ci % COMM.length]}"></i>${esc(c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name)} <em>${c.ids.length}</em></span>`).join('')) + '<span class="shapes">● account &nbsp;■ tag &nbsp;○ word</span><span class="shapes"><b class="l1">━</b> mentions / follows &nbsp;<b class="l2">━</b> shared tags &nbsp;<b class="l3">━</b> shared words</span>';
-  const hintHTML = () => 'size = ' + (st.sizeBy === 'influence' ? 'influence' : 'posts') + ' · colour = ' + (st.color === 'kind' ? 'kind' : 'community') + (st.mode === '2d' ? (focus && hopRing ? ' · rings = hops from the centre' : ' · inner = more pull') + ' · drag to move around' : ' · drag to spin') + ' · pull @' + PW.m + ' ↔' + PW.f + ' #' + PW.h + ' w' + PW.s + ' · wheel to zoom · tap a node';
+  const hintHTML = () => 'size = ' + (st.sizeBy === 'influence' ? 'influence' : 'posts') + ' · colour = ' + (st.color === 'kind' ? 'kind' : 'community') + (st.mode === '2d' ? (focus && hopRing ? ' · rings = hops from the centre' : ' · inner = more strong links') + ' · drag to move around' : ' · drag to spin') + ' · pull @' + PW.m + ' ↔' + PW.f + ' #' + PW.h + ' w' + PW.s + ' · wheel to zoom · tap a node';
   nwFocusNode = focus ? nodes[idx[focus]] : null;
   const H = webHops();
   const fb = nwFocusNode ? `<div class="focus">◎ ${nwFocusNode.kind === 'account' && !String(nwFocusNode.id).startsWith('person:') ? '@' : ''}${esc(nwFocusNode.label)}${nwFocusNode.identity && !String(nwFocusNode.id).startsWith('person:') ? ` <small class="note">· ${esc(nwFocusNode.identity)}</small>` : ''} <button class="hbtn" data-fhops title="How far from the centre to show: 1 hop = direct links, 2 = friends of friends, 3 = the classic three degrees, ALL = everything reachable. Only links that pull (see WEIGHTS) count as a hop.">${H >= 6 ? 'ALL' : H + ' HOP' + (H > 1 ? 'S' : '')} ▾</button>${nwFocusNode.kind === 'account' && nwFocusNode.person_id ? ' <button class="hbtn" data-fprof>PROFILE</button> <button class="hbtn" data-fcrawl title="Log this account\'s follows / followers / mutuals outward, hop by hop">CRAWL</button>' : ''} <button class="hbtn" data-fclear title="Show everything again">✕</button></div>` : '';
