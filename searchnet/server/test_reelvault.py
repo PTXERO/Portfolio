@@ -1104,3 +1104,35 @@ class LinkEvidence(Base):
         labels = {n["label"] for n in g["nodes"]}
         self.assertNotIn("lurker", labels)                                        # only shared words → not shown
         self.assertIn("wxguy", labels)
+
+
+class FullTextAndHygiene(Base):
+    def test_read_article_prefers_articlebody_then_paragraphs(self):
+        html = ('<html><head><title>T</title><link rel="canonical" href="https://news.example/a?x=1"><meta property="article:published_time" content="2026-10-01T10:00:00Z">'
+                '<script type="application/ld+json">{"@type":"NewsArticle","articleBody":"' + ("Isaias made landfall near Ocean Isle Beach. " * 8) + '"}</script></head><body><article><p>' + "p" * 60 + '</p></article></body></html>')
+        og = S.http_get
+        S.http_get = lambda url, **k: (html, "text/html", url)
+        self.addCleanup(lambda: setattr(S, "http_get", og))
+        a = S.read_article("https://news.example/a")
+        self.assertIn("Ocean Isle Beach", a["text"])
+        self.assertEqual(a["canonical"], "https://news.example/a?x=1")
+        self.assertTrue(a["published"])
+        html2 = '<html><body><nav><p>' + "menu " * 20 + '</p></nav><main><p>' + "Crews restored power across the county after the storm passed. " * 3 + '</p><p>Subscribe to our newsletter today please</p></main></body></html>'
+        S.http_get = lambda url, **k: (html2, "text/html", url)
+        a = S.read_article("https://x.example/b")
+        self.assertIn("Crews restored", a["text"])
+        self.assertNotIn("newsletter", a["text"])
+        self.assertNotIn("menu", a["text"])
+
+    def test_same_page_from_two_engines_is_one_item(self):
+        xml = ('<?xml version="1.0"?><rss><channel><item><title>Same story</title><link>https://www.a.example/story?utm_source=x</link></item></channel></rss>')
+        og = S.http_get
+        S.http_get = lambda url, **k: (xml, "text/xml", url)
+        self.addCleanup(lambda: setattr(S, "http_get", og))
+        news = next(s for s in self.v.list_sources() if s["preset"] == "news")
+        web = next(s for s in self.v.list_sources() if s["preset"] == "web")
+        a = list(self.v.fetch(Job("collect", {}), news, "x", 5, {"media": "everything"}))
+        b = list(self.v.fetch(Job("collect", {}), web, "x", 5, {"media": "everything"}))
+        self.assertEqual(a[0]["url"], "https://a.example/story")
+        self.assertEqual(a[0]["id"], b[0]["id"])
+        self.assertEqual(self.v.db.one("SELECT count(*) n FROM items")["n"], 1)

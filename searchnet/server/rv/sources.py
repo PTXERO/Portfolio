@@ -616,6 +616,7 @@ def _article(ctx, link, text, author="", posted_at=None, prefix="web", **kw):
     dom = domain_of(link)
     it = _web_item(ctx, dom, link, "post", text, posted_at=posted_at, author=author or dom)
     it["id"] = f"{prefix}:{short_hash(canon_url(link))}"
+    it["url"] = "https://" + canon_url(link)
     it["platform"] = kw.pop("platform", prefix)
     it.update(kw)
     return it
@@ -788,6 +789,61 @@ ADAPTERS = {
     "news": fetch_news, "gdelt": fetch_gdelt, "web": fetch_web, "hn": fetch_hn, "archive": fetch_archive,
     "fourchan": fetch_fourchan, "wikipedia": fetch_wikipedia,
 }
+
+
+def read_article(url: str):
+    """The full text of one article: JSON-LD articleBody, else the <p> run inside <article>/<main>, else the description."""
+    out = {"url": url, "canonical": None, "title": "", "text": "", "published": None, "author": ""}
+    try:
+        html, _, _ = http_get(url, timeout=20, max_bytes=1_500_000)
+    except Exception as e:      # noqa: BLE001
+        out["error"] = str(e)[:200]
+        return out
+
+    def meta(p):
+        m = re.search(r"<meta[^>]+(?:property|name)=[\"']%s[\"'][^>]+content=[\"']([^\"']*)" % re.escape(p), html, re.I) or \
+            re.search(r"<meta[^>]+content=[\"']([^\"']*)[\"'][^>]+(?:property|name)=[\"']%s[\"']" % re.escape(p), html, re.I)
+        return strip_html(m.group(1)) if m else ""
+    can = (re.search(r"<link[^>]+rel=[\"']canonical[\"'][^>]+href=[\"']([^\"']+)", html, re.I) or [None, None])[1] or meta("og:url")
+    if can:
+        out["canonical"] = urllib.parse.urljoin(url, can)
+    out["title"] = meta("og:title") or strip_html((re.search(r"<title[^>]*>([^<]*)", html, re.I) or [None, ""])[1])
+    tm = re.search(r"<time[^>]+datetime=[\"']([^\"']+)", html, re.I)
+    out["published"] = parse_date(meta("article:published_time") or meta("datePublished") or meta("date") or (tm.group(1) if tm else ""))
+    out["author"] = meta("author") or meta("article:author") or ""
+    for m in re.finditer(r"<script[^>]+ld\+json[^>]*>([\s\S]*?)</script>", html, re.I):
+        try:
+            d = json.loads(m.group(1))
+        except ValueError:
+            continue
+        stack = list(d) if isinstance(d, list) else [d]
+        while stack:
+            n = stack.pop()
+            if not isinstance(n, dict):
+                continue
+            if isinstance(n.get("@graph"), list):
+                stack.extend(n["@graph"])
+            body = n.get("articleBody")
+            if isinstance(body, str) and len(body) > 200:
+                out["text"] = strip_html(body)
+                out["published"] = out["published"] or parse_date(n.get("datePublished"))
+                au = n.get("author")
+                au = au[0] if isinstance(au, list) and au else au
+                if not out["author"] and isinstance(au, dict):
+                    out["author"] = au.get("name") or ""
+                break
+        if out["text"]:
+            break
+    if not out["text"]:
+        scope = (re.search(r"<article[\s\S]*?</article>", html, re.I) or re.search(r"<main[\s\S]*?</main>", html, re.I))
+        scope = scope.group(0) if scope else html
+        scope = re.sub(r"<(script|style|nav|aside|footer|header|form)[\s\S]*?</\1>", " ", scope, flags=re.I)
+        paras = [strip_html(p).strip() for p in re.findall(r"<p[^>]*>([\s\S]*?)</p>", scope, re.I)]
+        out["text"] = "\n".join(p for p in paras if len(p) > 40 and not re.search(r"cookie|subscribe|sign up|newsletter|all rights reserved", p, re.I))
+    if not out["text"]:
+        out["text"] = meta("og:description") or meta("description")
+    out["text"] = out["text"][:6000]
+    return out
 
 
 def discover(url: str, verify=True):

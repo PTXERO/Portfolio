@@ -21,7 +21,7 @@
  *  the way the optional local PC server does.
  * ───────────────────────────────────────────────────────────────── */
 
-const VERSION = "1.5";
+const VERSION = "1.6";
 const UA = "SearchNetWorker/1.5 (+https://ptxero.neocities.org/searchnet/; open-source research tool)";
 const INVIDIOUS = ["https://yewtu.be", "https://invidious.nerdvpn.de", "https://invidious.jing.rocks"];
 
@@ -47,7 +47,12 @@ export default {
         const src = SOURCES[q.source];
         if (!src) return json({ error: `unknown source '${q.source}'`, sources: Object.keys(SOURCES) }, 400);
         const limit = Math.min(parseInt(q.limit || "30", 10) || 30, 100);
-        let items = await src(q, limit);
+        // the same search from many people in ten minutes is one upstream call (GDELT, PullPush and Bing rate-limit per address)
+        const cacheable = ["news", "gdelt", "web", "hn", "archive", "wikipedia", "fourchan"].includes(q.source) && typeof caches !== "undefined";
+        const ckey = cacheable ? new Request("https://searchnet.cache/" + encodeURIComponent(JSON.stringify([q.source, q.q, q.qx, q.since, q.region, q.boards, limit]))) : null;
+        let items = null;
+        if (ckey) { try { const hit = await caches.default.match(ckey); if (hit) items = (await hit.json()).items; } catch (e) { items = null; } }
+        if (!items) { items = await src(q, limit); if (ckey) { try { await caches.default.put(ckey, new Response(JSON.stringify({ items }), { headers: { "Content-Type": "application/json", "Cache-Control": "max-age=600" } })); } catch (e) { /* ignore */ } } }
         const since = parseInt(q.since || "0", 10) || 0;
         if (since) items = items.filter((it) => !it.posted_at || it.posted_at >= since);   // the topic's time window
         return json({ items });
@@ -62,6 +67,10 @@ export default {
       }
       if (p === "/resolve") {                 // best-effort direct media URL for an item link
         return json({ url: await resolveMedia(q.url) });
+      }
+      if (p === "/article") {                  // the full text of one article (for briefs, names and scoring)
+        if (!/^https?:\/\//.test(q.url || "")) return json({ error: "bad url" }, 400);
+        return json(await readArticle(q.url));
       }
       if (p === "/discover") {                 // a site → its feeds and search page, so it can become a source
         if (!/^https?:\/\//.test(q.url || "")) return json({ error: "bad url" }, 400);
@@ -216,13 +225,13 @@ const SOURCES = {
     let xml;
     try { xml = await getText(`https://news.google.com/rss/search?q=${encodeURIComponent(qq)}&hl=en-${gl}&gl=${gl}&ceid=${gl}:en`); }
     catch (e) { xml = await getText(`https://www.bing.com/news/search?q=${encodeURIComponent(qq)}&format=rss&count=${Math.min(limit, 100)}`); }   // Google refuses most data-centre addresses; Bing News carries the same wires and papers
-    return parseFeed(xml, limit, true, "news").map((it) => Object.assign(it, { id: "news:" + hash(canon(it.url)) }));
+    return parseFeed(xml, limit, true, "news").map((it) => Object.assign(it, { id: "news:" + hash(canon(it.url)), url: "https://" + canon(it.url) }));
   },
   // GDELT: a running index of world news articles, searchable back years. Phrases go in quotes.
   async gdelt(q, limit) {
     const d = await getJSON(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(withExtra(q))}&mode=ArtList&maxrecords=${Math.min(limit, 250)}&format=json&sort=DateDesc&startdatetime=${q.since ? new Date((+q.since) * 1000).toISOString().replace(/[-:T]/g, "").slice(0, 14) : "20170101000000"}`);
     return (d.articles || []).map((a) => item({
-      id: "news:" + hash(canon(a.url)), platform: "news", media: "post", url: a.url,
+      id: "news:" + hash(canon(a.url)), platform: "news", media: "post", url: "https://" + canon(a.url),
       author: a.domain || hostOf(a.url), author_name: a.domain || "", text: a.title || "",
       posted_at: a.seendate ? toTs(a.seendate.replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/, "$1-$2-$3T$4:$5:$6Z")) : null,
       lang: a.language || null, thumbnail: a.socialimage || null,
@@ -234,7 +243,7 @@ const SOURCES = {
     for (let first = 1; out.length < limit && first <= 151; first += 50) {   // pages of 50, up to 4 pages
       const xml = await getText(`https://www.bing.com/search?format=rss&q=${encodeURIComponent(withExtra(q))}&count=50&first=${first}`);
       const page = parseFeed(xml, 50, true, "web"); let fresh = 0;
-      for (const it of page) { const k = canon(it.url); if (seen.has(k)) continue; seen.add(k); it.id = "web:" + hash(k); out.push(it); fresh++; }
+      for (const it of page) { const k = canon(it.url); if (seen.has(k)) continue; seen.add(k); it.id = "web:" + hash(k); it.url = "https://" + k; out.push(it); fresh++; }
       if (!fresh || page.length < 10) break;
     }
     return out.slice(0, limit);
@@ -575,6 +584,31 @@ function parseFeed(xml, limit, allMedia, brand) {
 }
 const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return ""; } };
 function hash(s) { let h = 0; for (let i = 0; i < (s || "").length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+
+// readability, small: JSON-LD articleBody → the densest run of <p> inside <article>/<main> → meta description
+async function readArticle(u) {
+  const out = { url: u, canonical: null, title: "", text: "", published: null, author: "" };
+  let html; try { html = (await getText(u, { "Accept-Language": "en" })).slice(0, 1500000); } catch (e) { out.error = e.message; return out; }
+  const meta = (p) => { const m = html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${p}["'][^>]+content=["']([^"']*)`, "i")) || html.match(new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']${p}["']`, "i")); return m ? stripHtml(m[1]) : ""; };
+  const can = (html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)/i) || [])[1] || meta("og:url"); if (can) { try { out.canonical = new URL(can, u).href; } catch (e) { /* ignore */ } }
+  out.title = meta("og:title") || stripHtml((html.match(/<title[^>]*>([^<]*)/i) || [, ""])[1]);
+  out.published = toTs(meta("article:published_time") || meta("datePublished") || meta("date") || (html.match(/<time[^>]+datetime=["']([^"']+)/i) || [])[1]);
+  out.author = meta("author") || meta("article:author") || "";
+  for (const m of html.matchAll(/<script[^>]+ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    let d; try { d = JSON.parse(m[1]); } catch (e) { continue; }
+    const stack = Array.isArray(d) ? [...d] : [d];
+    while (stack.length) { const n = stack.pop(); if (!n || typeof n !== "object") continue; if (Array.isArray(n["@graph"])) stack.push(...n["@graph"]); if (typeof n.articleBody === "string" && n.articleBody.length > 200) { out.text = stripHtml(n.articleBody); if (!out.published) out.published = toTs(n.datePublished); if (!out.author && n.author) out.author = (Array.isArray(n.author) ? n.author[0] : n.author).name || ""; break; } }
+    if (out.text) break;
+  }
+  if (!out.text) {
+    const scope = (html.match(/<article[\s\S]*?<\/article>/i) || html.match(/<main[\s\S]*?<\/main>/i) || [html])[0].replace(/<(script|style|nav|aside|footer|header|form)[\s\S]*?<\/\1>/gi, " ");
+    const paras = [...scope.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)].map((m) => stripHtml(m[1]).trim()).filter((t) => t.length > 40 && !/cookie|subscribe|sign up|newsletter|all rights reserved/i.test(t));
+    out.text = paras.join("\n");
+  }
+  if (!out.text) out.text = meta("og:description") || meta("description");
+  out.text = out.text.replace(/\s+\n/g, "\n").slice(0, 6000);
+  return out;
+}
 
 async function discoverSite(u) {
   const origin = new URL(u).origin; const out = { url: u, host: hostOf(u), feeds: [], search: null, candidates: [], platform: "" };

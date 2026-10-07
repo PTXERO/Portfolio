@@ -267,7 +267,7 @@ class TopicScorer:
                 parts.append((s, 1.2))
                 why["taste"] = round(s, 3)
         learned = sum(p * w for p, w in parts) / sum(w for _, w in parts)
-        alpha = min(0.85, n / (n + 4))
+        alpha = min(0.85, n / (n + 4)) * (1.0 if n >= 4 else 0.7)   # under four votes the model only leans
         final = (1 - alpha) * base + alpha * learned
         final = self._apply_reasons(it, final, why)
         up = self._why_raise(x)

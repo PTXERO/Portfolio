@@ -315,7 +315,7 @@
       if (!it.author) continue;
       const A = acctId(it); kindOf[A] = 'account';
       const tags = it.platform === 'archive' ? [] : [...hashSet(it)].map((h) => '#' + h);   // archive's "tags" are media types
-      const ents = entitiesIn(it.text, new Set([...seedWords, String(it.author || '').toLowerCase()])).map((e) => 'e:' + e);
+      const rawE = entitiesIn(it.text, new Set([...seedWords, String(it.author || '').toLowerCase()])); const ents = rawE.filter((e) => !rawE.some((o) => o !== e && o.includes(e))).map((e) => 'e:' + e);   // 'tampa bay' inside 'tampa bay times' is one name
       ents.forEach((e) => { kindOf[e] = 'entity'; bump(e, 1); link(A, e, 1.5, 2, 'e', { posts: [postRef(it)], names: [e.slice(2)] }); });
       for (let i = 0; i < ents.length; i++) for (let j = i + 1; j < ents.length; j++) link(ents[i], ents[j], 1, 2, 'e', { posts: [postRef(it)] });
       const words = [...new Set(tokens(it.text).filter((w) => w.length > WORD_MIN && !STOP.has(w) && !generic(w)))].map((w) => 'w:' + w);

@@ -33,6 +33,13 @@ Fair use is counted per identity per UTC day via the `hub_touch` RPC (`hub_usage
 
 Until step 2 is done the apps still work: the old Worker answers the Social/ASCII routes, SearchNet's fetch routes return "not found" on it, and the YOUR DATA panel says the hub is older.
 
+## Deploying without pasting
+
+`.github/workflows/hub-worker.yml` pushes `hub/hub-worker.js` to Cloudflare on every change to `main`. Set the
+two repository secrets it names (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`) and put the existing Worker's
+name in `hub/wrangler.toml`. `.github/workflows/hub-live-check.yml` asks the live hub for one search per source
+every Monday and fails when a source that should work comes back empty.
+
 ## For people running their own hub
 
 `hub/index.html` is the published guide (Supabase project → SQL → Worker → secrets → cron → TEST → point the apps). The apps pick the hub up from `PX.host()` (`localStorage.ptxero_host`), which the key file also carries.

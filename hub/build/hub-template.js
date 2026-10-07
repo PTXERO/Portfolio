@@ -105,7 +105,7 @@ function resetsAt() { const d = new Date(); d.setUTCHours(24, 0, 0, 0); return d
 // scope: 'fetch' (SearchNet compute) | 'write' (anything that stores) | 'read' (free)
 async function quota(env, svc, px, scope, bytes) {
   const L = limits(env); const admin = (env && env.ADMIN_UID) || '';
-  if (scope === 'read') return null;
+  if (scope === 'read') { if (px.verified && svc.apikey) fetch(`${SUPABASE}/rest/v1/hub_users`, { method: 'POST', headers: { ...svc, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ uid: px.uid, pubkey: px.pub, last_seen: new Date().toISOString() }) }).catch(() => {}); return null; }   // a signed read is a visit
   if (px.verified && admin && px.uid === admin) return null;
   if (!svc.apikey) return null;                                               // fetch-only hub: no DB, no limits
   if (!px.verified && scope === 'write') return { status: 401, body: { error: 'sign in with your PTXERO ID to store anything here' } };
@@ -155,7 +155,7 @@ async function searchnetRoutes(request, env, url, q) {
     return snJson({ error: String(e && e.message || e) }, 502);
   }
 }
-const SN_PATHS = new Set(['/search', '/account', '/follows', '/resolve', '/fetch', '/discover', '/health']);
+const SN_PATHS = new Set(['/search', '/account', '/follows', '/resolve', '/fetch', '/discover', '/article', '/health']);
 
 export default {
   async scheduled(event, env) {

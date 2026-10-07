@@ -351,6 +351,7 @@
       if (route === 'sources') {
         if (arg === 'presets') return { presets: WORKER_SOURCES };
         if (arg === 'discover' && method === 'POST') return await workerCall('/discover?url=' + encodeURIComponent(body.url || ''));
+        if (arg === 'article' && method === 'POST') return await workerCall('/article?url=' + encodeURIComponent(body.url || ''));
         if (arg === 'probe' && method === 'POST') return { candidates: probe(body.text) };
         const all = await listSources();
         if (!arg) {

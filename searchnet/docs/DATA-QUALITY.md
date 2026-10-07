@@ -152,3 +152,15 @@ Legend · **DONE** shipped · **NEXT** small, this week · **PLAN** needs design
 - Internet Archive uploads no longer carry their media type as a hashtag (that is what glued unrelated TV
   stations into a #movies community).
 - Topics open on the dossier.
+
+## Update: the shortfall list
+- Links explain themselves: hover a link or centre a node. Every link carries where it came from (the post),
+  how (mention, follow and its direction, shared name, shared tag) and the words when that is all there is.
+  Nodes with only shared-word links are gone unless you centred on a word.
+- Articles are read in full after a run (up to 25 per run on the PC, 15 in the browser), so names, scores and
+  the brief work from the body, not the headline. The same page from two engines is one item.
+- A run stops at 60 fetches on the shared hub (150 on your own), grown searches rated 👎 three times in four
+  are switched off, a source that switched itself off is retried a week later, the first four votes only lean
+  on the model, outlets show as articles on the review card.
+- The hub counts a signed read as a visit (retention), caches identical article-source searches for ten
+  minutes (shared-address rate limits), and deploys from GitHub instead of a paste.

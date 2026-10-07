@@ -1,0 +1,14 @@
+# Weekly: does every source still answer on the live hub? A silent format change at Bing or GDELT shows up here,
+# not as empty runs for everyone.
+name: Hub live check
+on:
+  schedule: [{ cron: '17 6 * * 1' }]
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node hub/build/live_check.mjs

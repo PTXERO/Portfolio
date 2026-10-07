@@ -452,6 +452,10 @@ class Vault:
                     continue
                 if opts.get("since") and item.get("posted_at") and item["posted_at"] < opts["since"]:
                     continue                                   # older than the topic's time window
+                if item.get("url") and src.get("kind") in S.ARTICLE_KINDS:   # the same page from another engine is one item
+                    dup = self.db.one("SELECT id FROM items WHERE url=? AND id!=?", (item["url"], item["id"]))
+                    if dup:
+                        item["id"] = dup["id"]
                 seen.add(item["id"])
                 res = self.db.upsert(item)
                 job.stats["found"] += 1
@@ -649,6 +653,12 @@ class Vault:
         stats = query_stats(self.db, tid)
         k = to_int(st.get("queries_per_run")) or (3 + 2 * breadth)
         queries = pick_queries(stats, k)
+        # a source that switched itself off gets one try a week later; a repeat failure switches it off again
+        for s_ in self.list_sources():
+            off = (s_.get("options") or {}).get("auto_off")
+            if not s_["enabled"] and off and now() - off > 7 * 86400:
+                self.update_source(s_["id"], {"enabled": True})
+                job.log(f"  retrying {s_['name']} (switched itself off a week ago)")
         p = st.get("plan") or {}
         if p.get("auto") and p.get("presets"):
             fresh = PLAN.plan_for(t["seeds"], st, self.list_sources())
@@ -722,6 +732,28 @@ class Vault:
                 self.link(tid, iid, "meaning", "library")
                 swept += 1
         job.log(f"  + {swept} matches from your library")
+        # full text for the articles in this topic (titles and snippets are too thin for names and briefs)
+        read = 0
+        for r in self.db.q("SELECT t.item_id FROM topic_items t JOIN items i ON i.id=t.item_id WHERE t.topic_id=? AND t.label>=0 "
+                           "AND i.platform IN ('news','web','hackernews') AND i.url LIKE 'http%' AND length(coalesce(i.text,''))<600 "
+                           "ORDER BY t.label DESC, t.score DESC LIMIT 25", (tid,)):
+            job.check()
+            it = self.db.get(r["item_id"])
+            if not it or self.db.one("SELECT 1 FROM cache WHERE key=?", ("body:" + it["id"],)):
+                continue
+            self.db.exec("INSERT OR REPLACE INTO cache(key, value, ts) VALUES (?, '1', ?)", ("body:" + it["id"], now()))
+            art = S.read_article(it["url"])
+            if art.get("text") and len(art["text"]) > len(it.get("text") or ""):
+                head = (it.get("text") or "").split("\n")[0]
+                self.db.upsert(dict(it, text=(head + "\n\n" + art["text"])[:8000], posted_at=it.get("posted_at") or art.get("published")))
+                read += 1
+        if read:
+            job.log(f"  read {read} full articles")
+        # grown searches that keep bringing junk are switched off (yours never are)
+        for q_ in query_stats(self.db, tid):
+            if q_["enabled"] and q_["origin"] not in ("seed", "user") and q_["pos"] + q_["neg"] >= 6 and q_["precision"] < 0.25:
+                self.db.exec("UPDATE topic_queries SET enabled=0 WHERE topic_id=? AND query=?", (tid, q_["query"]))
+                job.log(f"  search '{q_['query']}' switched off: {q_['neg']} of {q_['pos'] + q_['neg']} rated 👎")
         # which sites talked about it (news / web results) → offered as sources in the dossier
         sites = dict(st.get("sites") or {})
         for it in self.db.get_many(set(new)).values():

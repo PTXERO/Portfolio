@@ -616,7 +616,8 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
         aid = f"@{a.author.lower()}|{a.platform}"
         for it in a.items:
             tags = [] if it.get("platform") == "archive" else ["#" + h for h in _hashes(it)]   # archive's "tags" are media types
-            ents = ["e:" + e for e in _entities(it.get("text"), seed_words | {str(it.get("author") or "").lower()})]
+            raw_e = _entities(it.get("text"), seed_words | {str(it.get("author") or "").lower()})
+            ents = ["e:" + e for e in raw_e if not any(e != o and e in o for o in raw_e)]   # 'tampa bay' inside 'tampa bay times' is one name
             for e in ents:
                 kind_of[e] = "entity"
                 node_w[e] += 1.0

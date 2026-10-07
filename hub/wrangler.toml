@@ -1,0 +1,8 @@
+# Deploys hub/hub-worker.js with Wrangler (used by .github/workflows/hub-worker.yml).
+# Set `name` to the Worker that serves share.ptxero.net (Cloudflare → Workers & Pages → its name).
+name = "ptxero-hub"
+main = "hub-worker.js"
+compatibility_date = "2025-01-01"
+# Secrets (SERVICE_KEY) and variables (SUPABASE_URL, ADMIN_UID, …) stay in the dashboard; nothing here overrides them.
+[triggers]
+crons = ["0 4 * * *"]

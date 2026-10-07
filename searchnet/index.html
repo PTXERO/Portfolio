@@ -1290,7 +1290,7 @@ function showCard(){
         ${media !== 'image' && media !== 'post' ? '<button class="fsbtn" id="fsBtn" aria-label="Full screen / scrub">⛶</button>' : ''}
       </div>
       <div class="rinfo">
-        <div class="who"><b>@${esc(it.author || '?')}</b><span>· ${ago(it.posted_at)}</span>${it.likes ? `<span>· ♥ ${fmtN(it.likes)}</span>` : ''}${it.views ? `<span>· ▶ ${fmtN(it.views)}</span>` : ''}</div>
+        <div class="who"><b>${['news', 'web', 'archive', 'wikipedia'].includes(it.platform) ? esc(it.author_name || it.author || '?') : '@' + esc(it.author || '?')}</b>${['news', 'web', 'archive', 'wikipedia'].includes(it.platform) ? '<span class="kind">article</span>' : ''}<span>· ${it.posted_at ? ago(it.posted_at) : 'no date'}</span>${it.likes ? `<span>· ♥ ${fmtN(it.likes)}</span>` : ''}${it.views ? `<span>· ▶ ${fmtN(it.views)}</span>` : ''}</div>
         <div class="txt" id="rtxt" style="margin-top:6px">${hl(it.text || '(no caption)', re)}</div>
         <div class="why">${found}${it.why?.meaning != null ? `<span>meaning <b>${Math.round(it.why.meaning*100)}%</b></span>` : ''}${it.why?.taste != null ? `<span>your taste <b>${Math.round(it.why.taste*100)}%</b></span>` : ''}</div>
         ${whyLine(it)}

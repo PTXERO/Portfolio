@@ -87,7 +87,7 @@
           const x = feats(it);
           const r = (pc ? cos(x, pc) : 0) - 0.7 * (nc ? cos(x, nc) : 0);
           const learned = sig(5 * r - 0.5);
-          const alpha = Math.min(0.85, n / (n + 4));
+          const alpha = Math.min(0.85, n / (n + 4)) * (n >= 4 ? 1 : 0.7);   // under four votes the model only leans
           final = (1 - alpha) * prior + alpha * learned;
           why.model = +learned.toFixed(3);
           // why-not: item words with negative profile weight
@@ -176,6 +176,8 @@
     const queries = (t2.queries || []).filter((q) => q.enabled).map((q) => q.query);
     const seeds = t2.seeds || [];
     let runQs = [...new Set(seeds.concat(queries))].slice(0, 3 + 2 * (t2.settings.breadth || 3));
+    // a source that switched itself off gets one try a week later
+    for (const s of (await L.request('/api/sources')).sources) { if (!s.enabled && s.auto_off && now() - s.auto_off > 7 * 86400) { await L.request('/api/sources/' + s.id, { method: 'PATCH', body: { enabled: true } }); job.log('  retrying ' + s.name + ' (switched itself off a week ago)'); } }
     let srcs = (await L.request('/api/sources')).sources.filter((s) => s.enabled && s.searchable);
     if (person && person.mode === 'account') {        // one @account: its own feed + 'from:' searches only (Bluesky supports them)
       runQs = runQs.filter((q) => /^from:/i.test(q)); srcs = srcs.filter((s) => s.source === 'bluesky');
@@ -190,6 +192,21 @@
     const seen = new Set();
     // collect directly (synchronously), then link everything matching
     await collectForTopic(t2, runQs, srcs, job, seen);
+    // full text for the articles in this topic (titles and snippets are too thin for names and briefs)
+    try {
+      const votes = (await topicItems(tid)).filter((v) => v.label >= 0).sort((a, b) => (b.label - a.label) || (b.score - a.score));
+      let read = 0;
+      for (const v of votes) {
+        if (read >= 15 || job.cancel) break;
+        const it = await idb.get('items', v.item_id);
+        if (!it || !ARTICLE_PLATFORMS.has(it.platform) || it.platform === 'archive' || !/^http/.test(it.url || '') || it.body_at || String(it.text || '').length >= 600) continue;
+        it.body_at = now(); await idb.put('items', it);
+        try { const art = await L.workerCall('/article?url=' + encodeURIComponent(it.url)); if (art.text && art.text.length > String(it.text || '').length) { it.text = (String(it.text || '').split('\n')[0] + '\n\n' + art.text).slice(0, 8000); if (!it.posted_at && art.published) it.posted_at = art.published; await idb.put('items', it); read++; } } catch (e) { /* next */ }
+      }
+      if (read) job.log('  read ' + read + ' full articles');
+    } catch (e) { /* enrichment only */ }
+    // grown searches that keep bringing junk are switched off (yours never are)
+    (t2.queries || []).forEach((q) => { const n = (q.pos || 0) + (q.neg || 0); if (q.enabled && !['seed', 'user'].includes(q.origin) && n >= 6 && (q.pos || 0) / n < 0.25) { q.enabled = false; job.log("  search '" + q.query + "' switched off: " + q.neg + ' of ' + n + ' rated 👎'); } });
     // which sites talked about it (news / web results) → offered as sources in the dossier
     try {
       const sites = Object.assign({}, t2.settings.sites || {}); let added = 0;
@@ -215,9 +232,13 @@
   }
   async function collectForTopic(t, runQs, srcs, job, seen) {
     srcs = srcs.slice();
+    const h = await L.hub(); const budget = +t.settings.max_fetches || (h && h.kind === 'shared' ? 60 : 150); let spent = 0;   // fetches per run (the shared hub has daily limits)
+    const byUrl = new Map(); for (const it of await idb.all('items')) if (it.url && ARTICLE_PLATFORMS.has(it.platform)) byUrl.set(it.url, it.id);
     for (const q of runQs) {
       for (const s of srcs.slice()) {
         if (job.cancel) return;
+        if (spent >= budget) { job.log('  stopped at ' + budget + ' fetches this run (Settings → results per search, or your own hub, raises it)'); await saveTopic(t); return; }
+        spent++;
         try {
           const params = new URLSearchParams({ source: s.source, q, limit: t.settings.per_query || 20, media: t.settings.media || 'video' });
           const days = windowDays(t.settings, t.settings.plan); if (days) params.set('since', String(now() - days * 86400));
@@ -232,6 +253,7 @@
           for (const it of (r.items || [])) {
             if (!it.id) continue;
             if (since && it.posted_at && it.posted_at < since) continue;      // older than the topic's time window
+            if (it.url && ARTICLE_PLATFORMS.has(it.platform)) { const dup = byUrl.get(it.url); if (dup && dup !== it.id) it.id = dup; else byUrl.set(it.url, it.id); }   // the same page from another engine is one item
             it.collected_at = now();
             if (!(await idb.get('items', it.id))) { await idb.put('items', it); }
             await link(t.id, it.id, q, s.id); seen.add(it.id); found++;

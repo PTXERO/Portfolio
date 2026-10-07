@@ -1,0 +1,23 @@
+# Pushes hub/hub-worker.js to Cloudflare whenever it changes on main. No more pasting.
+# One-time setup (repo → Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN   a token with "Edit Cloudflare Workers" (dash.cloudflare.com → My Profile → API Tokens)
+#   CLOUDFLARE_ACCOUNT_ID  Workers & Pages → Overview, right-hand column
+# and set `name` in hub/wrangler.toml to the existing Worker's name so it updates in place (routes, secrets and
+# variables are kept).
+name: Deploy hub Worker
+on:
+  push:
+    branches: [main]
+    paths: [hub/hub-worker.js, hub/wrangler.toml]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: hub
+          command: deploy

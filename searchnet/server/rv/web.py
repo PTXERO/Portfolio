@@ -490,6 +490,8 @@ class Handler(BaseHTTPRequestHandler):
                 return ok({"candidates": v.probe(self._body().get("text", ""))})
             if arg == "discover" and method == "POST":
                 return ok(S.discover(self._body().get("url", "")))
+            if arg == "article" and method == "POST":
+                return ok(S.read_article(self._body().get("url", "")))
             if not arg:
                 if method == "GET":
                     return ok({"sources": v.list_sources()})
