@@ -85,7 +85,7 @@ const SITE = {
       id:     'reel-vault',
       title:  'SEARCH//NET',
       sub:    'v3.0',
-      desc:   'Self-learning social search. Ask about a topic and it searches Mastodon, Bluesky, Reddit, YouTube, X and any site you add, learns from your 👍/👎, builds profiles of the accounts behind the posts and draws the web of how they connect (follows, mentions, shared tags). Runs in your browser through your own Cloudflare Worker, or on your PC. Desktop + phone.',
+      desc:   'Self-learning social search. Ask about a topic and it searches Mastodon, Bluesky, Reddit, YouTube, X and any site you add, learns from your 👍/👎, builds profiles of the accounts behind the posts and draws the web of how they connect (follows, mentions, shared tags). Runs in your browser through the shared hub (or your own), or on your PC. Desktop + phone.',
       tags:   ['search', 'social', 'osint', 'ml', 'python'],
       url:    './reel-vault/',
       status: 'live',

@@ -7,6 +7,7 @@
 <meta name="description" content="The PTXERO network hub">
 <script src="design-tokens.js?v=1"></script>
 <script src="ascii-render/share.config.js?v=1"></script>
+<script src="ptxero-id.js?v=1"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
 <link rel="stylesheet" href="shared.css?v=1">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -284,11 +285,18 @@
 <script>
 (function(){
   const CFG = window.SHARE || {};
+  if (window.PX) {   // YOUR DATA → "my own hub": every PTXERO app follows the same choice
+    const H = window.PX.host();
+    if (H.mode === 'own') { CFG.workerUrl = H.hub; if (H.supabaseUrl) CFG.supabaseUrl = H.supabaseUrl; if (H.supabaseAnonKey) CFG.supabaseAnonKey = H.supabaseAnonKey; }
+    else if (!CFG.workerUrl) CFG.workerUrl = H.hub;
+  }
   if(CFG.supabaseUrl) CFG.supabaseUrl = CFG.supabaseUrl.replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
   const feed = document.getElementById('feed');
   const READY = CFG.supabaseUrl && !/YOURPROJECT/.test(CFG.supabaseUrl) && CFG.supabaseAnonKey && !/YOUR_ANON/.test(CFG.supabaseAnonKey);
   const publicUrl = (p) => `${CFG.supabaseUrl}/storage/v1/object/public/${CFG.bucket}/${p}`;
   const workerBase = (CFG.workerUrl && /^https?:/.test(CFG.workerUrl)) ? CFG.workerUrl.replace(/\/+$/,'') : '';
+  // every write carries the PTXERO ID signature (the hub binds the key on first use; from then on only it may act as @you)
+  async function pxPost(path, fd){ const url = workerBase + path; const headers = window.PX ? await window.PX.sign('POST', url) : {}; return fetch(url, { method:'POST', body: fd, headers }); }
   const anonHdr = { apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey };
 
   const PALETTE = ['#c8f542','#42d4f5','#f542a8','#f5a542'];
@@ -396,12 +404,13 @@
     if(fields.featured !== undefined) fd.append('featured', JSON.stringify(fields.featured));
     if(fields.avatarBlob) fd.append('avatar', fields.avatarBlob, 'avatar.jpg');
     if(fields.bannerBlob) fd.append('banner', fields.bannerBlob, 'banner.jpg');
-    const r = await fetch(workerBase + '/profile', { method:'POST', body: fd });
+    const r = await pxPost('/profile', fd);
     if(!r.ok) throw new Error('profile ' + r.status + ' ' + await r.text());
   }
 
   // ── key file ──
-  function buildKey(){ return { _type:'ptxero-identity', version:1, playerId:getRawId(), prefix:handlePrefix(), handle:myHandle(), renders:myTokens(), exported:new Date().toISOString() }; }
+  function buildKey(){ let key = null; try{ key = JSON.parse(localStorage.getItem('ptxero_key_v1') || 'null'); }catch(e){}
+    return { _type:'ptxero-identity', version: key ? 2 : 1, playerId:getRawId(), prefix:handlePrefix(), handle:myHandle(), renders:myTokens(), key, host: (window.PX && window.PX.host().mode === 'own') ? window.PX.host() : null, exported:new Date().toISOString() }; }
   function downloadKey(){
     const data = buildKey(); const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'}); const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'ptxero-key-'+(data.handle||'anon')+'.json'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -413,6 +422,8 @@
     try{ localStorage.setItem(ID_KEY, d.playerId); }catch(e){}
     if(d.prefix){ try{ localStorage.setItem(PFX_KEY, cleanPrefix(d.prefix)); }catch(e){} }
     if(d.renders && typeof d.renders === 'object'){ const merged = Object.assign({}, myTokens(), d.renders); try{ localStorage.setItem('ptxero_my_renders', JSON.stringify(merged)); }catch(e){} }
+    if(d.key && d.key.priv && d.key.pub){ try{ localStorage.setItem('ptxero_key_v1', JSON.stringify(d.key)); }catch(e){} }   // v2 key files carry the signing key
+    if(d.host && d.host.mode === 'own' && window.PX) window.PX.setHost(d.host);
     try{ localStorage.setItem(ACK_KEY,'1'); }catch(e){}
   }
 
@@ -481,11 +492,18 @@
           '<div class="ob-title">' + title + '</div><p class="ob-p">' + intro + '</p><div class="ob-handle">@' + esc(h) + '</div>'
         + '<p class="ob-p ob-dim">There’s no email or password. The key file is the only way back into your account on another device or after clearing your browser. Lose it and it can’t be recovered.</p>'
         + '<button class="ob-btn primary" data-act="dl">⬇ DOWNLOAD MY KEY</button><div class="ob-div">OR</div><button class="ob-btn" data-act="imp">⇪ IMPORT A KEY (returning user)</button>'
+        + (mode === 'manage' && window.PX ? '<button class="ob-btn" data-act="data">⚙ YOUR DATA &amp; HUB</button>' : '')
         + (mode === 'manage' ? '<button class="ob-skip" data-act="close">close</button>' : '<button class="ob-skip" data-act="skip">continue without saving →</button>');
       panel.querySelector('[data-act="dl"]').onclick = () => { downloadKey(); renderSaved(); };
       panel.querySelector('[data-act="imp"]').onclick = () => fileIn.click();
       const skip = panel.querySelector('[data-act="skip"]'); if(skip) skip.onclick = () => { try{ localStorage.setItem(ACK_KEY,'1'); }catch(e){} closeModal(); };
       const cl = panel.querySelector('[data-act="close"]'); if(cl) cl.onclick = closeModal;
+      const dt = panel.querySelector('[data-act="data"]'); if(dt) dt.onclick = renderData;
+    }
+    function renderData(){
+      panel.innerHTML = '<div id="pxHost"></div><button class="ob-skip" data-act="back">← back</button>';
+      window.PX.panel(panel.querySelector('#pxHost'), { app:'social', local:false, guide:'hub/', exportExtra: () => ({ renders: myTokens() }), onChange: () => location.reload() });
+      panel.querySelector('[data-act="back"]').onclick = renderChoose;
     }
     function renderSaved(){ panel.innerHTML = '<div class="ob-title">✓ KEY SAVED</div><p class="ob-p">Your key for <b>@' + esc(myHandle()||'anon') + '</b> downloaded. Store it somewhere safe...</p><button class="ob-btn primary" data-act="enter">ENTER SOCIAL</button>'; panel.querySelector('[data-act="enter"]').onclick = closeModal; }
     renderChoose();
@@ -674,6 +692,8 @@
   document.getElementById('btnNewEntry').addEventListener('click', showNewEntry);
   document.getElementById('btnEdit').addEventListener('click', showEditProfile);
   document.getElementById('btnKey').addEventListener('click', () => showIdentityModal('manage'));
+  // bind this device's key to @me on the hub once per visit (migrates a pre-key profile using its legacy secret)
+  if(window.PX && workerBase && READY){ try{ if(!sessionStorage.getItem('px_reg')){ sessionStorage.setItem('px_reg','1'); window.PX.register().then(r => { if(r && r.error) console.warn('PTXERO ID:', r.error); }); } }catch(e){} }
   document.getElementById('tabAll').addEventListener('click', () => setFilter('all'));
   document.getElementById('tabFollowing').addEventListener('click', () => setFilter('following'));
   document.getElementById('tabMine').addEventListener('click', () => setFilter('mine'));
@@ -737,7 +757,7 @@
     try{
       const secret = await identitySecret(); if(!secret) throw new Error('no secret');
       const fd = new FormData(); fd.append('follower', MY_SUFFIX); fd.append('followee', targetUid); fd.append('secret', secret); fd.append('action', willFollow ? 'follow' : 'unfollow');
-      const r = await fetch(workerBase + '/follow', { method:'POST', body: fd }); if(!r.ok) throw new Error();
+      const r = await pxPost('/follow', fd); if(!r.ok) throw new Error();
     }catch(e){
       if(willFollow) FOLLOWSET.delete(targetUid); else FOLLOWSET.add(targetUid);   // revert
       paintFollowBtn();
@@ -798,7 +818,7 @@
     try{
       const secret = await identitySecret(); if(!secret) return;
       const fd = new FormData(); fd.append('uid', MY_SUFFIX); fd.append('secret', secret); fd.append('action', 'list');
-      const r = await fetch(workerBase + '/notifications', { method:'POST', body: fd });
+      const r = await pxPost('/notifications', fd);
       if(!r.ok) return;
       const data = await r.json();
       NOTIFS = data.items || [];
@@ -859,7 +879,7 @@
       try{
         const secret = await identitySecret();
         const fd = new FormData(); fd.append('uid', MY_SUFFIX); fd.append('secret', secret||''); fd.append('action', 'read');
-        fetch(workerBase + '/notifications', { method:'POST', body: fd });
+        pxPost('/notifications', fd);
       }catch(e){}
       NOTIFS.forEach(n => n.read = true);
       setNotifBadge(0);
@@ -1289,7 +1309,7 @@
     try{
       const secret = await identitySecret();
       const fd = new FormData(); fd.append('id', row.slug); fd.append('uid', MY_SUFFIX); fd.append('secret', secret || ''); fd.append('action', 'delete');
-      const r = await fetch(workerBase + '/post', { method:'POST', body: fd }); if(!r.ok) throw new Error(await r.text());
+      const r = await pxPost('/post', fd); if(!r.ok) throw new Error(await r.text());
       ALL = ALL.filter(x => x.slug !== row.slug);
       if(FOLLOWFEED) FOLLOWFEED = FOLLOWFEED.filter(x => x.slug !== row.slug);
       card.style.transition = 'opacity .2s'; card.style.opacity = '0'; setTimeout(() => { updateCount(); render(); }, 200);
@@ -1303,7 +1323,7 @@
     try{
       const secret = await identitySecret();
       const fd = new FormData(); fd.append('uid', MY_SUFFIX); fd.append('secret', secret || ''); fd.append('handle', HANDLE || ('RF-' + MY_SUFFIX)); fd.append('body', val);
-      const r = await fetch(workerBase + '/post', { method:'POST', body: fd }); if(!r.ok) throw new Error(await r.text());
+      const r = await pxPost('/post', fd); if(!r.ok) throw new Error(await r.text());
       const data = await r.json(); const p = data.post;
       if(p){
         const item = { _type:'text', slug:p.id, body:p.body, handle:p.handle, created_at:p.created_at };
@@ -1330,7 +1350,7 @@
     try{
       const secret = await identitySecret(); if(!secret) throw new Error('no secret');
       const fd = new FormData(); fd.append('slug', slug); fd.append('uid', MY_SUFFIX); fd.append('secret', secret); fd.append('action', willLike ? 'like' : 'unlike');
-      const r = await fetch(workerBase + '/like', { method:'POST', body: fd });
+      const r = await pxPost('/like', fd);
       if(!r.ok) throw new Error('like ' + r.status);
     }catch(e){ LIKEMAP[slug] = cur; paintLike(el, slug); }   // revert
   }
@@ -1407,7 +1427,7 @@
     try{
       const fd = new FormData(); fd.append('slug', row.slug); if(token) fd.append('token', token); fd.append('handle', HANDLE || '');
       try{ const sec = await identitySecret(); if(sec) fd.append('secret', sec); }catch(e){}   // authorizes admin delete
-      const r = await fetch(workerBase + '/delete', { method:'POST', body: fd });
+      const r = await pxPost('/delete', fd);
       if(!r.ok){ alert('Delete failed (' + r.status + '): ' + await r.text()); return; }
       ALL = ALL.filter(x => x.slug !== row.slug);
       const tok = myTokens(); if(tok[row.slug]){ delete tok[row.slug]; try{ localStorage.setItem('ptxero_my_renders', JSON.stringify(tok)); }catch(e){} }
@@ -1489,7 +1509,7 @@
     try{
       const secret = await identitySecret();
       const fd = new FormData(); fd.append('uid', MY_SUFFIX); fd.append('secret', secret || ''); fd.append('action', 'list');
-      const r = await fetch(workerBase + '/report', { method:'POST', body: fd });
+      const r = await pxPost('/report', fd);
       if(r.ok){ reports = (await r.json()).reports || []; }
     }catch(e){}
     if(!reports.length){ msg('No open reports. All clear.'); return; }
@@ -1509,7 +1529,7 @@
         try{
           const secret = await identitySecret();
           const fd = new FormData(); fd.append('uid', MY_SUFFIX); fd.append('secret', secret || ''); fd.append('action', 'resolve'); fd.append('id', rep.id);
-          const r = await fetch(workerBase + '/report', { method:'POST', body: fd }); if(!r.ok) throw new Error();
+          const r = await pxPost('/report', fd); if(!r.ok) throw new Error();
           el.style.opacity = '.4'; resolve.textContent = 'RESOLVED';
         }catch(e){ resolve.disabled = false; alert('Could not resolve.'); }
       };

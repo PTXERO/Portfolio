@@ -14,6 +14,11 @@
 // ─────────────────────────────────────────────────────────────────
 (function(){
   const CFG = window.SHARE || {};
+  if (window.PX) {   // YOUR DATA → "my own hub": every PTXERO app follows the same choice
+    const H = window.PX.host();
+    if (H.mode === 'own') { CFG.workerUrl = H.hub; if (H.supabaseUrl) CFG.supabaseUrl = H.supabaseUrl; if (H.supabaseAnonKey) CFG.supabaseAnonKey = H.supabaseAnonKey; }
+    else if (!CFG.workerUrl) CFG.workerUrl = H.hub;
+  }
   const READY = CFG.supabaseUrl && !/YOURPROJECT/.test(CFG.supabaseUrl)
              && CFG.supabaseAnonKey && !/YOUR_ANON/.test(CFG.supabaseAnonKey);
   if(CFG.supabaseUrl) CFG.supabaseUrl = CFG.supabaseUrl.replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
@@ -300,7 +305,8 @@
         fd.append('media', mediaType);
         if(animBlob) fd.append('video', animBlob, 'output.webm');
         if(srcBlob) fd.append('source', srcBlob, 'source.jpg');
-        const r = await fetch(CFG.workerUrl.replace(/\/+$/,'') + '/share', { method:'POST', body: fd });
+        const shareUrl = CFG.workerUrl.replace(/\/+$/,'') + '/share';
+        const r = await fetch(shareUrl, { method:'POST', body: fd, headers: window.PX ? await window.PX.sign('POST', shareUrl) : {} });
         if(!r.ok) throw new Error('worker ' + r.status + ' ' + await r.text());
       } else {
         await uploadFile(`${slug}/output.png`, outBlob, 'image/png');
@@ -389,7 +395,7 @@
     a.id = 'userBubble';
     a.href = '../social.html?me=1';
     a.textContent = '@' + handle();
-    a.title = 'Your PTXERO handle — same across RF & ASCII. Click to see your shared entries.';
+    a.title = 'Your PTXERO ID — the same across every PTXERO app. Click to see your entries; YOUR DATA & HUB lives under ⚿ MY KEY there.';
     a.style.cssText = 'margin-left:8px;align-self:center;text-decoration:none;font-family:var(--fmono,monospace);'
       + 'font-size:9px;letter-spacing:.12em;padding:3px 8px;border-radius:2px;border:1px solid rgba(200,245,66,.35);'
       + 'color:var(--acc,#c8f542);background:rgba(200,245,66,.08);white-space:nowrap;';

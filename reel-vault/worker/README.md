@@ -1,5 +1,10 @@
 # SearchNet Worker
 
+> **Optional since hub 2.0.** SEARCH//NET fetches through PTXERO's shared hub by default,
+> and the full-featured way to run your own is the [hub](../../hub/README.md) (it contains
+> this Worker's routes plus identity, backups and Social/ASCII). This file remains the
+> fetch-only variant: no database, no identity, no limits of its own.
+
 A tiny scraper that runs in **your own** Cloudflare account, so the web app can
 find videos/posts **without a PC and without anyone tracking you**. It holds no
 database and keeps no logs — your library lives in your browser (and optionally

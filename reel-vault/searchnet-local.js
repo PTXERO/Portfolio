@@ -152,17 +152,43 @@
     } catch (e) { /* not a URL */ }
     return null;
   }
+  // Where fetching happens. In order: a SearchNet-only Worker you pasted (advanced), else the hub chosen in
+  // YOUR DATA (PTXERO's shared hub by default, or your own). Requests to a hub are signed with your PTXERO ID,
+  // so its fair-use limits are per person; a 429 waits politely (PX.fetch) instead of failing outright.
+  function hub(s) {
+    if (s && s.worker_url) return { base: s.worker_url.replace(/\/$/, ''), key: s.worker_key || '', signed: false, kind: 'worker' };
+    if (window.PX) { const h = window.PX.host(); return { base: h.hub, key: '', signed: true, kind: h.mode === 'own' ? 'own' : 'shared' }; }
+    return null;
+  }
+  async function hubInfo() { return hub(await settings()); }
   async function workerCall(path) {
-    const s = await settings();
-    if (!s.worker_url) throw new Error('Set your Cloudflare Worker URL in SOURCES first');
-    const base = s.worker_url.replace(/\/$/, '');
-    const r = await fetch(base + path + (s.worker_key ? (path.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(s.worker_key) : ''),
-      { headers: s.worker_key ? { 'X-SN-Key': s.worker_key } : {} });
+    const s = await settings(); const h = hub(s);
+    if (!h) throw new Error('No hub: paste a Worker URL in SOURCES, or reload to use the shared hub');
+    const url = h.base + path + (h.key ? (path.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(h.key) : '');
+    const r = h.signed ? await window.PX.fetch(url) : await fetch(url, { headers: h.key ? { 'X-SN-Key': h.key } : {} });
     const j = await r.json().catch(() => ({}));
+    if (h.signed && r.status === 404 && /not found/i.test(j.error || ''))
+      throw new Error((h.kind === 'own' ? 'Your hub' : 'The shared hub') + ' at ' + h.base + ' is not running hub 2.0 yet' + (h.kind === 'own' ? ' — paste hub/hub-worker.js into that Worker and Deploy (see the hub guide)' : ' — the owner has to redeploy it; meanwhile SOURCES → Advanced lets you paste your own Worker URL'));
     if (r.status === 404 && (j.error === 'not found' || !j.error) && !/^\/(search|health)/.test(path))
       throw new Error('Your Worker is older than this app — paste the new worker/searchnet-worker.js into Cloudflare (SOURCES → your Worker → how to update)');
-    if (!r.ok) throw new Error(j.error || ('Worker HTTP ' + r.status));
+    if (r.status === 429 && j.error === 'quota') throw new Error('Fair-use limit on the ' + (h.kind === 'own' ? 'hub' : 'shared hub') + ': ' + j.used + '/' + j.limit + ' ' + j.scope + ' today. ' + (j.hint || ''));
+    if (!r.ok) throw new Error(j.error || ('Hub HTTP ' + r.status));
     return j;
+  }
+  // ── backup of what you taught it (topics, votes, follows, sources, identities, settings — not the media itself) ──
+  const BACKUP_STORES = ['topics', 'votes', 'rel', 'kv'];   // kv holds sources, identities, settings, web weights
+  async function backupData() {
+    const out = { _type: 'searchnet-backup', version: 1, made: Math.floor(Date.now() / 1000) };
+    for (const st of BACKUP_STORES) out[st] = await idb.all(st);
+    out.kv = out.kv.map((r) => (r && r.k === 'settings' && r.v) ? { k: r.k, v: Object.assign({}, r.v, { worker_key: '' }) } : r);  // never back up a Worker secret
+    return out;
+  }
+  async function restoreData(d) {
+    if (!d || d._type !== 'searchnet-backup') throw new Error('not a SearchNet backup');
+    let n = 0;
+    for (const st of BACKUP_STORES) for (const row of (d[st] || [])) { if (row && (row.id || row.k)) { await idb.put(st, row); n++; } }
+    SET = null;
+    return { restored: n };
   }
   async function collect(body, job) {
     const srcs = (body.source_ids && body.source_ids.length)
@@ -232,7 +258,8 @@
 
       if (route === 'status') {
         const all = await items(); const s = await settings();
-        return { ok: true, local: true, auth: true, tools: { worker: !!s.worker_url }, counts: { n: all.length, files: 0, speech: all.filter((i) => i.transcript).length }, vectors: 0, semantic: false, data_dir: 'your browser (IndexedDB)', settings: s, topics: (await idb.all('topics')).length, worker_url: s.worker_url };
+        const h = hub(s);
+        return { ok: true, local: true, auth: true, tools: { worker: !!h }, counts: { n: all.length, files: 0, speech: all.filter((i) => i.transcript).length }, vectors: 0, semantic: false, data_dir: 'your browser (IndexedDB)', settings: s, topics: (await idb.all('topics')).length, worker_url: h ? h.base : '', hub: h };
       }
       if (route === 'search') {
         await loadSyn();
@@ -262,6 +289,7 @@
       }
       if (route === 'synonyms') { if (method === 'PUT') { SYN = body.groups || []; await saveSettings({ synonyms: SYN }); } return { groups: SYN }; }
       if (route === 'settings') { if (method === 'PUT') { SET = await saveSettings(body); } return await settings(); }
+      if (route === 'backup') { if (method === 'POST') return await restoreData(body); return await backupData(); }
       if (route === 'understand' && method === 'POST') { const j = newJob('understand', 'understand (not available in browser)'); j.state = 'done'; j.finished = Math.floor(Date.now() / 1000); return jobDict(j); }
 
       if (route === 'items' && arg) {
@@ -322,7 +350,7 @@
 
   function runSafe(job, fn) { Promise.resolve().then(fn).then(() => { job.state = job.cancel ? 'cancelled' : 'done'; }).catch((e) => { job.state = 'error'; job.log('ERROR: ' + (e && e.message || e)); }).finally(() => { job.finished = Math.floor(Date.now() / 1000); }); }
   function normTags(t) { if (typeof t === 'string') t = t.split(/[,\s]+/); const out = []; for (let x of (t || [])) { x = String(x).toLowerCase().replace(/^#/, '').replace(/[^\w-]+/g, ''); if (x && !out.includes(x)) out.push(x); } return out.join(' '); }
-  async function resolvePlay(it) { try { const s = await settings(); if (!s.worker_url) return null; const r = await workerCall('/resolve?url=' + encodeURIComponent(it.url || '')); return r.url || null; } catch (e) { return null; } }
+  async function resolvePlay(it) { try { const s = await settings(); if (!hub(s)) return null; const r = await workerCall('/resolve?url=' + encodeURIComponent(it.url || '')); return r.url || null; } catch (e) { return null; } }
   function probe(text) {
     text = (text || '').trim(); const out = [];
     if (/\.(xml|rss|atom)(\?|$)|\/feed|feeds\//.test(text)) out.push({ name: text, kind: 'rss', source: 'rss', template: text, value: text, searchable: false, why: 'feed URL' });
@@ -339,6 +367,6 @@
   // expose internals the learn module needs
   Local.idb = idb; Local.settings = settings; Local.runSearch = runSearch; Local.loadSyn = loadSyn;
   Local.getSyn = () => SYN; Local.newJob = newJob; Local.jobDict = jobDict; Local.runSafe = runSafe;
-  Local.jobs = JOBS; Local.workerCall = workerCall;
+  Local.jobs = JOBS; Local.workerCall = workerCall; Local.hub = hubInfo; Local.backup = backupData; Local.restore = restoreData;
   window.SearchNetLocal = Local;
 })();

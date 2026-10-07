@@ -16,6 +16,7 @@
 <link rel="icon" type="image/png" href="icon-192.png">
 <script src="reelvault.config.js"></script>
 <script src="demo-data.js"></script>
+<script src="../ptxero-id.js"></script>
 <script src="searchnet-local.js"></script>
 <script src="searchnet-learn.js"></script>
 <script src="searchnet-graph.js"></script>
@@ -833,7 +834,7 @@ curl -fsSL https://ptxero.neocities.org/reel-vault/install-sh.txt | bash
     <div class="ob-choices">
       <button class="ob-choice" data-ob="browser">
         <b>📱 This browser</b>
-        <span>No computer needed. Searches run through your own free Cloudflare Worker and everything is saved on this device.</span>
+        <span>No computer needed. Nothing to install: searches run through the shared hub (or your own) and everything is saved on this device.</span>
         <small>Best on a phone or if you don't want a PC running.</small>
       </button>
       <button class="ob-choice" data-ob="pc">
@@ -963,7 +964,7 @@ async function connect(){
   // allow a one-time setup link:  ?server=https://rv.example.com&key=XXXX
   const qp = new URLSearchParams(location.search);
   if (qp.get('mode') === 'browser') store.set('localMode', true);
-  // Browser mode: everything runs here — IndexedDB + your own Cloudflare Worker. No PC server.
+  // Browser mode: everything runs here — IndexedDB + a hub (shared by default, or your own Worker). No PC server.
   if (BK && store.get('localMode', false)){
     try{
       await BK.init();
@@ -973,9 +974,10 @@ async function connect(){
       const st = $('#status'); st.textContent = '◆ ' + fmtN(STATUS.counts?.n || 0); st.className = 'chip-status live';
       if (!STATUS.worker_url){
         const b = $('#banner');
-        b.innerHTML = 'BROWSER MODE: add your Cloudflare Worker URL in <a href="#sources">SOURCES</a> to start collecting. Everything stays on this device.';
+        b.innerHTML = 'BROWSER MODE: nowhere to fetch from yet — reload to use the shared hub, or paste a Worker URL in <a href="#sources">SOURCES</a>.';
         b.classList.add('on');
       }
+      window.addEventListener('px:quota', e => { const d = e.detail || {}; toast(d.wait > 60 ? ('Daily fair-use limit reached on the hub (' + d.used + '/' + d.limit + '). It resets at midnight UTC — or run your own hub (SOURCES → YOUR DATA).') : ('Hub is busy — waiting ' + d.wait + 's…'), 6000); });
       return;
     }catch(e){ LOCAL = false; }   // fall through to server/demo if IndexedDB is unavailable
   }
@@ -1025,7 +1027,7 @@ function showPair(){
     </form>
     <div class="note" style="margin:16px 0 8px;text-align:center">— or —</div>
     <button class="btn" style="width:100%" id="useBrowser">📱 USE THIS BROWSER ONLY</button>
-    <p class="note" style="margin-top:8px">No computer needed. Searches run through your own Cloudflare Worker and everything is saved on this device. Nothing is tracked.</p>`, false);
+    <p class="note" style="margin-top:8px">No computer needed. Searches run through a hub (PTXERO's shared one, or your own) and everything is saved on this device. Nothing is tracked.</p>`, false);
   const ub = $('#useBrowser'); if (ub) ub.onclick = () => { store.set('localMode', true); toast('Browser mode on ✓'); setTimeout(() => location.reload(), 400); };
   $('#pairF').onsubmit = async e => {
     e.preventDefault();
@@ -2737,25 +2739,45 @@ function renderWorkerBox(){
   const box = $('#workerBox'); if (!box) return;
   if (!LOCAL){ box.innerHTML = ''; return; }
   const st = STATUS?.settings || {};
-  const set = !!st.worker_url;
+  const own = !!st.worker_url, px = !!window.PX;
   box.innerHTML = `<div class="card pad" style="margin:6px 0 14px">
-    <b>${set ? '◆ Browser mode' : '◆ Set up browser mode'}</b>
-    <p class="note" style="margin:6px 0 10px">Everything stays on this device. Collecting runs through <b>your own</b> Cloudflare Worker — paste its URL. Nothing is sent anywhere else. <a href="worker/" target="_blank" rel="noreferrer">How to deploy one →</a></p>
-    <label class="field"><span>Your Worker URL</span><input id="wkUrl" value="${esc(st.worker_url || '')}" placeholder="https://searchnet.you.workers.dev" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"></label>
-    <label class="field"><span>Shared secret (optional, if you set one)</span><input id="wkKey" value="${esc(st.worker_key || '')}" placeholder="leave blank if none" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
-    <div class="row wrap" style="margin-top:8px"><button class="btn pri sm" id="wkSave">SAVE</button>${set ? '<button class="btn sm" id="wkTest">TEST</button>' : ''}</div></div>`;
+    <b>◆ Browser mode · where fetching happens</b>
+    <p class="note" style="margin:6px 0 10px">Your library stays on this device. The searching itself runs through a <b>hub</b>: PTXERO's shared one by default (nothing to set up, fair-use daily limits), or your own (<a href="../hub/" target="_blank" rel="noreferrer">free, 15 minutes</a>). Requests are signed with your anonymous PTXERO ID so limits are per person and nobody can act as you.</p>
+    <div id="pxPanel"></div>
+    <details style="margin-top:10px"${own ? ' open' : ''}><summary class="note" style="cursor:pointer">Advanced: a SearchNet-only Worker (fetching only, no hub features)</summary>
+      <p class="note" style="margin:8px 0">If you deployed <code>worker/searchnet-worker.js</code> on its own, paste it here and it is used instead of the hub. <a href="worker/" target="_blank" rel="noreferrer">Guide →</a></p>
+      <label class="field"><span>Worker URL</span><input id="wkUrl" value="${esc(st.worker_url || '')}" placeholder="https://searchnet.you.workers.dev (blank = use the hub above)" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"></label>
+      <label class="field"><span>Shared secret (optional, if you set one)</span><input id="wkKey" value="${esc(st.worker_key || '')}" placeholder="leave blank if none" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <div class="row wrap" style="margin-top:8px"><button class="btn pri sm" id="wkSave">SAVE</button><button class="btn sm" id="wkTest">TEST</button></div>
+    </details>
+    <div style="margin-top:12px"><b>Backup on the hub</b>
+      <p class="note" style="margin:6px 0 8px">Saves your topics, votes, sources and identities (not the media) under your PTXERO ID, so another device or a cleared browser can pick up where you left off. Optional — and gone when you delete your data.</p>
+      <div class="row wrap"><button class="btn sm" id="bkSave">⬆ BACK UP NOW</button><button class="btn sm" id="bkLoad">⬇ RESTORE</button><span class="note" id="bkMsg"></span></div></div></div>`;
+  if (px) PX.panel($('#pxPanel'), { app: 'searchnet', local: false, guide: '../hub/', onChange: () => { toast('Hub changed'); refreshStatusChip && refreshStatusChip(); } });
+  else $('#pxPanel').innerHTML = '<p class="note">(the PTXERO ID script did not load — only the Worker option below is available here)</p>';
   $('#wkSave').onclick = async () => {
     const worker_url = $('#wkUrl').value.trim().replace(/\/$/, ''), worker_key = $('#wkKey').value.trim();
-    try{ STATUS.settings = await api('/api/settings', { method: 'PUT', body: { worker_url, worker_key } }); toast('Saved'); renderSources(); const b = $('#banner'); if (worker_url) b.classList.remove('on'); }
+    try{ STATUS.settings = await api('/api/settings', { method: 'PUT', body: { worker_url, worker_key } }); STATUS = await api('/api/status'); toast(worker_url ? 'Saved — using your Worker' : 'Saved — using the hub'); renderSources(); const b = $('#banner'); if (STATUS.worker_url) b.classList.remove('on'); }
     catch(e){ toast(e.message); }
   };
-  if ($('#wkTest')) $('#wkTest').onclick = async () => {
-    try{ const params = new URLSearchParams({ source: 'mastodon', q: 'cat', limit: 3, instance: 'mastodon.social' });
-      const base = st.worker_url.replace(/\/$/, '');
-      const res = await fetch(base + '/search?' + params + (st.worker_key ? '&key=' + encodeURIComponent(st.worker_key) : ''), { headers: st.worker_key ? { 'X-SN-Key': st.worker_key } : {} });
-      const j = await res.json().catch(() => ({}));
-      toast(res.ok ? '✓ Worker reachable · ' + ((j.items || []).length) + ' test items' : ('✕ ' + (j.error || ('HTTP ' + res.status))), 5000);
-    }catch(e){ toast('✕ Could not reach your Worker: ' + e.message, 5000); }
+  $('#wkTest').onclick = async () => {
+    try{ const j = await BK.workerCall('/search?' + new URLSearchParams({ source: 'mastodon', q: 'cat', limit: 3, instance: 'mastodon.social' }));
+      const h = await BK.hub(); toast('✓ ' + (h.kind === 'worker' ? 'Worker' : h.kind === 'own' ? 'Your hub' : 'Shared hub') + ' reachable · ' + ((j.items || []).length) + ' test items', 5000);
+    }catch(e){ toast('✕ ' + e.message, 6000); }
+  };
+  $('#bkSave').onclick = async () => {
+    if (!px) return toast('PTXERO ID not loaded');
+    const m = $('#bkMsg'); m.textContent = 'backing up…';
+    try{ const d = await BK.backup(); const r = await PX.store.put('searchnet', 'backup', d); m.textContent = '✓ backed up · ' + Math.round(r.bytes / 1024) + ' KB · ' + new Date().toLocaleString(); }
+    catch(e){ m.textContent = '✕ ' + (e.status === 413 ? 'too big for one backup (over 512 KB) — delete old topics first' : e.message); }
+  };
+  $('#bkLoad').onclick = async () => {
+    if (!px) return toast('PTXERO ID not loaded');
+    const m = $('#bkMsg'); m.textContent = 'looking…';
+    try{ const r = await PX.store.get('searchnet', 'backup'); const d = r.data || {};
+      if (!await confirmSheet('Restore this backup?', 'From ' + new Date((d.made || 0) * 1000).toLocaleString() + ' · ' + (d.topics || []).length + ' topics, ' + (d.votes || []).length + ' votes. Existing items with the same id are overwritten; nothing else is deleted.', 'RESTORE')) { m.textContent = ''; return; }
+      const res = await BK.request('/api/backup', { method: 'POST', body: d }); await loadTopics(); render(); toast('✓ restored ' + res.restored + ' records'); const m2 = $('#bkMsg'); if (m2) m2.textContent = '✓ restored ' + res.restored + ' records';
+    }catch(e){ m.textContent = '✕ ' + (e.status === 404 ? 'no backup on this hub yet' : e.message); }
   };
 }
 function sourceInfo(s, p){
@@ -2886,7 +2908,7 @@ async function renderSetup(){
   if (LOCAL){
     const s = STATUS || {}; const st = s.settings || {};
     pb.innerHTML = `<div class="card pad"><b>◆ Browser mode</b>
-      <p class="note" style="margin:6px 0 10px">This device is your whole library — stored in your browser (IndexedDB), nothing on any server, nothing tracked. Collecting runs through ${st.worker_url ? 'your Worker <b>' + esc(st.worker_url) + '</b>' : 'a Cloudflare Worker you add in <a href="#sources">SOURCES</a>'}.</p>
+      <p class="note" style="margin:6px 0 10px">This device is your whole library — stored in your browser (IndexedDB), nothing on any server, nothing tracked. Fetching runs through ${s.hub ? (s.hub.kind === 'worker' ? 'your Worker <b>' + esc(s.hub.base) + '</b>' : s.hub.kind === 'own' ? 'your own hub <b>' + esc(s.hub.base) + '</b>' : 'PTXERO\'s shared hub (fair-use limits)') : 'nothing yet'} — change it in <a href="#sources">SOURCES → where fetching happens</a>.</p>
       <div class="note">Library: <b>${fmtN(s.counts?.n || 0)}</b> items · <b>${fmtN(s.topics || 0)}</b> topics · ${s.counts?.speech || 0} with speech</div>
       <p class="note" style="margin-top:10px">Add this page to your home screen (Firefox ⋯ → Share → Add to Home Screen) to use it like an app.</p>
       <div class="row wrap" style="margin-top:10px"><button class="btn sm" id="switchServer">USE A COMPUTER INSTEAD</button></div></div>`;
@@ -3084,35 +3106,39 @@ function showOnboarding(){
   const choose = which => {
     $$('.ob-choice').forEach(b => b.classList.toggle('on', b.dataset.ob === which));
     if (which === 'browser'){
+      const px = !!window.PX;
       step.innerHTML = `<div class="card pad">
-        <b>1 · Deploy your free Cloudflare Worker</b>
-        <p class="note" style="margin:6px 0 10px">It does the fetching so your browser doesn't have to. Takes a few minutes, once. <a href="worker/" target="_blank" rel="noreferrer">Step-by-step guide →</a></p>
-        <b>2 · Paste its address</b>
-        <label class="field" style="margin-top:8px"><span>Worker URL</span><input id="obWk" placeholder="https://searchnet.you.workers.dev" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"></label>
-        <label class="field"><span>Shared secret (only if you set one)</span><input id="obKey" placeholder="leave blank if none" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
-        <div class="ob-foot"><button class="btn sm" id="obTest">TEST</button><span class="note" id="obMsg"></span><span class="grow"></span><button class="btn pri" id="obGo" disabled>SAVE &amp; START</button></div>
-        <p class="note" style="margin-top:10px">Your library lives in this browser. Downloads, speech/on-screen text and logged-in sites (X, Instagram) need the computer option.</p></div>`;
+        <b>Nothing to install</b>
+        <p class="note" style="margin:6px 0 10px">Your library lives in this browser. The fetching runs through a hub — PTXERO's shared hub by default (fair-use daily limits; anything you leave there is deleted after a few months unused), or your own free one later. You get an anonymous <b>PTXERO ID</b>${px ? ' (<b>@' + esc(PX.handle()) + '</b>)' : ''} — no e-mail, no name — that signs your requests so limits are per person and nobody can act as you.</p>
+        <div id="obPx"></div>
+        <details style="margin-top:8px"><summary class="note" style="cursor:pointer">Advanced: use a SearchNet-only Worker instead</summary>
+          <label class="field" style="margin-top:8px"><span>Worker URL</span><input id="obWk" placeholder="https://searchnet.you.workers.dev" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"></label>
+          <label class="field"><span>Shared secret (only if you set one)</span><input id="obKey" placeholder="leave blank if none" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+          <p class="note"><a href="worker/" target="_blank" rel="noreferrer">How to deploy one →</a></p></details>
+        <div class="ob-foot"><button class="btn sm" id="obTest">TEST</button><span class="note" id="obMsg"></span><span class="grow"></span><button class="btn pri" id="obGo">START</button></div>
+        <p class="note" style="margin-top:10px">Downloads, speech/on-screen text and logged-in sites (X, Instagram) need the computer option.</p></div>`;
+      if (px) PX.panel($('#obPx'), { app: 'searchnet', local: false, guide: '../hub/' });
       const test = async () => {
         const base = $('#obWk').value.trim().replace(/\/$/, ''), key = $('#obKey').value.trim(), msg = $('#obMsg');
-        if (!/^https?:\/\//.test(base)) return (msg.textContent = 'Paste the full https:// address', msg.className = 'note ob-bad', false);
         msg.innerHTML = '<span class="spinner"></span> testing…'; msg.className = 'note';
         try{
-          const r = await fetch(base + '/search?' + new URLSearchParams({ source: 'mastodon', q: 'cat', limit: 3, instance: 'mastodon.social' }) + (key ? '&key=' + encodeURIComponent(key) : ''), { headers: key ? { 'X-SN-Key': key } : {} });
-          const j = await r.json().catch(() => ({}));
-          if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
-          msg.textContent = '✓ Worker reachable · ' + (j.items || []).length + ' test results'; msg.className = 'note ob-ok'; $('#obGo').disabled = false; return true;
-        }catch(e){ msg.textContent = '✕ ' + (e.message || 'could not reach it'); msg.className = 'note ob-bad'; $('#obGo').disabled = true; return false; }
+          let url, headers = {};
+          if (base){ if (!/^https?:\/\//.test(base)) throw new Error('Paste the full https:// address'); url = base + '/search?' + new URLSearchParams({ source: 'mastodon', q: 'cat', limit: 3, instance: 'mastodon.social' }) + (key ? '&key=' + encodeURIComponent(key) : ''); if (key) headers = { 'X-SN-Key': key }; }
+          else if (px){ url = PX.host().hub + '/search?' + new URLSearchParams({ source: 'mastodon', q: 'cat', limit: 3, instance: 'mastodon.social' }); headers = await PX.sign('GET', url); }
+          else throw new Error('No hub available here — paste a Worker URL');
+          const r = await fetch(url, { headers }); const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j.error === 'quota' ? 'fair-use limit reached — try later or use your own hub' : (j.error || ('HTTP ' + r.status)));
+          msg.textContent = '✓ ' + (base ? 'Worker' : 'hub') + ' reachable · ' + (j.items || []).length + ' test results'; msg.className = 'note ob-ok'; return true;
+        }catch(e){ msg.textContent = '✕ ' + (e.message || 'could not reach it'); msg.className = 'note ob-bad'; return false; }
       };
       $('#obTest').onclick = test;
-      $('#obWk').oninput = () => { $('#obGo').disabled = true; $('#obMsg').textContent = ''; };
       $('#obGo').onclick = async () => {
         const worker_url = $('#obWk').value.trim().replace(/\/$/, ''), worker_key = $('#obKey').value.trim();
-        if (!(await test())) return;
+        if (worker_url && !(await test())) return;
         store.set('localMode', true); store.set('setupDone', true);
-        if (LOCAL){ try{ STATUS.settings = await api('/api/settings', { method: 'PUT', body: { worker_url, worker_key } }); STATUS.worker_url = worker_url; }catch(e){} ob.hidden = true; document.body.classList.remove('noscroll'); $('#banner').classList.remove('on'); go('topics'); }
+        if (LOCAL){ try{ STATUS.settings = await api('/api/settings', { method: 'PUT', body: { worker_url, worker_key } }); STATUS = await api('/api/status'); }catch(e){} ob.hidden = true; document.body.classList.remove('noscroll'); $('#banner').classList.remove('on'); go('topics'); }
         else { try{ await BK.init(); await BK.request('/api/settings', { method: 'PUT', body: { worker_url, worker_key } }); }catch(e){} location.hash = '#topics'; location.reload(); }
       };
-      setTimeout(() => $('#obWk').focus(), 50);
     } else {
       const remoteHost = /github\.io$|neocities\.org$/.test(location.hostname);
       step.innerHTML = `<div class="card pad">

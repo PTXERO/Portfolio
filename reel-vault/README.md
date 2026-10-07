@@ -104,9 +104,14 @@ holding:
 
 - Your whole library lives in the browser (IndexedDB) — no server, no account, nothing
   sent anywhere.
-- Collecting runs through **your own** [Cloudflare Worker](worker/README.md) (free tier is
-  plenty). Deploy it once, paste its URL in SOURCES, and it fetches from Mastodon, Lemmy,
-  Reddit, Bluesky, YouTube and any RSS/channel feed at the edge.
+- Collecting runs through a **hub**: PTXERO's shared one by default (nothing to set up;
+  fair-use daily limits per person; anything you leave there is auto-deleted after 180 days
+  unused), or **your own** free Cloudflare Worker + Supabase hub with no limits — the
+  [hub guide](../hub/index.html) walks through it in about 15 minutes. Requests are signed
+  with your anonymous PTXERO ID (a key made in your browser), so nobody can act as you.
+  SOURCES → YOUR DATA switches hubs, backs up your topics/votes to the hub, exports or
+  erases everything. A bare SearchNet-only [Worker](worker/README.md) still works too
+  (SOURCES → Advanced).
 - The same self-learning topics, 👍/👎 training, soft/anti keywords, 👎-reasons and review
   deck work here — the relevance engine is ported to run in the page.
 - To go back to the PC server later, SETUP → **Use a computer instead**. Your browser

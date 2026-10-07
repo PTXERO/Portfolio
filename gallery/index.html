@@ -7,6 +7,7 @@
 <script src="../design-tokens.js"></script>
 <script src="../site.config.js"></script>
 <script src="rf.config.js"></script>
+<script src="../ptxero-id.js?v=1"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
 <link rel="stylesheet" href="../shared.css">
 <style>
@@ -279,7 +280,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
   <div class="rf-tuner-unit">MHz</div>
   <div class="rf-sep"></div>
   <div class="rf-freq-display" id="rfFreqDisplay">88.0 — 108.0 MHz</div>
+  <div class="rf-sep"></div>
+  <button class="rf-loc-btn" id="pxBtn" title="Your PTXERO ID and where your data lives">@ID</button>
 </header>
+<style>#pxOverlay:not([hidden]){display:flex}</style><div id="pxOverlay" hidden style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.72);align-items:center;justify-content:center;padding:16px"><div style="max-width:620px;width:100%;max-height:90vh;overflow:auto"><div id="pxHost"></div><button id="pxClose" class="rf-loc-btn" style="margin-top:10px">CLOSE</button></div></div>
 
 <div class="rf-workspace">
   <!-- Left -->
@@ -1968,6 +1972,15 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
   setStatus('NOISE FLOOR — SIMULATED · ENTER COORDINATES AND HIT LOAD FOR REAL STATIONS');
   setTimeout(loadStations, 300);
 
+})();
+</script>
+<script>
+(function(){
+  const b = document.getElementById('pxBtn'), ov = document.getElementById('pxOverlay'); if(!b || !window.PX){ if(b) b.hidden = true; return; }
+  b.textContent = '@' + PX.handle();
+  b.onclick = () => { ov.hidden = false; PX.panel(document.getElementById('pxHost'), { app:'gallery', local:false, guide:'../hub/' }); };
+  document.getElementById('pxClose').onclick = () => { ov.hidden = true; };
+  ov.addEventListener('click', e => { if(e.target === ov) ov.hidden = true; });
 })();
 </script>
 </body>

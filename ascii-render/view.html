@@ -10,6 +10,7 @@
 <meta property="og:type" content="website">
 <script src="../design-tokens.js?v=1"></script>
 <script src="share.config.js?v=1"></script>
+<script src="../ptxero-id.js?v=1"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
 <link rel="stylesheet" href="../shared.css?v=1">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -109,6 +110,11 @@
 <script>
 (function(){
   const CFG = window.SHARE || {};
+  if (window.PX) {   // YOUR DATA → "my own hub": every PTXERO app follows the same choice
+    const H = window.PX.host();
+    if (H.mode === 'own') { CFG.workerUrl = H.hub; if (H.supabaseUrl) CFG.supabaseUrl = H.supabaseUrl; if (H.supabaseAnonKey) CFG.supabaseAnonKey = H.supabaseAnonKey; }
+    else if (!CFG.workerUrl) CFG.workerUrl = H.hub;
+  }
   if(CFG.supabaseUrl) CFG.supabaseUrl = CFG.supabaseUrl.replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
   const body = document.getElementById('viewBody');
   const params = new URLSearchParams(location.search);
@@ -117,6 +123,8 @@
   const READY = CFG.supabaseUrl && !/YOURPROJECT/.test(CFG.supabaseUrl) && CFG.supabaseAnonKey && !/YOUR_ANON/.test(CFG.supabaseAnonKey);
   const publicUrl = (p) => `${CFG.supabaseUrl}/storage/v1/object/public/${CFG.bucket}/${p}`;
   const workerBase = (CFG.workerUrl && /^https?:/.test(CFG.workerUrl)) ? CFG.workerUrl.replace(/\/+$/,'') : '';
+  // every write carries the PTXERO ID signature (the hub binds the key on first use; from then on only it may act as @you)
+  async function pxPost(path, fd){ const url = workerBase + path; const headers = window.PX ? await window.PX.sign('POST', url) : {}; return fetch(url, { method:'POST', body: fd, headers }); }
 
   function handlePrefix(){ let p=''; try{ p=localStorage.getItem('ptxero_handle_prefix')||''; }catch(e){} p=p.replace(/[^A-Za-z0-9]/g,'').toUpperCase().slice(0,2); return p||'RF'; }
   function myHandle(){
@@ -233,7 +241,7 @@
             const secret = await identitySecret();
             const fd = new FormData(); fd.append('uid', mySuffix); fd.append('secret', secret || ''); fd.append('action', 'add');
             fd.append('target', slug); fd.append('kind', isText ? 'text' : 'render'); fd.append('reason', reason);
-            const r = await fetch(workerBase + '/report', { method:'POST', body: fd }); if(!r.ok) throw new Error();
+            const r = await pxPost('/report', fd); if(!r.ok) throw new Error();
             reportBtn.textContent = '✓ REPORTED';
           }catch(e){ reportBtn.disabled = false; reportBtn.textContent = 'REPORT'; alert('Could not submit report.'); }
         };
@@ -267,7 +275,7 @@
           try{
             const secret = await identitySecret();
             const fd = new FormData(); fd.append('uid', mySuffix); fd.append('secret', secret || ''); fd.append('target', slug); fd.append('kind', isText ? 'text' : 'render'); fd.append('action', willRepost ? 'repost' : 'unrepost');
-            const r = await fetch(workerBase + '/repost', { method:'POST', body: fd }); if(!r.ok) throw new Error();
+            const r = await pxPost('/repost', fd); if(!r.ok) throw new Error();
           }catch(e){ state = prev; paint(); }
         };
       })();
@@ -287,7 +295,7 @@
           try{
             const secret = await identitySecret();
             const fd = new FormData(); fd.append('uid', mySuffix); fd.append('secret', secret || ''); fd.append('featured', JSON.stringify(next));
-            const r = await fetch(workerBase + '/profile', { method:'POST', body: fd }); if(!r.ok) throw new Error();
+            const r = await pxPost('/profile', fd); if(!r.ok) throw new Error();
             featSet = next; paintFeat();
           }catch(e){ alert('Could not update featured.'); }
           finally{ featBtn.disabled = false; }
@@ -306,7 +314,7 @@
           if(!mySuffix) return;
           const prev = likeState; const willLike = !likeState.mine;
           likeState = { count: Math.max(0, likeState.count + (willLike ? 1 : -1)), mine: willLike }; paint();
-          try{ const secret = await identitySecret(); const fd = new FormData(); fd.append('slug', slug); fd.append('uid', mySuffix); fd.append('secret', secret || ''); fd.append('action', willLike ? 'like' : 'unlike'); const r = await fetch(workerBase + '/like', { method:'POST', body: fd }); if(!r.ok) throw new Error(); }
+          try{ const secret = await identitySecret(); const fd = new FormData(); fd.append('slug', slug); fd.append('uid', mySuffix); fd.append('secret', secret || ''); fd.append('action', willLike ? 'like' : 'unlike'); const r = await pxPost('/like', fd); if(!r.ok) throw new Error(); }
           catch(e){ likeState = prev; paint(); }
         };
       }
@@ -344,7 +352,7 @@
               try{
                 const secret = await identitySecret();
                 const fd = new FormData(); fd.append('slug', slug); fd.append('uid', mySuffix); fd.append('secret', secret||''); fd.append('action','delete'); fd.append('id', c.id);
-                const r = await fetch(workerBase + '/comment', { method:'POST', body: fd }); if(!r.ok) throw new Error();
+                const r = await pxPost('/comment', fd); if(!r.ok) throw new Error();
                 el.remove();
                 const n = (parseInt(countEl.textContent||'0',10)||1) - 1; countEl.textContent = n > 0 ? n : '';
                 if(!listEl.querySelector('.v-c')) listEl.innerHTML = '<div class="v-cempty">No comments yet — start the thread.</div>';
@@ -378,7 +386,7 @@
             try{
               const secret = await identitySecret();
               const fd = new FormData(); fd.append('slug', slug); fd.append('uid', mySuffix); fd.append('secret', secret||''); fd.append('body', val);
-              const r = await fetch(workerBase + '/comment', { method:'POST', body: fd }); if(!r.ok) throw new Error(await r.text());
+              const r = await pxPost('/comment', fd); if(!r.ok) throw new Error(await r.text());
               input.value = ''; await load();
             }catch(e){ alert('Could not post comment.'); }
             finally{ postBtn.disabled = false; postBtn.textContent = 'POST'; }
@@ -412,14 +420,14 @@
             const secret = await identitySecret();
             if(isText){
               const fd = new FormData(); fd.append('id', slug); fd.append('uid', mySuffix); fd.append('secret', secret||''); fd.append('action', 'delete');
-              r = await fetch(workerBase + '/post', { method:'POST', body: fd });
+              r = await pxPost('/post', fd);
             } else {
               const fd = new FormData();
               fd.append('slug', slug);
               if(token) fd.append('token', token);
               fd.append('handle', myHandle() || '');
               fd.append('secret', secret || '');   // enables the ADMIN override on the worker
-              r = await fetch(workerBase + '/delete', { method:'POST', body: fd });
+              r = await pxPost('/delete', fd);
             }
             if(!r.ok){ alert('Delete failed (' + r.status + '): ' + await r.text()); delBtn.disabled = false; delBtn.textContent = '✕ DELETE'; return; }
             if(!isText && token){ delete tokens[slug]; try{ localStorage.setItem('ptxero_my_renders', JSON.stringify(tokens)); }catch(e){} }

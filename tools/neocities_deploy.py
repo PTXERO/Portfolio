@@ -29,11 +29,11 @@ API = os.environ.get("NEOCITIES_API_URL", "https://neocities.org/api")
 
 # This tool manages ONLY the reel-vault app on the static host. Everything else on
 # the site is hand-maintained in the Neocities editor and must not be touched here.
-PUBLISH_ROOTS = ("reel-vault/",)          # the only subtree this tool publishes
+PUBLISH_ROOTS = ("reel-vault/", "hub/", "ptxero-id.js")   # the only paths this tool publishes
 # never published: tooling, the local server's code, private data
 SKIP_DIRS = {".git", ".github", ".claude", ".venv", "tools", "node_modules", "__pycache__", "data", "models"}
 SKIP_FILES = {".gitignore", ".DS_Store", "Thumbs.db"}
-SKIP_PATTERNS = ("reel-vault/server/",)   # server code runs on the PC, never on the static host
+SKIP_PATTERNS = ("reel-vault/server/", "hub/build/")   # server code runs on the PC; the hub build tooling stays in the repo
 # Neocities (free plan) accepts these; anything else is skipped with a note
 ALLOWED = set("""apng asc atom avif bin cjs css csv dae eot epub geojson gif glb glsl gltf gpg htm html
 ico jpeg jpg js json jxl key kml knowl less manifest map markdown md mf mid midi mjs mtl obj opml osdx
@@ -53,7 +53,7 @@ def local_files():
         rel = p.relative_to(ROOT).as_posix()
         if p.is_dir() or any(part in SKIP_DIRS for part in p.relative_to(ROOT).parts):
             continue
-        if not rel.startswith(PUBLISH_ROOTS):     # only the reel-vault subtree
+        if not rel.startswith(PUBLISH_ROOTS):     # only the published subtrees
             continue
         if p.name in SKIP_FILES or rel.startswith(SKIP_PATTERNS) or p.name.startswith("."):
             continue

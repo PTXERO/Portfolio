@@ -207,12 +207,7 @@
     }
     await saveTopic(t);
   }
-  async function workerSearch(params) {
-    const s = await L.settings(); if (!s.worker_url) throw new Error('set your Worker URL in SOURCES');
-    const base = s.worker_url.replace(/\/$/, '');
-    const r = await fetch(base + '/search?' + params + (s.worker_key ? '&key=' + encodeURIComponent(s.worker_key) : ''), { headers: s.worker_key ? { 'X-SN-Key': s.worker_key } : {} });
-    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j;
-  }
+  async function workerSearch(params) { return L.workerCall('/search?' + params); }
   async function notThem(tid) { const t = await getTopic(tid); const p = (t && t.settings && t.settings.person) || {}; return new Set((p.not_them || []).map((x) => String(x).toLowerCase())); }
   async function link(tid, iid, query, sid) {
     const bad = await notThem(tid);
@@ -414,7 +409,7 @@
   //    (The PC server has a real scheduler; in browser mode this is it.)
   async function autoRefresh() {
     if (!L.enabled) return [];
-    const s = await L.settings(); if (!s.worker_url) return [];
+    if (!(await L.hub())) return [];
     const ran = [];
     for (const t of await allTopics()) {
       const hrs = +((t.settings || {}).refresh_hours || 0); if (!hrs) continue;
