@@ -41,27 +41,12 @@ const SITE = {
   // status: 'live' | 'wip' | 'soon' | 'auto' (auto → resolved from statusUrl)
   projects: [
     {
-      id:     'about',
-      title:  'ABOUT',
-      desc:   'Who I am, what I shoot.',
-      tags:   ['photography', 'contact'],
-      url:    './about/',
-      status: 'live',
-    },
-    {
-      id:     'gallery',
-      title:  'GALLERY',
-      desc:   'Image gallery of my photography',
-      tags:   ['photography', 'film'],
-      url:    './gallery/',
-      status: 'live',
-    },
-    {
-      id:     'social',
-      title:  'PTXERO//SOCIAL',
-      desc:   'PTXERO SOCIAL NETWORK',
-      tags:   ['social', 'blog', 'platform'],
-      url:    './social.html',
+      id:     'hub',
+      title:  'PTXERO//HUB',
+      sub:    'v2.0',
+      desc:   'Your data, your choice. One anonymous PTXERO ID across every app, backed by a key made in your browser. Use the shared hub (fair-use limits, auto-deleted when unused) or set up your own free Cloudflare Worker + Supabase hub in 15 minutes. Export or erase everything any time.',
+      tags:   ['identity', 'privacy', 'self-host', 'guide'],
+      url:    './hub/',
       status: 'live',
     },
     {
@@ -82,6 +67,14 @@ const SITE = {
       status: 'auto',
     },
     {
+      id:     'social',
+      title:  'PTXERO//SOCIAL',
+      desc:   'PTXERO SOCIAL NETWORK',
+      tags:   ['social', 'blog', 'platform'],
+      url:    './social.html',
+      status: 'live',
+    },
+    {
       id:     'reel-vault',
       title:  'SEARCH//NET',
       sub:    'v3.0',
@@ -89,6 +82,25 @@ const SITE = {
       tags:   ['search', 'social', 'osint', 'ml', 'python'],
       url:    './reel-vault/',
       status: 'live',
+    },
+    // hidden for now (set hidden:false to bring back)
+    {
+      id:     'about',
+      title:  'ABOUT',
+      desc:   'Who I am, what I shoot.',
+      tags:   ['photography', 'contact'],
+      url:    './about/',
+      status: 'live',
+      hidden: true,
+    },
+    {
+      id:     'gallery',
+      title:  'GALLERY',
+      desc:   'Image gallery of my photography',
+      tags:   ['photography', 'film'],
+      url:    './gallery/',
+      status: 'live',
+      hidden: true,
     },
     // Project Template:
     // {
@@ -105,10 +117,9 @@ const SITE = {
   // ── Social Links ────────────────────────────────────────────────
   // icon: any single emoji or short string
   // Set url to null to hide a link.
+  // Empty = the Socials bar is hidden.
   socials: [
     //{ label: 'Placeholder',    icon: '⌥', url: 'https://placeholder' },
-    { label: 'Instagram', icon: '◎', url: 'https://instagram.com/PTXERO' },
-    { label: 'Flickr',     icon: '⛶', url: 'https://www.flickr.com/people/198130461@N06/' },
   ],
 
   // ── Footer ──────────────────────────────────────────────────────

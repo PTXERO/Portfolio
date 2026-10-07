@@ -48,7 +48,9 @@
 
   // Socials
   const socialsBarLinks=document.getElementById('socialsBarLinks');
-  S.socials.filter(s=>s.url).forEach(s=>{
+  const socialsOn=S.socials.filter(s=>s.url);
+  if(!socialsOn.length) document.getElementById('socialsBar').style.display='none';
+  socialsOn.forEach(s=>{
   const a=document.createElement('a');
   a.className='socials-tab';a.href=s.url;a.title=s.label;
   a.textContent=s.icon+' '+s.label;
@@ -143,7 +145,7 @@ window.addEventListener('resize', () => {
   // ── Projects Grid ────────────────────────────────────────────
   const grid=document.getElementById('projectsGrid');
 
-  S.projects.forEach(p=>{
+  S.projects.filter(p=>!p.hidden).forEach(p=>{
     const a=document.createElement('a');
     a.className='project-card';
     a.href=p.url;
