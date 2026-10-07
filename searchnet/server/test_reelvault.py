@@ -1239,3 +1239,81 @@ class Writers(Base):
         self.assertEqual(d["articles"][0]["with"], [])
         self.assertEqual(d["articles"][1]["with"], ["Bob Roe"])
         self.assertEqual(writer(self.v, "nobody")["error"], "no articles with this byline")
+
+
+
+def post(pid, text, author="u", ts=None, **kw):
+    it = {"id": "x:" + pid, "platform": "x", "post_id": pid, "media": "post", "url": "https://x.com/" + author + "/status/" + pid, "author": author,
+          "author_name": author.title(), "text": text, "hashtags": " ".join(t[1:] for t in text.split() if t.startswith("#")), "posted_at": ts,
+          "likes": 2, "reposts": 0, "replies": 0, "views": 50}
+    it.update(kw)
+    return it
+
+
+class Signals(Base):
+    def test_signals_read_a_surge_an_uproar_the_issue_and_a_copypasta(self):
+        from rv import signals as SIG
+        from rv.util import now as _now
+        n0 = _now()
+        items = []
+        # a quiet fortnight, then a burst yesterday and today, angry, about power and prices, with a copy-pasted line
+        for d in range(20, 2, -1):
+            if d % 3 == 0:
+                items.append(post(f"q{d}", "Isaias update: forecasters watching the track #isaias", f"calm{d % 4}", n0 - d * 86400))
+        angry = ["Duke Energy still has no power for 200k people. Unacceptable. Resign. #isaias", "Gas gouging at $9 a gallon after Isaias. Disgusting. Boycott them.",
+                 "Three days, NO POWER, NO ANSWERS!!! Outrage in Collier County #isaias", "Duke Energy outage map is a lie. Shameful. Lawsuit when?"]
+        for i in range(16):
+            items.append(post(f"b{i}", angry[i % 4], f"mad{i % 7}", n0 - (i % 2) * 86400 - 600 * i, likes=20, replies=18, reposts=3))
+        for i in range(4):
+            items.append(post(f"c{i}", "Sign the petition: restore power in Collier County now https://petition.example/isaias #isaias", f"copy{i}", n0 - 3600 * i, likes=1))
+        items.append(post("first", "Duke Energy says outages could last a week after Isaias #isaias", "wxguy", n0 - 86400 - 7200, likes=900, reposts=400, replies=30))
+        s = SIG.summarize(items, {"isaias", "hurricane"})
+        self.assertEqual(s["trend"]["state"], "surging", s["trend"])
+        self.assertTrue(s["trend"]["bursts"] and s["trend"]["bursts"][-1]["n"] >= 10)
+        self.assertIn(s["heat"]["level"], ("hot", "uproar"))
+        self.assertTrue({w["word"] for w in s["heat"]["words"]} & {"unacceptable", "resign", "disgusting", "boycott", "outrage", "shameful", "lawsuit"})
+        self.assertTrue(any(p["kind"] == "replies vs likes" and p["value"] >= 0.5 for p in s["heat"]["parts"]))
+        cats = [i["category"] for i in s["issues"]]
+        self.assertIn("infrastructure / outages", cats)
+        self.assertIn("cost of living", cats)
+        self.assertEqual(s["drivers"][0]["author"], "wxguy")          # reach + posted before the burst
+        self.assertTrue(any("before the burst" in w for w in s["drivers"][0]["why"]))
+        self.assertEqual(s["coordination"]["copies"][0]["accounts"], 4)
+        self.assertEqual(s["coordination"]["same_link"][0]["url"], "https://petition.example/isaias")
+        self.assertTrue(s["spread"]["platforms"][0]["platform"] == "x" and s["spread"]["accounts"] >= 12)
+        self.assertTrue(any(l["what"] == "name duke energy" for l in s["lead_lag"]), s["lead_lag"])
+        self.assertIn("surging", s["headline"])
+        self.assertEqual(s["badge"]["state"], "surging")
+        # calm data reads calm
+        calm = SIG.summarize([post(f"z{i}", f"Isaias track update number {i}, forecast cone {"shifted" if i % 2 else "held"} #isaias", f"a{i}", n0 - i * 3 * 86400) for i in range(8)], {"isaias"})
+        self.assertEqual(calm["heat"]["level"], "calm")
+        self.assertFalse(calm["coordination"]["copies"] and calm["coordination"]["copies"][0]["accounts"] >= 5)
+
+    def test_storylines_split_a_topic_into_its_threads(self):
+        from rv import signals as SIG
+        from rv.util import now as _now
+        n0 = _now()
+        items = []
+        for i in range(8):
+            items.append(post(f"p{i}", f"Power outage still going in Collier, crews from Duke Energy working #isaias {i}", f"u{i}", n0 - i * 3600))
+        for i in range(6):
+            items.append(post(f"e{i}", f"Evacuation shelters open at the high school tonight for Isaias #isaias {i}", f"v{i}", n0 - i * 3600))
+        for i in range(5):
+            items.append(post(f"g{i}", f"Gas stations gouging prices after Isaias, report it #isaias {i}", f"w{i}", n0 - i * 3600))
+        st = SIG.storylines(items, {"isaias", "hurricane"})
+        names = [s["name"] for s in st]
+        self.assertEqual(len(st), 3, names)
+        self.assertTrue(any("outage" in n or "power" in n or "crews" in n for n in names), names)
+        self.assertTrue(any("shelters" in n or "evacuation" in n for n in names), names)
+        self.assertTrue(any("gouging" in n or "stations" in n for n in names), names)
+        self.assertEqual(sum(s["n"] for s in st), 19)
+        self.assertTrue(all(s["examples"] and s["accounts"] for s in st))
+        # the route
+        t = self.v.create_topic("Isaias", ["isaias"], settings={"window": "all"})
+        for it in items[:6]:
+            self.v.db.upsert(it)
+            self.v.link(t["id"], it["id"], "isaias", "s")
+            self.v.vote(t["id"], it["id"], 1)
+        r = SIG.build(self.v, t["id"])
+        self.assertEqual(r["n"], 6)
+        self.assertIn("badge", r)

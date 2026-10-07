@@ -582,6 +582,16 @@ body.noscroll-max{overflow:hidden}
 .pcard .pill.t{color:var(--acc);border-color:rgba(var(--acc-rgb),.35)}
 .pcard .pill.a{color:var(--acc3);border-color:rgba(245,66,168,.35)}
 .spark{display:flex;align-items:flex-end;gap:2px;height:34px;margin-top:4px}
+.sig{display:inline-flex;align-items:center;gap:6px;font-family:var(--fmono);font-size:11px;letter-spacing:.04em;padding:2px 8px;border:1px solid var(--border);border-radius:999px;color:var(--dim)}
+.sig.surging,.sig.uproar{color:var(--acc);border-color:rgba(var(--acc-rgb),.5)}
+.sig.rising,.sig.hot{color:var(--txt);border-color:rgba(var(--acc-rgb),.3)}
+.sig.fading,.sig.quiet{opacity:.7}
+.sigbar{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.heat{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin:6px 0}
+.heat i{display:block;height:100%;background:var(--acc)}
+.story{padding:8px 0;border-bottom:1px solid var(--border)}
+.story:last-child{border-bottom:0}
+.story .nm{font-family:var(--fdisp);font-size:18px;letter-spacing:.04em}
 .spark i{flex:1;background:var(--acc2);opacity:.6;border-radius:1px;min-height:1px}
 .wd{display:flex;gap:3px;margin-top:4px}
 .wd i{flex:1;text-align:center;font-size:9px;color:var(--mut);padding-top:2px}
@@ -1124,6 +1134,7 @@ async function renderTopics(){
     return `<div class="tcard" data-tid="${t.id}" role="link" tabindex="0">
       <div class="name">${esc(t.name)}</div>
       <div class="seeds">${t.seeds.map(esc).join(' · ')} · ${BREADTH[t.settings.breadth] || ''}${t.settings.refresh_hours > 0 ? ' · ⟳ ' + t.settings.refresh_hours + 'h' : ''}</div>
+      ${sigBadges(t.settings.signal)}
       <div class="nums"><span class="todo"><b>${fmtN(c.unrated)}</b> to review</span><span><b>${fmtN(c.pos)}</b> 👍</span><span><b>${fmtN(c.neg)}</b> 👎</span><span>${t.running ? '<span class="spinner"></span> searching' : t.last_run ? 'updated ' + ago(t.last_run) + ' ago' : 'not run yet'}</span></div>
       <button class="btn sm run" data-run="${t.id}" ${t.running ? 'disabled' : ''} aria-label="Find more">▶</button>
     </div>`;
@@ -1676,7 +1687,7 @@ function personCardHTML(p, T, items, I){
     <div class="note" style="margin:10px 0 4px">People-search &amp; records sites <small>(show addresses, relatives, phone numbers. Open them to see what's public and use each site's opt-out)</small></div><div class="meta">${people.map(([n, u]) => a(n, u, 'a')).join('')}</div>
   </div>`;
 }
-let BRIEF = null;
+let BRIEF = null, SIGNALS = null;
 const KIND_LABEL = { person: 'a person', handle: 'one account', event: 'an event', place: 'a place', tech: 'technical', general: 'a general subject' };
 function windowLabel(st){ const w = String((st || {}).window || 'auto'); const d = w === 'auto' ? ((st || {}).plan || {}).window_days : (w === 'all' ? 0 : +w); return d ? 'last ' + d + ' days' + (w === 'auto' ? ' (auto)' : '') : 'everything' + (w === 'auto' ? ' (auto)' : ''); }
 function planCard(){
@@ -1691,6 +1702,53 @@ function briefText(){
   const b = BRIEF; if (!b) return '';
   const when = ts => ts ? new Date(ts * 1000).toLocaleDateString() : '?';
   return [b.topic.toUpperCase(), `${b.n_items} posts (${b.n_liked} rated 👍), ${when(b.first)} to ${when(b.last)}`, '', ...b.sentences.map(s => `• ${s.text} [${s.n}]`), '', 'WHO: ' + b.accounts.map(a => '@' + a.author + ' (' + a.platform + ', ' + a.n + ')').join(', '), 'WHERE: ' + b.platforms.map(([p, n]) => p + ' ' + n).join(', '), 'TAGS: ' + b.tags.map(([t, n]) => '#' + t + ' ' + n).join(', '), '', 'TIMELINE:', ...b.timeline.map(w => `${when(w.week_start)}: ${w.n} posts. ${w.headline}`), '', 'SOURCES:', ...Object.entries(b.citations).map(([n, c]) => `[${n}] ${c.url || ''}`)].join('\n');
+}
+// ── SIGNALS: patterns across the whole topic. Each number links to the posts behind it.
+const SIG_ICON = { surging: '▲▲', rising: '▲', steady: '●', fading: '▼', quiet: '○', new: '✦', undated: '?' };
+function sigBadges(sg){
+  if (!sg || !sg.state) return '';
+  const heat = sg.heat && sg.heat !== 'calm' ? `<span class="sig ${esc(sg.heat)}" title="heat ${sg.score}/100">${sg.heat === 'uproar' ? '🔥🔥' : sg.heat === 'hot' ? '🔥' : '♨'} ${esc(sg.heat)}</span>` : '';
+  return `<div class="sigbar" title="${esc(sg.headline || '')}"><span class="sig ${esc(sg.state)}">${SIG_ICON[sg.state] || ''} ${esc(sg.state)}${sg.velocity && sg.velocity !== 1 && isFinite(sg.velocity) ? ' · ' + sg.velocity + '× last week' : ''}</span>${heat}</div>`;
+}
+function signalCards(){
+  const S = SIGNALS; if (!S || S.error || !S.n) return '';
+  const when = ts => ts ? new Date(ts * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '?';
+  const link = (r, label) => r && r.url ? `<a class="pill" href="${esc(r.url)}" target="_blank" rel="noreferrer noopener" title="${esc(r.text || '')}">${esc(label || ('@' + (r.author || '') + ' · ' + (r.platform || '')))}</a>` : '';
+  const posts = rs => (rs || []).map(r => link(r, '↗')).join('');
+  const tr = S.trend, days = tr.series || [], dmax = Math.max(1, ...days.map(d => d.n));
+  const burst = (tr.bursts || [])[tr.bursts ? tr.bursts.length - 1 : 0];
+  const trendCard = `<div class="dcard"><div class="dh">Trend <span class="sig ${esc(tr.state)}">${SIG_ICON[tr.state] || ''} ${esc(tr.state)}</span></div>
+    ${days.length ? `<div class="spark">${days.map(d => `<i style="height:${Math.max(2, Math.round(100 * d.n / dmax))}%;${burst && d.day >= burst.start && d.day <= burst.end ? 'background:var(--acc)' : ''}" title="${when(d.day)}: ${d.n}"></i>`).join('')}</div><div class="note">last 30 days, a day each${tr.older ? ' · ' + fmtN(tr.older) + ' older' : ''}</div>` : ''}
+    <p class="note" style="margin-top:6px">${esc(tr.why || '')}${tr.peak ? ' · peak ' + tr.peak.n + ' on ' + when(tr.peak.day) : ''}${burst ? ' · burst ' + when(burst.start) + (burst.end !== burst.start ? '–' + when(burst.end) : '') + ' (' + burst.n + ' posts)' : ''}</p>
+    ${S.lead_lag && S.lead_lag.length ? `<div class="note" style="margin-top:8px"><b>Just before the burst</b> · what first showed up in the two days before it took off</div>${S.lead_lag.map(l => `<div class="drow"><span class="k">${esc(l.what)}</span><span class="note grow">${l.hours_before}h before · ${l.after} posts since</span>${link(l.example, '↗')}</div>`).join('')}` : ''}</div>`;
+  const sp = S.spread;
+  const spreadCard = `<div class="dcard"><div class="dh">Spread <span class="note">${fmtN(sp.accounts)} voices · ${sp.platforms.length} networks${sp.outlets ? ' · ' + sp.outlets + ' outlets' : ''}</span></div>
+    ${sp.platforms.map(p => `<div class="drow"><span class="k">${esc(p.platform)}</span><span class="note grow">${fmtN(p.n)} posts · ${fmtN(p.accounts)} accounts${p.first ? ' · from ' + when(p.first) : ''}</span></div>`).join('')}
+    <p class="note" style="margin-top:6px">${esc(sp.why || '')}${sp.new_accounts_7d ? ' · ' + sp.new_accounts_7d + ' voices joined this week' : ''}</p>
+    ${sp.crossover && sp.crossover.length ? `<div class="chips wrap">${sp.crossover.map(c => `<span class="pill">${esc(c.from)} → ${esc(c.to)} <em>${c.hours >= 48 ? Math.round(c.hours / 24) + 'd' : c.hours + 'h'}</em></span>`).join('')}</div>` : ''}
+    <div class="chips wrap" style="margin-top:6px">${link(sp.first_post, 'first post ↗')}${link(sp.first_outlet, 'first outlet ↗')}</div></div>`;
+  const ht = S.heat;
+  const heatCard = `<div class="dcard"><div class="dh">Heat <span class="sig ${esc(ht.level)}">${ht.level === 'uproar' ? '🔥🔥' : ht.level === 'hot' ? '🔥' : ht.level === 'warm' ? '♨' : '·'} ${esc(ht.level)} · ${ht.score}/100</span></div>
+    <div class="heat"><i style="width:${ht.score}%"></i></div>
+    ${ht.parts.map(p => `<div class="drow"><span class="k">${esc(p.kind)}</span><span class="note grow">${esc(p.note)}</span><span class="v">+${p.points}</span></div>`).join('')}
+    ${ht.words.length ? `<div class="chips wrap" style="margin-top:6px">${ht.words.map(w => `<button class="chip f" data-focus="${esc(w.word)}">${esc(w.word)} <em>${w.n}</em></button>`).join('')}</div>` : ''}
+    ${ht.examples.length ? `<div class="chips wrap" style="margin-top:6px">${posts(ht.examples)}</div>` : ''}
+    <p class="note" style="margin-top:6px">Anger words, shouting, and posts argued with more than liked. A measure of tone, not of who is right.</p></div>`;
+  const issuesCard = S.issues.length ? `<div class="dcard"><div class="dh">What kind of problem <span class="note">by the words used</span></div>
+    ${S.issues.map(i => `<div class="drow"><span class="k">${esc(i.category)}</span><span class="bar"><i style="width:${Math.round(100 * i.share)}%"></i></span><span class="v">${fmtN(i.n)} · ${Math.round(100 * i.share)}%</span></div><div class="note" style="padding:0 0 6px">${esc(i.words.join(', '))} ${posts(i.examples)}</div>`).join('')}</div>` : '';
+  const drivers = S.drivers || [];
+  const driversCard = drivers.length ? `<div class="dcard"><div class="dh">Who moved it <span class="note">reach, being named, posting early</span></div>
+    ${drivers.slice(0, 8).map(d => `<div class="drow"><span class="k">${d.role === 'outlet' ? '' : '@'}${esc(d.author)} <small>${esc(d.platform)}</small></span><span class="note grow">${esc(d.why.join(' · ') || d.n + ' post' + (d.n === 1 ? '' : 's'))}</span>${link(d.example, '↗')}</div>`).join('')}</div>` : '';
+  const storiesCard = S.storylines.length ? `<div class="dcard span2"><div class="dh">Storylines <span class="note">threads inside the topic, by the words they share</span></div>
+    ${S.storylines.map(st => `<div class="story"><div class="nm">${esc(st.name)} <small class="note">· ${fmtN(st.n)} posts · ${st.accounts} voices${st.last7 ? ' · ' + st.last7 + ' this week' : ''}${st.first ? ' · ' + when(st.first) + ' → ' + when(st.last) : ''}</small></div>
+      <div class="chips wrap">${st.terms.map(t => `<button class="chip f" data-focus="${esc(t)}">${esc(t)}</button>`).join('')}${st.names.map(n => `<button class="chip" data-focus="${esc('"' + n + '"')}">◆ ${esc(n)}</button>`).join('')}${posts(st.examples)}</div></div>`).join('')}</div>` : '';
+  const co = S.coordination;
+  const coordCard = (co.copies.length || co.same_link.length) ? `<div class="dcard"><div class="dh">Same words, same links <span class="note">signs, not proof</span></div>
+    ${co.copies.map(c => `<div class="story"><div class="note">${c.accounts} accounts · ${c.n} posts${c.within_hours != null ? ' · within ' + c.within_hours + 'h' : ''} · ${esc(c.platforms.join(', '))}</div><div>${esc(c.text)}</div><div class="chips wrap">${posts(c.examples)}</div></div>`).join('')}
+    ${co.same_link.map(l => `<div class="story"><div class="note">${l.accounts} accounts pushed the same link</div><a href="${esc(l.url)}" target="_blank" rel="noreferrer noopener" style="word-break:break-all">${esc(l.url)}</a> ${posts(l.examples)}</div>`).join('')}
+    <p class="note" style="margin-top:6px">${esc(co.note || '')}</p></div>` : '';
+  return `<div class="dcard span2" style="border-color:rgba(var(--acc-rgb),.35)"><div class="dh">Signals <span class="note">${fmtN(S.n)} posts read as a whole</span></div><p style="margin:0">${esc(S.headline)}</p><p class="note" style="margin-top:6px">Counted from the posts in this topic. Every figure links to the posts behind it. Nothing is looked up outside them.</p></div>
+    ${trendCard}${heatCard}${spreadCard}${issuesCard}${driversCard}${storiesCard}${coordCard}`;
 }
 function briefCard(){
   const b = BRIEF; if (!b || b.error) return '';
@@ -1768,11 +1826,12 @@ async function renderDossier(){
   let items = [], graph = { nodes: [], edges: [] }, wiki = null, views = null;
   const isPerson = !!((T.settings || {}).person);
   try{
-    [items, graph, wiki, BRIEF] = await Promise.all([
+    [items, graph, wiki, BRIEF, SIGNALS] = await Promise.all([
       api('/api/search?' + new URLSearchParams({ topic: T.id, topic_all: '1', limit: 2000, fuzzy: '0', synonyms: '0' })).then(r => r.items || []),
       api('/api/graph?' + new URLSearchParams({ topic: T.id, kinds: 'account,hashtag,word,entity', max: 140 })).catch(() => ({ nodes: [], edges: [] })),
       isPerson ? Promise.resolve(null) : wikiSummary(seed),          // an encyclopedia article for a name is almost always someone else
       api('/api/topics/' + T.id + '/brief').catch(() => null),
+      api('/api/topics/' + T.id + '/signals').catch(() => null),
     ]);
     views = isPerson ? null : await wikiViews(wiki && wiki.canonical ? wiki.canonical : seed);
   }catch(e){ body.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
@@ -1819,6 +1878,7 @@ async function renderDossier(){
       </div>
       <p class="note" style="margin-top:6px">Integrate pulls each associated account's recent posts in (no rating needed) and opens the web for this topic: the people around it and what they connect on. Your 👍/👎 then teach it how the edges relate.</p>
     </div>
+    ${signalCards()}
     <div class="dcard"><div class="dh">Where it's talked about</div>${plats.length ? plats.map(([p, c]) => `<div class="drow"><span class="k">${esc(p)}</span><span class="bar"><i style="width:${pct(c)}%"></i></span><span class="v">${fmtN(c)} · ${pct(c)}%</span></div>`).join('') : '<p class="note">Nothing collected yet.</p>'}</div>
     <div class="dcard"><div class="dh">Who talks about it most</div>${who.length ? who.slice(0, 10).map(a => `<button class="drow tap" data-prof="${esc(a.id)}"><span class="k">@${esc(a.author)} <small>${esc(a.platform)}</small></span><span class="bar"><i style="width:${pct(a.n)}%"></i></span><span class="v">${fmtN(a.n)}${a.liked ? ' · 👍' + a.liked : ''}</span></button>`).join('') : '<p class="note">—</p>'}</div>
     <div class="dcard"><div class="dh">Keywords it goes with</div><div class="chips wrap">${tags.map(t => `<button class="chip" data-focus="${esc(t.label)}">${esc(t.label)} <em>${t.n}</em></button>`).join('')}${words.map(w => `<button class="chip f" data-focus="${esc(w.label.includes(' ') ? '"' + w.label + '"' : w.label)}">${esc(w.label)} <em>${w.n}</em></button>`).join('')}${tags.length + words.length ? '' : '<p class="note">—</p>'}</div></div>

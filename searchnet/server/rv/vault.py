@@ -784,6 +784,14 @@ class Vault:
             job.log(f"  {len(sites)} sites mention it (dossier → SITES)")
         n = TopicScorer(self, tid).rescore()
         job.stats["linked"] = n
+        # the badge on the topic card: is it moving, is it heated (the full read is dossier → SIGNALS)
+        try:
+            from . import signals as SIG
+            sig = SIG.build(self, tid)
+            self.update_topic(tid, {"settings": {"signal": dict(sig["badge"], headline=sig["headline"], at=now())}})
+            job.log("  signals: " + sig["headline"])
+        except Exception as e:      # noqa: BLE001
+            job.log(f"  signals skipped: {e}")
         # per-source record → the plan drops what never pays off
         stats = dict(st.get("source_stats") or {})
         votes = {r["source_id"]: r for r in self.db.q(

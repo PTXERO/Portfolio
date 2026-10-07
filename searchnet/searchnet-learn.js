@@ -230,6 +230,8 @@
     }
     // link items from the library that match, score all
     await linkAndScore(tid, job);
+    // the badge on the topic card: is it moving, is it heated (the full read is dossier → SIGNALS)
+    try { const sig = await signals(tid); t2.settings.signal = Object.assign({}, sig.badge, { headline: sig.headline, at: now() }); job.log('  signals: ' + sig.headline); } catch (e) { job.log('  signals skipped: ' + e.message); }
     t2.last_run = now(); await saveTopic(t2);
     job.result = { topic_id: tid, new: seen.size, queries: runQs };
   }
@@ -414,6 +416,7 @@
       if (sub === 'run' && method === 'POST') { const j = L.newJob('topic', 'topic · ' + t.name); j.topic_id = t.id; L.runSafe(j, () => runTopic(t.id, j)); return L.jobDict(j); }
       if (sub === 'feed') return await feed(arg, qs);
       if (sub === 'brief') return await brief(arg);
+      if (sub === 'signals') return await signals(arg);
       if (sub === 'plan' && method === 'POST') { const p = planFor(t.seeds, t.settings, (await L.request('/api/sources')).sources); t.settings.plan = p; t.sources = p.source_ids; await saveTopic(t); return await dto(t); }
       if (sub === 'vote' && method === 'POST') { if (body.reasons) { const r = await applyReasons(arg, String(body.item_id), body.reasons, body.label != null ? +body.label : -1); return { counts: counts(await topicItems(arg)), applied: r }; } const vr = await voteItem(arg, String(body.item_id), +body.label); return { counts: vr, surprise: vr.surprise }; }
       if (sub === 'insights') return await insights(arg);
@@ -495,6 +498,167 @@
     plan.dropped = dropped; return keep;
   }
   // ── a brief: the sentences that carry the topic's words, who and where, a timeline, with [n] citations ──
+
+  // ── SIGNALS: patterns in a topic's posts, en masse. Is it growing, where it spread, who drove it, how heated,
+  //    what kind of problem, which storylines run inside it, whether some of it looks coordinated.
+  //    Every number carries the posts behind it. Counting, time, words; no model, no lookups. Mirrors server/rv/signals.py.
+  const DAY = 86400;
+  const HEAT = new Set(('outrage outraged outrageous disgusting disgusted disgrace disgraceful shame shameful shameless boycott resign resigns resignation fired unacceptable scandal backlash protest protests protesters protesting lawsuit sue sued suing furious angry anger fury slam slams slammed blast blasts blasted condemn condemns condemned demand demands demanding accountability accountable corrupt corruption lies lied liar lying coverup cover-up racist racism sexist abuse abusive harassment threat threats threatened victim victims apology apologize apologizes apologized controversy controversial uproar ban banned petition wtf smh shocking horrifying horrific appalling appalled infuriating pathetic criminal illegal fraud hypocrite hypocrisy betrayed betrayal negligence negligent reckless outcry exposed caught fail failed failure cancel cancelled').split(' '));
+  const ISSUES = {
+    'safety / crime': 'shooting shot stabbing stabbed robbery robbed arrested arrest police murder homicide assault assaulted missing kidnapped shooter gunfire burglary theft stolen carjacking',
+    'health': 'hospital hospitals outbreak overdose overdoses virus illness cancer disease infection infected contaminated poisoning sick measles flu covid mental suicide ambulance er',
+    'housing': 'rent rents eviction evicted homeless homelessness housing landlord landlords tenants affordable mortgage foreclosure shelter',
+    'environment / weather': 'flood flooding flooded pollution polluted toxic contaminated spill wildfire fire fires hurricane storm tornado heatwave drought sewage algae smoke evacuate evacuation',
+    'jobs / labor': 'strike striking layoffs layoff laid wages wage union unions unemployment unemployed jobs hiring overtime walkout picket',
+    'discrimination': 'racist racism discrimination discriminated hate bias bigotry slur harassment harassed sexism antisemitic islamophobic homophobic transphobic',
+    'corruption / governance': 'corruption corrupt fraud bribe bribery indicted indictment scandal resign resigns ethics lawsuit sued audit misconduct embezzlement kickback',
+    'infrastructure / outages': 'outage outages power blackout water main sewer bridge road closed closure internet down boil notice pothole potholes derailment collapse grid',
+    'education': 'school schools teacher teachers students student board curriculum tuition classroom superintendent principal campus',
+    'cost of living': 'prices price inflation gas groceries gouging bills bill afford cost costs expensive insurance premiums rates fees',
+    'immigration': 'ice deportation deported deportations border migrants migrant asylum immigration immigrants raid raids detained detention',
+  };
+  const ISSUE_WORDS = Object.fromEntries(Object.entries(ISSUES).map(([k, v]) => [k, new Set(v.split(' '))]));
+  const dayOf = (ts) => Math.floor(ts / DAY);
+  const ref = (it) => ({ id: it.id, url: it.url, text: String(it.text || '').slice(0, 120), author: it.author, platform: it.platform, posted_at: it.posted_at });
+  const normWords = (t) => String(t || '').toLowerCase().replace(/https?:\/\/\S+|@\w+|#/g, ' ').replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean);
+  const OUT = () => L.OUTLETS || new Set(['news', 'web', 'archive', 'wikipedia']);
+  const ents = (t, skip) => (L.entitiesIn ? L.entitiesIn(t, skip) : []);
+  const ments = (t) => (L.mentionsIn ? L.mentionsIn(t) : []);
+  const mean = (xs) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
+  const median = (xs) => { if (!xs.length) return 0; const s = xs.slice().sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const top = (c, n) => Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, n);
+  function sigTrend(items, horizon = 30) {
+    const dated = items.filter((it) => it.posted_at);
+    if (!dated.length) return { series: [], state: 'undated', why: 'the posts carry no dates', bursts: [] };
+    const end = dayOf(now()), start = end - horizon + 1; const per = {}; dated.forEach((it) => { const d = dayOf(it.posted_at); per[d] = (per[d] || 0) + 1; });
+    const series = []; for (let d = start; d <= end; d++) series.push({ day: d * DAY, n: per[d] || 0 });
+    const older = Object.entries(per).filter(([d]) => +d < start).reduce((a, [, n]) => a + n, 0);
+    const bursts = [];
+    for (let d = start; d <= end; d++) { const prev = []; for (let x = d - 7; x < d; x++) prev.push(per[x] || 0); const mu = mean(prev), sd = Math.sqrt(mean(prev.map((v) => (v - mu) ** 2))); const n = per[d] || 0; const z = (n - mu) / Math.max(sd, Math.sqrt(Math.max(mu, 1)));
+      if (n >= 3 && z >= 2) { const last = bursts[bursts.length - 1]; if (last && last.endDay === d - 1) { last.endDay = d; last.end = d * DAY; last.n += n; last.z = Math.max(last.z, +z.toFixed(1)); } else bursts.push({ start: d * DAY, end: d * DAY, startDay: d, endDay: d, n, z: +z.toFixed(1) }); } }
+    const sum = (a, b) => { let s = 0; for (let x = a; x <= b; x++) s += per[x] || 0; return s; };
+    const last7 = sum(end - 6, end), prev7 = sum(end - 13, end - 7), last48h = sum(end - 1, end);
+    const velocity = prev7 ? +(last7 / prev7).toFixed(2) : (last7 ? null : 0);
+    const peakDay = +Object.keys(per).sort((a, b) => per[b] - per[a])[0];
+    let state, why;
+    if (!last7 && !prev7) { state = 'quiet'; why = 'nothing new in two weeks; peak was ' + per[peakDay] + ' posts in a day'; }
+    else if (bursts.length && bursts[bursts.length - 1].endDay >= end - 1) { const b = bursts[bursts.length - 1]; state = 'surging'; why = b.n + ' posts in the last burst, ' + b.z + '× the usual spread above the week before'; }
+    else if (prev7 && velocity >= 1.5) { state = 'rising'; why = last7 + ' posts this week vs ' + prev7 + ' last week'; }
+    else if (prev7 && velocity <= 0.5) { state = 'fading'; why = last7 + ' posts this week vs ' + prev7 + ' last week'; }
+    else if (!prev7 && last7) { state = 'new'; why = last7 + ' posts this week, none the week before'; }
+    else { state = 'steady'; why = last7 + ' this week, ' + prev7 + ' last week'; }
+    bursts.forEach((b) => { const ts = dated.filter((it) => dayOf(it.posted_at) >= b.startDay && dayOf(it.posted_at) <= b.endDay).map((it) => it.posted_at).sort((a, c) => a - c); b.takeoff = ts.length ? ts[Math.max(0, Math.floor(ts.length * 0.2) - 1)] : b.start; delete b.startDay; delete b.endDay; });   // take-off: a fifth of the burst's posts out
+    return { series, older, last7, prev7, last48h, velocity, peak: { day: peakDay * DAY, n: per[peakDay] }, bursts: bursts.slice(-3), state, why, first: Math.min(...dated.map((i) => i.posted_at)), last: Math.max(...dated.map((i) => i.posted_at)) };
+  }
+  function sigSpread(items) {
+    const first = {}, per = {}, accts = {}; const O = OUT();
+    for (const it of items) { const p = it.platform || '?'; per[p] = (per[p] || 0) + 1; (accts[p] = accts[p] || new Set()).add(String(it.author || '').toLowerCase()); if (it.posted_at) first[p] = Math.min(first[p] || it.posted_at, it.posted_at); }
+    const order = Object.keys(first).sort((a, b) => first[a] - first[b]);
+    const crossover = order.slice(1).map((p, i) => ({ from: order[i], to: p, hours: +((first[p] - first[order[i]]) / 3600).toFixed(1) }));
+    const firsts = {}; items.filter((x) => x.posted_at).sort((a, b) => a.posted_at - b.posted_at).forEach((it) => { const a = String(it.author || '').toLowerCase(); if (firsts[a] === undefined) firsts[a] = it.posted_at; });
+    const cut = now() - 7 * DAY; const newAccts = Object.values(firsts).filter((ts) => ts >= cut).length;
+    const outlets = new Set(items.filter((it) => O.has(it.platform)).map((it) => String(it.author_name || it.author || '')));
+    const byTime = items.filter((x) => x.posted_at).sort((a, b) => a.posted_at - b.posted_at);
+    const firstOutlet = byTime.find((x) => O.has(x.platform)) || null, firstPost = byTime.find((x) => !O.has(x.platform)) || null;
+    const why = []; if (order.length) why.push('started on ' + order[0] + (order.length > 1 ? ' and reached ' + order.slice(1, 3).join(', ') : ''));
+    if (firstPost && firstOutlet) { const gap = (firstOutlet.posted_at - firstPost.posted_at) / 3600; why.push(gap > 0 ? 'news followed the posts by ' + Math.round(gap) + ' hours' : 'the posts followed the news by ' + Math.round(-gap) + ' hours'); }
+    return { platforms: Object.entries(per).sort((a, b) => b[1] - a[1]).map(([p, n]) => ({ platform: p, n, accounts: accts[p].size, first: first[p] })), accounts: new Set(Object.values(accts).flatMap((s) => [...s])).size, new_accounts_7d: newAccts, crossover, outlets: outlets.size, first_outlet: firstOutlet && ref(firstOutlet), first_post: firstPost && ref(firstPost), why: why.join('; ') };
+  }
+  function sigDrivers(items, burstStart, topN = 10) {
+    const by = {}; const O = OUT();
+    for (const it of items) if (it.author) { const k = String(it.author).toLowerCase() + '\u0001' + (it.platform || ''); (by[k] = by[k] || []).push(it); }
+    const named = {}; for (const it of items) for (const m of ments(it.text)) if (m !== String(it.author || '').toLowerCase()) named[m] = (named[m] || 0) + 1;
+    const ts0 = items.filter((i) => i.posted_at).map((i) => i.posted_at); const firstAll = ts0.length ? Math.min(...ts0) : 0, lastAll = ts0.length ? Math.max(...ts0) : 0;
+    const earlyCut = burstStart || (firstAll + 0.1 * (lastAll - firstAll));
+    const out = [];
+    for (const k in by) { const its = by[k]; const [a, p] = k.split('\u0001');
+      const reach = its.reduce((s, it) => s + (it.likes || 0) + 2 * (it.reposts || 0) + (it.replies || 0) + (it.views || 0) / 100, 0);
+      const ts = its.filter((i) => i.posted_at).map((i) => i.posted_at); const early = ts.length > 0 && Math.min(...ts) <= earlyCut; const nm = named[a] || 0;
+      const score = Math.log1p(reach) + 2 * Math.log1p(nm) + Math.log1p(its.length) + (early ? 2 : 0);
+      const why = []; if (reach >= 50) why.push('reach ' + Math.round(reach).toLocaleString() + ' (likes, reposts, replies, views)'); if (nm) why.push('named by others ' + nm + '×'); if (early) why.push(burstStart ? 'posted before the burst' : 'among the first to post'); if (its.length >= 3) why.push(its.length + ' posts');
+      const best = its.slice().sort((x, y) => ((y.likes || 0) + 2 * (y.reposts || 0)) - ((x.likes || 0) + 2 * (x.reposts || 0)))[0];
+      out.push({ id: a + '|' + p, author: a, platform: p, role: O.has(p) ? 'outlet' : 'person', n: its.length, reach: Math.round(reach), named_by: nm, early, first: ts.length ? Math.min(...ts) : null, score: +score.toFixed(2), why, example: ref(best) }); }
+    return out.sort((a, b) => b.score - a.score).slice(0, topN);
+  }
+  function sigHeat(items) {
+    const n = Math.max(1, items.length); let hits = 0, shout = 0; const words = {}, examples = [], contested = [];
+    for (const it of items) { const toks = tokens(it.text); const hw = toks.filter((w) => HEAT.has(w) || HEAT.has(stem(w)));
+      if (hw.length) { hits++; new Set(hw).forEach((w) => words[w] = (words[w] || 0) + 1); if (examples.length < 6) examples.push(Object.assign(ref(it), { words: [...new Set(hw)].slice(0, 4) })); }
+      const caps = (String(it.text || '').match(/\b[A-Z]{4,}\b/g) || []).filter((w) => !['HTTP', 'HTTPS', 'NEWS'].includes(w)); if (caps.length >= 2 || (String(it.text || '').match(/!/g) || []).length >= 3) shout++;
+      if ((it.likes || 0) >= 10 && it.replies != null) contested.push((it.replies || 0) / Math.max(1, it.likes || 0)); }
+    const share = hits / n, ratio = contested.length ? median(contested) : null;
+    const parts = [hits ? { kind: 'anger words', value: +share.toFixed(2), points: Math.round(Math.min(50, 50 * share / 0.35)), note: hits + ' of ' + n + ' posts use words like ' + top(words, 3).map(([w]) => w).join(', ') } : { kind: 'anger words', value: 0, points: 0, note: 'no anger words to speak of' },
+      { kind: 'shouting', value: +(shout / n).toFixed(2), points: Math.round(Math.min(15, 15 * (shout / n) / 0.25)), note: shout + ' posts in caps or with !!!' }];
+    if (ratio != null) parts.push({ kind: 'replies vs likes', value: +ratio.toFixed(2), points: Math.round(Math.min(25, 25 * ratio)), note: 'typical post gets ' + ratio.toFixed(1) + ' replies per like' + (ratio >= 0.5 ? ' (argued with more than agreed with)' : '') });
+    const score = Math.min(100, parts.reduce((s, p) => s + p.points, 0));
+    return { score, level: score >= 60 ? 'uproar' : score >= 35 ? 'hot' : score >= 15 ? 'warm' : 'calm', parts, words: top(words, 12).map(([word, c]) => ({ word, n: c })), examples };
+  }
+  function sigIssues(items) {
+    const n = Math.max(1, items.length); const out = [];
+    for (const cat in ISSUE_WORDS) { const ws = ISSUE_WORDS[cat]; let hit = 0; const words = {}, ex = [];
+      for (const it of items) { const h = [...new Set(tokens(it.text))].filter((w) => ws.has(w)); if (h.length) { hit++; h.forEach((w) => words[w] = (words[w] || 0) + 1); if (ex.length < 3) ex.push(ref(it)); } }
+      if (hit >= Math.max(2, 0.03 * n)) out.push({ category: cat, n: hit, share: +(hit / n).toFixed(2), words: top(words, 5).map(([w]) => w), examples: ex }); }
+    return out.sort((a, b) => b.n - a.n);
+  }
+  function sigStorylines(items, seedWords, maxLines = 5) {
+    const skip = new Set([...(seedWords || []), ...STOP]);
+    const docs = items.map((it) => [it, new Set(tokens(it.text).filter((w) => w.length > 3 && !skip.has(w) && !/^\d+$/.test(w)))]);
+    const n = docs.length; if (n < 6) return [];
+    const df = {}; docs.forEach(([, ws]) => ws.forEach((w) => df[w] = (df[w] || 0) + 1));
+    let cand = new Set(Object.keys(df).filter((w) => df[w] >= 0.04 * n && df[w] <= 0.5 * n && df[w] >= 3));
+    let left = docs.map((_, i) => i); const out = [];
+    while (cand.size && left.length && out.length < maxLines) {
+      const sub = {}; left.forEach((i) => docs[i][1].forEach((w) => { if (cand.has(w)) sub[w] = (sub[w] || 0) + 1; }));
+      const best = top(sub, 1)[0]; if (!best || best[1] < Math.max(3, 0.04 * n)) break;
+      const w0 = best[0]; const members = left.filter((i) => docs[i][1].has(w0));
+      const co = {}; members.forEach((i) => docs[i][1].forEach((w) => { if (cand.has(w)) co[w] = (co[w] || 0) + 1; }));
+      const ranked = Object.entries(co).filter(([, c]) => c >= 0.4 * members.length).map(([w, c]) => [(c * c / df[w]) * (w.length > 5 ? 1.2 : 1), w]).sort((a, b) => b[0] - a[0]);
+      const terms = ranked.map(([, w]) => w).slice(0, 5); if (!terms.includes(w0)) terms.push(w0);
+      const its = members.map((i) => docs[i][0]); const dated = its.filter((i) => i.posted_at).map((i) => i.posted_at); const accts = new Set(its.map((i) => String(i.author || '').toLowerCase()));
+      const en = {}; its.forEach((it) => ents(it.text, seedWords).forEach((e) => en[e] = (en[e] || 0) + 1));
+      out.push({ name: terms.slice(0, 3).join(' · '), terms, n: its.length, share: +(its.length / n).toFixed(2), accounts: accts.size, first: dated.length ? Math.min(...dated) : null, last: dated.length ? Math.max(...dated) : null, last7: dated.filter((ts) => ts >= now() - 7 * DAY).length, names: top(en, 4).map(([e]) => e),
+        examples: its.slice().sort((a, b) => ((b.likes || 0) + (b.reposts || 0)) - ((a.likes || 0) + (a.reposts || 0))).slice(0, 3).map(ref) });
+      const ms = new Set(members); left = left.filter((i) => !ms.has(i)); terms.forEach((w) => cand.delete(w));
+    }
+    return out;
+  }
+  function sigCoordination(items) {
+    const groups = {}, links = {};
+    for (const it of items) { const ws = normWords(it.text); if (ws.length >= 6) { const k = ws.slice(0, 14).join(' '); (groups[k] = groups[k] || []).push(it); }
+      for (let u of String(it.text || '').match(/https?:\/\/\S+/g) || []) { u = u.replace(/[.,)]+$/, ''); if (u !== it.url) (links[u] = links[u] || []).push(it); } }
+    const copies = []; for (const k in groups) { const its = groups[k]; const accts = new Set(its.map((i) => String(i.author || '').toLowerCase())); if (accts.size >= 3) { const ts = its.filter((i) => i.posted_at).map((i) => i.posted_at).sort((a, b) => a - b);
+      copies.push({ text: String(its[0].text || '').slice(0, 160), n: its.length, accounts: accts.size, platforms: [...new Set(its.map((i) => i.platform || ''))].sort(), within_hours: ts.length > 1 ? +((ts[ts.length - 1] - ts[0]) / 3600).toFixed(1) : null, examples: its.slice(0, 3).map(ref) }); } }
+    copies.sort((a, b) => (b.accounts - a.accounts) || ((a.within_hours ?? 1e9) - (b.within_hours ?? 1e9)));
+    const same = []; for (const u in links) { const its = links[u]; const accts = new Set(its.map((i) => String(i.author || '').toLowerCase())); if (accts.size >= 3) same.push({ url: u, n: its.length, accounts: accts.size, examples: its.slice(0, 3).map(ref) }); }
+    same.sort((a, b) => b.accounts - a.accounts);
+    const c = copies[0]; const note = c ? c.accounts + ' accounts posted the same words' + (c.within_hours != null ? ' within ' + c.within_hours + ' hours' : '') + '. Could be a campaign, a share button, or a quote. Read them.' : '';
+    return { copies: copies.slice(0, 6), same_link: same.slice(0, 6), note };
+  }
+  function sigLeadLag(items, burst) {
+    if (!burst) return []; const t0 = burst.takeoff || burst.start; const O = OUT(); const who = (it) => (O.has(it.platform) ? 'outlet ' + (it.author_name || it.author || '') : '@' + (it.author || ''));
+    const firsts = {}; for (const it of items.filter((x) => x.posted_at).sort((a, b) => a.posted_at - b.posted_at)) { const a = who(it); if (!firsts[a]) firsts[a] = [it.posted_at, it]; for (const e of ents(it.text)) if (!firsts['name ' + e]) firsts['name ' + e] = [it.posted_at, it]; }
+    const after = {}; for (const it of items) if ((it.posted_at || 0) >= t0) { const a = who(it); after[a] = (after[a] || 0) + 1; for (const e of ents(it.text)) after['name ' + e] = (after['name ' + e] || 0) + 1; }
+    return Object.entries(firsts).filter(([k, [ts]]) => t0 - ts >= 0 && t0 - ts <= 2 * DAY && ((after[k] || 0) >= 3 || t0 - ts >= 2 * 3600)).map(([k, [ts, it]]) => ({ what: k, first: ts, hours_before: +((t0 - ts) / 3600).toFixed(1), after: after[k] || 0, example: ref(it) })).sort((a, b) => b.after - a.after).slice(0, 8);
+  }
+  function summarizeSignals(items, seedWords) {
+    const tr = sigTrend(items); const burst = tr.bursts.length ? tr.bursts[tr.bursts.length - 1] : null;
+    const sp = sigSpread(items), ht = sigHeat(items), st = sigStorylines(items, seedWords), co = sigCoordination(items), dr = sigDrivers(items, burst ? (burst.takeoff || burst.start) : null), iss = sigIssues(items);
+    const headline = [];
+    if (tr.state === 'surging' || tr.state === 'rising') headline.push(tr.state + ' (' + tr.why + ')'); else if (tr.state === 'fading' || tr.state === 'quiet') headline.push(tr.state);
+    if (ht.level === 'hot' || ht.level === 'uproar') headline.push(ht.level + ': ' + ht.words.slice(0, 3).map((w) => w.word).join(', '));
+    if (iss.length) headline.push('reads as ' + iss[0].category + (iss[1] ? ' and ' + iss[1].category : ''));
+    if (co.copies.length && co.copies[0].accounts >= 5) headline.push(co.copies[0].accounts + ' accounts posting the same words');
+    return { n: items.length, trend: tr, spread: sp, drivers: dr, heat: ht, issues: iss, storylines: st, coordination: co, lead_lag: sigLeadLag(items, burst), headline: headline.join('; ') || 'nothing out of the ordinary', badge: { state: tr.state, heat: ht.level, score: ht.score, velocity: tr.velocity }, generated: now() };
+  }
+  async function signals(tid) {
+    const t = await getTopic(tid); if (!t) return { error: 'no such topic' };
+    const votes = await topicItems(tid); const tau = threshold(votes); const ids = votes.filter((v) => isMember(v, tau)).map((v) => v.item_id).slice(0, 3000);
+    const items = (await Promise.all(ids.map((id) => idb.get('items', id)))).filter(Boolean);
+    const seedWords = new Set((t.seeds || []).concat([t.name || '']).flatMap((s) => tokens(s)));
+    return summarizeSignals(items, seedWords);
+  }
+  L.signals = { summarize: summarizeSignals, trend: sigTrend, heat: sigHeat, storylines: sigStorylines, coordination: sigCoordination };
+
   async function brief(tid) {
     const t = await getTopic(tid); if (!t) return { error: 'no such topic' };
     const sc = await scorer(t); const votes = await topicItems(tid); const tau = threshold(votes);

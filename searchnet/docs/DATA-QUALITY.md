@@ -181,3 +181,17 @@ WRITERS ONLY in the web keeps the writers and the outlets they write for. Tap a 
 The writer dossier is built from the collected articles and the outlet's own author page, nothing else: outlets over time, co-authors, who names them, what they name, the datelines their stories carry (where they report from, never where they live), the handles the outlet lists for them, and the articles. A listed handle is offered as a tap-to-link. It becomes a link only when you tap it. The app never ties a byline to an account by itself.
 
 Known gaps: outlets that print no byline in the HTML, bylines with titles ("Staff Writer Jane Doe"), and the same writer spelled two ways (J. Doe / Jane Doe) are two nodes. Link them under one person if they are.
+
+## Update: signals
+
+A topic is now read as a whole, not only post by post. Dossier → SIGNALS, and a badge on the topic card after each run. Counting, time and words only; every figure links to the posts behind it.
+
+- **Trend**: posts per day, a burst when a day runs more than two standard deviations above the week before it, and a state: surging, rising, steady, fading, quiet, new. "Just before the burst" lists what first appeared in the two days before take-off (an outlet, an account, a name).
+- **Spread**: networks in the order the topic reached them, how many voices, how many joined this week, whether news led or followed the posts.
+- **Who moved it**: reach (likes, reposts, replies, views), being named by others, posting before the burst, volume. Each with the reasons.
+- **Heat**: anger words, shouting, replies swamping likes, 0..100 with the parts shown. Tone, not who is right.
+- **What kind of problem**: safety, health, housing, weather, labor, discrimination, corruption, outages, education, cost of living, immigration, by the words used. Shares, not verdicts.
+- **Storylines**: posts grouped by their most telling shared word, named by the words that belong to that group.
+- **Same words, same links**: three or more accounts with the same text or the same link. A sign, not proof. The note says so.
+
+Known gaps: sarcasm reads as heat; a share button that copies text reads as a copy; a topic with no dates has no trend; the lexicons are English.

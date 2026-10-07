@@ -546,6 +546,7 @@
       articles: arts.slice().reverse().slice(0, 40).map((a) => ({ id: a.id, url: a.url, outlet: a.author_name || a.author, text: String(a.text || '').split('\n')[0].slice(0, 140), posted_at: a.posted_at, dateline: a.dateline || '', with: bylineOf(a).filter((n) => n.toLowerCase() !== key) })) };
   }
 
+  L.entitiesIn = entitiesIn; L.mentionsIn = mentionsIn; L.OUTLETS = OUTLETS;
   L.people = {
     profile, graph, list, setMeta, getMeta, identities, identityWrite, listWriters, writer,
     async request(method, parts, qs, body) {

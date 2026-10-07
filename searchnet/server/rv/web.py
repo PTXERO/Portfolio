@@ -21,6 +21,7 @@ from pathlib import Path
 from . import people
 from . import sources as S
 from . import brief as BRIEF
+from . import signals as SIGNALS
 from . import plan as PLAN
 from .db import norm_tags
 from .related import related
@@ -565,6 +566,8 @@ class Handler(BaseHTTPRequestHandler):
                 return ok(v.insights(arg))
             if sub == "brief":
                 return ok(BRIEF.build(v, arg))
+            if sub == "signals":
+                return ok(SIGNALS.build(v, arg))
             if sub == "plan" and method == "POST":           # re-plan: let the kind decide again
                 t = v.topic(arg)
                 if not t:
