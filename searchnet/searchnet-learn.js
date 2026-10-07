@@ -670,6 +670,76 @@
       if (before.length) { const best = before.reduce((a, b) => ((b.likes || 0) + 2 * (b.reposts || 0) + (O.has(b.platform) ? 1000 : 0)) > ((a.likes || 0) + 2 * (a.reposts || 0) + (O.has(a.platform) ? 1000 : 0)) ? b : a); o.kickoff = Object.assign(ref(best), { hours_before: +((t0 - best.posted_at) / 3600).toFixed(1) }); } }
     return o;
   }
+
+  // ── claims, numbers that move, dated events, trust (mirrors server/rv/signals.py) ──
+  const SENT_SPLIT = /(?<=[.!?])\s+(?=[A-Z0-9"“])|\n+/;
+  const ASSERT = /\b(said|says|saying|confirmed|confirms|announced|announces|reports|reported|claims|claimed|denied|denies|admitted|admits|according to|told|stated|warned|warns|estimates|estimated|expects|expected|will|has|have|is|are|was|were)\b/i;
+  const DISPUTE = /\b(false|not true|untrue|debunked|denies|denied|deny|misinformation|hoax|fake|no evidence|incorrect|wrong|rumor|rumour)\b/i;
+  const NUM = /(?<![\w.])([$£€])?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)(?:\s*(k|m|bn|b|million|billion|thousand|%|percent|mph|km\/h|inches|feet|ft|miles|acres|degrees)\b)?(?:\s+(?:of\s+|a\s+|an\s+|per\s+)?([a-z][a-z-]{2,}))?/gi;
+  const NUM_SKIP = new Set('am pm the and for with that this from year years day days hour hours minute minutes week weeks month months time times ago today yesterday tomorrow more than about'.split(' '));
+  const UNITS = new Set(['%', 'percent', 'mph', 'km/h', 'inches', 'feet', 'ft', 'miles', 'acres', 'degrees']);
+  const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+  const WEEKDAYS = { monday: 0, tuesday: 1, wednesday: 2, thursday: 3, friday: 4, saturday: 5, sunday: 6 };
+  const DATE_RX = /\b(?:(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?|(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?(?:,?\s+(\d{4}))?|(next|last|this)?\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\b(tonight|tomorrow|yesterday)\b)/gi;
+  const PAST_HINT = /\b(was|were|happened|took place|yesterday|last|ago|had|did|\w{3,}ed)\b/i;
+  const sentencesOf = (t) => String(t || '').split(SENT_SPLIT).map((x) => x.trim()).filter((x) => x.length >= 30 && x.length <= 300 && !/^(http|rt @)/i.test(x));
+  const claimKey = (s) => new Set(tokens(s).filter((w) => !STOP.has(w) && w.length > 2).map(stem));
+  const jac = (a, b) => { let i = 0; a.forEach((x) => { if (b.has(x)) i++; }); return i / Math.max(1, a.size + b.size - i); };
+  const whoOf = (it) => (OUT().has(it.platform) ? (it.author_name || it.author) : it.author);
+  function sigClaims(items, seedWords, topN = 10) {
+    const out = [];
+    for (const it of items.filter((x) => x.posted_at).sort((a, b) => a.posted_at - b.posted_at)) for (const s of sentencesOf(it.text)) {
+      if (!ASSERT.test(s) || !/\d|\b[A-Z][a-z]+\b/.test(s)) continue;
+      const key = claimKey(s); if (key.size < 4) continue; const who = whoOf(it); const isOut = OUT().has(it.platform);
+      const hit = out.find((c) => { const j = jac(key, c.key); return j >= 0.45 || (j >= 0.25 && DISPUTE.test(s) && !DISPUTE.test(c.text)); });
+      if (!hit) { out.push({ key, text: s, first: { who, platform: it.platform, posted_at: it.posted_at, url: it.url, id: it.id }, accounts: new Set([String(it.author || '').toLowerCase()]), n: 1, outlets: new Set(isOut && who ? [who] : []), disputed: [], examples: [ref(it)] }); }
+      else { hit.n++; hit.accounts.add(String(it.author || '').toLowerCase()); if (isOut && who) hit.outlets.add(who); if (DISPUTE.test(s) && !DISPUTE.test(hit.text) && hit.disputed.length < 3) hit.disputed.push(Object.assign(ref(it), { who })); if (hit.examples.length < 3) hit.examples.push(ref(it)); }
+    }
+    return out.filter((c) => c.n >= 2 || c.outlets.size).map((c) => ({ text: c.text, first: c.first, n: c.n, accounts: c.accounts.size, outlets: [...c.outlets].sort(), status: c.disputed.length ? 'disputed' : c.outlets.size ? 'an outlet confirms' : 'posts only', disputed: c.disputed, examples: c.examples }))
+      .sort((a, b) => ((b.accounts + 2 * b.outlets.length) - (a.accounts + 2 * a.outlets.length)) || (a.first.posted_at - b.first.posted_at)).slice(0, topN);
+  }
+  const numVal = (v, u) => { v = parseFloat(String(v).replace(/,/g, '')); u = (u || '').toLowerCase(); return u === 'k' || u === 'thousand' ? v * 1e3 : u === 'm' || u === 'million' ? v * 1e6 : u === 'b' || u === 'bn' || u === 'billion' ? v * 1e9 : v; };
+  function sigNumbers(items, topN = 8) {
+    const series = {};
+    for (const it of items) { if (!it.posted_at) continue; for (const m of String(it.text || '').matchAll(NUM)) { const [raw, cur, val, unit, whatRaw] = m; const what = (whatRaw || '').toLowerCase(); const u = (unit || '').toLowerCase();
+      if ((what && NUM_SKIP.has(what)) || (!unit && !cur && (!what || val.length < 2)) || (/^\d{4}$/.test(val) && !unit && !cur) || (['k', 'm', 'b', 'bn'].includes(u) && !what)) continue;
+      const key = ((cur || '') + (UNITS.has(u) ? ' ' + u : '') + (what ? ' ' + what : '')).trim(); if (!key || key === '%' || key === 'percent') continue;
+      (series[key] = series[key] || []).push({ ts: it.posted_at, value: numVal(val, unit), raw: raw.trim(), post: ref(it) }); } }
+    const out = []; for (const key in series) { const pts = series[key].sort((a, b) => a.ts - b.ts); const vals = new Set(pts.map((p) => p.value)); if (pts.length < 2 || (vals.size < 2 && pts.length < 3)) continue;
+      out.push({ what: key, n: pts.length, first: pts[0].value, last: pts[pts.length - 1].value, min: Math.min(...vals), max: Math.max(...vals), moved: vals.size > 1, points: pts.slice(-12) }); }
+    return out.sort((a, b) => ((b.moved ? 1 : 0) - (a.moved ? 1 : 0)) || (b.n - a.n)).slice(0, topN);
+  }
+  function resolveDate(m, ts) {
+    const base = new Date(ts * 1000); const day0 = (d) => Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 1000);
+    if (m[1] || m[5]) { const mon = MONTHS[(m[1] || m[5]).toLowerCase().slice(0, 3)]; const day = +(m[2] || m[4]); const yr = +(m[3] || m[6] || base.getUTCFullYear()); let d = new Date(Date.UTC(yr, mon - 1, day)); if (isNaN(d)) return null;
+      if (!(m[3] || m[6])) { const diff = (d - base) / 864e5; if (diff > 240) d = new Date(Date.UTC(yr - 1, mon - 1, day)); else if (diff < -240) d = new Date(Date.UTC(yr + 1, mon - 1, day)); } return [Math.floor(d / 1000), 'day']; }
+    if (m[8]) { const wd = WEEKDAYS[m[8].toLowerCase()]; const bw = (base.getUTCDay() + 6) % 7; let delta = (wd - bw + 7) % 7; const q = (m[7] || '').toLowerCase(); if (q === 'last') delta = delta ? delta - 7 : -7; else if (q === 'next' && delta === 0) delta = 7; return [day0(base) + delta * DAY, 'weekday']; }
+    const w = (m[9] || '').toLowerCase(); if (w === 'tonight') return [day0(base), 'day']; if (w === 'tomorrow') return [day0(base) + DAY, 'day']; if (w === 'yesterday') return [day0(base) - DAY, 'day'];
+    return null;
+  }
+  function sigDated(items, topN = 12) {
+    const ev = [];
+    for (const it of items) { if (!it.posted_at) continue; for (const s of sentencesOf(it.text)) { for (const m of s.matchAll(DATE_RX)) { const r = resolveDate(m, it.posted_at); if (!r) continue; let [when, kind] = r;
+      if (kind === 'weekday' && !(m[7] || '') && PAST_HINT.test(s) && when > it.posted_at) when -= 7 * DAY;
+      const key = claimKey(s); const hit = ev.find((e) => Math.abs(e.when - when) < DAY && jac(key, e.key) >= 0.4);
+      if (hit) { hit.n++; if (hit.examples.length < 3) hit.examples.push(ref(it)); } else ev.push({ key, when, text: s, date_text: m[0].trim(), n: 1, examples: [ref(it)], who: whoOf(it), platform: it.platform });
+      break; } } }
+    const t = now(); ev.forEach((e) => { delete e.key; e.ahead = e.when > t; });
+    const ahead = ev.filter((e) => e.ahead).sort((a, b) => (a.when - b.when) || (b.n - a.n)).slice(0, topN);
+    const past = ev.filter((e) => !e.ahead).sort((a, b) => (b.n - a.n) || (b.when - a.when)).slice(0, topN).sort((a, b) => a.when - b.when);
+    return { ahead, past };
+  }
+  function sigTrust(items, tr, sp, sources, windowDays, older) {
+    const n = items.length; const reasons = []; let score = 0;
+    if (n >= 60) { score += 2; reasons.push(n + ' posts'); } else if (n >= 20) { score += 1; reasons.push(n + ' posts'); } else { score -= 1; reasons.push('only ' + n + ' posts'); }
+    const plats = (sp.platforms || []).length; if (plats >= 3) { score += 1; reasons.push(plats + ' networks'); } else if (plats <= 1) { score -= 1; reasons.push('one network only'); }
+    const srcs = sources || []; const failed = srcs.filter((s) => !s.enabled && s.auto_off);
+    if (srcs.length && failed.length >= Math.max(1, Math.floor(srcs.length / 2))) { score -= 1; reasons.push(failed.length + ' of ' + srcs.length + ' sources switched off after failing'); } else if (failed.length) reasons.push(failed.length + ' source' + (failed.length > 1 ? 's' : '') + ' switched off: ' + failed.slice(0, 2).map((s) => s.name || '?').join(', '));
+    const series = tr.series || []; if (series.length) { const empty = series.filter((d) => !d.n).length; if (empty >= 0.8 * series.length && tr.state !== 'quiet') { score -= 1; reasons.push(empty + ' of the last ' + series.length + ' days have no posts'); } }
+    if (windowDays && older) reasons.push('the ' + windowDays + '-day window left ' + older + ' older posts out');
+    if (sp.outlets) score += 1;
+    return { label: score >= 3 ? 'solid' : score >= 1 ? 'fair' : 'thin', score, reasons };
+  }
   function summarizeSignals(items, seedWords) {
     const tr = sigTrend(items); const burst = tr.bursts.length ? tr.bursts[tr.bursts.length - 1] : null;
     const sp = sigSpread(items), ht = sigHeat(items), st = sigStorylines(items, seedWords), co = sigCoordination(items), dr = sigDrivers(items, burst ? (burst.takeoff || burst.start) : null), iss = sigIssues(items);
@@ -678,7 +748,7 @@
     if (ht.level === 'hot' || ht.level === 'uproar') headline.push(ht.level + ': ' + ht.words.slice(0, 3).map((w) => w.word).join(', '));
     if (iss.length) headline.push('reads as ' + iss[0].category + (iss[1] ? ' and ' + iss[1].category : ''));
     if (co.copies.length && co.copies[0].accounts >= 5) headline.push(co.copies[0].accounts + ' accounts posting the same words');
-    return { n: items.length, trend: tr, spread: sp, drivers: dr, heat: ht, issues: iss, storylines: st, coordination: co, lead_lag: sigLeadLag(items, burst), headline: headline.join('; ') || 'nothing out of the ordinary', places: sigPlaces(items, seedWords), top_posts: sigTopPosts(items), momentum: sigMomentum(tr, sp, st), arc: sigArc(tr), origin: sigOrigin(items, sp, burst), badge: { state: tr.state, heat: ht.level, score: ht.score, velocity: tr.velocity }, generated: now() };
+    return { n: items.length, trend: tr, spread: sp, drivers: dr, heat: ht, issues: iss, storylines: st, coordination: co, lead_lag: sigLeadLag(items, burst), headline: headline.join('; ') || 'nothing out of the ordinary', places: sigPlaces(items, seedWords), top_posts: sigTopPosts(items), momentum: sigMomentum(tr, sp, st), arc: sigArc(tr), origin: sigOrigin(items, sp, burst), claims: sigClaims(items, seedWords), numbers: sigNumbers(items), dated: sigDated(items), trust: sigTrust(items, tr, sp), badge: { state: tr.state, heat: ht.level, score: ht.score, velocity: tr.velocity }, generated: now() };
   }
   async function signals(tid) {
     const t = await getTopic(tid); if (!t) return { error: 'no such topic' };
@@ -691,9 +761,10 @@
     const tops = {}; (await idb.all('topics')).forEach((x) => tops[x.id] = x.name);
     out.overlaps = top(ov, 6).filter(([k, n]) => n >= 2 && tops[k]).map(([k, n]) => ({ topic_id: k, name: tops[k], n }));
     out.kind = ((t.settings || {}).plan || {}).kind || 'general';
+    try { const all = (await L.request('/api/sources')).sources || []; const mine = new Set(t.sources || []); out.trust = sigTrust(items, out.trend, out.spread, all.filter((s) => mine.has(s.id)), windowDays(t.settings, (t.settings || {}).plan), out.trend.older || 0); } catch (e) { /* keep the plain trust */ }
     return out;
   }
-  L.signals = { summarize: summarizeSignals, trend: sigTrend, heat: sigHeat, storylines: sigStorylines, coordination: sigCoordination };
+  L.signals = { summarize: summarizeSignals, trend: sigTrend, heat: sigHeat, storylines: sigStorylines, coordination: sigCoordination, claims: sigClaims, numbers: sigNumbers, dated: sigDated };
 
   async function brief(tid) {
     const t = await getTopic(tid); if (!t) return { error: 'no such topic' };

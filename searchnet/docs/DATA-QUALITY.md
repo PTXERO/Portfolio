@@ -199,3 +199,12 @@ Known gaps: sarcasm reads as heat; a share button that copies text reads as a co
 ## Update: in short
 
 The dossier opens with eight lines, each backed by a card below: what it is, since when (born, peak, silence), what started it (the post or article the burst followed, whether news or posts came first), why it moves (who carried it, the biggest post, the tone, same-words posting), who cares (the circles and the networks), where (datelines and places named after in / at / near), momentum (this week against last, voices joining, storylines appearing or dying, outlets on it or not; a slope, not a forecast), overlaps with other topics in the library, and next (sources to add, accounts to pull, a name worth its own dossier).
+
+## Update: claims, numbers, dates, trust
+
+- **Claims**: sentences that assert something, grouped when they share most of their words. Each carries who said it first, how many voices repeat it, which outlets printed it, and whether a later post disputes it. Status is "posts only", "an outlet confirms" or "disputed". The first confirmed claim becomes the What line of IN SHORT.
+- **Numbers that move**: the same figure (customers, deaths, $ per gallon, mph) mentioned over time, with each mention linked. A figure mentioned once is not a series.
+- **Dates in the posts**: dates written in the text, resolved against the post's own date. Month-day, weekdays (next / last / bare, past tense means the one just gone), tonight, tomorrow, yesterday. Split into coming up and happened. Coming up feeds the Next line.
+- **Trust**: solid, fair or thin, from posts, networks, sources that switched themselves off, days with nothing, and what the time window cut. Shown on IN SHORT with the reasons. A quiet signal on a thin read is not a quiet topic.
+
+Known gaps: a claim and its paraphrase in different words are two claims; a number with no noun after it is skipped; dates without a month ("the 14th") are skipped; sarcastic disputes read as disputes.

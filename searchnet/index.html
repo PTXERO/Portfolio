@@ -1736,8 +1736,13 @@ function inShortCard(circles, wiki){
   if (S.drivers && S.drivers[0] && S.drivers[0].n <= 2 && S.drivers[0].role !== 'outlet') next.push(`pull more of @${esc(S.drivers[0].author)}: they carried it with ${S.drivers[0].n} post${S.drivers[0].n === 1 ? '' : 's'}`);
   const named = graphTopEntity(); if (named) next.push(`"${esc(named)}" keeps coming up: worth its own dossier`);
   if (S.storylines && S.storylines.length >= 3) next.push(`${S.storylines.length} storylines run inside this: rate a few posts in each so the model learns which you mean`);
-  return `<div class="dcard span2" style="border-color:rgba(var(--acc-rgb),.35)"><div class="dh">In short <span class="note">${KIND[S.kind] || 'a subject'} · ${fmtN(S.n)} posts</span></div>
-    <div class="drow"><span class="k">What</span><span class="grow">${esc(what)}</span></div>
+  const trust = S.trust ? `<span class="sig ${S.trust.label === 'solid' ? 'rising' : S.trust.label === 'thin' ? 'fading' : 'steady'}" title="${esc((S.trust.reasons || []).join(' · '))}">${esc(S.trust.label)} read</span>` : '';
+  const confirmed = (S.claims || []).find(c => c.status === 'an outlet confirms');
+  const whatLine = confirmed ? esc(confirmed.text) + ` <small class="note">(${esc(confirmed.outlets[0])} confirms, ${confirmed.accounts} voices)</small>` : esc(what);
+  const coming = (S.dated && S.dated.ahead || []).slice(0, 2);
+  if (coming.length) next.unshift('coming up: ' + coming.map(e => esc(e.date_text) + ', ' + esc(e.text.slice(0, 70)) + (e.text.length > 70 ? '…' : '')).join(' · '));
+  return `<div class="dcard span2" style="border-color:rgba(var(--acc-rgb),.35)"><div class="dh">In short <span class="note">${KIND[S.kind] || 'a subject'} · ${fmtN(S.n)} posts</span> ${trust}</div>
+    <div class="drow"><span class="k">What</span><span class="grow">${whatLine}</span></div>
     <div class="drow"><span class="k">Since when</span><span class="grow">${since}</span></div>
     <div class="drow"><span class="k">What started it</span><span class="grow">${originLine}</span></div>
     <div class="drow"><span class="k">Why it moves</span><span class="grow">${why || '—'}</span></div>
@@ -1746,7 +1751,7 @@ function inShortCard(circles, wiki){
     <div class="drow"><span class="k">Momentum</span><span class="grow"><span class="sig ${m.label === 'picking up' ? 'rising' : m.label === 'winding down' ? 'fading' : 'steady'}">${esc(m.label)}</span> ${esc(m.why)}</span></div>
     ${S.overlaps && S.overlaps.length ? `<div class="drow"><span class="k">Overlaps with</span><span class="grow chips wrap" style="display:flex">${S.overlaps.map(ov => `<a class="chip" href="#topic/${esc(ov.topic_id)}">${esc(ov.name)} <em>${ov.n}</em></a>`).join('')}</span></div>` : ''}
     <div class="drow"><span class="k">Next</span><span class="grow">${next.length ? next.map(x => '· ' + x).join('<br>') : 'nothing obvious. Rate posts and run it again.'}</span></div>
-    <p class="note" style="margin-top:8px">Each line comes from a card below. The slope is this week against last, not a forecast.</p></div>`;
+    <p class="note" style="margin-top:8px">Each line comes from a card below. The slope is this week against last, not a forecast.${S.trust ? ' Read: ' + esc(S.trust.label) + ' (' + esc(S.trust.reasons.join('; ')) + ').' : ''}</p></div>`;
 }
 let _dossierGraph = null;
 function graphTopEntity(){ const g = _dossierGraph; if (!g) return null; const e = g.nodes.filter(x => x.kind === 'entity').sort((a, b) => (b.n || 0) - (a.n || 0))[0]; return e && (e.n || 0) >= 5 ? e.label : null; }
@@ -1787,8 +1792,20 @@ function signalCards(){
     ${co.copies.map(c => `<div class="story"><div class="note">${c.accounts} accounts · ${c.n} posts${c.within_hours != null ? ' · within ' + c.within_hours + 'h' : ''} · ${esc(c.platforms.join(', '))}</div><div>${esc(c.text)}</div><div class="chips wrap">${posts(c.examples)}</div></div>`).join('')}
     ${co.same_link.map(l => `<div class="story"><div class="note">${l.accounts} accounts pushed the same link</div><a href="${esc(l.url)}" target="_blank" rel="noreferrer noopener" style="word-break:break-all">${esc(l.url)}</a> ${posts(l.examples)}</div>`).join('')}
     <p class="note" style="margin-top:6px">${esc(co.note || '')}</p></div>` : '';
+  const fmtV = v => Math.abs(v) >= 1e6 ? (v / 1e6).toFixed(v % 1e6 ? 1 : 0) + 'M' : Math.abs(v) >= 1e4 ? Math.round(v / 1e3) + 'k' : (Math.round(v * 100) / 100).toLocaleString();
+  const claimsCard = (S.claims || []).length ? `<div class="dcard span2"><div class="dh">Claims <span class="note">what is asserted, who said it first, who repeats it, whether an outlet printed it</span></div>
+    ${S.claims.map(c => `<div class="story"><div><span class="sig ${c.status === 'an outlet confirms' ? 'rising' : c.status === 'disputed' ? 'uproar' : 'steady'}">${esc(c.status)}</span> ${esc(c.text)}</div>
+      <div class="note" style="margin-top:4px">first ${c.first.platform === 'news' || c.first.platform === 'web' ? '' : '@'}${esc(c.first.who || '')} ${when(c.first.posted_at)} · ${c.accounts} voice${c.accounts === 1 ? '' : 's'}${c.outlets.length ? ' · ' + esc(c.outlets.slice(0, 2).join(', ')) : ''}${c.disputed.length ? ' · disputed by ' + c.disputed.map(d => '@' + esc(d.who || '')).join(', ') : ''} ${posts(c.examples)}${c.disputed.length ? posts(c.disputed) : ''}</div></div>`).join('')}</div>` : '';
+  const numbersCard = (S.numbers || []).length ? `<div class="dcard"><div class="dh">Numbers that move <span class="note">the same figure over time</span></div>
+    ${S.numbers.map(nm => { const vmax = Math.max(1e-9, ...nm.points.map(p => p.value)); return `<div class="story"><div><b>${esc(nm.what)}</b> <span class="note">${fmtV(nm.first)} → ${fmtV(nm.last)} · ${nm.n} mentions${nm.moved ? '' : ' · unchanged'}</span></div>
+      <div class="spark">${nm.points.map(p => `<i style="height:${Math.max(3, Math.round(100 * p.value / vmax))}%" title="${esc(p.raw)} · ${when(p.ts)}"></i>`).join('')}</div><div class="chips wrap">${nm.points.slice(-4).map(p => link(p.post, esc(p.raw) + ' ↗')).join('')}</div></div>`; }).join('')}</div>` : '';
+  const D = S.dated || { ahead: [], past: [] };
+  const timelineCard = (D.ahead.length || D.past.length) ? `<div class="dcard"><div class="dh">Dates in the posts <span class="note">what happened when, and what is coming</span></div>
+    ${D.ahead.length ? `<div class="note"><b>Coming up</b></div>${D.ahead.map(e => `<div class="drow"><span class="k">${when(e.when)}</span><span class="note grow">${esc(e.text)}</span>${posts(e.examples)}</div>`).join('')}` : ''}
+    ${D.past.length ? `<div class="note" style="margin-top:8px"><b>Happened</b></div>${D.past.map(e => `<div class="drow"><span class="k">${when(e.when)}</span><span class="note grow">${esc(e.text)}</span>${posts(e.examples)}</div>`).join('')}` : ''}
+    <p class="note" style="margin-top:6px">Dates written in the posts, resolved against the post's own date. "Friday" in the past tense is the one just gone.</p></div>` : '';
   return `<div class="dcard span2" style="border-color:rgba(var(--acc-rgb),.35)"><div class="dh">Signals <span class="note">${fmtN(S.n)} posts read as a whole</span></div><p style="margin:0">${esc(S.headline)}</p><p class="note" style="margin-top:6px">Counted from the posts in this topic. Every figure links to the posts behind it. Nothing is looked up outside them.</p></div>
-    ${trendCard}${heatCard}${spreadCard}${issuesCard}${driversCard}${storiesCard}${coordCard}`;
+    ${claimsCard}${trendCard}${numbersCard}${timelineCard}${heatCard}${spreadCard}${issuesCard}${driversCard}${storiesCard}${coordCard}`;
 }
 function briefCard(){
   const b = BRIEF; if (!b || b.error) return '';

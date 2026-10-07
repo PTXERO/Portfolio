@@ -1361,3 +1361,41 @@ class InShort(Base):
         b = SIG.build(self.v, t1["id"])
         self.assertEqual(b["overlaps"], [{"topic_id": t2["id"], "name": "Collier outages", "n": 7}])
         self.assertEqual(b["kind"], "general")
+
+
+class ClaimsNumbersDates(Base):
+    def test_claims_numbers_dates_and_trust(self):
+        from rv import signals as SIG
+        import datetime as dt
+        n0 = now()
+        D = 86400
+        items = [post("a", "Duke Energy said 200,000 customers are without power in Collier County after Isaias.", "wxguy", n0 - 3 * D, likes=50),
+                 post("b", "Duke Energy says 200k customers without power. Crews from out of state arriving.", "u1", n0 - 3 * D + 3600),
+                 dict(post("c", "Duke Energy said 200,000 customers lost power in Collier County, the utility confirmed Tuesday.", "nd", n0 - 2 * D), platform="news", author_name="Naples Daily News"),
+                 post("d", "Now 90,000 customers without power, Duke Energy said.", "u2", n0 - 2 * D + 7200),
+                 post("e", "Down to 12,000 customers without power as of this morning, gas at $9 a gallon.", "u3", n0 - D),
+                 post("f", "The county commission hearing on gouging is on October 14. Show up.", "u4", n0 - D + 100),
+                 post("g", "Hearing on price gouging October 14 at the county commission, bring receipts.", "u5", n0 - D + 200),
+                 post("h", "Shelters opened at Golden Gate High on Friday and stayed open through the weekend.", "u6", n0 - 2 * D),
+                 post("i", "That 200k customers number is false, Duke Energy never said that, it was 150k.", "skeptic", n0 - D - 100)]
+        s = SIG.summarize(items, {"isaias"})
+        st = {c["status"]: c for c in s["claims"]}
+        self.assertIn("an outlet confirms", st)
+        self.assertEqual(st["an outlet confirms"]["outlets"], ["Naples Daily News"])
+        self.assertEqual(st["an outlet confirms"]["first"]["who"], "wxguy")
+        self.assertIn("disputed", st)
+        self.assertEqual(st["disputed"]["disputed"][0]["who"], "skeptic")
+        cust = next(n for n in s["numbers"] if n["what"] == "customers")
+        self.assertEqual((cust["first"], cust["last"], cust["moved"]), (200000.0, 12000.0, True))
+        ahead = s["dated"]["ahead"]
+        self.assertEqual(len(ahead), 1)
+        self.assertEqual((ahead[0]["n"], ahead[0]["date_text"]), (2, "October 14"))
+        self.assertEqual(dt.datetime.fromtimestamp(ahead[0]["when"], dt.timezone.utc).strftime("%m-%d"), "10-14")
+        self.assertTrue(all(e["when"] <= n0 for e in s["dated"]["past"]))
+        self.assertTrue(any(e["date_text"] == "Friday" for e in s["dated"]["past"]))   # "opened ... on Friday": the one just gone
+        self.assertEqual(s["trust"]["label"], "thin")
+        self.assertIn("only 9 posts", s["trust"]["reasons"])
+        # with sources: half switched off is a reason
+        tr = SIG.trust(items * 8, s["trend"], dict(s["spread"], platforms=[1, 2, 3], outlets=1), [{"name": "news", "enabled": False, "auto_off": 1}, {"name": "x", "enabled": True}], 14, 5)
+        self.assertEqual(tr["label"], "fair")
+        self.assertTrue(any("switched off" in r for r in tr["reasons"]) and any("window" in r for r in tr["reasons"]))

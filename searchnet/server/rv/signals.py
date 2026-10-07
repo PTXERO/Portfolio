@@ -438,6 +438,10 @@ def build(vault, tid, max_items=3000):
     names = {r["id"]: r["name"] for r in vault.db.q("SELECT id, name FROM topics")}
     out["overlaps"] = [{"topic_id": k, "name": names.get(k, k), "n": n} for k, n in ov.most_common(6) if n >= 2 and k in names]
     out["kind"] = ((t.get("settings") or {}).get("plan") or {}).get("kind") or "general"
+    from .plan import window_days
+    st_ = t.get("settings") or {}
+    srcs = [dict(x, auto_off=(x.get("options") or {}).get("auto_off")) for x in vault.list_sources() if x["id"] in set(t.get("sources") or [])]
+    out["trust"] = trust(items, out["trend"], out["spread"], srcs, window_days(st_, st_.get("plan")), out["trend"].get("older") or 0)
     return out
 
 
@@ -464,5 +468,235 @@ def summarize(items, seed_words=()):
     return {"n": len(items), "trend": tr, "spread": sp, "drivers": dr, "heat": ht, "issues": iss, "storylines": st,
             "coordination": co, "lead_lag": lead_lag(items, burst), "headline": "; ".join(headline) or "nothing out of the ordinary",
             "places": places(items, seed_words), "top_posts": top_posts(items), "momentum": momentum(tr, sp, st), "arc": arc(tr),
-            "origin": origin(items, sp, burst),
+            "origin": origin(items, sp, burst), "claims": claims(items, seed_words), "numbers": numbers(items), "dated": dated(items),
+            "trust": trust(items, tr, sp),
             "badge": {"state": tr["state"], "heat": ht["level"], "score": ht["score"], "velocity": tr.get("velocity")}, "generated": now()}
+
+
+# ── claims, numbers, dated events, trust ──
+SENT_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"“])|\n+")
+ASSERT = re.compile(r"\b(said|says|saying|confirmed|confirms|announced|announces|reports|reported|claims|claimed|denied|denies|admitted|admits|"
+                    r"according to|told|stated|warned|warns|estimates|estimated|expects|expected|will|has|have|is|are|was|were)\b", re.I)
+DISPUTE = re.compile(r"\b(false|not true|untrue|debunked|denies|denied|deny|misinformation|hoax|fake|no evidence|incorrect|wrong|rumor|rumour)\b", re.I)
+NUM = re.compile(r"(?<![\w.])(\$|£|€)?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)(?:\s*(k|m|bn|b|million|billion|thousand|%|percent|mph|km/h|inches|feet|ft|miles|acres|degrees)\b)?"
+                 r"(?:\s+(?:of\s+|a\s+|an\s+|per\s+)?([a-z][a-z-]{2,}))?", re.I)
+NUM_SKIP = {"am", "pm", "the", "and", "for", "with", "that", "this", "from", "year", "years", "day", "days", "hour", "hours", "minute", "minutes",
+            "week", "weeks", "month", "months", "time", "times", "ago", "today", "yesterday", "tomorrow", "more", "than", "about"}
+MONTHS = {m: i + 1 for i, m in enumerate("january february march april may june july august september october november december".split())}
+MONTHS.update({m[:3]: i for m, i in list(MONTHS.items())})
+MONTHS["sept"] = 9
+WEEKDAYS = {d: i for i, d in enumerate("monday tuesday wednesday thursday friday saturday sunday".split())}
+DATE_RX = re.compile(r"\b(?:(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?"
+                     r"|(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?(?:,?\s+(\d{4}))?"
+                     r"|(next|last|this)?\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\b(tonight|tomorrow|yesterday)\b)", re.I)
+PAST_HINT = re.compile(r"\b(was|were|happened|took place|yesterday|last|ago|had|did|\w{3,}ed)\b", re.I)
+
+
+def _sentences(text):
+    for s_ in SENT_SPLIT.split(str(text or "")):
+        s_ = s_.strip()
+        if 30 <= len(s_) <= 300 and not s_.lower().startswith(("http", "rt @")):
+            yield s_
+
+
+def _claim_key(s_):
+    toks = [light_stem(w) for w in tokens(s_) if w not in STOP and len(w) > 2]
+    return set(toks)
+
+
+def claims(items, seed_words=(), top=10):
+    """What is asserted, who said it first, how many repeat it, whether an outlet has printed it, whether anyone disputes it.
+    "posts only" vs "an outlet confirms" is the tag that matters."""
+    out = []
+    for it in sorted((x for x in items if x.get("posted_at")), key=lambda x: x["posted_at"]):
+        for s_ in _sentences(it.get("text")):
+            if not ASSERT.search(s_) or not re.search(r"\d|\b[A-Z][a-z]+\b", s_):
+                continue
+            key = _claim_key(s_)
+            if len(key) < 4:
+                continue
+            who = (it.get("author_name") or it.get("author")) if it.get("platform") in OUTLETS else it.get("author")
+            hit = None
+            for c in out:
+                j = len(key & c["_key"]) / max(1, len(key | c["_key"]))
+                if j >= 0.45 or (j >= 0.25 and DISPUTE.search(s_) and not DISPUTE.search(c["text"])):
+                    hit = c
+                    break
+            if hit is None:
+                out.append({"_key": key, "text": s_, "first": {"who": who, "platform": it.get("platform"), "posted_at": it["posted_at"], "url": it.get("url"), "id": it["id"]},
+                            "accounts": {str(it.get("author") or "").lower()}, "n": 1, "outlets": set(), "disputed": [], "examples": [_ref(it)]})
+                if it.get("platform") in OUTLETS:
+                    out[-1]["outlets"].add(who or "")
+            else:
+                hit["n"] += 1
+                hit["accounts"].add(str(it.get("author") or "").lower())
+                if it.get("platform") in OUTLETS:
+                    hit["outlets"].add(who or "")
+                if DISPUTE.search(s_) and not DISPUTE.search(hit["text"]) and len(hit["disputed"]) < 3:
+                    hit["disputed"].append(dict(_ref(it), who=who))
+                if len(hit["examples"]) < 3:
+                    hit["examples"].append(_ref(it))
+    res = []
+    for c in out:
+        if c["n"] < 2 and not c["outlets"]:
+            continue
+        status = "disputed" if c["disputed"] else "an outlet confirms" if c["outlets"] else "posts only"
+        res.append({"text": c["text"], "first": c["first"], "n": c["n"], "accounts": len(c["accounts"]), "outlets": sorted(x for x in c["outlets"] if x),
+                    "status": status, "disputed": c["disputed"], "examples": c["examples"]})
+    res.sort(key=lambda c: (-(c["accounts"] + 2 * len(c["outlets"])), c["first"]["posted_at"]))
+    return res[:top]
+
+
+def _num(v, unit):
+    v = float(str(v).replace(",", ""))
+    u = (unit or "").lower()
+    if u == "k" or u == "thousand":
+        v *= 1e3
+    elif u in ("m", "million"):
+        v *= 1e6
+    elif u in ("b", "bn", "billion"):
+        v *= 1e9
+    return v
+
+
+def numbers(items, top=8):
+    """Figures that move: the same quantity mentioned over time (people without power, a price, a death toll)."""
+    series = defaultdict(list)
+    for it in items:
+        if not it.get("posted_at"):
+            continue
+        for m in NUM.finditer(str(it.get("text") or "")):
+            cur, val, unit, what = m.group(1), m.group(2), m.group(3), (m.group(4) or "").lower()
+            if (what and what.split()[0] in NUM_SKIP) or (not unit and not cur and (not what or len(val) < 2)):
+                continue
+            if re.match(r"^\d{4}$", val) and not unit and not cur:      # a year, not a quantity
+                continue
+            if unit and unit.lower() in ("k", "m", "b", "bn") and not what:
+                continue
+            key = (cur or "") + ((" " + unit.lower()) if unit and unit.lower() in ("%", "percent", "mph", "km/h", "inches", "feet", "ft", "miles", "acres", "degrees") else "") + (" " + what if what else "")
+            key = key.strip()
+            if not key or key in ("%", "percent"):
+                continue
+            series[key].append({"ts": it["posted_at"], "value": _num(val, unit), "raw": m.group(0).strip(), "post": _ref(it)})
+    out = []
+    for key, pts in series.items():
+        pts.sort(key=lambda p_: p_["ts"])
+        vals = {p_["value"] for p_ in pts}
+        if len(pts) < 2 or (len(vals) < 2 and len(pts) < 3):
+            continue
+        out.append({"what": key, "n": len(pts), "first": pts[0]["value"], "last": pts[-1]["value"], "min": min(vals), "max": max(vals),
+                    "moved": len(vals) > 1, "points": pts[-12:]})
+    out.sort(key=lambda s_: (-(s_["moved"]), -s_["n"]))
+    return out[:top]
+
+
+def _resolve_date(m, ts):
+    """A date written in a post → a timestamp, relative to when the post was made."""
+    import datetime as dt
+    base = dt.datetime.fromtimestamp(ts, dt.timezone.utc)
+    try:
+        if m.group(1) or m.group(5):
+            mon = MONTHS[(m.group(1) or m.group(5)).lower()[:3]]
+            day = int(m.group(2) or m.group(4))
+            year = int(m.group(3) or m.group(6) or base.year)
+            d = dt.datetime(year, mon, day, tzinfo=dt.timezone.utc)
+            if not (m.group(3) or m.group(6)):           # no year written: the nearest one
+                if (d - base).days > 240:
+                    d = d.replace(year=year - 1)
+                elif (base - d).days > 240:
+                    d = d.replace(year=year + 1)
+            return int(d.timestamp()), "day"
+        if m.group(8):
+            wd = WEEKDAYS[m.group(8).lower()]
+            delta = (wd - base.weekday()) % 7
+            q = (m.group(7) or "").lower()
+            if q == "last":
+                delta = delta - 7 if delta else -7
+            elif q == "next" and delta == 0:
+                delta = 7
+            d = base + dt.timedelta(days=delta)
+            return int(d.replace(hour=0, minute=0, second=0).timestamp()), "weekday"
+        w = (m.group(9) or "").lower()
+        if w == "tonight":
+            return int(base.replace(hour=0, minute=0, second=0).timestamp()), "day"
+        if w == "tomorrow":
+            return int((base + dt.timedelta(days=1)).replace(hour=0, minute=0, second=0).timestamp()), "day"
+        if w == "yesterday":
+            return int((base - dt.timedelta(days=1)).replace(hour=0, minute=0, second=0).timestamp()), "day"
+    except (ValueError, KeyError):
+        return None, None
+    return None, None
+
+
+def dated(items, top=12):
+    """Dates written in the posts, not the posts' own dates: what happened when, and what is coming."""
+    ev = []
+    for it in items:
+        if not it.get("posted_at"):
+            continue
+        for s_ in _sentences(it.get("text")):
+            for m in DATE_RX.finditer(s_):
+                when, kind = _resolve_date(m, it["posted_at"])
+                if when is None:
+                    continue
+                if kind == "weekday" and not (m.group(7) or "").lower() and PAST_HINT.search(s_) and when > it["posted_at"]:
+                    when -= 7 * DAY                        # "on Friday" in the past tense: the one just gone
+                key = _claim_key(s_)
+                hit = next((e for e in ev if abs(e["when"] - when) < DAY and len(key & e["_key"]) / max(1, len(key | e["_key"])) >= 0.4), None)
+                if hit:
+                    hit["n"] += 1
+                    if len(hit["examples"]) < 3:
+                        hit["examples"].append(_ref(it))
+                else:
+                    ev.append({"_key": key, "when": when, "text": s_, "date_text": m.group(0).strip(), "n": 1, "examples": [_ref(it)],
+                               "who": (it.get("author_name") or it.get("author")) if it.get("platform") in OUTLETS else it.get("author"), "platform": it.get("platform")})
+                break
+    t = now()
+    for e in ev:
+        e.pop("_key")
+        e["ahead"] = e["when"] > t
+    ahead = sorted((e for e in ev if e["ahead"]), key=lambda e: (e["when"], -e["n"]))[:top]
+    past = sorted((e for e in ev if not e["ahead"]), key=lambda e: (-e["n"], -e["when"]))[:top]
+    past.sort(key=lambda e: e["when"])
+    return {"ahead": ahead, "past": past}
+
+
+def trust(items, tr, sp, sources=None, window_days=0, older=0):
+    """How much to lean on this read: posts, networks, sources that answered, days with nothing, what the window cut."""
+    n = len(items)
+    reasons, score = [], 0
+    if n >= 60:
+        score += 2
+        reasons.append(f"{n} posts")
+    elif n >= 20:
+        score += 1
+        reasons.append(f"{n} posts")
+    else:
+        score -= 1
+        reasons.append(f"only {n} posts")
+    plats = len(sp.get("platforms") or [])
+    if plats >= 3:
+        score += 1
+        reasons.append(f"{plats} networks")
+    elif plats <= 1:
+        score -= 1
+        reasons.append("one network only")
+    srcs = sources or []
+    failed = [s_ for s_ in srcs if not s_.get("enabled") and s_.get("auto_off")]
+    if srcs and len(failed) >= max(1, len(srcs) // 2):
+        score -= 1
+        reasons.append(f"{len(failed)} of {len(srcs)} sources switched off after failing")
+    elif failed:
+        reasons.append(f"{len(failed)} source{'s' if len(failed) > 1 else ''} switched off: " + ", ".join(s_.get("name", "?") for s_ in failed[:2]))
+    series = tr.get("series") or []
+    if series:
+        empty = sum(1 for d in series if not d["n"])
+        if empty >= 0.8 * len(series) and tr.get("state") not in ("quiet",):
+            score -= 1
+            reasons.append(f"{empty} of the last {len(series)} days have no posts")
+    if window_days and older:
+        reasons.append(f"the {window_days}-day window left {older} older posts out")
+    if sp.get("outlets"):
+        score += 1
+    label = "solid" if score >= 3 else "fair" if score >= 1 else "thin"
+    return {"label": label, "score": score, "reasons": reasons}
