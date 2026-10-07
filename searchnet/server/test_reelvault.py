@@ -1136,3 +1136,25 @@ class FullTextAndHygiene(Base):
         self.assertEqual(a[0]["url"], "https://a.example/story")
         self.assertEqual(a[0]["id"], b[0]["id"])
         self.assertEqual(self.v.db.one("SELECT count(*) n FROM items")["n"], 1)
+
+
+class OutletNames(Base):
+    def test_an_outlets_own_name_is_a_mention_of_it_not_a_named_thing(self):
+        from rv.people import word_graph
+        t = self.v.create_topic("Isaias", ["hurricane isaias"], settings={"window": "all"})
+        ctx = type("C", (), {"label": "t"})()
+        for n, txt in enumerate(["Isaias knocks out power in Collier - Naples Daily News", "Naples Daily News: shelters open ahead of Isaias"], 1):
+            a = S._web_item(ctx, "naplesnews.com", f"https://www.naplesnews.com/{n}", "post", txt, author="Naples Daily News", posted_at=now())
+            a["id"], a["platform"], a["author_name"] = f"news:n{n}", "news", "Naples Daily News"
+            self.v.db.upsert(a)
+            self.v.link(t["id"], a["id"], "hurricane isaias", "s")
+            self.v.vote(t["id"], a["id"], 1)
+        self.add(tweet("1", "Naples Daily News says Isaias shelters are open #isaias", author="localguy"))
+        self.v.link(t["id"], "x:1", "hurricane isaias", "s")
+        self.v.vote(t["id"], "x:1", 1)
+        g = word_graph(self.v, topic=t["id"], kinds="account,entity", max_nodes=60)
+        self.assertFalse(any(n["kind"] == "entity" and "naples daily news" in n["label"].lower() for n in g["nodes"]))
+        e = next((e for e in g["edges"] if {e["a"], e["b"]} == {"@localguy|x", "@naples daily news|news"}), None)
+        self.assertIsNotNone(e)
+        self.assertEqual(e["t"], 1)
+        self.assertIn("names naples daily news", e["ev"]["mention"])

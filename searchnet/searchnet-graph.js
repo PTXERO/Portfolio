@@ -311,11 +311,18 @@
     const nAcc = Math.max(1, by.size);
     const generic = (w) => !focusWords.has(w) && !tagWords.has(w) && (BOILER.has(w) || (nPosts >= 50 && nAcc >= 20 && postDF[w] / nPosts > 0.7 && acctDF[w] / nAcc > 0.9));
     const seenPost = new Set();
+    // an account's own name (an outlet's masthead, a poster's display name) is never a named thing of its own:
+    // named by someone else it is a mention of that account, named by itself it is nothing
+    const acctNames = {}; for (const it of items) { if (!it.author) continue; for (const nm of [String(it.author).toLowerCase(), String(it.author_name || '').toLowerCase()]) if (nm.length > 3 && acctNames[nm] === undefined) acctNames[nm] = acctId(it); }
     for (const it of items) {
       if (!it.author) continue;
       const A = acctId(it); kindOf[A] = 'account';
       const tags = it.platform === 'archive' ? [] : [...hashSet(it)].map((h) => '#' + h);   // archive's "tags" are media types
-      const rawE = entitiesIn(it.text, new Set([...seedWords, String(it.author || '').toLowerCase()])); const ents = rawE.filter((e) => !rawE.some((o) => o !== e && o.includes(e))).map((e) => 'e:' + e);   // 'tampa bay' inside 'tampa bay times' is one name
+      const own = new Set([String(it.author || '').toLowerCase(), String(it.author_name || '').toLowerCase()]);
+      let rawE = entitiesIn(it.text, new Set([...seedWords, ...[...own].flatMap((n) => n.split(' '))])).filter((e) => !own.has(e));
+      rawE.filter((e) => acctNames[e] && acctNames[e] !== A).forEach((e) => link(A, acctNames[e], 2, 1, 'm', { posts: [postRef(it)], mention: A.split('|')[0] + ' names ' + e }));
+      rawE = rawE.filter((e) => !acctNames[e]);
+      const ents = rawE.filter((e) => !rawE.some((o) => o !== e && o.includes(e))).map((e) => 'e:' + e);   // 'tampa bay' inside 'tampa bay times' is one name
       ents.forEach((e) => { kindOf[e] = 'entity'; bump(e, 1); link(A, e, 1.5, 2, 'e', { posts: [postRef(it)], names: [e.slice(2)] }); });
       for (let i = 0; i < ents.length; i++) for (let j = i + 1; j < ents.length; j++) link(ents[i], ents[j], 1, 2, 'e', { posts: [postRef(it)] });
       const words = [...new Set(tokens(it.text).filter((w) => w.length > WORD_MIN && !STOP.has(w) && !generic(w)))].map((w) => 'w:' + w);

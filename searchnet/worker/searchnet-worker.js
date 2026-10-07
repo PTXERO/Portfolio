@@ -571,13 +571,14 @@ function parseFeed(xml, limit, allMedia, brand) {
     if (media === "post" && !allMedia) continue;
     const thumb = attr(/<media:thumbnail[^>]*url=["']([^"']+)/i);
     const srcName = pick(/<source[^>]*>([^<]+)<\/source>/i);
+    let title = pick(/<title[^>]*>([^<]+)/i); if (srcName && title.toLowerCase().endsWith(" - " + srcName.toLowerCase())) title = title.slice(0, -(srcName.length + 3));   // "Headline - Outlet" → "Headline"
     out.push(item({
       id: vid ? "youtube:" + vid : (brand || "rss") + ":" + hash(link || mediaUrl),
       platform: vid ? "youtube" : (brand || "rss"), media,
       url: link || mediaUrl, media_url: !vid && media === "video" ? mediaUrl : null,
       author: pick(/<(?:author|dc:creator)[^>]*>(?:<name>)?([^<]+)/i) || srcName || (brand ? hostOf(link) : ""),
       author_name: srcName || "",
-      text: [pick(/<title[^>]*>([^<]+)/i), pick(/<(?:description|summary|media:description)[^>]*>([\s\S]*?)<\//i)].filter(Boolean).join("\n"),
+      text: [title, pick(/<(?:description|summary|media:description)[^>]*>([\s\S]*?)<\//i)].filter(Boolean).join("\n"),
       posted_at: toTs(pick(/<(?:pubDate|published|updated|dc:date)[^>]*>([^<]+)/i)),
       thumbnail: thumb || null,
     }));

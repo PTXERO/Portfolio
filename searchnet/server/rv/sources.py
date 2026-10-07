@@ -636,8 +636,10 @@ def fetch_news(ctx, src, query, limit):
         url = f"https://www.bing.com/news/search?q={urllib.parse.quote(q_)}&format=rss&count={min(limit, 100)}"
         body, _, _ = http_get(url, timeout=20)
     for e in items_from_feed(body, url, ctx.label, True)[:limit]:
-        yield _article(ctx, e["url"], e["text"], author=e.get("author") or domain_of(e["url"]),
-                       posted_at=e.get("posted_at"), prefix="news", platform="news")
+        text, who = e["text"], e.get("author") or domain_of(e["url"])
+        if who and text.lower().startswith(text.split("\n")[0].lower()) and text.split("\n")[0].lower().endswith(" - " + who.lower()):
+            text = text[:len(text.split("\n")[0]) - len(who) - 3] + text[len(text.split("\n")[0]):]     # "Headline - Outlet" → "Headline"
+        yield _article(ctx, e["url"], text, author=who, posted_at=e.get("posted_at"), prefix="news", platform="news")
 
 
 def fetch_gdelt(ctx, src, query, limit):

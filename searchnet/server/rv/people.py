@@ -612,11 +612,23 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
                          (w in BOILER or (n_posts >= 50 and n_acc >= 20 and post_df[w] / n_posts > 0.7
                                           and acct_df[w] / n_acc > 0.9)))
     seen_posts = set()
+    # an account's own name (an outlet's masthead, a poster's display name) is never a named thing of its own:
+    # named by someone else it is a mention of that account, named by itself it is nothing
+    acct_names = {}
+    for a in by.values():
+        aid_ = f"@{a.author.lower()}|{a.platform}"
+        for nm in {str(a.author or "").lower()} | {str(it.get("author_name") or "").lower() for it in a.items}:
+            if len(nm) > 3:
+                acct_names.setdefault(nm, aid_)
     for a in by.values():
         aid = f"@{a.author.lower()}|{a.platform}"
         for it in a.items:
             tags = [] if it.get("platform") == "archive" else ["#" + h for h in _hashes(it)]   # archive's "tags" are media types
-            raw_e = _entities(it.get("text"), seed_words | {str(it.get("author") or "").lower()})
+            own = {str(it.get("author") or "").lower(), str(it.get("author_name") or "").lower()}
+            raw_e = [e for e in _entities(it.get("text"), seed_words | {w for n_ in own for w in n_.split()}) if e not in own]
+            for e in [e for e in raw_e if e in acct_names and acct_names[e] != aid]:
+                link(aid, acct_names[e], 2, 1, "m", {"posts": [post_ref(it)], "mention": f"{aid.split('|')[0]} names {e}"})
+            raw_e = [e for e in raw_e if e not in acct_names]
             ents = ["e:" + e for e in raw_e if not any(e != o and e in o for o in raw_e)]   # 'tampa bay' inside 'tampa bay times' is one name
             for e in ents:
                 kind_of[e] = "entity"
