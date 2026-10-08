@@ -359,7 +359,7 @@ const SOURCES = {
         return (d.data || []).map((o) => redditItem(o, q)).filter(Boolean);
       } catch (e2) {
         // PullPush rate-limits per address; reddit's own search feed still answers (titles and links, no counts)
-        const xml = await getText(`https://www.reddit.com/${sub ? "r/" + encodeURIComponent(sub) + "/" : ""}search.rss?q=${encodeURIComponent(q.q || "")}&sort=new${sub ? "&restrict_sr=1" : ""}`);
+        const xml = await getText(`https://www.reddit.com/${sub ? "r/" + encodeURIComponent(sub) + "/" : ""}search.rss?q=${encodeURIComponent(q.q || "")}&sort=new${sub ? "&restrict_sr=1" : ""}`, { "User-Agent": "Mozilla/5.0 (compatible; SearchNet/1.9; +https://ptxero.neocities.org/searchnet/)", "Accept": "application/rss+xml, application/xml" });   // reddit refuses a bot-looking agent on its feeds
         return parseFeed(xml, limit, true).map((it) => Object.assign(it, { id: "reddit:" + hash(it.url || ""), platform: "reddit", author: (it.author || "").replace(/^\/?u\//, "") || "reddit", author_name: it.author_name || "" }));
       }
     }
