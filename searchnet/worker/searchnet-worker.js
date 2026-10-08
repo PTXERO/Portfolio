@@ -21,8 +21,8 @@
  *  the way the optional local PC server does.
  * ───────────────────────────────────────────────────────────────── */
 
-const VERSION = "1.8";
-const UA = "SearchNetWorker/1.5 (+https://ptxero.neocities.org/searchnet/; open-source research tool)";
+const VERSION = "1.9";
+const UA = "SearchNetWorker/1.9 (+https://ptxero.neocities.org/searchnet/; open-source research tool)";
 const INVIDIOUS = ["https://yewtu.be", "https://invidious.nerdvpn.de", "https://invidious.jing.rocks"];
 
 export default {
@@ -108,6 +108,16 @@ async function fetchRetry(u, init) {           // one retry on a 5xx or a droppe
   if (!r || r.status >= 500) { await new Promise((x) => setTimeout(x, 600)); r = await fetch(u, init); }
   return r;
 }
+// Bluesky's public AppView refuses some unauthenticated calls (403) while api.bsky.app answers them: try both hosts
+async function bskyJSON(xrpc) {
+  try { return await getJSON(`https://api.bsky.app/xrpc/${xrpc}`); }
+  catch (e) { return await bskyJSON(`${xrpc}`); }
+}
+// a rate-limited upstream (429) gets one more try after a short wait
+async function getJSONRetry(u, headers) {
+  try { return await getJSON(u, headers); }
+  catch (e) { if (!/429/.test(String(e && e.message))) throw e; await new Promise((r) => setTimeout(r, 1500)); return await getJSON(u, headers); }
+}
 async function getJSON(u, headers) {
   const r = await fetchRetry(u, { headers: { "User-Agent": UA, Accept: "application/json", ...(headers || {}) } });
   if (!r.ok) throw new Error(`${new URL(u).hostname} → HTTP ${r.status}`);
@@ -139,7 +149,7 @@ const imgExt = /\.(jpe?g|png|gif|webp|avif)(\?|$)/i;
 // ── sources: each returns an array of normalized items ───────────
 // ── shared result cache: one upstream call serves everyone who asks the same thing for a while.
 //    News and web ten minutes, social three, reference an hour. A hit costs the asker nothing on the hub.
-const CACHE_TTL = { news: 600, gdelt: 600, web: 600, hn: 600, archive: 1800, wikipedia: 3600, fourchan: 300, mastodon: 180, lemmy: 180, reddit: 300, bluesky: 180, youtube: 600, rss: 300, html: 600 };
+const CACHE_TTL = { news: 600, gdelt: 1800, web: 600, hn: 600, archive: 1800, wikipedia: 3600, fourchan: 300, mastodon: 180, lemmy: 180, reddit: 300, bluesky: 180, youtube: 600, rss: 300, html: 600 };
 function searchCacheKey(q, limit) {
   if (typeof caches === "undefined" || !q || !q.source) return null;
   const parts = Object.keys(q).filter((k) => !["key", "_", "t", "limit"].includes(k)).sort().map((k) => [k, String(q[k])]);
@@ -194,14 +204,20 @@ const SOURCES = {
       return ((d.data || {}).children || []).map((c) => redditItem(c.data || {}, q)).filter(Boolean);
     } catch (e) {
       // reddit.com refuses most data-centre addresses; PullPush keeps a searchable archive (lags hours to days)
-      const d = await getJSON(`https://api.pullpush.io/reddit/search/submission/?q=${encodeURIComponent(q.q || "")}&size=${Math.min(limit, 100)}${sub ? "&subreddit=" + encodeURIComponent(sub) : ""}`);
-      return (d.data || []).map((o) => redditItem(o, q)).filter(Boolean);
+      try {
+        const d = await getJSON(`https://api.pullpush.io/reddit/search/submission/?q=${encodeURIComponent(q.q || "")}&size=${Math.min(limit, 100)}${sub ? "&subreddit=" + encodeURIComponent(sub) : ""}`);
+        return (d.data || []).map((o) => redditItem(o, q)).filter(Boolean);
+      } catch (e2) {
+        // PullPush rate-limits per address; reddit's own search feed still answers (titles and links, no counts)
+        const xml = await getText(`https://www.reddit.com/${sub ? "r/" + encodeURIComponent(sub) + "/" : ""}search.rss?q=${encodeURIComponent(q.q || "")}&sort=new${sub ? "&restrict_sr=1" : ""}`);
+        return parseFeed(xml, limit, true).map((it) => Object.assign(it, { id: "reddit:" + hash(it.url || ""), platform: "reddit", author: (it.author || "").replace(/^\/?u\//, "") || "reddit", author_name: it.author_name || "" }));
+      }
     }
   },
 
   // Bluesky public search (video/image posts)
   async bluesky(q, limit) {
-    const d = await getJSON(`https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=${encodeURIComponent(q.q || "")}&limit=${Math.min(limit, 100)}`);
+    const d = await bskyJSON(`app.bsky.feed.searchPosts?q=${encodeURIComponent(q.q || "")}&limit=${Math.min(limit, 100)}`);
     return (d.posts || []).map((p) => bskyItem(p, q)).filter(Boolean).slice(0, limit);
   },
 
@@ -244,7 +260,7 @@ const SOURCES = {
   },
   // GDELT: a running index of world news articles, searchable back years. Phrases go in quotes.
   async gdelt(q, limit) {
-    const d = await getJSON(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(withExtra(q))}&mode=ArtList&maxrecords=${Math.min(limit, 250)}&format=json&sort=DateDesc&startdatetime=${q.since ? new Date((+q.since) * 1000).toISOString().replace(/[-:T]/g, "").slice(0, 14) : "20170101000000"}`);
+    const d = await getJSONRetry(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(withExtra(q))}&mode=ArtList&maxrecords=${Math.min(limit, 250)}&format=json&sort=DateDesc&startdatetime=${q.since ? new Date((+q.since) * 1000).toISOString().replace(/[-:T]/g, "").slice(0, 14) : "20170101000000"}`);
     return (d.articles || []).map((a) => item({
       id: "news:" + hash(canon(a.url)), platform: "news", media: "post", url: "https://" + canon(a.url),
       author: a.domain || hostOf(a.url), author_name: a.domain || "", text: a.title || "",
@@ -464,7 +480,7 @@ async function accountPosts(q, limit) {
     return mastoItems(arr, q).slice(0, limit);
   }
   if (plat === "bluesky") {
-    const d = await getJSON(`https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(handle)}&limit=${Math.min(limit, 100)}&filter=${wantText(q) ? "posts_with_replies" : "posts_with_media"}`);
+    const d = await bskyJSON(`app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(handle)}&limit=${Math.min(limit, 100)}&filter=${wantText(q) ? "posts_with_replies" : "posts_with_media"}`);
     return (d.feed || []).map((f) => bskyItem(f.post || {}, q)).filter(Boolean).slice(0, limit);
   }
   if (plat === "reddit") {
@@ -529,7 +545,7 @@ async function accountFollows(q, limit) {
     const page = async (xrpc, key) => {
       const rows = []; let cursor = "";
       for (let i = 0; i < 5 && rows.length < limit; i++) {
-        const d = await getJSON(`https://public.api.bsky.app/xrpc/${xrpc}?actor=${encodeURIComponent(handle)}&limit=100${cursor ? "&cursor=" + encodeURIComponent(cursor) : ""}`);
+        const d = await bskyJSON(`${xrpc}?actor=${encodeURIComponent(handle)}&limit=100${cursor ? "&cursor=" + encodeURIComponent(cursor) : ""}`);
         (d[key] || []).forEach((a) => rows.push(row(a)));
         cursor = d.cursor; if (!cursor) break;
       }
