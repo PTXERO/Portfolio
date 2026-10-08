@@ -1,5 +1,5 @@
 // Drive the hub Worker in Node with a fake Supabase (in-memory tables) and a real ECDSA key, like the browser lib does.
-const DB = { profiles: {}, hub_users: {}, hub_usage: {}, hub_blobs: {}, posts: [], likes: [] };
+const DB = { profiles: {}, hub_users: {}, hub_usage: {}, hub_blobs: {}, posts: [], likes: [], hub_topics: {}, hub_votes: {} };
 const today = () => new Date().toISOString().slice(0, 10);
 const parseQ = (qs) => Object.fromEntries([...new URLSearchParams(qs)].map(([k, v]) => [k, v]));
 globalThis.fetch = async (u, opts = {}) => {
@@ -20,6 +20,18 @@ globalThis.fetch = async (u, opts = {}) => {
     if (m === 'POST') { DB.hub_blobs[body.uid + '/' + body.app + '/' + body.key] = body; return ok([]); }
     if (m === 'DELETE') { rows.forEach((b) => delete DB.hub_blobs[b.uid + '/' + b.app + '/' + b.key]); return ok([]); }
     return ok(rows);
+  }
+  if (t === 'hub_topics') {
+    const id = (q.id || '').replace('eq.', ''), uid = (q.uid || '').replace('eq.', '');
+    if (m === 'POST') { const rows = Array.isArray(body) ? body : [body]; rows.forEach((r) => DB.hub_topics[r.id] = Object.assign(DB.hub_topics[r.id] || {}, r)); return ok([]); }
+    if (m === 'PATCH') { Object.values(DB.hub_topics).forEach((r) => { if ((id && r.id === id) || (uid && r.uid === uid)) Object.assign(r, body); }); return ok([]); }
+    return ok(Object.values(DB.hub_topics).filter((r) => (!id || r.id === id) && (!uid || r.uid === uid) && (q.deleted !== 'eq.false' || !r.deleted)));
+  }
+  if (t === 'hub_votes') {
+    const tid = (q.topic_id || '').replace('eq.', ''), uid = (q.uid || '').replace('eq.', '');
+    if (m === 'POST') { (Array.isArray(body) ? body : [body]).forEach((v) => DB.hub_votes[v.topic_id + '|' + v.uid + '|' + v.item_id] = v); return ok([]); }
+    if (m === 'DELETE') { Object.keys(DB.hub_votes).forEach((k) => { if (DB.hub_votes[k].uid === uid) delete DB.hub_votes[k]; }); return ok([]); }
+    return ok(Object.values(DB.hub_votes).filter((v) => (!tid || v.topic_id === tid) && (!uid || v.uid === uid)));
   }
   if (t === 'posts') { if (m === 'POST') { const row = Object.assign({ created_at: new Date().toISOString() }, body); DB.posts.push(row); return ok([row]); } if (m === 'DELETE') { const uid = (q.uid || '').replace('eq.', ''); DB.posts = DB.posts.filter((p) => p.uid !== uid); return ok([]); } const uid = (q.uid || '').replace('eq.', ''); return ok(DB.posts.filter((p) => !uid || p.uid === uid)); }
   if (['likes', 'comments', 'follows', 'reposts', 'notifications', 'presence', 'reports', 'renders'].includes(t)) return ok([]);
@@ -84,6 +96,23 @@ DB.hub_usage = {}; // a new day
   const hdr = await me.headers('GET', '/me'); const a1 = await W.fetch(new Request('https://hub.test/me', { headers: hdr }), env); const a2 = await W.fetch(new Request('https://hub.test/me', { headers: hdr }), env);
   ok(a1.status === 200 && a2.status === 401, 'a replayed signed request is refused (' + a1.status + ' then ' + a2.status + ')');
   delete globalThis.caches; DB.hub_usage = {}; }
+// 6d. open topics: published by one id, seen by all, joined by any, ratings pooled; never a named person; archived by the starter or the owner
+{ DB.hub_usage = {}; const env3 = Object.assign({}, env, { LIMITS: JSON.stringify({ fetch: 50, max_fetch: 50, pool: 500, writes: 50, max_writes: 50, write_pool: 500, anon_fetch: 10, store_bytes: 9e6, blob_bytes: 9e6 }) });
+  const callE = async (method, path, id, body, extra) => { const headers = id ? await id.headers(method, path.split('?')[0], extra) : (extra || {}); const init = { method, headers }; if (body !== undefined) { init.body = JSON.stringify(body); headers['Content-Type'] = 'application/json'; } const rr = await W.fetch(new Request('https://hub.test' + path, init), env3); return { status: rr.status, j: await rr.json().catch(() => ({})) }; };
+  const other2 = await ident('EF56'); await callE('POST', '/id', other2, {});
+  let r = await callE('PUT', '/topics/isaias01', me, { name: 'Tropical Storm Isaias', seeds: ['isaias'], kind: 'event', settings: { soft: ['storm'], plan: { kind: 'event', presets: ['news'] }, sites: { 'x.com': 1 } } });
+  ok(r.status === 200 && r.j.started_by === 'AB12' && DB.hub_topics.isaias01 && !('sites' in DB.hub_topics.isaias01.settings), 'PUT /topics publishes an open topic under its starter with only the safe settings');
+  r = await callE('PUT', '/topics/jane01', me, { name: 'Jane Doe', seeds: ['Jane Doe'], kind: 'person' }); ok(r.status === 403, 'a topic about a named person is refused (403)');
+  r = await callE('GET', '/topics', null); ok(r.status === 200 && r.j.topics.length === 1 && r.j.topics[0].started_by === 'AB12' && r.j.topics[0].people === 1, 'GET /topics lists it for anyone, started by @AB12, 1 person');
+  r = await callE('POST', '/topics/isaias01/votes', other2, { votes: [{ item_id: 'x:1', label: 1, ts: 5 }, { item_id: 'x:2', label: -1, ts: 5 }] }); ok(r.status === 200 && r.j.saved === 2, 'another id joins by rating');
+  r = await callE('POST', '/topics/isaias01/votes', me, { votes: [{ item_id: 'x:1', label: 1, ts: 6 }] });
+  r = await callE('GET', '/topics/isaias01', other2); ok(r.status === 200 && r.j.pool['x:1'].pos === 2 && r.j.pool['x:2'].neg === 1 && r.j.people === 2, 'GET /topics/<id> pools the ratings per item (x:1 👍×2, x:2 👎×1), 2 people');
+  r = await callE('PUT', '/topics/isaias01', other2, { name: 'hijack', seeds: ['x'] }); ok(r.status === 403, 'someone else cannot rewrite it (403)');
+  r = await callE('DELETE', '/topics/isaias01', other2); ok(r.status === 403, 'someone else cannot delete it (403)');
+  r = await callE('DELETE', '/topics/isaias01', admin); ok(r.status === 200 && DB.hub_topics.isaias01.deleted === true && Object.keys(DB.hub_votes).length === 3, 'the hub owner can archive it; the ratings stay');
+  r = await callE('GET', '/topics', null); ok(r.j.topics.length === 0, 'an archived topic is off the list');
+  r = await callE('PUT', '/topics/isaias02', me, { name: 'Again', seeds: ['again'] }); r = await callE('DELETE', '/topics/isaias02', me); ok(r.status === 200, 'the starter can archive their own');
+  DB.hub_usage = {}; }
 // 7. legacy Social form posts still work, and a bound key blocks legacy writes
 const fd = new FormData(); fd.append('uid', 'CD34'); fd.append('secret', 's3cret'); fd.append('handle', 'RF-CD34'); fd.append('body', 'hello legacy');
 let rr = await W.fetch(new Request('https://hub.test/post', { method: 'POST', body: fd }), env); ok(rr.status === 200 && DB.profiles.CD34 && DB.profiles.CD34.secret_hash, 'legacy /post (uid+secret) still works and TOFU-registers');

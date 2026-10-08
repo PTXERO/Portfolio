@@ -193,7 +193,7 @@
     for (const st of BACKUP_STORES) out[st] = await idb.all(st);
     // a topic marked "this device only" never leaves this browser: not it, not its ratings
     const keepOut = new Set(out.topics.filter((t) => t && t.settings && t.settings.visibility === 'device').map((t) => t.id));
-    out.topics = out.topics.filter((t) => !keepOut.has(t.id)); out.votes = out.votes.filter((v) => !keepOut.has(v.topic_id)); out.left_out = keepOut.size;
+    out.topics = out.topics.filter((t) => !keepOut.has(t.id)); out.votes = out.votes.filter((v) => !keepOut.has(v.topic_id) && v.from !== 'hub'); out.left_out = keepOut.size;   // pooled ratings are the hub's, not yours to back up
     out.kv = out.kv.map((r) => (r && r.k === 'settings' && r.v) ? { k: r.k, v: Object.assign({}, r.v, { worker_key: '' }) } : r);  // never back up a Worker secret
     const dead = await idb.get('kv', 'deleted_topics'); out.deleted = (dead && dead.v) || {};      // tombstones, so a deletion wins over a stale copy elsewhere
     return out;

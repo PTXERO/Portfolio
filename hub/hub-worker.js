@@ -6,6 +6,7 @@
  *   • Social + ASCII share (/share /delete /profile /post /like /comment /follow /repost /presence
  *     /notifications /report, og cards /r/ /p/) — rows + files in YOUR Supabase project
  *   • Per-person store     (/store/<app>/<key>) — small JSON blobs per identity per app (backups, settings)
+ *   • Open topics          (/topics…) — SearchNet topics anyone on this hub can see and join; ratings pool; never a named person
  *   • Identity             (/id) — an anonymous PTXERO ID proves itself with a keypair; nobody can post as you
  *   • Your data            (/me  GET usage · GET /me/export everything · DELETE /me erase everything)
  *   • Fair use             per-identity daily limits (the owner is exempt) and a cron that deletes
@@ -227,6 +228,8 @@ async function purgeUser(svc, uid) {
   let renders = [];
   try { const r = await fetch(`${SUPABASE}/rest/v1/renders?select=slug,handle,has_source&limit=1000`, { headers: svc }); if (r.ok) renders = (await r.json()).filter((x) => sfxOf(x.handle) === uid); } catch (err) {}
   for (const r of renders) { await sdel(`${r.slug}/output.png`); if (r.has_source) await sdel(`${r.slug}/source.jpg`); await sdel(`${r.slug}/output.webm`); await del(`renders?slug=eq.${encodeURIComponent(r.slug)}`); await del(`likes?slug=eq.${encodeURIComponent(r.slug)}`); await del(`comments?slug=eq.${encodeURIComponent(r.slug)}`); }
+  await del(`hub_votes?uid=eq.${e}`);
+  await fetch(`${SUPABASE}/rest/v1/hub_topics?uid=eq.${e}`, { method: 'PATCH', headers: { ...svc, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ deleted: true }) });
   let posts = [];
   try { const r = await fetch(`${SUPABASE}/rest/v1/posts?uid=eq.${e}&select=id`, { headers: svc }); if (r.ok) posts = await r.json(); } catch (err) {}
   for (const p of posts) { await sdel(`stations/${p.id}.png`); await sdel(`audio/${p.id}.wav`); await del(`likes?slug=eq.${encodeURIComponent(p.id)}`); await del(`comments?slug=eq.${encodeURIComponent(p.id)}`); await del(`notifications?slug=eq.${encodeURIComponent(p.id)}`); }
@@ -1050,6 +1053,66 @@ export default {
         retention_days: Math.max(7, parseInt((env && env.RETENTION_DAYS) || '180', 10) || 180), resets_at: resetsAt() }, 200, request);
     }
 
+    // ── open topics: /topics (list) · /topics/<id> (GET pooled votes · PUT publish · DELETE) · /topics/<id>/votes (POST) ──
+    //    A topic marked open lives here for everyone on this hub: started by one id, joined by any, ratings pooled.
+    //    A topic about a named person is refused. Deleting archives it (other people's ratings stay).
+    const tm = path.match(/^\/topics(?:\/([A-Za-z0-9_-]{4,40})(?:\/(votes))?)?$/);
+    if (tm) {
+      if (!KEY) return ogJson({ error: 'this hub stores nothing (no SERVICE_KEY)' }, 400, request);
+      const tid = tm[1], sub = tm[2]; const H = { ...svc, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' };
+      if (request.method === 'GET' && !tid) {
+        if (px.verified) await quota(env, svc, px, 'read', 0);
+        const r = await fetch(`${SUPABASE}/rest/v1/hub_topics?deleted=eq.false&select=id,uid,name,seeds,kind,created_at,updated_at&order=updated_at.desc&limit=200`, { headers: svc });
+        const rows = r.ok ? await r.json() : [];
+        const vr = await fetch(`${SUPABASE}/rest/v1/hub_votes?select=topic_id,uid&limit=20000`, { headers: svc }); const votes = vr.ok ? await vr.json() : [];
+        const stat = {}; votes.forEach((v) => { const t = stat[v.topic_id] = stat[v.topic_id] || { ratings: 0, people: new Set() }; t.ratings++; t.people.add(v.uid); });
+        return ogJson({ topics: rows.map((t) => ({ id: t.id, name: t.name, seeds: t.seeds, kind: t.kind, started_by: t.uid, created_at: t.created_at, updated_at: t.updated_at, ratings: (stat[t.id] || {}).ratings || 0, people: new Set([t.uid, ...((stat[t.id] || {}).people || [])]).size })) }, 200, request);
+      }
+      if (request.method === 'GET' && tid && !sub) {
+        if (px.verified) await quota(env, svc, px, 'read', 0);
+        const r = await fetch(`${SUPABASE}/rest/v1/hub_topics?id=eq.${encodeURIComponent(tid)}&select=*`, { headers: svc }); const t = r.ok ? (await r.json())[0] : null;
+        if (!t || t.deleted) return ogJson({ error: 'not found' }, 404, request);
+        const vr = await fetch(`${SUPABASE}/rest/v1/hub_votes?topic_id=eq.${encodeURIComponent(tid)}&select=uid,item_id,label,ts&limit=50000`, { headers: svc }); const votes = vr.ok ? await vr.json() : [];
+        const pool = {}; const people = new Set([t.uid]);
+        votes.forEach((v) => { people.add(v.uid); const q = pool[v.item_id] = pool[v.item_id] || { pos: 0, neg: 0 }; if (v.label > 0) q.pos++; else if (v.label < 0) q.neg++; });
+        return ogJson({ id: t.id, name: t.name, seeds: t.seeds, settings: t.settings || {}, kind: t.kind, started_by: t.uid, created_at: t.created_at, updated_at: t.updated_at, people: people.size, ratings: votes.length, pool }, 200, request);
+      }
+      if (!px.verified) return ogJson({ error: 'signed request required' }, 401, request);
+      if (!(await ownsId(svc, px))) return ogJson({ error: 'this id belongs to another key' }, 401, request);
+      if (!tid) return ogJson({ error: 'topic id required' }, 400, request);
+      const cur = await fetch(`${SUPABASE}/rest/v1/hub_topics?id=eq.${encodeURIComponent(tid)}&select=uid,deleted`, { headers: svc }); const have = cur.ok ? (await cur.json())[0] : null;
+      const mine = !have || have.uid === px.uid || isAdmin(env, px.uid);
+      if (request.method === 'PUT' && !sub) {
+        if (!mine) return ogJson({ error: 'started by someone else' }, 403, request);
+        let b; try { b = await request.json(); } catch (e) { return ogJson({ error: 'body must be JSON' }, 400, request); }
+        const kind = String(b.kind || (b.settings && b.settings.plan && b.settings.plan.kind) || 'general');
+        if (kind === 'person' || (b.settings && b.settings.person && b.settings.person.mode !== 'account')) return ogJson({ error: 'a topic about a named person is never open' }, 403, request);
+        const d = await quota(env, svc, px, 'write', 0); if (d) return deny(d);
+        const st = b.settings || {}; const safe = { soft: st.soft || [], anti: st.anti || [], breadth: st.breadth, media: st.media, window: st.window, plan: st.plan ? { kind: st.plan.kind, presets: st.plan.presets } : null };
+        const row = { id: tid, uid: have ? have.uid : px.uid, name: String(b.name || '').slice(0, 80), seeds: (b.seeds || []).map(String).slice(0, 20), settings: safe, kind, deleted: false, updated_at: new Date().toISOString() };
+        if (!have) row.created_at = row.updated_at;
+        const up = await fetch(`${SUPABASE}/rest/v1/hub_topics`, { method: 'POST', headers: H, body: JSON.stringify(row) });
+        if (!up.ok) return ogJson({ error: 'topics ' + up.status + ' ' + await up.text() }, 502, request);
+        return ogJson({ ok: true, id: tid, started_by: row.uid }, 200, request);
+      }
+      if (request.method === 'DELETE' && !sub) {
+        if (!have) return ogJson({ error: 'not found' }, 404, request);
+        if (!mine) return ogJson({ error: 'only the one who started it, or the owner of this hub' }, 403, request);
+        await fetch(`${SUPABASE}/rest/v1/hub_topics?id=eq.${encodeURIComponent(tid)}`, { method: 'PATCH', headers: { ...svc, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ deleted: true, updated_at: new Date().toISOString() }) });
+        return ogJson({ ok: true, archived: tid }, 200, request);
+      }
+      if (request.method === 'POST' && sub === 'votes') {
+        if (!have || have.deleted) return ogJson({ error: 'not found' }, 404, request);
+        let b; try { b = await request.json(); } catch (e) { return ogJson({ error: 'body must be JSON' }, 400, request); }
+        const votes = (b.votes || []).filter((v) => v && v.item_id && [1, -1, 0].includes(+v.label)).slice(0, 500);
+        if (!votes.length) return ogJson({ ok: true, saved: 0 }, 200, request);
+        const d = await quota(env, svc, px, 'write', 0); if (d) return deny(d);
+        const up = await fetch(`${SUPABASE}/rest/v1/hub_votes`, { method: 'POST', headers: H, body: JSON.stringify(votes.map((v) => ({ topic_id: tid, uid: px.uid, item_id: String(v.item_id).slice(0, 200), label: +v.label, ts: +v.ts || Math.floor(Date.now() / 1000) }))) });
+        if (!up.ok) return ogJson({ error: 'votes ' + up.status + ' ' + await up.text() }, 502, request);
+        return ogJson({ ok: true, saved: votes.length }, 200, request);
+      }
+      return ogJson({ error: 'not found' }, 404, request);
+    }
     // ── per-person store: /store/<app>/<key> (GET · PUT json · DELETE) and /store/<app> (list) ──
     const sm = path.match(/^\/store\/([a-z0-9_-]{1,24})(?:\/([A-Za-z0-9_.:-]{1,120}))?$/);
     if (sm) {

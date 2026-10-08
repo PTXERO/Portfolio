@@ -229,3 +229,7 @@ Three settings per topic (⋯): open (the default: eligible for pooling with oth
 ## Update: the same id on every device
 
 Topics and ratings now meet on the hub store under your id. Pulled when the app opens and whenever you come back to it, pushed a few seconds after any change. Topics merge by id and the newest edit wins; a deletion is remembered so it beats a stale copy; ratings merge by key, newest wins. Device-only topics never go. Posts are not synced, they are refetched when a topic runs. The computer sees the phone's topics only if it holds the same key (import the key file) and runs in browser mode, not the PC server.
+
+## Update: open topics on the hub
+
+An open topic is published on the hub you use, with who started it. Everyone on that hub sees it under "Open on this hub" in TOPICS and can join; joining keeps the same id so ratings line up. Each person's ratings go up to the hub, and the pooled result (👍 vs 👎 per post) comes down to everyone who joined, marked as the hub's; your own rating always wins on your device and replaces the pooled one there. Pooled ratings are never in your backup. Only the starter or the hub's owner can edit or archive it; archiving keeps everyone's ratings and everyone's copy. The hub refuses a topic about a named person. Posts are not on the hub: each person fetches them, and the search cache makes the second fetch free.

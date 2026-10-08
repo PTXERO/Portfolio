@@ -1131,17 +1131,19 @@ async function renderTopics(){
   const el = $('#topicList');
   if (!ready()){ el.innerHTML = `<div class="empty">TOPICS LEARN FROM YOUR 👍 / 👎.<br>THEY NEED THE SERVER RUNNING ON A COMPUTER.<br><a href="#setup">HOW TO SET IT UP →</a><br><br>MEANWHILE, TRY THE SAMPLE <a href="#library">LIBRARY</a>.</div>`; return; }
   try{ await loadTopics(); }catch(e){ el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
-  if (!topicsCache.length){ el.innerHTML = '<div class="empty">NO TOPICS YET.<br>TYPE A WORD ABOVE AND PRESS <b>GO</b>.</div>'; return; }
+  if (!topicsCache.length){ el.innerHTML = '<div class="empty">NO TOPICS YET.<br>TYPE A WORD ABOVE AND PRESS <b>GO</b>.</div>'; if (!$('#hubTopics')){ const h = document.createElement('div'); h.id = 'hubTopics'; el.insertAdjacentElement('afterend', h); } renderHubTopics(); return; }
   el.innerHTML = topicsCache.map(t => {
     const c = t.counts;
     return `<div class="tcard" data-tid="${t.id}" role="link" tabindex="0">
       <div class="name">${esc(t.name)}</div>
-      <div class="seeds">${t.settings.visibility === 'device' ? '🔒 this device only · ' : ''}${t.seeds.map(esc).join(' · ')} · ${BREADTH[t.settings.breadth] || ''}${t.settings.refresh_hours > 0 ? ' · ⟳ ' + t.settings.refresh_hours + 'h' : ''}</div>
+      <div class="seeds">${t.settings.visibility === 'device' ? '🔒 this device only · ' : (t.settings.shared || {}).started_by ? '⇅ open · started by @' + esc(t.settings.shared.started_by) + ((t.settings.shared.people || 0) > 1 ? ' · ' + t.settings.shared.people + ' people' : '') + ' · ' : ''}${t.seeds.map(esc).join(' · ')} · ${BREADTH[t.settings.breadth] || ''}${t.settings.refresh_hours > 0 ? ' · ⟳ ' + t.settings.refresh_hours + 'h' : ''}</div>
       ${sigBadges(t.settings.signal)}
       <div class="nums"><span class="todo"><b>${fmtN(c.unrated)}</b> to review</span><span><b>${fmtN(c.pos)}</b> 👍</span><span><b>${fmtN(c.neg)}</b> 👎</span><span>${t.running ? '<span class="spinner"></span> searching' : t.last_run ? 'updated ' + ago(t.last_run) + ' ago' : 'not run yet'}</span></div>
       <button class="btn sm run" data-run="${t.id}" ${t.running ? 'disabled' : ''} aria-label="Find more">▶</button>
     </div>`;
   }).join('');
+  if (!$('#hubTopics')){ const h = document.createElement('div'); h.id = 'hubTopics'; el.insertAdjacentElement('afterend', h); }
+  renderHubTopics();
   $$('.tcard', el).forEach(c => c.onclick = e => { if (e.target.closest('[data-run]')) return; go('topic/' + c.dataset.tid + '/review'); });
   $$('[data-run]', el).forEach(b => b.onclick = async e => { e.stopPropagation(); b.disabled = true; await runTopic(b.dataset.run); renderTopics(); });
 }
@@ -1166,9 +1168,68 @@ async function syncLibrary(why){
     }
   }catch(e){ if (e.status === 413) toast('Sync skipped: library over 512 KB for one backup. Delete old topics, or run your own hub.', 7000); }
   finally{ syncing = false; }
+  syncOpenTopics().catch(() => {});
   keepSafe().catch(() => {});
 }
-window.syncLibrary = syncLibrary;   // reachable from the tests and the console
+// ── open topics live on the hub for everyone on it. Yours are published there, pooled ratings come back,
+//    and the TOPICS view lists what others started so you can join. A topic about a named person never goes.
+let hubTopicsCache = [];
+function myUid(){ return window.PX ? PX.suffix() : ''; }
+async function syncOpenTopics(){
+  const px = window.PX; if (!px || !BK || !LOCAL || px.host().mode === 'local') return;
+  const idb = BK.idb; const me = myUid(); const now_ = Math.floor(Date.now() / 1000);
+  let list; try{ list = (await PX.json('/topics')).topics || []; }catch(e){ return; }      // an older hub: no open topics there
+  hubTopicsCache = list;
+  for (const t of (await BK.request('/api/topics')).topics || []){
+    const st = t.settings || {}; if (st.visibility !== 'open' || isPersonTopic(t)) continue;
+    const sh = Object.assign({}, st.shared || {});
+    const onHub = list.find(x => x.id === t.id);
+    try{
+      // publish (mine, new or edited since)
+      if ((!onHub && !sh.started_by) || (sh.started_by === me && (sh.published || 0) < (t.updated || 0))){
+        const r = await PX.json('/topics/' + encodeURIComponent(t.id), { method: 'PUT', body: { name: t.name, seeds: t.seeds, kind: (st.plan || {}).kind || 'general', settings: { soft: st.soft, anti: st.anti, breadth: st.breadth, media: st.media, window: st.window, plan: st.plan } } });
+        sh.started_by = r.started_by; sh.published = now_ + 1;
+      } else if (onHub && !sh.started_by) sh.started_by = onHub.started_by;
+      // my ratings up (never the pooled ones), then the pool down
+      const votes = (await idb.all('votes')).filter(v => v.topic_id === t.id);
+      const mine = votes.filter(v => v.labeled_at && v.from !== 'hub' && v.labeled_at > (sh.votes_pushed || 0));
+      if (mine.length){ await PX.json('/topics/' + encodeURIComponent(t.id) + '/votes', { method: 'POST', body: { votes: mine.map(v => ({ item_id: v.item_id, label: v.label, ts: v.labeled_at })) } }); sh.votes_pushed = now_; }
+      const full = await PX.json('/topics/' + encodeURIComponent(t.id)).catch(() => null);
+      if (full && full.pool){
+        let applied = 0; const own = {}; votes.forEach(v => own[v.item_id] = v);
+        for (const iid in full.pool){ const q = full.pool[iid]; const lab = q.pos > q.neg ? 1 : q.neg > q.pos ? -1 : 0; const v = own[iid];
+          if (v && v.labeled_at && v.from !== 'hub') continue;                       // your own rating always wins on your device
+          if (!lab){ if (v && v.from === 'hub'){ await idb.del('votes', v.k); applied++; } continue; }
+          if (v && v.from === 'hub' && v.label === lab) continue;
+          await idb.put('votes', Object.assign(v || { k: t.id + '|' + iid, topic_id: t.id, item_id: iid, score: 0, why: {}, added: now_, found_by: [] }, { label: lab, labeled_at: now_, from: 'hub', pool: q })); applied++; }
+        sh.people = full.people; sh.ratings = full.ratings; sh.pulled = now_;
+        if (applied) await BK.request('/api/topics/' + t.id + '/rescore', { method: 'POST' }).catch(() => {});
+      }
+      if (JSON.stringify(sh) !== JSON.stringify(st.shared || {})) await BK.request('/api/topics/' + t.id, { method: 'PATCH', body: { settings: { shared: sh } } });
+    }catch(e){ /* this topic next time */ }
+  }
+  if (route.view === 'topics'){ await loadTopics(); renderHubTopics(); }
+}
+async function joinHubTopic(id){
+  const h = hubTopicsCache.find(x => x.id === id); if (!h) return;
+  let full = null; try{ full = await PX.json('/topics/' + encodeURIComponent(id)); }catch(e){ return toast(e.message); }
+  const st = full.settings || {};
+  const t = await api('/api/topics', { method: 'POST', body: { id, name: full.name, seeds: full.seeds, settings: { visibility: 'open', soft: st.soft || [], anti: st.anti || [], breadth: st.breadth || 3, media: st.media || 'everything', window: st.window || 'auto', shared: { started_by: full.started_by, joined: Math.floor(Date.now() / 1000), people: full.people, ratings: full.ratings } } } });
+  toast('Joined · started by @' + (full.started_by || '?') + ' · ' + full.people + ' people'); await loadTopics(); renderTopics(); syncOpenTopics().catch(() => {});
+  return t;
+}
+function renderHubTopics(){
+  const el = $('#hubTopics'); if (!el) return;
+  const have = new Set(topicsCache.map(t => t.id)); const others = hubTopicsCache.filter(h => !have.has(h.id));
+  if (!hubTopicsCache.length){ el.innerHTML = ''; return; }
+  el.innerHTML = `<h3 class="s" style="margin-top:18px">Open on this hub <span class="note">started by people here · join one and your ratings pool with theirs</span></h3>
+    ${others.length ? others.map(h => `<div class="tcard" data-join="${esc(h.id)}"><div class="name">${esc(h.name)}</div><div class="seeds">${(h.seeds || []).map(esc).join(' · ')}</div>
+      <div class="nums"><span>started by <b>@${esc(h.started_by || '?')}</b></span><span><b>${h.people}</b> ${h.people === 1 ? 'person' : 'people'}</span><span><b>${fmtN(h.ratings)}</b> ratings</span><span>${h.updated_at ? 'updated ' + ago(Date.parse(h.updated_at) / 1000) + ' ago' : ''}</span></div>
+      <button class="btn sm run" data-joinbtn="${esc(h.id)}" aria-label="Join">JOIN</button></div>`).join('') : '<p class="note">You are in every open topic on this hub.</p>'}`;
+  $$('[data-joinbtn]', el).forEach(b => b.onclick = async e => { e.stopPropagation(); b.disabled = true; await joinHubTopic(b.dataset.joinbtn); });
+  $$('[data-join]', el).forEach(c => c.onclick = () => joinHubTopic(c.dataset.join));
+}
+window.syncLibrary = syncLibrary; window.syncOpenTopics = syncOpenTopics; window.joinHubTopic = joinHubTopic;   // reachable from the tests and the console
 async function keepSafe(){
   const px = window.PX; if (!px || !BK || px.host().mode === 'local') return;
   const counts = (STATUS && STATUS.counts) || {}; const topics = (await BK.request('/api/topics')).topics || [];
@@ -2195,10 +2256,10 @@ async function topicSettings(){
     <div class="field"><span>Search on (nothing ticked = all enabled)</span>
       ${srcs.map(x => `<label class="facet"><input type="checkbox" data-src="${x.id}" ${T.sources.includes(x.id) ? 'checked' : ''}> <span class="v">${esc(x.name)}</span>${x.enabled ? '' : '<span class="n">off</span>'}</label>`).join('')}</div>
     <div class="field"><span>Where this topic may go</span>
-      ${isPersonTopic(T) ? '' : `<label class="facet"><input type="radio" name="tsVis" value="open" ${(s.visibility || 'open') === 'open' ? 'checked' : ''}> <span class="v">Open · may be pooled with others researching the same thing once sharing exists; backed up to my hub</span></label>`}
+      ${isPersonTopic(T) ? '' : `<label class="facet"><input type="radio" name="tsVis" value="open" ${(s.visibility || 'open') === 'open' ? 'checked' : ''}> <span class="v">Open · published on this hub for anyone here to join; ratings pool; backed up under my id</span></label>`}
       <label class="facet"><input type="radio" name="tsVis" value="private" ${s.visibility === 'private' || (isPersonTopic(T) && s.visibility !== 'device') ? 'checked' : ''}> <span class="v">Private · mine, backed up to my hub, never shared</span></label>
       <label class="facet"><input type="radio" name="tsVis" value="device" ${s.visibility === 'device' ? 'checked' : ''}> <span class="v">This device only · left out of backups, never leaves this browser</span></label>
-      <p class="note" style="margin-top:4px">${isPersonTopic(T) ? 'A topic about a named person is never open. Private or this device only.' : 'Sharing is not built yet, so open changes nothing today except that this topic will be eligible. You can close it any time.'}</p></div>
+      <p class="note" style="margin-top:4px">${isPersonTopic(T) ? 'A topic about a named person is never open. Private or this device only.' : 'Open topics are listed on the hub with who started them. Anyone on the hub can join and rate; your own rating always wins on your device. Close it any time: it is archived on the hub, the others keep their ratings.'}</p></div>
     <div class="row" style="margin-top:14px"><button class="btn danger" id="tsDel">DELETE</button><div class="grow"></div><button class="btn pri" id="tsSave">SAVE</button></div>`);
   $('#tsMedia').value = s.media; $('#tsRef').value = String(s.refresh_hours || 0); $('#tsWindow').value = s.window || 'auto';
   $('#tsB').oninput = e => $('#tsBL').textContent = BREADTH[e.target.value];
@@ -2211,8 +2272,10 @@ async function topicSettings(){
     }catch(e){ toast(e.message); }
   };
   $('#tsDel').onclick = async () => {
-    if (!await confirmSheet('Delete topic?', 'Your votes for "' + T.name + '" are removed. Collected videos stay in your library.', 'DELETE')) return;
-    try{ await api('/api/topics/' + T.id, { method: 'DELETE' }); toast('Deleted'); go('topics'); }catch(e){ toast(e.message); }
+    const sh0 = (T.settings || {}).shared; const mineOnHub = sh0 && sh0.started_by && sh0.started_by === myUid();
+    if (!await confirmSheet('Delete topic?', (mineOnHub ? 'You started this on the hub: it is archived there for everyone who joined (their ratings stay). ' : sh0 && sh0.started_by ? 'It stays on the hub for the others; only your copy goes. ' : '') + 'Your votes for "' + T.name + '" are removed. Collected videos stay in your library.', 'DELETE')) return;
+    try{ const sh = (T.settings || {}).shared; if (sh && sh.started_by && window.PX && sh.started_by === myUid()) { try{ await PX.json('/topics/' + encodeURIComponent(T.id), { method: 'DELETE' }); }catch(e){ /* someone else's now, or an older hub */ } }
+      await api('/api/topics/' + T.id, { method: 'DELETE' }); toast('Deleted'); go('topics'); }catch(e){ toast(e.message); }
   };
 }
 

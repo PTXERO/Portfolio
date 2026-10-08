@@ -379,7 +379,7 @@
     const k = voteKey(tid, iid); let v = await idb.get('votes', k);
     if (!v) v = { k, topic_id: tid, item_id: iid, label: 0, score: 0, why: {}, added: now(), found_by: [] };
     const expected = v.score || 0;
-    v.label = label; v.labeled_at = now(); await idb.put('votes', v);
+    v.label = label; v.labeled_at = now(); delete v.from; delete v.pool; await idb.put('votes', v);   // your own rating replaces a pooled one
     // update per-query precision tallies
     const t = await getTopic(tid);
     // a vote the model did not see coming: ask why, offering this post's own words
@@ -405,7 +405,7 @@
       const arg = parts[1], sub = parts[2];
       if (!arg) {
         if (method === 'GET') { const out = []; for (const t of await allTopics()) out.push(await dto(t)); return { topics: out.sort((a, b) => (b.last_run || b.created) - (a.last_run || a.created)) }; }
-        if (method === 'POST') { const seeds = (body.seeds || [body.name]).map((s) => String(s).trim()).filter(Boolean); const t = { id: uid(), name: (body.name || seeds[0]).slice(0, 80), seeds, sources: body.sources || [], settings: Object.assign({}, DEF, body.settings || {}), queries: [], created: now(), last_run: null }; if (!(body.sources || []).length) { const p = planFor(seeds, t.settings, (await L.request('/api/sources')).sources); t.settings.plan = p; t.sources = p.source_ids; } t.settings.visibility = visibilityFor(t); await saveTopic(t); if (body.run !== false) { const j = L.newJob('topic', 'topic · ' + t.name); j.topic_id = t.id; L.runSafe(j, () => runTopic(t.id, j)); } return await dto(t); }
+        if (method === 'POST') { const seeds = (body.seeds || [body.name]).map((s) => String(s).trim()).filter(Boolean); const t = { id: /^[A-Za-z0-9_-]{4,40}$/.test(body.id || '') && !(await idb.get('topics', body.id)) ? body.id : uid(), name: (body.name || seeds[0]).slice(0, 80), seeds, sources: body.sources || [], settings: Object.assign({}, DEF, body.settings || {}), queries: [], created: now(), last_run: null }; if (!(body.sources || []).length) { const p = planFor(seeds, t.settings, (await L.request('/api/sources')).sources); t.settings.plan = p; t.sources = p.source_ids; } t.settings.visibility = visibilityFor(t); await saveTopic(t); if (body.run !== false) { const j = L.newJob('topic', 'topic · ' + t.name); j.topic_id = t.id; L.runSafe(j, () => runTopic(t.id, j)); } return await dto(t); }
       }
       const t = await getTopic(arg); if (!t) return { error: 'not found' };
       if (!sub) {
@@ -420,6 +420,7 @@
       if (sub === 'plan' && method === 'POST') { const p = planFor(t.seeds, t.settings, (await L.request('/api/sources')).sources); t.settings.plan = p; t.sources = p.source_ids; await saveTopic(t); return await dto(t); }
       if (sub === 'vote' && method === 'POST') { if (body.reasons) { const r = await applyReasons(arg, String(body.item_id), body.reasons, body.label != null ? +body.label : -1); return { counts: counts(await topicItems(arg)), applied: r }; } const vr = await voteItem(arg, String(body.item_id), +body.label); return { counts: vr, surprise: vr.surprise }; }
       if (sub === 'insights') return await insights(arg);
+      if (sub === 'rescore' && method === 'POST') { await rescore(arg); return { ok: true }; }
       if (sub === 'queries' && method === 'POST') { const act = body.action, q = String(body.query || '').trim(); t.queries = t.queries || []; if (act === 'add') { if (!t.queries.some((x) => x.query.toLowerCase() === q.toLowerCase())) t.queries.push({ query: q, origin: 'user', enabled: true, locked: true, runs: 0, found: 0, pos: 0, neg: 0 }); } else { const row = t.queries.find((x) => x.query === q); if (row) { if (act === 'delete') t.queries = t.queries.filter((x) => x !== row); else { row.enabled = act === 'enable'; row.locked = true; } } } await saveTopic(t); await rescore(arg); return { ok: true }; }
       if (sub === 'reason' && method === 'DELETE') { const P = Object.fromEntries(new URLSearchParams(qs)); if (P.anti) t.settings.anti = (t.settings.anti || []).filter((w) => w !== P.anti); if (P.pref) delete (t.settings.prefs || {})[P.pref]; await saveTopic(t); await rescore(arg); return { ok: true }; }
       if (sub === 'person' && method === 'POST') return personVerdict(t, body || {});
