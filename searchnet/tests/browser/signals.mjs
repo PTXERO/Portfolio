@@ -11,6 +11,9 @@ const angry = ['Duke Energy still has no power for 200k people. Unacceptable. Re
 for (let i = 0; i < 16; i++) items.push(post('b' + i, 'mad' + (i % 7), angry[i % 4], NOW - (i % 2) * 86400 - 600 * i, { likes: 20, replies: 18, reposts: 3 }));
 for (let i = 0; i < 4; i++) items.push(post('c' + i, 'copy' + i, 'Sign the petition: restore power in Collier County now https://petition.example/isaias #isaias', NOW - 3600 * i, { likes: 1 }));
 items.push(post('first', 'wxguy', 'Duke Energy says outages could last a week after Isaias #isaias', NOW - 86400 - 7200, { likes: 900, reposts: 400, replies: 30 }));
+items.push(post('s1', 'nhc', 'Isaias is moving ENE at 8 mph with maximum sustained winds of 45 mph. #isaias', NOW - 7000));
+items.push(post('s2', 'nhc2', 'Isaias now moving at 10 mph, winds of 110 mph. #isaias', NOW - 3500));
+for (let i = 0; i < 4; i++) items.push(post('old' + i, 'mem' + i, 'Remembering Hurricane Isaias in 2020, the record season ' + i + ' #isaias', NOW - 100 - i));
 items.push(post('n1', 'wxguy2', 'Duke Energy said 200,000 customers are without power in Collier County after Isaias. #isaias', NOW - 3 * 86400, { likes: 50 }));
 items.push(post('n2', 'u9', 'Duke Energy said 200,000 customers lost power in Collier County, the utility confirmed. #isaias', NOW - 2 * 86400, { platform: 'news', author: 'naplesnews.com', author_name: 'Naples Daily News', id: 'news:n2', url: 'https://www.naplesnews.com/n2' }));
 items.push(post('n3', 'u10', 'Down to 12,000 customers without power as of this morning after Isaias #isaias', NOW - 86400));
@@ -51,6 +54,13 @@ ok(/Claims/.test(body) && /an outlet confirms/.test(body) && /Naples Daily News/
 ok(/Numbers that move/.test(body) && /customers/.test(body) && /200k → 12k/.test(body), 'dossier: numbers that move (customers 200k → 12k)');
 ok(/Coming up/.test(body) && /October 14/.test(body) && /coming up: October 14/.test(body), 'dossier: dates ahead, also in IN SHORT next');
 ok(/(thin|fair|solid) read/.test(body), 'dossier: trust label on IN SHORT');
+ok(/winds mph/.test(body) && /moving mph/.test(body), 'dossier: winds and forward speed are two series');
+ok(/posts are about the 2020 one with the same name/.test(body) && /KEEP 2020 OUT/.test(body), 'dossier: the 2020 storm with the same name is flagged');
+ok(/National Hurricane Center/.test(body), 'dossier: weather topics carry the safety line');
+ok(/✕ not this/.test(body), 'dossier: storylines have a not-this button');
+await p.click('[data-anti="2020"]'); await p.waitForTimeout(2500);
+const T2 = await api('/api/topics/' + t.id); ok((T2.settings.anti || []).includes('2020'), 'KEEP 2020 OUT adds the year as an anti-keyword');
+
 ok(/What.*confirms/.test(body.replace(/\s+/g, ' ')), 'dossier: What line uses the confirmed claim');
 ok(/Signals/.test(body) && /surging/.test(body), 'dossier: SIGNALS card with the headline');
 ok(/Trend/.test(body) && /Heat/.test(body) && /Spread/.test(body) && /Who moved it/.test(body) && /What kind of problem/.test(body) && /Same words, same links/.test(body), 'dossier: trend · heat · spread · drivers · problem · coordination cards');

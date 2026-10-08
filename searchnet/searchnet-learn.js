@@ -689,6 +689,8 @@
   const NUM = /(?<![\w.])([$£€])?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)(?:\s*(k|m|bn|b|million|billion|thousand|%|percent|mph|km\/h|inches|feet|ft|miles|acres|degrees)\b)?(?:\s+(?:of\s+|a\s+|an\s+|per\s+)?([a-z][a-z-]{2,}))?/gi;
   const NUM_SKIP = new Set('am pm the and for with that this from year years day days hour hours minute minutes week weeks month months time times ago today yesterday tomorrow more than about'.split(' '));
   const UNITS = new Set(['%', 'percent', 'mph', 'km/h', 'inches', 'feet', 'ft', 'miles', 'acres', 'degrees']);
+  const SPEEDY = new Set(['mph', 'km/h', 'inches', 'feet', 'ft', 'miles']);
+  const SPEED_CTX = new Set('wind winds gust gusts moving forward speed surge rain rainfall snow waves swells deep wide tall high long away offshore inland'.split(' '));
   const UNIT_WORDS = new Set(['%', 'percent', 'mph', 'km/h', 'inches', 'feet', 'ft', 'miles', 'acres', 'degrees', 'million', 'billion', 'thousand', 'k', 'm', 'bn', 'b']);
   const QTY_WORDS = new Set('people customers residents homes households families deaths dead killed injured missing cases patients students workers jobs employees evacuees acres buildings structures cars vehicles units tickets attendees followers members votes voters troops soldiers protesters officers arrests shelters outages complaints calls reports crews trucks flights schools businesses inches feet miles percent dollars hours days weeks months years minutes'.split(' '));
   const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
@@ -714,10 +716,11 @@
   const numVal = (v, u) => { v = parseFloat(String(v).replace(/,/g, '')); u = (u || '').toLowerCase(); return u === 'k' || u === 'thousand' ? v * 1e3 : u === 'm' || u === 'million' ? v * 1e6 : u === 'b' || u === 'bn' || u === 'billion' ? v * 1e9 : v; };
   function sigNumbers(items, topN = 8) {
     const series = {};
-    for (const it of items) { if (!it.posted_at) continue; for (const m of String(it.text || '').matchAll(NUM)) { const [raw, cur, val, unit, whatRaw] = m; const what = (whatRaw || '').toLowerCase(); const u = (unit || '').toLowerCase();
-      if ((what && NUM_SKIP.has(what)) || (!unit && !cur && (!what || val.length < 2)) || (/^\d{4}$/.test(val) && !unit && !cur) || (['k', 'm', 'b', 'bn'].includes(u) && !what)) continue;
+    for (const it of items) { if (!it.posted_at) continue; for (const m of String(it.text || '').matchAll(NUM)) { const [raw, cur, val, unit, whatRaw] = m; let what = (whatRaw || '').toLowerCase(); const u = (unit || '').toLowerCase(); if (what && NUM_SKIP.has(what)) what = ''; if (unit && UNIT_WORDS.has(u) && !QTY_WORDS.has(what)) what = '';   // "8 mph with", "110 mph recorded": the unit is the quantity
+      if ((!unit && !cur && (!what || val.length < 2)) || (/^\d{4}$/.test(val) && !unit && !cur) || (['k', 'm', 'b', 'bn'].includes(u) && !what)) continue;
       if (!cur && !(unit && UNIT_WORDS.has(u)) && !QTY_WORDS.has(what)) continue;   // "11 Boston", "02 unknown": a track number, not a figure
-      const key = ((cur || '') + (UNITS.has(u) ? ' ' + u : '') + (what ? ' ' + what : '')).trim(); if (!key || key === '%' || key === 'percent') continue;
+      let key = ((cur || '') + (UNITS.has(u) ? ' ' + u : '') + (what ? ' ' + what : '')).trim(); if (!key || key === '%' || key === 'percent') continue;
+      if (SPEEDY.has(u)) { const before = (String(it.text || '').slice(Math.max(0, m.index - 40), m.index).toLowerCase().match(/[a-z]+/g) || []).slice(-5).reverse(); const cw = before.find((w) => SPEED_CTX.has(w)); if (cw) key = cw + ' ' + key; } key = key.replace(/\s+/g, ' ').trim();   // "winds of 110 mph" and "moving at 8 mph" are two figures
       (series[key] = series[key] || []).push({ ts: it.posted_at, value: numVal(val, unit), raw: raw.trim(), post: ref(it) }); } }
     const out = []; for (const key in series) { const pts = series[key].sort((a, b) => a.ts - b.ts); const vals = new Set(pts.map((p) => p.value)); if (pts.length < 2 || (vals.size < 2 && pts.length < 3)) continue;
       out.push({ what: key, n: pts.length, first: pts[0].value, last: pts[pts.length - 1].value, min: Math.min(...vals), max: Math.max(...vals), moved: vals.size > 1, points: pts.slice(-12) }); }
@@ -755,6 +758,9 @@
     if (sp.outlets) score += 1;
     return { label: unrated ? 'thin' : score >= 3 ? 'solid' : score >= 1 ? 'fair' : 'thin', score, reasons };   // unverified membership caps the read at thin
   }
+  // posts about an earlier thing with the same name: a year other than this one, written in the text, on a tenth of the posts or more
+  function sigStale(items) { const thisYear = new Date().getUTCFullYear(); const by = {}; for (const it of items) for (const y of new Set((String(it.text || '').match(/\b20[0-3]\d\b/g) || []).map(Number))) if (y !== thisYear && y <= thisYear) (by[y] = by[y] || []).push(it);
+    const n = Math.max(1, items.length); return Object.entries(by).sort((a, b) => b[1].length - a[1].length).filter(([, its]) => its.length >= 3 && its.length / n >= 0.08).slice(0, 3).map(([y, its]) => ({ year: +y, n: its.length, share: +(its.length / n).toFixed(2), examples: its.slice(0, 3).map(ref) })); }
   function summarizeSignals(items, seedWords) {
     const tr = sigTrend(items); const burst = tr.bursts.length ? tr.bursts[tr.bursts.length - 1] : null;
     const sp = sigSpread(items), ht = sigHeat(items), st = sigStorylines(items, seedWords), co = sigCoordination(items), dr = sigDrivers(items, burst ? (burst.takeoff || burst.start) : null), iss = sigIssues(items);
@@ -763,7 +769,7 @@
     if (ht.level === 'hot' || ht.level === 'uproar') headline.push(ht.level + ': ' + ht.words.slice(0, 3).map((w) => w.word).join(', '));
     if (iss.length) headline.push('reads as ' + iss[0].category + (iss[1] ? ' and ' + iss[1].category : ''));
     if (co.copies.length && co.copies[0].accounts >= 5) headline.push(co.copies[0].accounts + ' accounts posting the same words');
-    return { n: items.length, trend: tr, spread: sp, drivers: dr, heat: ht, issues: iss, storylines: st, coordination: co, lead_lag: sigLeadLag(items, burst), headline: headline.join('; ') || 'nothing out of the ordinary', places: sigPlaces(items, seedWords), top_posts: sigTopPosts(items), momentum: sigMomentum(tr, sp, st), arc: sigArc(tr), origin: sigOrigin(items, sp, burst), claims: sigClaims(items, seedWords), numbers: sigNumbers(items), dated: sigDated(items), trust: sigTrust(items, tr, sp), badge: { state: tr.state, heat: ht.level, score: ht.score, velocity: tr.velocity }, generated: now() };
+    return { n: items.length, trend: tr, spread: sp, drivers: dr, heat: ht, issues: iss, storylines: st, coordination: co, lead_lag: sigLeadLag(items, burst), headline: headline.join('; ') || 'nothing out of the ordinary', places: sigPlaces(items, seedWords), top_posts: sigTopPosts(items), momentum: sigMomentum(tr, sp, st), arc: sigArc(tr), origin: sigOrigin(items, sp, burst), claims: sigClaims(items, seedWords), numbers: sigNumbers(items), dated: sigDated(items), stale: sigStale(items), trust: sigTrust(items, tr, sp), badge: { state: tr.state, heat: ht.level, score: ht.score, velocity: tr.velocity }, generated: now() };
   }
   async function signals(tid) {
     const t = await getTopic(tid); if (!t) return { error: 'no such topic' };
@@ -777,6 +783,7 @@
     out.overlaps = top(ov, 6).filter(([k, n]) => n >= 2 && tops[k]).map(([k, n]) => ({ topic_id: k, name: tops[k], n }));
     out.kind = ((t.settings || {}).plan || {}).kind || 'general';
     try { const all = (await L.request('/api/sources')).sources || []; const mine = new Set(t.sources || []); out.trust = sigTrust(items, out.trend, out.spread, all.filter((s) => mine.has(s.id)), windowDays(t.settings, (t.settings || {}).plan), out.trend.older || 0, votes.filter((v) => v.label).length); } catch (e) { /* keep the plain trust */ }
+    (out.stale || []).forEach((y) => out.trust.reasons.push(y.n + ' posts are about ' + y.year + ', the same name on an earlier thing'));
     return out;
   }
   L.signals = { summarize: summarizeSignals, trend: sigTrend, heat: sigHeat, storylines: sigStorylines, coordination: sigCoordination, claims: sigClaims, numbers: sigNumbers, dated: sigDated };

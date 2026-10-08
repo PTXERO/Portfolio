@@ -21,6 +21,7 @@ from pathlib import Path
 from . import people
 from . import sources as S
 from . import brief as BRIEF
+from .learn import TopicScorer
 from . import signals as SIGNALS
 from . import plan as PLAN
 from .db import norm_tags
@@ -571,6 +572,8 @@ class Handler(BaseHTTPRequestHandler):
                 return ok({"counts": c, "surprise": c.pop("surprise", None)})
             if sub == "insights":
                 return ok(v.insights(arg))
+            if sub == "rescore" and method == "POST":
+                return ok({"ok": True, "rescored": TopicScorer(v, arg).rescore()})
             if sub == "brief":
                 return ok(BRIEF.build(v, arg))
             if sub == "signals":

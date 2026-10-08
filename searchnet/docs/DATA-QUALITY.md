@@ -237,3 +237,12 @@ An open topic is published on the hub you use, with who started it. Everyone on 
 ## Update: sources that switch themselves off
 
 A source now needs three failing runs in a row before it switches off, and a failure that is the hub's doing never counts: a Worker older than the app ("unknown source", "older than this app"), a limit, a 401/404/429/5xx, a timeout, a network blip. One strike per run, not per search. The run log names how many sources are off, and SOURCES has TURN THEM ALL BACK ON. A double seeding once made two 4chans; the list is deduplicated on load.
+
+## Update: what the Isaias read taught it
+
+- A speed or a length is of something: "winds of 110 mph" and "moving at 8 mph" are two series, keyed by the word before the unit (winds, gusts, moving, surge, rain…). A verb after a unit is not a quantity.
+- Names repeat: storm lists every six years, bands, bills, games. Posts that write an earlier year (3 or more, a tenth or more) are flagged in the trust reasons and in Next, with KEEP <year> OUT, which makes the year an anti-keyword.
+- Spelling: when the posts spell a seed word differently and often (Isaiah vs Isaias), Next offers RENAME THE SEARCH.
+- The dossier header now says "N collected · M in the topic" when they differ, so the counts across cards agree with what they count.
+- Every storyline has ✕ not this: its words become anti-keywords and the posts drop out.
+- A weather topic carries a line pointing to the National Hurricane Center, the National Weather Service and local officials for anything safety-related.

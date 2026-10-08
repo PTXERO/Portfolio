@@ -1862,6 +1862,9 @@ function inShortCard(circles, wiki){
   const sites = Object.entries((T.settings || {}).sites || {}).filter(([, v]) => !v.added).sort((a, b) => b[1].n - a[1].n);
   if (sites.length) next.push(`${sites.length} site${sites.length > 1 ? 's' : ''} talk about it and aren't sources yet (${esc(sites[0][0])}…)`);
   if (S.drivers && S.drivers[0] && S.drivers[0].n <= 2 && S.drivers[0].role !== 'outlet') next.push(`pull more of @${esc(S.drivers[0].author)}: they carried it with ${S.drivers[0].n} post${S.drivers[0].n === 1 ? '' : 's'}`);
+  // the name is spelled differently in the posts than in the seeds (Isaiah vs Isaias): offer the rename
+  const spell = spellingHint(); if (spell) next.push(`the posts say "${esc(spell.name)}" (${spell.n}×), your topic says "${esc(spell.seed)}" · <button class="lnk" data-rename="${esc(spell.seed)}|${esc(spell.name)}">RENAME THE SEARCH</button>`);
+  (S.stale || []).forEach(y => next.push(`${y.n} posts are about the ${y.year} one with the same name · <button class="lnk" data-anti="${esc(String(y.year))}">KEEP ${y.year} OUT</button> ${(y.examples || []).filter(p => p.url).slice(0, 2).map(p => `<a class="pill" href="${esc(p.url)}" target="_blank" rel="noreferrer noopener">↗</a>`).join('')}`));
   const named = graphTopEntity(); if (named) next.push(`"${esc(named)}" keeps coming up: worth its own dossier`);
   if (S.storylines && S.storylines.length >= 3) next.push(`${S.storylines.length} storylines run inside this: rate a few posts in each so the model learns which you mean`);
   const trust = S.trust ? `<span class="sig ${S.trust.label === 'solid' ? 'rising' : S.trust.label === 'thin' ? 'fading' : 'steady'}" title="${esc((S.trust.reasons || []).join(' · '))}">${esc(S.trust.label)} read</span>` : '';
@@ -1879,7 +1882,18 @@ function inShortCard(circles, wiki){
     <div class="drow"><span class="k">Momentum</span><span class="grow"><span class="sig ${m.label === 'picking up' ? 'rising' : m.label === 'winding down' ? 'fading' : 'steady'}">${esc(m.label)}</span> ${esc(m.why)}</span></div>
     ${S.overlaps && S.overlaps.length ? `<div class="drow"><span class="k">Overlaps with</span><span class="grow chips wrap" style="display:flex">${S.overlaps.map(ov => `<a class="chip" href="#topic/${esc(ov.topic_id)}">${esc(ov.name)} <em>${ov.n}</em></a>`).join('')}</span></div>` : ''}
     <div class="drow"><span class="k">Next</span><span class="grow">${next.length ? next.map(x => '· ' + x).join('<br>') : 'nothing obvious. Rate posts and run it again.'}</span></div>
+    ${weatherEvent() ? '<p class="note" style="margin-top:8px;color:var(--acc)">This is a read of what people posted. For warnings, forecasts and evacuation orders use the National Hurricane Center, the National Weather Service and local officials, not this page.</p>' : ''}
     <p class="note" style="margin-top:8px">Each line comes from a card below. The slope is this week against last, not a forecast.${S.trust ? ' Read: ' + esc(S.trust.label) + ' (' + esc(S.trust.reasons.join('; ')) + ').' : ''}</p></div>`;
+}
+function weatherEvent(){ const words = ((T.seeds || []).join(' ') + ' ' + (T.name || '') + ' ' + ((SIGNALS && SIGNALS.storylines) || []).map(s => s.name).join(' ')).toLowerCase(); return /hurricane|tropical storm|tornado|flood|wildfire|evacuat|storm surge|typhoon|cyclone/.test(words); }
+// a seed word the posts spell differently, often and consistently (edit distance 1 or 2 on a word of 5+ letters)
+function spellingHint(){
+  const g = _dossierGraph; if (!g) return null;
+  const seeds = [...new Set((T.seeds || []).flatMap(s => s.toLowerCase().split(/\s+/)).filter(w => w.length >= 5))];
+  const lev = (a, b) => { const d = []; for (let i = 0; i <= a.length; i++){ d[i] = [i]; for (let j = 1; j <= b.length; j++) d[i][j] = i === 0 ? j : Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1)); } return d[a.length][b.length]; };
+  let best = null;
+  for (const nd of g.nodes){ if (nd.kind !== 'entity' && nd.kind !== 'word') continue; for (const w of String(nd.label || '').toLowerCase().split(/\s+/)){ if (w.length < 5) continue; for (const sw of seeds){ if (w === sw) continue; const d = lev(w, sw); if (d >= 1 && d <= 2 && (nd.n || 0) >= 3 && (!best || nd.n > best.n)) best = { seed: sw, name: w, n: nd.n }; } } }
+  return best;
 }
 let _dossierGraph = null;
 function graphTopEntity(){ const g = _dossierGraph; if (!g) return null; const e = g.nodes.filter(x => x.kind === 'entity').sort((a, b) => (b.n || 0) - (a.n || 0))[0]; return e && (e.n || 0) >= 5 ? e.label : null; }
@@ -1913,7 +1927,7 @@ function signalCards(){
   const driversCard = drivers.length ? `<div class="dcard"><div class="dh">Who moved it <span class="note">reach, being named, posting early</span></div>
     ${drivers.slice(0, 8).map(d => `<div class="drow"><span class="k">${d.role === 'outlet' ? '' : '@'}${esc(d.author)} <small>${esc(d.platform)}</small></span><span class="note grow">${esc(d.why.join(' · ') || d.n + ' post' + (d.n === 1 ? '' : 's'))}</span>${link(d.example, '↗')}</div>`).join('')}</div>` : '';
   const storiesCard = S.storylines.length ? `<div class="dcard span2"><div class="dh">Storylines <span class="note">threads inside the topic, by the words they share</span></div>
-    ${S.storylines.map(st => `<div class="story"><div class="nm">${esc(st.name)} <small class="note">· ${fmtN(st.n)} posts · ${st.accounts} voices${st.last7 ? ' · ' + st.last7 + ' this week' : ''}${st.first ? ' · ' + when(st.first) + ' → ' + when(st.last) : ''}</small></div>
+    ${S.storylines.map(st => `<div class="story"><div class="nm">${esc(st.name)} <small class="note">· ${fmtN(st.n)} posts · ${st.accounts} voices${st.last7 ? ' · ' + st.last7 + ' this week' : ''}${st.first ? ' · ' + when(st.first) + ' → ' + when(st.last) : ''}</small> <button class="lnk" data-anti="${esc(st.terms.slice(0, 3).join('|'))}" title="Not what this topic is about: its words become anti-keywords and the posts drop out">✕ not this</button></div>
       <div class="chips wrap">${st.terms.map(t => `<button class="chip f" data-focus="${esc(t)}">${esc(t)}</button>`).join('')}${st.names.map(n => `<button class="chip" data-focus="${esc('"' + n + '"')}">◆ ${esc(n)}</button>`).join('')}${posts(st.examples)}</div></div>`).join('')}</div>` : '';
   const co = S.coordination;
   const coordCard = (co.copies.length || co.same_link.length) ? `<div class="dcard"><div class="dh">Same words, same links <span class="note">signs, not proof</span></div>
@@ -2052,7 +2066,7 @@ async function renderDossier(){
   body.innerHTML = `<div class="dossier">
     ${person ? personCardHTML(person, T, ownItems, ident) : ''}
     <div class="dcard span2">
-      <div class="dh">${esc(name)} <span class="note">${fmtN(n)} posts · ${fmtN(who.length)} accounts · ${plats.length} sites${T.counts && (T.counts.pos || T.counts.neg) ? ' · you rated ' + fmtN(T.counts.pos + T.counts.neg) : ''}</span></div>
+      <div class="dh">${esc(name)} <span class="note">${SIGNALS && SIGNALS.n != null && SIGNALS.n !== n ? fmtN(n) + ' collected · ' + fmtN(SIGNALS.n) + ' in the topic' : fmtN(n) + ' posts'} · ${fmtN(who.length)} accounts · ${plats.length} sites${T.counts && (T.counts.pos || T.counts.neg) ? ' · you rated ' + fmtN(T.counts.pos + T.counts.neg) : ''}</span></div>
       ${wiki ? `<div class="wiki">${wiki.thumb ? `<img src="${esc(wiki.thumb)}" alt="" referrerpolicy="no-referrer">` : ''}<div><p>${esc(wiki.extract)}</p><a class="note" href="${esc(wiki.url)}" target="_blank" rel="noreferrer">Wikipedia · ${esc(wiki.title)} →</a></div></div>`
              : isPerson ? `<p class="note">Built from their posts only. ${esc(((T.settings || {}).person || {}).platform || 'The network')} gives us no profile fields (bio, location, join date, follower counts), so none are shown. No encyclopedia lookup is made for a person's name either, it would almost always be someone else.</p>`
              : `<p class="note">No encyclopedia entry for “${esc(seed)}”. Below is what your collected posts say about it.</p>`}
@@ -2083,6 +2097,10 @@ async function renderDossier(){
   </div>`;
   $$('[data-prof]', body).forEach(b => b.onclick = () => openProfile(b.dataset.prof));
   $$('[data-writer]', body).forEach(b => b.onclick = () => openWriter(b.dataset.writer));
+  $$('[data-anti]', body).forEach(b => b.onclick = async () => { const terms = b.dataset.anti.split('|').filter(Boolean); const anti = [...new Set(((T.settings || {}).anti || []).concat(terms))];
+    try{ T = await api('/api/topics/' + T.id, { method: 'PATCH', body: { settings: { anti } } }); await api('/api/topics/' + T.id + '/rescore', { method: 'POST' }).catch(() => {}); toast('✕ ' + terms.join(', ') + ' kept out'); renderDossier(); }catch(e){ toast(e.message); } });
+  $$('[data-rename]', body).forEach(b => b.onclick = async () => { const [from, to] = b.dataset.rename.split('|'); const seeds = (T.seeds || []).map(s => s.replace(new RegExp(from, 'ig'), to)); if (!seeds.some((s, i) => s !== T.seeds[i])) seeds.push(to);
+    try{ T = await api('/api/topics/' + T.id, { method: 'PATCH', body: { seeds } }); toast('Search is now: ' + seeds.join(' · ') + ' · run it again'); renderDossier(); }catch(e){ toast(e.message); } });
   $$('[data-focus]', body).forEach(b => b.onclick = () => go('network?' + new URLSearchParams({ topic: T.id, focus: b.dataset.focus })));
   const pIdBtn = $('#paIdent', body); if (pIdBtn) pIdBtn.onclick = () => openIdentity(person.identity_id);
   $$('[data-site]', body).forEach(b => b.onclick = () => addSiteSource(b.dataset.site, b));

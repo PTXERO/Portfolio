@@ -1484,3 +1484,28 @@ class Visibility(Base):
         self.assertEqual((t2["settings"]["plan"]["kind"], t2["settings"]["visibility"]), ("person", "private"))
         t3 = self.v.update_topic(t2["id"], {"seeds": ["furnace fest"], "settings": {"visibility": "open"}})
         self.assertEqual(t3["settings"]["visibility"], "open")
+
+
+class SameNameOtherYear(Base):
+    def test_speeds_are_of_something_and_an_earlier_year_is_flagged(self):
+        from rv import signals as SIG
+        n0 = now()
+        items = [post("a", "Isaias is moving ENE at 8 mph with maximum sustained winds of 45 mph.", "nhc", n0 - 7200),
+                 post("b", "Isaias now moving at 10 mph, winds of 70 mph, forecast to reach 110 mph.", "nhc2", n0 - 3600),
+                 post("c", "Winds of 110 mph recorded as Isaias nears the coast.", "wx", n0 - 600)]
+        s = SIG.summarize(items, {"isaias"})
+        keys = {n["what"]: n for n in s["numbers"]}
+        self.assertIn("winds mph", keys)
+        self.assertIn("moving mph", keys)
+        self.assertEqual((keys["winds mph"]["first"], keys["winds mph"]["last"]), (45.0, 110.0))
+        self.assertEqual((keys["moving mph"]["first"], keys["moving mph"]["last"]), (8.0, 10.0))
+        old = [post(f"o{i}", f"Remembering Hurricane Isaias in 2020, the record season {i}", f"u{i}", n0 - i * 3600) for i in range(4)]
+        s2 = SIG.summarize(items + old + [post(f"n{i}", f"Isaias 2026 update {i}", f"v{i}", n0 - i * 60) for i in range(10)], {"isaias"})
+        self.assertEqual([(y["year"], y["n"]) for y in s2["stale"]], [(2020, 4)])
+        t = self.v.create_topic("Isaias", ["isaias"], settings={"window": "all"})
+        for it in items + old:
+            self.v.db.upsert(it)
+            self.v.link(t["id"], it["id"], "isaias", "s")
+            self.v.vote(t["id"], it["id"], 1)
+        b = SIG.build(self.v, t["id"])
+        self.assertTrue(any("2020" in r for r in b["trust"]["reasons"]), b["trust"])

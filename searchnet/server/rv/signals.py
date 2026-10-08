@@ -465,6 +465,8 @@ def build(vault, tid, max_items=3000):
     srcs = [dict(x, auto_off=(x.get("options") or {}).get("auto_off")) for x in vault.list_sources() if x["id"] in set(t.get("sources") or [])]
     rated = sum(1 for it in items if it["id"] in rated_ids)
     out["trust"] = trust(items, out["trend"], out["spread"], srcs, window_days(st_, st_.get("plan")), out["trend"].get("older") or 0, rated)
+    for y in out.get("stale") or []:
+        out["trust"]["reasons"].append(f"{y['n']} posts are about {y['year']}, the same name on an earlier thing")
     return out
 
 
@@ -492,7 +494,7 @@ def summarize(items, seed_words=()):
             "coordination": co, "lead_lag": lead_lag(items, burst), "headline": "; ".join(headline) or "nothing out of the ordinary",
             "places": places(items, seed_words), "top_posts": top_posts(items), "momentum": momentum(tr, sp, st), "arc": arc(tr),
             "origin": origin(items, sp, burst), "claims": claims(items, seed_words), "numbers": numbers(items), "dated": dated(items),
-            "trust": trust(items, tr, sp),
+            "stale": stale_years(items), "trust": trust(items, tr, sp),
             "badge": {"state": tr["state"], "heat": ht["level"], "score": ht["score"], "velocity": tr.get("velocity")}, "generated": now()}
 
 
@@ -505,6 +507,8 @@ NUM = re.compile(r"(?<![\w.])(\$|£|€)?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)(?:\s
                  r"(?:\s+(?:of\s+|a\s+|an\s+|per\s+)?([a-z][a-z-]{2,}))?", re.I)
 NUM_SKIP = {"am", "pm", "the", "and", "for", "with", "that", "this", "from", "year", "years", "day", "days", "hour", "hours", "minute", "minutes",
             "week", "weeks", "month", "months", "time", "times", "ago", "today", "yesterday", "tomorrow", "more", "than", "about"}
+SPEEDY = {"mph", "km/h", "inches", "feet", "ft", "miles"}
+SPEED_CTX = {"wind", "winds", "gust", "gusts", "moving", "forward", "speed", "surge", "rain", "rainfall", "snow", "waves", "swells", "deep", "wide", "tall", "high", "long", "away", "offshore", "inland"}
 UNIT_WORDS = {"%", "percent", "mph", "km/h", "inches", "feet", "ft", "miles", "acres", "degrees", "million", "billion", "thousand", "k", "m", "bn", "b"}
 QTY_WORDS = set("people customers residents homes households families deaths dead killed injured missing cases patients students workers jobs "
                 "employees evacuees acres buildings structures cars vehicles units tickets attendees followers members votes voters troops "
@@ -595,7 +599,11 @@ def numbers(items, top=8):
             continue
         for m in NUM.finditer(str(it.get("text") or "")):
             cur, val, unit, what = m.group(1), m.group(2), m.group(3), (m.group(4) or "").lower()
-            if (what and what.split()[0] in NUM_SKIP) or (not unit and not cur and (not what or len(val) < 2)):
+            if what and what.split()[0] in NUM_SKIP:
+                what = ""                                              # "8 mph with": the unit stands, the filler word goes
+            if unit and unit.lower() in UNIT_WORDS and what not in QTY_WORDS:
+                what = ""                                              # "110 mph recorded": the unit is the quantity, the verb is not
+            if not unit and not cur and (not what or len(val) < 2):
                 continue
             if re.match(r"^\d{4}$", val) and not unit and not cur:      # a year, not a quantity
                 continue
@@ -604,7 +612,12 @@ def numbers(items, top=8):
             if not cur and not (unit and unit.lower() in UNIT_WORDS) and what not in QTY_WORDS:
                 continue                                               # "11 Boston", "02 unknown": a track number, not a figure
             key = (cur or "") + ((" " + unit.lower()) if unit and unit.lower() in ("%", "percent", "mph", "km/h", "inches", "feet", "ft", "miles", "acres", "degrees") else "") + (" " + what if what else "")
-            key = key.strip()
+            # a speed or a length is of something: "winds of 110 mph" and "moving at 8 mph" are two figures, not one
+            if unit and unit.lower() in SPEEDY:
+                before = re.findall(r"[a-z]+", str(it.get("text") or "")[max(0, m.start() - 40):m.start()].lower())
+                ctx_w = next((w for w in reversed(before[-5:]) if w in SPEED_CTX), "")
+                key = ((ctx_w + " ") if ctx_w else "") + key
+            key = re.sub(r"\s+", " ", key).strip()
             if not key or key in ("%", "percent"):
                 continue
             series[key].append({"ts": it["posted_at"], "value": _num(val, unit), "raw": m.group(0).strip(), "post": _ref(it)})
@@ -689,6 +702,28 @@ def dated(items, top=12):
     past = sorted((e for e in ev if not e["ahead"]), key=lambda e: (-e["n"], -e["when"]))[:top]
     past.sort(key=lambda e: e["when"])
     return {"ahead": ahead, "past": past}
+
+
+YEAR_RX = re.compile(r"\b(20[0-3]\d)\b")
+
+
+def stale_years(items):
+    """Posts about an earlier thing with the same name: a year other than the current one, written in the text,
+    carried by a tenth of the posts or more. Storm names repeat every six years; so do bands, bills and games."""
+    import datetime as dt
+    this_year = dt.datetime.now(dt.timezone.utc).year
+    by_year = defaultdict(list)
+    for it in items:
+        ys = {int(y) for y in YEAR_RX.findall(str(it.get("text") or ""))}
+        for y in ys:
+            if y != this_year and y <= this_year:
+                by_year[y].append(it)
+    n = max(1, len(items))
+    out = []
+    for y, its in sorted(by_year.items(), key=lambda kv: -len(kv[1])):
+        if len(its) >= 3 and len(its) / n >= 0.08:
+            out.append({"year": y, "n": len(its), "share": round(len(its) / n, 2), "examples": [_ref(x) for x in its[:3]]})
+    return out[:3]
 
 
 def trust(items, tr, sp, sources=None, window_days=0, older=0, rated=None):
