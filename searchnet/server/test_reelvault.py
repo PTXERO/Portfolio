@@ -926,6 +926,10 @@ class WebSourcesAndMembership(Base):
         web = next(s for s in self.v.list_sources() if s["preset"] == "web")
         list(self.v.fetch(Job("collect", {}), web, "x", 5, {"media": "video"}))
         web = self.v.get_source(web["id"])
+        self.assertEqual((web["enabled"], web["options"].get("fails")), (1, 1))          # one bad run is a strike, not a switch-off
+        for _ in range(2):
+            list(self.v.fetch(Job("collect", {}), web, "x", 5, {"media": "video"}))
+            web = self.v.get_source(web["id"])
         self.assertEqual(web["enabled"], 0)
         self.assertTrue(web["options"].get("auto_off"))
         self.assertIn("403", web["last_error"])

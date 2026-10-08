@@ -281,14 +281,21 @@
     const add = DEFAULT_PRESETS.filter((k) => !seeded.has(k) && !all.some((s) => s.preset === k));
     if (add.length) { add.forEach((k) => { const p = WORKER_SOURCES.find((x) => x.preset === k); if (p) all.push(fromPreset(p, p.param_default || '')); }); await saveSources(all); }
     if (add.length || !seenRow) await idb.put('kv', { k: 'sources_seeded', v: [...new Set([...seeded, ...DEFAULT_PRESETS])] });
+    const seen = new Set(); const dedup = all.filter((s) => { const k = (s.preset || s.source) + '|' + (s.value || ''); if (s.preset && seen.has(k)) return false; seen.add(k); return true; });
+    if (dedup.length !== all.length) { all = dedup; await saveSources(all); }     // a double seeding once made two 4chans
     return all;
   }
   // a source that errors (not a quota wait, not the hub being down) turns itself off; the switch in SOURCES turns it back on
+  // the hub, not the source, is the problem: an older Worker, a limit, a network blip. Never a reason to switch a source off.
+  const HUB_PROBLEM = /quota|limit|busy|Failed to fetch|NetworkError|hub 2\.0|older than this app|unknown source|not found|HTTP (?:401|404|429|500|502|503|504)|timed out|Hub HTTP/i;
   async function markFailed(id, msg) {
-    if (!id || /quota|limit|busy|Failed to fetch|NetworkError|hub 2\.0|HTTP (?:429|500|502|503|504)|timed out/i.test(msg || '')) return false;   // transient: try again next run
+    if (!id || HUB_PROBLEM.test(msg || '')) return false;
     const all = await listSources(); const s = all.find((x) => x.id === id); if (!s || !s.enabled) return false;
-    s.enabled = false; s.auto_off = Math.floor(Date.now() / 1000); s.last_error = String(msg || '').slice(0, 200); await saveSources(all); return true;
+    s.fails = (s.fails || 0) + 1; s.last_error = String(msg || '').slice(0, 200);
+    if (s.fails < 3) { await saveSources(all); return false; }                      // three runs in a row, then off
+    s.enabled = false; s.auto_off = Math.floor(Date.now() / 1000); s.fails = 0; await saveSources(all); return true;
   }
+  async function markWorked(id) { const all = await listSources(); const s = all.find((x) => x.id === id); if (s && (s.fails || s.last_error)) { s.fails = 0; s.last_error = ''; await saveSources(all); } }
   async function saveSources(arr) { await idb.put('kv', { k: 'sources', v: arr }); return arr; }
 
   // ── jobs (in-memory, mirror the server's job shape) ───────────
@@ -385,6 +392,7 @@
           if (method === 'POST') { const p = WORKER_SOURCES.find((x) => x.preset === body.preset); const s = p ? { source: p.source, name: body.name || (p.name + (body.param ? ' · ' + body.param : '')), param: p.param, value: body.param || p.param_default || '', searchable: p.searchable, preset: p.preset } : body; s.id = Math.random().toString(36).slice(2, 10); s.enabled = true; s.kind = s.source; s.limit_per = s.limit_per || 30; all.push(s); await saveSources(all); return s; }
         }
         const s = all.find((x) => x.id === arg);
+        if (arg === 'enable-all' && method === 'POST') { let n = 0; all.forEach((x) => { if (!x.enabled) { x.enabled = true; delete x.auto_off; x.last_error = ''; x.fails = 0; n++; } }); await saveSources(all); return { ok: true, enabled: n }; }
         if (s && method === 'PATCH') { Object.assign(s, body); if (body.enabled) { delete s.auto_off; s.last_error = ''; } await saveSources(all); return s; }
         if (s && method === 'DELETE') { await saveSources(all.filter((x) => x.id !== arg)); return { ok: true }; }
         if (s && sub === 'test' && method === 'POST') { const j = newJob('test', 'test ' + s.name); runSafe(j, async () => { const params = new URLSearchParams({ source: s.source, q: body.query || 'cat', limit: 5 }); if (s.value) params.set('instance', s.value); if (s.param === 'url') { params.delete('instance'); params.set('url', s.value || ''); } const r = await workerCall('/search?' + params); j.result = { count: (r.items || []).length, items: (r.items || []).slice(0, 5).map((i) => ({ id: i.id, text: i.text, thumbnail: i.thumbnail, media: i.media, url: i.url, author: i.author })) }; }); return jobDict(j); }
@@ -425,6 +433,6 @@
   // expose internals the learn module needs
   Local.idb = idb; Local.settings = settings; Local.runSearch = runSearch; Local.loadSyn = loadSyn;
   Local.getSyn = () => SYN; Local.newJob = newJob; Local.jobDict = jobDict; Local.runSafe = runSafe;
-  Local.jobs = JOBS; Local.workerCall = workerCall; Local.markFailed = markFailed; Local.hub = hubInfo; Local.backup = backupData; Local.restore = restoreData; Local.merge = mergeData;
+  Local.jobs = JOBS; Local.workerCall = workerCall; Local.markFailed = markFailed; Local.markWorked = markWorked; Local.hub = hubInfo; Local.backup = backupData; Local.restore = restoreData; Local.merge = mergeData;
   window.SearchNetLocal = Local;
 })();

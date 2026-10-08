@@ -233,3 +233,7 @@ Topics and ratings now meet on the hub store under your id. Pulled when the app 
 ## Update: open topics on the hub
 
 An open topic is published on the hub you use, with who started it. Everyone on that hub sees it under "Open on this hub" in TOPICS and can join; joining keeps the same id so ratings line up. Each person's ratings go up to the hub, and the pooled result (👍 vs 👎 per post) comes down to everyone who joined, marked as the hub's; your own rating always wins on your device and replaces the pooled one there. Pooled ratings are never in your backup. Only the starter or the hub's owner can edit or archive it; archiving keeps everyone's ratings and everyone's copy. The hub refuses a topic about a named person. The posts go too: what is in the topic on your device is sent up in a compact form (text trimmed, no transcripts), and everyone who joined pulls what is new since their last pull, so a joiner's review and web are full from the first minute. Posts older than 90 days are pruned from the hub by the daily cron.
+
+## Update: sources that switch themselves off
+
+A source now needs three failing runs in a row before it switches off, and a failure that is the hub's doing never counts: a Worker older than the app ("unknown source", "older than this app"), a limit, a 401/404/429/5xx, a timeout, a network blip. One strike per run, not per search. The run log names how many sources are off, and SOURCES has TURN THEM ALL BACK ON. A double seeding once made two 4chans; the list is deduplicated on load.

@@ -3173,6 +3173,10 @@ async function renderSources(){
   try{
     if (!presetsCache) presetsCache = (await api('/api/sources/presets')).presets;
     const srcs = (await api('/api/sources')).sources;
+    const off = srcs.filter(s => !s.enabled && (s.auto_off || (s.options && s.options.auto_off)));
+    const bar = $('#srcOffBar') || (() => { const d = document.createElement('div'); d.id = 'srcOffBar'; $('#srcList').insertAdjacentElement('beforebegin', d); return d; })();
+    bar.innerHTML = off.length ? `<div class="card pad" style="border-color:rgba(var(--acc-rgb),.5);margin-bottom:10px"><b>${off.length} source${off.length === 1 ? '' : 's'} switched ${off.length === 1 ? 'itself' : 'themselves'} off after failing.</b> <span class="note">A source goes off after three failing runs in a row. A hub that is behind, a limit or a network blip never counts.</span><div class="row wrap" style="margin-top:8px"><button class="btn sm pri" id="srcAllOn">⏻ TURN THEM ALL BACK ON</button></div></div>` : '';
+    const allOn = $('#srcAllOn'); if (allOn) allOn.onclick = async () => { const r = await api('/api/sources/enable-all', { method: 'POST' }); toast('✓ ' + r.enabled + ' back on'); renderSources(); };
     const have = new Set(srcs.map(s => s.preset).filter(Boolean));
     $('#presets').innerHTML = presetsCache.map(p => { const added = have.has(p.preset) && !p.param;
       return `<button data-preset="${p.preset}"${added ? ' style="border-color:var(--acc)"' : ''}>${esc(p.name)}<small>${added ? '<span style="color:var(--acc)">✓ added</span>' : p.param ? (p.param === 'qx' ? 'extra terms, optional' : p.param === 'boards' ? 'boards, optional' : 'enter ' + esc(p.param)) : p.searchable ? 'searches' : 'follows'}${p.needs_login ? ' · login' : ''}</small></button>`; }).join('');

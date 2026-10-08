@@ -493,6 +493,13 @@ class Handler(BaseHTTPRequestHandler):
                 return ok(S.discover(self._body().get("url", "")))
             if arg == "article" and method == "POST":
                 return ok(S.read_article(self._body().get("url", "")))
+            if arg == "enable-all" and method == "POST":
+                n = 0
+                for s_ in v.list_sources():
+                    if not s_["enabled"]:
+                        v.update_source(s_["id"], {"enabled": True})
+                        n += 1
+                return ok({"ok": True, "enabled": n})
             if not arg:
                 if method == "GET":
                     return ok({"sources": v.list_sources()})

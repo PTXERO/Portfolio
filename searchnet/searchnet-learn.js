@@ -189,6 +189,7 @@
     if (t2.sources && t2.sources.length) srcs = srcs.filter((s) => t2.sources.includes(s.id));
     job.total = Math.max(1, runQs.length * srcs.length + 2);
     job.log('  ' + runQs.length + ' searches × ' + srcs.length + ' sources');
+    try { const off = (await L.request('/api/sources')).sources.filter((x) => !x.enabled && x.auto_off); if (off.length >= 3) job.log('  ⚠ ' + off.length + ' sources are switched off after failing (' + off.slice(0, 3).map((x) => x.name).join(', ') + '…). SOURCES → TURN THEM ALL BACK ON'); } catch (e) { /* fine */ }
     const seen = new Set();
     // collect directly (synchronously), then link everything matching
     await collectForTopic(t2, runQs, srcs, job, seen);
@@ -252,7 +253,7 @@
           if (s.value && s.param === 'url') params.set('url', s.value);          // feeds and 'Any site' templates carry their URL
           if (s.value && s.param === 'qx') params.set('qx', s.value);            // Obituaries / Schools / local news: extra terms on every query
           if (s.value && s.param === 'boards') params.set('boards', s.value);
-          const r = await workerSearch(params);
+          const r = await workerSearch(params); if (L.markWorked) L.markWorked(s.id).catch(() => {});
           const q2 = (t.queries || []).find((x) => x.query === q);
           let found = 0; t.settings.source_stats = t.settings.source_stats || {}; const ss = t.settings.source_stats[s.id] = t.settings.source_stats[s.id] || { runs: 0, found: 0, pos: 0, neg: 0 }; if (!(t._runSeen = t._runSeen || new Set()).has(s.id)) { t._runSeen.add(s.id); ss.runs++; }
           const since = (windowDays(t.settings, t.settings.plan) || 0) ? now() - windowDays(t.settings, t.settings.plan) * 86400 : 0;
@@ -267,7 +268,7 @@
           if (q2) { q2.runs++; q2.found += found; }
           ss.found += found;
           job.stats.found += found; job.log('  ' + found + ' · ' + q + ' @ ' + s.name);
-        } catch (e) { job.stats.errors++; job.log('  ✕ ' + s.name + ': ' + e.message); if (await L.markFailed(s.id, e.message)) { job.log('    ' + s.name + ' switched off until you turn it back on (SOURCES)'); srcs = srcs.filter((x) => x.id !== s.id); } }
+        } catch (e) { job.stats.errors++; job.log('  ✕ ' + s.name + ': ' + e.message); job._failSeen = job._failSeen || new Set(); const firstThisRun = !job._failSeen.has(s.id); job._failSeen.add(s.id); if (firstThisRun && await L.markFailed(s.id, e.message)) { /* one strike per run, not per search */ job.log('    ' + s.name + ' switched off until you turn it back on (SOURCES)'); srcs = srcs.filter((x) => x.id !== s.id); } }
         job.done++;
       }
     }

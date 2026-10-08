@@ -44,19 +44,24 @@ const jt = await api('/api/topics', { method: 'POST', body: { name: 'John Smith'
 const byId = {}; (await api('/api/sources')).sources.forEach((s) => byId[s.id] = s.preset);
 ok(jt.settings.plan.kind === 'person' && jt.sources.map((i) => byId[i]).includes('obituaries') && !jt.sources.map((i) => byId[i]).includes('fourchan'), 'plan: "John Smith" → person sources (obituaries in, 4chan out)');
 // topic
-const t = await api('/api/topics', { method: 'POST', body: { name: 'Florida Hurricane Isaias', seeds: ['florida hurricane isaias'], settings: { breadth: 1, media: 'everything' } } });
+const t = await api('/api/topics', { method: 'POST', body: { name: 'Florida Hurricane Isaias', seeds: ['florida hurricane isaias'], settings: { breadth: 1, media: 'everything' }, run: false } });
 ok(t.settings.plan.kind === 'event' && t.settings.plan.window_days === 14 && !t.sources.map((i) => byId[i]).includes('obituaries'), 'plan: hurricane → event, last 14 days, no obituaries');
 const j = await api('/api/topics/' + t.id + '/run', { method: 'POST' });
 for (let i = 0; i < 60; i++) { const st = await p.evaluate((id) => (window.SearchNetLocal.jobs[id] || {}).state, j.id); if (st === 'done' || st === 'error') break; await p.waitForTimeout(300); }
 ok(hubLog.some((l) => l.includes('source=news') && l.includes('qx=Florida')), 'run: news source queried with the extra term');
 ok(hubLog.some((l) => l.includes('source=news') && /since=\d+/.test(l)), 'run: the time window rides along as since=');
-const hn = (await api('/api/sources')).sources.find((x) => x.preset === 'gdelt');
-ok(hn && !hn.enabled && hn.auto_off && /403/.test(hn.last_error), 'a failing source switched itself off with the reason (' + (hn && hn.last_error) + ')');
+let hn = (await api('/api/sources')).sources.find((x) => x.preset === 'gdelt');
+ok(hn && hn.enabled && hn.fails === 1 && /403/.test(hn.last_error), 'a failing source is still on after one bad run (strike 1, ' + (hn && hn.last_error) + ')');
+for (let k = 0; k < 2; k++) { const jj = await api('/api/topics/' + t.id + '/run', { method: 'POST' }); for (let i = 0; i < 60; i++) { const st = await p.evaluate((id) => (window.SearchNetLocal.jobs[id] || {}).state, jj.id); if (st === 'done' || st === 'error') break; await p.waitForTimeout(300); } }
+hn = (await api('/api/sources')).sources.find((x) => x.preset === 'gdelt');
+ok(hn && !hn.enabled && hn.auto_off && /403/.test(hn.last_error), 'three failing runs in a row switch it off with the reason');
+ok((await api('/api/sources')).sources.filter((x) => x.preset === 'fourchan').length === 1, 'one 4chan, not two');
 const hn2 = await api('/api/sources/' + hn.id, { method: 'PATCH', body: { enabled: true } });
 ok(hn2.enabled && !hn2.auto_off && !hn2.last_error, 'flipping it back on clears the failure');
+await api('/api/sources/' + hn.id, { method: 'PATCH', body: { enabled: false } }); const ea = await api('/api/sources/enable-all', { method: 'POST' }); ok(ea.enabled >= 1 && (await api('/api/sources')).sources.every((x) => x.enabled || !x.auto_off), 'TURN THEM ALL BACK ON turns every switched-off source on');
 const T = await api('/api/topics/' + t.id);
 const sites = (T.settings || {}).sites || {};
-ok(sites['tampabay.com'] && sites['tampabay.com'].n === 2 && sites['floridablog.example'], 'run: sites tallied (' + Object.keys(sites).join(', ') + ')');
+ok(sites['tampabay.com'] && sites['tampabay.com'].n >= 2 && sites['floridablog.example'], 'run: sites tallied (' + Object.keys(sites).join(', ') + ')');
 // the review deck explains itself
 let feed = await api('/api/topics/' + t.id + '/feed?view=review&limit=20');
 const ice = feed.items.find((it) => it.id === 'mastodon:2'), storm = feed.items.find((it) => it.id === 'mastodon:1');

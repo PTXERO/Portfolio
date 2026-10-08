@@ -470,14 +470,27 @@ class Vault:
             err = str(e)[:300]
             job.stats["errors"] += 1
             job.log(f"  ✕ {label}: {err}")
-            if src.get("id") and not re.search(r"quota|rate limit|HTTP (?:429|500|502|503|504)|timed out|Temporary failure|Connection", err, re.I):
+            # a limit, a network blip or an older hub is not the source's fault; otherwise three failing runs in a row switch it off
+            seen_fail = getattr(job, "_fail_seen", None)
+            if seen_fail is None:
+                seen_fail = job._fail_seen = set()
+            if src.get("id") and src["id"] not in seen_fail and not re.search(r"quota|rate limit|limit|unknown source|older than|not found|HTTP (?:401|404|429|500|502|503|504)|timed out|Temporary failure|Connection", err, re.I):
+                seen_fail.add(src["id"])                   # one strike per run, not per search
                 opts_ = dict(src.get("options") or {})
-                opts_["auto_off"] = now()
-                self.db.exec("UPDATE sources SET enabled=0, options=? WHERE id=?", (json.dumps(opts_), src["id"]))
-                job.log(f"    {src['name']} switched off until you turn it back on (SOURCES)")
+                opts_["fails"] = int(opts_.get("fails") or 0) + 1
+                if opts_["fails"] >= 3:
+                    opts_["auto_off"] = now()
+                    opts_["fails"] = 0
+                    self.db.exec("UPDATE sources SET enabled=0, options=?, last_error=? WHERE id=?", (json.dumps(opts_), err[:200], src["id"]))
+                    job.log(f"    {src['name']} switched off after three failing runs; turn it back on in SOURCES")
+                else:
+                    self.db.exec("UPDATE sources SET options=?, last_error=? WHERE id=?", (json.dumps(opts_), err[:200], src["id"]))
+                    job.log(f"    ({opts_['fails']} of 3 failing runs before it switches off)")
         if src.get("id"):
             self.db.exec("UPDATE sources SET last_run=?, last_found=? WHERE id=?",
                          (now(), got, src["id"]))
+            if got and (src.get("options") or {}).get("fails"):      # it worked: the strike count resets
+                self.db.exec("UPDATE sources SET options=?, last_error='' WHERE id=?", (json.dumps(dict(src.get("options") or {}, fails=0)), src["id"]))
             if err or got:          # clear an old error once a run succeeds
                 self.db.exec("UPDATE sources SET last_error=? WHERE id=?", (err, src["id"]))
         job.log(f"  {got} from {label}")
