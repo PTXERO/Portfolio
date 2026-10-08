@@ -142,7 +142,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim)}
       <tr><th>Name</th><th>Type</th><th>Value</th></tr>
       <tr><td><code>SERVICE_KEY</code></td><td><b>Secret</b></td><td>the Supabase secret / service_role key from step 3</td></tr>
       <tr><td><code>SUPABASE_URL</code></td><td>Text</td><td>your Project URL, e.g. <code>https://abcd1234.supabase.co</code></td></tr>
-      <tr><td><code>ADMIN_UID</code></td><td>Text</td><td>your own 4-character suffix (<b id="meSuffix">…</b>). Makes you the owner: no limits, never auto-deleted, moderation rights in Social</td></tr>
+      <tr><td><code>ADMIN_UID</code></td><td>Text</td><td>your own 4-character suffix (<b id="meSuffix">…</b>), or several separated by commas. Owners have no limits of any kind: no daily caps, no storage cap, no size cap, never auto-deleted, and moderation rights in Social</td></tr>
       <tr><td><code>ALLOWED_ORIGINS</code></td><td>Text, optional</td><td><code>*</code> to let any page use it, or a comma-separated list of sites. Default: <code>https://ptxero.neocities.org</code> (the hosted apps). Fetch routes answer any site regardless</td></tr>
       <tr><td><code>LIMITS</code></td><td>Text, optional</td><td>JSON to change the limits for guests, e.g. <code>{"pool":50000,"fetch":1000,"max_fetch":10000,"writes":500,"store_bytes":104857600,"anon_fetch":100}</code>. <code>pool</code> is shared by the day's active ids, <code>fetch</code> is the floor each, <code>max_fetch</code> the ceiling.</td></tr>
       <tr><td><code>RETENTION_DAYS</code></td><td>Text, optional</td><td>how long an unused identity's data is kept (default <code>180</code>, minimum 7)</td></tr>

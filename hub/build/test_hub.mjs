@@ -62,6 +62,8 @@ r = await call('GET', '/store/searchnet/topics', other); ok(r.status === 401 || 
 r = await call('GET', '/me', me); ok(r.status === 200 && r.j.limits.writes === 2 && r.j.today.writes >= 2 && r.j.store.blobs === 2, '/me reports usage ' + JSON.stringify(r.j.today) + ' and store ' + r.j.store.bytes + ' B');
 await call('POST', '/id', admin, {}); r = await call('GET', '/me', admin); ok(r.status === 200 && r.j.owner && r.j.limits === null, 'the owner sees no limits');
 for (let i = 0; i < 5; i++) r = await call('PUT', '/store/x/k' + i, admin, { i }); ok(r.status === 200, 'owner writes are never throttled');
+r = await call('PUT', '/store/x/big', admin, { pad: 'x'.repeat(300) }); ok(r.status === 200, 'owner blobs are not capped (blob_bytes 100, sent ' + (300 + 12) + ')');
+{ const env2 = Object.assign({}, env, { ADMIN_UID: 'ZZ99, ad01' }); const r2 = await W.fetch(new Request('https://hub.test/me', { headers: await admin.headers('GET', '/me') }), env2); const j2 = await r2.json(); ok(r2.status === 200 && j2.owner === true, 'several owners: a comma-separated ADMIN_UID, any case, still makes @AD01 an owner'); }
 // 6. fetch quota: anonymous 1/day, identity 3/day
 globalThis.__sn = 0; const origFetch = globalThis.fetch; // SearchNet routes call out: make bluesky search answer
 globalThis.fetch = async (u, o) => (String(u).includes('bsky.app') ? { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ posts: [] }), text: async () => '{}' } : origFetch(u, o));

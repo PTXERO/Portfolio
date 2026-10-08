@@ -60,7 +60,12 @@ for a, b in [("if (!uid || !secret) return ogJson({ error: 'uid and secret requi
 og_routes = og_routes.replace("body: JSON.stringify({ uid, secret_hash: sh, updated_at: new Date().toISOString() }) });", "body: JSON.stringify(Object.assign({ uid, updated_at: new Date().toISOString() }, sh ? { secret_hash: sh } : {}, px.verified ? { pubkey: px.pub } : {})) });")
 og_routes = og_routes.replace("body: JSON.stringify({ uid: follower, secret_hash: sh, updated_at: new Date().toISOString() }) });", "body: JSON.stringify(Object.assign({ uid: follower, updated_at: new Date().toISOString() }, sh ? { secret_hash: sh } : {}, px.verified ? { pubkey: px.pub } : {})) });")
 # admin override in /delete: a signed owner request is enough
-og_routes = og_routes.replace("        if (!ok && ADMIN && secret && sfx(handle) === ADMIN) {", "        if (!ok && ADMIN && px.verified && px.uid === ADMIN) ok = true;\n        if (!ok && ADMIN && secret && sfx(handle) === ADMIN) {")
+og_routes = og_routes.replace("        if (!ok && ADMIN && secret && sfx(handle) === ADMIN) {", "        if (!ok && px.verified && isAdmin(env, px.uid)) ok = true;\n        if (!ok && ADMIN && secret && sfx(handle) === ADMIN) {")
+# every owner (ADMIN_UID may list several) moderates, not only the first
+n3 = og_routes.count("(ADMIN && uid === ADMIN)"); og_routes = og_routes.replace("(ADMIN && uid === ADMIN)", "isAdmin(env, uid)")
+og_routes = og_routes.replace("const isAdmin = !!ADMIN && uid === ADMIN;", "const isAdmin_ = isAdmin(env, uid);")
+n4 = og_routes.count("if (!isAdmin) return"); og_routes = og_routes.replace("if (!isAdmin) return", "if (!isAdmin_) return"); assert n4 == 2, n4
+assert n3 == 2, n3
 left = len(re.findall(r"secret_hash !== (sh|secretHash)", og_routes))
 print('legacy checks rewritten:', n1, '+', n2, '· unguarded left:', left, '· .json() intact:', 'cur.json()' in og_routes)
 assert left == 0 and 'cur.json()' in og_routes

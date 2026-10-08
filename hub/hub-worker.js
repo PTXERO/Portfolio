@@ -15,7 +15,7 @@
  *  SECRETS (Settings → Variables and Secrets):
  *    SERVICE_KEY     your Supabase service_role / sb_secret key  (required for anything that stores)
  *    SUPABASE_URL    https://<project>.supabase.co                (required when you store; defaults to PTXERO's)
- *    ADMIN_UID       your own 4-char PTXERO id (e.g. CB6C) — exempt from limits, moderation rights
+ *    ADMIN_UID       your own 4-char PTXERO id (e.g. CB6C), or several separated by commas — no limits of any kind, never auto-deleted, moderation rights
  *  OPTIONAL: BUCKET (renders) · ALLOWED_ORIGINS (comma list) · RETENTION_DAYS (180) · LIMITS (json)
  *            SEARCHNET_SECRET (legacy shared key for a private fetch-only hub)
  *  CRON: Triggers → Cron Triggers → add "0 4 * * *" (daily retention + usage pruning).
@@ -35,6 +35,9 @@ const RF_PROXY  = 'https://rf-proxy.ptxero.workers.dev';
 // Fair use scales with the day: a pool of fetches is split among the identities active today, never below
 // `fetch` each and never above `max_fetch`. One person alone gets the ceiling; a busy day shares the pool.
 // (Cloudflare's free tier is ~100k Worker requests a day; the pool leaves headroom for Social and the rest.)
+// the owners: no fetch or write caps, no storage cap, no blob cap, never purged. One suffix or several, comma-separated.
+const admins = (env) => String((env && env.ADMIN_UID) || '').toUpperCase().split(/[,\s]+/).filter(Boolean);
+const isAdmin = (env, uid) => !!uid && admins(env).includes(String(uid).toUpperCase());
 const DEFAULT_LIMITS = { fetch: 400, max_fetch: 6000, pool: 20000, writes: 300, max_writes: 3000, write_pool: 10000, store_bytes: 25 * 1024 * 1024, blob_bytes: 512 * 1024, anon_fetch: 60 };
 let activeCache = { n: 1, t: 0 };
 async function activeToday(svc) {                 // identities that touched the hub today (cached a minute per isolate)
@@ -197,9 +200,9 @@ async function touch(svc, key, calls, writes, bytes) {
 function resetsAt() { const d = new Date(); d.setUTCHours(24, 0, 0, 0); return d.toISOString(); }
 // scope: 'fetch' (SearchNet compute) | 'write' (anything that stores) | 'read' (free)
 async function quota(env, svc, px, scope, bytes) {
-  const L = limits(env); const admin = (env && env.ADMIN_UID) || '';
+  const L = limits(env);
   if (scope === 'read') { if (px.verified && svc.apikey) fetch(`${SUPABASE}/rest/v1/hub_users`, { method: 'POST', headers: { ...svc, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ uid: px.uid, pubkey: px.pub, last_seen: new Date().toISOString() }) }).catch(() => {}); return null; }   // a signed read is a visit
-  if (px.verified && admin && px.uid === admin) return null;
+  if (px.verified && isAdmin(env, px.uid)) return null;
   if (!svc.apikey) return null;                                               // fetch-only hub: no DB, no limits
   if (!px.verified && scope === 'write') return { status: 401, body: { error: 'sign in with your PTXERO ID to store anything here' } };
   if (px.verified && !(await ownsId(svc, px))) {
@@ -974,10 +977,9 @@ export default {
     const svc = { apikey: KEY, Authorization: 'Bearer ' + KEY };
     const days = Math.max(7, parseInt((env && env.RETENTION_DAYS) || '180', 10) || 180);
     const cutoff = new Date(Date.now() - days * 86400000).toISOString();
-    const admin = (env && env.ADMIN_UID) || '';
     try {
       const r = await fetch(`${SUPABASE}/rest/v1/hub_users?last_seen=lt.${encodeURIComponent(cutoff)}&pinned=eq.false&select=uid&limit=200`, { headers: svc });
-      if (r.ok) for (const u of await r.json()) { if (u.uid && u.uid !== admin) await purgeUser(svc, u.uid); }
+      if (r.ok) for (const u of await r.json()) { if (u.uid && !isAdmin(env, u.uid)) await purgeUser(svc, u.uid); }
       await fetch(`${SUPABASE}/rest/v1/rpc/hub_prune_usage`, { method: 'POST', headers: { ...svc, 'Content-Type': 'application/json' }, body: '{}' });
     } catch (e) {}
   },
@@ -990,7 +992,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, '') || '/';
     const KEY = (env && env.SERVICE_KEY) || '';
-    const ADMIN = (env && env.ADMIN_UID) || '';   // the owner's suffix (e.g. CB6C) — grants moderation
+    const ADMIN = admins(env)[0] || '';   // the first owner's suffix, for the legacy secret path; signed requests use isAdmin()
     const svc = KEY ? { apikey: KEY, Authorization: 'Bearer ' + KEY } : {};
     const px = await who(request);
     const q = Object.fromEntries(url.searchParams);
@@ -1041,7 +1043,7 @@ export default {
       const today = (await touch(svc, px.key, 0, 0, 0)) || { calls: 0, writes: 0, bytes: 0 };
       const [users, blobs] = await Promise.all([get(`hub_users?uid=eq.${e}&select=created_at,last_seen,bytes,pinned`), get(`hub_blobs?uid=eq.${e}&select=app,key,bytes,updated_at`)]);
       const bytes = blobs.reduce((s, b) => s + (b.bytes || 0), 0);
-      const L = limits(env); const owner = !!ADMIN && px.uid === ADMIN;
+      const L = limits(env); const owner = isAdmin(env, px.uid);
       return ogJson({ uid: px.uid, owner, since: users[0] ? users[0].created_at : null, last_seen: users[0] ? users[0].last_seen : null, pinned: !!(users[0] && users[0].pinned),
         today: { fetch: today.calls, writes: today.writes }, limits: owner ? null : Object.assign({ store_bytes: L.store_bytes }, dailyCaps(L, await activeToday(svc))),
         store: { bytes, blobs: blobs.length, by_app: blobs.reduce((m, b) => (m[b.app] = (m[b.app] || 0) + (b.bytes || 0), m), {}) },
@@ -1071,10 +1073,10 @@ export default {
       }
       if (request.method === 'PUT' || request.method === 'POST') {
         const text = await request.text(); const bytes = new TextEncoder().encode(text).length;
-        if (bytes > LIMITS.blob_bytes) return ogJson({ error: 'too large', limit: LIMITS.blob_bytes }, 413, request);
+        const owner = isAdmin(env, px.uid);
+        if (!owner && bytes > LIMITS.blob_bytes) return ogJson({ error: 'too large', limit: LIMITS.blob_bytes }, 413, request);
         let data; try { data = JSON.parse(text); } catch (err) { return ogJson({ error: 'body must be JSON' }, 400, request); }
         const d = await quota(env, svc, px, 'write', bytes); if (d) return deny(d);
-        const owner = !!ADMIN && px.uid === ADMIN;
         if (!owner) {
           const r = await fetch(`${SUPABASE}/rest/v1/hub_blobs?uid=eq.${e}&select=key,app,bytes`, { headers: svc });
           const rows = r.ok ? await r.json() : []; const other = rows.filter((x) => !(x.app === app && x.key === key)).reduce((s, x) => s + (x.bytes || 0), 0);
@@ -1202,7 +1204,7 @@ export default {
         if (token && row.del_token) ok = (await sha256hex(token)) === row.del_token;
         if (!ok && handle && row.handle) ok = (sfx(handle) === sfx(row.handle));
         // admin override: the ADMIN identity, verified via its stored profile secret, may delete anything
-        if (!ok && ADMIN && px.verified && px.uid === ADMIN) ok = true;
+        if (!ok && px.verified && isAdmin(env, px.uid)) ok = true;
         if (!ok && ADMIN && secret && sfx(handle) === ADMIN) {
           const ar = await fetch(`${SUPABASE}/rest/v1/profiles?uid=eq.${encodeURIComponent(ADMIN)}&select=secret_hash,pubkey`, { headers: svc });
           if (ar.ok) { const a = (await ar.json())[0]; if (a && a.secret_hash && a.secret_hash === await sha256hex(secret)) ok = true; }
@@ -1338,7 +1340,7 @@ export default {
           const c = cr.ok ? (await cr.json())[0] : null;
           if (!c) return ogJson({ error: 'not found' }, 404, request);
           // author may delete own; the verified ADMIN identity may delete any
-          let ok = (c.uid === uid) || (ADMIN && uid === ADMIN);
+          let ok = (c.uid === uid) || isAdmin(env, uid);
           if (!ok) return ogJson({ error: 'not authorized' }, 403, request);
           await fetch(`${SUPABASE}/rest/v1/comments?id=eq.${id}`, { method: 'DELETE', headers: { ...svc, Prefer: 'return=minimal' } });
           return ogJson({ ok: true }, 200, request);
@@ -1386,7 +1388,7 @@ export default {
           const cr = await fetch(`${SUPABASE}/rest/v1/posts?id=eq.${encodeURIComponent(id)}&select=id,handle`, { headers: svc });
           const c = cr.ok ? (await cr.json())[0] : null;
           if (!c) return ogJson({ error: 'not found' }, 404, request);
-          const ok = (sfxOf(c.handle) === uid) || (ADMIN && uid === ADMIN);
+          const ok = (sfxOf(c.handle) === uid) || isAdmin(env, uid);
           if (!ok) return ogJson({ error: 'not authorized' }, 403, request);
           // remove the post + its engagement + notifications (best-effort)
           await fetch(`${SUPABASE}/rest/v1/posts?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: { ...svc, Prefer: 'return=minimal' } });
@@ -1452,15 +1454,15 @@ export default {
         } else {
           return ogJson({ error: 'not authorized' }, 403, request);
         }
-        const isAdmin = !!ADMIN && uid === ADMIN;   // secret already verified above for existing profiles
+        const isAdmin_ = isAdmin(env, uid);   // secret already verified above for existing profiles
 
         if (action === 'list') {
-          if (!isAdmin) return ogJson({ error: 'admin only' }, 403, request);
+          if (!isAdmin_) return ogJson({ error: 'admin only' }, 403, request);
           const r = await fetch(`${SUPABASE}/rest/v1/reports?resolved=eq.false&order=created_at.desc&limit=100&select=id,target,kind,reporter,reason,created_at`, { headers: svc });
           return ogJson({ ok: true, reports: r.ok ? await r.json() : [] }, 200, request);
         }
         if (action === 'resolve') {
-          if (!isAdmin) return ogJson({ error: 'admin only' }, 403, request);
+          if (!isAdmin_) return ogJson({ error: 'admin only' }, 403, request);
           const id = (form.get('id') || '').toString().replace(/[^0-9]/g, '');
           if (!id) return ogJson({ error: 'bad id' }, 400, request);
           await fetch(`${SUPABASE}/rest/v1/reports?id=eq.${id}`, { method: 'PATCH', headers: { ...svc, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ resolved: true }) });
