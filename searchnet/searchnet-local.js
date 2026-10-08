@@ -195,7 +195,29 @@
     const keepOut = new Set(out.topics.filter((t) => t && t.settings && t.settings.visibility === 'device').map((t) => t.id));
     out.topics = out.topics.filter((t) => !keepOut.has(t.id)); out.votes = out.votes.filter((v) => !keepOut.has(v.topic_id)); out.left_out = keepOut.size;
     out.kv = out.kv.map((r) => (r && r.k === 'settings' && r.v) ? { k: r.k, v: Object.assign({}, r.v, { worker_key: '' }) } : r);  // never back up a Worker secret
+    const dead = await idb.get('kv', 'deleted_topics'); out.deleted = (dead && dead.v) || {};      // tombstones, so a deletion wins over a stale copy elsewhere
     return out;
+  }
+  // the same id on several devices: fold what the hub holds into this library and say what moved each way.
+  // Topics by id, newest `updated` wins, a deletion beats an older copy; ratings by key, newest wins. Nothing else is merged.
+  async function mergeData(remote) {
+    if (!remote || remote._type !== 'searchnet-backup') return { pulled: 0, pushed: 0, changed: false };
+    const dead = Object.assign({}, ((await idb.get('kv', 'deleted_topics')) || {}).v || {}); const rdead = remote.deleted || {};
+    for (const id in rdead) if (!dead[id] || rdead[id] > dead[id]) dead[id] = rdead[id];
+    const local = await idb.all('topics'); const byId = {}; local.forEach((t) => byId[t.id] = t);
+    let pulled = 0, pushed = 0;
+    for (const rt of remote.topics || []) { if (!rt || !rt.id || (rt.settings || {}).visibility === 'device') continue;
+      if (dead[rt.id] && dead[rt.id] >= (rt.updated || rt.created || 0)) continue;
+      const lt = byId[rt.id]; if (!lt) { await idb.put('topics', rt); byId[rt.id] = rt; pulled++; }
+      else if ((rt.updated || 0) > (lt.updated || 0)) { await idb.put('topics', rt); byId[rt.id] = rt; pulled++; }
+      else if ((lt.updated || 0) > (rt.updated || 0)) pushed++; }
+    for (const lt of local) { if (dead[lt.id] && dead[lt.id] >= (lt.updated || lt.created || 0)) { await idb.del('topics', lt.id); for (const v of await idb.all('votes')) if (v.topic_id === lt.id) await idb.del('votes', v.k); pulled++; continue; }
+      if (!(remote.topics || []).some((rt) => rt && rt.id === lt.id) && (lt.settings || {}).visibility !== 'device') pushed++; }
+    const lv = {}; (await idb.all('votes')).forEach((v) => lv[v.k] = v);
+    for (const rv of remote.votes || []) { if (!rv || !rv.k || !byId[rv.topic_id]) continue; const cur = lv[rv.k]; const rt = rv.labeled_at || rv.ts || 0, ct = cur ? (cur.labeled_at || cur.ts || 0) : -1;
+      if (!cur || rt > ct) { await idb.put('votes', rv); pulled++; } else if (ct > rt) pushed++; }
+    await idb.put('kv', { k: 'deleted_topics', v: dead });
+    return { pulled, pushed, changed: pulled > 0 || pushed > 0 };
   }
   async function restoreData(d) {
     if (!d || d._type !== 'searchnet-backup') throw new Error('not a SearchNet backup');
@@ -403,6 +425,6 @@
   // expose internals the learn module needs
   Local.idb = idb; Local.settings = settings; Local.runSearch = runSearch; Local.loadSyn = loadSyn;
   Local.getSyn = () => SYN; Local.newJob = newJob; Local.jobDict = jobDict; Local.runSafe = runSafe;
-  Local.jobs = JOBS; Local.workerCall = workerCall; Local.markFailed = markFailed; Local.hub = hubInfo; Local.backup = backupData; Local.restore = restoreData;
+  Local.jobs = JOBS; Local.workerCall = workerCall; Local.markFailed = markFailed; Local.hub = hubInfo; Local.backup = backupData; Local.restore = restoreData; Local.merge = mergeData;
   window.SearchNetLocal = Local;
 })();

@@ -225,3 +225,7 @@ festivals, shows, labels and outlets are never a person's name; archive scans an
 ## Update: where a topic may go
 
 Three settings per topic (⋯): open (the default: eligible for pooling with others once sharing exists, backed up to your hub), private (never shared), and this device only (left out of backups, never leaves the browser, lock on the card). SOURCES sets what new topics start as. A topic about a named person is never open; the planner's kind and the PERSON choice both force it to private.
+
+## Update: the same id on every device
+
+Topics and ratings now meet on the hub store under your id. Pulled when the app opens and whenever you come back to it, pushed a few seconds after any change. Topics merge by id and the newest edit wins; a deletion is remembered so it beats a stale copy; ratings merge by key, newest wins. Device-only topics never go. Posts are not synced, they are refetched when a topic runs. The computer sees the phone's topics only if it holds the same key (import the key file) and runs in browser mode, not the PC server.

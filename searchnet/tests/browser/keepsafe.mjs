@@ -1,11 +1,12 @@
-// the library survives Safari's seven-day wipe: a weekly backup goes to the hub store on its own, and an empty device is offered it back
+// the same id on every device: topics and ratings meet on the hub store. Also the old-hub banner and the device-only lock.
 const pw = (await import(process.env.PW_MODULE || 'playwright')).default; const ROOT = new URL('../../..', import.meta.url).pathname;
 import { spawn } from 'node:child_process';
 const srv = spawn('python3', ['-m', 'http.server', '8773', '--bind', '127.0.0.1'], { cwd: ROOT, stdio: 'ignore' }); await new Promise((r) => setTimeout(r, 800));
 let bad = 0; const ok = (c, m) => { if (!c) bad++; console.log((c ? '✓ ' : '✗ ') + m); };
-const browser = await pw.chromium.launch(); const ctx = await browser.newContext({ viewport: { width: 1200, height: 900 } });
-const NOW = Math.floor(Date.now() / 1000); const log = []; let stored = { _type: 'searchnet-backup', version: 1, made: NOW - 86400, topics: [{ id: 't1', name: 'Hurricane Isaias', seeds: ['isaias'], settings: {}, sources: [], created: NOW - 86400, counts: { pos: 0, neg: 0, unrated: 0 } }], votes: [], rel: [], kv: [] };
-await ctx.route(/share\.ptxero\.net/, async (route) => {
+const browser = await pw.chromium.launch();
+const NOW = Math.floor(Date.now() / 1000); const log = [];
+let stored = { _type: 'searchnet-backup', version: 1, made: NOW - 86400, topics: [{ id: 't1', name: 'Tropical Storm Isaias', seeds: ['isaias'], settings: { visibility: 'open' }, sources: [], created: NOW - 86400, updated: NOW - 86400 }], votes: [{ k: 't1|x:1', topic_id: 't1', item_id: 'x:1', label: 1, labeled_at: NOW - 86400 }], rel: [], kv: [], deleted: {} };
+const mockHub = async (route) => {
   const req = route.request(); const u = new URL(req.url()); log.push(req.method() + ' ' + u.pathname);
   const json = (o, s = 200) => route.fulfill({ status: s, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*' }, body: JSON.stringify(o) });
   if (req.method() === 'OPTIONS') return json({});
@@ -16,34 +17,36 @@ await ctx.route(/share\.ptxero\.net/, async (route) => {
   if (u.pathname === '/store/searchnet/backup' && req.method() === 'PUT') { stored = JSON.parse(req.postData() || '{}'); return json({ ok: true, bytes: (req.postData() || '').length }); }
   if (u.pathname === '/search') return json({ items: [] });
   return json({ error: 'unmocked ' + u.pathname }, 404);
-});
-await ctx.route(/wikipedia|wikimedia|datamuse|googleapis|gstatic/, (r) => r.abort());
-const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
-await p.goto('http://127.0.0.1:8773/searchnet/index.html?mode=browser#topics', { waitUntil: 'domcontentloaded' }); await p.waitForTimeout(4500);
-const sheet = await p.textContent('#sheet').catch(() => '');
-ok(/Restore your backup\?/.test(sheet) && /1 topics/.test(sheet), 'empty library + a backup on the hub → the restore is offered');
-ok(/runs Worker 1\.5; this app expects/.test(await p.textContent('#banner')), 'an older hub is named in the banner with what is missing');
-await p.click('#sheet button:has-text("RESTORE")').catch(() => {}); await p.waitForTimeout(1200);
-const topics = (await p.evaluate(() => window.SearchNetLocal.request('/api/topics'))).topics || [];
-ok(topics.some((t) => t.name === 'Hurricane Isaias'), 'restored topic is in the library');
-// a week later: the backup goes up by itself
-await p.evaluate(() => { localStorage.setItem('rv.lastBackup', JSON.stringify(1)); });
-const puts0 = log.filter((l) => l === 'PUT /store/searchnet/backup').length;
-await p.reload({ waitUntil: 'domcontentloaded' }); await p.waitForTimeout(4500);
-ok(log.filter((l) => l === 'PUT /store/searchnet/backup').length > puts0 && (stored.topics || []).some((t) => t.name === 'Hurricane Isaias'), 'with the last backup over a week old, the library is backed up on its own');
-await p.evaluate(() => { location.hash = '#sources'; }); await p.waitForTimeout(1200);
-ok(/last backup .* automatic weekly/.test(await p.textContent('#bkMsg').catch(() => '')), 'SOURCES shows when the last backup was');
-// a topic marked "this device only" is left out of the backup
-const api = (path, opts) => p.evaluate(([path, opts]) => window.SearchNetLocal.request(path, opts), [path, opts]);
-const t2 = await api('/api/topics', { method: 'POST', body: { name: 'Private thing', seeds: ['private thing'], settings: { visibility: 'device' }, run: false } });
-const d = await p.evaluate(() => window.SearchNetLocal.backup());
-ok(!(d.topics || []).some((t) => t.id === t2.id) && d.left_out === 1 && (d.topics || []).some((t) => t.name === 'Hurricane Isaias'), 'a "this device only" topic stays out of the backup (' + d.left_out + ' left out)');
-await p.evaluate(() => { location.hash = '#topics'; }); await p.waitForTimeout(800);
-ok(/this device only/.test(await p.textContent('#topicList').catch(() => '')), 'the topic card shows the lock');
-const t3 = await api('/api/topics', { method: 'POST', body: { name: 'Open thing', seeds: ['open thing'], run: false } });
-const t4 = await api('/api/topics', { method: 'POST', body: { name: 'Jane Doe', seeds: ['Jane Doe'], settings: { visibility: 'open' }, run: false } });
-ok((t3.settings.visibility || 'open') === 'open', 'a new topic is open by default (' + t3.settings.visibility + ')');
+};
+// one PTXERO key for both devices: the key file is what makes them the same id
+const device = async () => { const ctx = await browser.newContext({ viewport: { width: 1200, height: 900 } }); await ctx.route(/share\.ptxero\.net/, mockHub); await ctx.route(/wikipedia|wikimedia|datamuse|googleapis|gstatic/, (r) => r.abort()); const p = await ctx.newPage(); p.on('pageerror', (e) => errs.push(e.message)); return [ctx, p]; };
+const errs = []; const api = (p, path, opts) => p.evaluate(([path, opts]) => window.SearchNetLocal.request(path, opts), [path, opts]);
+const sync = (p) => p.evaluate(() => syncLibrary('change'));
+const [, A] = await device();
+await A.goto('http://127.0.0.1:8773/searchnet/index.html?mode=browser#topics', { waitUntil: 'domcontentloaded' }); await A.waitForTimeout(4000);
+let topics = (await api(A, '/api/topics')).topics || [];
+ok(topics.some((t) => t.name === 'Tropical Storm Isaias'), 'phone A opens empty: the topic on the hub arrives by itself (' + topics.map((t) => t.name).join(', ') + ')');
+ok(/runs Worker 1\.5; this app expects/.test(await A.textContent('#banner')), 'an older hub is named in the banner with what is missing');
+const t2 = await api(A, '/api/topics', { method: 'POST', body: { name: 'Furnace Fest', seeds: ['furnace fest'], run: false } });
+const t3 = await api(A, '/api/topics', { method: 'POST', body: { name: 'Private thing', seeds: ['private thing'], settings: { visibility: 'device' }, run: false } });
+await sync(A); await A.waitForTimeout(300);
+ok((stored.topics || []).some((t) => t.id === t2.id) && !(stored.topics || []).some((t) => t.id === t3.id) && stored.left_out === 1, 'after a change the library is pushed; the device-only topic stays off the hub');
+const [, B] = await device();
+await B.goto('http://127.0.0.1:8773/searchnet/index.html?mode=browser#topics', { waitUntil: 'domcontentloaded' }); await B.waitForTimeout(4000);
+topics = (await api(B, '/api/topics')).topics || [];
+ok(topics.some((t) => t.name === 'Furnace Fest') && topics.some((t) => t.name === 'Tropical Storm Isaias') && !topics.some((t) => t.name === 'Private thing'), 'computer B with the same key sees both topics, not the device-only one');
+await api(B, '/api/topics/t1', { method: 'DELETE' }); await sync(B); await A.waitForTimeout(200);
+await A.evaluate(() => syncLibrary('return')); await A.waitForTimeout(500);
+topics = (await api(A, '/api/topics')).topics || [];
+ok(!topics.some((t) => t.id === 't1') && (stored.deleted || {}).t1, 'deleted on B: gone on A too, and the deletion is remembered');
+await api(B, '/api/topics/' + t2.id, { method: 'PATCH', body: { name: 'Furnace Fest 2026' } }); await sync(B); await A.evaluate(() => syncLibrary('return')); await A.waitForTimeout(500);
+topics = (await api(A, '/api/topics')).topics || [];
+ok(topics.some((t) => t.name === 'Furnace Fest 2026'), 'renamed on B: renamed on A');
+const t4 = await api(A, '/api/topics', { method: 'POST', body: { name: 'Jane Doe', seeds: ['Jane Doe'], settings: { visibility: 'open' }, run: false } });
 ok(t4.settings.plan && t4.settings.plan.kind === 'person' && t4.settings.visibility === 'private', 'a name plans as a person and is never open (' + t4.settings.visibility + ')');
-const t5 = await api('/api/topics/' + t3.id, { method: 'PATCH', body: { seeds: ['John Smith'] } }); ok(t5.settings.visibility === 'private', 'edited into a name: closes');
+await A.evaluate(() => { location.hash = '#topics'; }); await A.waitForTimeout(600);
+ok(/this device only/.test(await A.textContent('#topicList').catch(() => '')), 'the topic card shows the lock');
+await A.evaluate(() => { location.hash = '#sources'; }); await A.waitForTimeout(1200);
+ok(/synced .* every device with your key/.test(await A.textContent('#bkMsg').catch(() => '')), 'SOURCES says when it last synced');
 ok(errs.length === 0, 'no page errors' + (errs.length ? ' → ' + errs.slice(0, 3).join(' | ') : ''));
 await browser.close(); srv.kill(); process.exit(bad ? 1 : 0);

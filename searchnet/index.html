@@ -935,6 +935,7 @@ const ready = () => LOCAL || (LIVE && !NEEDKEY);
 function authHeaders(h={}){ if (KEY) h['X-RV-Key'] = KEY; return h; }
 function setKey(k){ KEY = k || ''; store.set('key', KEY); }
 async function api(path, opts={}){
+  if (LOCAL && opts.method && opts.method !== 'GET' && /^\/api\/topics/.test(path) && typeof schedulePush === 'function') schedulePush();
   if (LOCAL){                          // handled entirely in this browser — no network, nothing tracked
     const j = await BK.request(path, opts);
     if (j && j.error && /not available in browser/.test(j.error)) throw new Error(j.error);
@@ -990,7 +991,8 @@ async function connect(){
         b.innerHTML = 'BROWSER MODE: nowhere to fetch from yet. Reload to use the shared hub, or paste a Worker URL in <a href="#sources">SOURCES</a>.';
         b.classList.add('on');
       }
-      setTimeout(() => { keepSafe().catch(() => {}); hubBehind().catch(() => {}); }, 3000);
+      setTimeout(() => { syncLibrary('load').catch(() => {}); hubBehind().catch(() => {}); }, 2500);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) syncLibrary('return').catch(() => {}); });
       window.addEventListener('px:quota', e => { const d = e.detail || {}; toast(d.wait > 60 ? ('Daily limit on the hub hit (' + d.used + '/' + d.limit + '). Resets at midnight UTC. Or run your own hub (SOURCES → YOUR DATA).') : ('Hub is busy, waiting ' + d.wait + 's…'), 6000); });
       return;
     }catch(e){ LOCAL = false; }   // fall through to server/demo if IndexedDB is unavailable
@@ -1147,14 +1149,30 @@ async function renderTopics(){
 //    go to the hub's per-person store once a week on their own (posts are refetched on restore). Offered back when the library is empty.
 const NEED_WORKER = '1.8';
 const vcmp = (a, b) => { const x = String(a || '0').split('.').map(Number), y = String(b || '0').split('.').map(Number); for (let i = 0; i < Math.max(x.length, y.length); i++){ const d = (x[i] || 0) - (y[i] || 0); if (d) return d; } return 0; };
+// ── the same id on every device: topics and ratings meet on the hub store under your id.
+//    Pull on load and whenever you come back to the app, push shortly after any change. Device-only topics never go.
+let syncTimer = null, syncing = false;
+function schedulePush(){ clearTimeout(syncTimer); syncTimer = setTimeout(() => syncLibrary('change').catch(() => {}), 15000); }
+async function syncLibrary(why){
+  const px = window.PX; if (!px || !BK || !LOCAL || px.host().mode === 'local' || syncing) return;
+  syncing = true;
+  try{
+    let remote = null; try{ const r = await PX.store.get('searchnet', 'backup'); remote = r && r.data; }catch(e){ if (e.status !== 404) throw e; }
+    const m = remote ? await BK.merge(remote) : { pulled: 0, pushed: 1, changed: true };
+    if (m.pulled){ await loadTopics(); if (route.view === 'topics') render(); toast('⇅ ' + m.pulled + ' change' + (m.pulled === 1 ? '' : 's') + ' from your other device', 4000); }
+    const local = await BK.backup(); const topics = (local.topics || []).length;
+    if (!remote || m.pushed || why === 'change' || (topics && Date.now() / 1000 - store.get('lastBackup', 0) > 86400)){
+      if (topics || remote){ const r = await PX.store.put('searchnet', 'backup', local); store.set('lastBackup', Date.now() / 1000); store.set('lastBackupBytes', r.bytes || 0); const mm = $('#bkMsg'); if (mm) mm.textContent = backupLine(); }
+    }
+  }catch(e){ if (e.status === 413) toast('Sync skipped: library over 512 KB for one backup. Delete old topics, or run your own hub.', 7000); }
+  finally{ syncing = false; }
+  keepSafe().catch(() => {});
+}
+window.syncLibrary = syncLibrary;   // reachable from the tests and the console
 async function keepSafe(){
   const px = window.PX; if (!px || !BK || px.host().mode === 'local') return;
   const counts = (STATUS && STATUS.counts) || {}; const topics = (await BK.request('/api/topics')).topics || [];
-  const last = store.get('lastBackup', 0), now_ = Date.now() / 1000;
-  if (topics.length && now_ - last > 7 * 86400){
-    try{ const d = await BK.backup(); const r = await PX.store.put('searchnet', 'backup', d); store.set('lastBackup', now_); store.set('lastBackupBytes', r.bytes || 0); const m = $('#bkMsg'); if (m) m.textContent = backupLine(); }
-    catch(e){ if (e.status === 413) toast('Weekly backup skipped: over 512 KB. Delete old topics or back up by hand in SETUP.', 7000); }
-  } else if (!topics.length && !(counts.n || 0) && !store.get('restoreOffered', false)){
+  if (!topics.length && !(counts.n || 0) && !store.get('restoreOffered', false)){
     store.set('restoreOffered', true);
     try{ const r = await PX.store.get('searchnet', 'backup'); const d = r && r.data; if (d && (d.topics || []).length){
       if (await confirmSheet('Restore your backup?', 'This device has an empty library, and your hub holds a backup from ' + new Date((d.made || 0) * 1000).toLocaleString() + ' with ' + d.topics.length + ' topics and ' + (d.votes || []).length + ' ratings. Posts are fetched again when you run the topics.', 'RESTORE')){
@@ -1164,7 +1182,7 @@ async function keepSafe(){
   const ios = /iP(hone|ad|od)/.test(navigator.userAgent) && !/CriOS|FxiOS/.test(navigator.userAgent), standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
   if (ios && !standalone && !store.get('homeNudged', false)){ store.set('homeNudged', true); toast('Tip: Share → Add to Home Screen. Safari wipes a site\'s storage after 7 days unused; a home-screen app is exempt. Weekly backups go to your hub either way.', 9000); }
 }
-function backupLine(){ const t = store.get('lastBackup', 0); return t ? 'last backup ' + ago(t) + ' ago · ' + Math.round((store.get('lastBackupBytes', 0) || 0) / 1024) + ' KB · automatic weekly' : 'no backup yet · automatic weekly once you have topics'; }
+function backupLine(){ const t = store.get('lastBackup', 0); return t ? 'synced ' + ago(t) + ' ago · ' + Math.round((store.get('lastBackupBytes', 0) || 0) / 1024) + ' KB · every device with your key sees the same topics' : 'not synced yet · happens on its own once you have topics'; }
 // the hub answers for an older Worker than this app expects: say what is missing, once per version
 async function hubBehind(){
   const h = await BK.hub().catch(() => null); if (!h || !h.base) return;

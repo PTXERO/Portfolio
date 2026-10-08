@@ -43,7 +43,7 @@
   const DEF = { breadth: 3, media: 'video', per_query: 20, soft: [], _attr_soft: [], anti: [], prefs: {}, reasons_recent: [], creators: {} };
   async function getTopic(id) { return idb.get('topics', id); }
   async function allTopics() { return idb.all('topics'); }
-  async function saveTopic(t) { await idb.put('topics', t); return t; }
+  async function saveTopic(t) { t.updated = now(); await idb.put('topics', t); return t; }
   const voteKey = (tid, iid) => tid + '|' + iid;
   async function topicItems(tid) { return (await idb.all('votes')).filter((v) => v.topic_id === tid); }
 
@@ -411,7 +411,7 @@
       if (!sub) {
         if (method === 'GET') return await dto(t);
         if (method === 'PATCH') { if (body.name != null) t.name = String(body.name).slice(0, 80); if (body.seeds) t.seeds = body.seeds.map((s) => s.trim()).filter(Boolean); if (body.sources) { t.sources = body.sources; if (t.settings.plan && t.settings.plan.auto && !(body.settings || {}).plan) t.settings.plan = Object.assign({}, t.settings.plan, { auto: false, note: 'chosen by hand' }); } if (body.settings) t.settings = Object.assign({}, t.settings, body.settings); if (body.seeds || body.settings) { if (body.seeds && t.settings.plan) t.settings.plan = Object.assign({}, t.settings.plan, { kind: kindOf(t.seeds, t.settings)[0] }); t.settings.visibility = visibilityFor(t); } await saveTopic(t); await rescore(t.id); return await dto(t); }
-        if (method === 'DELETE') { for (const v of await topicItems(arg)) await idb.del('votes', v.k); await idb.del('topics', arg); return { ok: true }; }
+        if (method === 'DELETE') { for (const v of await topicItems(arg)) await idb.del('votes', v.k); await idb.del('topics', arg); const dead = ((await idb.get('kv', 'deleted_topics')) || {}).v || {}; dead[arg] = now(); await idb.put('kv', { k: 'deleted_topics', v: dead }); return { ok: true }; }
       }
       if (sub === 'run' && method === 'POST') { const j = L.newJob('topic', 'topic · ' + t.name); j.topic_id = t.id; L.runSafe(j, () => runTopic(t.id, j)); return L.jobDict(j); }
       if (sub === 'feed') return await feed(arg, qs);
