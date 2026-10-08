@@ -1651,13 +1651,19 @@ async function renderTopicGrid(seg, append=false){
 //  DOSSIER — what you want to know about a topic / @account / #tag, en masse
 // ══════════════════════════════════════════════════════
 const WIKI_UA = { 'Api-User-Agent': 'SearchNet/1.0 (personal media library)' };
+const STOPWORDS = new Set('about above after again against along among around because before being below between could during every first found from great having into large later little might most much never often other others over place same several should since small some still such their there these they things think those three through under until upon used using very what when where which while whole whose will with within without would years young about which'.split(' '));
 async function wikiSummary(name){
   const key = 'wiki.' + name.toLowerCase(); const c = store.get(key, null);
   if (c && Date.now() - c.t < 7 * 86400e3) return c.v;
   let v = null;
   try{
     const r = await fetch('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(name.replace(/^[@#"]|"$/g, '').trim().replace(/\s+/g, '_')), { headers: WIKI_UA });
-    if (r.ok){ const j = await r.json(); if (j.type !== 'disambiguation' && j.extract) v = { title: j.title, extract: j.extract, url: (j.content_urls && j.content_urls.desktop && j.content_urls.desktop.page) || '', thumb: j.thumbnail && j.thumbnail.source, canonical: j.titles && j.titles.canonical }; }
+    if (r.ok){ const j = await r.json();
+      if (j.type === 'disambiguation'){   // several things share the name: offer them, let the topic say which
+        try{ const o = await (await fetch('https://en.wikipedia.org/w/api.php?action=opensearch&search=' + encodeURIComponent(name.replace(/^[@#"]|"$/g, '').trim()) + '&limit=7&namespace=0&format=json&origin=*', { headers: WIKI_UA })).json();
+          v = { disambiguation: true, options: (o[1] || []).map((t, i) => ({ title: t, url: (o[3] || [])[i] || '' })).filter(x => !/disambiguation/i.test(x.title)).slice(0, 6) }; }catch(e){ v = { disambiguation: true, options: [] }; }
+      }
+      if (j.type !== 'disambiguation' && j.extract) v = { title: j.title, extract: j.extract, url: (j.content_urls && j.content_urls.desktop && j.content_urls.desktop.page) || '', thumb: j.thumbnail && j.thumbnail.source, canonical: j.titles && j.titles.canonical }; }
   }catch(e){}
   store.set(key, { t: Date.now(), v }); return v;
 }
@@ -2029,7 +2035,7 @@ async function renderDossier(){
     [items, graph, wiki, BRIEF, SIGNALS] = await Promise.all([
       api('/api/search?' + new URLSearchParams({ topic: T.id, topic_all: '1', limit: 2000, fuzzy: '0', synonyms: '0' })).then(r => r.items || []),
       api('/api/graph?' + new URLSearchParams({ topic: T.id, kinds: 'account,hashtag,word,entity', max: 140 })).catch(() => ({ nodes: [], edges: [] })),
-      isPerson ? Promise.resolve(null) : wikiSummary(seed),          // an encyclopedia article for a name is almost always someone else
+      isPerson ? Promise.resolve(null) : wikiSummary((T.settings || {}).sense || seed),          // an encyclopedia article for a name is almost always someone else; a chosen sense wins
       api('/api/topics/' + T.id + '/brief').catch(() => null),
       api('/api/topics/' + T.id + '/signals').catch(() => null),
     ]);
@@ -2078,6 +2084,7 @@ async function renderDossier(){
       </div>
       <p class="note" style="margin-top:6px">Integrate pulls each associated account's recent posts in (no rating needed) and opens the web for this topic: the people around it and what they connect on. Your 👍/👎 then teach it how the edges relate.</p>
     </div>
+    ${wiki && wiki.disambiguation ? `<div class="dcard span2" style="border-color:rgba(var(--acc-rgb),.5)"><div class="dh">Which one? <span class="note">several things are called "${esc(seed)}"</span></div><p class="note">Pick the one you mean. Its own words become soft keywords, so posts about the others fall away.</p><div class="chips wrap">${(wiki.options || []).map(o => `<button class="chip" data-sense="${esc(o.title)}">${esc(o.title)}</button>`).join('') || '<span class="note">Wikipedia lists nothing to pick from. Add soft keywords in ⋯ settings instead.</span>'}</div></div>` : ''}
     ${inShortCard(circles, wiki)}
     ${signalCards()}
     <div class="dcard"><div class="dh">Where it's talked about</div>${plats.length ? plats.map(([p, c]) => `<div class="drow"><span class="k">${esc(p)}</span><span class="bar"><i style="width:${pct(c)}%"></i></span><span class="v">${fmtN(c)} · ${pct(c)}%</span></div>`).join('') : '<p class="note">Nothing collected yet.</p>'}</div>
@@ -2097,6 +2104,11 @@ async function renderDossier(){
   </div>`;
   $$('[data-prof]', body).forEach(b => b.onclick = () => openProfile(b.dataset.prof));
   $$('[data-writer]', body).forEach(b => b.onclick = () => openWriter(b.dataset.writer));
+  $$('[data-sense]', body).forEach(b => b.onclick = async () => { const title = b.dataset.sense; b.disabled = true;
+    try{ const w = await wikiSummary(title); const words = w && w.extract ? [...new Set(w.extract.toLowerCase().match(/[a-z][a-z-]{4,}/g) || [])].filter(x => !STOPWORDS.has(x) && !T.seeds.join(' ').toLowerCase().includes(x)).slice(0, 8) : [];
+      const soft = [...new Set(((T.settings || {}).soft || []).concat(words))];
+      T = await api('/api/topics/' + T.id, { method: 'PATCH', body: { settings: { sense: title, soft } } }); store.set('wiki.' + seed.toLowerCase(), { t: Date.now(), v: w });
+      await api('/api/topics/' + T.id + '/rescore', { method: 'POST' }).catch(() => {}); toast('✓ ' + title + (words.length ? ' · soft keywords: ' + words.slice(0, 4).join(', ') + '…' : '')); renderDossier(); }catch(e){ toast(e.message); b.disabled = false; } });
   $$('[data-anti]', body).forEach(b => b.onclick = async () => { const terms = b.dataset.anti.split('|').filter(Boolean); const anti = [...new Set(((T.settings || {}).anti || []).concat(terms))];
     try{ T = await api('/api/topics/' + T.id, { method: 'PATCH', body: { settings: { anti } } }); await api('/api/topics/' + T.id + '/rescore', { method: 'POST' }).catch(() => {}); toast('✕ ' + terms.join(', ') + ' kept out'); renderDossier(); }catch(e){ toast(e.message); } });
   $$('[data-rename]', body).forEach(b => b.onclick = async () => { const [from, to] = b.dataset.rename.split('|'); const seeds = (T.seeds || []).map(s => s.replace(new RegExp(from, 'ig'), to)); if (!seeds.some((s, i) => s !== T.seeds[i])) seeds.push(to);
@@ -3208,7 +3220,7 @@ async function renderSources(){
       <div class="h"><div class="name">${esc(s.name)}</div><label class="switch"><input type="checkbox" data-en="${s.id}" ${s.enabled ? 'checked' : ''} aria-label="Enabled"><span></span></label></div>
       <div class="row wrap" style="margin-top:6px;gap:6px"><span class="kind">${esc(s.kind)}</span><span class="kind" style="color:${s.searchable ? 'var(--acc)' : 'var(--acc4)'}">${s.searchable ? 'searches' : 'follows'}</span>${s.needs_login ? '<span class="kind" style="color:var(--acc3)">login</span>' : ''}${s.options && s.options.topic ? '<span class="kind">one topic</span>' : ''}</div>
       ${s.template ? `<div class="tpl">${esc(s.template)}</div>` : ''}
-      <div class="st${s.last_error ? ' err' : ''}">${(s.auto_off || (s.options && s.options.auto_off)) ? '⏻ switched itself off after an error' + (s.last_error ? ': ' + esc(s.last_error) : '') + '. Flip the switch to try it again.' : s.last_error ? '✕ ' + esc(s.last_error) : s.last_run ? 'last run ' + ago(s.last_run) + ' ago · ' + s.last_found + ' found' : 'not used yet'}</div>
+      <div class="st${s.last_error ? ' err' : ''}">${!(s.auto_off || (s.options && s.options.auto_off)) && (s.fails || (s.options && s.options.fails)) ? '⚠ ' + (s.fails || s.options.fails) + ' of 3 failing runs' + (s.last_error ? ' · ' + esc(s.last_error) : '') + ' · ' : ''}${!(s.auto_off || (s.options && s.options.auto_off)) && !(s.fails || (s.options && s.options.fails)) && s.last_ok ? '✓ worked ' + ago(s.last_ok) + ' ago · ' : ''}${(s.auto_off || (s.options && s.options.auto_off)) ? '⏻ switched itself off after an error' + (s.last_error ? ': ' + esc(s.last_error) : '') + '. Flip the switch to try it again.' : s.last_error ? '✕ ' + esc(s.last_error) : s.last_run ? 'last run ' + ago(s.last_run) + ' ago · ' + s.last_found + ' found' : 'not used yet'}</div>
       <div class="row" style="margin-top:8px">${s.needs_login && s.last_error ? '<button class="btn sm pri" data-login>SET UP LOGIN</button>' : ''}<button class="btn sm" data-test="${s.id}">TEST</button><button class="btn sm" data-edit="${s.id}">EDIT</button><div class="grow"></div><button class="btn sm danger" data-del="${s.id}" aria-label="Remove">✕</button></div>
     </div>`).join('') : '<div class="empty">NO SOURCES. TAP A ONE-TAP SOURCE ABOVE.</div>';
     $$('[data-en]').forEach(c => c.onchange = async () => { try{ await api('/api/sources/' + c.dataset.en, { method: 'PATCH', body: { enabled: c.checked } }); }catch(e){ toast(e.message); } });

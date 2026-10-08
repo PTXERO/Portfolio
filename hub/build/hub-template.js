@@ -50,6 +50,16 @@ async function activeToday(svc) {                 // identities that touched the
   } catch (e) { activeCache = { n: 1, t: Date.now() }; }
   return activeCache.n;
 }
+const youngCache = new Map();                     // uid → created_at ms (per isolate)
+async function isYoung(svc, uid) {
+  let born = youngCache.get(uid);
+  if (born === undefined) {
+    try { const r = await fetch(`${SUPABASE}/rest/v1/hub_users?uid=eq.${encodeURIComponent(uid)}&select=created_at`, { headers: svc }); const row = r.ok ? (await r.json())[0] : null; born = row && row.created_at ? Date.parse(row.created_at) : Date.now(); }
+    catch (e) { born = Date.now(); }
+    youngCache.set(uid, born);
+  }
+  return Date.now() - born < 86400000;
+}
 function dailyCaps(L, active) {
   const share = (pool, floor, ceil) => Math.max(floor, Math.min(ceil, Math.floor(pool / Math.max(1, active))));
   return { fetch: share(L.pool, L.fetch, L.max_fetch), writes: share(L.write_pool, L.writes, L.max_writes), active };
@@ -142,7 +152,10 @@ async function quota(env, svc, px, scope, bytes) {
   const u = await touch(svc, px.key, 1, scope === 'write' ? 1 : 0, bytes || 0);
   if (!u) return null;
   const caps = px.verified ? dailyCaps(L, await activeToday(svc)) : null;
-  const cap = scope === 'fetch' ? (px.verified ? caps.fetch : L.anon_fetch) : caps.writes;
+  let cap = scope === 'fetch' ? (px.verified ? caps.fetch : L.anon_fetch) : caps.writes;
+  // an id made today gets the floor, not a full share: minting a hundred ids on day one buys nothing extra
+  const floor = scope === 'fetch' ? L.fetch : L.writes;
+  if (px.verified && cap > floor && (scope === 'fetch' ? u.calls : u.writes) > floor && await isYoung(svc, px.uid)) cap = floor;
   const used = scope === 'fetch' ? u.calls : u.writes;
   if (used > cap) return { status: 429, body: { error: 'quota', scope, used, limit: cap, resets_at: resetsAt(), hint: px.verified ? 'Daily limit on the shared hub (today\'s pool split among ' + (caps ? caps.active : 1) + ' active id' + (caps && caps.active === 1 ? '' : 's') + '). Your own hub has no limits, see the /hub/ guide.' : 'Anonymous limit. A PTXERO ID (free, no account) gets more; your own hub has no limits.' }, retry: Math.max(60, Math.round((new Date(resetsAt()) - Date.now()) / 1000)) };
   if (px.verified) fetch(`${SUPABASE}/rest/v1/hub_users`, { method: 'POST', headers: { ...svc, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ uid: px.uid, pubkey: px.pub, last_seen: new Date().toISOString() }) }).catch(() => {});

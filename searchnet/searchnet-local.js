@@ -295,7 +295,7 @@
     if (s.fails < 3) { await saveSources(all); return false; }                      // three runs in a row, then off
     s.enabled = false; s.auto_off = Math.floor(Date.now() / 1000); s.fails = 0; await saveSources(all); return true;
   }
-  async function markWorked(id) { const all = await listSources(); const s = all.find((x) => x.id === id); if (s && (s.fails || s.last_error)) { s.fails = 0; s.last_error = ''; await saveSources(all); } }
+  async function markWorked(id) { const all = await listSources(); const s = all.find((x) => x.id === id); if (!s) return; const t = Math.floor(Date.now() / 1000); if (s.fails || s.last_error || !s.last_ok || t - s.last_ok > 600) { s.fails = 0; s.last_error = ''; s.last_ok = t; await saveSources(all); } }
   async function saveSources(arr) { await idb.put('kv', { k: 'sources', v: arr }); return arr; }
 
   // ── jobs (in-memory, mirror the server's job shape) ───────────

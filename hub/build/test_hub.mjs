@@ -89,6 +89,17 @@ r = await call('GET', '/search?source=bluesky&q=cat', null, undefined, { 'CF-Con
 r = await call('GET', '/search?source=bluesky&q=cat', null, undefined, { 'CF-Connecting-IP': '9.9.9.9' }); ok(r.status === 429 && /Anonymous/.test(r.j.hint), 'anonymous search #2 → 429 (anon_fetch 1)');
 let last; for (let i = 0; i < 4; i++) last = await call('GET', '/search?source=bluesky&q=cat', me); ok(last.status === 429 && /pool/.test(last.j.hint), 'identity: 4th search → 429 (fetch 3)');
 DB.hub_usage = {}; // a new day
+// 6a. a day-old id gets a full share of the pool; an id made today gets the floor
+{ DB.hub_usage = {}; const envY = Object.assign({}, env, { LIMITS: JSON.stringify({ fetch: 2, max_fetch: 6, pool: 60, writes: 9, max_writes: 9, write_pool: 90, anon_fetch: 1 }) });
+  const callY = async (path, id) => { const rr = await W.fetch(new Request('https://hub.test' + path, { headers: await id.headers('GET', path.split('?')[0]) }), envY); return rr.status; };
+  const fresh = await ident('NEW1'); await W.fetch(new Request('https://hub.test/id', { method: 'POST', headers: await fresh.headers('POST', '/id'), body: '{}' }), envY);
+  let codes = []; for (let i = 0; i < 4; i++) codes.push(await callY('/search?source=bluesky&q=young' + i, fresh));
+  ok(codes.slice(0, 2).every((c) => c === 200) && codes[2] === 429, 'an id made today stops at the floor (2) although the pool would give 6: ' + codes.join(','));
+  DB.hub_users.NEW1.created_at = new Date(Date.now() - 2 * 86400000).toISOString(); DB.hub_usage = {};
+  const W2 = (await import(new URL('../hub-worker.js?fresh', import.meta.url).href)).default;   // a new isolate: the age cache is empty
+  codes = []; for (let i = 0; i < 7; i++) { const rr = await W2.fetch(new Request('https://hub.test/search?source=bluesky&q=old' + i, { headers: await fresh.headers('GET', '/search') }), envY); codes.push(rr.status); }
+  ok(codes.slice(0, 6).every((c) => c === 200) && codes[6] === 429, 'two days later the same id gets its full share (6): ' + codes.join(','));
+  DB.hub_usage = {}; }
 // 6b. shared result cache: a search someone already made recently is free for the next asker
 { const store = new Map(); globalThis.caches = { default: { match: async (req) => { const v = store.get(req.url); return v ? new Response(v) : undefined; }, put: async (req, res) => { store.set(req.url, await res.text()); } } };
   r = await call('GET', '/search?source=bluesky&q=dog', me); const m1 = await call('GET', '/me', me);

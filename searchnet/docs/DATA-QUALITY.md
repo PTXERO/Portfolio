@@ -246,3 +246,10 @@ A source now needs three failing runs in a row before it switches off, and a fai
 - The dossier header now says "N collected · M in the topic" when they differ, so the counts across cards agree with what they count.
 - Every storyline has ✕ not this: its words become anti-keywords and the posts drop out.
 - A weather topic carries a line pointing to the National Hurricane Center, the National Weather Service and local officials for anything safety-related.
+
+## Update: hub 1.9, which one, source health, injection check
+
+- Worker 1.9: Bluesky through api.bsky.app (the public AppView began refusing unauthenticated searches), Reddit falls back to reddit's own search feed when PullPush rate-limits, GDELT retries once on 429 and is cached for half an hour. On the shared hub an id made today gets the floor share for its first day, so minting ids buys nothing.
+- Which one: when Wikipedia says a seed is several things, the dossier asks, with the options; the pick is remembered, its article's words become soft keywords, and the card shows that article.
+- SOURCES rows say when each source last worked, or how many of its three strikes it has.
+- A browser check feeds script tags, event handlers and javascript: links through a source and visits every view: nothing runs, nothing survives as markup.
