@@ -1,5 +1,5 @@
 // Drive the hub Worker in Node with a fake Supabase (in-memory tables) and a real ECDSA key, like the browser lib does.
-const DB = { profiles: {}, hub_users: {}, hub_usage: {}, hub_blobs: {}, posts: [], likes: [], hub_topics: {}, hub_votes: {} };
+const DB = { profiles: {}, hub_users: {}, hub_usage: {}, hub_blobs: {}, posts: [], likes: [], hub_topics: {}, hub_votes: {}, hub_topic_items: {} };
 const today = () => new Date().toISOString().slice(0, 10);
 const parseQ = (qs) => Object.fromEntries([...new URLSearchParams(qs)].map(([k, v]) => [k, v]));
 globalThis.fetch = async (u, opts = {}) => {
@@ -32,6 +32,12 @@ globalThis.fetch = async (u, opts = {}) => {
     if (m === 'POST') { (Array.isArray(body) ? body : [body]).forEach((v) => DB.hub_votes[v.topic_id + '|' + v.uid + '|' + v.item_id] = v); return ok([]); }
     if (m === 'DELETE') { Object.keys(DB.hub_votes).forEach((k) => { if (DB.hub_votes[k].uid === uid) delete DB.hub_votes[k]; }); return ok([]); }
     return ok(Object.values(DB.hub_votes).filter((v) => (!tid || v.topic_id === tid) && (!uid || v.uid === uid)));
+  }
+  if (t === 'hub_topic_items') {
+    const tid = (q.topic_id || '').replace('eq.', ''); const gt = q.ts && q.ts.startsWith('gt.') ? +q.ts.slice(3) : 0; const lt = q.ts && q.ts.startsWith('lt.') ? +q.ts.slice(3) : 0;
+    if (m === 'POST') { (Array.isArray(body) ? body : [body]).forEach((r) => DB.hub_topic_items[r.topic_id + '|' + r.item_id] = r); return ok([]); }
+    if (m === 'DELETE') { Object.keys(DB.hub_topic_items).forEach((k) => { if (lt && DB.hub_topic_items[k].ts < lt) delete DB.hub_topic_items[k]; }); return ok([]); }
+    return ok(Object.values(DB.hub_topic_items).filter((r) => (!tid || r.topic_id === tid) && (!gt || r.ts > gt)).sort((a, b) => b.ts - a.ts));
   }
   if (t === 'posts') { if (m === 'POST') { const row = Object.assign({ created_at: new Date().toISOString() }, body); DB.posts.push(row); return ok([row]); } if (m === 'DELETE') { const uid = (q.uid || '').replace('eq.', ''); DB.posts = DB.posts.filter((p) => p.uid !== uid); return ok([]); } const uid = (q.uid || '').replace('eq.', ''); return ok(DB.posts.filter((p) => !uid || p.uid === uid)); }
   if (['likes', 'comments', 'follows', 'reposts', 'notifications', 'presence', 'reports', 'renders'].includes(t)) return ok([]);
@@ -107,6 +113,10 @@ DB.hub_usage = {}; // a new day
   r = await callE('POST', '/topics/isaias01/votes', other2, { votes: [{ item_id: 'x:1', label: 1, ts: 5 }, { item_id: 'x:2', label: -1, ts: 5 }] }); ok(r.status === 200 && r.j.saved === 2, 'another id joins by rating');
   r = await callE('POST', '/topics/isaias01/votes', me, { votes: [{ item_id: 'x:1', label: 1, ts: 6 }] });
   r = await callE('GET', '/topics/isaias01', other2); ok(r.status === 200 && r.j.pool['x:1'].pos === 2 && r.j.pool['x:2'].neg === 1 && r.j.people === 2, 'GET /topics/<id> pools the ratings per item (x:1 👍×2, x:2 👎×1), 2 people');
+  r = await callE('POST', '/topics/isaias01/items', other2, { items: [{ id: 'x:1', platform: 'x', text: 'a'.repeat(3000), transcript: 'never', likes: 3 }, { id: 'x:2', platform: 'x', text: 'two' }] });
+  ok(r.status === 200 && r.j.saved === 2 && DB.hub_topic_items['isaias01|x:1'].data.text.length === 1500 && !('transcript' in DB.hub_topic_items['isaias01|x:1'].data), 'posts go up in the compact form (text trimmed, no transcript)');
+  r = await callE('GET', '/topics/isaias01/items', null); ok(r.status === 200 && r.j.items.length === 2 && r.j.ts > 0, 'anyone can pull the topic\'s posts');
+  r = await callE('GET', '/topics/isaias01/items?since=' + r.j.ts, null); ok(r.status === 200 && r.j.items.length === 0, 'since= keeps the next pull empty');
   r = await callE('PUT', '/topics/isaias01', other2, { name: 'hijack', seeds: ['x'] }); ok(r.status === 403, 'someone else cannot rewrite it (403)');
   r = await callE('DELETE', '/topics/isaias01', other2); ok(r.status === 403, 'someone else cannot delete it (403)');
   r = await callE('DELETE', '/topics/isaias01', admin); ok(r.status === 200 && DB.hub_topics.isaias01.deleted === true && Object.keys(DB.hub_votes).length === 3, 'the hub owner can archive it; the ratings stay');

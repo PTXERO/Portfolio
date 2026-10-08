@@ -200,6 +200,7 @@ GET  /topics                         open SearchNet topics on this hub, who star
 GET  /topics/&lt;id&gt;                    one topic with its pooled ratings per post
 PUT  /topics/&lt;id&gt;  DELETE /topics/&lt;id&gt;   publish (signed; starter or owner) · archive (ratings stay) · never a named person
 POST /topics/&lt;id&gt;/votes               pool your ratings for it (signed)
+GET/POST /topics/&lt;id&gt;/items          the posts in it, compact form; since= for what is new (POST signed)
 POST /profile /post /like /comment /follow /repost /report /delete /share   Social + ASCII (signed or legacy secret)
 GET  /r/&lt;slug&gt; /p/&lt;id&gt;                 rich link previews · GET /status · GET /presence</pre>
     <p class="note">Signed = headers <code>X-PX-Uid · X-PX-Pub · X-PX-Ts · X-PX-Nonce · X-PX-Sig</code> (ECDSA P-256 over <code>uid\nts\nnonce\nMETHOD\npath</code>, 5-minute window). <code>ptxero-id.js</code> does this for the apps. The Worker ties the first key it sees to the handle and rejects any other.</p>

@@ -1138,7 +1138,7 @@ async function renderTopics(){
       <div class="name">${esc(t.name)}</div>
       <div class="seeds">${t.settings.visibility === 'device' ? '🔒 this device only · ' : (t.settings.shared || {}).started_by ? '⇅ open · started by @' + esc(t.settings.shared.started_by) + ((t.settings.shared.people || 0) > 1 ? ' · ' + t.settings.shared.people + ' people' : '') + ' · ' : ''}${t.seeds.map(esc).join(' · ')} · ${BREADTH[t.settings.breadth] || ''}${t.settings.refresh_hours > 0 ? ' · ⟳ ' + t.settings.refresh_hours + 'h' : ''}</div>
       ${sigBadges(t.settings.signal)}
-      <div class="nums"><span class="todo"><b>${fmtN(c.unrated)}</b> to review</span><span><b>${fmtN(c.pos)}</b> 👍</span><span><b>${fmtN(c.neg)}</b> 👎</span><span>${t.running ? '<span class="spinner"></span> searching' : t.last_run ? 'updated ' + ago(t.last_run) + ' ago' : 'not run yet'}</span></div>
+      <div class="nums">${(t.settings.shared || {}).from_hub ? `<span><b>${fmtN(t.settings.shared.from_hub)}</b> from the hub</span>` : ''}<span class="todo"><b>${fmtN(c.unrated)}</b> to review</span><span><b>${fmtN(c.pos)}</b> 👍</span><span><b>${fmtN(c.neg)}</b> 👎</span><span>${t.running ? '<span class="spinner"></span> searching' : t.last_run ? 'updated ' + ago(t.last_run) + ' ago' : 'not run yet'}</span></div>
       <button class="btn sm run" data-run="${t.id}" ${t.running ? 'disabled' : ''} aria-label="Find more">▶</button>
     </div>`;
   }).join('');
@@ -1173,9 +1173,11 @@ async function syncLibrary(why){
 }
 // ── open topics live on the hub for everyone on it. Yours are published there, pooled ratings come back,
 //    and the TOPICS view lists what others started so you can join. A topic about a named person never goes.
-let hubTopicsCache = [];
+let hubTopicsCache = [], openSyncP = null;
 function myUid(){ return window.PX ? PX.suffix() : ''; }
-async function syncOpenTopics(){
+// runs one at a time: two overlapping passes would each write the topic's hub bookkeeping and one would lose
+async function syncOpenTopics(){ while (openSyncP) await openSyncP.catch(() => {}); openSyncP = syncOpenTopicsNow().finally(() => { openSyncP = null; }); return openSyncP; }
+async function syncOpenTopicsNow(){
   const px = window.PX; if (!px || !BK || !LOCAL || px.host().mode === 'local') return;
   const idb = BK.idb; const me = myUid(); const now_ = Math.floor(Date.now() / 1000);
   let list; try{ list = (await PX.json('/topics')).topics || []; }catch(e){ return; }      // an older hub: no open topics there
@@ -1194,28 +1196,41 @@ async function syncOpenTopics(){
       const votes = (await idb.all('votes')).filter(v => v.topic_id === t.id);
       const mine = votes.filter(v => v.labeled_at && v.from !== 'hub' && v.labeled_at > (sh.votes_pushed || 0));
       if (mine.length){ await PX.json('/topics/' + encodeURIComponent(t.id) + '/votes', { method: 'POST', body: { votes: mine.map(v => ({ item_id: v.item_id, label: v.label, ts: v.labeled_at })) } }); sh.votes_pushed = now_; }
+      // the posts: mine up (what is in the topic here, not yet sent), everyone's down (new since my last pull)
+      try{
+        const tau = BK.learn.threshold(votes); const inTopic = votes.filter(v => (BK.learn.isMember(v, tau) || v.label) && !(v.found_by || []).includes('hub'));   // what is in, plus what you rated out (the pool needs the 👎 too)
+        const sendIds = inTopic.filter(v => (v.added || 0) > (sh.items_pushed || 0) || (v.labeled_at || 0) > (sh.items_pushed || 0)).map(v => v.item_id).slice(0, 300);
+        const send = (await Promise.all(sendIds.map(id => idb.get('items', id)))).filter(Boolean);
+        if (send.length){ const r = await PX.json('/topics/' + encodeURIComponent(t.id) + '/items', { method: 'POST', body: { items: send } }); sh.items_pushed = r.ts || now_; }
+        const got = await PX.json('/topics/' + encodeURIComponent(t.id) + '/items?since=' + (sh.items_pulled || 0));
+        let added = 0; const have = {}; votes.forEach(v => have[v.item_id] = v);
+        for (const it of got.items || []){ if (!it || !it.id) continue; if (!(await idb.get('items', it.id))){ await idb.put('items', Object.assign({ collected_at: now_ }, it)); added++; }
+          if (!have[it.id]){ await idb.put('votes', { k: t.id + '|' + it.id, topic_id: t.id, item_id: it.id, label: 0, score: 0, why: {}, added: now_, found_by: ['hub'] }); added++; } }
+        if (got.ts) sh.items_pulled = got.ts;
+        if (added){ sh.from_hub = (sh.from_hub || 0) + added; await BK.request('/api/topics/' + t.id + '/rescore', { method: 'POST' }).catch(() => {}); }
+      }catch(e){ /* an older hub, or nothing yet */ }
       const full = await PX.json('/topics/' + encodeURIComponent(t.id)).catch(() => null);
       if (full && full.pool){
-        let applied = 0; const own = {}; votes.forEach(v => own[v.item_id] = v);
+        let applied = 0; const own = {}; (await idb.all('votes')).filter(v => v.topic_id === t.id).forEach(v => own[v.item_id] = v);
         for (const iid in full.pool){ const q = full.pool[iid]; const lab = q.pos > q.neg ? 1 : q.neg > q.pos ? -1 : 0; const v = own[iid];
           if (v && v.labeled_at && v.from !== 'hub') continue;                       // your own rating always wins on your device
           if (!lab){ if (v && v.from === 'hub'){ await idb.del('votes', v.k); applied++; } continue; }
           if (v && v.from === 'hub' && v.label === lab) continue;
-          await idb.put('votes', Object.assign(v || { k: t.id + '|' + iid, topic_id: t.id, item_id: iid, score: 0, why: {}, added: now_, found_by: [] }, { label: lab, labeled_at: now_, from: 'hub', pool: q })); applied++; }
+          await idb.put('votes', Object.assign(v || { k: t.id + '|' + iid, topic_id: t.id, item_id: iid, score: 0, why: {}, added: now_, found_by: ['hub'] }, { label: lab, labeled_at: now_, from: 'hub', pool: q })); applied++; }
         sh.people = full.people; sh.ratings = full.ratings; sh.pulled = now_;
         if (applied) await BK.request('/api/topics/' + t.id + '/rescore', { method: 'POST' }).catch(() => {});
       }
       if (JSON.stringify(sh) !== JSON.stringify(st.shared || {})) await BK.request('/api/topics/' + t.id, { method: 'PATCH', body: { settings: { shared: sh } } });
     }catch(e){ /* this topic next time */ }
   }
-  if (route.view === 'topics'){ await loadTopics(); renderHubTopics(); }
+  if (route.view === 'topics') renderTopics();
 }
 async function joinHubTopic(id){
   const h = hubTopicsCache.find(x => x.id === id); if (!h) return;
   let full = null; try{ full = await PX.json('/topics/' + encodeURIComponent(id)); }catch(e){ return toast(e.message); }
   const st = full.settings || {};
-  const t = await api('/api/topics', { method: 'POST', body: { id, name: full.name, seeds: full.seeds, settings: { visibility: 'open', soft: st.soft || [], anti: st.anti || [], breadth: st.breadth || 3, media: st.media || 'everything', window: st.window || 'auto', shared: { started_by: full.started_by, joined: Math.floor(Date.now() / 1000), people: full.people, ratings: full.ratings } } } });
-  toast('Joined · started by @' + (full.started_by || '?') + ' · ' + full.people + ' people'); await loadTopics(); renderTopics(); syncOpenTopics().catch(() => {});
+  const t = await api('/api/topics', { method: 'POST', body: { id, run: false, name: full.name, seeds: full.seeds, settings: { visibility: 'open', soft: st.soft || [], anti: st.anti || [], breadth: st.breadth || 3, media: st.media || 'everything', window: st.window || 'auto', shared: { started_by: full.started_by, joined: Math.floor(Date.now() / 1000), people: full.people, ratings: full.ratings } } } });
+  toast('Joined · started by @' + (full.started_by || '?') + ' · ' + full.people + ' people · pulling its posts'); await loadTopics(); renderTopics(); await syncOpenTopics().catch(() => {});   // the posts and pooled ratings arrive now; FIND MORE adds your own fetch
   return t;
 }
 function renderHubTopics(){

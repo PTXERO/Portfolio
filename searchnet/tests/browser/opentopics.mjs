@@ -18,13 +18,15 @@ const mockHub = async (route) => {
   if (sm && req.method() === 'GET') return hub.stores[uid] ? json({ data: hub.stores[uid] }) : json({ error: 'not found' }, 404);
   if (sm && req.method() === 'PUT') { hub.stores[uid] = JSON.parse(req.postData() || '{}'); return json({ ok: true, bytes: 10 }); }
   if (u.pathname === '/search') return json({ items: u.searchParams.get('source') === 'mastodon' ? [post(1, 'storm', 'Isaias storm surge hits Tampa Bay #isaias'), post(2, 'cleanup', 'Isaias cleanup crews out #isaias'), post(3, 'other', 'Totally unrelated post #isaias')] : [] });
-  const tm = u.pathname.match(/^\/topics(?:\/([A-Za-z0-9_-]+)(?:\/(votes))?)?$/);
+  const tm = u.pathname.match(/^\/topics(?:\/([A-Za-z0-9_-]+)(?:\/(votes|items))?)?$/);
   if (tm) {
     const tid = tm[1], sub = tm[2]; const stat = (id) => { const vs = Object.values(hub.votes).filter((v) => v.topic_id === id); return { ratings: vs.length, people: new Set([hub.topics[id].uid, ...vs.map((v) => v.uid)]).size }; };
     if (req.method() === 'GET' && !tid) return json({ topics: Object.values(hub.topics).filter((t) => !t.deleted).map((t) => Object.assign({ id: t.id, name: t.name, seeds: t.seeds, kind: t.kind, started_by: t.uid, updated_at: new Date().toISOString() }, stat(t.id))) });
     if (req.method() === 'GET' && tid && !sub) { const t = hub.topics[tid]; if (!t || t.deleted) return json({ error: 'not found' }, 404); const pool = {}; Object.values(hub.votes).filter((v) => v.topic_id === tid).forEach((v) => { const q = pool[v.item_id] = pool[v.item_id] || { pos: 0, neg: 0 }; if (v.label > 0) q.pos++; else if (v.label < 0) q.neg++; }); return json(Object.assign({ id: t.id, name: t.name, seeds: t.seeds, settings: t.settings, kind: t.kind, started_by: t.uid, pool }, stat(tid))); }
     if (req.method() === 'PUT') { const b = JSON.parse(req.postData() || '{}'); if (b.kind === 'person') return json({ error: 'never' }, 403); const have = hub.topics[tid]; if (have && have.uid !== uid) return json({ error: 'started by someone else' }, 403); hub.topics[tid] = { id: tid, uid: have ? have.uid : uid, name: b.name, seeds: b.seeds, settings: b.settings || {}, kind: b.kind, deleted: false }; return json({ ok: true, id: tid, started_by: hub.topics[tid].uid }); }
     if (req.method() === 'DELETE') { const have = hub.topics[tid]; if (!have) return json({ error: 'not found' }, 404); if (have.uid !== uid) return json({ error: 'no' }, 403); have.deleted = true; return json({ ok: true }); }
+    if (req.method() === 'GET' && sub === 'items') { const since = +(u.searchParams.get('since') || 0); const rows = Object.values(hub.items || {}).filter((r) => r.topic_id === tid && r.ts > since); return json({ id: tid, items: rows.map((r) => r.data), ts: rows.length ? Math.max(...rows.map((r) => r.ts)) : since }); }
+    if (req.method() === 'POST' && sub === 'items') { const b = JSON.parse(req.postData() || '{}'); const ts = Math.floor(Date.now() / 1000) + Object.keys(hub.items || {}).length; hub.items = hub.items || {}; (b.items || []).forEach((it) => hub.items[tid + '|' + it.id] = { topic_id: tid, item_id: it.id, data: it, ts }); return json({ ok: true, saved: (b.items || []).length, ts }); }
     if (req.method() === 'POST' && sub === 'votes') { const b = JSON.parse(req.postData() || '{}'); (b.votes || []).forEach((v) => hub.votes[tid + '|' + uid + '|' + v.item_id] = { topic_id: tid, uid, item_id: v.item_id, label: v.label }); return json({ ok: true, saved: (b.votes || []).length }); }
   }
   return json({ error: 'unmocked ' + u.pathname }, 404);
@@ -52,9 +54,14 @@ await api(A, '/api/topics/' + t.id + '/vote', { method: 'POST', body: { item_id:
 await api(A, '/api/topics/' + t.id + '/vote', { method: 'POST', body: { item_id: 'mastodon:3', label: -1 } });
 await syncOpen(A); await A.waitForTimeout(300);
 ok(Object.keys(hub.votes).length === 2, 'A\'s two ratings are on the hub');
+ok(Object.keys(hub.items || {}).length >= 2, 'the posts A pulled into the topic are on the hub (' + Object.keys(hub.items || {}).length + ')');
 await syncOpen(B); await B.waitForTimeout(500);
 const vB = await B.evaluate((tid) => window.SearchNetLocal.idb.all('votes').then((vs) => vs.filter((v) => v.topic_id === tid)), t.id);
 ok(vB.some((v) => v.item_id === 'mastodon:1' && v.label === 1 && v.from === 'hub') && vB.some((v) => v.item_id === 'mastodon:3' && v.label === -1 && v.from === 'hub'), 'B\'s copy carries the pooled ratings, marked as the hub\'s (' + vB.map((v) => v.item_id + ':' + v.label + (v.from ? '/' + v.from : '')).join(', ') + ')');
+const itemsB = await B.evaluate(() => window.SearchNetLocal.idb.all('items')); ok(itemsB.some((it) => it.id === 'mastodon:1') && itemsB.some((it) => it.id === 'mastodon:3'), 'B now holds the posts without fetching (' + itemsB.length + ' in its library)');
+const feedB = await api(B, '/api/topics/' + t.id + '/feed?view=review&limit=20'); ok((feedB.items || []).length >= 1, 'B\'s review is not empty (' + (feedB.items || []).length + ')');
+const gB = await api(B, '/api/graph?' + new URLSearchParams({ topic: t.id, kinds: 'account,hashtag,word,entity', max: 80 })); ok(gB.nodes.length > 0, 'B\'s web is not empty (' + gB.nodes.length + ' nodes)');
+ok(/from the hub/.test(await B.textContent('#topicList')), 'B\'s card says how many posts came from the hub');
 // B disagrees on one: its own rating wins on its device and goes up; A keeps its own
 await api(B, '/api/topics/' + t.id + '/vote', { method: 'POST', body: { item_id: 'mastodon:1', label: -1 } }); await syncOpen(B); await B.waitForTimeout(300);
 const vB2 = await B.evaluate((tid) => window.SearchNetLocal.idb.all('votes').then((vs) => vs.filter((v) => v.topic_id === tid && v.item_id === 'mastodon:1')[0]), t.id);

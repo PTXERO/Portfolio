@@ -197,6 +197,15 @@ create table if not exists hub_votes (
   primary key (topic_id, uid, item_id)
 );
 create index if not exists hub_votes_topic_idx on hub_votes (topic_id);
+create table if not exists hub_topic_items (        -- the posts people pulled into an open topic (compact form), so a joiner starts full
+  topic_id   text not null,
+  item_id    text not null,
+  uid        text not null,                    -- who found it
+  data       jsonb,
+  ts         bigint default 0,
+  primary key (topic_id, item_id)
+);
+create index if not exists hub_topic_items_ts_idx on hub_topic_items (topic_id, ts desc);
 
 -- bring an older profiles table up to date (the first signed request binds the key; afterwards only that key may write)
 alter table profiles add column if not exists pubkey text;
@@ -231,6 +240,7 @@ alter table hub_usage  enable row level security;
 alter table hub_blobs  enable row level security;
 alter table hub_topics enable row level security;
 alter table hub_votes  enable row level security;
+alter table hub_topic_items enable row level security;
 -- Intentionally NO policies: the anon/publishable key gets nothing. The Worker uses the service key.
 
 -- ═══════════════ Part 3 · storage ═══════════════
