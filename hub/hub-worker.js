@@ -26,8 +26,8 @@
  * ───────────────────────────────────────────────────────────────── */
 
 const HUB_VERSION = "2.0";
-const SN_VERSION = "1.9";
-const UA = "SearchNetWorker/1.9 (+https://ptxero.neocities.org/searchnet/; open-source research tool)";
+const SN_VERSION = "1.10";
+const UA = "SearchNetWorker/1.10 (+https://ptxero.neocities.org/searchnet/; open-source research tool)";
 const INVIDIOUS = ["https://yewtu.be", "https://invidious.nerdvpn.de", "https://invidious.jing.rocks"];
 const DEFAULT_SUPABASE = 'https://tfquiunqquuctgkpmiba.supabase.co';
 const DEFAULT_ALLOWED = ['https://ptxero.neocities.org'];
@@ -267,28 +267,38 @@ function snCors(res) {
 function snJson(obj, status = 200) {
   return snCors(new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } }));
 }
-async function fetchRetry(u, init) {           // one retry on a 5xx or a dropped connection
-  let r; try { r = await fetch(u, init); } catch (e) { r = null; }
-  if (!r || r.status >= 500) { await new Promise((x) => setTimeout(x, 600)); r = await fetch(u, init); }
+// no upstream may hang a search: every fetch has a deadline (a site that refuses data-centre addresses often just stalls)
+const FETCH_MS = 10000;
+const withDeadline = (init, ms) => (typeof AbortSignal !== "undefined" && AbortSignal.timeout) ? Object.assign({}, init, { signal: AbortSignal.timeout(ms || FETCH_MS) }) : init;
+async function fetchRetry(u, init, ms) {           // one retry on a 5xx or a dropped connection
+  let r; try { r = await fetch(u, withDeadline(init, ms)); } catch (e) { r = null; }
+  if (!r || r.status >= 500) { await new Promise((x) => setTimeout(x, 600)); try { r = await fetch(u, withDeadline(init, ms)); } catch (e) { throw new Error(`${new URL(u).hostname} → timed out`); } }
   return r;
 }
 // Bluesky's public AppView refuses some unauthenticated calls (403) while api.bsky.app answers them: try both hosts
 async function bskyJSON(xrpc) {
   try { return await getJSON(`https://api.bsky.app/xrpc/${xrpc}`); }
-  catch (e) { return await bskyJSON(`${xrpc}`); }
+  catch (e) { return await getJSON(`https://public.api.bsky.app/xrpc/${xrpc}`); }
 }
-// a rate-limited upstream (429) gets one more try after a short wait
-async function getJSONRetry(u, headers) {
-  try { return await getJSON(u, headers); }
-  catch (e) { if (!/429/.test(String(e && e.message))) throw e; await new Promise((r) => setTimeout(r, 1500)); return await getJSON(u, headers); }
+// a rate-limited upstream (429) gets one more try after a short wait, then a cooldown: for a minute every call to it
+// fails at once instead of waiting on another 429 (the app treats a limit as "not the source's fault" and moves on)
+const COOL_MS = 60000;
+async function cooled(host) { try { const hit = await caches.default.match("https://cooldown.searchnet/" + host); return !!hit; } catch (e) { return false; } }
+async function coolDown(host) { try { await caches.default.put("https://cooldown.searchnet/" + host, new Response("1", { headers: { "Cache-Control": "max-age=" + Math.round(COOL_MS / 1000) } })); } catch (e) { /* no cache here */ } }
+async function getJSONRetry(u, headers, ms) {
+  const host = new URL(u).hostname;
+  if (await cooled(host)) throw new Error(`${host} → HTTP 429 (rate limited, cooling down for a minute)`);
+  try { return await getJSON(u, headers, ms); }
+  catch (e) { if (!/429/.test(String(e && e.message))) throw e; await new Promise((r) => setTimeout(r, 1500));
+    try { return await getJSON(u, headers, ms); } catch (e2) { if (/429/.test(String(e2 && e2.message))) await coolDown(host); throw e2; } }
 }
-async function getJSON(u, headers) {
-  const r = await fetchRetry(u, { headers: { "User-Agent": UA, Accept: "application/json", ...(headers || {}) } });
+async function getJSON(u, headers, ms) {
+  const r = await fetchRetry(u, { headers: { "User-Agent": UA, Accept: "application/json", ...(headers || {}) } }, ms);
   if (!r.ok) throw new Error(`${new URL(u).hostname} → HTTP ${r.status}`);
   return r.json();
 }
-async function getText(u, headers) {
-  const r = await fetchRetry(u, { headers: { "User-Agent": UA, ...(headers || {}) } });
+async function getText(u, headers, ms) {
+  const r = await fetchRetry(u, { headers: { "User-Agent": UA, ...(headers || {}) } }, ms);
   if (!r.ok) throw new Error(`${new URL(u).hostname} → HTTP ${r.status}`);
   return r.text();
 }
@@ -418,13 +428,13 @@ const SOURCES = {
     const gl = (q.region || "US").toUpperCase().slice(0, 2);
     const days = sinceDays(q); const qq = withExtra(q) + (days ? (days <= 30 ? ` when:${days}d` : " after:" + new Date((+q.since) * 1000).toISOString().slice(0, 10)) : "");
     let xml;
-    try { xml = await getText(`https://news.google.com/rss/search?q=${encodeURIComponent(qq)}&hl=en-${gl}&gl=${gl}&ceid=${gl}:en`); }
+    try { xml = await getText(`https://news.google.com/rss/search?q=${encodeURIComponent(qq)}&hl=en-${gl}&gl=${gl}&ceid=${gl}:en`, null, 4000); }
     catch (e) { xml = await getText(`https://www.bing.com/news/search?q=${encodeURIComponent(qq)}&format=rss&count=${Math.min(limit, 100)}`); }   // Google refuses most data-centre addresses; Bing News carries the same wires and papers
     return parseFeed(xml, limit, true, "news").map((it) => Object.assign(it, { id: "news:" + hash(canon(it.url)), url: "https://" + canon(it.url) }));
   },
   // GDELT: a running index of world news articles, searchable back years. Phrases go in quotes.
   async gdelt(q, limit) {
-    const d = await getJSONRetry(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(withExtra(q))}&mode=ArtList&maxrecords=${Math.min(limit, 250)}&format=json&sort=DateDesc&startdatetime=${q.since ? new Date((+q.since) * 1000).toISOString().replace(/[-:T]/g, "").slice(0, 14) : "20170101000000"}`);
+    const d = await getJSONRetry(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(withExtra(q))}&mode=ArtList&maxrecords=${Math.min(limit, 250)}&format=json&sort=DateDesc&startdatetime=${q.since ? new Date((+q.since) * 1000).toISOString().replace(/[-:T]/g, "").slice(0, 14) : "20170101000000"}`, null, 8000);
     return (d.articles || []).map((a) => item({
       id: "news:" + hash(canon(a.url)), platform: "news", media: "post", url: "https://" + canon(a.url),
       author: a.domain || hostOf(a.url), author_name: a.domain || "", text: a.title || "",

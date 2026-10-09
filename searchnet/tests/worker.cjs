@@ -1,7 +1,7 @@
 const fs = require('fs'), vm = require('vm');
 const src = fs.readFileSync(require('path').join(__dirname, '..', 'worker', 'searchnet-worker.js'), 'utf8').replace('export default {', 'const __handler = {');
 const mod = { exports: {} };
-const W = (() => { const ctx = { module: mod, exports: mod.exports, console, URL, URLSearchParams, TextEncoder, TextDecoder, Response: class { constructor(b, o) { this.body = b; this.status = (o || {}).status || 200; this.headers = new Map(Object.entries(((o || {}).headers) || {})); } }, setTimeout, Request: class {}, get fetch() { return globalThis.fetch; } }; vm.createContext(ctx); vm.runInContext(src, ctx); return mod.exports; })();
+const W = (() => { const ctx = { module: mod, exports: mod.exports, console, URL, URLSearchParams, TextEncoder, TextDecoder, Response: class { constructor(b, o) { this.body = b; this.status = (o || {}).status || 200; this.headers = new Map(Object.entries(((o || {}).headers) || {})); } }, setTimeout: (f) => setTimeout(f, 1), Request: class {}, get fetch() { return globalThis.fetch; }, caches: { default: { _m: new Map(), async match(k) { return this._m.get(String(k)) || undefined; }, async put(k, v) { this._m.set(String(k), v); } } }, AbortSignal: { timeout: (ms) => ({ ms }) } }; vm.createContext(ctx); vm.runInContext(src, ctx); return mod.exports; })();
 const ok = (c, m) => console.log((c ? '✓ ' : '✗ ') + m);
 const RSS = (items) => `<?xml version="1.0"?><rss><channel>${items.map((i) => `<item><title>${i.t}</title><link>${i.l}</link><pubDate>Tue, 07 Oct 2026 10:00:00 GMT</pubDate><description>${i.d || ''}</description>${i.s ? `<source url="https://x.example">${i.s}</source>` : ''}</item>`).join('')}</channel></rss>`;
 const calls = [];
@@ -17,6 +17,9 @@ globalThis.fetch = async (u, o) => { calls.push(String(u)); const url = String(u
   if (url.includes('/api/v1/search') && !url.includes('algolia')) return { ok: false, status: 530, headers: { get: () => '' }, text: async () => '', json: async () => ({}) };
   if (url.includes('news.google.com')) return R(RSS([{ t: 'Isaias nears Florida coast', l: 'https://www.tampabay.com/isaias', s: 'Tampa Bay Times' }]), 'text/xml');
   if (url.includes('bing.com')) return R(RSS([{ t: 'John Smith obituary', l: 'https://www.legacy.com/us/obituaries/x/john-smith', d: 'passed away' }]), 'text/xml');
+  if (url.includes('api.bsky.app/xrpc/app.bsky.feed.searchPosts') && !url.includes('public.')) return { ok: false, status: 403, headers: { get: () => '' }, text: async () => '', json: async () => ({}) };
+  if (url.includes('public.api.bsky.app/xrpc/app.bsky.feed.searchPosts')) return R(JSON.stringify({ posts: [{ uri: 'at://did:plc:x/app.bsky.feed.post/3k', cid: 'c', author: { handle: 'wx.bsky.social', displayName: 'WX' }, record: { text: 'Isaias on the radar', createdAt: '2026-08-07T12:00:00Z' }, likeCount: 1, repostCount: 0, replyCount: 0 }] }));
+  if (url.includes('gdeltproject') && globalThis.GDELT_429) return { ok: false, status: 429, headers: { get: () => '' }, text: async () => '', json: async () => ({}) };
   if (url.includes('gdeltproject')) return R(JSON.stringify({ articles: [{ url: 'https://news.example/a', title: 'Storm update', seendate: '20260807T120000Z', domain: 'news.example', language: 'English' }] }));
   if (url.includes('hn.algolia')) return R(JSON.stringify({ hits: [{ objectID: '1', title: 'Hurricane tracking', url: 'https://hn.example', author: 'pg', created_at_i: 1, points: 5, num_comments: 2 }] }));
   if (url.includes('archive.org')) return R(JSON.stringify({ response: { docs: [{ identifier: 'isaias1', title: 'Isaias 2020', description: ['d'], date: '2020-08-01T00:00:00Z', mediatype: 'texts' }] } }));
@@ -47,5 +50,13 @@ globalThis.fetch = async (u, o) => { calls.push(String(u)); const url = String(u
   r = await S.wikipedia({ q: 'hurricane isaias' }, 5); ok(r.length === 1 && r[0].id === 'wikipedia:en:9' && /Hurricane_Isaias/.test(r[0].url), 'wikipedia: article mapped');
   r = await S.reddit({ q: 'isaias', media: 'everything' }, 5); ok(r.length === 1 && /reddit:/.test(r[0].id), 'reddit: falls back to PullPush when reddit.com says 403');
   r = await S.youtube({ q: 'isaias' }, 5); ok(r.length === 1 && r[0].id === 'youtube:abc123' && r[0].duration === 201 && r[0].views === 12000 && r[0].author === 'WX Channel', 'youtube: falls back to the results page when Invidious is down');
+  r = await S.bluesky({ q: 'isaias', media: 'everything' }, 5); ok(r.length === 1 && /bluesky:/.test(r[0].id) && calls.some((c) => c.includes('public.api.bsky.app')), 'bluesky: 403 on api.bsky.app → public.api.bsky.app answers (no loop)');
+  globalThis.GDELT_429 = true; const n0 = calls.length; let err = '';
+  try { await S.gdelt({ q: 'storm' }, 10); } catch (e) { err = e.message; }
+  const tries = calls.slice(n0).filter((c) => c.includes('gdeltproject')).length;
+  ok(/429/.test(err) && tries === 2, 'gdelt: one retry on 429, then it gives up (' + tries + ' tries: ' + err + ')');
+  err = ''; const n1 = calls.length; try { await S.gdelt({ q: 'storm' }, 10); } catch (e) { err = e.message; }
+  ok(/cooling down/.test(err) && calls.slice(n1).filter((c) => c.includes('gdeltproject')).length === 0, 'gdelt: during the cooldown it fails at once, no request (' + err + ')');
+  globalThis.GDELT_429 = false;
   const d2 = await W.discoverSite('https://nofeed.example/'); ok(d2.feeds.length === 1 && d2.feeds[0].url === 'https://nofeed.example/feed' && d2.search_guess, 'discover: falls back to /feed probe and a search guess');
 })();

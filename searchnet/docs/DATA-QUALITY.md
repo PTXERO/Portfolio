@@ -276,3 +276,11 @@ the connection asked for). Same logic in browser mode and on the PC server.
 Update: + DOSSIER from the web. The centred node's bar now offers + DOSSIER: an @account starts its own-feed dossier,
 a writer a named-person dossier (private, as always), a tag, phrase or named thing a plain topic. If a topic with
 that name already exists the button reads OPEN DOSSIER and opens it. Searches start straight away.
+
+Update: Worker 1.10, from a live probe of the shared hub after 1.9 went up. Three fixes. The Bluesky fallback called
+itself with the same host, so a failing api.bsky.app would have looped instead of trying public.api.bsky.app; it now
+tries the second host once. Every upstream fetch has a deadline (10 s, Google News 4 s before Bing takes over, GDELT
+8 s): Google News stalls from Cloudflare addresses and was costing news searches 14 s. GDELT rate-limits shared
+addresses and took 20 s to say so; after a second 429 the Worker now cools that host down for a minute and fails at once
+(the app treats a limit as not the source's fault, so nothing switches off). A slow or limited source no longer holds
+a lane while the others finish.
