@@ -661,7 +661,7 @@ def _parse_focus(f):
     return {"kind": "word", "key": txt, "phrase": " " in txt}
 
 
-def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, platform="", topic="", hops=2, via="", merge=False, role="", islands=False):
+def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, platform="", topic="", hops=2, via="", merge=False, role="", islands=False, to=""):
     by, idf, h_df, w_df = _build(v)
     if platform:
         by = {k: a for k, a in by.items() if a.platform == platform}
@@ -685,6 +685,7 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
     kinds = {k for k in str(kinds).split(",") if k}
     cap = min(int(max_nodes or 80), 160)
     fz = _parse_focus(focus)
+    tz = _parse_focus(to) if to and fz else None
     node_w, edge_w, kind_of, node_n = Counter(), Counter(), {}, Counter()   # node_n = posts behind each node
 
     edge_t = {}   # best (lowest) tier seen for the pair: 1 real relationship · 2 shared hashtag · 3 shared words
@@ -862,16 +863,19 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
                 link(members[x], members[y], 5, 1, "i", {"person": i.get("name") or ""})
 
     # centred on a named thing ("duke energy"): the diamond itself is the centre, not a second word node for the phrase
-    if fz and fz["kind"] == "word" and ("e:" + fz["key"]) in kind_of:
-        wk = "w:" + fz["key"]
-        kind_of.pop(wk, None)
-        node_w.pop(wk, None)
-        for k in [k for k in edge_w if wk in k]:
-            del edge_w[k]
-        fz = dict(fz, kind="entity")
+    def prefer_entity(z):
+        if z and z["kind"] == "word" and ("e:" + z["key"]) in kind_of:
+            wk = "w:" + z["key"]
+            kind_of.pop(wk, None)
+            node_w.pop(wk, None)
+            for k in [k for k in edge_w if wk in k]:
+                del edge_w[k]
+            return dict(z, kind="entity")
+        return z
+    fz, tz = prefer_entity(fz), prefer_entity(tz)
     # ── term selection (VOSviewer): minimum occurrences, then keep the most *relevant* 60% ──
     min_occ = max(2, round(n_posts * 0.01))
-    is_focus_word = lambda k: bool(fz and fz["kind"] == "word" and k == "w:" + fz["key"])  # noqa: E731
+    is_focus_word = lambda k: bool(fz and fz["kind"] == "word" and k == "w:" + fz["key"]) or bool(tz and tz["kind"] == "word" and k == "w:" + tz["key"])  # noqa: E731
     word_ids = [k for k, kind in kind_of.items() if kind == "word"]
     scored = sorted(((k, node_n[k] * math.log((n_acc + 1) / (acct_df[k[2:]] + 1)))
                      for k in word_ids if node_n[k] >= min_occ or is_focus_word(k)), key=lambda p: -p[1])
@@ -882,7 +886,7 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
             node_w.pop(k, None)
     for k in [k for k, kind in kind_of.items() if kind == "entity"]:
         accts = {a for (a, b) in edge_w if (a == k or b == k) for a in ((a if b == k else b),) if kind_of.get(a) == "account"}
-        if node_n[k] < 2 and len(accts) < 2 and n_acc > 3 and not (fz and fz["kind"] == "entity" and k == "e:" + fz["key"]):      # a small view keeps its names; the centre always stays
+        if node_n[k] < 2 and len(accts) < 2 and n_acc > 3 and not (fz and fz["kind"] == "entity" and k == "e:" + fz["key"]) and not (tz and tz["kind"] == "entity" and k == "e:" + tz["key"]):      # a small view keeps its names; the centre always stays
             kind_of.pop(k, None)
             node_w.pop(k, None)
     for (a, b) in list(edge_w):
@@ -902,21 +906,70 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
         out = [(y if x == nid else x, w, edge_t.get((x, y), 3)) for (x, y), w in edge_w.items() if nid in (x, y)]
         return sorted(out, key=lambda p: (p[2], -p[1]))
 
-    focus_id = None
-    if fz:
-        if fz["kind"] == "account":
-            focus_id = next((k for k in kind_of if k.startswith("@" + fz["key"] + "|")), None)
-        elif fz["kind"] == "hashtag":
-            focus_id = "#" + fz["key"]
-        elif fz["kind"] == "entity":
-            focus_id = "e:" + fz["key"]
+    def resolve(z):
+        if not z:
+            return None
+        if z["kind"] == "account":
+            return next((k for k in kind_of if k.startswith("@" + z["key"] + "|")), None)
+        return {"hashtag": "#", "entity": "e:"}.get(z["kind"], "w:") + z["key"]
+    focus_id = resolve(fz)
+    # the connection between two things: the shortest chain of links from one to the other, real relationships
+    # first (a mention or follow is a short step, a shared tag or name longer, a shared word longest).
+    to_id, path, path_missing = resolve(tz), None, ""
+    if to_id and to_id not in kind_of and to_id not in node_w:
+        to_id, path_missing = None, "nothing collected for " + (to or "")
+    if to_id and to_id == focus_id:
+        to_id, path_missing = None, "that is the same thing"
+    if focus_id and to_id and (focus_id in kind_of or focus_id in node_w):
+        import heapq
+        adj = defaultdict(list)
+        for (x, y), w in edge_w.items():
+            t = edge_t.get((x, y), 3)
+            cost = (0.6 if t == 1 else 1.0 if t == 2 else 2.5) / (1 + min(4.0, math.log(1 + w)))
+            adj[x].append((y, cost))
+            adj[y].append((x, cost))
+        dist, prev, done, todo = {focus_id: 0.0}, {}, set(), [(0.0, focus_id)]
+        while todo:
+            d, u = heapq.heappop(todo)
+            if u in done:
+                continue
+            done.add(u)
+            if u == to_id:
+                break
+            for v_, c in adj.get(u, ()):
+                if v_ not in kind_of and v_ not in node_w:
+                    continue
+                nd = d + c
+                if nd < dist.get(v_, 1e18):
+                    dist[v_] = nd
+                    prev[v_] = u
+                    heapq.heappush(todo, (nd, v_))
+        if to_id in dist:
+            path, u = [to_id], to_id
+            while u in prev:
+                u = prev[u]
+                path.insert(0, u)
         else:
-            focus_id = "w:" + fz["key"]
+            path_missing = "no chain of links joins them in what is collected: they share no account, tag, name or word"
     # ego network: everything within `hops` of the focus, walking only links of the kinds in `via`
     # (default: mentions, follows, shared tags — a shared word is not a hop). Nearer hops fill first,
     # strongest links first inside a hop, so the cap trims the far edge, never the inner circle.
     hop_of = {}
-    if focus_id and (focus_id in kind_of or focus_id in node_w):
+    if path:
+        # the chain itself, then each link's own strongest neighbours (so the chain sits in its context), until the cap
+        ids = list(path)
+        for i, nid in enumerate(path):
+            hop_of[nid] = i
+        rings = [[k for k, *_ in nb(nid) if kind_of.get(k) in kinds and k not in hop_of] for nid in path]
+        while len(ids) < cap and any(rings):
+            for i, ring in enumerate(rings):
+                if not ring or len(ids) >= cap:
+                    continue
+                k = ring.pop(0)
+                if k not in hop_of:
+                    hop_of[k] = max(1, i)
+                    ids.append(k)
+    elif focus_id and (focus_id in kind_of or focus_id in node_w):
         hops = max(1, min(6, int(hops or 2)))
         # a word's own relationships ARE shared words, so a word focus walks them too unless told otherwise
         via_set = {x for x in str(via or ("m,f,h,e,s" if kind_of.get(focus_id) == "word" else "m,f,h,e")).split(",") if x}
@@ -1004,7 +1057,8 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
                         for (a, b), w in edge_w.items() if a in idset and b in idset),
                        key=lambda e: (e["t"], -e["w"]))
     # keep every real relationship, the strongest links overall, PLUS every node's own strongest few
-    keep = {id(e): e for e in all_edges if e["t"] == 1}
+    on_path = {(path[i - 1], path[i]) if path[i - 1] < path[i] else (path[i], path[i - 1]) for i in range(1, len(path))} if path else set()
+    keep = {id(e): e for e in all_edges if e["t"] == 1 or (e["a"], e["b"]) in on_path or (e["b"], e["a"]) in on_path}
     keep.update({id(e): e for e in all_edges[:cap * 4]})
     per = defaultdict(list)
     for e in all_edges:
@@ -1020,13 +1074,14 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
         best_t[e["a"]] = min(best_t.get(e["a"], 9), e["t"])
         best_t[e["b"]] = min(best_t.get(e["b"], 9), e["t"])
     word_focus = bool(fz and fz["kind"] == "word")      # centred on a word: its word neighbours are the point
-    ids = [nid for nid in ids if nid == focus_id or (word_focus and kind_of.get(nid) == "word") or nid not in best_t or best_t[nid] <= 2]
+    path_set = set(path or [])
+    ids = [nid for nid in ids if nid == focus_id or nid in path_set or (word_focus and kind_of.get(nid) == "word") or nid not in best_t or best_t[nid] <= 2]
     idset = set(ids)
     edges = [e for e in edges if e["a"] in idset and e["b"] in idset]
     # islands: a cluster with no real link (mention, follow, name, tag) to the main body of the web is about something
     # else that shares a word with the topic. Out, unless asked for (islands=True), and counted so the view can say so.
     islands_hidden = 0
-    if not islands and not word_focus and len(ids) > 3:
+    if not islands and not word_focus and not path and len(ids) > 3:
         parent = {nid: nid for nid in ids}
 
         def find(x):
@@ -1073,7 +1128,9 @@ def word_graph(v, focus="", kinds="account,hashtag,word,entity", max_nodes=80, p
                       "strength": round(deg[nid], 1), "hop": hop_of.get(nid),
                       "identity": i["name"] if i else None, "identity_id": i["id"] if i else None,
                       "person_id": pid, "attrs": ((meta.get(pid) or {}).get("attrs", [])[:3] if pid else [])})
+    path_edges = [next((e for e in edges if {e["a"], e["b"]} == {path[i - 1], path[i]}), None) for i in range(1, len(path))] if path else []
     return {"nodes": nodes, "edges": edges, "focus": focus_id if focus_id in idset else None,
+            "to": to_id if to_id in idset else None, "to_asked": to or "", "path": path or [], "path_edges": path_edges, "path_missing": path_missing,
             "focus_asked": focus or "", "kinds": sorted(kinds), "hops": max(hop_of.values()) if hop_of else None, "islands_hidden": islands_hidden,
             "generated": _now()}
 
@@ -1252,7 +1309,7 @@ def handle(v, method, parts, params, body):
         if "focus" in params or "kinds" in params:
             return word_graph(v, params.get("focus") or "", params.get("kinds") or "account,hashtag,word,entity",
                               int(params.get("max") or 80), params.get("platform") or "", params.get("topic") or "",
-                              params.get("hops") or 2, params.get("via") or "", params.get("merge") == "1", params.get("role") or "", params.get("islands") == "1")
+                              params.get("hops") or 2, params.get("via") or "", params.get("merge") == "1", params.get("role") or "", params.get("islands") == "1", params.get("to") or "")
         return graph(v, params.get("topic") or None, int(params.get("max") or 60), float(params.get("min") or 1.5),
                      params.get("platform") or "", params.get("role") or "")
     pid = parts[1] if len(parts) > 1 else None

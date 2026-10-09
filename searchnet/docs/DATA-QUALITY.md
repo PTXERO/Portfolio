@@ -264,3 +264,15 @@ lane (it is its own site with its own limits) and four lanes run at once, in the
 source's searches still go one after another, so no site ever sees a burst from us, and a single search is exactly as
 fast as it was alone; a run with eight sources finishes in about a quarter of the time. The fetch budget and the
 three-strikes rule are shared across lanes.
+
+Update: the chain between two things. WEB has a second box, "to". Centre on one thing, type another (an @account,
+#tag, "phrase" or word) and the shortest chain of links between them lights up in the web, with a card listing each
+link, why it exists (a mention, a follow, a shared tag or name, shared words) and the post it comes from. Real
+relationships are short steps, a shared tag or name longer, a shared word longest, so the chain prefers evidence over
+coincidence. If nothing joins them the card says so instead of guessing. Deep link: `#network?focus=…&to=…`. The chain
+view keeps every node on the chain even when its only link is a shared word, and does not hide islands (the chain is
+the connection asked for). Same logic in browser mode and on the PC server.
+
+Update: + DOSSIER from the web. The centred node's bar now offers + DOSSIER: an @account starts its own-feed dossier,
+a writer a named-person dossier (private, as always), a tag, phrase or named thing a plain topic. If a topic with
+that name already exists the button reads OPEN DOSSIER and opens it. Searches start straight away.

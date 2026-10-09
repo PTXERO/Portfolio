@@ -286,7 +286,7 @@
     const { by, idf, hDF, wDF } = await build();
     const kinds = new Set((opts.kinds || 'account,hashtag,word,entity').split(',').filter(Boolean));
     const cap = Math.min(opts.max || 80, 160);
-    const focus = parseFocus(opts.focus);
+    const focus = parseFocus(opts.focus), toF = parseFocus(opts.to);
     let items = await idb.all('items');
     if (opts.platform) items = items.filter((it) => it.platform === opts.platform);
     if (opts.role === 'person') items = items.filter((it) => !OUTLETS.has(it.platform)); else if (opts.role === 'outlet' || opts.role === 'writer') items = items.filter((it) => OUTLETS.has(it.platform));
@@ -373,11 +373,11 @@
     //    relevance = how specific a term is to a few accounts (spread-evenly-everywhere terms score low)
     const minOcc = Math.max(2, Math.round(nPosts * 0.01));
     const wordIds = Object.keys(kindOf).filter((k) => kindOf[k] === 'word');
-    const keepW = new Set(); const isFocusWord = (k) => focus && focus.kind === 'word' && k === 'w:' + focus.key;
+    const keepW = new Set(); const isFocusWord = (k) => (focus && focus.kind === 'word' && k === 'w:' + focus.key) || (toF && toF.kind === 'word' && k === 'w:' + toF.key);
     const scored = wordIds.filter((k) => (nodeN[k] || 0) >= minOcc || isFocusWord(k)).map((k) => [k, (nodeN[k] || 0) * Math.log((nAcc + 1) / ((acctDF[k.slice(2)] || 0) + 1))]).sort((a, b) => b[1] - a[1]);
     scored.slice(0, Math.max(10, Math.ceil(scored.length * 0.6))).forEach(([k]) => keepW.add(k)); scored.forEach(([k]) => { if (isFocusWord(k)) keepW.add(k); });
     for (const k of wordIds) if (!keepW.has(k)) { delete kindOf[k]; delete nodeW[k]; }
-    for (const k of Object.keys(kindOf).filter((k) => kindOf[k] === 'entity')) { const accts = new Set(); for (const ek in edgeW) { const [a, b] = ek.split('\u0001'); if (a === k && kindOf[b] === 'account') accts.add(b); else if (b === k && kindOf[a] === 'account') accts.add(a); } if ((nodeN[k] || 0) < 2 && accts.size < 2 && nAcc > 3 && !(focus && focus.kind === 'word' && k === 'e:' + focus.key)) { delete kindOf[k]; delete nodeW[k]; } }
+    for (const k of Object.keys(kindOf).filter((k) => kindOf[k] === 'entity')) { const accts = new Set(); for (const ek in edgeW) { const [a, b] = ek.split('\u0001'); if (a === k && kindOf[b] === 'account') accts.add(b); else if (b === k && kindOf[a] === 'account') accts.add(a); } if ((nodeN[k] || 0) < 2 && accts.size < 2 && nAcc > 3 && !(focus && focus.kind === 'word' && k === 'e:' + focus.key) && !(toF && toF.kind === 'word' && k === 'e:' + toF.key)) { delete kindOf[k]; delete nodeW[k]; } }
     for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (!kindOf[a] || !kindOf[b]) delete edgeW[k]; }
     // ── edge weights (association strength): co-occurrence vs. what chance predicts from each term's frequency ──
     for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (kindOf[a] === 'account' || kindOf[b] === 'account') continue;
@@ -386,14 +386,34 @@
     // pick nodes: around the focus, else the heaviest of each kind
     let ids;
     // centred on a named thing ("duke energy"): the diamond itself is the centre, not a second word node for the phrase
-    if (focus && focus.kind === 'word' && kindOf['e:' + focus.key]) { const wk = 'w:' + focus.key; delete kindOf[wk]; delete nodeW[wk]; for (const k in edgeW) if (k.split('\u0001').includes(wk)) { delete edgeW[k]; delete edgeT[k]; delete edgeP[k]; delete edgeEv[k]; } focus.kind = 'entity'; }
-    let focusId = focus ? (focus.kind === 'account' ? Object.keys(kindOf).find((k) => k.startsWith('@' + focus.key + '|')) : focus.kind === 'hashtag' ? '#' + focus.key : focus.kind === 'entity' ? 'e:' + focus.key : 'w:' + focus.key) : null;
+    const resolve = (f) => { if (!f) return null;
+      if (f.kind === 'word' && kindOf['e:' + f.key]) { const wk = 'w:' + f.key; delete kindOf[wk]; delete nodeW[wk]; for (const k in edgeW) if (k.split('\u0001').includes(wk)) { delete edgeW[k]; delete edgeT[k]; delete edgeP[k]; delete edgeEv[k]; } f.kind = 'entity'; }
+      return f.kind === 'account' ? Object.keys(kindOf).find((k) => k.startsWith('@' + f.key + '|')) : f.kind === 'hashtag' ? '#' + f.key : f.kind === 'entity' ? 'e:' + f.key : 'w:' + f.key; };
+    let focusId = resolve(focus);
+    // the connection between two things: the shortest chain of links from one to the other, real relationships
+    // first (a mention or follow is a short step, a shared tag or name longer, a shared word longest).
+    const to = toF; let toId = focusId ? resolve(to) : null; let path = null, pathMissing = '';
+    if (toId && !(kindOf[toId] || nodeW[toId])) { pathMissing = 'nothing collected for ' + (opts.to || '') ; toId = null; }
+    if (toId && toId === focusId) { pathMissing = 'that is the same thing'; toId = null; }
+    if (focusId && toId && (kindOf[focusId] || nodeW[focusId])) {
+      const adj = {}; for (const k in edgeW) { const [x, y] = k.split('\u0001'); const t = edgeT[k] || 3; const cost = (t === 1 ? 0.6 : t === 2 ? 1 : 2.5) / (1 + Math.min(4, Math.log(1 + edgeW[k]))); (adj[x] = adj[x] || []).push([y, cost, k]); (adj[y] = adj[y] || []).push([x, cost, k]); }
+      const dist = { [focusId]: 0 }, prev = {}, done = new Set(); const todo = [[0, focusId]];
+      while (todo.length) { todo.sort((p, q) => p[0] - q[0]); const [d, u] = todo.shift(); if (done.has(u)) continue; done.add(u); if (u === toId) break;
+        for (const [v, c, k] of (adj[u] || [])) { if (!kindOf[v] && !nodeW[v]) continue; const nd = d + c; if (dist[v] === undefined || nd < dist[v]) { dist[v] = nd; prev[v] = [u, k]; todo.push([nd, v]); } } }
+      if (dist[toId] !== undefined) { path = [toId]; let u = toId; while (prev[u]) { u = prev[u][0]; path.unshift(u); } }
+      else pathMissing = 'no chain of links joins them in what is collected: they share no account, tag, name or word';
+    }
     const nb = (id) => { const out = []; for (const k in edgeW) { const [x, y] = k.split('\u0001'); if (x === id) out.push([y, edgeW[k], edgeT[k]]); else if (y === id) out.push([x, edgeW[k], edgeT[k]]); } return out.sort((p, q) => (p[2] - q[2]) || (q[1] - p[1])); };
     // ego network: everything within `hops` of the focus, walking only links of the kinds in `via`
     // (default: mentions, follows, shared tags — a shared word is not a hop). Nearer hops fill first,
     // strongest links first inside a hop, so the cap trims the far edge, never the inner circle.
     const hopOf = {};
-    if (focusId && (kindOf[focusId] || nodeW[focusId])) {
+    if (path) {
+      // the chain itself, then each link's own strongest neighbours (so the chain sits in its context), until the cap
+      ids = path.slice(); path.forEach((id, i) => hopOf[id] = i);
+      const ring = path.map((id) => nb(id).filter(([k]) => kinds.has(kindOf[k]) && hopOf[k] === undefined));
+      for (let r = 0; ids.length < cap && ring.some((l) => l.length); r++) ring.forEach((l, i) => { const nx = l.shift(); if (nx && hopOf[nx[0]] === undefined && ids.length < cap) { hopOf[nx[0]] = Math.max(1, i); ids.push(nx[0]); } });
+    } else if (focusId && (kindOf[focusId] || nodeW[focusId])) {
       // a word's own relationships ARE shared words, so a word focus walks them too unless told otherwise
       const hops = Math.max(1, Math.min(6, +opts.hops || 2)), via = new Set((opts.via || (kindOf[focusId] === 'word' ? 'm,f,h,e,s' : 'm,f,h,e')).split(',').filter(Boolean));
       const steps = (k) => { const P = edgeP[k]; return P ? [...via].some((v) => P[v] > 0) : (edgeT[k] || 3) <= 2; };
@@ -424,18 +444,20 @@
     const edges = []; for (const k in edgeW) { const [a, b] = k.split('\u0001'); if (idset.has(a) && idset.has(b)) { const P = edgeP[k] || { m: 0, f: 0, h: 0, s: edgeW[k], i: 0, e: 0 }; edges.push({ a, b, w: +edgeW[k].toFixed(2), t: edgeT[k] || 3, p: { m: +P.m.toFixed(2), f: +P.f.toFixed(2), h: +P.h.toFixed(2), s: +P.s.toFixed(2), i: +(P.i || 0).toFixed(2), e: +(P.e || 0).toFixed(2), b: +(P.b || 0).toFixed(2) }, ev: edgeEv[k] || {} }); } }
     // keep the strongest links overall PLUS every node's own strongest few, so nothing is left dangling
     edges.sort((p, q) => (p.t - q.t) || (q.w - p.w));
-    const keep = new Set(edges.filter((e) => e.t === 1).concat(edges.slice(0, cap * 4))); const per = {};
+    const onPath = new Set(); if (path) for (let i = 1; i < path.length; i++) onPath.add(path[i - 1] < path[i] ? path[i - 1] + '\u0001' + path[i] : path[i] + '\u0001' + path[i - 1]);
+    const keep = new Set(edges.filter((e) => e.t === 1 || (path && onPath.has(e.a < e.b ? e.a + '\u0001' + e.b : e.b + '\u0001' + e.a))).concat(edges.slice(0, cap * 4))); const per = {};
     for (const e of edges) { (per[e.a] = per[e.a] || []).push(e); (per[e.b] = per[e.b] || []).push(e); }
     for (const id in per) per[id].slice(0, 4).forEach((e) => keep.add(e));
     let E = [...keep];
     // a node whose every link is a shared word says nothing about how it is connected: out (the centre stays)
     const bestT = {}; E.forEach((e) => { bestT[e.a] = Math.min(bestT[e.a] || 9, e.t); bestT[e.b] = Math.min(bestT[e.b] || 9, e.t); });
     const wordFocus = !!(focus && focus.kind === 'word');
-    ids = ids.filter((id) => id === focusId || (wordFocus && kindOf[id] === 'word') || bestT[id] === undefined || bestT[id] <= 2); let idset2 = new Set(ids); E = E.filter((e) => idset2.has(e.a) && idset2.has(e.b));
+    const pathSet = new Set(path || []);
+    ids = ids.filter((id) => id === focusId || pathSet.has(id) || (wordFocus && kindOf[id] === 'word') || bestT[id] === undefined || bestT[id] <= 2); let idset2 = new Set(ids); E = E.filter((e) => idset2.has(e.a) && idset2.has(e.b));
     // islands: a cluster with no real link (mention, follow, name, tag) to the main body of the web is about something else
     // that shares a word with the topic. Out, unless asked for (islands), and counted so the view can say so.
     let islandsHidden = 0;
-    if (!opts.islands && !wordFocus && ids.length > 3) {
+    if (!opts.islands && !wordFocus && !path && ids.length > 3) {
       const parent = {}; ids.forEach((id) => parent[id] = id); const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
       E.forEach((e) => { if (e.t <= 2) { const ra = find(e.a), rb = find(e.b); if (ra !== rb) parent[ra] = rb; } });
       const compW = {}; ids.forEach((id) => { const r = find(id); compW[r] = (compW[r] || 0) + (nodeW[id] || 0) + (kindOf[id] === 'account' ? 1 : 0); });
@@ -448,7 +470,8 @@
       if (isPerson) { const first = (personMembers[id] || [])[0]; return { id, kind: 'account', label, n: nodeN[id] || 0, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), hop: hopOf[id] === undefined ? null : hopOf[id], person_id: first ? ([...by.values()].find((a) => a.id.toLowerCase() === first)?.id || first) : null, identity_id: id.slice(7), identity: label, accounts: personMembers[id] || [], attrs: [] }; }
       const I = personOf[id];
       return { id, kind, label, role: kind === 'account' ? (id.endsWith('|' + WRITER_PLAT) ? 'writer' : OUTLETS.has(id.split('|').pop()) ? 'outlet' : 'person') : null, identity: I ? I.name : null, identity_id: I ? I.id : null, n: nodeN[id] || 0, w: +(nodeW[id] || 0).toFixed(2), strength: +(deg[id] || 0).toFixed(1), hop: hopOf[id] === undefined ? null : hopOf[id], person_id: kind === 'account' ? [...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id || null : null, attrs: kind === 'account' ? ((meta[[...by.values()].find((a) => '@' + a.author.toLowerCase() + '|' + a.platform === id)?.id]?.attrs) || []).slice(0, 3) : [] }; });
-    return { nodes, edges: E, focus: focusId && idset.has(focusId) ? focusId : null, focus_asked: opts.focus || '', kinds: [...kinds], hops: focusId ? Math.max(0, ...Object.values(hopOf)) : null, islands_hidden: islandsHidden, generated: now() };
+    const pathEdges = path ? path.slice(1).map((id, i) => E.find((e) => (e.a === path[i] && e.b === id) || (e.b === path[i] && e.a === id)) || null) : [];
+    return { nodes, edges: E, focus: focusId && idset.has(focusId) ? focusId : null, focus_asked: opts.focus || '', to: toId && idset.has(toId) ? toId : null, to_asked: opts.to || '', path: path || [], path_edges: pathEdges, path_missing: pathMissing, kinds: [...kinds], hops: focusId ? Math.max(0, ...Object.values(hopOf)) : null, islands_hidden: islandsHidden, generated: now() };
   }
 
   // ── "load more posts": pull an account's own recent posts into the library, no rating needed.
@@ -570,7 +593,7 @@
       const id = parts[1] ? decodeURIComponent(parts[1]) : null;
       if (parts[0] === 'writers') return id ? writer(id, P.topic || null) : listWriters({ topic: P.topic || null, q: P.q || '' });
       if (parts[0] === 'graph') {
-        if (P.focus !== undefined || P.kinds !== undefined) return wordGraph({ focus: P.focus || '', kinds: P.kinds || 'account,hashtag,word,entity', max: +P.max || 80, platform: P.platform || '', topic: P.topic || '', hops: P.hops, via: P.via, merge: P.merge === '1', role: P.role || '', islands: P.islands === '1' });
+        if (P.focus !== undefined || P.kinds !== undefined) return wordGraph({ focus: P.focus || '', to: P.to || '', kinds: P.kinds || 'account,hashtag,word,entity', max: +P.max || 80, platform: P.platform || '', topic: P.topic || '', hops: P.hops, via: P.via, merge: P.merge === '1', role: P.role || '', islands: P.islands === '1' });
         return graph({ topic: P.topic || null, max: +P.max || 60, min: +P.min || 1.5, platform: P.platform || '', role: P.role || '' });
       }
       if (!id) return list({ topic: P.topic || null, q: P.q || '', sort: P.sort || '', platform: P.platform || '', role: P.role || '' });

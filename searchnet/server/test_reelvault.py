@@ -1538,3 +1538,37 @@ class TestLanes(Base):
         for sid in {c[0] for c in calls}:
             times = [c[2] for c in calls if c[0] == sid]
             self.assertTrue(all(b - a >= 0.29 for a, b in zip(times, times[1:])), sid)
+
+
+class TestPath(Base):
+    """WEB: the chain of links between two things."""
+
+    def test_chain_between_two_named_things(self):
+        from rv import people
+        from rv.util import now as _now
+        n0 = _now()
+        for it in [post("a1", "Furnace Fest lineup is out and it is stacked #furnacefest", "alice", n0 - 3 * 86400),
+                   post("a2", "Furnace Fest day two, best set of the weekend #furnacefest", "alice", n0 - 2 * 86400),
+                   post("b1", "great photos @alice from the weekend", "bob", n0 - 2 * 86400 + 100),
+                   post("b2", "Hurricane Isaias is turning north, Duke Energy warns of outages #isaias", "bob", n0 - 86400),
+                   post("b3", "Hurricane Isaias update: still no power in Collier #isaias", "bob", n0 - 80000),
+                   post("c1", "Hurricane Isaias radar looks rough tonight #isaias", "carl", n0 - 70000),
+                   post("c2", "nothing to do with anything, sourdough starter day 4", "carl", n0 - 60000)]:
+            self.v.db.upsert(it)
+        g = people.word_graph(self.v, focus='"furnace fest"', to='"hurricane isaias"', hops=2, via="m,f,e,h,s")
+        self.assertEqual((g["focus"], g["to"]), ("e:furnace fest", "e:hurricane isaias"))
+        self.assertEqual(g["path"][0], "e:furnace fest")
+        self.assertEqual(g["path"][-1], "e:hurricane isaias")
+        self.assertTrue({"@alice|x", "@bob|x"} <= set(g["path"]), g["path"])
+        self.assertEqual(len(g["path_edges"]), len(g["path"]) - 1)
+        self.assertTrue(all(g["path_edges"]), g["path_edges"])
+        ids = {n["id"] for n in g["nodes"]}
+        self.assertTrue(set(g["path"]) <= ids)
+        g2 = people.word_graph(self.v, focus='"furnace fest"', to='"sourdough starter"')
+        self.assertEqual(g2["path"], [])
+        self.assertIn("nothing collected", g2["path_missing"])
+        g3 = people.word_graph(self.v, focus='"furnace fest"', to='"furnace fest"')
+        self.assertIn("same thing", g3["path_missing"])
+        # the route passes it through
+        r = people.handle(self.v, "GET", ["graph"], {"focus": '"furnace fest"', "to": '"hurricane isaias"', "kinds": "account,entity"}, None)
+        self.assertEqual(r["to"], "e:hurricane isaias")
