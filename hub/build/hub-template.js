@@ -34,11 +34,12 @@ const VIEW_BASE = 'https://ptxero.neocities.org/ascii-render/view.html';
 const RF_PROXY  = 'https://rf-proxy.ptxero.workers.dev';
 // Fair use scales with the day: a pool of fetches is split among the identities active today, never below
 // `fetch` each and never above `max_fetch`. One person alone gets the ceiling; a busy day shares the pool.
-// (Cloudflare's free tier is ~100k Worker requests a day; the pool leaves headroom for Social and the rest.)
+// (A Worker on the free plan gets 100k requests a day, paid plans far more; the pool is sized for the free
+// plan with cache hits and Social on top. Raise or lower everything with the LIMITS variable, no re-paste needed.)
 // the owners: no fetch or write caps, no storage cap, no blob cap, never purged. One suffix or several, comma-separated.
 const admins = (env) => String((env && env.ADMIN_UID) || '').toUpperCase().split(/[,\s]+/).filter(Boolean);
 const isAdmin = (env, uid) => !!uid && admins(env).includes(String(uid).toUpperCase());
-const DEFAULT_LIMITS = { fetch: 400, max_fetch: 6000, pool: 20000, writes: 300, max_writes: 3000, write_pool: 10000, store_bytes: 25 * 1024 * 1024, blob_bytes: 512 * 1024, anon_fetch: 60 };
+const DEFAULT_LIMITS = { fetch: 2000, max_fetch: 20000, pool: 100000, writes: 1000, max_writes: 10000, write_pool: 50000, store_bytes: 25 * 1024 * 1024, blob_bytes: 512 * 1024, anon_fetch: 200 };
 let activeCache = { n: 1, t: 0 };
 async function activeToday(svc) {                 // identities that touched the hub today (cached a minute per isolate)
   if (Date.now() - activeCache.t < 60000) return activeCache.n;

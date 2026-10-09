@@ -253,3 +253,8 @@ A source now needs three failing runs in a row before it switches off, and a fai
 - Which one: when Wikipedia says a seed is several things, the dossier asks, with the options; the pick is remembered, its article's words become soft keywords, and the card shows that article.
 - SOURCES rows say when each source last worked, or how many of its three strikes it has.
 - A browser check feeds script tags, event handlers and javascript: links through a source and visits every view: nothing runs, nothing survives as markup.
+
+Update: fair-use defaults raised. The shared hub's day pool is now 100,000 fetches (2,000 floor, 20,000 ceiling per id; an
+id made today stays at the floor), 50,000 writes (1,000 to 10,000), 200 anonymous fetches per address. A Worker gets
+100,000 requests a day on the free plan and far more on paid, and cache hits never count, so the pool fits either. The
+`LIMITS` variable still overrides any of these on the next request without re-pasting the Worker.
