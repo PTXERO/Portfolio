@@ -1509,3 +1509,32 @@ class SameNameOtherYear(Base):
             self.v.vote(t["id"], it["id"], 1)
         b = SIG.build(self.v, t["id"])
         self.assertTrue(any("2020" in r for r in b["trust"]["reasons"]), b["trust"])
+
+
+class TestLanes(Base):
+    """Sources run side by side within one run; a single search is never slower than alone."""
+
+    def test_topic_run_fans_out_across_sources(self):
+        calls = []
+        lock = threading.Lock()
+
+        def slow_fetch(job, src, query, limit, opts):
+            with lock:
+                calls.append((src["id"], query, time.monotonic()))
+            time.sleep(0.3)
+            return iter(())
+        self.v.fetch = slow_fetch
+        srcs = [s for s in self.v.list_sources() if s["enabled"] and s["searchable"]]
+        self.assertGreaterEqual(len(srcs), 4)
+        t = self.v.create_topic("skate", ["skate"], {"breadth": 1})
+        t0 = time.monotonic()
+        job = self.v.run_now("topic", {"topic_id": t["id"]})
+        took = time.monotonic() - t0
+        n_q = len({c[1] for c in calls})
+        serial = 0.3 * len(srcs) * n_q
+        self.assertEqual(job.state, "done", job.log_lines)
+        self.assertLess(took, serial * 0.6, (took, serial, len(srcs), n_q))
+        # one source never sees a burst: its own searches start in order, never two at once
+        for sid in {c[0] for c in calls}:
+            times = [c[2] for c in calls if c[0] == sid]
+            self.assertTrue(all(b - a >= 0.29 for a, b in zip(times, times[1:])), sid)

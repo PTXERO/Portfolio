@@ -167,6 +167,7 @@
   }
 
   // ── running a topic (collect through the Worker, score, link) ──
+  const LANES = 4;   // sources searched at the same time within one run (browsers allow ~6 connections to the hub)
   async function runTopic(tid, job) {
     const t = await getTopic(tid); if (!t) throw new Error('topic gone');
     const person = (t.settings || {}).person;
@@ -241,10 +242,12 @@
     const h = await L.hub(); let budget = +t.settings.max_fetches || (h && h.kind === 'shared' ? 60 : 150); let spent = 0;   // fetches per run (the shared hub has daily limits)
     if (!t.settings.max_fetches && h && h.kind === 'shared' && window.PX) { try { const me = await window.PX.me(); const left = me.limits ? me.limits.fetch - (me.today.fetch || 0) : 1e9; budget = me.owner || left > 2000 ? 150 : Math.max(20, Math.min(60, Math.floor(left / 2))); } catch (e) { /* keep default */ } }
     const byUrl = new Map(); for (const it of await idb.all('items')) if (it.url && ARTICLE_PLATFORMS.has(it.platform)) byUrl.set(it.url, it.id);
-    for (const q of runQs) {
-      for (const s of srcs.slice()) {
-        if (job.cancel) return;
-        if (spent >= budget) { job.log('  stopped at ' + budget + ' fetches this run (Settings → results per search, or your own hub, raises it)'); await saveTopic(t); return; }
+    // sources run side by side (each is its own site with its own limits); one source's searches go one after another,
+    // so no site sees a burst from us. LANES at once; a single search is never slower than it was alone.
+    let stopped = false, dropped = new Set();
+    const lane = async (s) => { for (const q of runQs) {
+        if (job.cancel || stopped || dropped.has(s.id)) return;
+        if (spent >= budget) { if (!stopped) { stopped = true; job.log('  stopped at ' + budget + ' fetches this run (Settings → results per search, or your own hub, raises it)'); } return; }
         spent++;
         try {
           const params = new URLSearchParams({ source: s.source, q, limit: t.settings.per_query || 20, media: t.settings.media || 'video' });
@@ -268,10 +271,13 @@
           if (q2) { q2.runs++; q2.found += found; }
           ss.found += found;
           job.stats.found += found; job.log('  ' + found + ' · ' + q + ' @ ' + s.name);
-        } catch (e) { job.stats.errors++; job.log('  ✕ ' + s.name + ': ' + e.message); job._failSeen = job._failSeen || new Set(); const firstThisRun = !job._failSeen.has(s.id); job._failSeen.add(s.id); if (firstThisRun && await L.markFailed(s.id, e.message)) { /* one strike per run, not per search */ job.log('    ' + s.name + ' switched off until you turn it back on (SOURCES)'); srcs = srcs.filter((x) => x.id !== s.id); } }
+        } catch (e) { job.stats.errors++; job.log('  ✕ ' + s.name + ': ' + e.message); job._failSeen = job._failSeen || new Set(); const firstThisRun = !job._failSeen.has(s.id); job._failSeen.add(s.id); if (firstThisRun && await L.markFailed(s.id, e.message)) { /* one strike per run, not per search */ job.log('    ' + s.name + ' switched off until you turn it back on (SOURCES)'); dropped.add(s.id); } }
         job.done++;
-      }
-    }
+      } };
+    const todo = srcs.slice(); const workers = []; for (let i = 0; i < Math.min(LANES, todo.length); i++) workers.push((async () => { while (todo.length && !job.cancel && !stopped) await lane(todo.shift()); })());
+    await Promise.all(workers);
+    srcs = srcs.filter((x) => !dropped.has(x.id));
+    if (stopped) { await saveTopic(t); return; }
     delete t._runSeen;
     // per-source votes → the plan drops what never pays off
     const votes = await topicItems(t.id); const stats = t.settings.source_stats || {}; Object.values(stats).forEach((s) => { s.pos = 0; s.neg = 0; });

@@ -258,3 +258,9 @@ Update: fair-use defaults raised. The shared hub's day pool is now 100,000 fetch
 id made today stays at the floor), 50,000 writes (1,000 to 10,000), 200 anonymous fetches per address. A Worker gets
 100,000 requests a day on the free plan and far more on paid, and cache hits never count, so the pool fits either. The
 `LIMITS` variable still overrides any of these on the next request without re-pasting the Worker.
+
+Update: searches run side by side. A run used to go search by search, source by source. Now each source is its own
+lane (it is its own site with its own limits) and four lanes run at once, in the browser and on the PC server. One
+source's searches still go one after another, so no site ever sees a burst from us, and a single search is exactly as
+fast as it was alone; a run with eight sources finishes in about a quarter of the time. The fetch budget and the
+three-strikes rule are shared across lanes.

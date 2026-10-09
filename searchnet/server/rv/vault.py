@@ -1,6 +1,7 @@
 """The Vault: storage + background jobs (collect, topic runs, download,
 analyze, understand), source management, voting and auto-refresh."""
 
+import concurrent.futures
 import importlib.util
 import json
 import queue
@@ -495,6 +496,25 @@ class Vault:
                 self.db.exec("UPDATE sources SET last_error=? WHERE id=?", (err, src["id"]))
         job.log(f"  {got} from {label}")
 
+    LANES = 4     # sources searched at the same time within one run; one source's searches stay one after another
+
+    def _fan_out(self, job, srcs, per_source):
+        """Run `per_source(src)` for every source, LANES at a time. Each source is its own site with its own
+        limits, so sources run side by side while one source never sees a burst from us. A single search is
+        never slower than it was alone. Errors inside a lane are already logged by fetch(); a cancel stops all."""
+        if len(srcs) <= 1:
+            for s in srcs:
+                per_source(s)
+            return
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(self.LANES, len(srcs))) as ex:
+            futs = [ex.submit(per_source, s) for s in srcs]
+            for f in futs:
+                try:
+                    f.result()
+                except Cancelled:
+                    pass
+        job.check()
+
     def _run_collect(self, job):
         """Ad-hoc: sources × queries, plus pasted links."""
         p = job.params
@@ -508,12 +528,14 @@ class Vault:
         limit = max(1, min(to_int(p.get("limit"), 20), 2000))
         job.total = len(queries) * len(srcs) + len(links)
         new_ids = []
-        for q in queries:
-            for s in srcs:
+
+        def lane(s):
+            for q in queries:
                 job.check()
                 for it in self.fetch(job, s, q, limit, opts):
                     new_ids.append(it["id"])
                 job.done += 1
+        self._fan_out(job, srcs, lane)
         for u in links:
             job.check()
             src = {"name": S.domain_of(u), "kind": "url", "template": u,
@@ -712,20 +734,32 @@ class Vault:
         job.log(f"  {len(queries)} searches × {len(searchable)} sources: " + ", ".join(queries))
         new = []
         per_src = {s["id"]: 0 for s in searchable}
-        for q in queries:
-            found_q = 0
-            for s in searchable:
+        found_q = {q: 0 for q in queries}
+        tally, scoring = threading.Lock(), threading.Lock()
+
+        def lane(s):
+            for q in queries:
                 job.check()
+                ids = []
                 for it in self.fetch(job, s, q, per, opts):
                     self.link(tid, it["id"], q, s["id"])
-                    new.append(it["id"])
-                    found_q += 1
-                    per_src[s["id"]] = per_src.get(s["id"], 0) + 1
-                job.done += 1
+                    ids.append(it["id"])
+                with tally:
+                    new.extend(ids)
+                    found_q[q] += len(ids)
+                    per_src[s["id"]] = per_src.get(s["id"], 0) + len(ids)
+                    job.done += 1
+                if ids and scoring.acquire(blocking=False):      # score as we go so the review deck is ranked while searching
+                    try:
+                        TopicScorer(self, tid).rescore()
+                    finally:
+                        scoring.release()
+        self._fan_out(job, searchable, lane)
+        for q in queries:
             self.db.exec("UPDATE topic_queries SET runs=runs+1, found=found+?, last_run=? "
-                         "WHERE topic_id=? AND query=?", (found_q, now(), tid, q))
-            if found_q:      # score as we go so the review deck is ranked while searching
-                TopicScorer(self, tid).rescore()
+                         "WHERE topic_id=? AND query=?", (found_q[q], now(), tid, q))
+        if any(found_q.values()):
+            TopicScorer(self, tid).rescore()
 
         # feeds you follow for this topic: keep what matches
         if feeds:
