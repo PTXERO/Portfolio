@@ -1,4 +1,5 @@
 import { D } from './num';
+import { offlineBonusSec } from './rates';
 import { tick } from './tick';
 import type { Decimal } from './num';
 import type { GameState, StageId } from './types';
@@ -27,7 +28,8 @@ export function timeBankCap(state: GameState): number {
 export function applyOffline(state: GameState, now = Date.now()): OfflineReport {
   // Before the first action the clock hasn't started, so there is nothing to catch up.
   const raw = state.started ? Math.max(0, (now - state.lastSeen) / 1000) : 0;
-  const away = Math.min(raw, state.offlineCapSec);
+  const cap = state.offlineCapSec + offlineBonusSec(state);
+  const away = Math.min(raw, cap);
   const short = away < OFFLINE_MIN_SEC;
   const applied = short ? away : away * OFFLINE_APPLIED_SHARE;
   const banked = short ? 0 : Math.min(away - applied, timeBankCap(state) - state.timeBank);
@@ -39,7 +41,7 @@ export function applyOffline(state: GameState, now = Date.now()): OfflineReport 
 
   const earned: OfflineReport['earned'] = {};
   for (const [id, was] of before) earned[id] = state.stages[id].totalEarned.sub(was);
-  return { awaySec: raw, appliedSec: applied, bankedSec: Math.max(0, banked), capped: raw > state.offlineCapSec, earned };
+  return { awaySec: raw, appliedSec: applied, bankedSec: Math.max(0, banked), capped: raw > cap, earned };
 }
 
 /** Runs `seconds` of game time in steps between 0.1 s and 60 s. */

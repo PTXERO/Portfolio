@@ -1,6 +1,6 @@
 import { STAGES, STAGE_ORDER } from '../content/stages';
 import { D, Decimal, ZERO } from './num';
-import type { DialId, Effect, GameState, GeneratorDef, StageId } from './types';
+import type { DialId, Diet, Effect, GameState, GeneratorDef, HabitatDef, StageId } from './types';
 
 /** Owning this many of a generator doubles its output, each. Past 100, every further 100 counts too. */
 export const MILESTONES = [10, 25, 50, 100];
@@ -25,7 +25,7 @@ export function stageEffects(state: GameState, stage: StageId): Effect[] {
   const st = state.stages[stage];
   const def = STAGES[stage];
   const out: Effect[] = [];
-  for (const u of def.upgrades) if (st.upgrades.includes(u.id)) out.push(u.effect);
+  for (const u of def.upgrades) if (st.upgrades.includes(u.id)) out.push(u.effect, ...(u.extra ?? []));
   for (const r of def.reactions ?? []) if (r.bonus && st.discovered.includes(r.id)) out.push(r.bonus);
   return out;
 }
@@ -70,13 +70,77 @@ export function feedMult(state: GameState, stage: StageId): number {
   return 1 + strength * Math.log10(1 + stageRate(state, prev).toNumber());
 }
 
+// ---- Cell stage: diet, defense and the habitat ----
+
+/** The lineage's diet, or null before one is chosen (eats a bit of everything). */
+export function dietOf(state: GameState, stage: StageId): Diet | null {
+  let diet: Diet | null = null;
+  for (const e of stageEffects(state, stage)) if (e.kind === 'diet' && (diet === null || e.diet === 'omnivore')) diet = e.diet;
+  return diet;
+}
+
+/** Protection from predators, 0 to 0.9. */
+export function defenseOf(state: GameState, stage: StageId): number {
+  let d = 0;
+  for (const e of stageEffects(state, stage)) if (e.kind === 'defense') d += e.amount;
+  return Math.min(0.9, d);
+}
+
+export function sizeOf(state: GameState, stage: StageId): number {
+  let size = 1;
+  for (const e of stageEffects(state, stage)) if (e.kind === 'size') size = Math.max(size, e.size);
+  return size;
+}
+
+function product(state: GameState, stage: StageId, kind: 'heroSpeed' | 'forageMult' | 'spawnMult'): number {
+  let m = 1;
+  for (const e of stageEffects(state, stage)) if (e.kind === kind) m *= e.mult;
+  return m;
+}
+export const heroSpeed = (state: GameState, stage: StageId) => product(state, stage, 'heroSpeed');
+export const forageMult = (state: GameState, stage: StageId) => product(state, stage, 'forageMult');
+export const spawnMult = (state: GameState, stage: StageId) => product(state, stage, 'spawnMult');
+export const autopilot = (state: GameState, stage: StageId) => stageEffects(state, stage).some((e) => e.kind === 'autopilot');
+
+export function habitatOf(state: GameState, stage: StageId): HabitatDef | undefined {
+  const hs = STAGES[stage].habitats;
+  return hs?.find((h) => h.id === state.stages[stage].habitat) ?? hs?.[0];
+}
+
+/** How well a diet does on a habitat's food: grazers want algae, hunters bacteria. */
+export function dietFit(diet: Diet | null, food: HabitatDef['food']): number {
+  if (diet === 'grazer') return food.algae;
+  if (diet === 'hunter') return food.bacteria;
+  if (diet === 'omnivore') return 0.8 * Math.max(food.algae, food.bacteria) + 0.4 * Math.min(food.algae, food.bacteria);
+  return 0.6 * (food.algae + food.bacteria) / 2 + 0.4;
+}
+
+/** Share of output that survives predators here, given the lineage's defenses. */
+export function survival(state: GameState, stage: StageId, h = habitatOf(state, stage)): number {
+  if (!h) return 1;
+  return 1 - h.danger * (1 - defenseOf(state, stage));
+}
+
+/** Output multiplier from where the lineage lives: food that suits its diet, minus predators. */
+export function habitatMult(state: GameState, stage: StageId, h = habitatOf(state, stage)): number {
+  if (!h) return 1;
+  return dietFit(dietOf(state, stage), h.food) * survival(state, stage, h);
+}
+
+/** Extra seconds of time away that count, from effects on the current stage. */
+export function offlineBonusSec(state: GameState): number {
+  let hours = 0;
+  for (const e of stageEffects(state, state.current)) if (e.kind === 'offlineHours') hours += e.hours;
+  return hours * 3600;
+}
+
 export function generatorRate(state: GameState, stage: StageId, gen: GeneratorDef): Decimal {
   const owned = state.stages[stage].generators[gen.id] ?? 0;
   if (owned === 0) return ZERO;
   const effects = stageEffects(state, stage);
   let m = Math.pow(2, milestonesReached(owned));
   for (const e of effects) if (e.kind === 'genMult' && e.target === gen.id) m *= e.mult;
-  m *= stageMult(effects) * dialMult(state, stage, gen) * swirlMult(state, stage);
+  m *= stageMult(effects) * dialMult(state, stage, gen) * swirlMult(state, stage) * habitatMult(state, stage);
   return D(gen.baseRate * owned * m * feedMult(state, stage));
 }
 

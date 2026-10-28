@@ -8,6 +8,7 @@
 import { PAL } from '../art/sprites';
 import type { GameState, StageId } from '../economy/types';
 import { CellScene } from './cell';
+import type { PondEvent } from './pond';
 import { ring, type Frame } from './paint';
 import { SoupScene } from './soup';
 
@@ -82,10 +83,20 @@ export class Scene {
     if (this.floaters.length > 24) this.floaters.shift();
   }
 
-  /** Startles the cells under a finger; returns a quip if one was hit. */
-  poke(cssX: number, cssY: number): string | null {
+  /**
+   * A tap in the Cell pond: steers your cell, or hits a predator under the
+   * finger. Returns a quip when a swimmer was poked instead.
+   */
+  cellTap(state: GameState, cssX: number, cssY: number): { hit: boolean; quip: string | null } {
     const [x, y] = this.toArt(cssX, cssY);
-    return this.cell.poke(x, y) ? QUIPS[Math.floor(Math.random() * QUIPS.length)] : null;
+    const r = this.cell.tap(state, x, y);
+    return { hit: r.hit, quip: r.poked && Math.random() < 0.3 ? QUIPS[Math.floor(Math.random() * QUIPS.length)] : null };
+  }
+
+  /** What happened in the pond since last asked, with positions in CSS pixels. */
+  pondEvents(): PondEvent[] {
+    if (this.stage !== 'cell') return [];
+    return this.cell.pond.drain().map((e) => ({ ...e, x: e.x * this.px, y: e.y * this.px }));
   }
 
   /** Plays a purchase out in the scene. Call after the purchase went through. */

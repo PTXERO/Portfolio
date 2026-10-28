@@ -2,7 +2,7 @@
 
 An idle creature-evolution game for iPhone. The design doc lives in Claude Docs; this folder is the code.
 
-**Status: M2 in progress.** Soup and Cell are playable with the pixel-art scene and interface. Sprites are placeholders in the final palette.
+**Status: M2 in progress.** Soup (about 1 hour) and Cell (about 2 to 3 hours) are playable from start to end, with the pixel-art scene and interface. Sprites are placeholders in the final palette.
 
 ## Commands
 
@@ -19,9 +19,9 @@ npm run build      # type-check and build to dist/
 - `src/economy/`: state, rates, actions, tick, offline progress, saves. Pure logic, no DOM.
 - `src/content/stages.ts`: every stage, generator and upgrade as data. Balancing means editing this file and rerunning `npm run sim`.
 - `src/art/sprites.ts`: every sprite as a grid of palette letters. Replace the grids with real art; names and sizes are free.
-- `src/scene/`: the diorama. Draws the state into a small pixel buffer and scales it up. Never changes the economy.
+- `src/scene/`: the diorama. Draws the state into a small pixel buffer and scales it up. Never changes the economy: the Cell pond (`pond.ts`) reports what your cell ate, engulfed or drove off as events, and `main.ts` applies them.
 - `src/ui/`: tab panels and the interface stylesheet (pixel boxes and buttons).
-- `src/main.ts`: wires the screen together: scene in the middle (tap to stir or poke), tabs below.
+- `src/main.ts`: wires the screen together: scene in the middle (tap to stir the Soup, or steer your cell), tabs below.
 - `tools/sim.ts`: the balance simulator.
 - `tests/`: unit tests.
 

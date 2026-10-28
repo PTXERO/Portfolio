@@ -15,9 +15,14 @@ import {
   buyGenerator,
   buyUpgrade,
   canEvolve,
+  engulf,
+  engulfable,
   evolve,
+  fendOff,
+  forage,
   goalProgress,
   goalShown,
+  moveHabitat,
   nextReaction,
   reactions,
   setDial,
@@ -32,7 +37,7 @@ import { createState } from './economy/state';
 import { liveTick, TICK_SEC } from './economy/tick';
 import type { BuyAmount, DialId, GameState } from './economy/types';
 import { Scene } from './scene/scene';
-import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, layout, layoutKey, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
+import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const stageEl = $('stage');
@@ -105,7 +110,8 @@ function showDiscovery(): void {
   if (!r) return;
   scene.discovery();
   const n = state.stages[state.current].discovered.indexOf(id) + 1;
-  showModal(`<p class="label dim">New reaction · ${n} of ${reactions(state.current).length}</p>
+  const kind = STAGES[state.current].habitats ? 'New organelle' : 'New reaction';
+  showModal(`<p class="label dim">${kind} · ${n} of ${reactions(state.current).length}</p>
     <h3>${r.name}</h3>
     <p>${r.flavor}</p>
     <p class="fx">${rewardText(state.current, r)}</p>
@@ -184,7 +190,7 @@ function renderGoal(): void {
     goalKey = key;
     evolveEl.hidden = !shown;
     const pips = rs.length || 20;
-    const label = rs.length ? 'Recipe book' : 'Something is changing';
+    const label = rs.length ? (def.bookName ?? 'Discoveries') : 'Something is changing';
     const button = finale
       ? `<button class="px-btn gold pulse" data-act="finale">${rs.find((r) => r.final)!.name}</button>`
       : almost
@@ -220,10 +226,11 @@ function renderGoal(): void {
   if (nextEl) {
     const n = nextReaction(state, state.current);
     let text = '';
-    if (n && !finaleReady(state)) {
+    if (engulfable(state, state.current).length) text = 'A rare microbe is about: steer your cell into it!';
+    else if (n && !finaleReady(state)) {
       const name = n.r.final ? n.r.name : '???';
       const missing = n.check.parts.filter((p) => !p.ok);
-      if (!n.check.gens) text = `Next ${name}: grow ${missing.find((p) => /^\d/.test(p.label))?.label ?? 'more molecules'}`;
+      if (!n.check.gens && !def.habitats) text = `Next ${name}: grow ${missing.find((p) => /^\d/.test(p.label))?.label ?? 'more molecules'}`;
       else if (missing.length || !n.check.cost) {
         const met = n.check.parts.length - missing.length;
         let need = missing[0]?.label;
@@ -247,7 +254,9 @@ function renderPanel(): void {
   for (const b of tabsEl.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
     b.classList.toggle('on', ui.open && b.dataset.tab === ui.tab);
     const dot = b.querySelector<HTMLElement>('.dot');
-    if (dot) dot.hidden = !(b.dataset.tab === 'boosts' ? boostReady(state) : b.dataset.tab === 'lab' ? finaleReady(state) : false);
+    const t = b.dataset.tab;
+    const on = t === 'boosts' || t === 'mutate' ? boostReady(state) : t === 'lab' ? finaleReady(state) : t === 'pond' ? organelleNear(state) || finaleReady(state) : false;
+    if (dot) dot.hidden = !on;
   }
   if (!ui.open) return;
   const key = layoutKey(state, ui.tab);
@@ -270,7 +279,7 @@ function renderHint(): void {
     const st = state.stages.soup;
     if (state.taps < 3) text = 'Tap the soup to stir it';
     else if (st.discovered.includes('phosphorylation') && !st.discovered.includes('polymerization') && state.swirl < 0.05) text = 'Draw circles to spin a whirlpool';
-  } else if (!pokedThisStage) text = 'Tap to poke your cells';
+  } else if (!pokedThisStage) text = 'Tap to steer your cell';
   hint.hidden = !text || !modal.hidden;
   if (hint.textContent !== text) hint.textContent = text;
 }
@@ -285,27 +294,33 @@ function render(): void {
   showDiscovery();
 }
 
-// ---- The Soup's ending ----
+// ---- A stage's ending ----
 
 function playEnding(): void {
-  const soup = state.stages.soup;
+  const def = STAGES[state.current];
+  const st = state.stages[state.current];
+  const book = def.bookName ?? 'Discoveries';
   const stats = [
     ['Time', formatTime(state.playTime)],
-    ['Stirs', String(state.taps)],
-    ['Reactions', `${soup.discovered.length} / ${reactions('soup').length}`],
-    ['Nutrients made', format(soup.totalEarned)],
+    def.habitats ? ['Food eaten', String(st.eaten)] : ['Stirs', String(state.taps)],
+    [book, `${st.discovered.length} / ${reactions(state.current).length}`],
+    [`${def.currency[0].toUpperCase()}${def.currency.slice(1)} made`, format(st.totalEarned)],
   ];
-  scene.finale();
+  if (state.current === 'soup') scene.finale();
+  else scene.evolveFlash();
+  // With nothing built after this stage yet, the ending says so instead of going on.
+  const after = def.next
+    ? `<p class="stir">…but something is still moving.</p>
+      <button class="px-btn gold pulse" data-act="look">Look closer</button>`
+    : `<p class="stir">The story continues in a future update.</p>
+      <button class="px-btn gold" data-act="keep">Keep watching</button>`;
   ending.innerHTML = `<div class="ending-inner">
-    <p class="label dim">Primordial Soup</p>
-    <h1>Life.</h1>
-    <p>Something in the soup made a copy of itself, and the copy did too.</p>
+    <p class="label dim">${def.name}</p>
+    <h1>${def.ending?.title ?? 'The end.'}</h1>
+    <p>${def.ending?.line ?? ''}</p>
     <dl>${stats.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
     <p class="thanks">Thank you for playing.</p>
-    <div class="after" hidden>
-      <p class="stir">…but something is still moving.</p>
-      <button class="px-btn gold pulse" data-act="look">Look closer</button>
-    </div>
+    <div class="after" hidden>${after}</div>
   </div>`;
   ending.hidden = false;
   requestAnimationFrame(() => ending.classList.add('in'));
@@ -324,6 +339,19 @@ function closeEnding(): void {
     ui.tab = 'grow';
     panelKey = '';
   }
+}
+
+/** Applies what happened in the pond: food eaten, organelles engulfed, predators driven off. */
+function pondEvents(): void {
+  for (const e of scene.pondEvents()) {
+    if (e.type === 'eat') scene.float(e.x, e.y - 8, `+${format(forage(state, e.food))}`, '#7fe0b0');
+    else if (e.type === 'engulf') {
+      if (engulf(state, state.current, e.id)) scene.float(e.x, e.y - 10, 'engulfed!', '#f5c45e');
+    } else if (e.type === 'rare') scene.float(e.x, e.y - 10, 'a rare microbe!', '#f5c45e');
+    else if (e.type === 'hit') scene.float(e.x, e.y - 10, ['thwack', 'ow!', 'scram!'][Math.floor(Math.random() * 3)], '#f2ead7');
+    else if (e.type === 'fend') scene.float(e.x, e.y - 10, `driven off! +${format(fendOff(state))}`, '#f5c45e');
+  }
+  collectNews();
 }
 
 // ---- Input ----
@@ -347,7 +375,7 @@ stageEl.addEventListener('pointerdown', (e) => {
     const v = tap(state);
     if (v.gt(0)) scene.float(x, y - 10, `+${format(v)}`, '#f5c45e');
   } else {
-    const quip = scene.poke(x, y);
+    const { quip } = scene.cellTap(state, x, y);
     pokedThisStage = true;
     if (quip) scene.float(x, y - 14, quip, '#f2ead7');
   }
@@ -394,6 +422,7 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.dial) setDial(state, id, el.dataset.dial as DialId, Number(el.dataset.level));
   else if (el.dataset.amount) state.buyAmount = el.dataset.amount === 'max' ? 'max' : (Number(el.dataset.amount) as BuyAmount);
   else if (el.dataset.warp) state.warp = Number(el.dataset.warp);
+  else if (el.dataset.habitat) moveHabitat(state, id, el.dataset.habitat);
   else if (el.dataset.tab) {
     const t = el.dataset.tab as Tab;
     const order = tabsFor(state);
@@ -411,6 +440,10 @@ function act(el: HTMLElement): void {
         break;
       case 'look':
         closeEnding();
+        break;
+      case 'keep':
+        ending.classList.remove('in');
+        setTimeout(() => (ending.hidden = true), 600);
         break;
       case 'evolve':
         if (evolve(state)) {
@@ -455,14 +488,16 @@ document.addEventListener('click', (e) => {
   if (el && !el.disabled) act(el);
 });
 
-// Tapping the recipe strip opens the Lab, where the dials and clues are.
+// Tapping the book strip opens the book: the Lab in the Soup, the Pond after.
 evolveEl.addEventListener('click', (e) => {
-  if ((e.target as HTMLElement).closest('button') || !tabsFor(state).includes('lab')) return;
-  if (ui.tab !== 'lab' || !ui.open) {
+  const tabs = tabsFor(state);
+  const book: Tab | null = tabs.includes('lab') ? 'lab' : tabs.includes('pond') ? 'pond' : null;
+  if ((e.target as HTMLElement).closest('button') || !book) return;
+  if (ui.tab !== book || !ui.open) {
     panelEnter = ui.open ? 'from-right' : 'from-below';
     panelKey = '';
   }
-  ui.tab = 'lab';
+  ui.tab = book;
   ui.open = true;
   saveUi();
   render();
@@ -494,6 +529,7 @@ function frame(now: number): void {
   const dt = Math.min(acc, 100) / 1000;
   acc %= FRAME_MS;
   scene.draw(state, dt);
+  pondEvents();
 }
 
 // A save made mid-ending (closed during the credits) picks up at the reveal.

@@ -6,16 +6,20 @@ import {
   buyGenerator,
   buyUpgrade,
   canEvolve,
+  engulf,
+  engulfable,
   evolve,
+  forage,
   generatorCost,
   generatorVisible,
+  moveHabitat,
   setDial,
   tap,
   triggerFinale,
 } from '../src/economy/actions';
 import { D } from '../src/economy/num';
 import { applyOffline, timeBankCap } from '../src/economy/offline';
-import { dialMax, milestonesReached, stageRate } from '../src/economy/rates';
+import { dialMax, dietOf, habitatMult, milestonesReached, stageRate } from '../src/economy/rates';
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
@@ -344,5 +348,67 @@ describe('saves', () => {
     const saved = JSON.parse(serialize(s));
     delete saved.stages.soup.generators.protocell;
     expect(deserialize(JSON.stringify(saved)).stages.soup.generators.protocell).toBe(0);
+  });
+});
+
+describe('cell stage', () => {
+  function cell() {
+    const s = fresh();
+    finishSoup(s);
+    s.stages.cell.currency = D(1e15);
+    return s;
+  }
+
+  it('diets are a choice: buying one hides the other', () => {
+    const s = cell();
+    expect(buyUpgrade(s, 'cell', 'grazer')).toBe(true);
+    expect(buyUpgrade(s, 'cell', 'hunter')).toBe(false);
+    expect(dietOf(s, 'cell')).toBe('grazer');
+  });
+
+  it('habitats open with mutations, and diet decides how well you do there', () => {
+    const s = cell();
+    expect(moveHabitat(s, 'cell', 'depths')).toBe(false);
+    buyUpgrade(s, 'cell', 'thickMembrane');
+    buyUpgrade(s, 'cell', 'hunter');
+    const before = habitatMult(s, 'cell');
+    expect(moveHabitat(s, 'cell', 'depths')).toBe(true);
+    expect(habitatMult(s, 'cell')).toBeGreaterThan(before);
+  });
+
+  it('organelles are engulfed only when their conditions hold', () => {
+    const s = cell();
+    expect(engulf(s, 'cell', 'chloroplast')).toBe(false);
+    buyUpgrade(s, 'cell', 'grazer');
+    expect(engulfable(s, 'cell').map((r) => r.id)).toContain('chloroplast');
+    expect(engulf(s, 'cell', 'chloroplast')).toBe(true);
+    expect(s.stages.cell.discovered).toContain('chloroplast');
+    expect(s.news).toContain('chloroplast');
+    // Organelles are never discovered by just waiting.
+    const t = fresh();
+    finishSoup(t);
+    t.stages.cell.currency = D(1e15);
+    buyUpgrade(t, 'cell', 'grazer');
+    tick(t, 10);
+    expect(t.stages.cell.discovered).not.toContain('chloroplast');
+  });
+
+  it('foraging pays more for the right food', () => {
+    const s = cell();
+    buyUpgrade(s, 'cell', 'grazer');
+    s.stages.cell.generators.fission = 100;
+    const a = forage(s, 'algae');
+    const b = forage(s, 'bacteria');
+    expect(a.gt(b)).toBe(true);
+    expect(s.stages.cell.eaten).toBe(2);
+  });
+
+  it('multicellularity ends the stage, with nothing to evolve into yet', () => {
+    const s = cell();
+    s.stages.cell.discovered = STAGES.cell.reactions!.filter((r) => !r.final).map((r) => r.id);
+    s.stages.cell.generators.colony = 40;
+    for (const u of ['bigger', 'giant']) buyUpgrade(s, 'cell', u);
+    expect(triggerFinale(s)).toBe(true);
+    expect(canEvolve(s)).toBe(false);
   });
 });

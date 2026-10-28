@@ -1,6 +1,7 @@
 // Soft-bodied blobs: several round "cores" whose fields add up, so cores that
 // drift close together melt into one body (metaballs). Used for colonies: the
-// member cells fuse into a single morphing amoeba with a nucleus each.
+// member cells fuse into a single morphing amoeba with a nucleus each. Predators
+// are blobs too, in their own colours.
 
 import { PAL } from '../art/sprites';
 
@@ -17,11 +18,21 @@ function rgba(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-const EDGE = rgba(PAL.g);
-const BODY = rgba(PAL.G);
-const SHINE = rgba(PAL.g);
-const NUCLEUS = rgba(PAL.n);
-const ORGANELLE = rgba(PAL.o);
+/** Colours for a blob: its outline (also the shine), body and nuclei. */
+export interface BlobStyle {
+  edge: string;
+  body: string;
+  nucleus: string;
+}
+
+export const MINT: BlobStyle = { edge: PAL.g, body: PAL.G, nucleus: PAL.n };
+
+const rgbCache = new Map<string, [number, number, number]>();
+const rgb = (hex: string) => {
+  let c = rgbCache.get(hex);
+  if (!c) rgbCache.set(hex, (c = rgba(hex)));
+  return c;
+};
 
 const scratch = document.createElement('canvas');
 const sctx = scratch.getContext('2d')!;
@@ -31,8 +42,12 @@ const sctx = scratch.getContext('2d')!;
  * with `insideOnly` false, then again with it true: the second pass paints over
  * outlines where blobs overlap, so touching blobs merge into one body.
  */
-export function drawBlob(b: CanvasRenderingContext2D, cores: Core[], organelles: boolean, insideOnly = false): void {
+export function drawBlob(b: CanvasRenderingContext2D, cores: Core[], style: BlobStyle = MINT, insideOnly = false): void {
   if (!cores.length) return;
+  const EDGE = rgb(style.edge);
+  const BODY = rgb(style.body);
+  const SHINE = EDGE;
+  const NUCLEUS = rgb(style.nucleus);
   let x0 = Infinity;
   let y0 = Infinity;
   let x1 = -Infinity;
@@ -98,10 +113,6 @@ export function drawBlob(b: CanvasRenderingContext2D, cores: Core[], organelles:
     put(nx + 1, ny, NUCLEUS);
     put(nx, ny - 1, NUCLEUS);
     put(nx + 1, ny - 1, NUCLEUS);
-    if (organelles) {
-      put(nx - 2, ny + 1, ORGANELLE);
-      put(nx - 1, ny + 1, ORGANELLE);
-    }
   }
   sctx.clearRect(0, 0, w, h);
   sctx.putImageData(img, 0, 0);

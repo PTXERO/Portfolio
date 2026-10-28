@@ -1,11 +1,23 @@
-// The Cell stage scene: a tide pool whose life is drawn from what you own, and
+// The Cell stage scene: a pond whose life is drawn from what you own, and
 // whose purchases play out on screen (cells divide, colonies clump, pillars rise).
+// Every cell wears the lineage's mutations; the pond's active life (your own
+// cell, food, rare microbes, predators) lives in pond.ts.
 
-import { blit, PAL } from '../art/sprites';
+import { PAL } from '../art/sprites';
+import { habitatOf } from '../economy/rates';
 import type { GameState } from '../economy/types';
 import { Effects, ease, glints, hash, ring, visibleCount, water, type Frame } from './paint';
-import { drawBlob, type Core } from './blob';
-import { SPLIT_AT, STRETCH_UNTIL, Swarm } from './swarm';
+import { drawBlob, type BlobStyle, type Core } from './blob';
+import { DIET_COLORS, drawCellLook, lookOf, type Look } from './cellLook';
+import { Pond } from './pond';
+import { SPLIT_AT, Swarm } from './swarm';
+
+/** How each habitat looks: water bands top to bottom, glints, and the floor. */
+const HABITATS: Record<string, { water: string[]; glint: string; sand: [string, string]; rock: [string, string] }> = {
+  shallows: { water: ['#2a7184', '#1d5a6e', '#184d60', '#134052', '#0d2b3a'], glint: '#3f8a99', sand: [PAL.s, PAL.S], rock: [PAL.r, PAL.R] },
+  depths: { water: ['#1a3f5c', '#16364f', '#122d43', '#0e2437', '#0a1a2a'], glint: '#2a5a78', sand: ['#5a6a70', '#46555c'], rock: ['#3a4650', '#4c5a64'] },
+  vents: { water: ['#2b2236', '#251d2f', '#201927', '#1b1420', '#1a0f14'], glint: '#4a3550', sand: ['#3a3236', '#2a2428'], rock: ['#2e2a2c', '#46403f'] },
+};
 
 interface Colony {
   x: number;
@@ -41,6 +53,11 @@ const MEMBERS: [number, number][] = [
 
 export class CellScene {
   swarm = new Swarm();
+  pond = new Pond();
+  private habitat = '';
+  /** Seconds of the dark wipe after moving habitat. */
+  private wipe = 0;
+  private look: Look | null = null;
   private colonies: Colony[] = [];
   private pillars: Pillar[] = [];
   private matShown = 0;
@@ -55,6 +72,8 @@ export class CellScene {
   reset(): void {
     this.ready = false;
     this.fx.clear();
+    this.pond.reset();
+    this.habitat = '';
   }
 
   private colonyTargets(owned: number): { count: number; size: number } {
@@ -109,7 +128,7 @@ export class CellScene {
           const from = [Math.random() < 0.5 ? -10 : W + 10, Math.random() * floor * 0.8] as const;
           fx.add(1, (f, age) => {
             const k = ease(age);
-            blit(f.b, 'cell', from[0] + (c.x - from[0]) * k, from[1] + (this.colonyY(c) - from[1]) * k, from[0] > c.x);
+            if (this.look) drawCellLook(f.b, this.look, from[0] + (c.x - from[0]) * k, from[1] + (this.colonyY(c) - from[1]) * k, { rx: 4, left: from[0] > c.x, frame: Math.floor(age * 8) % 2 });
             if (age > 0.95) c.pulse = 0.4;
           });
           c.size = Math.max(c.size, size);
@@ -158,21 +177,21 @@ export class CellScene {
           for (let x = 0; x < reach; x += 2) f.b.fillRect(x, floor - 1 - ((x >> 1) % 2), 1, 1);
         });
         break;
-      case 'endosymbiosis': {
-        const host = this.swarm.cells.find((c) => c.split < 0);
-        if (host) {
-          const from = [host.x + 30, host.y - 20] as const;
-          fx.add(1.2, (f, age) => {
-            const k = ease(age / 0.9);
-            if (age < 0.9) blit(f.b, 'protoSmall', from[0] + (host.x - from[0]) * k, from[1] + (host.y - from[1]) * k);
-            else ring(f.b, host.x, host.y, 4 + (age - 0.9) * 30, PAL.o);
-          });
-        }
-        break;
-      }
       case 'layering':
         fx.sparkle(W / 2, floor + 3);
         break;
+      default: {
+        // A mutation: the change ripples out from your own cell, then the swarm.
+        const at = this.pond.heroAt();
+        if (!at) break;
+        const diet = id === 'grazer' || id === 'hunter' || id === 'omnivore' ? DIET_COLORS[id][1] : PAL.w;
+        fx.pulse(at[0], at[1], diet);
+        fx.pulse(at[0], at[1], diet, 0.3);
+        fx.sparkle(at[0] + 6, at[1] - 6, 0.2);
+        this.swarm.cells.forEach((c, i) => {
+          if (i < 12) fx.add(0.5, (f) => ring(f.b, c.x, c.y, 4, diet), 0.4 + i * 0.05);
+        });
+      }
     }
   }
 
@@ -193,6 +212,17 @@ export class CellScene {
     const st = state.stages.cell;
     const gens = st.generators;
     const has = (u: string) => st.upgrades.includes(u);
+    const look = (this.look = lookOf(state, 'cell'));
+    // The swarm wears a lighter version of the look, so a crowd stays readable;
+    // your own cell shows every mutation.
+    const crowd: Look = { ...look, flagella: Math.min(1, look.flagella), cilia: false, thick: false, eyespot: false, spikes: false, toxin: false };
+    const hab = HABITATS[habitatOf(state, 'cell')?.id ?? 'shallows'] ?? HABITATS.shallows;
+    if (this.habitat !== st.habitat) {
+      // Moving house: a quick dark wipe and a fresh pond.
+      if (this.habitat) this.wipe = 0.6;
+      this.habitat = st.habitat;
+      this.pond.moved();
+    }
 
     // First frame on this stage: show what's owned without replaying it all.
     if (!this.ready) {
@@ -205,8 +235,40 @@ export class CellScene {
       this.filmShown = this.filmTarget(gens.biofilm);
     }
 
-    water(f, ['#2a7184', '#1d5a6e', '#184d60', '#134052', '#0d2b3a'], floor);
-    glints(f, '#3f8a99', floor);
+    water(f, hab.water, floor);
+    glints(f, hab.glint, floor);
+    if (st.habitat === 'depths') {
+      // Marine snow drifting down through the dark.
+      b.fillStyle = '#8fa8b8';
+      for (let i = 0; i < 24; i++) {
+        const x = Math.floor(hash(i, 3) * W + Math.sin(t * 0.5 + i) * 2);
+        const y = Math.floor((hash(i, 7) * floor + t * (2 + (i % 3))) % floor);
+        b.fillRect(x, y, 1, 1);
+      }
+    }
+    if (st.habitat === 'vents') {
+      // A hot glow along the floor, and chimneys puffing dark smoke.
+      for (let y = 0; y < 10; y++) {
+        b.fillStyle = y < 4 ? '#5a2020' : '#3a1820';
+        for (let x = (y + Math.floor(t * 3)) % 3; x < W; x += 3 + (y >> 1)) b.fillRect(x, floor - y, 1, 1);
+      }
+      for (const [k, cx] of [[0, 0.3], [1, 0.62]] as const) {
+        const x = Math.floor(W * cx);
+        const ch = 14 + k * 6;
+        b.fillStyle = hab.rock[1];
+        b.fillRect(x - 3, floor - ch, 6, ch);
+        b.fillStyle = hab.rock[0];
+        b.fillRect(x - 2, floor - ch, 1, ch);
+        b.fillStyle = '#f2906c';
+        b.fillRect(x - 1, floor - ch, 2, 1);
+        for (let i = 0; i < 8; i++) {
+          const age = (t * 0.7 + i / 8 + k * 0.3) % 1;
+          b.fillStyle = age < 0.2 ? '#6a5a60' : '#3a3038';
+          const s = 1 + Math.floor(age * 3);
+          b.fillRect(Math.round(x + Math.sin(age * 6 + i) * age * 6) - (s >> 1), Math.round(floor - ch - age * 30), s, s);
+        }
+      }
+    }
 
     // Stromatolites rise out of the sand at the back.
     for (const p of this.pillars) {
@@ -221,13 +283,13 @@ export class CellScene {
       }
     }
 
-    // Sand.
-    b.fillStyle = PAL.s;
+    // Sand (mud in the depths, basalt at the vents).
+    b.fillStyle = hab.sand[0];
     for (let x = 0; x < W; x++) {
       const top = floor + Math.round(Math.sin(x * 0.06) * 1.5);
       b.fillRect(x, top, 1, H - top);
     }
-    b.fillStyle = PAL.S;
+    b.fillStyle = hab.sand[1];
     for (let i = 0; i < 40; i++) b.fillRect((i * 29) % W, floor + 4 + ((i * 13) % Math.max(1, H - floor - 5)), 2, 1);
 
     // Microbial mats unroll outward from the middle.
@@ -252,11 +314,11 @@ export class CellScene {
       const covered = Math.round(this.filmShown * r);
       for (let y = 0; y < r; y++) {
         const half = Math.round(Math.sqrt(1 - (y / r) ** 2) * r * 1.3);
-        b.fillStyle = y < covered ? (y % 2 ? PAL.l : PAL.L) : PAL.r;
+        b.fillStyle = y < covered ? (y % 2 ? PAL.l : PAL.L) : hab.rock[0];
         b.fillRect(rx - half, floor + 1 - y, half * 2, 1);
       }
       if (covered < r * 0.7) {
-        b.fillStyle = PAL.R;
+        b.fillStyle = hab.rock[1];
         b.fillRect(rx - Math.floor(r * 0.6), floor + 1 - Math.floor(r * 0.7), Math.floor(r * 0.6), 2);
       }
     }
@@ -301,36 +363,53 @@ export class CellScene {
       }
       blobs.push(cores);
     }
-    for (const cores of blobs) drawBlob(b, cores, has('endosymbiosis'));
-    for (const cores of blobs) drawBlob(b, cores, has('endosymbiosis'), true);
+    const [fill, edge] = DIET_COLORS[look.diet ?? 'none'];
+    const style: BlobStyle = { edge, body: fill, nucleus: PAL.n };
+    for (const cores of blobs) drawBlob(b, cores, style);
+    for (const cores of blobs) drawBlob(b, cores, style, true);
 
-    // The free-swimming swarm, dividing as it grows.
+    this.pond.step(f, state, floor, this.swarm);
+    this.pond.drawBack(f);
+
+    // The free-swimming swarm, dividing as it grows. Each cell wears the
+    // lineage's mutations.
     this.swarm.target = visibleCount(gens.fission, 60);
     this.swarm.step(dt, t, W, floor, top);
     for (const c of this.swarm.cells) {
       if (c.fade > 0 && Math.floor(t * 14) % 2) continue; // blink out
       const left = c.vx < 0;
       if (c.split >= 0) {
-        // Stretch, then pinch, wobbling as it goes.
-        const wob = Math.round(Math.sin(c.split * 40));
-        blit(b, c.split < STRETCH_UNTIL ? 'cellStretch' : 'cellPinch', c.x + wob, c.y);
-        if (c.split > SPLIT_AT - 0.1) blit(b, 'sparkB', c.x, c.y - 5);
+        // Two daughters pull apart inside one stretching body, wobbling as they go.
+        const apart = Math.min(1, c.split / SPLIT_AT) * 3;
+        const wob = Math.round(Math.sin(c.split * 40) * 0.6);
+        drawCellLook(b, crowd, c.x - apart + wob, c.y, { rx: 4 });
+        drawCellLook(b, crowd, c.x + apart + wob, c.y, { rx: 4, left: true });
+        if (c.split > SPLIT_AT - 0.1) {
+          b.fillStyle = PAL.w;
+          b.fillRect(Math.round(c.x), Math.round(c.y) - 4, 1, 1);
+        }
         continue;
       }
-      const flick = Math.floor(t * 8 + c.phase) % 2 === 0;
-      blit(b, flick ? 'tailA' : 'tailB', c.x + (left ? 6 : -6), c.y, left);
       const squish = (c.poked > 0 || c.pop > 0) && Math.floor(t * 16) % 2 === 0;
-      blit(b, squish ? 'cellSquish' : 'cell', c.x, c.y, left);
-      if (has('endosymbiosis')) {
-        b.fillStyle = PAL.o;
-        b.fillRect(Math.round(c.x) + (left ? 1 : -2), Math.round(c.y) + 1, 2, 1);
-      }
+      drawCellLook(b, crowd, c.x, c.y, { rx: 4, left, frame: Math.floor(t * 8 + c.phase) % 2, squash: squish });
     }
 
+    this.pond.drawFront(f);
     this.fx.run(f);
+
+    if (this.wipe > 0) {
+      this.wipe = Math.max(0, this.wipe - dt);
+      b.globalAlpha = Math.min(1, this.wipe * 2);
+      b.fillStyle = PAL.k;
+      b.fillRect(0, 0, W, H);
+      b.globalAlpha = 1;
+    }
   }
 
-  poke(x: number, y: number): boolean {
-    return !!this.swarm.poke(x, y);
+  /** A tap in the pond: hits a predator or steers your cell; nearby swimmers scatter. */
+  tap(state: GameState, x: number, y: number): { hit: boolean; poked: boolean } {
+    const hit = this.pond.tap(state, x, y) === 'hit';
+    const poked = !hit && !!this.swarm.poke(x, y);
+    return { hit, poked };
   }
 }

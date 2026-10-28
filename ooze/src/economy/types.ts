@@ -8,6 +8,10 @@ export const DIALS: DialId[] = ['heat', 'light', 'charge'];
 /** Output multiplier at each dial level, 0 to 3. */
 export type DialCurve = [number, number, number, number];
 
+/** What the Cell stage's cells eat. Before choosing, a cell eats a bit of everything. */
+export type Diet = 'grazer' | 'hunter' | 'omnivore';
+export type FoodKind = 'algae' | 'bacteria';
+
 export interface GeneratorDef {
   id: string;
   name: string;
@@ -34,7 +38,23 @@ export type Effect =
   /** Unlocks a dial, or raises how far it turns. */
   | { kind: 'dialMax'; dial: DialId; max: number }
   /** Strengthens the whirlpool's production bonus. */
-  | { kind: 'swirlMult'; mult: number };
+  | { kind: 'swirlMult'; mult: number }
+  // ---- Cell stage ----
+  /** The hero cell swims faster. */
+  | { kind: 'heroSpeed'; mult: number }
+  /** Shields the lineage from predators: 0 to 1, added up and capped. */
+  | { kind: 'defense'; amount: number }
+  /** Food the hero eats is worth more. */
+  | { kind: 'forageMult'; mult: number }
+  | { kind: 'diet'; diet: Diet }
+  /** Cell size: bigger cells can engulf bigger things. */
+  | { kind: 'size'; size: number }
+  /** The hero forages on its own. */
+  | { kind: 'autopilot' }
+  /** Food and rare microbes turn up more often. */
+  | { kind: 'spawnMult'; mult: number }
+  /** Adds to how much time away counts. */
+  | { kind: 'offlineHours'; hours: number };
 
 export interface UpgradeDef {
   id: string;
@@ -42,8 +62,27 @@ export interface UpgradeDef {
   flavor: string;
   cost: number;
   effect: Effect;
-  /** Shown only once this many of a generator are owned, or a reaction is known. */
-  requires?: { generator?: string; owned?: number; reaction?: string };
+  /** More effects, for mutations that change several things at once. */
+  extra?: Effect[];
+  /** Shown only once these hold: generators owned, a reaction known, other upgrades bought. */
+  requires?: { generator?: string; owned?: number; reaction?: string; upgrades?: string[]; anyReaction?: string[] };
+  /** Mutation Tree branch; upgrades without one are plain boosts. */
+  branch?: string;
+  /** Can't be bought alongside these (a choice, like diets). */
+  excludes?: string[];
+}
+
+/** A place in the Cell stage's pond. */
+export interface HabitatDef {
+  id: string;
+  name: string;
+  flavor: string;
+  /** How much of each food there is; 1 is ordinary. */
+  food: Record<FoodKind, number>;
+  /** Share of output lost to predators with no defense, 0 to 1. */
+  danger: number;
+  /** Locked until this upgrade is bought or reaction found. */
+  unlock?: { upgrade?: string; reaction?: string };
 }
 
 /** A discovery: happens by itself once its conditions all hold at the same moment. */
@@ -59,7 +98,17 @@ export interface ReactionDef {
     dials?: Partial<Record<DialId, [number, number]>>;
     /** Whirlpool strength needed, 0 to 1. */
     swirl?: number;
+    /** Upgrades (mutations) that must be owned. */
+    upgrades?: string[];
+    /** Any one of these upgrades will do (e.g. either diet). */
+    anyUpgrade?: string[];
+    /** Habitat the lineage must be living in. */
+    habitat?: string;
+    /** How many other entries must already be found. */
+    found?: number;
   };
+  /** Found by the player steering into it (engulfing), not automatically. */
+  manual?: boolean;
   /** The two molecules seen combining in the scene (looks only). */
   pair?: [string, string];
   /** Generator this reveals. */
@@ -86,6 +135,11 @@ export interface StageDef {
   upgrades: UpgradeDef[];
   /** Stages with reactions end on their final reaction instead of `goal`. */
   reactions?: ReactionDef[];
+  /** What the stage calls its collection (the Recipe Book, Organelles). */
+  bookName?: string;
+  habitats?: HabitatDef[];
+  /** Text for the stage's finish screen. */
+  ending?: { title: string; line: string };
   next?: StageId;
 }
 
@@ -102,6 +156,10 @@ export interface StageState {
   free: Record<string, number>;
   /** Progress toward each reaction's next free product, 0 to 1. */
   catalysis: Record<string, number>;
+  /** Where the lineage lives (Cell stage). */
+  habitat: string;
+  /** Food the hero has eaten, for stats. */
+  eaten: number;
 }
 
 export type BuyAmount = 1 | 10 | 'max';

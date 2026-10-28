@@ -1,8 +1,8 @@
 import { STAGES } from '../content/stages';
 import { createStageState } from './state';
 import { D, Decimal } from './num';
-import { dialMax, tapValue } from './rates';
-import type { BuyAmount, DialId, GameState, GeneratorDef, ReactionDef, StageId, UpgradeDef } from './types';
+import { dialMax, dietOf, forageMult, stageRate, tapValue } from './rates';
+import type { BuyAmount, DialId, FoodKind, GameState, GeneratorDef, HabitatDef, ReactionDef, StageId, UpgradeDef } from './types';
 import { DIALS } from './types';
 
 function generatorDef(stage: StageId, id: string): GeneratorDef {
@@ -53,6 +53,10 @@ export function upgradeVisible(state: GameState, stage: StageId, u: UpgradeDef):
   const r = u.requires;
   if (r?.generator && (st.generators[r.generator] ?? 0) < (r.owned ?? 1)) return false;
   if (r?.reaction && !st.discovered.includes(r.reaction)) return false;
+  if (r?.anyReaction && !r.anyReaction.some((x) => st.discovered.includes(x))) return false;
+  if (r?.upgrades && !r.upgrades.every((x) => st.upgrades.includes(x))) return false;
+  // A choice already made elsewhere (e.g. the other diet) hides this one.
+  if (u.excludes?.some((x) => st.upgrades.includes(x))) return false;
   return true;
 }
 
@@ -110,7 +114,28 @@ export function checkReaction(state: GameState, stage: StageId, r: ReactionDef):
     gens &&= ok;
     parts.push({ label: `${n} ${def.generators.find((g) => g.id === id)?.name ?? id}`, ok });
   }
+  for (const id of r.needs.upgrades ?? []) {
+    const ok = st.upgrades.includes(id);
+    gens &&= ok;
+    parts.push({ label: def.upgrades.find((u) => u.id === id)?.name ?? id, ok });
+  }
+  if (r.needs.anyUpgrade) {
+    const ok = r.needs.anyUpgrade.some((id) => st.upgrades.includes(id));
+    gens &&= ok;
+    parts.push({ label: r.needs.anyUpgrade.map((id) => def.upgrades.find((u) => u.id === id)?.name ?? id).join(' or '), ok });
+  }
+  if (r.needs.found) {
+    const n = st.discovered.filter((x) => x !== r.id).length;
+    const ok = n >= r.needs.found;
+    gens &&= ok;
+    parts.push({ label: `${r.needs.found} ${def.bookName?.toLowerCase() ?? 'discoveries'} found`, ok });
+  }
   let dials = true;
+  if (r.needs.habitat) {
+    const ok = st.habitat === r.needs.habitat;
+    dials &&= ok;
+    parts.push({ label: `Living in the ${def.habitats?.find((h) => h.id === r.needs.habitat)?.name ?? r.needs.habitat}`, ok });
+  }
   for (const d of DIALS) {
     const range = r.needs.dials?.[d];
     if (!range) continue;
@@ -136,7 +161,7 @@ export function discoverReactions(state: GameState, stage: StageId): string[] {
   const st = state.stages[stage];
   const found: string[] = [];
   for (const r of reactions(stage)) {
-    if (r.final || st.discovered.includes(r.id) || !reactionReady(state, stage, r)) continue;
+    if (r.final || r.manual || st.discovered.includes(r.id) || !reactionReady(state, stage, r)) continue;
     st.discovered.push(r.id);
     found.push(r.id);
   }
@@ -205,6 +230,73 @@ export function catalyze(state: GameState, stage: StageId, dt: number): void {
   }
 }
 
+// ---- Cell stage: habitats, foraging, predators, engulfing ----
+
+export function habitatUnlocked(state: GameState, stage: StageId, h: HabitatDef): boolean {
+  const st = state.stages[stage];
+  if (h.unlock?.upgrade && !st.upgrades.includes(h.unlock.upgrade)) return false;
+  if (h.unlock?.reaction && !st.discovered.includes(h.unlock.reaction)) return false;
+  return true;
+}
+
+export function moveHabitat(state: GameState, stage: StageId, id: string): boolean {
+  const h = STAGES[stage].habitats?.find((x) => x.id === id);
+  if (!h || !habitatUnlocked(state, stage, h)) return false;
+  state.stages[stage].habitat = id;
+  return true;
+}
+
+/** Seconds of the stage's output one bite of food is worth, before diet and mutations. */
+export const FORAGE_SECONDS = 1;
+/** Seconds of output for driving off a predator. */
+export const FEND_OFF_SECONDS = 15;
+
+/** How much a diet gets out of a food: the right food is a feast, the wrong one a snack. */
+export function foodValue(state: GameState, stage: StageId, food: FoodKind): number {
+  const diet = dietOf(state, stage);
+  if (diet === 'grazer') return food === 'algae' ? 1.5 : 0.3;
+  if (diet === 'hunter') return food === 'bacteria' ? 1.5 : 0.3;
+  if (diet === 'omnivore') return 1.1;
+  return 0.7;
+}
+
+function earn(state: GameState, stage: StageId, amount: Decimal): Decimal {
+  const st = state.stages[stage];
+  st.currency = st.currency.add(amount);
+  st.totalEarned = st.totalEarned.add(amount);
+  state.started = true;
+  return amount;
+}
+
+/** The hero cell eats one piece of food. Returns the currency gained. */
+export function forage(state: GameState, food: FoodKind): Decimal {
+  const stage = state.current;
+  const base = Decimal.max(stageRate(state, stage).mul(FORAGE_SECONDS), 1);
+  state.stages[stage].eaten++;
+  return earn(state, stage, base.mul(foodValue(state, stage, food) * forageMult(state, stage)));
+}
+
+/** A predator was driven off. Returns the reward. */
+export function fendOff(state: GameState): Decimal {
+  const stage = state.current;
+  return earn(state, stage, Decimal.max(stageRate(state, stage).mul(FEND_OFF_SECONDS), 5));
+}
+
+/** Organelles that could be engulfed right now (their microbe can turn up in the pond). */
+export function engulfable(state: GameState, stage: StageId): ReactionDef[] {
+  const st = state.stages[stage];
+  return reactions(stage).filter((r) => r.manual && !st.discovered.includes(r.id) && reactionReady(state, stage, r));
+}
+
+/** The hero engulfs a rare microbe, gaining its organelle. */
+export function engulf(state: GameState, stage: StageId, id: string): boolean {
+  const r = engulfable(state, stage).find((x) => x.id === id);
+  if (!r) return false;
+  state.stages[stage].discovered.push(r.id);
+  state.news.push(r.id);
+  return true;
+}
+
 export function finalReaction(stage: StageId): ReactionDef | undefined {
   return reactions(stage).find((r) => r.final);
 }
@@ -224,6 +316,7 @@ export function visibleUpgrades(state: GameState, stage: StageId): UpgradeDef[] 
 }
 
 export function buyUpgrade(state: GameState, stage: StageId, id: string): boolean {
+  // (upgradeVisible also refuses a choice whose alternative is already owned.)
   const u = STAGES[stage].upgrades.find((x) => x.id === id);
   const st = state.stages[stage];
   if (!u || !upgradeVisible(state, stage, u) || st.currency.lt(u.cost)) return false;

@@ -8,7 +8,11 @@ import {
   buyUpgrade,
   canEvolve,
   checkReaction,
+  engulfable,
+  engulf,
   evolve,
+  forage,
+  habitatUnlocked,
   finalReaction,
   generatorCost,
   generatorVisible,
@@ -42,7 +46,7 @@ const STRATEGIES: Strategy[] = [
 /** Target seconds per stage for an engaged player (design doc, First run table). */
 const TARGETS: Record<StageId, [number, number]> = {
   soup: [50 * 60, 70 * 60],
-  cell: [10 * 60, 20 * 60],
+  cell: [120 * 60, 180 * 60],
 };
 
 const LIMIT_SEC = 48 * 3600;
@@ -132,14 +136,18 @@ function visit(s: GameState, tapsPerSec: number): void {
     }
     const st = s.stages[s.current];
     const money = st.currency.toNumber();
-    // Unlocks (dials, the whirlpool) have no direct payback; players buy them when they can.
-    const unlock = visibleUpgrades(s, s.current).find((u) => (u.effect.kind === 'dialMax' || u.effect.kind === 'swirlMult') && u.cost <= money);
+    // Unlocks (dials, the whirlpool, mutations) have no simple payback; players buy them when they can.
+    const unlock = visibleUpgrades(s, s.current).find((u) => (u.effect.kind === 'dialMax' || u.effect.kind === 'swirlMult' || !!u.branch) && u.cost <= money);
     if (unlock) {
       buyUpgrade(s, s.current, unlock.id);
       continue;
     }
     const rate = effectiveRate(s, tapsPerSec);
-    const goal = fin ? (checkReaction(s, s.current, fin).gens ? fin.cost ?? 0 : Infinity) : STAGES[s.current].goal;
+    // Save for the finale once it's in reach, otherwise for the next mutation (players save for what they want).
+    const nextMutation = visibleUpgrades(s, s.current)
+      .filter((u) => !!u.branch)
+      .reduce((m, u) => Math.min(m, u.cost), Infinity);
+    const goal = fin ? (checkReaction(s, s.current, fin).gens ? fin.cost ?? 0 : nextMutation) : STAGES[s.current].goal;
     const toGoal = (goal - money) / Math.max(rate, 1e-9);
     const affordable = options(s, tapsPerSec)
       .filter((o) => o.cost <= money)
@@ -148,7 +156,30 @@ function visit(s: GameState, tapsPerSec: number): void {
     if (!best || best.cost / best.gain > toGoal) break;
     best.apply(s);
   }
-  if (s.current === stage && fin) chaseReaction(s);
+  if (s.current === stage && STAGES[stage].habitats) cellVisit(s);
+  else if (s.current === stage && fin) chaseReaction(s);
+}
+
+/** Cell stage: catch any organelle that's within reach (trying each habitat), then live where output is best. */
+function cellVisit(s: GameState): void {
+  const st = s.stages[s.current];
+  const habitats = (STAGES[s.current].habitats ?? []).filter((h) => habitatUnlocked(s, s.current, h));
+  for (const h of habitats) {
+    st.habitat = h.id;
+    for (const r of engulfable(s, s.current)) engulf(s, s.current, r.id);
+  }
+  let best = habitats[0].id;
+  let bestRate = -1;
+  for (const h of habitats) {
+    st.habitat = h.id;
+    const rate = stageRate(s, s.current).toNumber();
+    if (rate > bestRate) {
+      bestRate = rate;
+      best = h.id;
+    }
+  }
+  st.habitat = best;
+  s.news = [];
 }
 
 function run(strategy: Strategy) {
@@ -159,18 +190,31 @@ function run(strategy: Strategy) {
   let nextVisit = 0;
   const last = STAGE_ORDER[STAGE_ORDER.length - 1];
   const seen = new Set<string>();
+  const seenUp = new Set<string>();
   while (t < LIMIT_SEC) {
     if (process.env.SIM_TRACE && strategy.name.startsWith(process.env.SIM_TRACE)) {
-      for (const id of s.stages.soup.discovered) {
+      for (const id of s.stages[s.current].discovered) {
         if (!seen.has(id)) {
           seen.add(id);
-          console.log(`  ${formatTime(t).padStart(8)}  ${id}`);
+          console.log(`  ${formatTime(t).padStart(8)}  ${s.current}: found ${id}`);
+        }
+      }
+      if (process.env.SIM_UPS) {
+        for (const id of s.stages[s.current].upgrades) {
+          if (!seenUp.has(id)) {
+            seenUp.add(id);
+            console.log(`  ${formatTime(t).padStart(8)}  ${s.current}: bought ${id}`);
+          }
         }
       }
     }
     if (process.env.SIM_FREE && strategy.name.startsWith(process.env.SIM_FREE) && s.current === 'soup' && t % 600 === 0) {
       const st = s.stages.soup;
       console.log(`  ${formatTime(t).padStart(8)}  owned ${JSON.stringify(st.generators)}  free ${JSON.stringify(st.free)}`);
+    }
+    if (process.env.SIM_CELL && strategy.name.startsWith(process.env.SIM_CELL) && s.current === 'cell' && t % 600 === 0) {
+      const st = s.stages.cell;
+      console.log(`  ${formatTime(t).padStart(8)} DNA ${st.currency.toExponential(2)} rate ${stageRate(s, 'cell').toNumber().toExponential(2)} ${st.habitat} found [${st.discovered}] gens ${JSON.stringify(st.generators)} ups ${st.upgrades.length}`);
     }
     if (t >= nextVisit) {
       const before = s.current;
@@ -182,8 +226,9 @@ function run(strategy: Strategy) {
       done[last] = t;
       break;
     }
-    // Active players keep a whirlpool going much of the time.
+    // Active players keep a whirlpool going much of the time, and steer their cell to food.
     if (strategy.tapsPerSec > 0 && s.current === 'soup') s.swirl = Math.max(s.swirl, 0.5);
+    if (strategy.tapsPerSec > 0 && STAGES[s.current].habitats && t % 3 === 0) forage(s, 'algae');
     if (strategy.tapsPerSec > 0) {
       for (let k = 0; k < strategy.tapsPerSec; k++) {
         const st = s.stages[s.current];
