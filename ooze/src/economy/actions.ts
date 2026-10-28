@@ -138,6 +138,24 @@ export function discoverReactions(state: GameState, stage: StageId): string[] {
   return found;
 }
 
+/**
+ * The reaction to point the player at: the first unfound one whose molecules are
+ * all there (only conditions missing), otherwise the first unfound one at all.
+ */
+export function nextReaction(state: GameState, stage: StageId): { r: ReactionDef; check: ReactionCheck } | null {
+  const st = state.stages[stage];
+  const open = reactions(stage).filter((r) => !st.discovered.includes(r.id));
+  const ready = open.find((r) => checkReaction(state, stage, r).gens);
+  const r = ready ?? open[0];
+  return r ? { r, check: checkReaction(state, stage, r) } : null;
+}
+
+/** True when a reaction's dial and whirlpool conditions hold right now (molecules aside). */
+export function conditionsHold(state: GameState, stage: StageId, r: ReactionDef): boolean {
+  const c = checkReaction(state, stage, r);
+  return c.dials && c.swirl;
+}
+
 export function finalReaction(stage: StageId): ReactionDef | undefined {
   return reactions(stage).find((r) => r.final);
 }

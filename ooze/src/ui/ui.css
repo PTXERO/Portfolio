@@ -385,3 +385,6 @@ textarea {
 .ending-inner .after { margin-top: 30px; animation: from-below 1.2s ease; }
 .ending-inner .stir { color: var(--mint); animation: pulse 1.6s steps(2) infinite; }
 .ending-inner .px-btn { margin-top: 12px; font-size: 18px; padding-left: 22px; padding-right: 22px; }
+
+.goal-next { font-size: 13px; color: var(--mint); margin-top: 6px; }
+#evolve { cursor: pointer; }

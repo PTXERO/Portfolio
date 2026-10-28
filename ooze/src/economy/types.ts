@@ -60,6 +60,8 @@ export interface ReactionDef {
     /** Whirlpool strength needed, 0 to 1. */
     swirl?: number;
   };
+  /** The two molecules seen combining in the scene (looks only). */
+  pair?: [string, string];
   /** Generator this reveals. */
   unlocks?: string;
   bonus?: Effect;

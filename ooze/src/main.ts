@@ -18,6 +18,7 @@ import {
   evolve,
   goalProgress,
   goalShown,
+  nextReaction,
   reactions,
   setDial,
   tap,
@@ -192,7 +193,8 @@ function renderGoal(): void {
         : '';
     evolveEl.innerHTML = `
       <div class="evolve-row"><span class="label">${label}</span><span class="label dim" data-t="goal-note"></span></div>
-      <div class="bar">${'<i></i>'.repeat(pips)}</div>${button}`;
+      <div class="bar">${'<i></i>'.repeat(pips)}</div>
+      ${rs.length ? '<div class="goal-next" data-t="goal-next"></div>' : ''}${button}`;
   }
   if (!shown) return;
   const st = state.stages[state.current];
@@ -211,6 +213,24 @@ function renderGoal(): void {
         : '';
   const el = evolveEl.querySelector('[data-t="goal-note"]')!;
   if (el.textContent !== note) el.textContent = note;
+
+  // What the next reaction still needs, so it's clear whether the mix is right.
+  const nextEl = evolveEl.querySelector('[data-t="goal-next"]');
+  if (nextEl) {
+    const n = nextReaction(state, state.current);
+    let text = '';
+    if (n && !finaleReady(state)) {
+      const name = n.r.final ? n.r.name : '???';
+      const missing = n.check.parts.filter((p) => !p.ok);
+      if (!n.check.gens) text = `Next ${name}: grow ${missing.find((p) => /^\d/.test(p.label))?.label ?? 'more molecules'}`;
+      else if (missing.length || !n.check.cost) {
+        const met = n.check.parts.length - missing.length;
+        const need = missing[0]?.label ?? `${format(D(n.r.cost ?? 0))} ${def.currency}`;
+        text = `Next ${name}: ${met} of ${n.check.parts.length} · needs ${need}`;
+      } else text = `${name}: reacting…`;
+    }
+    if (nextEl.textContent !== text) nextEl.textContent = text;
+  }
 }
 
 function renderPanel(): void {
@@ -424,6 +444,19 @@ function act(el: HTMLElement): void {
 document.addEventListener('click', (e) => {
   const el = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
   if (el && !el.disabled) act(el);
+});
+
+// Tapping the recipe strip opens the Lab, where the dials and clues are.
+evolveEl.addEventListener('click', (e) => {
+  if ((e.target as HTMLElement).closest('button') || !tabsFor(state).includes('lab')) return;
+  if (ui.tab !== 'lab' || !ui.open) {
+    panelEnter = ui.open ? 'from-right' : 'from-below';
+    panelKey = '';
+  }
+  ui.tab = 'lab';
+  ui.open = true;
+  saveUi();
+  render();
 });
 
 document.addEventListener('visibilitychange', () => {

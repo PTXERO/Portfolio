@@ -27,6 +27,7 @@ const soup: StageDef = {
   reactions: [
     {
       id: 'peptideBond',
+      pair: ['amino', 'amino'],
       name: 'Peptide Bond',
       flavor: 'Two amino acids hold on and don\'t let go.',
       hints: ['Building blocks want to link up.', 'More of them, and a little warmth.'],
@@ -36,6 +37,7 @@ const soup: StageDef = {
     },
     {
       id: 'formose',
+      pair: ['peptide', 'peptide'],
       name: 'Formose Reaction',
       flavor: 'Sunlight turns simple stuff sweet.',
       hints: ['Something sweet forms in bright light.', 'Plenty of peptides, and strong sunlight.'],
@@ -45,6 +47,7 @@ const soup: StageDef = {
     },
     {
       id: 'selfAssembly',
+      pair: ['sugar', 'amino'],
       name: 'Self-Assembly',
       flavor: 'Oily chains curl into bubbles all by themselves.',
       hints: ['Some things only hold together in the cold.', 'Lots of sugar and amino acids. Cool water, some light.'],
@@ -54,6 +57,7 @@ const soup: StageDef = {
     },
     {
       id: 'phosphorylation',
+      pair: ['sugar', 'lipid'],
       name: 'Phosphorylation',
       flavor: 'A jolt welds sugar to something new.',
       hints: ['It needs a jolt.', 'Sugar and bubbles, with plenty of charge.'],
@@ -63,6 +67,7 @@ const soup: StageDef = {
     },
     {
       id: 'polymerization',
+      pair: ['nucleotide', 'nucleotide'],
       name: 'Polymerization',
       flavor: 'Letters string themselves into words.',
       hints: ['Some strands only form where the water spins.', 'Nucleotides, inside a strong whirlpool.'],
@@ -72,6 +77,7 @@ const soup: StageDef = {
     },
     {
       id: 'ribozyme',
+      pair: ['rna', 'rna'],
       name: 'Ribozyme',
       flavor: 'RNA that speeds up everything around it.',
       hints: ['A strand that helps other chemistry along.', 'RNA in warm, calm water.'],
@@ -80,6 +86,7 @@ const soup: StageDef = {
     },
     {
       id: 'encapsulation',
+      pair: ['lipid', 'rna'],
       name: 'Encapsulation',
       flavor: 'Strands wrapped in a bubble. A room of their own.',
       hints: ['Wrap the strands up.', 'Bubbles and RNA in a calm whirlpool, no charge at all.'],
@@ -89,6 +96,7 @@ const soup: StageDef = {
     },
     {
       id: 'sparkOfLife',
+      pair: ['protocell', 'protocell'],
       name: 'Spark of Life',
       flavor: 'It copies itself, and keeps going.',
       hints: ['Everything, just right, all at once.', 'Many protocells. Gentle heat, warm light, a storm of charge, and the strongest whirlpool.'],

@@ -4,7 +4,8 @@
 
 import { blit, PAL, type SpriteName } from '../art/sprites';
 import { STAGES } from '../content/stages';
-import type { GameState } from '../economy/types';
+import { checkReaction, conditionsHold, nextReaction } from '../economy/actions';
+import type { GameState, ReactionDef } from '../economy/types';
 import { Effects, ease, glints, hash, ring, visibleCount, water, type Frame } from './paint';
 
 type Displace = (x: number, y: number) => [number, number];
@@ -21,7 +22,7 @@ const sprite = (name: SpriteName) => (f: Frame, x: number, y: number, i: number)
 const KINDS: Record<string, Kind> = {
   amino: {
     salt: 1,
-    cap: 60,
+    cap: 40,
     speed: 2,
     draw: (f, x, y, i) => {
       f.b.fillStyle = i % 3 ? PAL.y : PAL.Y;
@@ -29,10 +30,10 @@ const KINDS: Record<string, Kind> = {
       if (i % 4 === 0) f.b.fillRect(Math.round(x) + 1, Math.round(y), 1, 1);
     },
   },
-  peptide: { salt: 5, cap: 30, speed: 1.8, draw: sprite('peptideSmall') },
-  sugar: { salt: 6, cap: 24, speed: 1.2, draw: sprite('sugarSmall') },
-  lipid: { salt: 2, cap: 24, speed: 1.5, draw: sprite('bubble') },
-  nucleotide: { salt: 7, cap: 20, speed: 2.2, draw: sprite('nucleoSmall') },
+  peptide: { salt: 5, cap: 20, speed: 1.8, draw: sprite('peptideSmall') },
+  sugar: { salt: 6, cap: 16, speed: 1.2, draw: sprite('sugarSmall') },
+  lipid: { salt: 2, cap: 16, speed: 1.5, draw: sprite('bubble') },
+  nucleotide: { salt: 7, cap: 14, speed: 2.2, draw: sprite('nucleoSmall') },
   rna: { salt: 3, cap: 16, speed: 3, draw: (f, x, y, i) => blit(f.b, Math.floor(f.t * 4 + i) % 2 ? 'rnaA' : 'rnaB', x, y, i % 2 === 0) },
   protocell: { salt: 4, cap: 12, speed: 1, draw: sprite('protoSmall') },
 };
@@ -64,9 +65,15 @@ export class SoupScene {
   private swirl = 0;
   private finaleAt = -1;
   private nextBolt = 0;
+  /** When the next pair of molecules meets in the scene. */
+  private nextBond = 1;
+  /** Molecules (`kind:index`) borrowed by a bonding animation, not drawn in place. */
+  private busy = new Set<string>();
+  private displace: Displace = (x, y) => [x, y];
 
   reset(): void {
     this.fx.clear();
+    this.busy.clear();
     this.finaleAt = -1;
   }
 
@@ -185,6 +192,123 @@ export class SoupScene {
     for (let i = 0; i < 10; i++) this.fx.sparkle(cx + (Math.random() - 0.5) * 60, cy + (Math.random() - 0.5) * 40, 0.75 + Math.random() * 0.4);
   }
 
+  /**
+   * Two molecules meet. If the reaction's conditions hold they bond, flash and
+   * release the product; if not (the reaction you're close to), they fizzle and
+   * bounce apart. Either way the pool shows whether the dials are right.
+   */
+  private bond(state: GameState, r: ReactionDef, works: boolean): void {
+    const [ka, kb] = r.pair!;
+    const gens = state.stages.soup.generators;
+    const na = visibleCount(gens[ka], KINDS[ka].cap);
+    const nb = visibleCount(gens[kb], KINDS[kb].cap);
+    const free = (k: string, n: number, not = -1) => {
+      const opts = Array.from({ length: n }, (_, i) => i).filter((i) => i !== not && !this.busy.has(`${k}:${i}`));
+      return opts.length ? opts[Math.floor(Math.random() * opts.length)] : -1;
+    };
+    const ia = free(ka, na);
+    const ib = free(kb, nb, ka === kb ? ia : -1);
+    if (ia < 0 || ib < 0) return;
+    const keyA = `${ka}:${ia}`;
+    const keyB = `${kb}:${ib}`;
+    const [ax, ay] = this.position(ka, ia, this.displace);
+    const [bx0, by0] = this.position(kb, ib, this.displace);
+    // Pull the partner in close first, so pairs never fly across the whole pool.
+    const d = Math.hypot(bx0 - ax, by0 - ay) || 1;
+    const reach = Math.min(d, 18);
+    const bx = ax + ((bx0 - ax) / d) * reach;
+    const by = ay + ((by0 - ay) / d) * reach;
+    const mx = (ax + bx) / 2;
+    const my = (ay + by) / 2;
+    this.busy.add(keyA);
+    this.busy.add(keyB);
+    const life = works ? 1.4 : 1.1;
+    this.fx.add(life, (f, age) => {
+      const b = f.b;
+      if (age >= life - f.dt * 1.5) {
+        this.busy.delete(keyA);
+        this.busy.delete(keyB);
+      }
+      if (works) {
+        if (age < 0.6) {
+          const k = ease(age / 0.6);
+          const pa = [ax + (mx - ax) * k, ay + (my - ay) * k];
+          const pb = [bx + (mx - bx) * k, by + (my - by) * k];
+          b.globalAlpha = 0.8;
+          ring(b, pa[0], pa[1], 4, PAL.w, 1);
+          ring(b, pb[0], pb[1], 4, PAL.w, 1);
+          b.globalAlpha = 1;
+          KINDS[ka].draw(f, pa[0], pa[1], ia);
+          KINDS[kb].draw(f, pb[0], pb[1], ib);
+          if (age > 0.3) {
+            // A bond forming between them.
+            b.fillStyle = PAL.w;
+            for (let s = 0; s <= 4; s++) b.fillRect(Math.round(pa[0] + ((pb[0] - pa[0]) * s) / 4), Math.round(pa[1] + ((pb[1] - pa[1]) * s) / 4), 1, 1);
+          }
+        } else {
+          const k = (age - 0.6) / (life - 0.6);
+          if (age < 0.75) blit(b, 'sparkA', mx, my);
+          if (age < 1.1) {
+            b.globalAlpha = 1 - (age - 0.6) / 0.5;
+            ring(b, mx, my, 3 + (age - 0.6) * 22, PAL.y, 0.8);
+            b.globalAlpha = 1;
+          }
+          if (r.unlocks && KINDS[r.unlocks]) {
+            b.globalAlpha = 1 - Math.max(0, k - 0.6) / 0.4;
+            KINDS[r.unlocks].draw(f, mx, my - k * 4, 0);
+            b.globalAlpha = 1;
+          } else if (Math.floor(age * 10) % 2) blit(b, 'sparkB', mx, my - k * 4);
+        }
+      } else {
+        // Close, but no: they bump, puff, and drift apart again.
+        const k = age < 0.45 ? ease(age / 0.45) * 0.7 : 0.7 * (1 - ease((age - 0.45) / 0.65));
+        if (age < 0.45) {
+          b.globalAlpha = 0.7;
+          ring(b, ax + (mx - ax) * k, ay + (my - ay) * k, 4, '#9aa6a2', 1);
+          ring(b, bx + (mx - bx) * k, by + (my - by) * k, 4, '#9aa6a2', 1);
+          b.globalAlpha = 1;
+        }
+        KINDS[ka].draw(f, ax + (mx - ax) * k, ay + (my - ay) * k, ia);
+        KINDS[kb].draw(f, bx + (mx - bx) * k, by + (my - by) * k, ib);
+        if (age > 0.4 && age < 0.9) {
+          const p = (age - 0.4) / 0.5;
+          b.fillStyle = '#7d8a86';
+          b.globalAlpha = 1 - p;
+          for (let i = 0; i < 10; i++) {
+            const a = (i / 10) * Math.PI * 2;
+            b.fillRect(Math.round(mx + Math.cos(a) * (1 + p * 7)), Math.round(my + Math.sin(a) * (1 + p * 5) - p * 3), 2, 1);
+          }
+          b.globalAlpha = 1;
+        }
+      }
+    });
+  }
+
+  /** Picks which pairs are meeting right now. */
+  private chemistry(state: GameState): void {
+    if (this.t < this.nextBond || this.finaleAt >= 0) return;
+    const st = state.stages.soup;
+    const gens = st.generators;
+    const has = (k: string, n: number) => visibleCount(gens[k], KINDS[k].cap) >= n;
+    const options: { r: ReactionDef; works: boolean }[] = [];
+    const next = nextReaction(state, 'soup');
+    for (const r of STAGES.soup.reactions ?? []) {
+      if (!r.pair) continue;
+      const [a, b] = r.pair;
+      if (!has(a, a === b ? 2 : 1) || !has(b, 1)) continue;
+      if (st.discovered.includes(r.id)) {
+        if (conditionsHold(state, 'soup', r)) options.push({ r, works: true });
+      } else if (next?.r === r && checkReaction(state, 'soup', r).gens) {
+        options.push({ r, works: conditionsHold(state, 'soup', r) });
+      }
+    }
+    // Faster chemistry in a spinning whirlpool.
+    this.nextBond = this.t + (1.3 - this.swirl * 0.8) * (0.6 + Math.random() * 0.8);
+    if (!options.length) return;
+    const pick = options[Math.floor(Math.random() * options.length)];
+    this.bond(state, pick.r, pick.works);
+  }
+
   /** The Spark of Life: everything is drawn into the middle, then light. */
   finale(): void {
     this.finaleAt = this.t;
@@ -198,6 +322,7 @@ export class SoupScene {
     this.t = t;
     this.top = top;
     this.swirl = state.swirl;
+    this.displace = displace;
     this.ventGlow = Math.max(0, this.ventGlow - dt);
     const st = state.stages.soup;
     const { heat, light, charge } = st.dials;
@@ -296,6 +421,7 @@ export class SoupScene {
       const kind = KINDS[g.id];
       const n = visibleCount(st.generators[g.id], kind.cap);
       for (let i = 0; i < n; i++) {
+        if (this.busy.has(`${g.id}:${i}`)) continue;
         let [x, y] = this.position(g.id, i, displace);
         if (fin > 0) {
           x += (cx - x) * fin;
@@ -313,6 +439,7 @@ export class SoupScene {
       if (Math.floor(t * 3) % 2 === 0) ring(b, cx, cy, 4 + ((t - this.finaleAt) % 1) * 20, PAL.w);
     }
 
+    this.chemistry(state);
     this.fx.run(f);
   }
 }
