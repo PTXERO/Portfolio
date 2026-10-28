@@ -94,7 +94,7 @@ describe('stages', () => {
     const spark = STAGES.soup.reactions!.find((r) => r.final)!;
     s.stages.soup.discovered = STAGES.soup.reactions!.filter((r) => !r.final).map((r) => r.id);
     s.stages.soup.upgrades.push('thunderhead', 'clearSkies', 'volcanic');
-    s.stages.soup.generators.protocell = 15;
+    s.stages.soup.generators.protocell = 20;
     s.stages.soup.currency = D(spark.cost! * 1.5);
     expect(triggerFinale(s)).toBe(false); // dials and whirlpool not right yet
     setDial(s, 'soup', 'heat', 1);
@@ -248,6 +248,26 @@ describe('reactions', () => {
     expect(stageRate(s, 'soup').toNumber()).toBeGreaterThan(calm);
     tick(s, 30);
     expect(s.swirl).toBe(0);
+  });
+
+  it('discovered reactions make free product while their conditions hold, without using anything up', () => {
+    const s = fresh();
+    s.stages.soup.discovered = ['peptideBond'];
+    s.stages.soup.upgrades.push('warmVents');
+    s.stages.soup.generators.amino = 100;
+    s.stages.soup.generators.peptide = 10;
+    const priceBefore = generatorCost(s, 'soup', 'peptide').toNumber();
+    tick(s, 120); // cold water: the bond doesn't hold
+    expect(s.stages.soup.generators.peptide).toBe(10);
+    setDial(s, 'soup', 'heat', 1);
+    for (let i = 0; i < 60; i++) tick(s, 1);
+    const made = s.stages.soup.generators.peptide - 10;
+    expect(made).toBeGreaterThan(0);
+    expect(s.stages.soup.free.peptide).toBe(made);
+    expect(s.stages.soup.generators.amino).toBe(100);
+    expect(s.made).toContain('peptideBond');
+    // Free molecules don't make buying more expensive.
+    near(generatorCost(s, 'soup', 'peptide').toNumber(), priceBefore);
   });
 
   it('old saves count owned molecules as discovered', () => {

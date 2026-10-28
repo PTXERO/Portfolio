@@ -1,5 +1,5 @@
 import { STAGES } from '../content/stages';
-import { affordableCount, buyGenerator, buyUpgrade, discoverReactions, SWIRL_FADE_PER_SEC, visibleUpgrades } from './actions';
+import { affordableCount, buyGenerator, buyUpgrade, catalyze, discoverReactions, SWIRL_FADE_PER_SEC, visibleUpgrades } from './actions';
 import { stageRate } from './rates';
 import type { GameState, StageId } from './types';
 
@@ -27,7 +27,10 @@ export function tick(state: GameState, dt: number): void {
   }
   for (const id of state.unlocked) if (state.stages[id].complete) autobuy(state, id);
   // Reactions are checked before the whirlpool fades, so a spin that's strong now counts now.
-  if (!state.stages[state.current].complete) discoverReactions(state, state.current);
+  if (!state.stages[state.current].complete) {
+    catalyze(state, state.current, dt);
+    discoverReactions(state, state.current);
+  }
   state.swirl = Math.max(0, state.swirl - SWIRL_FADE_PER_SEC * dt);
   state.playTime += dt;
 }

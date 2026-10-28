@@ -4,7 +4,7 @@
 
 import { blit, PAL, type SpriteName } from '../art/sprites';
 import { STAGES } from '../content/stages';
-import { checkReaction, conditionsHold, nextReaction } from '../economy/actions';
+import { conditionsHold, nextReaction } from '../economy/actions';
 import type { GameState, ReactionDef } from '../economy/types';
 import { Effects, ease, glints, hash, ring, visibleCount, water, type Frame } from './paint';
 
@@ -65,15 +65,25 @@ export class SoupScene {
   private swirl = 0;
   private finaleAt = -1;
   private nextBolt = 0;
-  /** When the next pair of molecules meets in the scene. */
-  private nextBond = 1;
+  /** Reactions that really made a product, waiting to be shown bonding. */
+  private queue: string[] = [];
+  private nextBond = 0;
+  /** When the next fizzle (the reaction you're close to, conditions wrong) plays. */
+  private nextFizzle = 2;
   /** Molecules (`kind:index`) borrowed by a bonding animation, not drawn in place. */
   private busy = new Set<string>();
   private displace: Displace = (x, y) => [x, y];
 
+  /** Products the economy just made: each is shown as a pair bonding, with +1. */
+  made(ids: string[]): void {
+    this.queue.push(...ids);
+    if (this.queue.length > 12) this.queue.splice(0, this.queue.length - 12);
+  }
+
   reset(): void {
     this.fx.clear();
     this.busy.clear();
+    this.queue = [];
     this.finaleAt = -1;
   }
 
@@ -256,6 +266,7 @@ export class SoupScene {
           if (r.unlocks && KINDS[r.unlocks]) {
             b.globalAlpha = 1 - Math.max(0, k - 0.6) / 0.4;
             KINDS[r.unlocks].draw(f, mx, my - k * 4, 0);
+            blit(b, 'plusOne', mx + 6, my - 4 - k * 8);
             b.globalAlpha = 1;
           } else if (Math.floor(age * 10) % 2) blit(b, 'sparkB', mx, my - k * 4);
         }
@@ -284,29 +295,26 @@ export class SoupScene {
     });
   }
 
-  /** Picks which pairs are meeting right now. */
+  /** Plays real bonds as products are made, and fizzles for the reaction you're close to. */
   private chemistry(state: GameState): void {
-    if (this.t < this.nextBond || this.finaleAt >= 0) return;
-    const st = state.stages.soup;
-    const gens = st.generators;
-    const has = (k: string, n: number) => visibleCount(gens[k], KINDS[k].cap) >= n;
-    const options: { r: ReactionDef; works: boolean }[] = [];
-    const next = nextReaction(state, 'soup');
-    for (const r of STAGES.soup.reactions ?? []) {
-      if (!r.pair) continue;
-      const [a, b] = r.pair;
-      if (!has(a, a === b ? 2 : 1) || !has(b, 1)) continue;
-      if (st.discovered.includes(r.id)) {
-        if (conditionsHold(state, 'soup', r)) options.push({ r, works: true });
-      } else if (next?.r === r && checkReaction(state, 'soup', r).gens) {
-        options.push({ r, works: conditionsHold(state, 'soup', r) });
+    if (this.finaleAt >= 0) return;
+    const rs = STAGES.soup.reactions ?? [];
+    if (this.queue.length && this.t >= this.nextBond) {
+      const r = rs.find((x) => x.id === this.queue[0]);
+      this.queue.shift();
+      if (r?.pair) this.bond(state, r, true);
+      this.nextBond = this.t + 0.35;
+    }
+    if (this.t >= this.nextFizzle) {
+      this.nextFizzle = this.t + 1.5 + Math.random() * 1.5;
+      const next = nextReaction(state, 'soup');
+      const r = next?.r;
+      if (r?.pair && next?.check.gens && !conditionsHold(state, 'soup', r)) {
+        const gens = state.stages.soup.generators;
+        const [a, b] = r.pair;
+        if (visibleCount(gens[a], KINDS[a].cap) >= (a === b ? 2 : 1) && visibleCount(gens[b], KINDS[b].cap) >= 1) this.bond(state, r, false);
       }
     }
-    // Faster chemistry in a spinning whirlpool.
-    this.nextBond = this.t + (1.3 - this.swirl * 0.8) * (0.6 + Math.random() * 0.8);
-    if (!options.length) return;
-    const pick = options[Math.floor(Math.random() * options.length)];
-    this.bond(state, pick.r, pick.works);
   }
 
   /** The Spark of Life: everything is drawn into the middle, then light. */

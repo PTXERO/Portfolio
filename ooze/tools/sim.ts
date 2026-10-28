@@ -168,6 +168,10 @@ function run(strategy: Strategy) {
         }
       }
     }
+    if (process.env.SIM_FREE && strategy.name.startsWith(process.env.SIM_FREE) && s.current === 'soup' && t % 600 === 0) {
+      const st = s.stages.soup;
+      console.log(`  ${formatTime(t).padStart(8)}  owned ${JSON.stringify(st.generators)}  free ${JSON.stringify(st.free)}`);
+    }
     if (t >= nextVisit) {
       const before = s.current;
       visit(s, strategy.tapsPerSec);

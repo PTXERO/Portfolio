@@ -11,17 +11,23 @@ function generatorDef(stage: StageId, id: string): GeneratorDef {
   return g;
 }
 
+/** Units bought with currency; free ones from reactions don't raise prices. */
+function bought(state: GameState, stage: StageId, id: string): number {
+  const st = state.stages[stage];
+  return st.generators[id] - (st.free[id] ?? 0);
+}
+
 /** Cost of the next `count` units of a generator. */
 export function generatorCost(state: GameState, stage: StageId, id: string, count = 1): Decimal {
   const g = generatorDef(stage, id);
-  return Decimal.sumGeometricSeries(count, g.baseCost, g.growth, state.stages[stage].generators[id]);
+  return Decimal.sumGeometricSeries(count, g.baseCost, g.growth, bought(state, stage, id));
 }
 
 /** How many units the stage's current currency can buy right now. */
 export function affordableCount(state: GameState, stage: StageId, id: string): number {
   const g = generatorDef(stage, id);
   const st = state.stages[stage];
-  return Decimal.affordGeometricSeries(st.currency, g.baseCost, g.growth, st.generators[id]).toNumber();
+  return Decimal.affordGeometricSeries(st.currency, g.baseCost, g.growth, bought(state, stage, id)).toNumber();
 }
 
 /** Number of units a press of the buy button would buy with the given setting. */
@@ -154,6 +160,46 @@ export function nextReaction(state: GameState, stage: StageId): { r: ReactionDef
 export function conditionsHold(state: GameState, stage: StageId, r: ReactionDef): boolean {
   const c = checkReaction(state, stage, r);
   return c.dials && c.swirl;
+}
+
+// ---- Catalysis: discovered reactions make free product while their conditions hold ----
+
+/** Free products per second at sqrt(1) ingredient, before the product's tier slows it down. */
+export const CATALYSIS_BASE = 0.008;
+
+/**
+ * Free products per second a discovered reaction is making right now: zero
+ * unless its dials and whirlpool conditions hold. More ingredients bond more
+ * often (square root, so it grows gently); each tier up is half as fast; a
+ * spinning whirlpool triples it at full strength.
+ */
+export function catalysisRate(state: GameState, stage: StageId, r: ReactionDef): number {
+  const st = state.stages[stage];
+  if (!r.unlocks || !r.pair || !st.discovered.includes(r.id) || !conditionsHold(state, stage, r)) return 0;
+  const [a, b] = r.pair;
+  const ingredients = a === b ? Math.floor(st.generators[a] / 2) : Math.min(st.generators[a], st.generators[b]);
+  if (ingredients < 1) return 0;
+  const tier = Math.max(0, STAGES[stage].generators.findIndex((g) => g.id === r.unlocks) - 1);
+  return (CATALYSIS_BASE * Math.sqrt(ingredients) * (1 + 2 * state.swirl)) / Math.pow(2, tier);
+}
+
+/** Runs the stage's reactions for `dt` seconds, adding the free products they make. */
+export function catalyze(state: GameState, stage: StageId, dt: number): void {
+  const st = state.stages[stage];
+  for (const r of reactions(stage)) {
+    const rate = catalysisRate(state, stage, r);
+    if (rate <= 0) continue;
+    const progress = (st.catalysis[r.id] ?? 0) + rate * dt;
+    const made = Math.floor(progress);
+    st.catalysis[r.id] = progress - made;
+    if (made > 0) {
+      st.generators[r.unlocks!] += made;
+      st.free[r.unlocks!] = (st.free[r.unlocks!] ?? 0) + made;
+      // Only a few at a time are shown; long absences would flood the scene.
+      for (let i = 0; i < Math.min(made, 3); i++) state.made.push(r.id);
+      if (state.made.length > 12) state.made.splice(0, state.made.length - 12);
+    }
+  }
 }
 
 export function finalReaction(stage: StageId): ReactionDef | undefined {

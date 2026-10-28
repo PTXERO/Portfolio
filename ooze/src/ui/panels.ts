@@ -3,7 +3,7 @@
 
 import { icon, type SpriteName } from '../art/sprites';
 import { STAGES } from '../content/stages';
-import { buyCount, checkReaction, generatorCost, generatorVisible, reactionReady, reactions, visibleUpgrades } from '../economy/actions';
+import { buyCount, catalysisRate, checkReaction, generatorCost, generatorVisible, reactionReady, reactions, visibleUpgrades } from '../economy/actions';
 import { D, format, formatTime } from '../economy/num';
 import { timeBankCap } from '../economy/offline';
 import { dialMax, generatorRate, MILESTONES, nextMilestone, stageRate } from '../economy/rates';
@@ -165,6 +165,7 @@ export function layout(state: GameState, tab: Tab): string {
               <div class="name">${esc(r.name)}</div>
               <div class="flavor">${esc(r.flavor)}</div>
               <div class="fx">${esc(rewardText(id, r))}</div>
+              ${r.unlocks ? `<div class="making" data-t="making-${r.id}"></div>` : ''}
             </div>
           </div>`;
         }
@@ -221,7 +222,8 @@ export function update(root: HTMLElement, state: GameState, tab: Tab): void {
       const n = buyCount(state, id, g.id, state.buyAmount);
       const cost = generatorCost(state, id, g.id, n);
       setText(root, `owned-${g.id}`, owned ? `×${owned}` : '');
-      setText(root, `sub-${g.id}`, owned ? `${format(generatorRate(state, id, g))}/s · next ×2 at ${nextMilestone(owned)}` : g.flavor);
+      const free = st.free[g.id] ?? 0;
+      setText(root, `sub-${g.id}`, owned ? `${format(generatorRate(state, id, g))}/s · next ×2 at ${nextMilestone(owned)}${free ? ` · ${free} made by reactions` : ''}` : g.flavor);
       setText(root, `cost-${g.id}`, format(cost));
       setText(root, `qty-${g.id}`, `BUY ${n}`);
       const btn = root.querySelector<HTMLButtonElement>(`[data-gen="${g.id}"]`);
@@ -266,7 +268,16 @@ export function update(root: HTMLElement, state: GameState, tab: Tab): void {
       setText(root, `dialfx-${d}`, fx || 'Nothing you have cares about this yet');
     }
     for (const r of reactions(id)) {
-      if (st.discovered.includes(r.id)) continue;
+      if (st.discovered.includes(r.id)) {
+        if (!r.unlocks) continue;
+        const rate = catalysisRate(state, id, r);
+        const product = STAGES[id].generators.find((g) => g.id === r.unlocks)!.name;
+        const missing = checkReaction(state, id, r).parts.filter((p) => !p.ok && !/^\d/.test(p.label));
+        const text = rate > 0 ? `Making 1 ${product} every ${formatTime(1 / rate)}` : missing.length ? `Paused: needs ${missing[0].label}` : 'Paused';
+        setText(root, `making-${r.id}`, text);
+        root.querySelector(`[data-t="making-${r.id}"]`)?.classList.toggle('on', rate > 0);
+        continue;
+      }
       const c = checkReaction(state, id, r);
       c.parts.forEach((p, i) => root.querySelector(`[data-check="${r.id}-${i}"]`)?.classList.toggle('ok', p.ok));
       root.querySelector(`[data-check="${r.id}-cost"]`)?.classList.toggle('ok', c.cost);

@@ -388,3 +388,6 @@ textarea {
 
 .goal-next { font-size: 13px; color: var(--mint); margin-top: 6px; }
 #evolve { cursor: pointer; }
+.making { font-size: 12px; color: var(--dim); margin-top: 3px; }
+.making.on { color: var(--gold); }
+.making.on::before { content: '◆ '; }

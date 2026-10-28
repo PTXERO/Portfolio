@@ -98,6 +98,10 @@ export interface StageState {
   dials: Record<DialId, number>;
   /** Reaction ids, in the order they were found. */
   discovered: string[];
+  /** Generators made free by reactions; they produce but don't raise prices. */
+  free: Record<string, number>;
+  /** Progress toward each reaction's next free product, 0 to 1. */
+  catalysis: Record<string, number>;
 }
 
 export type BuyAmount = 1 | 10 | 'max';
@@ -124,4 +128,6 @@ export interface GameState {
   swirl: number;
   /** Reactions found since the interface last looked, for it to celebrate. */
   news: string[];
+  /** Reaction ids that just made a free product, for the scene to show. */
+  made: string[];
 }

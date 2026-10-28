@@ -9,7 +9,7 @@ export function createStageState(id: StageId, opened: boolean): StageState {
   const generators: Record<string, number> = {};
   for (const g of def.generators) generators[g.id] = 0;
   if (opened) generators[def.generators[0].id] = def.startingGenerators;
-  return { currency: ZERO, totalEarned: ZERO, generators, upgrades: [], complete: false, dials: { heat: 0, light: 0, charge: 0 }, discovered: [] };
+  return { currency: ZERO, totalEarned: ZERO, generators, upgrades: [], complete: false, dials: { heat: 0, light: 0, charge: 0 }, discovered: [], free: {}, catalysis: {} };
 }
 
 export function createState(now = Date.now()): GameState {
@@ -30,6 +30,7 @@ export function createState(now = Date.now()): GameState {
     started: false,
     swirl: 0,
     news: [],
+    made: [],
   };
 }
 
@@ -46,7 +47,9 @@ export function cloneState(s: GameState): GameState {
       complete: st.complete,
       dials: { ...st.dials },
       discovered: [...st.discovered],
+      free: { ...st.free },
+      catalysis: { ...st.catalysis },
     };
   }
-  return { ...s, unlocked: [...s.unlocked], stages, news: [...s.news] };
+  return { ...s, unlocked: [...s.unlocked], stages, news: [...s.news], made: [...s.made] };
 }

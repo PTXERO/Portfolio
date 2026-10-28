@@ -71,6 +71,7 @@ export const SPRITES = {
   sugar: ['...wwww...', '..w....w..', '.w.wwww.w.', '.w.w..w.w.', '.w.w..w.w.', '.w.wwww.w.', '..w....w..', '...wwww...', '..........', '..........'],
   nucleotide: ['..........', '...pppp...', '..pPPPPp..', '..pP..Pp..', '..pPPPPp..', '...pppp...', '....bb....', '....bb....', '...bbbb...', '..........'],
   peptideSmall: ['yy.yy', '.yy.y'],
+  plusOne: ['.....w.', '.w..ww.', 'www..w.', '.w...w.', '....www'],
   sugarSmall: ['.ww.', 'w..w', '.ww.'],
   nucleoSmall: ['.pp.', 'pPPp', '.bb.'],
 } satisfies Record<string, string[]>;

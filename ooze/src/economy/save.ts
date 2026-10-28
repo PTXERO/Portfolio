@@ -35,6 +35,8 @@ export function deserialize(text: string): GameState {
           complete: s.complete,
           dials: { ...fresh.dials, ...s.dials },
           discovered: [...(s.discovered ?? [])],
+          free: { ...(s.free ?? {}) },
+          catalysis: { ...(s.catalysis ?? {}) },
         }
       : base.stages[id];
     // Saves from before reactions existed: anything owned counts as discovered.
@@ -48,7 +50,7 @@ export function deserialize(text: string): GameState {
   }
   // Saves from before the start flag existed: anyone who had played has started.
   const started = saved.started ?? (saved.playTime > 0 || saved.taps > 0);
-  return { ...base, ...saved, stages, started, swirl: 0, news: [] };
+  return { ...base, ...saved, stages, started, swirl: 0, news: [], made: [] };
 }
 
 /** Save as a copyable text string, for backups (iOS can clear web storage). */

@@ -105,6 +105,11 @@ export class Scene {
     this.soup.whirl(x, y, dir);
   }
 
+  /** Free products the soup's reactions just made, to show bonding. */
+  made(ids: string[]): void {
+    if (this.stage === 'soup') this.soup.made(ids);
+  }
+
   /** A reaction was just discovered. */
   discovery(): void {
     if (this.stage === 'soup') this.soup.discovery();

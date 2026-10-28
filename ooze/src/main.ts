@@ -113,6 +113,7 @@ function showDiscovery(): void {
 }
 
 function collectNews(): void {
+  if (state.made.length) scene.made(state.made.splice(0));
   if (!state.news.length) return;
   discoveryQueue.push(...state.news);
   state.news = [];
