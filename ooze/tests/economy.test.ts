@@ -393,14 +393,14 @@ describe('cell stage', () => {
     expect(t.stages.cell.discovered).not.toContain('chloroplast');
   });
 
-  it('foraging pays more for the right food', () => {
+  it('a cell eats nothing until it has a diet, then only its own food', () => {
     const s = cell();
-    buyUpgrade(s, 'cell', 'grazer');
     s.stages.cell.generators.fission = 100;
-    const a = forage(s, 'algae');
-    const b = forage(s, 'bacteria');
-    expect(a.gt(b)).toBe(true);
-    expect(s.stages.cell.eaten).toBe(2);
+    expect(forage(s, 'algae').eq(0)).toBe(true);
+    buyUpgrade(s, 'cell', 'grazer');
+    expect(forage(s, 'algae').gt(0)).toBe(true);
+    expect(forage(s, 'bacteria').eq(0)).toBe(true);
+    expect(s.stages.cell.eaten).toBe(1);
   });
 
   it('multicellularity ends the stage, with nothing to evolve into yet', () => {

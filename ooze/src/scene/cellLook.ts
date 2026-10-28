@@ -39,7 +39,8 @@ export function lookOf(state: GameState, stage: StageId): Look {
 /** Body colours (fill, outline) for each diet. */
 export const DIET_COLORS: Record<string, [string, string]> = {
   none: [PAL.G, PAL.g],
-  grazer: ['#3f9c5a', '#8fe08a'],
+  // Teal rather than leaf green, so grazers never look like the algae they eat.
+  grazer: ['#2f8a8f', '#86dcd8'],
   hunter: ['#b8573f', '#f2906c'],
   omnivore: ['#b88a2e', '#f5c45e'],
 };
@@ -106,12 +107,11 @@ function bake(look: Look, rx: number, frame: number, squash: boolean, inner: boo
       px(x, y, rim ? edge : rim2 ? PAL.w : fill);
     }
   }
-  // Your own cell gets an ink outline, so it stands out from a crowd of its kin.
+  // Your own cell catches the light along its top-left edge, a quiet way to tell it from its kin.
   if (inner) {
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (inside(x, y)) continue;
-        if (inside(x - 1, y) || inside(x + 1, y) || inside(x, y - 1) || inside(x, y + 1)) px(x, y, PAL.k);
+    for (let y = 0; y < cy; y++) {
+      for (let x = 0; x < cx + 1; x++) {
+        if (inside(x, y) && (!inside(x - 1, y) || !inside(x, y - 1))) px(x, y, PAL.w);
       }
     }
   }

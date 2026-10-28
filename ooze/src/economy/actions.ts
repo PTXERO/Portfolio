@@ -251,13 +251,18 @@ export const FORAGE_SECONDS = 1;
 /** Seconds of output for driving off a predator. */
 export const FEND_OFF_SECONDS = 15;
 
-/** How much a diet gets out of a food: the right food is a feast, the wrong one a snack. */
-export function foodValue(state: GameState, stage: StageId, food: FoodKind): number {
+/** What a lineage can eat: nothing until it picks a diet, then only that diet's food (both for omnivores). */
+export function canEat(state: GameState, stage: StageId, food: FoodKind): boolean {
   const diet = dietOf(state, stage);
-  if (diet === 'grazer') return food === 'algae' ? 1.5 : 0.3;
-  if (diet === 'hunter') return food === 'bacteria' ? 1.5 : 0.3;
-  if (diet === 'omnivore') return 1.1;
-  return 0.7;
+  if (diet === 'grazer') return food === 'algae';
+  if (diet === 'hunter') return food === 'bacteria';
+  return diet === 'omnivore';
+}
+
+/** How much one piece of food is worth, in seconds of output: specialists get more from their food. */
+export function foodValue(state: GameState, stage: StageId, food: FoodKind): number {
+  if (!canEat(state, stage, food)) return 0;
+  return dietOf(state, stage) === 'omnivore' ? 1.1 : 1.5;
 }
 
 function earn(state: GameState, stage: StageId, amount: Decimal): Decimal {
@@ -271,6 +276,7 @@ function earn(state: GameState, stage: StageId, amount: Decimal): Decimal {
 /** The hero cell eats one piece of food. Returns the currency gained. */
 export function forage(state: GameState, food: FoodKind): Decimal {
   const stage = state.current;
+  if (!canEat(state, stage, food)) return D(0);
   const base = Decimal.max(stageRate(state, stage).mul(FORAGE_SECONDS), 1);
   state.stages[stage].eaten++;
   return earn(state, stage, base.mul(foodValue(state, stage, food) * forageMult(state, stage)));

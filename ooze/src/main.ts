@@ -31,7 +31,7 @@ import {
 } from './economy/actions';
 import { D, format, formatTime } from './economy/num';
 import { applyOffline, type OfflineReport } from './economy/offline';
-import { stageRate } from './economy/rates';
+import { dietOf, stageRate } from './economy/rates';
 import { clearStorage, exportSave, importSave, loadFromStorage, saveToStorage } from './economy/save';
 import { createState } from './economy/state';
 import { liveTick, TICK_SEC } from './economy/tick';
@@ -280,6 +280,7 @@ function renderHint(): void {
     if (state.taps < 3) text = 'Tap the soup to stir it';
     else if (st.discovered.includes('phosphorylation') && !st.discovered.includes('polymerization') && state.swirl < 0.05) text = 'Draw circles to spin a whirlpool';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
+  else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
   hint.hidden = !text || !modal.hidden;
   if (hint.textContent !== text) hint.textContent = text;
 }

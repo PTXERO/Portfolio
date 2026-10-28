@@ -4,8 +4,8 @@
 // reports what happened (ate, engulfed, drove off) as events for main to apply.
 
 import { PAL } from '../art/sprites';
-import { engulfable } from '../economy/actions';
-import { autopilot, defenseOf, dietOf, habitatOf, heroSpeed, spawnMult } from '../economy/rates';
+import { canEat, engulfable } from '../economy/actions';
+import { autopilot, defenseOf, habitatOf, heroSpeed, spawnMult } from '../economy/rates';
 import type { FoodKind, GameState } from '../economy/types';
 import { drawBlob, type BlobStyle, type Core } from './blob';
 import { drawCellLook, lookOf, ORGANELLE_COLORS, type Look } from './cellLook';
@@ -76,6 +76,8 @@ const HERO_SPEED = 18;
 /** Seconds without steering before the eyespot's autopilot takes over. */
 const AUTOPILOT_AFTER = 2.5;
 const RARE_LIFE = 35;
+/** Your cell's radius by size mutation: only a little bigger than the swarm's 4. */
+const HERO_RX = [5, 5, 6, 7];
 const PREDATOR_STYLE: BlobStyle = { edge: '#e8615a', body: '#8a2f45', nucleus: '#3a1020' };
 const PREDATOR_FLINCH: BlobStyle = { edge: PAL.w, body: '#c4485a', nucleus: '#3a1020' };
 
@@ -96,6 +98,8 @@ export class Pond {
   private predTimer = 30;
   private marker: { x: number; y: number; age: number } | null = null;
   private ramCooldown = 0;
+  /** Swarm cells just bitten by a predator: a red burst where each one was. */
+  private bites: { x: number; y: number; age: number }[] = [];
   private W = 0;
   private floor = 0;
   private top = 0;
@@ -126,7 +130,7 @@ export class Pond {
   }
 
   private heroRx(state: GameState): number {
-    return [5, 5, 7, 9][Math.min(3, lookOf(state, 'cell').size)];
+    return HERO_RX[Math.min(3, lookOf(state, 'cell').size)];
   }
 
   /**
@@ -169,7 +173,6 @@ export class Pond {
     this.look = lookOf(state, 'cell');
     const hab = habitatOf(state, 'cell');
     const spawn = spawnMult(state, 'cell');
-    const diet = dietOf(state, 'cell');
     if (!this.hero) {
       const [x, y] = [W * 0.5, top + (floor - top) * 0.55];
       this.hero = { x, y, vx: 0, vy: 0, tx: null, ty: y, idle: 0, left: false, gulp: 0 };
@@ -194,7 +197,7 @@ export class Pond {
     h.idle += dt;
     h.gulp = Math.max(0, h.gulp - dt);
     if (h.tx === null && autopilot(state, 'cell') && h.idle > AUTOPILOT_AFTER) {
-      const wants = (q: Food) => diet === null || diet === 'omnivore' || (diet === 'grazer' ? q.kind === 'algae' : q.kind === 'bacteria');
+      const wants = (q: Food) => canEat(state, 'cell', q.kind);
       let best: Food | null = null;
       let bd = Infinity;
       for (const q of this.food) {
@@ -236,9 +239,15 @@ export class Pond {
       if (q.x < 4 || q.x > W - 4) q.vx = (q.x < 4 ? 1 : -1) * Math.abs(q.vx || 2);
       if (q.y < top + 4 || q.y > floor - 4) q.vy = (q.y < top + 4 ? 1 : -1) * Math.abs(q.vy || 2);
       if (q.age > 0.5 && d < rx + 2) {
-        q.age = -1;
-        h.gulp = 0.25;
-        this.events.push({ type: 'eat', food: q.kind, x: q.x, y: q.y });
+        if (canEat(state, 'cell', q.kind)) {
+          q.age = -1;
+          h.gulp = 0.25;
+          this.events.push({ type: 'eat', food: q.kind, x: q.x, y: q.y });
+        } else {
+          // Not on the menu: it just gets nudged aside.
+          q.vx += ((q.x - h.x) / (d || 1)) * 8;
+          q.vy += ((q.y - h.y) / (d || 1)) * 8;
+        }
       }
     }
     this.food = this.food.filter((q) => q.age >= 0);
@@ -316,8 +325,11 @@ export class Pond {
         else [tx, ty] = [W / 2 + Math.sin(f.t * 0.4) * W * 0.3, (top + floor) / 2];
         speed = p.flinch > 0 ? 2 : 11;
         if (best && bd < 5 && p.bite <= 0) {
-          best.fade = 0.6;
+          // A bite: the cell bursts (the swarm divides again to replace it).
+          best.dead = true;
           p.bite = 3;
+          p.flinch = 0;
+          this.bites.push({ x: best.x, y: best.y, age: 0 });
         }
       }
       this.goTo(p, tx, ty, speed, dt);
@@ -331,6 +343,8 @@ export class Pond {
     }
     this.preds = this.preds.filter((p) => !(p.fleeing && (p.x < -30 || p.x > W + 30)));
 
+    for (const bt of this.bites) bt.age += dt;
+    this.bites = this.bites.filter((bt) => bt.age < 0.7);
     if (this.marker) {
       this.marker.age += dt;
       if (this.marker.age > 0.6) this.marker = null;
@@ -410,6 +424,15 @@ export class Pond {
       const s = Math.round(2 + m.age * 4);
       for (const [dx, dy] of [[-s, 0], [s, 0], [0, -s], [0, s]]) b.fillRect(Math.round(m.x + dx), Math.round(m.y + dy), 1, 1);
     }
+    // Bitten cells burst into red bits.
+    for (const bt of this.bites) {
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const r = 2 + bt.age * 14;
+        b.fillStyle = bt.age < 0.25 ? PAL.w : '#e8615a';
+        b.fillRect(Math.round(bt.x + Math.cos(a) * r), Math.round(bt.y + Math.sin(a) * r * 0.8), 1, 1);
+      }
+    }
     for (const p of this.preds) {
       const cores: Core[] = [];
       const wob = p.flinch > 0 ? 1.4 : 1;
@@ -434,7 +457,7 @@ export class Pond {
     }
     const h = this.hero;
     if (h && this.look) {
-      const rx = [5, 5, 7, 9][Math.min(3, this.look.size)];
+      const rx = HERO_RX[Math.min(3, this.look.size)];
       const moving = Math.hypot(h.vx, h.vy) > 2;
       drawCellLook(b, this.look, h.x, h.y + Math.sin(t * 2) * 0.6, {
         rx,
