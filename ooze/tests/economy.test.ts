@@ -270,6 +270,16 @@ describe('reactions', () => {
     near(generatorCost(s, 'soup', 'peptide').toNumber(), priceBefore);
   });
 
+  it('once known, reactions that needed a whirlpool keep producing without one', () => {
+    const s = fresh();
+    s.stages.soup.discovered = ['peptideBond', 'formose', 'selfAssembly', 'phosphorylation', 'polymerization', 'ribozyme', 'encapsulation'];
+    s.stages.soup.generators.lipid = 100;
+    s.stages.soup.generators.rna = 30;
+    expect(s.swirl).toBe(0);
+    for (let i = 0; i < 1200; i++) tick(s, 1);
+    expect(s.stages.soup.free.protocell ?? 0).toBeGreaterThan(0);
+  });
+
   it('old saves count owned molecules as discovered', () => {
     const s = fresh();
     s.stages.soup.generators.lipid = 3;

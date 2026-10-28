@@ -167,20 +167,23 @@ export function conditionsHold(state: GameState, stage: StageId, r: ReactionDef)
 /** Free products per second at sqrt(1) ingredient, before the product's tier slows it down. */
 export const CATALYSIS_BASE = 0.008;
 
+/** How much slower each tier up the chain reacts. */
+export const CATALYSIS_TIER_SLOWDOWN = 1.7;
+
 /**
  * Free products per second a discovered reaction is making right now: zero
- * unless its dials and whirlpool conditions hold. More ingredients bond more
- * often (square root, so it grows gently); each tier up is half as fast; a
- * spinning whirlpool triples it at full strength.
+ * unless its dials are right. The whirlpool isn't needed once a reaction is
+ * known; spinning one just speeds it up (×3 at full strength). More ingredients
+ * bond more often (square root, so it grows gently); each tier up is slower.
  */
 export function catalysisRate(state: GameState, stage: StageId, r: ReactionDef): number {
   const st = state.stages[stage];
-  if (!r.unlocks || !r.pair || !st.discovered.includes(r.id) || !conditionsHold(state, stage, r)) return 0;
+  if (!r.unlocks || !r.pair || !st.discovered.includes(r.id) || !checkReaction(state, stage, r).dials) return 0;
   const [a, b] = r.pair;
   const ingredients = a === b ? Math.floor(st.generators[a] / 2) : Math.min(st.generators[a], st.generators[b]);
   if (ingredients < 1) return 0;
   const tier = Math.max(0, STAGES[stage].generators.findIndex((g) => g.id === r.unlocks) - 1);
-  return (CATALYSIS_BASE * Math.sqrt(ingredients) * (1 + 2 * state.swirl)) / Math.pow(2, tier);
+  return (CATALYSIS_BASE * Math.sqrt(ingredients) * (1 + 2 * state.swirl)) / Math.pow(CATALYSIS_TIER_SLOWDOWN, tier);
 }
 
 /** Runs the stage's reactions for `dt` seconds, adding the free products they make. */

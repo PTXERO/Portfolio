@@ -165,7 +165,7 @@ export function layout(state: GameState, tab: Tab): string {
               <div class="name">${esc(r.name)}</div>
               <div class="flavor">${esc(r.flavor)}</div>
               <div class="fx">${esc(rewardText(id, r))}</div>
-              ${r.unlocks ? `<div class="making" data-t="making-${r.id}"></div>` : ''}
+              ${r.unlocks ? `<div class="making" data-t="making-${r.id}"></div><div class="making-bar" data-bar="${r.id}"><i></i></div>` : ''}
             </div>
           </div>`;
         }
@@ -272,10 +272,22 @@ export function update(root: HTMLElement, state: GameState, tab: Tab): void {
         if (!r.unlocks) continue;
         const rate = catalysisRate(state, id, r);
         const product = STAGES[id].generators.find((g) => g.id === r.unlocks)!.name;
-        const missing = checkReaction(state, id, r).parts.filter((p) => !p.ok && !/^\d/.test(p.label));
-        const text = rate > 0 ? `Making 1 ${product} every ${formatTime(1 / rate)}` : missing.length ? `Paused: needs ${missing[0].label}` : 'Paused';
+        const progress = st.catalysis[r.id] ?? 0;
+        // The whirlpool only speeds reactions up, so it's never listed as missing here.
+        const missing = checkReaction(state, id, r).parts.filter((p) => !p.ok && !/^\d/.test(p.label) && p.label !== 'a strong whirlpool');
+        const text =
+          rate > 0
+            ? `Making ${product} · next in ${formatTime((1 - progress) / rate)}${state.swirl > 0.05 ? ' · whirlpool ×' + (1 + 2 * state.swirl).toFixed(1) : ''}`
+            : missing.length
+              ? `Paused: needs ${missing[0].label}`
+              : 'Paused';
         setText(root, `making-${r.id}`, text);
         root.querySelector(`[data-t="making-${r.id}"]`)?.classList.toggle('on', rate > 0);
+        const bar = root.querySelector<HTMLElement>(`[data-bar="${r.id}"] > i`);
+        if (bar) {
+          bar.style.width = `${Math.round(progress * 100)}%`;
+          bar.parentElement!.classList.toggle('on', rate > 0);
+        }
         continue;
       }
       const c = checkReaction(state, id, r);

@@ -391,3 +391,6 @@ textarea {
 .making { font-size: 12px; color: var(--dim); margin-top: 3px; }
 .making.on { color: var(--gold); }
 .making.on::before { content: '◆ '; }
+.making-bar { height: 4px; margin-top: 4px; background: var(--slot); max-width: 160px; }
+.making-bar > i { display: block; height: 100%; width: 0; background: #5a5f78; transition: width 250ms linear; }
+.making-bar.on > i { background: var(--gold); }
