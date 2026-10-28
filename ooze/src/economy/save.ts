@@ -36,7 +36,9 @@ export function deserialize(text: string): GameState {
         }
       : base.stages[id];
   }
-  return { ...base, ...saved, stages };
+  // Saves from before the start flag existed: anyone who had played has started.
+  const started = saved.started ?? (saved.playTime > 0 || saved.taps > 0);
+  return { ...base, ...saved, stages, started };
 }
 
 /** Save as a copyable text string, for backups (iOS can clear web storage). */

@@ -3,7 +3,7 @@
 // Run with: npm run sim
 
 import { STAGES, STAGE_ORDER } from '../src/content/stages';
-import { buyGenerator, buyUpgrade, canEvolve, evolve, generatorCost, goalProgress, visibleUpgrades } from '../src/economy/actions';
+import { buyGenerator, buyUpgrade, canEvolve, evolve, generatorCost, goalProgress, tap, visibleUpgrades } from '../src/economy/actions';
 import { formatTime } from '../src/economy/num';
 import { stageRate, tapValue } from '../src/economy/rates';
 import { cloneState, createState } from '../src/economy/state';
@@ -78,6 +78,7 @@ function visit(s: GameState, tapsPerSec: number): void {
 
 function run(strategy: Strategy) {
   const s = createState(0);
+  tap(s); // every player's first action; nothing runs before it
   const done: Partial<Record<StageId, number>> = {};
   let t = 0;
   let nextVisit = 0;

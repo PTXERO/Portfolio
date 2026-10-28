@@ -75,4 +75,6 @@ export interface GameState {
   playTime: number;
   buyAmount: BuyAmount;
   taps: number;
+  /** False until the player's first action; nothing is produced before then. */
+  started: boolean;
 }

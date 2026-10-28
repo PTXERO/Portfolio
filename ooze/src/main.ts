@@ -136,7 +136,7 @@ function update(): void {
 
   setText('currency', format(st.currency));
   setText('rate', `${def.currency} · ${format(rate)}/s`);
-  setText('tap', `Stir the soup (+${format(tapValue(state))})`);
+  setText('tap', state.started ? `Stir the soup (+${format(tapValue(state))})` : 'Stir the soup to begin');
 
   for (const g of shownGenerators()) {
     const owned = st.generators[g.id];

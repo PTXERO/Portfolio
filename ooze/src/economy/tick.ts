@@ -16,6 +16,7 @@ export function autobuy(state: GameState, stage: StageId): void {
 
 /** Advances the economy by `dt` game seconds. Every open stage keeps producing. */
 export function tick(state: GameState, dt: number): void {
+  if (!state.started) return;
   // Rates are read before any currency moves so the order of stages doesn't matter.
   const rates = state.unlocked.map((id) => [id, stageRate(state, id)] as const);
   for (const [id, rate] of rates) {

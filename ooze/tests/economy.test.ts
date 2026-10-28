@@ -8,11 +8,18 @@ import { deserialize, exportSave, importSave, serialize } from '../src/economy/s
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
 
+/** A game where the player has already made their first move. */
+function fresh() {
+  const s = createState(0);
+  s.started = true;
+  return s;
+}
+
 const near = (a: number, b: number, rel = 1e-6) => expect(Math.abs(a - b)).toBeLessThanOrEqual(Math.abs(b) * rel + 1e-9);
 
 describe('costs', () => {
   it('bulk cost equals buying one at a time', () => {
-    const s = createState(0);
+    const s = fresh();
     const bulk = generatorCost(s, 'soup', 'lipid', 10).toNumber();
     let single = 0;
     for (let i = 0; i < 10; i++) {
@@ -23,7 +30,7 @@ describe('costs', () => {
   });
 
   it('affordable count is the most that can be bought', () => {
-    const s = createState(0);
+    const s = fresh();
     s.stages.soup.currency = D(5000);
     const n = affordableCount(s, 'soup', 'amino');
     expect(generatorCost(s, 'soup', 'amino', n).lte(5000)).toBe(true);
@@ -44,7 +51,7 @@ describe('rates', () => {
   });
 
   it('upgrades multiply the right generator', () => {
-    const s = createState(0);
+    const s = fresh();
     s.stages.soup.generators.amino = 10;
     const before = stageRate(s, 'soup').toNumber();
     s.stages.soup.currency = D(1e6);
@@ -53,7 +60,7 @@ describe('rates', () => {
   });
 
   it('a finished stage boosts the next one', () => {
-    const s = createState(0);
+    const s = fresh();
     s.stages.soup.currency = D(STAGES.soup.goal);
     s.stages.soup.generators.lipid = 20;
     expect(evolve(s)).toBe(true);
@@ -66,7 +73,7 @@ describe('rates', () => {
 
 describe('stages', () => {
   it('evolving pays the goal and opens the next stage with a starter generator', () => {
-    const s = createState(0);
+    const s = fresh();
     s.stages.soup.currency = D(STAGES.soup.goal * 1.5);
     expect(canEvolve(s)).toBe(true);
     evolve(s);
@@ -77,7 +84,7 @@ describe('stages', () => {
   });
 
   it('the last stage cannot evolve yet', () => {
-    const s = createState(0);
+    const s = fresh();
     s.stages.soup.currency = D(STAGES.soup.goal);
     evolve(s);
     s.stages.cell.currency = D(STAGES.cell.goal * 10);
@@ -85,7 +92,7 @@ describe('stages', () => {
   });
 
   it('tapping only works where the stage has taps', () => {
-    const s = createState(0);
+    const s = fresh();
     expect(tap(s).toNumber()).toBe(1);
     s.stages.soup.currency = D(STAGES.soup.goal);
     evolve(s);
@@ -95,7 +102,7 @@ describe('stages', () => {
 
 describe('ticking', () => {
   it('small and large steps agree when nothing is bought', () => {
-    const a = createState(0);
+    const a = fresh();
     a.stages.soup.generators.lipid = 7;
     const b = cloneState(a);
     for (let i = 0; i < 100; i++) tick(a, 0.1);
@@ -104,7 +111,7 @@ describe('ticking', () => {
   });
 
   it('warp spends the time bank and runs faster', () => {
-    const s = createState(0);
+    const s = fresh();
     s.timeBank = 10;
     s.warp = 5;
     liveTick(s, 1);
@@ -113,7 +120,7 @@ describe('ticking', () => {
   });
 
   it('warp switches off when the bank runs dry', () => {
-    const s = createState(0);
+    const s = fresh();
     s.timeBank = 2;
     s.warp = 10;
     liveTick(s, 1);
@@ -125,7 +132,7 @@ describe('ticking', () => {
 
 describe('offline', () => {
   it('applies 80% of time away and banks the rest', () => {
-    const s = createState(0);
+    const s = fresh();
     const rate = stageRate(s, 'soup').toNumber();
     const r = applyOffline(s, 3600 * 1000);
     near(r.appliedSec, 2880);
@@ -135,7 +142,7 @@ describe('offline', () => {
   });
 
   it('respects the offline cap and the bank cap', () => {
-    const s = createState(0);
+    const s = fresh();
     const r = applyOffline(s, 100 * 3600 * 1000);
     expect(r.capped).toBe(true);
     near(r.appliedSec, s.offlineCapSec * 0.8);
@@ -143,19 +150,52 @@ describe('offline', () => {
   });
 
   it('short absences are caught up in full with nothing banked', () => {
-    const s = createState(0);
+    const s = fresh();
     const r = applyOffline(s, 10 * 1000);
     near(r.appliedSec, 10);
     expect(r.bankedSec).toBe(0);
   });
 
   it('keeps finished stages buying while away', () => {
-    const s = createState(0);
+    const s = fresh();
     s.stages.soup.currency = D(STAGES.soup.goal);
     evolve(s);
     s.stages.soup.generators.amino = 5;
     applyOffline(s, 2 * 3600 * 1000);
     expect(s.stages.soup.generators.amino).toBeGreaterThan(5);
+  });
+});
+
+describe('before the first action', () => {
+  it('nothing is produced and no time passes', () => {
+    const s = createState(0);
+    tick(s, 60);
+    expect(s.stages.soup.currency.toNumber()).toBe(0);
+    expect(s.playTime).toBe(0);
+  });
+
+  it('time away before starting is not counted or banked', () => {
+    const s = createState(0);
+    const r = applyOffline(s, 3600 * 1000);
+    expect(r.appliedSec).toBe(0);
+    expect(s.timeBank).toBe(0);
+    expect(s.lastSeen).toBe(3600 * 1000);
+  });
+
+  it('the first tap starts production', () => {
+    const s = createState(0);
+    tap(s);
+    expect(s.started).toBe(true);
+    tick(s, 10);
+    expect(s.stages.soup.currency.toNumber()).toBeGreaterThan(1);
+  });
+
+  it('old saves from players who had played count as started', () => {
+    const s = fresh();
+    s.playTime = 50;
+    const saved = JSON.parse(serialize(s));
+    delete saved.started;
+    expect(deserialize(JSON.stringify(saved)).started).toBe(true);
   });
 });
 
@@ -178,7 +218,7 @@ describe('saves', () => {
   });
 
   it('fills in generators added after the save was made', () => {
-    const s = createState(0);
+    const s = fresh();
     const saved = JSON.parse(serialize(s));
     delete saved.stages.soup.generators.protocell;
     expect(deserialize(JSON.stringify(saved)).stages.soup.generators.protocell).toBe(0);

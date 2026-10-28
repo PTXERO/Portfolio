@@ -63,6 +63,8 @@ export function buyUpgrade(state: GameState, stage: StageId, id: string): boolea
 export function tap(state: GameState): Decimal {
   const v = tapValue(state);
   if (v.lte(0)) return v;
+  // The first stir is what starts life: production only begins after it.
+  state.started = true;
   const st = state.stages[state.current];
   st.currency = st.currency.add(v);
   st.totalEarned = st.totalEarned.add(v);

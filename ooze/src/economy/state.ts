@@ -27,6 +27,7 @@ export function createState(now = Date.now()): GameState {
     playTime: 0,
     buyAmount: 1,
     taps: 0,
+    started: false,
   };
 }
 

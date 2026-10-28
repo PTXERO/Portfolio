@@ -25,7 +25,8 @@ export function timeBankCap(state: GameState): number {
 
 /** Catches the state up to `now`. Same tick math as live play, in bigger steps. */
 export function applyOffline(state: GameState, now = Date.now()): OfflineReport {
-  const raw = Math.max(0, (now - state.lastSeen) / 1000);
+  // Before the first action the clock hasn't started, so there is nothing to catch up.
+  const raw = state.started ? Math.max(0, (now - state.lastSeen) / 1000) : 0;
   const away = Math.min(raw, state.offlineCapSec);
   const short = away < OFFLINE_MIN_SEC;
   const applied = short ? away : away * OFFLINE_APPLIED_SHARE;
