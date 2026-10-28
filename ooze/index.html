@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#0b1013" />
+    <title>Ooze to Orbit (economy test)</title>
+    <link rel="stylesheet" href="./src/debug.css" />
+  </head>
+  <body>
+    <main>
+      <div id="game"></div>
+      <h2>Save</h2>
+      <div class="tools" id="save-tools">
+        <button data-act="export">Export</button>
+        <button data-act="import">Import</button>
+        <button data-act="reset">Reset</button>
+      </div>
+      <textarea id="save-text" placeholder="Tap Export to get a backup code, or paste one here and tap Import"></textarea>
+    </main>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
