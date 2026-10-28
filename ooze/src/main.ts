@@ -52,6 +52,8 @@ const saveUi = () => {
 
 const scene = new Scene($<HTMLCanvasElement>('scene'));
 let panelKey = '';
+/** Entrance animation for the next panel page: which side it slides in from. */
+let panelEnter = '';
 let evolveKey = '';
 let pokedThisStage = false;
 
@@ -150,7 +152,8 @@ function renderPanel(): void {
   if (key !== panelKey) {
     panelKey = key;
     const keepText = ($('save-text') as HTMLTextAreaElement | null)?.value ?? '';
-    panel.innerHTML = layout(state, ui.tab);
+    panel.innerHTML = `<div class="panel-inner ${panelEnter}">${layout(state, ui.tab)}</div>`;
+    panelEnter = '';
     const ta = $('save-text') as HTMLTextAreaElement | null;
     if (ta) ta.value = keepText;
   }
@@ -197,11 +200,17 @@ function act(el: HTMLElement): void {
   else if (el.dataset.warp) state.warp = Number(el.dataset.warp);
   else if (el.dataset.tab) {
     const t = el.dataset.tab as Tab;
+    const order = TABS.map((x) => x.id);
+    if (!ui.open) panelEnter = 'from-below';
+    else if (t !== ui.tab) panelEnter = order.indexOf(t) > order.indexOf(ui.tab) ? 'from-right' : 'from-left';
     ui.open = ui.tab === t ? !ui.open : true;
     ui.tab = t;
     saveUi();
-    // The scene changes size when the sheet opens or closes.
-    requestAnimationFrame(() => scene.fit());
+    if (panelEnter) {
+      // Rebuild the page so its entrance plays, starting from the top.
+      panelKey = '';
+      panel.scrollTop = 0;
+    }
   } else {
     const ta = $('save-text') as HTMLTextAreaElement | null;
     switch (el.dataset.act) {
@@ -254,7 +263,11 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 window.addEventListener('pagehide', save);
-window.addEventListener('resize', () => scene.fit());
+// The scene resizes as the sheet slides; redraw at once so it never flashes blank.
+new ResizeObserver(() => {
+  scene.fit();
+  scene.draw(state, 0);
+}).observe(stageEl);
 
 // ---- Loops ----
 
