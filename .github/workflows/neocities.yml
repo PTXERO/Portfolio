@@ -1,9 +1,9 @@
-# Publishes ONLY the reel-vault/ app to Neocities whenever main changes.
+# Publishes ONLY the reel-vault/ app and the ooze/ game build to Neocities whenever main changes.
 # The rest of the site is hand-maintained in the Neocities editor and is never
-# touched by this workflow (the deploy script is scoped to reel-vault/).
+# touched by this workflow (the deploy script is scoped to reel-vault/ and ooze/).
 # Needs a repository secret named NEOCITIES_API_KEY
 # (GitHub → Settings → Secrets and variables → Actions → New repository secret).
-name: Publish reel-vault to Neocities
+name: Publish reel-vault and ooze to Neocities
 
 on:
   push:
@@ -19,6 +19,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ooze/package-lock.json
+      - name: Build Ooze to Orbit
+        working-directory: ooze
+        run: |
+          npm ci
+          npm test
+          npm run build
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

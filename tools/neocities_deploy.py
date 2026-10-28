@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Publish the REEL//VAULT app to Neocities — uploads only files that changed.
+"""Publish the REEL//VAULT app and the Ooze to Orbit build to Neocities — uploads only files that changed.
 
     NEOCITIES_API_KEY=xxxx python tools/neocities_deploy.py            # publish
     NEOCITIES_API_KEY=xxxx python tools/neocities_deploy.py --dry-run  # just show what would change
     NEOCITIES_API_KEY=xxxx python tools/neocities_deploy.py --delete   # also remove deleted files (scoped)
 
-SCOPE: this only ever touches the reel-vault/ subtree (minus reel-vault/server/).
+SCOPE: this only ever touches the reel-vault/ subtree (minus reel-vault/server/) and
+ooze/, which is published from the game's build output (ooze/dist, run `npm run build`
+in ooze/ first; the workflow does).
 The rest of ptxero.neocities.org — the homepage, site.config.js, gallery, about,
 exposed, ascii-render, rf, social.html, icons — is hand-maintained in the Neocities
 editor and is NEVER read, uploaded, or deleted by this tool. --delete likewise only
-removes orphans under reel-vault/, so it can't wipe the hand-maintained site.
+removes orphans under reel-vault/ and ooze/, so it can't wipe the hand-maintained site.
 
 Get the key at neocities.org → Settings → (your site) → API. Standard library only.
 """
@@ -29,7 +31,10 @@ API = os.environ.get("NEOCITIES_API_URL", "https://neocities.org/api")
 
 # This tool manages ONLY the reel-vault app on the static host. Everything else on
 # the site is hand-maintained in the Neocities editor and must not be touched here.
-PUBLISH_ROOTS = ("reel-vault/",)          # the only subtree this tool publishes
+PUBLISH_ROOTS = ("reel-vault/",)          # subtrees published as they are in the repo
+# subtrees published from a build folder instead of their source: remote prefix -> local dir
+BUILT_ROOTS = {"ooze/": "ooze/dist"}
+MANAGED_ROOTS = PUBLISH_ROOTS + tuple(BUILT_ROOTS)   # everything this tool may upload or delete
 # never published: tooling, the local server's code, private data
 SKIP_DIRS = {".git", ".github", ".claude", ".venv", "tools", "node_modules", "__pycache__", "data", "models"}
 SKIP_FILES = {".gitignore", ".DS_Store", "Thumbs.db"}
@@ -53,7 +58,7 @@ def local_files():
         rel = p.relative_to(ROOT).as_posix()
         if p.is_dir() or any(part in SKIP_DIRS for part in p.relative_to(ROOT).parts):
             continue
-        if not rel.startswith(PUBLISH_ROOTS):     # only the reel-vault subtree
+        if not rel.startswith(PUBLISH_ROOTS):     # only the reel-vault subtree (ooze/ comes from its build)
             continue
         if p.name in SKIP_FILES or rel.startswith(SKIP_PATTERNS) or p.name.startswith("."):
             continue
@@ -61,6 +66,19 @@ def local_files():
             skipped.append(rel)
             continue
         out[rel] = p
+    for prefix, build_dir in BUILT_ROOTS.items():
+        base = ROOT / build_dir
+        if not base.is_dir():
+            print(f"  note: {build_dir} not found, {prefix} not published (build it first)")
+            continue
+        for p in sorted(base.rglob("*")):
+            if p.is_dir() or p.name.startswith("."):
+                continue
+            rel = prefix + p.relative_to(base).as_posix()
+            if p.suffix.lstrip(".").lower() not in ALLOWED:
+                skipped.append(rel)
+                continue
+            out[rel] = p
     for rel, src in PUBLISH_AS.items():
         if (ROOT / src).is_file():
             out[rel] = ROOT / src
@@ -116,7 +134,7 @@ def main():
     # only consider deleting remote files INSIDE the published subtree — never the
     # hand-maintained parts of the site (and never the server code we don't publish)
     orphans = sorted(r for r in (set(remote_hash) - set(files))
-                     if r.startswith(PUBLISH_ROOTS) and not r.startswith(SKIP_PATTERNS)) if a.delete else []
+                     if r.startswith(MANAGED_ROOTS) and not r.startswith(SKIP_PATTERNS)) if a.delete else []
 
     info = call("/info", key).get("info", {})
     print(f"site: https://{info.get('sitename', '?')}.neocities.org  ·  {len(files)} files here, "
