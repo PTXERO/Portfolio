@@ -504,11 +504,27 @@ evolveEl.addEventListener('click', (e) => {
   render();
 });
 
+/** Reloads onto a newer build when there is one, so a tab left open never runs old rules. */
+async function checkForUpdate(): Promise<void> {
+  try {
+    const mine = document.querySelector<HTMLScriptElement>('script[src*="/assets/index-"]')?.src.match(/index-[^/]+\.js/)?.[0];
+    const html = await (await fetch('./', { cache: 'no-store' })).text();
+    const live = html.match(/index-[^"/]+\.js/)?.[0];
+    if (mine && live && live !== mine) {
+      save();
+      location.reload();
+    }
+  } catch {
+    /* offline: keep playing this build */
+  }
+}
+
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') save();
   else {
     catchUp();
     render();
+    if (!import.meta.env.DEV) void checkForUpdate();
   }
 });
 window.addEventListener('pagehide', save);

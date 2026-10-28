@@ -100,6 +100,8 @@ export class Pond {
   private ramCooldown = 0;
   /** Swarm cells just bitten by a predator: a red burst where each one was. */
   private bites: { x: number; y: number; age: number }[] = [];
+  /** Which foods the lineage can eat; the rest is drawn faded. */
+  private edible: Record<FoodKind, boolean> = { algae: false, bacteria: false };
   private W = 0;
   private floor = 0;
   private top = 0;
@@ -172,6 +174,7 @@ export class Pond {
     this.top = top;
     this.look = lookOf(state, 'cell');
     const hab = habitatOf(state, 'cell');
+    this.edible = { algae: canEat(state, 'cell', 'algae'), bacteria: canEat(state, 'cell', 'bacteria') };
     const spawn = spawnMult(state, 'cell');
     if (!this.hero) {
       const [x, y] = [W * 0.5, top + (floor - top) * 0.55];
@@ -373,6 +376,8 @@ export class Pond {
       if (q.age < 0.5 && Math.floor(t * 12) % 2) continue;
       const x = Math.round(q.x);
       const y = Math.round(q.y);
+      // Food your cell can't eat fades into the water.
+      b.globalAlpha = this.edible[q.kind] ? 1 : 0.35;
       if (q.kind === 'algae') {
         // A little clump of green.
         b.fillStyle = PAL.l;
@@ -392,6 +397,7 @@ export class Pond {
         b.fillRect(x + 2, y + (w ? 1 : 0), 1, 1);
       }
     }
+    b.globalAlpha = 1;
     const r = this.rare;
     if (r) {
       const col = ORGANELLE_COLORS[r.id] ?? PAL.y;
