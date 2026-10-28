@@ -4,11 +4,13 @@
 import { blit, PAL } from '../art/sprites';
 import type { GameState } from '../economy/types';
 import { Effects, ease, glints, hash, ring, visibleCount, water, type Frame } from './paint';
+import { drawBlob, type Core } from './blob';
 import { SPLIT_AT, STRETCH_UNTIL, Swarm } from './swarm';
 
 interface Colony {
   x: number;
-  y: number;
+  /** Height as a share of the open water, so it survives the scene resizing. */
+  yf: number;
   vx: number;
   phase: number;
   /** Cells stuck together in this blob. */
@@ -59,10 +61,11 @@ export class CellScene {
     return { count: Math.min(8, owned), size: Math.min(MEMBERS.length, 3 + Math.floor(Math.log2(1 + owned) / 2)) };
   }
 
-  private newColony(size: number, forming: boolean): Colony {
+  /** Colonies swim in four lanes across the water, so they rarely overlap. */
+  private newColony(index: number, size: number, forming: boolean): Colony {
     return {
-      x: 14 + Math.random() * (this.W - 28),
-      y: this.top + 12 + Math.random() * Math.max(1, this.floor - this.top - 30),
+      x: this.W * ((Math.floor(index / 4) % 2) * 0.5 + 0.25) + (hash(index, 59) - 0.5) * 10,
+      yf: ((index % 4) + 0.5) / 4 + (hash(index, 61) - 0.5) * 0.08,
       vx: (Math.random() < 0.5 ? -1 : 1) * (1.5 + Math.random()),
       phase: Math.random() * 10,
       size,
@@ -75,6 +78,10 @@ export class CellScene {
   private pillarAt(i: number): Pillar {
     const slots = [0.33, 0.56, 0.45, 0.65, 0.25, 0.93];
     return { x: Math.floor(this.W * slots[i % slots.length]), h: 0, maxH: 10 + Math.floor(hash(i, 43) * 12) };
+  }
+
+  private colonyY(c: Colony): number {
+    return this.top + 12 + c.yf * Math.max(1, this.floor - this.top - 34);
   }
 
   /** Share of each rock covered in biofilm. */
@@ -95,14 +102,14 @@ export class CellScene {
         break;
       case 'colony': {
         const { count, size } = this.colonyTargets(gens.colony);
-        if (this.colonies.length < count) this.colonies.push(this.newColony(size, true));
+        if (this.colonies.length < count) this.colonies.push(this.newColony(this.colonies.length, size, true));
         else if (this.colonies.length) {
           // Full house: a cell swims over and joins an existing colony.
           const c = this.colonies[Math.floor(Math.random() * this.colonies.length)];
           const from = [Math.random() < 0.5 ? -10 : W + 10, Math.random() * floor * 0.8] as const;
           fx.add(1, (f, age) => {
             const k = ease(age);
-            blit(f.b, 'cell', from[0] + (c.x - from[0]) * k, from[1] + (c.y - from[1]) * k, from[0] > c.x);
+            blit(f.b, 'cell', from[0] + (c.x - from[0]) * k, from[1] + (this.colonyY(c) - from[1]) * k, from[0] > c.x);
             if (age > 0.95) c.pulse = 0.4;
           });
           c.size = Math.max(c.size, size);
@@ -140,8 +147,8 @@ export class CellScene {
         break;
       case 'quorum':
         this.colonies.forEach((c, i) => {
-          fx.pulse(c.x, c.y, PAL.g, i * 0.12);
-          fx.pulse(c.x, c.y, PAL.g, i * 0.12 + 0.35);
+          fx.pulse(c.x, this.colonyY(c), PAL.g, i * 0.12);
+          fx.pulse(c.x, this.colonyY(c), PAL.g, i * 0.12 + 0.35);
         });
         break;
       case 'slime':
@@ -192,7 +199,7 @@ export class CellScene {
       this.ready = true;
       this.swarm.fill(visibleCount(gens.fission, 60), W, floor, top);
       const { count, size } = this.colonyTargets(gens.colony);
-      this.colonies = Array.from({ length: count }, () => this.newColony(size, false));
+      this.colonies = Array.from({ length: count }, (_, i) => this.newColony(i, size, false));
       this.pillars = Array.from({ length: Math.min(6, gens.stromatolite) }, (_, i) => ({ ...this.pillarAt(i), h: this.pillarAt(i).maxH }));
       this.matShown = this.matTarget(gens.mat);
       this.filmShown = this.filmTarget(gens.biofilm);
@@ -254,34 +261,48 @@ export class CellScene {
       }
     }
 
-    // Colonies: blobs of stuck-together cells that drift slowly.
+    // Colonies: member cells fused into one morphing amoeba that drifts slowly.
+    const blobs: Core[][] = [];
     for (const c of this.colonies) {
       c.age += dt;
       c.pulse = Math.max(0, c.pulse - dt);
       c.x += c.vx * dt;
-      if (c.x < 12 || c.x > W - 12) c.vx = -c.vx;
-      const bob = Math.sin(t * 1.3 + c.phase) * 2;
+      if (c.x < 14) c.vx = Math.abs(c.vx);
+      if (c.x > W - 14) c.vx = -Math.abs(c.vx);
+      // Colonies sharing a lane bump apart instead of passing through each other.
+      for (const o of this.colonies) {
+        if (o === c || Math.abs(o.yf - c.yf) > 0.15) continue;
+        const dx = o.x - c.x;
+        if (Math.abs(dx) < 30 && Math.sign(dx) === Math.sign(c.vx)) c.vx = -c.vx;
+      }
+      const cy = this.colonyY(c) + Math.sin(t * 1.3 + c.phase) * 2;
       const k = ease(c.age / FORM_SEC);
       const swell = c.pulse > 0 ? 1 + Math.sin(c.pulse * 20) * 0.15 : 1;
-      // The slime that holds them together, once they've arrived.
-      if (k > 0.85) {
-        b.fillStyle = PAL.n;
-        for (let i = 0; i < c.size; i++) {
-          const [ox, oy] = MEMBERS[i];
-          b.fillRect(Math.round(c.x + ox * swell) - 5, Math.round(c.y + bob + oy * swell) - 4, 10, 8);
-        }
-      }
+      // While forming, members start far apart and swim in; as they meet,
+      // their fields overlap and they melt into a single body.
+      const spread = (0.75 + (1 - k) * 4) * swell;
+      const cores: Core[] = [];
       for (let i = 0; i < c.size; i++) {
         const [ox, oy] = MEMBERS[i];
-        // While forming, members swim in from far out.
-        const spread = 1 + (1 - k) * 5;
-        blit(b, 'cell', c.x + ox * spread * swell, c.y + bob + oy * spread * swell, i % 2 === 0);
-        if (has('endosymbiosis')) {
-          b.fillStyle = PAL.o;
-          b.fillRect(Math.round(c.x + ox * spread * swell) - 2, Math.round(c.y + bob + oy * spread * swell) + 1, 2, 1);
+        cores.push({
+          x: c.x + ox * spread + Math.sin(t * 1.7 + i * 2.1 + c.phase) * 1.3,
+          y: cy + oy * spread + Math.cos(t * 1.3 + i * 1.7 + c.phase) * 1.1,
+          r: 4.2,
+          nucleus: true,
+        });
+      }
+      // Two pseudopods reach out and pull back, so the outline keeps changing.
+      if (k > 0.9) {
+        for (let j = 0; j < 2; j++) {
+          const a = c.phase + t * 0.35 + j * Math.PI;
+          const reach = 9 + c.size * 0.8 + Math.sin(t * 1.9 + j * 2 + c.phase) * 4;
+          cores.push({ x: c.x + Math.cos(a) * reach, y: cy + Math.sin(a) * reach * 0.6, r: 2.6, nucleus: false });
         }
       }
+      blobs.push(cores);
     }
+    for (const cores of blobs) drawBlob(b, cores, has('endosymbiosis'));
+    for (const cores of blobs) drawBlob(b, cores, has('endosymbiosis'), true);
 
     // The free-swimming swarm, dividing as it grows.
     this.swarm.target = visibleCount(gens.fission, 60);
