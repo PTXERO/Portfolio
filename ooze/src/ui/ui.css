@@ -213,11 +213,12 @@ html, body {
   position: relative;
   z-index: 1;
 }
+/* Short on purpose: about two and a bit cards, so the scene stays the main thing. */
 #panel {
-  height: 40dvh;
+  height: clamp(215px, 27dvh, 250px);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 14px 12px 8px;
+  padding: 10px 12px 6px;
   touch-action: pan-y;
 }
 #panel {
@@ -281,22 +282,22 @@ html, body {
 
 /* ---- Panel contents ---- */
 
-.panel-head { display: flex; align-items: center; justify-content: space-between; margin: 0 4px 12px; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; margin: 0 4px 6px; min-height: 22px; }
 .panel-head h2 { margin: 0; font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
 .seg { display: flex; }
-.seg .px-btn { padding: 6px 10px calc(6px + var(--depth)); font-size: 13px; margin: var(--u) 0 var(--u) var(--u); }
+.seg .px-btn { padding: 3px 9px calc(3px + var(--depth)); font-size: 13px; margin: var(--u) 0 var(--u) var(--u); }
 .seg .px-btn.on { --face: var(--panel-hi); --hi: #4a5a85; color: var(--gold); }
 
 .card {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px;
-  margin: 0 var(--u) 12px;
+  padding: 6px 10px;
+  margin: 0 var(--u) 6px;
 }
 .slot {
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
   background: var(--slot);
@@ -308,18 +309,20 @@ html, body {
 .card .count { color: var(--gold); font-family: var(--digits); font-size: 20px; margin-left: 4px; }
 .card .sub { font-size: 13px; color: var(--dim); margin-top: 2px; }
 .card .fx { font-size: 13px; color: var(--mint); margin-top: 2px; }
-.card .flavor { font-size: 12px; color: var(--dim); margin-top: 3px; font-style: italic; }
+.card .flavor { font-size: 12px; color: var(--dim); margin-top: 3px; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .tag { font-size: 11px; font-weight: 500; color: var(--dim); letter-spacing: 0.06em; text-transform: uppercase; margin-left: 4px; }
+.evolved-list { color: var(--mint); }
 .card .buy {
   min-width: 92px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 7px 8px calc(7px + var(--depth));
+  padding: 5px 8px calc(5px + var(--depth));
 }
-.buy .cost { display: flex; align-items: center; gap: 4px; font-family: var(--digits); font-size: 22px; line-height: 0.9; }
+.buy .cost { display: flex; align-items: center; gap: 4px; font-family: var(--digits); font-size: 20px; line-height: 0.9; }
 .buy .qty { font-size: 11px; letter-spacing: 0.06em; }
-.mini { display: flex; gap: 2px; margin-top: 5px; }
+.mini { display: flex; gap: 2px; margin-top: 3px; }
 .mini > i { width: 8px; height: 5px; background: var(--slot); }
 .mini > i.on { background: var(--gold); }
 

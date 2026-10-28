@@ -36,7 +36,7 @@ interface Strategy {
   tapsPerSec: number;
 }
 
-const STRATEGIES: Strategy[] = [
+export const STRATEGIES: Strategy[] = [
   { name: 'active (taps 4/s)', checkEvery: 1, tapsPerSec: 4 },
   { name: 'engaged (30 s visits)', checkEvery: 30, tapsPerSec: 0 },
   { name: 'casual (5 min visits)', checkEvery: 300, tapsPerSec: 0 },
@@ -143,6 +143,12 @@ function visit(s: GameState, tapsPerSec: number): void {
       continue;
     }
     const rate = effectiveRate(s, tapsPerSec);
+    // Boosts that cost under a minute of income get bought on sight, whatever their payback.
+    const cheap = visibleUpgrades(s, s.current).find((u) => u.cost <= money && u.cost <= rate * 60);
+    if (cheap) {
+      buyUpgrade(s, s.current, cheap.id);
+      continue;
+    }
     // Save for the finale once it's in reach, otherwise for the next mutation (players save for what they want).
     const nextMutation = visibleUpgrades(s, s.current)
       .filter((u) => !!u.branch)
@@ -182,7 +188,8 @@ function cellVisit(s: GameState): void {
   s.news = [];
 }
 
-function run(strategy: Strategy) {
+/** Plays one strategy. `events` gets the time each upgrade, discovery and first generator happened. */
+export function run(strategy: Strategy, events?: Map<string, number>) {
   const s = createState(0);
   tap(s); // every player's first action; nothing runs before it
   const done: Partial<Record<StageId, number>> = {};
@@ -206,6 +213,12 @@ function run(strategy: Strategy) {
             console.log(`  ${formatTime(t).padStart(8)}  ${s.current}: bought ${id}`);
           }
         }
+        for (const [id, n] of Object.entries(s.stages[s.current].generators)) {
+          if (n > 0 && !seenUp.has(`gen:${id}`)) {
+            seenUp.add(`gen:${id}`);
+            console.log(`  ${formatTime(t).padStart(8)}  ${s.current}: first ${id}`);
+          }
+        }
       }
     }
     if (process.env.SIM_FREE && strategy.name.startsWith(process.env.SIM_FREE) && s.current === 'soup' && t % 600 === 0) {
@@ -215,6 +228,15 @@ function run(strategy: Strategy) {
     if (process.env.SIM_CELL && strategy.name.startsWith(process.env.SIM_CELL) && s.current === 'cell' && t % 600 === 0) {
       const st = s.stages.cell;
       console.log(`  ${formatTime(t).padStart(8)} DNA ${st.currency.toExponential(2)} rate ${stageRate(s, 'cell').toNumber().toExponential(2)} ${st.habitat} found [${st.discovered}] gens ${JSON.stringify(st.generators)} ups ${st.upgrades.length}`);
+    }
+    if (events) {
+      const st = s.stages[s.current];
+      const tag = (k: string) => {
+        if (!events.has(`${s.current}:${k}`)) events.set(`${s.current}:${k}`, t);
+      };
+      for (const id of st.discovered) tag(id);
+      for (const id of st.upgrades) tag(id);
+      for (const [id, n] of Object.entries(st.generators)) if (n > 0) tag(`gen:${id}`);
     }
     if (t >= nextVisit) {
       const before = s.current;
@@ -249,20 +271,24 @@ function verdict(stage: StageId, sec: number | undefined): string {
   return sec < lo ? 'fast' : sec > hi ? 'slow' : 'on target';
 }
 
-const rows: string[][] = [['player', ...STAGE_ORDER.map((id) => STAGES[id].name), 'total']];
-for (const strat of STRATEGIES) {
-  const done = run(strat);
-  let prev = 0;
-  const cells = STAGE_ORDER.map((id) => {
-    const at = done[id];
-    if (at === undefined) return 'not reached';
-    const dur = at - prev;
-    prev = at;
-    return strat.name.startsWith('engaged') ? `${formatTime(dur)} (${verdict(id, dur)})` : formatTime(dur);
-  });
-  rows.push([strat.name, ...cells, done[STAGE_ORDER[STAGE_ORDER.length - 1]] !== undefined ? formatTime(prev) : '—']);
-}
+if (process.argv[1]?.endsWith('sim.ts')) main();
 
-const widths = rows[0].map((_, c) => Math.max(...rows.map((r) => r[c].length)));
-for (const r of rows) console.log(r.map((cell, c) => cell.padEnd(widths[c])).join('  '));
-console.log(`\nTargets for the engaged player: ${STAGE_ORDER.map((id) => `${STAGES[id].name} ${TARGETS[id].map((x) => formatTime(x)).join('–')}`).join(', ')}`);
+function main(): void {
+  const rows: string[][] = [['player', ...STAGE_ORDER.map((id) => STAGES[id].name), 'total']];
+  for (const strat of STRATEGIES) {
+    const done = run(strat);
+    let prev = 0;
+    const cells = STAGE_ORDER.map((id) => {
+      const at = done[id];
+      if (at === undefined) return 'not reached';
+      const dur = at - prev;
+      prev = at;
+      return strat.name.startsWith('engaged') ? `${formatTime(dur)} (${verdict(id, dur)})` : formatTime(dur);
+    });
+    rows.push([strat.name, ...cells, done[STAGE_ORDER[STAGE_ORDER.length - 1]] !== undefined ? formatTime(prev) : '—']);
+  }
+
+  const widths = rows[0].map((_, c) => Math.max(...rows.map((r) => r[c].length)));
+  for (const r of rows) console.log(r.map((cell, c) => cell.padEnd(widths[c])).join('  '));
+  console.log(`\nTargets for the engaged player: ${STAGE_ORDER.map((id) => `${STAGES[id].name} ${TARGETS[id].map((x) => formatTime(x)).join('–')}`).join(', ')}`);
+}

@@ -355,7 +355,7 @@ describe('cell stage', () => {
   function cell() {
     const s = fresh();
     finishSoup(s);
-    s.stages.cell.currency = D(1e15);
+    s.stages.cell.currency = D(1e20);
     return s;
   }
 
@@ -387,7 +387,7 @@ describe('cell stage', () => {
     // Organelles are never discovered by just waiting.
     const t = fresh();
     finishSoup(t);
-    t.stages.cell.currency = D(1e15);
+    t.stages.cell.currency = D(1e20);
     buyUpgrade(t, 'cell', 'grazer');
     tick(t, 10);
     expect(t.stages.cell.discovered).not.toContain('chloroplast');

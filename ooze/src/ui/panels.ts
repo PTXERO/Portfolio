@@ -218,33 +218,30 @@ export function layout(state: GameState, tab: Tab): string {
 
   if (tab === 'mutate') {
     const st = state.stages[id];
-    const branches = [...new Set(def.upgrades.filter((u) => u.branch).map((u) => u.branch!))];
     const card = (u: UpgradeDef) => {
-      const owned = st.upgrades.includes(u.id);
-      const action = owned
-        ? '<span class="label owned-tag">Evolved</span>'
-        : upgradeVisible(state, id, u)
-          ? `<button class="px-btn buy" data-up="${u.id}"><span class="cost">${cur}${format(D(u.cost))}</span></button>`
-          : `<button class="px-btn buy locked" disabled><span class="qty">${esc(lockReason(state, id, u))}</span></button>`;
-      return `<div class="card px-box${owned ? ' owned' : ''}">
+      const action = upgradeVisible(state, id, u)
+        ? `<button class="px-btn buy" data-up="${u.id}"><span class="cost">${cur}${format(D(u.cost))}</span></button>`
+        : `<button class="px-btn buy locked" disabled><span class="qty">${esc(lockReason(state, id, u))}</span></button>`;
+      return `<div class="card px-box">
         <div class="slot">${icon('helix', 3)}</div>
         <div class="info">
-          <div class="name">${esc(u.name)}</div>
+          <div class="name">${esc(u.name)}${u.branch ? ` <span class="tag">${esc(u.branch)}</span>` : ''}</div>
           <div class="fx">${esc(upgradeText(id, u))}</div>
           <div class="flavor">${esc(u.flavor)}</div>
         </div>
         ${action}
       </div>`;
     };
+    // What's left to evolve comes first, cheapest first, so the next goal is always on top.
     // A choice already made elsewhere (the other diet) drops out of the tree.
-    const tree = branches
-      .map((b) => {
-        const ups = def.upgrades.filter((u) => u.branch === b && !(u.excludes ?? []).some((x) => st.upgrades.includes(x)));
-        return `<div class="panel-head"><h2>${b}</h2></div>${ups.map(card).join('')}`;
-      })
-      .join('');
-    const boosts = visibleUpgrades(state, id).filter((u) => !u.branch);
-    return `${tree}${boosts.length ? `<div class="panel-head"><h2>Boosts</h2></div>${boosts.map(card).join('')}` : ''}`;
+    const open = def.upgrades
+      .filter((u) => !st.upgrades.includes(u.id) && !(u.excludes ?? []).some((x) => st.upgrades.includes(x)))
+      .filter((u) => u.branch || upgradeVisible(state, id, u))
+      .sort((a, b) => Number(!upgradeVisible(state, id, a)) - Number(!upgradeVisible(state, id, b)) || a.cost - b.cost);
+    const evolved = def.upgrades.filter((u) => st.upgrades.includes(u.id));
+    return `<div class="panel-head"><h2>Evolve next</h2></div>
+      ${open.map(card).join('') || '<p class="note">Every mutation is yours.</p>'}
+      ${evolved.length ? `<div class="panel-head"><h2>Evolved</h2></div><p class="note evolved-list">${evolved.map((u) => esc(u.name)).join(' · ')}</p>` : ''}`;
   }
 
   if (tab === 'pond') {
