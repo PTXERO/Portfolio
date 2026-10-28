@@ -1,8 +1,9 @@
 import { STAGES } from '../content/stages';
 import { createStageState } from './state';
 import { D, Decimal } from './num';
-import { tapValue } from './rates';
-import type { BuyAmount, GameState, GeneratorDef, StageId, UpgradeDef } from './types';
+import { dialMax, tapValue } from './rates';
+import type { BuyAmount, DialId, GameState, GeneratorDef, ReactionDef, StageId, UpgradeDef } from './types';
+import { DIALS } from './types';
 
 function generatorDef(stage: StageId, id: string): GeneratorDef {
   const g = STAGES[stage].generators.find((x) => x.id === id);
@@ -43,7 +44,111 @@ export function buyGenerator(state: GameState, stage: StageId, id: string, count
 export function upgradeVisible(state: GameState, stage: StageId, u: UpgradeDef): boolean {
   const st = state.stages[stage];
   if (st.upgrades.includes(u.id)) return false;
-  if (u.requires && (st.generators[u.requires.generator] ?? 0) < u.requires.owned) return false;
+  const r = u.requires;
+  if (r?.generator && (st.generators[r.generator] ?? 0) < (r.owned ?? 1)) return false;
+  if (r?.reaction && !st.discovered.includes(r.reaction)) return false;
+  return true;
+}
+
+/** Generators the player can see: unlocked by a reaction, or the next tier up from what's owned. */
+export function generatorVisible(state: GameState, stage: StageId, g: GeneratorDef): boolean {
+  const def = STAGES[stage];
+  const st = state.stages[stage];
+  if (g.unlockedBy) return st.discovered.includes(g.unlockedBy);
+  const i = def.generators.indexOf(g);
+  return i === 0 || st.generators[g.id] > 0 || st.generators[def.generators[i - 1].id] > 0;
+}
+
+// ---- Dials and the whirlpool ----
+
+export function setDial(state: GameState, stage: StageId, dial: DialId, level: number): boolean {
+  const max = dialMax(state, stage, dial);
+  if (level < 0 || level > max) return false;
+  state.stages[stage].dials[dial] = level;
+  return true;
+}
+
+/** Turns of a finger around the whirlpool. Strength builds with spinning and fades by itself. */
+export const SWIRL_PER_TURN = 0.18;
+export const SWIRL_FADE_PER_SEC = 0.06;
+
+export function addSwirl(state: GameState, turns: number): void {
+  if (state.current !== 'soup' || turns <= 0) return;
+  state.started = true;
+  state.swirl = Math.min(1, state.swirl + turns * SWIRL_PER_TURN);
+}
+
+// ---- Reactions ----
+
+export function reactions(stage: StageId): ReactionDef[] {
+  return STAGES[stage].reactions ?? [];
+}
+
+export interface ReactionCheck {
+  gens: boolean;
+  dials: boolean;
+  swirl: boolean;
+  cost: boolean;
+  /** Each requirement, whether it holds, for hints and the recipe book. */
+  parts: { label: string; ok: boolean }[];
+}
+
+/** Which of a reaction's conditions hold right now. */
+export function checkReaction(state: GameState, stage: StageId, r: ReactionDef): ReactionCheck {
+  const st = state.stages[stage];
+  const def = STAGES[stage];
+  const parts: ReactionCheck['parts'] = [];
+  let gens = true;
+  for (const [id, n] of Object.entries(r.needs.gens ?? {})) {
+    const ok = (st.generators[id] ?? 0) >= n;
+    gens &&= ok;
+    parts.push({ label: `${n} ${def.generators.find((g) => g.id === id)?.name ?? id}`, ok });
+  }
+  let dials = true;
+  for (const d of DIALS) {
+    const range = r.needs.dials?.[d];
+    if (!range) continue;
+    const v = st.dials[d];
+    const ok = v >= range[0] && v <= range[1];
+    dials &&= ok;
+    const word = d[0].toUpperCase() + d.slice(1);
+    parts.push({ label: range[0] === range[1] ? `${word} exactly ${range[0]}` : range[1] >= 3 ? `${word} ${range[0]}+` : range[0] === 0 ? `${word} ${range[1]} or less` : `${word} ${range[0]}-${range[1]}`, ok });
+  }
+  const swirl = state.swirl >= (r.needs.swirl ?? 0);
+  if (r.needs.swirl) parts.push({ label: 'a strong whirlpool', ok: swirl });
+  const cost = !r.cost || st.currency.gte(r.cost);
+  return { gens, dials, swirl, cost, parts };
+}
+
+export function reactionReady(state: GameState, stage: StageId, r: ReactionDef): boolean {
+  const c = checkReaction(state, stage, r);
+  return c.gens && c.dials && c.swirl && c.cost;
+}
+
+/** Discovers every ordinary reaction whose conditions hold. Called each tick. */
+export function discoverReactions(state: GameState, stage: StageId): string[] {
+  const st = state.stages[stage];
+  const found: string[] = [];
+  for (const r of reactions(stage)) {
+    if (r.final || st.discovered.includes(r.id) || !reactionReady(state, stage, r)) continue;
+    st.discovered.push(r.id);
+    found.push(r.id);
+  }
+  if (found.length) state.news.push(...found);
+  return found;
+}
+
+export function finalReaction(stage: StageId): ReactionDef | undefined {
+  return reactions(stage).find((r) => r.final);
+}
+
+/** The ending: pays for and discovers the final reaction. The stage is then done. */
+export function triggerFinale(state: GameState): boolean {
+  const r = finalReaction(state.current);
+  const st = state.stages[state.current];
+  if (!r || st.discovered.includes(r.id) || !reactionReady(state, state.current, r)) return false;
+  if (r.cost) st.currency = st.currency.sub(r.cost);
+  st.discovered.push(r.id);
   return true;
 }
 
@@ -72,27 +177,32 @@ export function tap(state: GameState): Decimal {
   return v;
 }
 
-/** Progress toward the current stage's goal, 0 to 1. */
+/** Progress toward the current stage's goal, 0 to 1: reactions found, or currency saved. */
 export function goalProgress(state: GameState): number {
   const st = state.stages[state.current];
+  const rs = reactions(state.current);
+  if (rs.length) return st.discovered.length / rs.length;
   return Math.min(1, st.currency.div(STAGES[state.current].goal).toNumber());
 }
 
-/** The next stage's button shows (greyed out) from 70% of the goal. */
-export function nextStageTeased(state: GameState): boolean {
-  return state.stages[state.current].complete || goalProgress(state) >= 0.7;
+/** Stages without reactions show their goal bar from 70%. It never names what comes next. */
+export function goalShown(state: GameState): boolean {
+  return reactions(state.current).length > 0 || goalProgress(state) >= 0.7;
 }
 
 export function canEvolve(state: GameState): boolean {
   const def = STAGES[state.current];
-  return !!def.next && goalProgress(state) >= 1;
+  if (!def.next) return false;
+  const fin = finalReaction(state.current);
+  if (fin) return state.stages[state.current].discovered.includes(fin.id);
+  return goalProgress(state) >= 1;
 }
 
 export function evolve(state: GameState): boolean {
   if (!canEvolve(state)) return false;
   const def = STAGES[state.current];
   const st = state.stages[state.current];
-  st.currency = st.currency.sub(D(def.goal));
+  if (!finalReaction(state.current)) st.currency = st.currency.sub(D(def.goal));
   st.complete = true;
   const next = def.next!;
   state.stages[next] = createStageState(next, true);

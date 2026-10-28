@@ -3,12 +3,27 @@
 // Run with: npm run sim
 
 import { STAGES, STAGE_ORDER } from '../src/content/stages';
-import { buyGenerator, buyUpgrade, canEvolve, evolve, generatorCost, goalProgress, tap, visibleUpgrades } from '../src/economy/actions';
+import {
+  buyGenerator,
+  buyUpgrade,
+  canEvolve,
+  checkReaction,
+  evolve,
+  finalReaction,
+  generatorCost,
+  generatorVisible,
+  goalProgress,
+  reactionReady,
+  reactions,
+  tap,
+  triggerFinale,
+  visibleUpgrades,
+} from '../src/economy/actions';
 import { formatTime } from '../src/economy/num';
-import { stageRate, tapValue } from '../src/economy/rates';
+import { dialMax, stageRate, tapValue } from '../src/economy/rates';
 import { cloneState, createState } from '../src/economy/state';
 import { tick } from '../src/economy/tick';
-import type { GameState, StageId } from '../src/economy/types';
+import { DIALS, type DialId, type GameState, type ReactionDef, type StageId } from '../src/economy/types';
 
 interface Strategy {
   name: string;
@@ -26,7 +41,7 @@ const STRATEGIES: Strategy[] = [
 
 /** Target seconds per stage for an engaged player (design doc, First run table). */
 const TARGETS: Record<StageId, [number, number]> = {
-  soup: [3 * 60, 5 * 60],
+  soup: [50 * 60, 70 * 60],
   cell: [10 * 60, 20 * 60],
 };
 
@@ -43,6 +58,7 @@ function options(s: GameState, tapsPerSec: number): Option[] {
   const base = effectiveRate(s, tapsPerSec);
   const out: Option[] = [];
   for (const g of STAGES[stage].generators) {
+    if (!generatorVisible(s, stage, g)) continue;
     const apply = (x: GameState) => buyGenerator(x, stage, g.id, 1);
     const trial = cloneState(s);
     trial.stages[stage].generators[g.id] += 1;
@@ -56,24 +72,83 @@ function options(s: GameState, tapsPerSec: number): Option[] {
   return out.filter((o) => o.gain > 0);
 }
 
-/** One visit: evolve if possible, otherwise buy the best-payback items unless saving for the goal is faster. */
+/** Every dial setting allowed right now, optionally limited to a reaction's ranges. */
+function dialSettings(s: GameState, r?: ReactionDef): Record<DialId, number>[] {
+  const stage = s.current;
+  let out: Record<DialId, number>[] = [{ heat: 0, light: 0, charge: 0 }];
+  for (const d of DIALS) {
+    const max = dialMax(s, stage, d);
+    const [lo, hi] = r?.needs.dials?.[d] ?? [0, 3];
+    const next: Record<DialId, number>[] = [];
+    for (const base of out) for (let v = lo; v <= Math.min(hi, max); v++) next.push({ ...base, [d]: v });
+    out = next;
+  }
+  return out;
+}
+
+/** Sets the dials to the most productive setting (within a reaction's ranges, if given). */
+function tuneDials(s: GameState, r?: ReactionDef): boolean {
+  const st = s.stages[s.current];
+  let best: Record<DialId, number> | null = null;
+  let bestRate = -1;
+  for (const d of dialSettings(s, r)) {
+    st.dials = d;
+    const rate = stageRate(s, s.current).toNumber();
+    if (rate > bestRate) {
+      bestRate = rate;
+      best = d;
+    }
+  }
+  if (best) st.dials = best;
+  return !!best;
+}
+
+/** Points the dials (and a quick whirl) at the next reaction the molecules are ready for. */
+function chaseReaction(s: GameState): ReactionDef | null {
+  const st = s.stages[s.current];
+  for (const r of reactions(s.current)) {
+    if (st.discovered.includes(r.id) || !checkReaction(s, s.current, r).gens) continue;
+    if (r.final) return r;
+    if (!tuneDials(s, r)) continue;
+    if (r.needs.swirl) s.swirl = Math.max(s.swirl, r.needs.swirl + 0.05);
+    return r;
+  }
+  tuneDials(s);
+  return null;
+}
+
+/** One visit: chase reactions, buy unlocks, then the best-payback items, saving for the finale when it's close. */
 function visit(s: GameState, tapsPerSec: number): void {
+  const stage = s.current;
+  const fin = finalReaction(stage);
   for (let i = 0; i < 2000; i++) {
     if (canEvolve(s)) {
       evolve(s);
-      continue;
+      return;
+    }
+    if (fin && checkReaction(s, s.current, fin).gens && tuneDials(s, fin)) {
+      s.swirl = 1;
+      if (reactionReady(s, s.current, fin) && triggerFinale(s)) continue;
     }
     const st = s.stages[s.current];
     const money = st.currency.toNumber();
+    // Unlocks (dials, the whirlpool) have no direct payback; players buy them when they can.
+    const unlock = visibleUpgrades(s, s.current).find((u) => (u.effect.kind === 'dialMax' || u.effect.kind === 'swirlMult') && u.cost <= money);
+    if (unlock) {
+      buyUpgrade(s, s.current, unlock.id);
+      continue;
+    }
     const rate = effectiveRate(s, tapsPerSec);
-    const toGoal = (STAGES[s.current].goal - money) / Math.max(rate, 1e-9);
+    const goal = fin ? (checkReaction(s, s.current, fin).gens ? fin.cost ?? 0 : Infinity) : STAGES[s.current].goal;
+    const toGoal = (goal - money) / Math.max(rate, 1e-9);
     const affordable = options(s, tapsPerSec)
       .filter((o) => o.cost <= money)
       .sort((a, b) => a.cost / a.gain - b.cost / b.gain);
     const best = affordable[0];
-    if (!best || best.cost / best.gain > toGoal) return;
+    if (!best || best.cost / best.gain > toGoal) break;
     best.apply(s);
   }
+  if (s.current === stage && fin) chaseReaction(s);
 }
 
 function run(strategy: Strategy) {
@@ -83,7 +158,16 @@ function run(strategy: Strategy) {
   let t = 0;
   let nextVisit = 0;
   const last = STAGE_ORDER[STAGE_ORDER.length - 1];
+  const seen = new Set<string>();
   while (t < LIMIT_SEC) {
+    if (process.env.SIM_TRACE && strategy.name.startsWith(process.env.SIM_TRACE)) {
+      for (const id of s.stages.soup.discovered) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          console.log(`  ${formatTime(t).padStart(8)}  ${id}`);
+        }
+      }
+    }
     if (t >= nextVisit) {
       const before = s.current;
       visit(s, strategy.tapsPerSec);
@@ -94,6 +178,8 @@ function run(strategy: Strategy) {
       done[last] = t;
       break;
     }
+    // Active players keep a whirlpool going much of the time.
+    if (strategy.tapsPerSec > 0 && s.current === 'soup') s.swirl = Math.max(s.swirl, 0.5);
     if (strategy.tapsPerSec > 0) {
       for (let k = 0; k < strategy.tapsPerSec; k++) {
         const st = s.stages[s.current];

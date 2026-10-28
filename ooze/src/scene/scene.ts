@@ -99,6 +99,22 @@ export class Scene {
     this.topCss = cssPx;
   }
 
+  /** A finger circling at (cssX, cssY): where the whirlpool sits, and its direction. */
+  whirl(cssX: number, cssY: number, dir: number): void {
+    const [x, y] = this.toArt(cssX, cssY);
+    this.soup.whirl(x, y, dir);
+  }
+
+  /** A reaction was just discovered. */
+  discovery(): void {
+    if (this.stage === 'soup') this.soup.discovery();
+  }
+
+  /** The Soup's final reaction. */
+  finale(): void {
+    this.soup.finale();
+  }
+
   /** Redraws the current stage from scratch, after a save is loaded or reset. */
   reload(): void {
     this.stage = '';

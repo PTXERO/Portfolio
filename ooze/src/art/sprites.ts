@@ -47,6 +47,12 @@ export const SPRITES = {
   hourglass: ['bbbbbbb.', '.bwwwb..', '..bwb...', '...b....', '..byb...', '.byyyb..', 'bbbbbbb.', '........'],
   sprout: ['...ll...', '..lLLl..', '.l.L..l.', '...L.ll.', '...LlL..', '...L....', '..sSs...', '.sSSSs..'],
   menu: ['........', 'wwwwwww.', '........', 'wwwwwww.', '........', 'wwwwwww.', '........', '........'],
+  flask: ['..www...', '...b....', '...b....', '..bbb...', '.bgggb..', 'bggwggb.', 'bgggggb.', '.bbbbb..'],
+  flame: ['...o....', '..oo....', '..oyo...', '.oyyo.o.', '.oyyyoo.', 'oyywyyo.', 'oyyyyyo.', '.oOOOo..'],
+  sun: ['...y....', '.y.y.y..', '..yyy...', 'yyywyyy.', '..yyy...', '.y.y.y..', '...y....', '........'],
+  bolt: ['....yy..', '...yy...', '..yy....', '.yyyyy..', '...yy...', '..yy....', '.yy.....', 'y.......'],
+  lock: ['..RRR...', '.R...R..', '.R...R..', 'RRRRRRR.', 'RrrrrrR.', 'RrrkrrR.', 'RrrrrrR.', 'RRRRRRR.'],
+  unknown: ['..wwww....', '.w....w...', '......w...', '.....w....', '....w.....', '....w.....', '..........', '....w.....', '..........', '..........'],
 
   // Scene sprites
   bubble: ['.bbb.', 'bw..b', 'b...b', 'b...B', '.BBB.'],
@@ -61,6 +67,12 @@ export const SPRITES = {
   tailA: ['...g', '.gg.', 'g...'],
   tailB: ['g...', '.gg.', '...g'],
   protoSmall: ['.ggg.', 'gGnGg', 'gGGGg', '.ggg.'],
+  peptide: ['..........', '..........', '.yy....yy.', 'yYyy..yyYy', '...yyyy...', '..........', '.yy....yy.', 'yYyy..yyYy', '...yyyy...', '..........'],
+  sugar: ['...wwww...', '..w....w..', '.w.wwww.w.', '.w.w..w.w.', '.w.w..w.w.', '.w.wwww.w.', '..w....w..', '...wwww...', '..........', '..........'],
+  nucleotide: ['..........', '...pppp...', '..pPPPPp..', '..pP..Pp..', '..pPPPPp..', '...pppp...', '....bb....', '....bb....', '...bbbb...', '..........'],
+  peptideSmall: ['yy.yy', '.yy.y'],
+  sugarSmall: ['.ww.', 'w..w', '.ww.'],
+  nucleoSmall: ['.pp.', 'pPPp', '.bb.'],
 } satisfies Record<string, string[]>;
 
 export type SpriteName = keyof typeof SPRITES;

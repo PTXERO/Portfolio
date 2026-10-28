@@ -343,3 +343,45 @@ textarea {
   user-select: text;
 }
 .px-icon.inline { display: inline-block; vertical-align: middle; margin-right: 6px; }
+
+/* ---- Lab: dials and the recipe book ---- */
+
+.dial .levels { margin-top: 6px; }
+.dial .levels .px-btn { min-width: 40px; font-family: var(--digits); font-size: 18px; }
+.dial .levels .px-btn.on { --face: var(--gold); --hi: var(--gold-hi); --lo: var(--gold-lo); color: var(--ink); }
+.page .name { letter-spacing: 0.02em; }
+.page:not(.found) .name { color: var(--dim); }
+.page.final .name { color: var(--gold); }
+.checks { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; }
+.checks li { color: var(--dim); padding-left: 16px; position: relative; margin: 2px 0; }
+.checks li::before { content: ''; position: absolute; left: 2px; top: 5px; width: 7px; height: 7px; background: var(--slot); box-shadow: 0 0 0 2px #2c3550; }
+.checks li.ok { color: var(--mint); }
+.checks li.ok::before { background: var(--mint); box-shadow: 0 0 0 2px var(--mint-lo); }
+.finale { width: calc(100% - 6px); margin-top: 10px; font-size: 18px; letter-spacing: 0.06em; }
+#evolve .bar > i.on { background: var(--gold); box-shadow: inset 0 calc(var(--u) * -1) 0 0 var(--gold-lo); }
+#modal .fx { color: var(--mint); }
+
+/* ---- The ending: a full stop, then a reveal ---- */
+
+#ending {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: calc(env(safe-area-inset-top) + 24px) 28px calc(env(safe-area-inset-bottom) + 24px);
+  background: rgba(16, 20, 31, 0);
+  transition: background 2.4s ease;
+  text-align: center;
+}
+#ending.in { background: rgba(16, 20, 31, 0.94); }
+.ending-inner { max-width: 340px; opacity: 0; transform: translateY(12px); transition: opacity 1.6s 1.2s, transform 1.6s 1.2s; }
+#ending.in .ending-inner { opacity: 1; transform: none; }
+.ending-inner h1 { font-family: var(--digits); font-weight: 400; font-size: 72px; line-height: 1; margin: 6px 0 14px; color: var(--cream); }
+.ending-inner dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; margin: 22px 0; text-align: left; }
+.ending-inner dt { color: var(--dim); }
+.ending-inner dd { margin: 0; font-family: var(--digits); font-size: 20px; color: var(--gold); text-align: right; }
+.ending-inner .thanks { color: var(--dim); margin-top: 22px; }
+.ending-inner .after { margin-top: 30px; animation: from-below 1.2s ease; }
+.ending-inner .stir { color: var(--mint); animation: pulse 1.6s steps(2) infinite; }
+.ending-inner .px-btn { margin-top: 12px; font-size: 18px; padding-left: 22px; padding-right: 22px; }

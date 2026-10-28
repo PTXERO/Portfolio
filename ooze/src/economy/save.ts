@@ -1,4 +1,4 @@
-import { STAGE_ORDER } from '../content/stages';
+import { STAGES, STAGE_ORDER } from '../content/stages';
 import { createStageState, createState } from './state';
 import { D } from './num';
 import type { GameState, StageId, StageState } from './types';
@@ -33,12 +33,22 @@ export function deserialize(text: string): GameState {
           generators: { ...fresh.generators, ...s.generators },
           upgrades: [...s.upgrades],
           complete: s.complete,
+          dials: { ...fresh.dials, ...s.dials },
+          discovered: [...(s.discovered ?? [])],
         }
       : base.stages[id];
+    // Saves from before reactions existed: anything owned counts as discovered.
+    const rs = STAGES[id].reactions ?? [];
+    for (const g of STAGES[id].generators) {
+      if (!g.unlockedBy || !(stages[id].generators[g.id] > 0)) continue;
+      for (const r of rs.slice(0, rs.findIndex((x) => x.id === g.unlockedBy) + 1)) {
+        if (!stages[id].discovered.includes(r.id)) stages[id].discovered.push(r.id);
+      }
+    }
   }
   // Saves from before the start flag existed: anyone who had played has started.
   const started = saved.started ?? (saved.playTime > 0 || saved.taps > 0);
-  return { ...base, ...saved, stages, started };
+  return { ...base, ...saved, stages, started, swirl: 0, news: [] };
 }
 
 /** Save as a copyable text string, for backups (iOS can clear web storage). */
