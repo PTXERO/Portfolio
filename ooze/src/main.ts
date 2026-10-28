@@ -129,15 +129,14 @@ function renderEvolve(): void {
     evolveEl.innerHTML = `
       <div class="evolve-row"><span class="label">Next: ${nextName}</span><span class="label dim" data-t="eta"></span></div>
       <div class="bar">${'<i></i>'.repeat(20)}</div>
-      ${ready ? '<button class="px-btn gold pulse" data-act="evolve">Evolve</button>' : ''}
-      ${!def.next && goalProgress(state) >= 1 ? '<p class="dim label" style="margin:8px 0 0">Arrives in the next update</p>' : ''}`;
+      ${ready ? '<button class="px-btn gold pulse" data-act="evolve">Evolve</button>' : ''}`;
   }
   if (!teased) return;
   const p = goalProgress(state);
   evolveEl.querySelectorAll('.bar > i').forEach((el, i) => el.classList.toggle('on', p >= (i + 1) / 20));
   const st = state.stages[state.current];
   const rate = stageRate(state, state.current);
-  const eta = p >= 1 ? 'Ready' : rate.gt(0) ? `about ${formatTime(D(def.goal).sub(st.currency).div(rate).toNumber())}` : '';
+  const eta = p >= 1 ? (def.next ? 'Ready' : 'Coming soon') : rate.gt(0) ? `about ${formatTime(D(def.goal).sub(st.currency).div(rate).toNumber())}` : '';
   const el = evolveEl.querySelector('[data-t="eta"]')!;
   if (el.textContent !== eta) el.textContent = eta;
 }
@@ -166,9 +165,12 @@ function renderHint(): void {
   if (hint.textContent !== text) hint.textContent = text;
 }
 
+const overlayTop = $('overlay-top');
+
 function render(): void {
   renderHud();
   renderEvolve();
+  scene.setTopInset(overlayTop.getBoundingClientRect().bottom - stageEl.getBoundingClientRect().top);
   renderPanel();
   renderHint();
 }
@@ -194,8 +196,11 @@ stageEl.addEventListener('pointerdown', (e) => {
 
 function act(el: HTMLElement): void {
   const id = state.current;
-  if (el.dataset.gen) buyGenerator(state, id, el.dataset.gen, buyCount(state, id, el.dataset.gen, state.buyAmount));
-  else if (el.dataset.up) buyUpgrade(state, id, el.dataset.up);
+  if (el.dataset.gen) {
+    if (buyGenerator(state, id, el.dataset.gen, buyCount(state, id, el.dataset.gen, state.buyAmount))) scene.purchase(state, el.dataset.gen);
+  } else if (el.dataset.up) {
+    if (buyUpgrade(state, id, el.dataset.up)) scene.purchase(state, el.dataset.up);
+  }
   else if (el.dataset.amount) state.buyAmount = el.dataset.amount === 'max' ? 'max' : (Number(el.dataset.amount) as BuyAmount);
   else if (el.dataset.warp) state.warp = Number(el.dataset.warp);
   else if (el.dataset.tab) {
@@ -232,6 +237,7 @@ function act(el: HTMLElement): void {
       case 'import':
         try {
           state = importSave(ta?.value ?? '');
+          scene.reload();
           catchUp();
           if (ta) ta.value = '';
         } catch {
@@ -242,6 +248,7 @@ function act(el: HTMLElement): void {
         if (confirm('Restart from the very beginning? This cannot be undone.')) {
           clearStorage();
           state = createState();
+          scene.reload();
         }
         break;
     }
