@@ -170,7 +170,7 @@ export function layout(state: GameState, tab: Tab): string {
           </div>`;
         }
         const level = hintLevel(state, r);
-        const checks = level >= 2 ? `<ul class="checks">${checkReaction(state, id, r).parts.map((p, i) => `<li data-check="${r.id}-${i}">${esc(p.label)}</li>`).join('')}${r.cost ? `<li data-check="${r.id}-cost">${format(D(r.cost))} ${def.currency}</li>` : ''}</ul>` : '';
+        const checks = level >= 2 ? `<ul class="checks">${checkReaction(state, id, r).parts.map((p, i) => `<li data-check="${r.id}-${i}">${esc(p.label)}</li>`).join('')}${r.cost ? `<li data-check="${r.id}-cost" data-t="cost-${r.id}"></li>` : ''}</ul>` : '';
         const finale = r.final ? `<button class="px-btn gold pulse finale" data-act="finale" hidden>${esc(r.name)}</button>` : '';
         return `<div class="card px-box page${r.final ? ' final' : ''}">
           <div class="slot">${icon('unknown', 3)}</div>
@@ -293,6 +293,7 @@ export function update(root: HTMLElement, state: GameState, tab: Tab): void {
       const c = checkReaction(state, id, r);
       c.parts.forEach((p, i) => root.querySelector(`[data-check="${r.id}-${i}"]`)?.classList.toggle('ok', p.ok));
       root.querySelector(`[data-check="${r.id}-cost"]`)?.classList.toggle('ok', c.cost);
+      if (r.cost) setText(root, `cost-${r.id}`, `${format(st.currency.gte(r.cost) ? D(r.cost) : st.currency)} / ${format(D(r.cost))} ${STAGES[id].currency}`);
       const btn = root.querySelector<HTMLButtonElement>('[data-act="finale"]');
       if (btn && r.final) btn.hidden = !reactionReady(state, id, r);
     }

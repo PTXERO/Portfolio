@@ -102,7 +102,7 @@ const soup: StageDef = {
       hints: ['Everything, just right, all at once.', 'Many protocells. Gentle heat, warm light, a storm of charge, and the strongest whirlpool.'],
       needs: { gens: { protocell: 20 }, dials: { heat: [1, 1], light: [2, 2], charge: [3, 3] }, swirl: 0.6 },
       final: true,
-      cost: 2.5e11,
+      cost: 1.2e11,
     },
   ],
   upgrades: [

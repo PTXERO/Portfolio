@@ -226,7 +226,15 @@ function renderGoal(): void {
       if (!n.check.gens) text = `Next ${name}: grow ${missing.find((p) => /^\d/.test(p.label))?.label ?? 'more molecules'}`;
       else if (missing.length || !n.check.cost) {
         const met = n.check.parts.length - missing.length;
-        const need = missing[0]?.label ?? `${format(D(n.r.cost ?? 0))} ${def.currency}`;
+        let need = missing[0]?.label;
+        if (!need) {
+          // Only the cost is left: show how far along and how long to go.
+          const st = state.stages[state.current];
+          const cost = D(n.r.cost ?? 0);
+          const rate = stageRate(state, state.current);
+          const eta = rate.gt(0) ? ` · about ${formatTime(cost.sub(st.currency).div(rate).toNumber())}` : '';
+          need = `${format(cost)} ${def.currency} (have ${format(st.currency)})${eta}`;
+        }
         text = `Next ${name}: ${met} of ${n.check.parts.length} · needs ${need}`;
       } else text = `${name}: reacting…`;
     }
