@@ -1,46 +1,81 @@
-// M1 economy test page: plain numbers and buttons, no art yet.
-//
-// The page is laid out only when its structure changes (a new stage, a new row).
-// Numbers and button states are then patched in place four times a second, so a
-// button is never replaced under a finger mid-tap (iOS would drop the click).
+// Ooze to Orbit: the game screen. The scene sits in the middle and takes taps;
+// tabs underneath hold everything you buy.
 
+import '@fontsource/pixelify-sans/latin-500.css';
+import '@fontsource/pixelify-sans/latin-600.css';
+import '@fontsource/pixelify-sans/latin-700.css';
+import '@fontsource/jersey-10/latin-400.css';
+import './ui/ui.css';
+
+import { icon } from './art/sprites';
 import { STAGES } from './content/stages';
-import {
-  buyCount,
-  buyGenerator,
-  buyUpgrade,
-  canEvolve,
-  evolve,
-  generatorCost,
-  goalProgress,
-  nextStageTeased,
-  tap,
-  visibleUpgrades,
-} from './economy/actions';
+import { buyCount, buyGenerator, buyUpgrade, canEvolve, evolve, goalProgress, nextStageTeased, tap } from './economy/actions';
 import { D, format, formatTime } from './economy/num';
-import { applyOffline, timeBankCap, type OfflineReport } from './economy/offline';
-import { generatorRate, nextMilestone, stageRate, tapValue } from './economy/rates';
+import { applyOffline, type OfflineReport } from './economy/offline';
+import { stageRate } from './economy/rates';
 import { clearStorage, exportSave, importSave, loadFromStorage, saveToStorage } from './economy/save';
 import { createState } from './economy/state';
 import { liveTick, TICK_SEC } from './economy/tick';
 import type { BuyAmount, GameState } from './economy/types';
+import { Scene } from './scene/scene';
+import { boostReady, CURRENCY_ICON, layout, layoutKey, TABS, update, type Tab } from './ui/panels';
 
-const game = document.getElementById('game')!;
-const saveBox = document.getElementById('save-text') as HTMLTextAreaElement;
-const WARPS = [1, 2, 5, 10];
-const AMOUNTS: BuyAmount[] = [1, 10, 'max'];
-/** Gaps longer than this (tab hidden, phone locked) go through offline progress. */
+const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+const stageEl = $('stage');
+const sheet = $('sheet');
+const panel = $('panel');
+const tabsEl = $('tabs');
+const modal = $('modal');
+const evolveEl = $('evolve');
+const hint = $('hint');
+
+/** Gaps longer than this (app closed, phone locked) go through offline progress. */
 const LIVE_GAP_SEC = 5;
+const FRAME_MS = 1000 / 30;
+const UI_KEY = 'ooze-to-orbit/ui';
 
 let state: GameState = loadFromStorage() ?? createState();
-let report: OfflineReport | null = null;
-let layoutKey = '';
+const ui = (() => {
+  try {
+    return { tab: 'grow' as Tab, open: true, ...JSON.parse(localStorage.getItem(UI_KEY) ?? '{}') };
+  } catch {
+    return { tab: 'grow' as Tab, open: true };
+  }
+})();
+const saveUi = () => {
+  try {
+    localStorage.setItem(UI_KEY, JSON.stringify(ui));
+  } catch {
+    /* private mode: the tab just isn't remembered */
+  }
+};
+
+const scene = new Scene($<HTMLCanvasElement>('scene'));
+let panelKey = '';
+let evolveKey = '';
+let pokedThisStage = false;
+
+// ---- Economy clock ----
+
+function showReport(r: OfflineReport): void {
+  const lines = Object.entries(r.earned)
+    .filter(([, v]) => v && v.gt(0))
+    .map(([k, v]) => `<p>${icon(CURRENCY_ICON[k as keyof typeof CURRENCY_ICON], 2, 'px-icon inline')} +${format(v!)} ${STAGES[k as keyof typeof STAGES].currency}</p>`)
+    .join('');
+  modal.innerHTML = `<div class="px-box">
+    <h3>While you were away</h3>
+    <p class="dim">${formatTime(r.awaySec)}${r.capped ? ' (capped)' : ''}</p>
+    ${lines}
+    ${r.bankedSec > 0 ? `<p class="dim">${formatTime(r.bankedSec)} saved to your time bank.</p>` : ''}
+    <button class="px-btn gold" data-act="dismiss">Nice</button>
+  </div>`;
+  modal.hidden = false;
+}
 
 function catchUp(): void {
   const r = applyOffline(state);
-  if (r.awaySec >= 30) report = r;
+  if (r.awaySec >= 60) showReport(r);
 }
-catchUp();
 
 function step(): void {
   const now = Date.now();
@@ -53,188 +88,193 @@ function step(): void {
 }
 
 const save = () => saveToStorage(state);
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
-/** Generators on show: owned ones, plus the next tier up. */
-function shownGenerators() {
+// ---- Rendering ----
+
+function renderTabs(): void {
+  tabsEl.innerHTML = TABS.map(
+    (t) => `<button class="px-btn tab" data-tab="${t.id}">${icon(t.sprite, 3)}<span>${t.label}</span>${t.id === 'boosts' ? '<i class="dot" hidden></i>' : ''}</button>`,
+  ).join('');
+}
+
+function renderHud(): void {
   const def = STAGES[state.current];
   const st = state.stages[state.current];
-  return def.generators.filter((g, i) => i === 0 || st.generators[g.id] > 0 || st.generators[def.generators[i - 1].id] > 0);
+  const set = (id: string, text: string) => {
+    const el = $(id);
+    if (el.textContent !== text) el.textContent = text;
+  };
+  set('stage-name', def.name);
+  set('currency', format(st.currency));
+  set('rate', `${format(stageRate(state, state.current))} ${def.currency}\nper second`);
+  set('bank-chip', state.timeBank > 0 ? `⧗ ${formatTime(state.timeBank)}${state.warp > 1 ? ` · ${state.warp}×` : ''}` : '');
+  const iconEl = $('currency-icon');
+  if (iconEl.dataset.stage !== state.current) {
+    iconEl.dataset.stage = state.current;
+    iconEl.innerHTML = icon(CURRENCY_ICON[state.current], 4);
+  }
 }
 
-function layout(): void {
-  const id = state.current;
-  const def = STAGES[id];
-  const gens = shownGenerators()
-    .map(
-      (g) => `<div class="row">
-        <div class="info"><div class="name">${esc(g.name)} <span class="dim" data-text="owned-${g.id}"></span></div>
-        <div class="sub" data-text="sub-${g.id}"></div></div>
-        <button data-gen="${g.id}" data-text="buy-${g.id}"></button>
-      </div>`,
-    )
-    .join('');
-  const ups = visibleUpgrades(state, id)
-    .map(
-      (u) => `<div class="row">
-        <div class="info"><div class="name">${esc(u.name)}</div><div class="sub">${esc(u.flavor)}</div></div>
-        <button data-up="${u.id}">${format(D(u.cost))}</button>
-      </div>`,
-    )
-    .join('');
-  const nextName = def.next ? STAGES[def.next].name : 'Creature (coming in M3)';
-  const background = state.unlocked.filter((sid) => sid !== id);
-
-  game.innerHTML = `
-    ${report ? `<div class="banner"><span data-text="report"></span><br><button data-act="dismiss" style="margin-top:8px">OK</button></div>` : ''}
-    <h1>${esc(def.name)}</h1>
-    <div class="big" data-text="currency"></div>
-    <div class="rate" data-text="rate"></div>
-    <p class="intro">${esc(def.intro)}</p>
-    ${def.tapBase > 0 ? `<button class="tap" data-act="tap" data-text="tap"></button>` : ''}
-    ${
-      nextStageTeased(state)
-        ? `<h2>Next: ${esc(nextName)}</h2>
-           <div class="progress"><div data-bar></div></div>
-           <div class="dim" data-text="goal"></div>
-           ${def.next ? `<button class="primary" style="margin-top:8px;width:100%" data-act="evolve">Evolve</button>` : ''}`
-        : ''
-    }
-    <h2>Generators</h2>
-    <div class="amounts">${AMOUNTS.map((a) => `<button data-amount="${a}">${a === 'max' ? 'Max' : `x${a}`}</button>`).join('')}</div>
-    ${gens}
-    ${ups ? `<h2>Upgrades</h2>${ups}` : ''}
-    ${background.length ? `<h2>Running in the background</h2>${background.map((sid) => `<div class="dim" data-text="bg-${sid}"></div>`).join('')}` : ''}
-    <h2 data-text="bank"></h2>
-    <div class="amounts">${WARPS.map((w) => `<button data-warp="${w}">${w}x</button>`).join('')}</div>
-    <p class="dim" data-text="stats"></p>`;
+function renderEvolve(): void {
+  const def = STAGES[state.current];
+  const teased = nextStageTeased(state);
+  const ready = canEvolve(state);
+  const key = JSON.stringify([state.current, teased, ready]);
+  if (key !== evolveKey) {
+    evolveKey = key;
+    evolveEl.hidden = !teased;
+    const nextName = def.next ? STAGES[def.next].name : 'Creature';
+    evolveEl.innerHTML = `
+      <div class="evolve-row"><span class="label">Next: ${nextName}</span><span class="label dim" data-t="eta"></span></div>
+      <div class="bar">${'<i></i>'.repeat(20)}</div>
+      ${ready ? '<button class="px-btn gold pulse" data-act="evolve">Evolve</button>' : ''}
+      ${!def.next && goalProgress(state) >= 1 ? '<p class="dim label" style="margin:8px 0 0">Arrives in the next update</p>' : ''}`;
+  }
+  if (!teased) return;
+  const p = goalProgress(state);
+  evolveEl.querySelectorAll('.bar > i').forEach((el, i) => el.classList.toggle('on', p >= (i + 1) / 20));
+  const st = state.stages[state.current];
+  const rate = stageRate(state, state.current);
+  const eta = p >= 1 ? 'Ready' : rate.gt(0) ? `about ${formatTime(D(def.goal).sub(st.currency).div(rate).toNumber())}` : '';
+  const el = evolveEl.querySelector('[data-t="eta"]')!;
+  if (el.textContent !== eta) el.textContent = eta;
 }
 
-function setText(key: string, text: string): void {
-  const el = game.querySelector<HTMLElement>(`[data-text="${key}"]`);
-  if (el && el.textContent !== text) el.textContent = text;
+function renderPanel(): void {
+  sheet.classList.toggle('closed', !ui.open);
+  for (const b of tabsEl.querySelectorAll<HTMLButtonElement>('[data-tab]')) b.classList.toggle('on', ui.open && b.dataset.tab === ui.tab);
+  const dot = tabsEl.querySelector<HTMLElement>('.dot');
+  if (dot) dot.hidden = !boostReady(state);
+  if (!ui.open) return;
+  const key = layoutKey(state, ui.tab);
+  if (key !== panelKey) {
+    panelKey = key;
+    const keepText = ($('save-text') as HTMLTextAreaElement | null)?.value ?? '';
+    panel.innerHTML = layout(state, ui.tab);
+    const ta = $('save-text') as HTMLTextAreaElement | null;
+    if (ta) ta.value = keepText;
+  }
+  update(panel, state, ui.tab);
 }
 
-function update(): void {
-  const key = JSON.stringify([
-    state.current,
-    shownGenerators().map((g) => g.id),
-    visibleUpgrades(state, state.current).map((u) => u.id),
-    nextStageTeased(state),
-    !!report,
-    state.unlocked,
-  ]);
-  if (key !== layoutKey) {
-    layoutKey = key;
-    layout();
-  }
-
-  const id = state.current;
-  const def = STAGES[id];
-  const st = state.stages[id];
-  const rate = stageRate(state, id);
-
-  setText('currency', format(st.currency));
-  setText('rate', `${def.currency} · ${format(rate)}/s`);
-  setText('tap', state.started ? `Stir the soup (+${format(tapValue(state))})` : 'Stir the soup to begin');
-
-  for (const g of shownGenerators()) {
-    const owned = st.generators[g.id];
-    const n = buyCount(state, id, g.id, state.buyAmount);
-    const cost = generatorCost(state, id, g.id, n);
-    setText(`owned-${g.id}`, `×${owned}`);
-    setText(`sub-${g.id}`, `${owned ? `${format(generatorRate(state, id, g))}/s total · ` : ''}x2 at ${nextMilestone(owned)}`);
-    setText(`buy-${g.id}`, `+${n} · ${format(cost)}`);
-    const btn = game.querySelector<HTMLButtonElement>(`[data-gen="${g.id}"]`);
-    if (btn) btn.disabled = st.currency.lt(cost);
-  }
-  for (const u of visibleUpgrades(state, id)) {
-    const btn = game.querySelector<HTMLButtonElement>(`[data-up="${u.id}"]`);
-    if (btn) btn.disabled = st.currency.lt(u.cost);
-  }
-
-  const progress = goalProgress(state);
-  const bar = game.querySelector<HTMLElement>('[data-bar]');
-  if (bar) bar.style.width = `${(progress * 100).toFixed(1)}%`;
-  const eta = progress < 1 && rate.gt(0) ? ` · about ${formatTime(D(def.goal).sub(st.currency).div(rate).toNumber())}` : '';
-  setText('goal', `${format(st.currency)} / ${format(D(def.goal))} ${def.currency}${eta}`);
-  const evolveBtn = game.querySelector<HTMLButtonElement>('[data-act="evolve"]');
-  if (evolveBtn) evolveBtn.disabled = !canEvolve(state);
-
-  for (const sid of state.unlocked) {
-    if (sid !== id) setText(`bg-${sid}`, `${STAGES[sid].name}: ${format(stageRate(state, sid))} ${STAGES[sid].currency}/s, automated`);
-  }
-
-  if (report) {
-    const earned = Object.entries(report.earned)
-      .map(([k, v]) => `+${format(v!)} ${STAGES[k as keyof typeof STAGES].currency}`)
-      .join(', ');
-    setText(
-      'report',
-      `While you were away (${formatTime(report.awaySec)}${report.capped ? ', capped' : ''}): ${earned}.` +
-        (report.bankedSec > 0 ? ` ${formatTime(report.bankedSec)} saved to the time bank.` : ''),
-    );
-  }
-
-  for (const b of game.querySelectorAll<HTMLButtonElement>('[data-amount]')) {
-    b.classList.toggle('on', String(state.buyAmount) === b.dataset.amount);
-  }
-  for (const b of game.querySelectorAll<HTMLButtonElement>('[data-warp]')) {
-    const w = Number(b.dataset.warp);
-    b.classList.toggle('on', state.warp === w);
-    b.disabled = w > 1 && state.timeBank <= 0;
-  }
-  setText('bank', `Time bank: ${formatTime(state.timeBank)} of ${formatTime(timeBankCap(state))}`);
-  setText('stats', `Played ${formatTime(state.playTime)} · ${state.taps} taps · offline cap ${formatTime(state.offlineCapSec)}`);
+function renderHint(): void {
+  const text = state.current === 'soup' ? (state.taps < 3 ? 'Tap the soup to stir it' : '') : pokedThisStage ? '' : 'Tap to poke your cells';
+  hint.hidden = !text || !modal.hidden;
+  if (hint.textContent !== text) hint.textContent = text;
 }
 
-game.addEventListener('click', (e) => {
-  const el = (e.target as HTMLElement).closest('button');
-  if (!el || el.disabled) return;
+function render(): void {
+  renderHud();
+  renderEvolve();
+  renderPanel();
+  renderHint();
+}
+
+// ---- Input ----
+
+stageEl.addEventListener('pointerdown', (e) => {
+  if (!modal.hidden || (e.target as HTMLElement).closest('#evolve')) return;
+  const r = stageEl.getBoundingClientRect();
+  const x = e.clientX - r.left;
+  const y = e.clientY - r.top;
+  scene.ripple(x, y);
+  if (state.current === 'soup') {
+    const v = tap(state);
+    if (v.gt(0)) scene.float(x, y - 10, `+${format(v)}`, '#f5c45e');
+  } else {
+    const quip = scene.poke(x, y);
+    pokedThisStage = true;
+    if (quip) scene.float(x, y - 14, quip, '#f2ead7');
+  }
+  render();
+});
+
+function act(el: HTMLElement): void {
   const id = state.current;
   if (el.dataset.gen) buyGenerator(state, id, el.dataset.gen, buyCount(state, id, el.dataset.gen, state.buyAmount));
   else if (el.dataset.up) buyUpgrade(state, id, el.dataset.up);
   else if (el.dataset.amount) state.buyAmount = el.dataset.amount === 'max' ? 'max' : (Number(el.dataset.amount) as BuyAmount);
   else if (el.dataset.warp) state.warp = Number(el.dataset.warp);
-  else if (el.dataset.act === 'tap') tap(state);
-  else if (el.dataset.act === 'evolve') evolve(state);
-  else if (el.dataset.act === 'dismiss') report = null;
-  save();
-  update();
-});
-
-document.getElementById('save-tools')!.addEventListener('click', (e) => {
-  const act = (e.target as HTMLElement).closest('button')?.dataset.act;
-  if (act === 'export') {
-    saveBox.value = exportSave(state);
-    saveBox.select();
-  } else if (act === 'import') {
-    try {
-      state = importSave(saveBox.value);
-      catchUp();
-      saveBox.value = '';
-      save();
-    } catch {
-      alert('That save could not be read.');
+  else if (el.dataset.tab) {
+    const t = el.dataset.tab as Tab;
+    ui.open = ui.tab === t ? !ui.open : true;
+    ui.tab = t;
+    saveUi();
+    // The scene changes size when the sheet opens or closes.
+    requestAnimationFrame(() => scene.fit());
+  } else {
+    const ta = $('save-text') as HTMLTextAreaElement | null;
+    switch (el.dataset.act) {
+      case 'evolve':
+        if (evolve(state)) {
+          scene.evolveFlash();
+          pokedThisStage = false;
+        }
+        break;
+      case 'dismiss':
+        modal.hidden = true;
+        break;
+      case 'export':
+        if (ta) {
+          ta.value = exportSave(state);
+          ta.select();
+        }
+        break;
+      case 'import':
+        try {
+          state = importSave(ta?.value ?? '');
+          catchUp();
+          if (ta) ta.value = '';
+        } catch {
+          alert('That save code could not be read.');
+        }
+        break;
+      case 'reset':
+        if (confirm('Restart from the very beginning? This cannot be undone.')) {
+          clearStorage();
+          state = createState();
+        }
+        break;
     }
-  } else if (act === 'reset' && confirm('Start over from the beginning?')) {
-    clearStorage();
-    state = createState();
-    report = null;
   }
-  update();
+  save();
+  render();
+}
+
+document.addEventListener('click', (e) => {
+  const el = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
+  if (el && !el.disabled) act(el);
 });
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') save();
   else {
     catchUp();
-    update();
+    render();
   }
 });
 window.addEventListener('pagehide', save);
+window.addEventListener('resize', () => scene.fit());
 
+// ---- Loops ----
+
+let last = performance.now();
+let acc = 0;
+function frame(now: number): void {
+  requestAnimationFrame(frame);
+  acc += now - last;
+  last = now;
+  if (acc < FRAME_MS) return;
+  const dt = Math.min(acc, 100) / 1000;
+  acc %= FRAME_MS;
+  scene.draw(state, dt);
+}
+
+renderTabs();
+catchUp();
+render();
+document.fonts?.ready.then(() => render());
+requestAnimationFrame(frame);
 setInterval(step, TICK_SEC * 1000);
-setInterval(update, 250);
-setInterval(save, 30_000);
-update();
+setInterval(render, 250);
+setInterval(save, 10_000);
