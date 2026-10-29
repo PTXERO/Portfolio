@@ -69,9 +69,33 @@ export function upgradeUnlocked(state: GameState, stage: StageId, u: UpgradeDef)
   if (r?.reaction && !st.discovered.includes(r.reaction)) return false;
   if (r?.anyReaction && !r.anyReaction.some((x) => st.discovered.includes(x))) return false;
   if (r?.upgrades && !r.upgrades.every((x) => st.upgrades.includes(x))) return false;
+  if (r?.found && st.discovered.length < r.found) return false;
+  if (r?.generation && st.generation < r.generation) return false;
+  if (r?.pop && st.pop < r.pop) return false;
   // A choice already made elsewhere (e.g. the other diet) hides this one.
   if (u.excludes?.some((x) => st.upgrades.includes(x))) return false;
   return true;
+}
+
+/**
+ * What it takes to open a locked upgrade, as a short line (so a locked thing shows as a hint,
+ * not a card). Null if nothing's in the way.
+ */
+export function lockHint(state: GameState, stage: StageId, u: UpgradeDef): string | null {
+  const st = state.stages[stage];
+  const def = STAGES[stage];
+  const r = u.requires;
+  if (!r) return null;
+  const placeName = (id: string) => def.places?.find((p) => p.id === id)?.name ?? def.reactions?.find((x) => x.id === id)?.name ?? id;
+  if (r.reaction && !st.discovered.includes(r.reaction)) return `find the ${placeName(r.reaction)}`;
+  if (r.found && st.discovered.length < r.found) return `find ${r.found} places`;
+  if (r.generation && st.generation < r.generation) return r.generation === 1 ? 'hatch a first egg' : `breed generation ${r.generation}`;
+  if (r.pop && st.pop < r.pop) return `grow the herd to ${r.pop}`;
+  if (r.upgrades) {
+    const need = r.upgrades.filter((x) => !st.upgrades.includes(x)).map((x) => def.upgrades.find((y) => y.id === x)?.name ?? x);
+    if (need.length) return `get ${need.join(' and ')}`;
+  }
+  return null;
 }
 
 /** Buyable now or later: unlocked and not yet at its last level. */

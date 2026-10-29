@@ -182,6 +182,10 @@ export interface UpgradeDef {
     levels?: Record<string, number>;
     /** Only offered once this habitat is open (Cell stage). */
     habitat?: string;
+    /** Creature milestones: this many places found, generations bred, or this big a herd. */
+    found?: number;
+    generation?: number;
+    pop?: number;
   };
   /** How many times it can be bought, each level adding the effect again (default 1). */
   levels?: number;

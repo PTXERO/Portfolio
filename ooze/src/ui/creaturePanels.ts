@@ -40,7 +40,21 @@ import { seenShare } from '../economy/island';
 import { buyCount, generatorCost, generatorVisible } from '../economy/actions';
 import { BODY_FORAGE, bodyMult, foragers, SEASON_SEC, seasonOf, stageRate } from '../economy/rates';
 import { D, format, formatTime } from '../economy/num';
-import { checkReaction, payStage, reactionReady, upgradeCost, visibleUpgrades } from '../economy/actions';
+import { checkReaction, lockHint, payStage, reactionReady, upgradeCost, upgradeUnlocked, visibleUpgrades } from '../economy/actions';
+import type { UpgradeDef } from '../economy/types';
+
+/**
+ * A locked part of a section shows as one line saying what opens it (the next thing to
+ * come, not a card), so nothing clogs the screen before it's useful.
+ */
+function nextHint(state: GameState, which: (u: UpgradeDef) => boolean): string {
+  for (const u of STAGES[CREATURE].upgrades.filter(which)) {
+    if (upgradeUnlocked(state, CREATURE, u)) continue;
+    const h = lockHint(state, CREATURE, u);
+    if (h) return `<p class="note lock">More here once you ${esc(h)}.</p>`;
+  }
+  return '';
+}
 import type { GameState, PartDef, Role, Stat } from '../economy/types';
 import { ROLES, SLOTS, STATS } from '../economy/types';
 import { creatureIcon, creatureLookOf } from '../scene/creatureLook';
@@ -86,10 +100,11 @@ export function herdLayout(state: GameState, amounts: string, upgradeCard: (u: (
       (r) => `<div class="role-row"><span class="name">${ROLE_INFO[r].name}<span class="count" data-t="role-${r}"></span></span><span class="sub">${ROLE_INFO[r].text}</span></div>`,
     )
     .join('');
-  const instincts = visibleUpgrades(state, CREATURE)
-    .filter((u) => u.branch === 'Instincts')
-    .map(upgradeCard)
-    .join('');
+  const instincts =
+    visibleUpgrades(state, CREATURE)
+      .filter((u) => u.branch === 'Instincts')
+      .map(upgradeCard)
+      .join('') + nextHint(state, (u) => u.branch === 'Instincts');
   const buildings = def.generators
     .filter((g) => generatorVisible(state, CREATURE, g))
     .map(
@@ -142,11 +157,16 @@ export function bodyLayout(state: GameState, upgradeCard: (u: (typeof STAGES)['c
       ${hint ? `<div class="hint dim">${esc(hint)}</div>` : ''}
     </div>`;
   }).join('');
-  const training = def.upgrades.filter((u) => u.branch === 'Training').map(upgradeCard).join('');
-  const boosts = visibleUpgrades(state, CREATURE)
-    .filter((u) => !u.branch && !u.pay && !u.target)
-    .map(upgradeCard)
-    .join('');
+  const training =
+    visibleUpgrades(state, CREATURE)
+      .filter((u) => u.branch === 'Training')
+      .map(upgradeCard)
+      .join('') + nextHint(state, (u) => u.branch === 'Training');
+  const boosts =
+    visibleUpgrades(state, CREATURE)
+      .filter((u) => !u.branch && !u.pay && !u.target)
+      .map(upgradeCard)
+      .join('') + nextHint(state, (u) => !u.branch && !u.pay && !u.target);
   return `<div class="portrait">${creatureIcon(creatureLookOf(state), 4)}<div class="stats">${stats}</div></div>
     <div class="energy-bar"><span class="label">Energy</span><span class="pips" data-pips></span><span class="num" data-t="energy"></span></div>
     <p class="note" data-t="body-forage"></p>
@@ -185,7 +205,7 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
     ${visibleUpgrades(state, CREATURE)
       .filter((u) => u.branch === 'Wandering')
       .map(upgradeCard)
-      .join('')}
+      .join('')}${nextHint(state, (u) => u.branch === 'Wandering')}
     ${partySlots(state) ? '<p class="note" data-t="parties"></p>' : ''}
     ${curiosity(state) ? `<button class="px-btn small${s.autoRoam ? ' on' : ''}" data-act="autoroam">Exploring on its own: ${s.autoRoam ? 'on' : 'off'}</button>` : ''}
     ${
@@ -226,9 +246,13 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
     .join('');
   const fin = def.reactions!.find((r) => r.final)!;
   const done = s.discovered.includes(fin.id);
+  // The last page waits until most places are found; till then, just a line that it exists.
+  const near = s.discovered.filter((id) => id !== fin.id).length >= def.places!.length - 2;
   const finale = done
     ? ''
-    : `<div class="card px-box page final"><div class="info"><div class="name">${esc(fin.name)}</div><div class="flavor">${esc(fin.hints.join(' '))}</div>
+    : !near
+      ? '<p class="note lock">One last page waits once most of the island\'s places are found.</p>'
+      : `<div class="card px-box page final"><div class="info"><div class="name">${esc(fin.name)}</div><div class="flavor">${esc(fin.hints.join(' '))}</div>
         <ul class="checks">${checkReaction(state, CREATURE, fin)
           .parts.map((p, i) => `<li data-check="${fin.id}-${i}">${esc(p.label)}</li>`)
           .join('')}<li data-check="${fin.id}-cost" data-t="cost-${fin.id}"></li></ul>

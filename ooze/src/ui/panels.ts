@@ -46,16 +46,19 @@ export function tabsFor(state: GameState): Tab[] {
   const def = STAGES[state.current];
   const habitats = !!def.habitats;
   const creature = !!def.places;
+  const cst = state.stages[state.current];
   const has: Record<Tab, boolean> = {
     grow: true,
     boosts: !habitats && !creature,
     lab: !habitats && !creature && reactions(state.current).length > 0,
     mutate: habitats,
     pond: habitats,
-    body: creature,
+    // The Creature's tabs open as they're needed: the Body once there's anything to do with
+    // it, Family once there's a mate, Roots once a first egg has hatched.
+    body: creature && (cst.discovered.length > 1 || cst.totalEarned.gte(150) || cst.parts.length > 5),
     explore: creature,
-    family: creature,
-    roots: hasRoots(state),
+    family: creature && (cst.mates.length > 0 || !!cst.egg || cst.generation > 0),
+    roots: hasRoots(state) && (!creature || cst.generation > 0),
     menu: true,
   };
   return TABS.map((t) => t.id).filter((t) => has[t]);

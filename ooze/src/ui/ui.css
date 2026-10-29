@@ -538,3 +538,5 @@ textarea {
 /* The island's lighting canvas sits under the scene canvas (which keeps only floating text on top). */
 #stage canvas.shade { position: absolute; inset: 0; width: 100%; height: 100%; display: none; image-rendering: auto; }
 .nest .row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+/* What opens next in a section: one quiet line instead of a locked card. */
+.note.lock { font-style: italic; opacity: 0.8; border-left: var(--u) solid var(--panel-hi); padding-left: 8px; }
