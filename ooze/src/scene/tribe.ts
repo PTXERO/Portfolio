@@ -35,6 +35,8 @@ const BURN_SEC = 9;
  * and how long it takes to reach the camp however far it is. */
 const SPREAD_SPEED = 9;
 const SPREAD_SEC = 4;
+/** How fast the spear turns in its pool. */
+const SPIN = 1.2;
 
 export class TribeScene extends RangeScene {
   private people: Person[] = [];
@@ -178,7 +180,8 @@ export class TribeScene extends RangeScene {
 
   /** How tall the spear stands on screen (art px): a giant, whatever the zoom. */
   private spearHeight(): number {
-    return Math.max(30, 15 * this.zoom);
+    // A fixed size in the world: it shrinks with the land as you zoom out.
+    return 15 * this.zoom;
   }
 
   draw(f: Frame, state: GameState): void {
@@ -412,14 +415,15 @@ export class TribeScene extends RangeScene {
     // walks back to them.
     if (tribe.awake && this.walker) {
       const w = this.walker;
-      const back = this.spreadAt >= 0 && t - this.spreadAt > 5;
+      // After the vision it runs back to the others, behind the light going out to them.
+      const back = this.spreadAt >= 0 && t - this.spreadAt > 0.8;
       const dx = frag.camp.x - w.x;
       const dy = frag.camp.y - w.y;
       const d = Math.hypot(dx, dy);
       if (back && d < 2) this.walker = null;
       else {
         if (back) {
-          const step = Math.min(d, 2.2 * dt);
+          const step = Math.min(d, Math.max(6, Math.hypot(frag.camp.x - frag.spear.x, frag.camp.y - frag.spear.y) / 7) * dt);
           w.x += (dx / d) * step;
           w.y += (dy / d) * step;
         }
@@ -429,7 +433,7 @@ export class TribeScene extends RangeScene {
         sprites.push({
           y: wy,
           draw: () => {
-            this.drawBeing(b, look, wx, wy, { left: back ? dx < 0 : frag.spear.x < wx, frame: back ? Math.floor(t * 6) % 2 : 0, sleeping: false, hop: back ? Math.abs(Math.sin(t * 6)) * 2 : 0 });
+            this.drawBeing(b, look, wx, wy, { left: back ? dx < 0 : frag.spear.x < wx, frame: back ? Math.floor(t * 10) % 2 : 0, sleeping: false, hop: back ? Math.abs(Math.sin(t * 10)) * 2 : 0 });
             if (sinceTouch < 4) this.spark(b, wx, wy, sinceTouch * 0.75);
           },
         });
@@ -565,7 +569,8 @@ export class TribeScene extends RangeScene {
     for (let i = 0; i < tall; i++) {
       // Two strands twisting round each other.
       const k = i / tall;
-      const tw = Math.sin(k * 14 + t * 0.4) * w;
+      // The strands twist round each other as the whole spear turns.
+      const tw = Math.sin(k * 14 + t * SPIN) * w;
       b.fillStyle = '#5a1018';
       b.fillRect(x0 - w + Math.round(tw), y0 - i, w, 1);
       b.fillStyle = '#2a0a10';
@@ -581,15 +586,18 @@ export class TribeScene extends RangeScene {
     const top = y0 - tall;
     const prong = Math.max(4, Math.round(tall * 0.22));
     b.fillStyle = '#6a1420';
+    // Turning slowly: the prongs swing round (seen edge-on, they close together).
+    const turn = Math.cos(t * SPIN * 0.5);
     for (let i = 0; i < prong; i++) {
-      const spread = Math.round((i / prong) ** 1.5 * prong * 0.45);
+      const spread = Math.round((i / prong) ** 1.5 * prong * 0.45 * turn);
       b.fillRect(x0 - spread - w, top - i, w, 1);
       b.fillRect(x0 + spread, top - i, w, 1);
     }
     if (!awake || Math.sin(t * 2) > 0.6) {
+      const tip = Math.round(prong * 0.45 * turn);
       b.fillStyle = 'rgba(255, 120, 140, 0.996)';
-      b.fillRect(x0 - Math.round(prong * 0.45) - w, top - prong, w, 1);
-      b.fillRect(x0 + Math.round(prong * 0.45), top - prong, w, 1);
+      b.fillRect(x0 - tip - w, top - prong, w, 1);
+      b.fillRect(x0 + tip, top - prong, w, 1);
     }
   }
 }
