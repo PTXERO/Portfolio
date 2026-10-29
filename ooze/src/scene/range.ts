@@ -175,18 +175,21 @@ export class RangeScene {
   }
 
   zoomAt(ax: number, ay: number, factor: number): void {
-    const before = this.toWorld(ax, ay);
+    // Keep the ground under the fingers exactly under them: find it, zoom, then place the
+    // camera so that spot lands back on the same pixel.
+    const at = this.toWorld(ax, ay);
     this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom * factor));
-    const after = this.toWorld(ax, ay);
-    this.camX += before.x - after.x;
-    this.camY += before.y - after.y;
+    this.camX = at.x - (ax - this.W / 2) / this.zoom;
+    if (this.shaded) this.camY = at.y - (ay - this.midY() + this.heightAt(at.x, at.y) * LIFT * this.zoom) / (this.zoom * TILT);
+    else this.camY = at.y - (ay - this.midY()) / this.zoom;
     this.auto = false;
     this.clamp();
   }
 
   pan(dx: number, dy: number): void {
+    // In 2.5D a tile of depth is squashed on screen, so a drag moves further over the ground.
     this.camX -= dx / this.zoom;
-    this.camY -= dy / this.zoom;
+    this.camY -= dy / (this.zoom * (this.shaded ? TILT : 1));
     this.auto = false;
     this.clamp();
   }

@@ -26,6 +26,47 @@ void main() {
   gl_Position = vec4(aPos, 0.0, 1.0);
 }`;
 
+/**
+ * The light, worked out once per tile of the island (not per screen pixel), so shadows stay
+ * fixed to the land however the view pans or zooms: r = direct sun (slope and shadow),
+ * g = ambient occlusion, b = shadow alone.
+ */
+const LIGHT = `
+precision highp float;
+uniform sampler2D uHeight;
+uniform vec3 uSun;
+varying vec2 vUv;
+const float N = ${ISLAND.toFixed(1)};
+const float K = ${LIFT.toFixed(1)};
+float hTop(vec2 w) {
+  vec4 t = texture2D(uHeight, w / N);
+  return max((t.r * 65280.0 + t.a * 255.0) / 65535.0 * ${H_SPAN.toFixed(2)} + ${H_LO.toFixed(2)}, 0.0);
+}
+void main() {
+  vec2 w = vUv * N;
+  float h = hTop(w);
+  float hl = hTop(w - vec2(1.0, 0.0)), hr = hTop(w + vec2(1.0, 0.0));
+  float hu = hTop(w - vec2(0.0, 1.0)), hd = hTop(w + vec2(0.0, 1.0));
+  vec3 n = normalize(vec3(-(hr - hl) * 0.5 * K, -(hd - hu) * 0.5 * K, 1.0));
+  float diff = max(dot(n, uSun), 0.0);
+  // March toward the sun over the island: higher ground in the way casts a shadow.
+  float sh = 1.0;
+  vec2 dir = normalize(uSun.xy + 1e-5);
+  float rise = uSun.z / max(length(uSun.xy), 0.05);
+  for (int i = 1; i <= 28; i++) {
+    float d = float(i) * 1.3;
+    float over = hTop(w + dir * d) * K - (h * K + rise * d + 0.3);
+    sh = min(sh, 1.0 - smoothstep(0.0, 1.5, over) * (1.0 - float(i) / 32.0));
+  }
+  float around = 0.0;
+  for (int i = 0; i < 8; i++) {
+    float a = float(i) * 0.785;
+    around += hTop(w + vec2(cos(a), sin(a)) * 2.5);
+  }
+  float ao = clamp(1.0 - max(around / 8.0 - h, 0.0) * K * 0.08, 0.6, 1.0);
+  gl_FragColor = vec4(diff * sh, ao, sh, 1.0);
+}`;
+
 const FRAG = `
 precision highp float;
 uniform sampler2D uGround0;
@@ -33,6 +74,7 @@ uniform sampler2D uGround1;
 uniform sampler2D uHeight;
 uniform sampler2D uFog;
 uniform sampler2D uOver;
+uniform sampler2D uLight;
 uniform float uBlend;
 uniform vec2 uArt;
 uniform vec4 uCam; // camera centre x, y (tiles), zoom (art px per tile), screen row of the centre
@@ -106,21 +148,11 @@ void main() {
   float dRow = (screenRow(w + vec2(0.0, 0.3)) - screenRow(w - vec2(0.0, 0.3))) / 0.6;
   float face = 1.0 - clamp(dRow / (uCam.z * TY * 0.55), 0.0, 1.0);
 
-  // Light: the slope against the sun, shadows cast by higher ground, and hollows.
-  float hl = hTop(w - vec2(1.0, 0.0)), hr = hTop(w + vec2(1.0, 0.0));
-  float hu = hTop(w - vec2(0.0, 1.0)), hd = hTop(w + vec2(0.0, 1.0));
-  vec3 n = normalize(vec3(-(hr - hl) * 0.5 * K, -(hd - hu) * 0.5 * K, 1.0));
-  float diff = max(dot(n, uSun), 0.0);
-  float sh = 1.0;
-  vec2 sdir = normalize(uSun.xy + 1e-5);
-  float rise = uSun.z / max(length(uSun.xy), 0.05);
-  for (int i = 1; i <= 20; i++) {
-    float d = float(i) * 1.4;
-    float over = hTop(w + sdir * d) * K - (h * K + rise * d + 0.3);
-    sh = min(sh, 1.0 - smoothstep(0.0, 1.5, over) * (1.0 - float(i) / 24.0));
-  }
-  float around = (hl + hr + hu + hd) * 0.25;
-  float ao = clamp(1.0 - max(around - h, 0.0) * K * 0.08, 0.6, 1.0);
+  // Light, from the island's light map (fixed to the land).
+  vec3 L = inside ? texture2D(uLight, w / N).rgb : vec3(0.8, 1.0, 1.0);
+  float sunLit = L.r;
+  float ao = L.g;
+  float sh = L.b;
 
   vec3 lit;
   bool water = biome < 1.5 && raw <= 0.0;
@@ -141,7 +173,7 @@ void main() {
     // Faces: the earth and rock under the top, darker the steeper.
     vec3 earth = mix(vec3(0.42, 0.32, 0.22), vec3(0.45, 0.47, 0.5), smoothstep(0.45, 0.65, h));
     col = mix(col, earth * (0.75 + 0.25 * fract(w.y * 0.5)), face * 0.85);
-    lit = col * (uAmb + uSunCol * diff * sh) * ao * (1.0 - face * 0.25);
+    lit = col * (uAmb + uSunCol * sunLit) * ao * (1.0 - face * 0.25);
   }
 
   // Clouds drift over, their shadows darkening the land below.
@@ -149,7 +181,9 @@ void main() {
   lit *= 1.0 - cloud * 0.22 * (1.0 - uNight);
 
   // Fog of war: soft, rolling cloud, with wisps at its edge.
-  float fogA = inside ? texture2D(uFog, w / N).a : 0.0;
+  // Past what's been seen, and thickening toward the map's edge (and beyond it), all is cloud.
+  float edge = min(min(w.x, w.y), min(N - w.x, N - w.y));
+  float fogA = max(inside ? texture2D(uFog, w / N).a : 1.0, 1.0 - smoothstep(4.0, 34.0, edge));
   float fn = fbm(w * 0.06 + vec2(uTime * 0.02, -uTime * 0.013));
   float fn2 = fbm(w * 0.16 - vec2(uTime * 0.035, uTime * 0.02));
   float fog = smoothstep(0.3, 0.7, fogA + (fn - 0.5) * 0.6 + (fn2 - 0.5) * 0.2);
@@ -228,6 +262,10 @@ function blend(a: number[], b: number[], c: number[], wa: number, wb: number, wc
 export class MapShader {
   private gl: WebGLRenderingContext;
   private prog: WebGLProgram;
+  private lightProg: WebGLProgram;
+  private lightTex: WebGLTexture;
+  private lightFbo: WebGLFramebuffer;
+  private lightKey = '';
   private heightTex: WebGLTexture;
   private fogTex: WebGLTexture;
   private overTex: WebGLTexture;
@@ -243,6 +281,7 @@ export class MapShader {
     if (!gl) throw new Error('no webgl');
     this.gl = gl;
     this.prog = compile(gl, VERT, FRAG);
+    this.lightProg = compile(gl, VERT, LIGHT);
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
@@ -251,6 +290,29 @@ export class MapShader {
     this.heightTex = texture(gl, gl.LINEAR);
     this.fogTex = texture(gl, gl.LINEAR);
     this.overTex = texture(gl, gl.NEAREST);
+    this.lightTex = texture(gl, gl.LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, ISLAND, ISLAND, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    this.lightFbo = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.lightFbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.lightTex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  /** Re-lights the island's light map (only when the sun has moved enough to show). */
+  private relight(sun: number[]): void {
+    const key = `${this.heightSeed}|${sun.map((v) => v.toFixed(2)).join()}`;
+    if (key === this.lightKey) return;
+    this.lightKey = key;
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.lightFbo);
+    gl.viewport(0, 0, ISLAND, ISLAND);
+    gl.useProgram(this.lightProg);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.heightTex);
+    gl.uniform1i(gl.getUniformLocation(this.lightProg, 'uHeight'), 2);
+    gl.uniform3fv(gl.getUniformLocation(this.lightProg, 'uSun'), sun);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
   private u(name: string): WebGLUniformLocation | null {
@@ -311,6 +373,8 @@ export class MapShader {
     const gl = this.gl;
     const g0 = this.groundTex(p.ground[0]);
     const g1 = this.groundTex(p.ground[1]);
+    const sky = this.sky(p.day);
+    this.relight(sky.sun);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.useProgram(this.prog);
@@ -325,12 +389,14 @@ export class MapShader {
     gl.activeTexture(gl.TEXTURE4);
     gl.bindTexture(gl.TEXTURE_2D, this.overTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, over);
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_2D, this.lightTex);
     gl.uniform1i(this.u('uGround0'), 0);
     gl.uniform1i(this.u('uGround1'), 1);
     gl.uniform1i(this.u('uHeight'), 2);
     gl.uniform1i(this.u('uFog'), 3);
     gl.uniform1i(this.u('uOver'), 4);
-    const sky = this.sky(p.day);
+    gl.uniform1i(this.u('uLight'), 5);
     gl.uniform1f(this.u('uBlend'), p.blend);
     gl.uniform2f(this.u('uArt'), artW, artH);
     gl.uniform4f(this.u('uCam'), p.cam[0], p.cam[1], p.cam[2], p.cam[3]);
