@@ -13,7 +13,7 @@ import { STAGES } from './content/stages';
 import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed } from './economy/tribal';
-import { assign, daysLeft, decideFallen, DAY_SEC, eatsPlants, extinctionTick, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, type JobId } from './economy/extinction';
+import { assign, daysLeft, decideFallen, DAY_SEC, eatsPlants, extinctionTick, launch, learnIdea, startExtinction, toggleFamily, TRAITS, tryAgain, waitingOnChoice, WINTER, type JobId } from './economy/extinction';
 import {
   addSwirl,
   buyCount,
@@ -297,6 +297,10 @@ function extinctionStep(sec: number): void {
   }
   const ex = t?.ex;
   if (!ex) return;
+  if (ex.escaped) {
+    showEscape();
+    return;
+  }
   if (ex.over) {
     showAlone();
     return;
@@ -319,12 +323,20 @@ function nightReport(): void {
   const names = r.starved.map((p) => p.name);
   const who = names.length === 0 ? 'No one starved in the night.' : names.length === 1 ? `${names[0]} starved in the night.` : names.length <= 4 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} starved in the night.` : `${names.length} starved in the night: ${names.slice(0, 3).join(', ')} and ${names.length - 3} more.`;
   const one = r.starved.length === 1 ? r.starved[0] : null;
+  const more: string[] = [];
+  if (r.killed) more.push(`<p class="grim">${r.killed.name} was killed in the night. ${r.killed.by} was seen at the body.</p>`);
+  if (r.shook?.length) more.push(`<p class="grim">${r.shook.join(', ')} died of the shaking.</p>`);
+  if (r.caught?.length) more.push(`<p class="shake">${r.caught.join(', ')} began to shake.</p>`);
+  if (r.fire === false && state.stages.tribal.tribe?.ex?.ideas.includes('fire')) more.push('<p class="dim">The fire went out: no wood to keep it.</p>');
+  if (r.season === 'winter') more.push(`<p class="winter">The sky has gone dark with ash. The ash winter: gathering will be poor, and nights cold without a fire, until day ${WINTER[1] + 1}.</p>`);
+  if (r.season === 'green') more.push('<p class="green">Something green pushed up through the ash this morning.</p>');
   showModal(
     `<p class="label dim">Night ${r.day}</p>
-    <h3 class="${names.length ? 'grim' : ''}">${who}</h3>
+    <h3 class="${names.length || r.killed ? 'grim' : ''}">${who}</h3>
     ${one ? `<p class="dim">${TRAITS[one.trait].name}: ${TRAITS[one.trait].does}.</p>` : ''}
-    <p>They ate ${Math.floor(r.ate)} of the ${Math.ceil(r.wanted)} meals they needed.${r.spoiled >= 1 ? ` ${Math.floor(r.spoiled)} food spoiled.` : ''}</p>`,
-    6,
+    <p>They ate ${Math.floor(r.ate)} of the ${Math.ceil(r.wanted)} meals they needed.${r.spoiled >= 1 ? ` ${Math.floor(r.spoiled)} food spoiled.` : ''}</p>
+    ${more.join('')}`,
+    more.length ? 9 : 6,
   );
 }
 
@@ -340,6 +352,32 @@ function askFallen(): void {
     <button class="px-btn grim" data-act="fallen-eat">Eat them</button></div>
     <p class="small dim">Eating the dead makes your kind cannibals, for good: from now on, and in every age to come.${loses}</p>`);
   modal.dataset.kind = 'fallen';
+}
+
+/** They set off: the four on the raft, the ash behind them. */
+function showEscape(): void {
+  if (alone) return;
+  const t = state.stages.tribal.tribe!;
+  const ex = t.ex!;
+  alone = true;
+  modal.hidden = true;
+  syncCine();
+  storyLine(STORY.launch);
+  window.setTimeout(() => storyLine(STORY.crossing), 6000);
+  window.setTimeout(() => {
+    storyLine('');
+    extinctEl.innerHTML = `<div class="ending-inner">
+      <p class="label dim">Extinction</p>
+      <p>They survived the Extinction</p>
+      <h1>${ex.day} days</h1>
+      <dl>${(t.family ?? []).map((p) => `<dt>${p.name}</dt><dd>${TRAITS[p.trait as keyof typeof TRAITS]?.name ?? ''}</dd>`).join('')}
+      <dt>Left on the ash</dt><dd>${ex.people.length - (t.family?.length ?? 0)}</dd><dt>Tries</dt><dd>${(t.attempts ?? 0) + 1}</dd></dl>
+      ${t.cannibal ? '<p class="dim">They are cannibals now, and always will be.</p>' : ''}
+      <p class="stir">The story continues in a future update.</p>
+    </div>`;
+    extinctEl.hidden = false;
+    requestAnimationFrame(() => extinctEl.classList.add('in'));
+  }, 12000);
 }
 
 /** No one left: the last of them looks round, alone. Then how long they lasted, and again. */
@@ -948,7 +986,10 @@ function act(el: HTMLElement): void {
   else if (el.dataset.amount) state.buyAmount = el.dataset.amount === 'max' ? 'max' : (Number(el.dataset.amount) as BuyAmount);
   else if (el.dataset.warp) state.warp = Number(el.dataset.warp);
   else if (el.dataset.policy) state.stages.creature.roamOpts.policy = el.dataset.policy as RunInPolicy;
-  else if (el.dataset.job) {
+  else if (el.dataset.family) {
+    const ex = state.stages.tribal.tribe?.ex;
+    if (ex) toggleFamily(ex, Number(el.dataset.family));
+  } else if (el.dataset.job) {
     const ex = state.stages.tribal.tribe?.ex;
     if (ex) assign(ex, el.dataset.job as JobId, Number(el.dataset.d));
   } else if (el.dataset.ration) {
@@ -1028,6 +1069,12 @@ function act(el: HTMLElement): void {
         modal.hidden = true;
         panelKey = '';
         save();
+        break;
+      case 'launch':
+        if (launch(state)) {
+          save();
+          showEscape();
+        }
         break;
       case 'retry':
         tryAgain(state);

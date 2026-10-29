@@ -83,25 +83,25 @@ const PATHS: Record<BranchId, [Leaf, Leaf, Leaf, Leaf, Leaf, Leaf]> = {
     { id: 'edges', name: 'Sharp edges', does: 'Scavenging +10%.', fx: { gather: { scavenge: 0.1 } } },
     { id: 'tools', name: 'Stone tools', does: 'Foraging, scavenging and digging +40%.', fx: { gather: { forage: 0.4, scavenge: 0.4, dig: 0.4 } } },
     { id: 'knapping', name: 'Knapping', does: 'All gathering +10%.', fx: { gather: { all: 0.1 } } },
-    { id: 'heavy', name: 'Heavy stones', does: 'Scavenging +15%.', fx: { gather: { scavenge: 0.15 } } },
+    { id: 'rope', name: 'Rope', does: 'Bark and sinew twisted into cord: the raft can be lashed together. Wood cutting +10%.', fx: { gather: { wood: 0.1 } } },
     { id: 'butcher', name: 'Butchering', does: 'Nothing on a carcass wasted: scavenging +30%.', fx: { gather: { scavenge: 0.3 } } },
     { id: 'mightmakes', name: 'Strength above all', does: 'The strong work half again as hard; everyone else, 15% less.', fx: { strong: 0.5, others: -0.15 } },
   ],
   sea: [
     { id: 'watch', name: 'Watch the water', does: 'Fishing +10%.', fx: { gather: { fish: 0.1 } } },
     { id: 'line', name: 'Fishing line', does: 'Fish the shore: meat that keeps coming.', fx: { unlock: 'fish' } },
-    { id: 'bait', name: 'Bait', does: 'Fishing +15%.', fx: { gather: { fish: 0.15 } } },
-    { id: 'deeper', name: 'Deeper water', does: 'The shore holds 20% more lines.', fx: { fishCap: 0.2 } },
-    { id: 'nets', name: 'Nets', does: 'Fishing +20%, and the shore holds 40% more.', fx: { gather: { fish: 0.2 }, fishCap: 0.4 } },
-    { id: 'tides', name: 'Read the tides', does: 'Fishing half again as good; foraging and digging 30% worse.', fx: { gather: { fish: 0.5, forage: -0.3, dig: -0.3 } } },
+    { id: 'bait', name: 'Bait', does: 'Fishing +15%, and the shore holds 15% more lines.', fx: { gather: { fish: 0.15 }, fishCap: 0.15 } },
+    { id: 'deeper', name: 'Deeper water', does: 'The shore holds 40% more lines.', fx: { fishCap: 0.4 } },
+    { id: 'nets', name: 'Nets', does: 'Fishing +20%, and the shore holds 80% more.', fx: { gather: { fish: 0.2 }, fishCap: 0.8 } },
+    { id: 'tides', name: 'Read the tides', does: 'Fishing half again as good, and the shore holds 50% more; foraging and digging 30% worse.', fx: { gather: { fish: 0.5, forage: -0.3, dig: -0.3 }, fishCap: 0.5 } },
   ],
   earth: [
     { id: 'green', name: 'Know the green', does: 'Foraging +10%.', fx: { gather: { forage: 0.1 } } },
     { id: 'stick', name: 'Digging stick', does: 'Dig for roots: plants that keep coming.', fx: { unlock: 'dig' } },
-    { id: 'rootlore', name: 'Root lore', does: 'Digging +15%.', fx: { gather: { dig: 0.15 } } },
+    { id: 'rootlore', name: 'Root lore', does: 'Digging +15%, and roots stretch 15% further.', fx: { gather: { dig: 0.15 }, digCap: 0.15 } },
     { id: 'seeds', name: 'Seed keeping', does: 'A little of the ash grows back each day.', fx: { ashRegrow: 0.01 } },
-    { id: 'deeproots', name: 'Deep roots', does: 'Roots stretch 40% further.', fx: { digCap: 0.4 } },
-    { id: 'tend', name: 'Tend the ash', does: 'The ash grows back four times as fast; scavenging 30% worse.', fx: { ashRegrow: 0.04, gather: { scavenge: -0.3 } } },
+    { id: 'deeproots', name: 'Deep roots', does: 'Roots stretch 80% further.', fx: { digCap: 0.8 } },
+    { id: 'tend', name: 'Tend the ash', does: 'The ash grows back four times as fast, and roots stretch 40% further; scavenging 30% worse.', fx: { ashRegrow: 0.04, digCap: 0.4, gather: { scavenge: -0.3 } } },
   ],
   kin: [
     { id: 'huddle', name: 'Huddle', does: 'Nights cost a little less hunger.', fx: { night: 0.06 } },
@@ -164,24 +164,23 @@ const PLANT_EATERS: Record<string, Partial<Leaf>> = {
   racks: { name: 'Seed cakes', does: 'Pressed and dried, plants keep almost for good, and meals go 10% further.', fx: { plantKeep: 0.04, meal: 0.1 } },
   edges: { name: 'Fruit sense', does: 'Gathering fallen fruit +10%.' },
   tools: { name: 'Stone tools', does: 'Foraging, fruit gathering and digging +40%.' },
-  heavy: { name: 'Climbers', does: 'Gathering fallen fruit +15%.' },
   butcher: { name: 'Pick clean', does: 'Nothing on a branch wasted: fruit gathering +30%.' },
   watch: { name: 'Kelp lore', does: 'Kelp gathering +10%.' },
   line: { name: 'Kelp knife', does: 'Gather kelp from the shallows: plants that keep coming.' },
-  bait: { name: 'Tide flats', does: 'Kelp gathering +15%.' },
-  deeper: { name: 'Deeper beds', does: 'The shallows hold 20% more gatherers.' },
-  nets: { name: 'Kelp baskets', does: 'Kelp gathering +20%, and the shallows hold 40% more.' },
-  tides: { name: 'Read the tides', does: 'Kelp gathering half again as good; foraging and digging 30% worse.' },
+  bait: { name: 'Tide flats', does: 'Kelp gathering +15%, and the shallows hold 15% more.' },
+  deeper: { name: 'Deeper beds', does: 'The shallows hold 40% more gatherers.' },
+  nets: { name: 'Kelp baskets', does: 'Kelp gathering +20%, and the shallows hold 80% more.' },
+  tides: { name: 'Read the tides', does: 'Kelp gathering half again as good, and the shallows hold 50% more; foraging and digging 30% worse.' },
 };
 const MEAT_EATERS: Record<string, Partial<Leaf>> = {
   green: { name: 'Tracks in the ash', does: 'Grubbing in the ash +10%.' },
   tools: { name: 'Stone tools', does: 'Grubbing, scavenging and trapping +40%.' },
   stick: { name: 'Snares', does: 'Set snares for what hid underground: meat that keeps coming.' },
-  rootlore: { name: 'Trap lore', does: 'Trapping +15%.' },
+  rootlore: { name: 'Trap lore', does: 'Trapping +15%, and snares reach 15% further.' },
   seeds: { name: 'Let some go', does: 'A few grubs are left to breed: a little of the ash comes back each day.' },
-  deeproots: { name: 'Wide trapline', does: 'Snares reach 40% further.' },
+  deeproots: { name: 'Wide trapline', does: 'Snares reach 80% further.' },
   tides: { name: 'Read the tides', does: 'Fishing half again as good; grubbing and trapping 30% worse.' },
-  tend: { name: 'Breed the grubs', does: 'The ash comes back four times as fast; scavenging 30% worse.' },
+  tend: { name: 'Breed the grubs', does: 'The ash comes back four times as fast, and snares reach 40% further; scavenging 30% worse.' },
 };
 
 /** An idea as a diet knows it (its name, what it says and does). */
@@ -221,7 +220,7 @@ export interface Mods {
 }
 
 export function modsOf(known: string[], diet: Diet = 'omnivore'): Mods {
-  const m: Mods = { gather: { forage: 0, scavenge: 0, dig: 0, fish: 0, listen: 0, rest: 0, all: 0 }, meal: 0, meatKeep: 0, plantKeep: 0, night: 0, rest: 0, limit: 0, weak: 0, digCap: 0, fishCap: 0, ashRegrow: 0, unlock: new Set(), keen: 0, strong: 0, others: 0, listenHunger: 0, ration: 0, strongFirst: false };
+  const m: Mods = { gather: { forage: 0, scavenge: 0, dig: 0, fish: 0, wood: 0, build: 0, listen: 0, rest: 0, all: 0 }, meal: 0, meatKeep: 0, plantKeep: 0, night: 0, rest: 0, limit: 0, weak: 0, digCap: 0, fishCap: 0, ashRegrow: 0, unlock: new Set(), keen: 0, strong: 0, others: 0, listenHunger: 0, ration: 0, strongFirst: false };
   for (const id of known) {
     const f = MIND_NODE[id] && nodeFor(id, diet).fx;
     if (!f) continue;

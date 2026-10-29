@@ -2,7 +2,7 @@
 // the Ideas the spear can teach.
 
 import { STORY } from '../content/tribal';
-import { count, dayYield, eatsMeat, eatsPlants, hungerWord, ideaCost, jobFood, jobInfo, JOBS, jobOpen, TRAITS, type Diet, type ExtinctionState } from '../economy/extinction';
+import { count, dayYield, eatsMeat, eatsPlants, FAMILY, hungerWord, ideaCost, jobFood, jobInfo, JOBS, jobOpen, launchBlockers, provisions, RAFT, raftDone, raftPart, seasonOf, TRAITS, VOYAGE_FOOD, WINTER, type Diet, type ExtinctionState } from '../economy/extinction';
 import { BRANCHES, MIND_NODE, MIND_TREE, nodeFor, reachable } from '../economy/mindTree';
 import { tribeOf } from '../economy/tribal';
 import type { GameState } from '../economy/types';
@@ -21,7 +21,7 @@ export function tribeKey(state: GameState): string {
   const t = tribeOf(state);
   const ex = t?.ex;
   if (!ex) return JSON.stringify([t?.awake]);
-  return JSON.stringify([ex.day, ex.people.map((p) => [p.id, p.job, Math.round(p.hunger * 4)]), Math.floor(ex.plants), Math.floor(ex.meat), Math.floor(ex.insight), ex.ration, ex.ideas, ex.diet, ex.over, picked]);
+  return JSON.stringify([ex.day, ex.people.map((p) => [p.id, p.job, Math.round(p.hunger * 4)]), Math.floor(ex.plants), Math.floor(ex.meat), Math.floor(ex.insight), ex.ration, ex.ideas, ex.diet, ex.over, picked, Math.floor(ex.wood ?? 0), ex.raft, ex.family, ex.escaped, ex.people.map((p) => p.sick)]);
 }
 
 export function tribeLayout(state: GameState): string {
@@ -33,7 +33,7 @@ export function tribeLayout(state: GameState): string {
       <div class="card px-box"><div class="info"><div class="name">${t.survivors} of the herd lived</div>
       <div class="sub">${t.awake ? STORY.wakeSub : STORY.approach}</div></div></div>`;
   }
-  return [storesCard(ex), rationCard(ex), jobsCard(ex), peopleCard(ex)].join('');
+  return [storesCard(ex), rationCard(ex), jobsCard(ex), raftCard(ex), peopleCard(ex)].join('');
 }
 
 function storesCard(ex: ExtinctionState): string {
@@ -47,9 +47,17 @@ function storesCard(ex: ExtinctionState): string {
     <div class="card px-box ex-stores">
       ${cell('Plants', ex.plants, gain('plants'), plants, 'keeps')}
       ${cell('Meat', ex.meat, gain('meat'), meat, ex.ideas.includes('racks') && meat ? 'dried, keeps' : 'rots overnight')}
+      ${cell('Wood', ex.wood ?? 0, y.wood, true, ex.ideas.includes('fire') ? 'fire burns 2 a night' : 'for the raft')}
       ${cell('Insight', ex.insight, y.listen, true, 'for ideas')}
-      <div class="sub diet">${DIET_LINE[ex.diet]} Each eats ${ex.ration === 1 ? 'a full meal' : ex.ration === 0.5 ? 'half a meal' : 'a quarter meal'} at night: ${n0(ex.people.length * ex.ration)} wanted.</div>
+      <div class="sub diet">${seasonLine(ex)}${DIET_LINE[ex.diet]} Each eats ${ex.ration === 1 ? 'a full meal' : ex.ration === 0.5 ? 'half a meal' : 'a quarter meal'} at night: ${n0(ex.people.length * ex.ration)} wanted.</div>
     </div>`;
+}
+
+function seasonLine(ex: ExtinctionState): string {
+  const s = seasonOf(ex);
+  if (s === 'winter') return `<b class="winter">The ash winter: gathering is poor, and nights are cold without a fire (until day ${WINTER[1] + 1}).</b> `;
+  if (s === 'green') return '<b class="green">The first green: the ash grows back a little each day.</b> ';
+  return '';
 }
 
 function rationCard(ex: ExtinctionState): string {
@@ -61,12 +69,12 @@ function rationCard(ex: ExtinctionState): string {
 
 function jobsCard(ex: ExtinctionState): string {
   const y = dayYield(ex);
-  const unit = (id: (typeof JOBS)[number]['id']) => jobFood(ex.diet, id) ?? 'insight';
+  const unit = (id: (typeof JOBS)[number]['id']) => jobFood(ex.diet, id) ?? (id === 'wood' ? 'wood' : id === 'build' ? 'work on the raft' : 'insight');
   const rows = JOBS.filter((j) => j.id !== 'rest' && jobOpen(ex, j.id))
     .map((plain) => {
       const j = jobInfo(ex.diet, plain.id);
       const c = count(ex, j.id);
-      const left = j.id === 'forage' ? ` · ${n0(ex.ash)} left` : j.id === 'scavenge' ? ` · ${n0(ex.carrion)} left` : '';
+      const left = j.id === 'forage' ? ` · ${n0(ex.ash)} left` : j.id === 'scavenge' ? ` · ${n0(ex.carrion)} left` : j.id === 'wood' ? ` · ${n0(ex.trees ?? 0)} left` : j.id === 'build' ? ` · ${raftPart(ex)?.name ?? ''}` : '';
       return `<div class="job"><div class="info"><div class="name">${j.name}</div><div class="sub">${j.does}</div>
         <div class="sub gain">${c ? `+${n0(y[j.id])} ${unit(j.id)} a day` : unit(j.id)}${left}</div></div>
         <div class="seg"><button class="px-btn" data-job="${j.id}" data-d="-5">−5</button><button class="px-btn" data-job="${j.id}" data-d="-1">−</button><b class="num">${c}</b><button class="px-btn" data-job="${j.id}" data-d="1">+</button><button class="px-btn" data-job="${j.id}" data-d="5">+5</button></div></div>`;
@@ -76,15 +84,36 @@ function jobsCard(ex: ExtinctionState): string {
     <div class="sub">${count(ex, 'rest')} resting (hunger comes on a little slower).</div></div>${rows}</div>`;
 }
 
+/** The raft: each part's progress, then (once it's done) the four who go, and the food. */
+function raftCard(ex: ExtinctionState): string {
+  const parts = RAFT.map((p) => {
+    const done = Math.min(p.work, ex.raft?.[p.id] ?? 0);
+    const blocked = p.needs && !ex.ideas.includes(p.needs) && done < p.work;
+    return `<div class="raft-part"><span>${p.name}</span><div class="bar"><i style="width:${(done / p.work) * 100}%"></i></div><span class="dim tiny">${done >= p.work ? 'done' : blocked ? 'needs Rope (an idea)' : `${n0(done)}/${p.work} · ${p.wood} wood`}</span></div>`;
+  }).join('');
+  const ready = raftDone(ex);
+  const blockers = launchBlockers(ex);
+  const tail = ready
+    ? `<div class="sub">It carries ${FAMILY}. Choose them below (tap a name), and stock ${VOYAGE_FOOD} food for the crossing (${n0(provisions(ex))} now). Those left behind stay on the ash.</div>
+       ${blockers.length ? `<div class="sub warn">${blockers.join(' ')}</div>` : ''}
+       <button class="px-btn gold launch" data-act="launch"${blockers.length ? ' disabled' : ''}>Set off</button>`
+    : '<div class="sub">The way off this island. Put people on Build the raft: it takes wood as they work.</div>';
+  return `<div class="card px-box ex-raft"><div class="info"><div class="name">The raft</div>${tail}</div>${parts}</div>`;
+}
+
 function peopleCard(ex: ExtinctionState): string {
+  const ready = raftDone(ex);
+  const fam = ex.family ?? [];
   const rows = [...ex.people]
     .sort((a, b) => b.hunger - a.hunger)
     .map((p) => {
       const w = hungerWord(ex, p);
-      return `<div class="person ${w.toLowerCase()}"><b>${p.name}</b><span class="dim">${TRAITS[p.trait].name}</span><span class="dim">${jobInfo(ex.diet, p.job).name.split(' ')[0]}</span><span class="hunger">${w}</span></div>`;
+      const chosen = fam.includes(p.id);
+      const inner = `<b>${chosen ? '» ' : ''}${p.name}</b><span class="dim">${TRAITS[p.trait].name}</span><span class="dim">${jobInfo(ex.diet, p.job).name.split(' ')[0]}</span><span class="hunger">${w}</span>`;
+      return ready ? `<button class="person pick ${w.toLowerCase()}${chosen ? ' chosen' : ''}" data-family="${p.id}">${inner}</button>` : `<div class="person ${w.toLowerCase()}">${inner}</div>`;
     })
     .join('');
-  return `<div class="card px-box ex-people"><div class="info"><div class="name">Who's left</div><div class="sub">Hungriest first. They eat in that order too.</div></div>${rows}</div>`;
+  return `<div class="card px-box ex-people"><div class="info"><div class="name">Who's left</div><div class="sub">${ready ? `Tap to choose the ${FAMILY} who go on the raft.` : 'Hungriest first. They eat in that order too.'}</div></div>${rows}</div>`;
 }
 
 /** The idea picked in the web (shown in the card under it). */

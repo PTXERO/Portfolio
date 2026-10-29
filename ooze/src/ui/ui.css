@@ -582,7 +582,7 @@ textarea {
 .ex-count.safe { color: var(--mint); }
 .ex-count.warn { color: var(--gold); }
 .ex-count.dire { color: #ff6a5a; animation: pulse 1s steps(2) infinite; }
-.ex-stores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; }
+.ex-stores { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 8px; align-items: start; }
 .ex-stores .store { display: flex; flex-direction: column; gap: 1px; font-size: 12px; }
 .ex-stores .store b { font-size: 26px; color: var(--gold); line-height: 1; }
 .ex-stores .store.off { opacity: 0.45; }
@@ -618,3 +618,18 @@ textarea {
 .tb { position: absolute; transform: translate(-50%, -50%); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mint); pointer-events: none; }
 .idea-card.keystone .name { color: #ff9a7a; }
 .idea-card.notable .name { color: var(--gold); }
+.person.shaking .hunger { color: #c08aff; }
+.ex-people .person.pick { width: 100%; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.ex-people .person.chosen { background: rgba(245, 196, 94, 0.12); }
+.ex-raft { flex-direction: column; align-items: stretch; }
+.raft-part { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 8px; font-size: 12px; margin-top: 6px; }
+.raft-part .bar { height: 8px; background: var(--panel-lo); box-shadow: 0 0 0 2px var(--ink); }
+.raft-part .bar i { display: block; height: 100%; background: var(--gold); }
+.ex-raft .launch { margin-top: 8px; width: 100%; }
+.sub.warn { color: #ff9a7a; }
+b.winter { color: #a8c8ff; }
+b.green { color: var(--mint); }
+#modal p.grim { color: #ff8a7a; }
+#modal p.shake { color: #c08aff; }
+#modal p.winter { color: #a8c8ff; }
+#modal p.green { color: var(--mint); }

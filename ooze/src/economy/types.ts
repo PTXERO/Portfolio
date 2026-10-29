@@ -330,6 +330,9 @@ export interface TribeState {
   attempts?: number;
   best?: number;
   remembered?: string[];
+  /** Once the Extinction is survived: the four who set off, and whether they ate their dead. */
+  family?: { name: string; trait: string }[];
+  cannibal?: boolean;
 }
 
 export interface StageState {

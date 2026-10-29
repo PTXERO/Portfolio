@@ -4,7 +4,11 @@
 // there is, and whoever goes without gets hungrier, until they starve. Food is split by kind,
 // and what a tribe can eat is the diet its line chose long ago: herbivores eat only plants,
 // carnivores only meat, omnivores both (never quite as good at either). A tribe that eats its
-// dead becomes cannibals for good. Ideas, heard from the spear, are the only way to more food.
+// dead becomes cannibals for good: much more meat, but the shaking spreads through those who eat
+// their own, and hungry cannibals kill their weakest. Ideas, heard from the spear, are the only
+// way to more food. Half way through the ash winter comes (gathering worse, nights colder),
+// then the first green. The way off is a raft: wood, work and rope, and food for the crossing;
+// it carries four, the family that goes on.
 // When fewer than two are left, it's over: back to just after the waking, to try again (the
 // spear remembers what it taught, so those ideas come cheaper).
 
@@ -12,7 +16,7 @@ import { COST_STEP, MIND_NODE, modsOf, NODE_COST, reachable, type Mods } from '.
 import type { GameState, TribeState } from './types';
 
 export type Diet = 'herbivore' | 'carnivore' | 'omnivore' | 'cannibal';
-export type JobId = 'forage' | 'scavenge' | 'dig' | 'fish' | 'listen' | 'rest';
+export type JobId = 'forage' | 'scavenge' | 'dig' | 'fish' | 'wood' | 'build' | 'listen' | 'rest';
 export type TraitId = 'strong' | 'swift' | 'keen' | 'hardy' | 'frail' | 'old' | 'young';
 
 export interface Survivor {
@@ -22,6 +26,10 @@ export interface Survivor {
   /** 0 fed, 1 hungry, 2 starving; at their limit (about 3) they die. */
   hunger: number;
   job: JobId;
+  /** How much more (or less) hunger they can bear than others like them. */
+  grit?: number;
+  /** Days left to live with the shaking (from eating their own); unset if well. */
+  sick?: number;
 }
 
 export interface NightReport {
@@ -31,6 +39,13 @@ export interface NightReport {
   wanted: number;
   starved: { name: string; trait: TraitId }[];
   spoiled: number;
+  /** Died of the shaking; killed in the night (and by whom); newly shaking. */
+  shook?: string[];
+  killed?: { name: string; by: string } | null;
+  caught?: string[];
+  /** Whether the fire was kept lit, and what the season did. */
+  fire?: boolean;
+  season?: 'winter' | 'green' | null;
 }
 
 export interface ExtinctionState {
@@ -63,7 +78,29 @@ export interface ExtinctionState {
   today: { plants: number; meat: number; insight: number };
   last: NightReport | null;
   over: boolean;
+  /** Wood cut, and charred trees left standing. */
+  wood?: number;
+  trees?: number;
+  /** The raft: work done on each part, and the four chosen to go. */
+  raft?: Record<RaftPart, number>;
+  family?: number[];
+  escaped?: boolean;
+  /** For chance (the shaking, killings): seeded, so the countdown guesses true. */
+  luck?: number;
 }
+
+export type RaftPart = 'frame' | 'lashing' | 'hull';
+/** The raft's parts, in order: work and wood for each (lashing needs rope). */
+export const RAFT: { id: RaftPart; name: string; work: number; wood: number; needs?: string }[] = [
+  { id: 'frame', name: 'Frame', work: 30, wood: 50 },
+  { id: 'lashing', name: 'Lashing', work: 20, wood: 15, needs: 'rope' },
+  { id: 'hull', name: 'Hull', work: 45, wood: 70 },
+];
+/** It carries four, and needs food for them for the crossing. */
+export const FAMILY = 4;
+export const VOYAGE_FOOD = 20;
+/** The ash winter, and the first green after. */
+export const WINTER = [12, 26];
 
 /** Seconds of play in a day. */
 export const DAY_SEC = 45;
@@ -73,6 +110,8 @@ export const JOBS: { id: JobId; name: string; does: string }[] = [
   { id: 'scavenge', name: 'Scavenge the dead', does: 'Meat, from what the strike killed. It rots away.' },
   { id: 'dig', name: 'Dig for roots', does: 'Plants. Roots live through fire, but there are only so many.' },
   { id: 'fish', name: 'Fish the shore', does: 'Meat. The sea still has fish, but the shore holds only so many lines.' },
+  { id: 'wood', name: 'Cut charred trees', does: 'Wood, for the fire and the raft. The trees run out.' },
+  { id: 'build', name: 'Build the raft', does: 'Turns wood and work into the raft, part by part.' },
   { id: 'listen', name: 'Listen to the spear', does: 'Insight, to learn ideas from it. No food.' },
   { id: 'rest', name: 'Rest', does: 'No work. Hunger comes on a little slower.' },
 ];
@@ -87,7 +126,7 @@ const OTHER_FOOD: Partial<Record<JobId, { name: string; does: string }>> = {
 
 /** What a job brings in for a diet: each line works for the food it can eat. */
 export function jobFood(diet: Diet, job: JobId): 'plants' | 'meat' | null {
-  if (job === 'listen' || job === 'rest') return null;
+  if (job === 'listen' || job === 'rest' || job === 'wood' || job === 'build') return null;
   const plain = job === 'forage' || job === 'dig' ? 'plants' : 'meat';
   if (diet === 'omnivore') return plain;
   const want = diet === 'herbivore' ? 'plants' : 'meat';
@@ -97,7 +136,7 @@ export function jobFood(diet: Diet, job: JobId): 'plants' | 'meat' | null {
 /** A job as a diet knows it. */
 export function jobInfo(diet: Diet, job: JobId): { id: JobId; name: string; does: string } {
   const j = JOBS.find((x) => x.id === job)!;
-  const plain = job === 'forage' || job === 'dig' ? 'plants' : job === 'listen' || job === 'rest' ? null : 'meat';
+  const plain = job === 'forage' || job === 'dig' ? 'plants' : job === 'scavenge' || job === 'fish' ? 'meat' : null;
   const food = jobFood(diet, job);
   return plain && food !== plain ? { id: job, ...OTHER_FOOD[job]! } : j;
 }
@@ -115,7 +154,7 @@ export const TRAITS: Record<TraitId, { name: string; does: string }> = {
 
 /** How good each trait is at each job. */
 const SKILL: Record<TraitId, Partial<Record<JobId, number>> & { all?: number }> = {
-  strong: { scavenge: 1.4, dig: 1.3 },
+  strong: { scavenge: 1.4, dig: 1.3, wood: 1.4, build: 1.3 },
   swift: { forage: 1.35, fish: 1.25 },
   keen: { listen: 1.5, fish: 1.15, forage: 1.1 },
   hardy: {},
@@ -128,19 +167,30 @@ const SKILL: Record<TraitId, Partial<Record<JobId, number>> & { all?: number }> 
 const LIMIT: Record<TraitId, number> = { strong: 3, swift: 3, keen: 3, hardy: 3.6, frail: 2.4, old: 2.7, young: 2.7 };
 
 /** A day's work, per worker, before skill and hunger. */
-const YIELD: Record<JobId, number> = { forage: 1.3, scavenge: 1.9, dig: 1.1, fish: 1.3, listen: 1, rest: 0 };
+const YIELD: Record<JobId, number> = { forage: 1.3, scavenge: 1.9, dig: 1.1, fish: 1.3, wood: 1.5, build: 1, listen: 1, rest: 0 };
 /** Roots and fish keep coming, but only so much a day (a share of how many lived through the
  * strike). */
 /** Insight a day from the square root of the listening done. */
 const LISTEN = 1.4;
-const DIG_CAP = 0.32;
-const FISH_CAP = 0.36;
+/** (Low on their own: the ideas taken raise them, so the path chosen sets how many can live.) */
+const DIG_CAP = 0.2;
+const FISH_CAP = 0.22;
 /** Overnight: meat rots (much slower once dried), plants a little; carrion on the ground too. */
 const MEAT_KEEP = 0.62;
 const PLANT_KEEP = 0.95;
-const CARRION_KEEP = 0.86;
-/** Each of the dead, eaten: this much meat. */
-const CORPSE_MEAT = 2.5;
+const CARRION_KEEP = 0.9;
+/** Each of the dead, eaten: this much meat (a body feeds several). */
+const CORPSE_MEAT = 8;
+/** Each body eaten: the chance one of the living catches the shaking, and how long it takes
+ * to kill them. Each night some are starving, the chance cannibals kill one of their own. */
+const SHAKING_CHANCE = 0.3;
+const SHAKING_DAYS = 10;
+const KILL_CHANCE = 0.25;
+/** A lit fire burns this much wood a night; the ash winter's toll on gathering and nights. */
+const FIRE_WOOD = 2;
+const WINTER_GATHER = 0.65;
+const WINTER_COLD = 0.15;
+const GREEN_REGROW = 0.015;
 
 const SYL = ['ka', 'ri', 'mo', 'tu', 'na', 'sa', 'ke', 'lo', 'vi', 'ra', 'en', 'ul', 'ha', 'po', 'mi', 'zu', 'ta', 'ne', 'ok', 'ya', 'bo', 'li', 'fe', 'gu', 'da', 'shi'];
 
@@ -166,7 +216,7 @@ export function eatsMeat(d: Diet): boolean {
 
 /** How a diet does at a food job: specialists are better at their own food. */
 function dietSkill(d: Diet, job: JobId): number {
-  if (job === 'listen' || job === 'rest') return 1;
+  if (job === 'listen' || job === 'rest' || job === 'wood' || job === 'build') return 1;
   return d === 'omnivore' ? 0.85 : 1.1;
 }
 
@@ -198,8 +248,9 @@ export function newExtinction(tribe: TribeState): ExtinctionState {
         break;
       }
     }
-    // They've had nothing since the strike.
-    people.push({ id: i, name, trait, hunger: 1, job: 'rest' });
+    // They've had little or nothing since the strike (some less than others).
+    const hunger = Math.max(0, 0.3 + rand() * 1.4 + (trait === 'frail' ? 0.3 : trait === 'hardy' ? -0.2 : 0));
+    people.push({ id: i, name, trait, hunger, job: 'rest', grit: (rand() - 0.5) * 0.6 });
   }
   return {
     day: 0,
@@ -214,14 +265,31 @@ export function newExtinction(tribe: TribeState): ExtinctionState {
     insight: 0,
     ash: n * 3.2,
     ashMax: n * 3.2,
-    carrion: n * 5,
+    carrion: n * 6,
     ideas: [],
     ration: 1,
     fallen: 'undecided',
     today: { plants: 0, meat: 0, insight: 0 },
     last: null,
     over: false,
+    wood: 0,
+    trees: n * 4,
+    raft: { frame: 0, lashing: 0, hull: 0 },
+    family: [],
+    escaped: false,
+    luck: (tribe.seed * 7 + 3) >>> 0,
   };
+}
+
+/** A roll of the Extinction's own dice. */
+function roll(ex: ExtinctionState): number {
+  ex.luck = ((ex.luck ?? 1) * 1664525 + 1013904223) >>> 0;
+  return ex.luck / 2 ** 32;
+}
+
+/** Whether the ash winter is on (and the green after). */
+export function seasonOf(ex: ExtinctionState): 'before' | 'winter' | 'green' {
+  return ex.day < WINTER[0] ? 'before' : ex.day < WINTER[1] ? 'winter' : 'green';
 }
 
 export function exOf(state: GameState): ExtinctionState | undefined {
@@ -263,7 +331,7 @@ export function ideaCost(state: GameState, id: string): number {
 export function learnIdea(state: GameState, id: string): boolean {
   const t = state.stages.tribal.tribe;
   const ex = t?.ex;
-  if (!t || !ex || ex.over || !reachable(ex.ideas, id)) return false;
+  if (!t || !ex || ex.over || ex.escaped || !reachable(ex.ideas, id)) return false;
   const cost = ideaCost(state, id);
   if (ex.insight < cost) return false;
   ex.insight -= cost;
@@ -273,28 +341,34 @@ export function learnIdea(state: GameState, id: string): boolean {
 }
 
 export function jobOpen(ex: ExtinctionState, job: JobId): boolean {
+  if (job === 'build') return raftPart(ex) !== null;
   return (job !== 'dig' && job !== 'fish') || modsOf(ex.ideas, ex.diet).unlock.has(job);
 }
 
 /** How well one survivor works at a job today. */
 function workOf(ex: ExtinctionState, p: Survivor, job: JobId, m = modsOf(ex.ideas, ex.diet)): number {
   const sk = SKILL[p.trait];
-  const weak = Math.max(0.3, 1 - 0.18 * p.hunger);
+  const weak = Math.max(0.45, 1 - 0.12 * p.hunger);
   const ideas = Math.max(0.1, 1 + m.gather[job] + m.gather.all);
   const trait = (p.trait === 'keen' ? 1 + m.keen : 1) * (p.trait === 'strong' ? 1 + m.strong : 1 + m.others);
-  return (sk[job] ?? 1) * (sk.all ?? 1) * weak * dietSkill(ex.diet, job) * ideas * trait;
+  const shaking = p.sick !== undefined ? 0.5 : 1;
+  const cold = seasonOf(ex) === 'winter' && (job === 'forage' || job === 'scavenge' || job === 'dig') ? WINTER_GATHER : 1;
+  return (sk[job] ?? 1) * (sk.all ?? 1) * weak * dietSkill(ex.diet, job) * ideas * trait * shaking * cold;
 }
+
+/** Hunger now (for sorting who's weakest). */
+const p0 = (p: Survivor) => p.hunger;
 
 /** Hunger someone can bear before dying. */
 function limitOf(p: Survivor, m: Mods): number {
   const weak = p.trait === 'frail' || p.trait === 'old' || p.trait === 'young' ? m.weak : 0;
   const first = m.strongFirst ? (p.job === 'rest' ? -0.5 : 0.3) : 0;
-  return LIMIT[p.trait] + m.limit + weak + first;
+  return LIMIT[p.trait] + m.limit + weak + first + (p.grit ?? 0);
 }
 
 /** What each job brings in over a whole day, as things stand. */
 export function dayYield(ex: ExtinctionState): Record<JobId, number> {
-  const out: Record<JobId, number> = { forage: 0, scavenge: 0, dig: 0, fish: 0, listen: 0, rest: 0 };
+  const out: Record<JobId, number> = { forage: 0, scavenge: 0, dig: 0, fish: 0, wood: 0, build: 0, listen: 0, rest: 0 };
   const m = modsOf(ex.ideas, ex.diet);
   for (const p of ex.people) out[p.job] += YIELD[p.job] * workOf(ex, p, p.job, m);
   const start = ex.people.length + ex.deaths;
@@ -303,6 +377,7 @@ export function dayYield(ex: ExtinctionState): Record<JobId, number> {
   out.scavenge = Math.min(out.scavenge, ex.carrion);
   out.dig = Math.min(out.dig, start * DIG_CAP * (1 + m.digCap));
   out.fish = Math.min(out.fish, start * FISH_CAP * (1 + m.fishCap));
+  out.wood = Math.min(out.wood, ex.trees ?? 0);
   // The spear only says so much a day: more listening helps less and less.
   out.listen = LISTEN * Math.sqrt(out.listen);
   return out;
@@ -336,9 +411,71 @@ export function decideFallen(state: GameState, eat: boolean): void {
   ex.fallen = eat ? 'eat' : 'leave';
   if (eat) {
     ex.diet = 'cannibal';
-    ex.meat += ex.corpses * CORPSE_MEAT;
+    eatDead(ex, ex.corpses, []);
   }
   ex.corpses = 0;
+}
+
+/** The dead, eaten: meat for all, and a chance one of the eaters catches the shaking. */
+function eatDead(ex: ExtinctionState, bodies: number, caught: string[]): void {
+  ex.meat += bodies * CORPSE_MEAT;
+  // More bodies, more likely, but at most one falls sick a night.
+  if (bodies <= 0 || roll(ex) >= Math.min(0.7, SHAKING_CHANCE + 0.04 * bodies)) return;
+  const well = ex.people.filter((p) => p.sick === undefined);
+  if (!well.length) return;
+  const p = well[Math.floor(roll(ex) * well.length)];
+  p.sick = SHAKING_DAYS;
+  caught.push(p.name);
+}
+
+/** The raft part being built now (null once it's done, or when the next needs an idea not
+ * known yet). */
+export function raftPart(ex: ExtinctionState): (typeof RAFT)[number] | null {
+  for (const part of RAFT) {
+    if ((ex.raft?.[part.id] ?? 0) >= part.work) continue;
+    return part.needs && !ex.ideas.includes(part.needs) ? null : part;
+  }
+  return null;
+}
+
+export function raftDone(ex: ExtinctionState): boolean {
+  return RAFT.every((p) => (ex.raft?.[p.id] ?? 0) >= p.work);
+}
+
+/** Food the family could take (what they can eat). */
+export function provisions(ex: ExtinctionState): number {
+  return (eatsMeat(ex.diet) ? ex.meat : 0) + (eatsPlants(ex.diet) ? ex.plants : 0);
+}
+
+/** Picks (or unpicks) one of the four to go. */
+export function toggleFamily(ex: ExtinctionState, id: number): void {
+  const f = (ex.family ??= []);
+  const i = f.indexOf(id);
+  if (i >= 0) f.splice(i, 1);
+  else if (f.length < FAMILY && ex.people.some((p) => p.id === id)) f.push(id);
+}
+
+/** What's still in the way of setting off (empty when they can). */
+export function launchBlockers(ex: ExtinctionState): string[] {
+  const out: string[] = [];
+  if (!raftDone(ex)) out.push('The raft isn\'t finished.');
+  const fam = (ex.family ?? []).filter((id) => ex.people.some((p) => p.id === id));
+  if (ex.people.length < FAMILY) out.push(`It needs ${FAMILY} to go; only ${ex.people.length} are left.`);
+  else if (fam.length < FAMILY) out.push(`Choose who goes: ${fam.length} of ${FAMILY} chosen.`);
+  if (provisions(ex) < VOYAGE_FOOD) out.push(`Food for the crossing: ${Math.floor(provisions(ex))} of ${VOYAGE_FOOD}.`);
+  return out;
+}
+
+/** The family sets off: the Extinction is survived. */
+export function launch(state: GameState): boolean {
+  const t = state.stages.tribal.tribe;
+  const ex = t?.ex;
+  if (!t || !ex || ex.over || ex.escaped || launchBlockers(ex).length) return false;
+  ex.escaped = true;
+  t.best = Math.max(t.best ?? 0, ex.day);
+  t.family = ex.people.filter((p) => ex.family!.includes(p.id)).map((p) => ({ name: p.name, trait: p.trait }));
+  t.cannibal = ex.diet === 'cannibal';
+  return true;
 }
 
 /** A stretch of the day: work comes in as it's done. */
@@ -353,6 +490,16 @@ function work(ex: ExtinctionState, sec: number): void {
   }
   ex.ash = Math.max(0, ex.ash - y.forage * k);
   ex.carrion = Math.max(0, ex.carrion - y.scavenge * k);
+  // Wood comes in; the raft takes wood as the work is done on it (none without wood).
+  ex.trees = Math.max(0, (ex.trees ?? 0) - y.wood * k);
+  ex.wood = (ex.wood ?? 0) + y.wood * k;
+  const part = raftPart(ex);
+  if (part && y.build > 0) {
+    const perWork = part.wood / part.work;
+    const done = Math.min(y.build * k, (ex.wood ?? 0) / perWork, part.work - ex.raft![part.id]);
+    ex.raft![part.id] += done;
+    ex.wood! -= done * perWork;
+  }
   ex.plants += plants;
   ex.meat += meat;
   ex.insight += y.listen * k;
@@ -365,7 +512,13 @@ function work(ex: ExtinctionState, sec: number): void {
  * don't see the morning. Then food spoils, and a new day starts. */
 function night(ex: ExtinctionState): void {
   const m = modsOf(ex.ideas, ex.diet);
-  const value = (1 + m.meal) * (ex.ration < 1 ? 1 + m.ration : 1);
+  // The fire (once they know it) burns wood each night; without wood, no cooking and no warmth.
+  const fireKnown = ex.ideas.includes('fire');
+  const fire = fireKnown && (ex.wood ?? 0) >= FIRE_WOOD;
+  if (fire) ex.wood! -= FIRE_WOOD;
+  const season = seasonOf(ex);
+  const cold = season === 'winter' && !fire ? WINTER_COLD : 0;
+  const value = (1 + (fire || !fireKnown ? m.meal : 0)) * (ex.ration < 1 ? 1 + m.ration : 1);
   // The hungriest eat first (or, if the strong eat first, the workers do).
   const order = [...ex.people].sort((a, b) => (m.strongFirst ? Number(a.job === 'rest') - Number(b.job === 'rest') : 0) || b.hunger - a.hunger);
   let ate = 0;
@@ -388,22 +541,47 @@ function night(ex: ExtinctionState): void {
     ate += meal;
     const rest = p.job === 'rest' ? 0.25 + m.rest : 0;
     const listen = p.job === 'listen' ? m.listenHunger : 0;
-    p.hunger = Math.max(0, p.hunger + 1 - 1.5 * meal - rest - m.night + listen);
+    p.hunger = Math.max(0, p.hunger + 1 - 1.5 * meal - rest - m.night + listen + cold);
+  }
+  // The shaking runs its course.
+  const shook: string[] = [];
+  for (const p of ex.people) {
+    if (p.sick === undefined) continue;
+    p.sick -= 1;
+    if (p.sick <= 0) shook.push(p.name);
+  }
+  if (shook.length) {
+    ex.people = ex.people.filter((p) => p.sick === undefined || p.sick > 0);
+    ex.deaths += shook.length;
+  }
+  // Cannibals with starving among them: some nights, the strong take one of the weak.
+  const caught: string[] = [];
+  let killed: NightReport['killed'] = null;
+  if (ex.diet === 'cannibal' && ex.people.length > 2 && ex.people.some((p) => p.hunger >= 2) && roll(ex) < KILL_CHANCE) {
+    const weak = [...ex.people].sort((a, b) => limitOf(a, m) - p0(a) - (limitOf(b, m) - p0(b)))[0];
+    const killer = ex.people.filter((p) => p !== weak && p.sick === undefined).sort((a, b) => workOf(ex, b, 'scavenge', m) - workOf(ex, a, 'scavenge', m))[0];
+    if (weak && killer) {
+      ex.people = ex.people.filter((p) => p !== weak);
+      ex.deaths += 1;
+      killed = { name: weak.name, by: killer.name };
+      eatDead(ex, 1, caught);
+    }
   }
   const starved = ex.people.filter((p) => p.hunger >= limitOf(p, m));
   ex.people = ex.people.filter((p) => p.hunger < limitOf(p, m));
   ex.deaths += starved.length;
-  if (ex.fallen === 'eat') ex.meat += starved.length * CORPSE_MEAT;
+  if (ex.fallen === 'eat') eatDead(ex, starved.length, caught);
   else if (ex.fallen === 'undecided') ex.corpses += starved.length;
   const before = ex.meat + ex.plants;
   ex.meat *= Math.min(0.95, MEAT_KEEP + m.meatKeep);
   ex.plants *= Math.min(0.995, PLANT_KEEP + m.plantKeep);
   ex.carrion *= CARRION_KEEP;
-  ex.ash = Math.min(ex.ashMax, ex.ash + ex.ashMax * m.ashRegrow);
+  ex.ash = Math.min(ex.ashMax, ex.ash + ex.ashMax * (m.ashRegrow + (season === 'green' ? GREEN_REGROW : 0)));
+  ex.family = (ex.family ?? []).filter((id) => ex.people.some((p) => p.id === id));
   ex.day += 1;
   ex.clock = 0;
   ex.today = { plants: 0, meat: 0, insight: 0 };
-  ex.last = { day: ex.day, ate, wanted: (ex.people.length + starved.length) * ex.ration, starved: starved.map((p) => ({ name: p.name, trait: p.trait })), spoiled: before - ex.meat - ex.plants };
+  ex.last = { day: ex.day, ate, wanted: (ex.people.length + starved.length) * ex.ration, starved: starved.map((p) => ({ name: p.name, trait: p.trait })), spoiled: before - ex.meat - ex.plants, shook, killed, caught, fire, season: ex.day === WINTER[0] ? 'winter' : ex.day === WINTER[1] ? 'green' : null };
   if (ex.people.length < 2) ex.over = true;
 }
 
@@ -411,7 +589,7 @@ function night(ex: ExtinctionState): void {
 export function extinctionTick(state: GameState, dt: number): boolean {
   const t = state.stages.tribal.tribe;
   const ex = t?.ex;
-  if (!t || !ex || ex.over || waitingOnChoice(ex)) return false;
+  if (!t || !ex || ex.over || ex.escaped || waitingOnChoice(ex)) return false;
   let nights = false;
   let left = dt;
   while (left > 0 && !ex.over && !waitingOnChoice(ex)) {
@@ -447,5 +625,6 @@ export function daysLeft(ex: ExtinctionState): number | null {
 /** How hungry someone is, in words. */
 export function hungerWord(ex: ExtinctionState, p: Survivor): string {
   const near = limitOf(p, modsOf(ex.ideas, ex.diet)) - p.hunger;
+  if (p.sick !== undefined) return 'Shaking';
   return near <= 1 ? 'Dying' : p.hunger >= 2 ? 'Starving' : p.hunger >= 1 ? 'Hungry' : 'Fed';
 }
