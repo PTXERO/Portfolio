@@ -38,13 +38,13 @@ export const PARTS: PartDef[] = [
 ];
 
 export const PLACES: PlaceDef[] = [
-  { id: 'shore', name: 'Shoreline', flavor: 'Wet sand and things the tide forgot.', minutes: 2, needs: {}, parts: ['shell'], mateChance: 0.6, bonus: { kind: 'stageMult', mult: 1.3 } },
-  { id: 'tidePools', name: 'Tide Pools', flavor: 'Little worlds in every hollow.', minutes: 5, needs: { senses: 4 }, parts: ['stalkEyes'], mateChance: 0.6, after: ['shore'], bonus: { kind: 'stageMult', mult: 1.3 } },
-  { id: 'marsh', name: 'Marsh', flavor: 'Soft ground, tall reeds, and a lot of noise.', minutes: 8, needs: { speed: 6 }, parts: ['runner', 'sail'], mateChance: 0.6, unlocks: 'waterhole', after: ['shore'] },
-  { id: 'forest', name: 'Forest Edge', flavor: 'Shade, seeds and something watching.', minutes: 12, needs: { senses: 9, speed: 9 }, parts: ['beak', 'crestTail'], mateChance: 0.6, bonus: { kind: 'stageMult', mult: 1.6 }, after: ['tidePools', 'marsh'] },
-  { id: 'cliffs', name: 'Cliffs', flavor: 'Wind, gulls and a long way down.', minutes: 18, needs: { strength: 12, toughness: 8 }, parts: ['climber', 'clubTail'], mateChance: 0.6, bonus: { kind: 'forageMult', mult: 2 }, after: ['marsh'] },
-  { id: 'caves', name: 'Caves', flavor: 'Cool, dark and full of echoes.', minutes: 25, needs: { senses: 16, toughness: 14 }, parts: ['nightEyes'], mateChance: 0.6, unlocks: 'den', after: ['forest', 'cliffs'] },
-  { id: 'highlands', name: 'Highlands', flavor: 'Open sky, far horizons, and room for everyone.', minutes: 40, needs: { speed: 18, strength: 20 }, parts: ['tusks'], mateChance: 0.6, unlocks: 'territory', after: ['caves'] },
+  { id: 'shore', name: 'Shoreline', flavor: 'Wet sand and things the tide forgot.', minutes: 2, needs: {  }, parts: ['shell'], mateChance: 0.6, bonus: { kind: 'stageMult', mult: 1.3 } },
+  { id: 'tidePools', name: 'Tide Pools', flavor: 'Little worlds in every hollow.', minutes: 5, needs: { senses: 14 }, parts: ['stalkEyes'], mateChance: 0.6, after: ['shore'], bonus: { kind: 'stageMult', mult: 1.3 } },
+  { id: 'marsh', name: 'Marsh', flavor: 'Soft ground, tall reeds, and a lot of noise.', minutes: 8, needs: { speed: 31 }, parts: ['runner', 'sail'], mateChance: 0.6, unlocks: 'waterhole', after: ['shore'] },
+  { id: 'forest', name: 'Forest Edge', flavor: 'Shade, seeds and something watching.', minutes: 12, needs: { senses: 25, speed: 25 }, parts: ['beak', 'crestTail'], mateChance: 0.6, bonus: { kind: 'stageMult', mult: 1.6 }, after: ['tidePools', 'marsh'] },
+  { id: 'cliffs', name: 'Cliffs', flavor: 'Wind, gulls and a long way down.', minutes: 18, needs: { strength: 19, toughness: 12 }, parts: ['climber', 'clubTail'], mateChance: 0.6, bonus: { kind: 'forageMult', mult: 2 }, after: ['marsh'] },
+  { id: 'caves', name: 'Caves', flavor: 'Cool, dark and full of echoes.', minutes: 25, needs: { senses: 33, toughness: 29 }, parts: ['nightEyes'], mateChance: 0.6, unlocks: 'den', after: ['forest', 'cliffs'] },
+  { id: 'highlands', name: 'Highlands', flavor: 'Open sky, far horizons, and room for everyone.', minutes: 40, needs: { speed: 23, strength: 24 }, parts: ['tusks'], mateChance: 0.6, unlocks: 'territory', after: ['caves'] },
 ];
 
 /** The Field Guide: one page per place, plus the ending. */
@@ -66,7 +66,7 @@ const final: ReactionDef = {
   hints: ['One is not enough.', 'Every place roamed, a line six generations long, and a great herd across the land.'],
   needs: { found: 7, generation: 6, pop: 200, gens: { territory: 5 } },
   final: true,
-  cost: 1e12,
+  cost: 2.9e9,
 };
 
 /** Things it runs into partway through a roam. Left alone, instinct plays safe (the last option). */
@@ -154,10 +154,10 @@ export const creature: StageDef = {
   // lives and feeds, dug or found or spread into: births, room, food and shelter.
   generators: [
     { id: 'nest', name: 'Nests', flavor: 'Scraped hollows in the warm sand. More births.', baseCost: 1e3, growth: 1.15, baseRate: 0 },
-    { id: 'burrow', name: 'Burrows', flavor: 'Holes dug into the bank: room for three more.', baseCost: 1e4, growth: 1.15, baseRate: 0 },
+    { id: 'burrow', name: 'Burrows', flavor: 'Holes dug into the bank: room for three more.', baseCost: 5.7e5, growth: 1.15, baseRate: 0 },
     { id: 'waterhole', name: 'Marsh Grazing', flavor: 'The herd spreads into the reeds: the same food goes further.', baseCost: 1e6, growth: 1.3, baseRate: 0, unlockedBy: 'marsh' },
-    { id: 'den', name: 'Caves', flavor: 'Out of the wind: room for fifteen, and shelter from winter.', baseCost: 3e7, growth: 1.2, baseRate: 0, unlockedBy: 'caves' },
-    { id: 'territory', name: 'Home Range', flavor: 'More land roamed and grazed: room for fifty, and richer foraging.', baseCost: 3e10, growth: 1.25, baseRate: 0, unlockedBy: 'highlands' },
+    { id: 'den', name: 'Caves', flavor: 'Out of the wind: room for fifteen, and shelter from winter.', baseCost: 1.5e7, growth: 1.2, baseRate: 0, unlockedBy: 'caves' },
+    { id: 'territory', name: 'Home Range', flavor: 'More land roamed and grazed: room for fifty, and richer foraging.', baseCost: 3.1e9, growth: 1.25, baseRate: 0, unlockedBy: 'highlands' },
   ],
   upgrades: UPGRADES,
   reactions: [...pages, final],
