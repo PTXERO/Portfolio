@@ -12,6 +12,7 @@
 // When fewer than two are left, it's over: back to just after the waking, to try again (the
 // spear remembers what it taught, so those ideas come cheaper).
 
+import { planCrisis } from './crises';
 import { discover, ordainedNeeds, say, tribeLaunches, tribeThinks, type SpellId } from './miracles';
 import { ensureSociety, flushNotes, mourn, nightTheft, remember, sharing, socialNight, spirit, type Bond, type Quirk } from './society';
 import { COST_STEP, MIND_NODE, modsOf, NODE_COST, reachable, type Mods } from './mindTree';
@@ -130,6 +131,11 @@ export interface ExtinctionState {
   told?: Record<string, number>;
   /** Food set aside for the crossing (wrapped and smoked: it keeps). */
   voyage?: number;
+  /** A crisis on now (for the player's own hand), or planned for later today; and a cold
+   * night coming from one missed. */
+  crisis?: import('./crises').Crisis;
+  crisisPlan?: { kind: import('./crises').CrisisKind; at: number };
+  coldTonight?: boolean;
   /** Miracles the spear worked unasked last night (for the scene to show). */
   worked?: SpellId[];
 }
@@ -738,7 +744,8 @@ function night(ex: ExtinctionState): void {
   // (A lightning-lit fire burns tonight whether they know fire or not.)
   const fire = burnt || !!ex.fireTonight;
   const season = seasonOf(ex);
-  const cold = season === 'winter' && !fire && !ex.warmTonight ? WINTER_COLD : 0;
+  const cold = (season === 'winter' && !fire && !ex.warmTonight ? WINTER_COLD : 0) + (ex.coldTonight && !fire ? 0.25 : 0);
+  ex.coldTonight = false;
   // Cooking: what fire they know, or (by lightning) the plain good of a cooked meal.
   const cooking = fireKnown ? (fire ? m.meal : 0) : fire ? 0.35 : m.meal;
   ex.fireTonight = false;
@@ -836,6 +843,7 @@ function night(ex: ExtinctionState): void {
     flushNotes(ex);
     tribeThinks(ex);
     discover(ex);
+    planCrisis(ex);
     autoAssign(ex);
     ex.worked = ordainedNeeds(ex);
   }

@@ -691,3 +691,9 @@ p.chron .when { display: block; }
 .chron-day { margin: 0 0 8px; }
 .chron-day .when { color: var(--gold); font-family: var(--digits); font-size: 13px; }
 .chron-day p { margin: 1px 0 0; font-size: 13px; line-height: 1.35; }
+#crisisbar { position: absolute; left: 8px; right: 8px; bottom: 64px; z-index: 4; display: flex; align-items: center; gap: 10px; padding: 8px 10px; }
+#crisisbar div { flex: 1; display: flex; flex-direction: column; font-size: 12px; color: var(--cream); }
+#crisisbar b { color: #f0a0d8; font-size: 14px; }
+#crisisbar .warn-mark { font-family: var(--digits); font-size: 26px; color: #f0a0d8; animation: pulse 0.8s steps(2) infinite; }
+.cinematic #crisisbar { opacity: 0; pointer-events: none; }
+#crisisbar.top { bottom: auto; top: 6px; }

@@ -16,6 +16,7 @@ import { awaken, sealed } from './economy/tribal';
 import { autoAssign, daysLeft, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
+import { CRISES, crisisAnswered, crisisMissed, startCrisis } from './economy/crises';
 import { readGesture } from './ui/gesture';
 import {
   addSwirl,
@@ -337,6 +338,16 @@ function extinctionStep(sec: number): void {
     }
   }
   showDiscovered();
+  // A crisis: it starts when its time comes (the map says where), and is lost when time's up.
+  if (ex.crisisPlan && !ex.crisis && ex.clock >= ex.crisisPlan.at) {
+    const c = startCrisis(ex, scene.tribeScene.crisisPlace(ex.crisisPlan.kind, ex));
+    if (c) save();
+  }
+  if (ex.crisis && (ex.crisis.day !== ex.day || ex.clock >= ex.crisis.until)) {
+    crisisMissed(ex);
+    panelKey = '';
+    save();
+  }
 }
 
 // ---- The spear's will: miracles drawn on the world ----
@@ -348,6 +359,11 @@ castBar.id = 'castbar';
 castBar.className = 'px-box';
 castBar.hidden = true;
 stageEl.appendChild(castBar);
+const crisisBar = document.createElement('div');
+crisisBar.id = 'crisisbar';
+crisisBar.className = 'px-box';
+crisisBar.hidden = true;
+stageEl.appendChild(crisisBar);
 const spellBar = document.createElement('div');
 spellBar.id = 'spellbar';
 spellBar.hidden = true;
@@ -422,14 +438,34 @@ function finishCast(): void {
     if (!tribe.landAt(last) || Math.hypot(last.x - first.x, last.y - first.y) < 8) return fizzle('A long line, in toward them');
     at = [first, last];
   }
-  const r = cast(ex, id, { people });
+  // Answering a crisis: the right miracle, near enough to it (or round the one trapped).
+  const c = ex.crisis;
+  const near = (p: { x: number; y: number }) => !!c && Math.hypot(p.x - c.x, p.y - c.y) < 9;
+  const answers = !!c && c.spell === id && (c.kind === 'trapped' ? !!people?.some((i) => ex.people[i]?.id === c.who) : c.kind === 'cold' ? true : at.some(near) || near(first) || near(last));
+  const r = cast(ex, id, { people, power: answers && c!.kind !== 'trapped' && c!.kind !== 'cold' ? 2 : 1 });
   if (!r.ok) return fizzle(r.text);
   tribe.wonder(id, at);
-  scene.float(end.x, end.y - 12, r.text, '#e8b0ff');
+  scene.float(end.x, end.y - 12, answers ? `${crisisAnswered(ex)} · ${r.text}` : r.text, '#e8b0ff');
   endCast();
   panelKey = '';
   goalKey = '';
   save();
+}
+
+/** A crisis on: what it is, what answers it, and how long's left (tap to answer it). */
+function renderCrisis(): void {
+  const ex = state.current === 'tribal' ? state.stages.tribal.tribe?.ex : undefined;
+  const c = ex?.crisis;
+  const show = !!c && !cine() && !casting;
+  crisisBar.hidden = !show;
+  // (With the menu up, it sits at the top instead, over the bar, so it's never missed.)
+  crisisBar.classList.toggle('top', ui.open);
+  if (!show || !c || !ex) return;
+  const who = c.who !== undefined ? ex.people.find((p) => p.id === c.who)?.name : '';
+  const left = Math.max(0, Math.ceil(c.until - ex.clock));
+  const sp = SPELL[c.spell];
+  const html = `<span class="warn-mark">!</span><div><b>${who ? `${who} ${CRISES[c.kind].call}` : CRISES[c.kind].call}</b><span>${CRISES[c.kind].how}: ${sp.name}. ${left}s</span></div><button class="px-btn gold" data-cast="${c.spell}"${(ex.prayer ?? 0) >= sp.cost ? '' : ' disabled'}>${glyph(sp.gesture, 2)}</button>`;
+  if (crisisBar.innerHTML !== html) crisisBar.innerHTML = html;
 }
 
 /** The quick bar of miracles on the map (when the menu's down): tap one, then draw it. */
@@ -1635,6 +1671,7 @@ function frame(now: number): void {
   pondEvents();
   syncCine();
   renderSpellbar();
+  renderCrisis();
 }
 
 // A save made mid-ending (closed during the credits) picks up at the reveal. This also

@@ -63,3 +63,23 @@ describe('the spear\'s will', () => {
     }
   }, 60_000);
 });
+
+describe('crises', () => {
+  it('cost lives when missed, and only one miracle can be ordained', async () => {
+    const { startCrisis, crisisMissed } = await import('../src/economy/crises');
+    const { toggleOrdain } = await import('../src/economy/miracles');
+    const s = game('omnivore');
+    const ex = s.stages.tribal.tribe!.ex!;
+    ex.powers = ['lightning', 'rain', 'ward'];
+    ex.crisisPlan = { kind: 'trapped', at: 0 };
+    const who = ex.people[3].id;
+    startCrisis(ex, { x: 0, y: 0, who });
+    expect(ex.crisis?.spell).toBe('ward');
+    crisisMissed(ex);
+    expect(ex.people.some((p) => p.id === who)).toBe(false);
+    ex.casts = { lightning: 9, rain: 9 };
+    toggleOrdain(ex, 'lightning');
+    toggleOrdain(ex, 'rain');
+    expect(ex.ordained).toEqual(['rain']);
+  });
+});

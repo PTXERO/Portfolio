@@ -313,5 +313,5 @@ export function spellsLayout(state: GameState): string {
     <div class="meter"><i style="width:${dread}%"></i><b style="left:${DREAD_COWER}%"></b><b style="left:${DREAD_FLEE}%"></b></div>
     <div class="sub">Every miracle frightens them. Past ${DREAD_COWER} they cower from the spear and work less; past ${DREAD_FLEE}, some walk into the sea to get away from it. It fades a little each night.</div></div></div>
     ${cards}
-    <p class="note">Ordained miracles the spear works by itself, when they're needed, at 1.5× the prayer.</p>`;
+    <p class="note">One miracle at a time can be ordained: the spear works it by itself when it's needed, at twice the prayer and half the strength. It never answers a crisis: those need your own hand.</p>`;
 }

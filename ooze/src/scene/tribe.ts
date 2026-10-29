@@ -181,6 +181,100 @@ export class TribeScene extends RangeScene {
     }
   }
 
+  /** Where a crisis happens (tiles), found from what's on the island. */
+  crisisPlace(kind: import('../economy/crises').CrisisKind, ex: ExtinctionState): { x: number; y: number; who?: number } {
+    const is = this.island!;
+    const camp = this.spots.find((q) => q.job === 'build') ?? { x: 0, y: 0 };
+    const spot = (job: JobId) => this.spots.find((q) => q.job === job && this.spotShown(ex, q)) ?? this.spots.find((q) => q.job === job) ?? camp;
+    const landNear = (c: Pt, r0: number, r1: number, salt: number): Pt => {
+      for (let k = 0; k < 80; k++) {
+        const a = hash(k, salt + ex.day) * Math.PI * 2;
+        const r = r0 + hash(k, salt + 1 + ex.day) * (r1 - r0);
+        const p = { x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r };
+        if (isLand(is, p.x, p.y)) return p;
+      }
+      return { ...c };
+    };
+    if (kind === 'trapped') {
+      const n = Math.min(this.people.length, ex.people.length);
+      const i = Math.floor(hash(ex.day, 113) * n);
+      const p = this.people[i];
+      return { x: p.x, y: p.y, who: ex.people[i].id };
+    }
+    if (kind === 'shoal') {
+      const f = spot('fish');
+      for (let r = 3; r < 20; r++) {
+        for (let a = 0; a < 16; a++) {
+          const p = { x: f.x + Math.cos((a / 16) * Math.PI * 2) * r, y: f.y + Math.sin((a / 16) * Math.PI * 2) * r };
+          if (!isLand(is, p.x, p.y)) return p;
+        }
+      }
+      return f;
+    }
+    if (kind === 'cold') return spot('wood');
+    if (kind === 'seeds') return landNear(spot('forage'), 2, 8, 117);
+    if (kind === 'beast') return landNear(camp, 22, 34, 119);
+    return landNear(camp, 6, 14, 121);
+  }
+
+  /** A crisis out on the island: a pulsing mark (and what it is: a storm cloud, a glitter
+   * offshore, the stirring seed, the beast). */
+  private drawCrisis(b: CanvasRenderingContext2D, ex: ExtinctionState, t: number): void {
+    const c = ex.crisis;
+    if (!c) return;
+    const X = Math.round(this.sx(c.x));
+    const Y = Math.round(this.py(c.x, c.y));
+    const z = this.detail();
+    if (c.kind === 'storm') {
+      // A dark cloud of ash, boiling.
+      for (let k = 0; k < 24; k++) {
+        const a = hash(k, 131) * Math.PI * 2 + t * 0.3;
+        const r = (3 + hash(k, 133) * 6) * this.zoom * 0.8;
+        b.fillStyle = `rgba(60, 54, 52, ${0.35 + 0.2 * Math.sin(t * 2 + k)})`;
+        const sz = Math.max(2, Math.round(this.zoom * 1.5));
+        b.fillRect(Math.round(X + Math.cos(a) * r), Math.round(Y - 8 * z + Math.sin(a) * r * 0.5), sz, sz);
+      }
+    } else if (c.kind === 'shoal') {
+      for (let k = 0; k < 14; k++) {
+        if (Math.sin(t * 6 + k * 1.7) < 0.4) continue;
+        b.fillStyle = k % 2 ? 'rgba(230, 245, 255, 0.996)' : 'rgba(160, 220, 240, 0.996)';
+        b.fillRect(Math.round(X + (hash(k, 137) - 0.5) * 10 * z), Math.round(Y + (hash(k, 139) - 0.5) * 6 * z), z, z);
+      }
+    } else if (c.kind === 'seeds') {
+      for (let k = 0; k < 10; k++) {
+        if (Math.sin(t * 3 + k) < 0.2) continue;
+        b.fillStyle = '#6aaa4a';
+        b.fillRect(Math.round(X + (hash(k, 141) - 0.5) * 10 * z), Math.round(Y + (hash(k, 143) - 0.5) * 6 * z), z, z);
+      }
+    } else if (c.kind === 'beast') {
+      b.fillStyle = '#3a2a24';
+      b.fillRect(X - 4 * z, Y - 5 * z, 8 * z, 3 * z);
+      b.fillRect(X + 3 * z, Y - 7 * z, 3 * z, 2 * z);
+      b.fillRect(X - 3 * z, Y - 2 * z, z, 2 * z);
+      b.fillRect(X + 2 * z, Y - 2 * z, z, 2 * z);
+      b.fillStyle = '#8a2a2a';
+      b.fillRect(X - z, Y - 4 * z, 2 * z, z);
+    }
+    // The mark: a ring of light pulsing, and a "!" over it (the same size at any zoom).
+    const pulse = (t * 1.5) % 1;
+    const r = 4 + pulse * 6;
+    b.globalAlpha = 1 - pulse;
+    b.fillStyle = 'rgba(232, 120, 200, 0.996)';
+    for (let k = 0; k < 20; k++) {
+      const a = (k / 20) * Math.PI * 2;
+      b.fillRect(Math.round(X + Math.cos(a) * r), Math.round(Y + Math.sin(a) * r * 0.6), 1, 1);
+    }
+    b.globalAlpha = 1;
+    if (Math.floor(t * 3) % 2) {
+      b.fillStyle = PAL.k;
+      b.fillRect(X - 1, Y - 15, 3, 6);
+      b.fillRect(X - 1, Y - 8, 3, 2);
+      b.fillStyle = 'rgba(232, 120, 200, 0.996)';
+      b.fillRect(X, Y - 14, 1, 4);
+      b.fillRect(X, Y - 7, 1, 1);
+    }
+  }
+
   /** The one whose card is open (marked over their head), or -1. */
   chosen = -1;
 
@@ -956,7 +1050,14 @@ export class TribeScene extends RangeScene {
       // Before waking they keep close to the camp, away from the spear; after, they range
       // over what's left, and some stand looking up at it.
       p.wait -= dt;
-      if (struck) p.goal = { x: p.x, y: p.y };
+      const trapped = tribe.ex?.crisis?.kind === 'trapped' && tribe.ex.people[i]?.id === tribe.ex.crisis.who;
+      if (struck || trapped) {
+        p.goal = { x: p.x, y: p.y };
+        if (trapped) {
+          p.vx = 0;
+          p.vy = 0;
+        }
+      }
       else if (!p.goal || p.wait <= 0) {
         p.wait = 4 + hash(i, Math.floor(t / 7)) * 8;
         const ex = tribe.ex;
@@ -1168,6 +1269,7 @@ export class TribeScene extends RangeScene {
     }
 
     this.drawWonders(b, t, dt);
+    if (tribe.ex) this.drawCrisis(b, tribe.ex, t);
     this.drawStroke(b, dt);
 
     // A red haze over the burnt world, thinning as it cools.

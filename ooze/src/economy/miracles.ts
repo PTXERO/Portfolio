@@ -70,7 +70,9 @@ export const DREAD_COWER = 60;
 export const DREAD_FLEE = 85;
 /** Casts before a miracle can be ordained, and what the spear charges to work it unasked. */
 export const ORDAIN_AFTER = 4;
-export const ORDAIN_COST = 1.5;
+export const ORDAIN_COST = 2;
+/** What an ordained miracle does, next to one worked by hand (the spear's own are dimmer). */
+export const ORDAIN_POWER = 0.5;
 
 /** The Chronicle: what happened, day by day (newest last, the last 150 kept). */
 export function say(ex: ExtinctionState, text: string): void {
@@ -104,20 +106,24 @@ export function canCast(ex: ExtinctionState, id: SpellId, ordained = false): boo
  * Works a miracle. `people` are the indexes (into ex.people) of those inside a Ward. Its
  * effect lands at once, and the tribe re-plans straight away (they run to what appeared).
  */
-export function cast(ex: ExtinctionState, id: SpellId, opts: { people?: number[]; ordained?: boolean } = {}): { ok: boolean; text: string } {
+export function cast(ex: ExtinctionState, id: SpellId, opts: { people?: number[]; ordained?: boolean; power?: number } = {}): { ok: boolean; text: string } {
   if (!canCast(ex, id, opts.ordained)) return { ok: false, text: 'Not enough prayer.' };
   const s = SPELL[id];
   let text = '';
+  // How much it does: a hand-worked miracle in full, an ordained one dimmer, one answering a
+  // crisis twice over.
+  const k = opts.power ?? (opts.ordained ? ORDAIN_POWER : 1);
+  const n = (v: number) => Math.round(v * k);
   switch (id) {
     case 'lightning':
-      ex.wood = (ex.wood ?? 0) + 10;
+      ex.wood = (ex.wood ?? 0) + n(10);
       ex.trees = Math.max(0, (ex.trees ?? 0) - 3);
       ex.fireTonight = true;
-      text = '+10 wood · fire tonight';
+      text = `+${n(10)} wood · fire tonight`;
       say(ex, 'Lightning came down out of a clear sky and set a dead tree burning. They kept the fire.');
       break;
     case 'rain':
-      ex.ash = Math.min(ex.ashMax, ex.ash + ex.ashMax * 0.12);
+      ex.ash = Math.min(ex.ashMax, ex.ash + ex.ashMax * 0.12 * k);
       ex.warmTonight = true;
       text = 'green in the ash';
       say(ex, 'It rained, warm, on one patch of ash only. By evening there was green there.');
@@ -130,32 +136,32 @@ export function cast(ex: ExtinctionState, id: SpellId, opts: { people?: number[]
         if (p.sick !== undefined) cured++;
         remember(ex, p, p.sick !== undefined ? 'was cured of the shaking by a light from the spear' : 'felt a light from the spear ease the hunger');
         delete p.sick;
-        p.hunger = Math.max(0, p.hunger - 0.5);
+        p.hunger = Math.max(0, p.hunger - 0.5 * k);
       }
       text = cured ? `${cured} cured` : `${inside.length} strengthened`;
       say(ex, cured ? `A light came round ${inside.length} of them. ${cured === 1 ? 'One' : cured} stopped shaking.` : `A light came round ${inside.length} of them, and the hunger eased.`);
       break;
     }
     case 'quicken':
-      ex.plants += 16;
-      text = '+16 plants';
+      ex.plants += n(16);
+      text = `+${n(16)} plants`;
       say(ex, 'A line of green came up through the ash overnight, as if drawn there: fireweed, flowering pink.');
       break;
     case 'kelp':
-      ex.plants += 14;
-      ex.boost = { day: ex.day, fish: 1 };
-      text = '+14 plants · rich shallows';
+      ex.plants += n(14);
+      ex.boost = { day: ex.day, fish: k };
+      text = `+${n(14)} plants · rich shallows`;
       say(ex, 'A wave out of a calm sea threw kelp the length of the beach.');
       break;
     case 'shoals':
-      ex.meat += 14;
-      ex.boost = { day: ex.day, fish: 1 };
-      text = '+14 meat · the shore teems';
+      ex.meat += n(14);
+      ex.boost = { day: ex.day, fish: k };
+      text = `+${n(14)} meat · the shore teems`;
       say(ex, 'The water boiled with fish, and they leapt onto the sand.');
       break;
     case 'dying':
-      ex.carrion += 22;
-      text = '+22 meat to scavenge';
+      ex.carrion += n(22);
+      text = `+${n(22)} meat to scavenge`;
       say(ex, 'A wounded beast came out of the ash, walked into the camp, and lay down.');
       break;
   }
@@ -167,13 +173,12 @@ export function cast(ex: ExtinctionState, id: SpellId, opts: { people?: number[]
   return { ok: true, text };
 }
 
-/** Ordains a miracle (once cast often enough): the spear works it when it's needed. */
+/** Ordains a miracle (once cast often enough): the spear works it when it's needed, dimmer
+ * and dearer than by hand, and only one at a time. */
 export function toggleOrdain(ex: ExtinctionState, id: SpellId): void {
   if ((ex.casts?.[id] ?? 0) < ORDAIN_AFTER) return;
-  const o = (ex.ordained ??= []);
-  const i = o.indexOf(id);
-  if (i >= 0) o.splice(i, 1);
-  else o.push(id);
+  // Only one at a time: ordaining another lets the first go.
+  ex.ordained = (ex.ordained ?? []).includes(id) ? [] : [id];
 }
 
 /** Edible food in store and coming in today, against what they need. */
