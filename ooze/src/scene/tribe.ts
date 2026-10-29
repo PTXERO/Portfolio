@@ -272,10 +272,12 @@ export class TribeScene extends RangeScene {
     const x1 = Math.min(ISLAND - 1, Math.ceil(Math.max(c0.x, c1.x)) + 2);
     const y0 = Math.max(0, Math.floor(Math.min(c0.y, c1.y)) - 2);
     const y1 = Math.min(ISLAND - 1, Math.ceil(Math.max(c0.y, c1.y)) + 6);
-    const stride = Math.max(1, Math.ceil((x1 - x0) * (y1 - y0) / 6000));
+    // Zoomed out, only every so many cells are looked at: on a grid fixed to the world (and
+    // stepping in doublings), so the same embers glow wherever the view is moved.
+    const stride = 2 ** Math.max(0, Math.ceil(Math.log2(Math.sqrt(((x1 - x0) * (y1 - y0)) / 6000))));
     const embers: Pt[] = [];
-    for (let y = y0; y <= y1; y += stride) {
-      for (let x = x0; x <= x1; x += stride) {
+    for (let y = y0 - (y0 % stride); y <= y1; y += stride) {
+      for (let x = x0 - (x0 % stride); x <= x1; x += stride) {
         if (is.scar?.[y * ISLAND + x] === BURNT && hash(x * 7 + y * 131, 49) < 0.035 && (!this.burn || this.burn.order[y * ISLAND + x] < this.burnReach)) embers.push({ x: x + 0.5, y: y + 0.5 });
       }
     }
