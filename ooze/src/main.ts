@@ -52,6 +52,7 @@ import { Scene } from './scene/scene';
 import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
 import { playCrossing } from './ui/crossing';
+import { setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
 import { miniIcon } from './scene/creatureLook';
 import { glyph, panWeb, pickIdea, webTransform, webView, zoomWeb } from './ui/tribePanels';
 import { record } from './economy/chronicle';
@@ -1325,6 +1326,9 @@ const castUp = (e: PointerEvent) => {
 stageEl.addEventListener('pointerup', castUp, true);
 stageEl.addEventListener('pointercancel', castUp, true);
 
+// Sound can only start from a tap: the first one anywhere wakes it.
+document.addEventListener('pointerdown', unlockSound, true);
+
 stageEl.addEventListener('pointerdown', (e) => {
   if (!modal.hidden || (e.target as HTMLElement).closest('#evolve, button, #placecard')) return;
   placeCard.hidden = true;
@@ -1344,6 +1348,7 @@ stageEl.addEventListener('pointerdown', (e) => {
   swirlAngle = null;
   swirlSpin = 0;
   scene.ripple(x, y);
+  if (state.current === 'soup' || state.current === 'cell') tapSound();
   if (state.current === 'soup') {
     const v = tap(state);
     if (v.gt(0)) scene.float(x, y - 10, `+${format(v)}`, '#f5c45e');
@@ -1635,6 +1640,12 @@ document.addEventListener('pointerup', (e) => {
   act(el);
 });
 document.addEventListener('pointercancel', () => (pressed = null));
+// The Menu's volume sliders.
+document.addEventListener('input', (e) => {
+  const el = e.target as HTMLInputElement;
+  if (el.dataset?.vol) setVolume(el.dataset.vol as Channel, Number(el.value) / 100);
+});
+
 document.addEventListener('click', (e) => {
   const el = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
   // Already done on release (a click from the keyboard comes without one).
@@ -1721,6 +1732,7 @@ async function startFromLink(): Promise<void> {
 void startFromLink();
 
 document.addEventListener('visibilitychange', () => {
+  soundHidden(document.visibilityState === 'hidden');
   if (document.visibilityState === 'hidden') save();
   else {
     catchUp();
@@ -1756,6 +1768,7 @@ function frame(now: number): void {
   syncCine();
   renderSpellbar();
   renderCrisis();
+  soundFrame(state);
 }
 
 // A save made mid-ending (closed during the credits) picks up at the reveal. This also

@@ -725,3 +725,12 @@ body.wide .mind-tree { max-width: 100%; }
 /* The web of ideas wants room: the sidebar widens while it's open. */
 body.wide.tab-ideas #sheet { width: clamp(420px, 42vw, 820px); }
 .hope .sub.mad { color: #c08aff; margin-top: 6px; }
+
+/* Sound: a slider for each kind of sound. */
+.sound { display: grid; gap: 8px; margin: 6px 0 14px; }
+.sound label { display: grid; grid-template-columns: 7.5em 1fr; align-items: center; gap: 10px; font-size: 18px; }
+.sound input[type='range'] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; margin: 0; touch-action: pan-y; }
+.sound input[type='range']::-webkit-slider-runnable-track { height: 8px; background: var(--ink); box-shadow: 0 0 0 2px var(--gold-lo); }
+.sound input[type='range']::-moz-range-track { height: 8px; background: var(--ink); box-shadow: 0 0 0 2px var(--gold-lo); }
+.sound input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 22px; margin-top: -7px; background: var(--gold); box-shadow: inset -2px -2px 0 var(--gold-lo), inset 2px 2px 0 var(--gold-hi); border: 0; border-radius: 0; }
+.sound input[type='range']::-moz-range-thumb { width: 14px; height: 22px; background: var(--gold); box-shadow: inset -2px -2px 0 var(--gold-lo), inset 2px 2px 0 var(--gold-hi); border: 0; border-radius: 0; }

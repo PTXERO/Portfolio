@@ -1,6 +1,7 @@
 // The tab panels under the scene. Each panel is laid out once (when its rows
 // change) and then patched in place, so a button never vanishes under a finger.
 
+import { CHANNELS, volumes } from '../audio/sound';
 import { ideasLayout, spellsLayout, tribeKey, tribeLayout } from './tribePanels';
 import { eraName } from '../economy/chronicle';
 import { icon, type SpriteName } from '../art/sprites';
@@ -418,6 +419,8 @@ export function layout(state: GameState, tab: Tab): string {
       <button class="px-btn" data-act="import">Import</button>
       <button class="px-btn" data-act="reset">Restart</button>
     </div>
+    <div class="panel-head"><h2>Sound</h2></div>
+    <div class="sound">${CHANNELS.map((c) => `<label><span>${c.label}</span><input type="range" min="0" max="100" step="1" value="${Math.round(volumes[c.id] * 100)}" data-vol="${c.id}"></label>`).join('')}</div>
     <div class="panel-head"><h2>Interface size</h2></div>
     <div class="warp">${[0.9, 1, 1.15, 1.3].map((k, i) => `<button class="px-btn" data-uiscale="${k}">${['Small', 'Normal', 'Large', 'Huge'][i]}</button>`).join('')}</div>
     <textarea id="save-text" placeholder="Export gives you a backup code. To restore, paste one here and tap Import."></textarea>

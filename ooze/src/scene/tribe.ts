@@ -145,8 +145,8 @@ export class TribeScene extends RangeScene {
     this.arrived = false;
     this.piles = [];
     this.landSeed = -1;
-    this.departT = -2;
-    this.arriveT = -2;
+    // (A leaving or an arrival under way carries on: the scene is reset when it first opens,
+    // which can be the very moment the raft goes.)
     this.wonders = [];
     this.stroke = [];
     this.handed = null;

@@ -37,13 +37,13 @@ export function playCrossing(look: { body: string; belly: string }, onDone: () =
   const frame = (now: number) => {
     const t = (now - start) / 1000;
     const days = dayAt(t);
-    const phase = days % 1; // 0 dawn, 0.5 dusk-ish
-    const sunUp = Math.sin(phase * Math.PI * 2 - Math.PI / 2) * -1; // 1 at noon, -1 at midnight
+    const phase = days % 1; // 0 dawn, 0.5 dusk
+    const sunUp = Math.sin(phase * Math.PI * 2); // 1 at noon (0.25), -1 at midnight (0.75)
     const light = Math.max(0, Math.min(1, 0.5 + sunUp * 0.7));
     // Sky: dark to blue to dawn-warm.
     const sky = (k: number) => Math.round(k);
     const top = [sky(10 + 60 * light), sky(14 + 110 * light), sky(30 + 170 * light)];
-    const low = [sky(20 + 200 * light * (phase < 0.15 || phase > 0.85 ? 1.1 : 0.8)), sky(20 + 150 * light), sky(40 + 120 * light)];
+    const low = [sky(20 + 200 * light * (phase < 0.12 || (phase > 0.4 && phase < 0.6) || phase > 0.92 ? 1.1 : 0.8)), sky(20 + 150 * light), sky(40 + 120 * light)];
     for (let y = 0; y < horizon; y++) {
       const k = y / horizon;
       b.fillStyle = `rgb(${Math.round(top[0] + (low[0] - top[0]) * k)}, ${Math.round(top[1] + (low[1] - top[1]) * k)}, ${Math.round(top[2] + (low[2] - top[2]) * k)})`;
