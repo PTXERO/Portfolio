@@ -313,6 +313,30 @@ function renderGoal(): void {
   }
 }
 
+/** The markup each top-level card was last laid out from, to tell which ones changed. */
+let panelChildHtml: string[] = [];
+let panelTab = '';
+
+function splitChildren(el: HTMLElement): string[] {
+  return [...el.children].map((c) => c.outerHTML);
+}
+
+function patchChildren(inner: HTMLElement, html: string): void {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  const fresh = [...tpl.content.children] as HTMLElement[];
+  // Compare against what each card was laid out from, not its current (patched) state.
+  const freshHtml = fresh.map((c) => c.outerHTML);
+  const old = [...inner.children];
+  freshHtml.forEach((h, i) => {
+    if (old[i] && panelChildHtml[i] === h) return;
+    if (old[i]) old[i].replaceWith(fresh[i]);
+    else inner.appendChild(fresh[i]);
+  });
+  for (let i = freshHtml.length; i < old.length; i++) old[i].remove();
+  panelChildHtml = freshHtml;
+}
+
 function renderPanel(): void {
   sheet.classList.toggle('closed', !ui.open);
   for (const b of tabsEl.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
@@ -340,9 +364,18 @@ function renderPanel(): void {
   if (key !== panelKey) {
     panelKey = key;
     const keepText = ($('save-text') as HTMLTextAreaElement | null)?.value ?? '';
-    const keepScroll = panelEnter ? 0 : panel.scrollTop;
-    panel.innerHTML = `<div class="panel-inner ${panelEnter}">${layout(state, ui.tab)}</div>`;
-    panel.scrollTop = keepScroll;
+    const html = layout(state, ui.tab);
+    const inner = panel.firstElementChild as HTMLElement | null;
+    if (!panelEnter && inner && panelTab === ui.tab + state.current) {
+      // Same page, something changed (usually a purchase): swap only the cards whose
+      // markup changed, so nothing under the finger jumps or gets rebuilt.
+      patchChildren(inner, html);
+    } else {
+      panel.innerHTML = `<div class="panel-inner ${panelEnter}">${html}</div>`;
+      panel.scrollTop = 0;
+      panelChildHtml = splitChildren(panel.firstElementChild as HTMLElement);
+    }
+    panelTab = ui.tab + state.current;
     panelEnter = '';
     const ta = $('save-text') as HTMLTextAreaElement | null;
     if (ta) ta.value = keepText;

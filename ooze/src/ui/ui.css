@@ -93,9 +93,10 @@ html, body {
   transition: transform 40ms;
 }
 .px-btn:active:not(:disabled) {
+  /* Pressed: sinks by a pixel. Only transform and shadow change, never the size, so
+     nothing around it moves. */
   transform: translateY(var(--u));
-  --depth: var(--u);
-  padding-top: calc(10px + var(--u));
+  filter: brightness(0.92);
 }
 .px-btn:disabled {
   --face: #272f45;
