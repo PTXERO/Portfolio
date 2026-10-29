@@ -16,7 +16,7 @@ import { awaken, sealed } from './economy/tribal';
 import { autoAssign, daysLeft, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
-import { CRISES, crisisAnswered, crisisMissed, startCrisis } from './economy/crises';
+import { CRISES, crisisAnswered, crisisAt, crisisMissed, startCrisis } from './economy/crises';
 import { readGesture } from './ui/gesture';
 import {
   addSwirl,
@@ -456,7 +456,8 @@ function finishCast(): void {
   }
   // Answering a crisis: the right miracle, near enough to it (or round the one trapped).
   const c = ex.crisis;
-  const near = (p: { x: number; y: number }) => !!c && Math.hypot(p.x - c.x, p.y - c.y) < 9;
+  const now = crisisAt(ex);
+  const near = (p: { x: number; y: number }) => !!now && Math.hypot(p.x - now.x, p.y - now.y) < (c?.kind === 'storm' ? 12 : 9);
   const answers = !!c && c.spell === id && (c.kind === 'trapped' ? !!people?.some((i) => ex.people[i]?.id === c.who) : c.kind === 'cold' ? true : at.some(near) || near(first) || near(last));
   const r = cast(ex, id, { people, power: answers && c!.kind !== 'trapped' && c!.kind !== 'cold' ? 2 : 1 });
   if (!r.ok) return fizzle(r.text);

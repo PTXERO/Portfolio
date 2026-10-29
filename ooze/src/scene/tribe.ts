@@ -10,6 +10,7 @@ import { Biome, CELLS, ISLAND, isLand, islandOf, type Island, type Pt } from '..
 import { BURNT, LAKE, ashenFor, tribeOf } from '../economy/tribal';
 import { DAY_SEC as EX_DAY, RAFT, raftPart, type ExtinctionState, type JobId } from '../economy/extinction';
 import type { SpellId } from '../economy/miracles';
+import { crisisAt } from '../economy/crises';
 import type { GameState } from '../economy/types';
 import { hash, type Frame } from './paint';
 import { RangeScene } from './range';
@@ -182,7 +183,7 @@ export class TribeScene extends RangeScene {
   }
 
   /** Where a crisis happens (tiles), found from what's on the island. */
-  crisisPlace(kind: import('../economy/crises').CrisisKind, ex: ExtinctionState): { x: number; y: number; who?: number } {
+  crisisPlace(kind: import('../economy/crises').CrisisKind, ex: ExtinctionState): { x: number; y: number; who?: number; toX?: number; toY?: number } {
     const is = this.island!;
     const camp = this.spots.find((q) => q.job === 'build') ?? { x: 0, y: 0 };
     const spot = (job: JobId) => this.spots.find((q) => q.job === job && this.spotShown(ex, q)) ?? this.spots.find((q) => q.job === job) ?? camp;
@@ -214,7 +215,15 @@ export class TribeScene extends RangeScene {
     if (kind === 'cold') return spot('wood');
     if (kind === 'seeds') return landNear(spot('forage'), 2, 8, 117);
     if (kind === 'beast') return landNear(camp, 22, 34, 119);
-    return landNear(camp, 6, 14, 121);
+    // A storm: out at sea, to roll in toward the camp.
+    for (let r = 26; r < 60; r += 2) {
+      for (let a = 0; a < 24; a++) {
+        const an = (a / 24) * Math.PI * 2 + hash(ex.day, 123) * 6;
+        const p = { x: camp.x + Math.cos(an) * r, y: camp.y + Math.sin(an) * r };
+        if (!isLand(is, p.x, p.y)) return { ...p, toX: camp.x, toY: camp.y };
+      }
+    }
+    return { ...landNear(camp, 6, 14, 121), toX: camp.x, toY: camp.y };
   }
 
   /** A crisis out on the island: a pulsing mark (and what it is: a storm cloud, a glitter
@@ -222,17 +231,34 @@ export class TribeScene extends RangeScene {
   private drawCrisis(b: CanvasRenderingContext2D, ex: ExtinctionState, t: number): void {
     const c = ex.crisis;
     if (!c) return;
-    const X = Math.round(this.sx(c.x));
-    const Y = Math.round(this.py(c.x, c.y));
+    const at = crisisAt(ex)!;
+    const X = Math.round(this.sx(at.x));
+    const Y = Math.round(this.py(at.x, at.y));
     const z = this.detail();
     if (c.kind === 'storm') {
-      // A dark cloud of ash, boiling.
-      for (let k = 0; k < 24; k++) {
-        const a = hash(k, 131) * Math.PI * 2 + t * 0.3;
-        const r = (3 + hash(k, 133) * 6) * this.zoom * 0.8;
-        b.fillStyle = `rgba(60, 54, 52, ${0.35 + 0.2 * Math.sin(t * 2 + k)})`;
-        const sz = Math.max(2, Math.round(this.zoom * 1.5));
-        b.fillRect(Math.round(X + Math.cos(a) * r), Math.round(Y - 8 * z + Math.sin(a) * r * 0.5), sz, sz);
+      // A wall of ash, rolling in off the sea: its shadow on the ground, a heaving black-brown
+      // cloud many tiles across, and ash pouring down out of it.
+      const R = 9 * this.zoom;
+      b.fillStyle = 'rgba(10, 8, 8, 0.28)';
+      for (let k = 0; k < 18; k++) {
+        const a = hash(k, 151) * Math.PI * 2;
+        const r = hash(k, 153) * R * 0.9;
+        const sz = Math.round(R * (0.35 + hash(k, 155) * 0.3));
+        b.fillRect(Math.round(X + Math.cos(a) * r - sz / 2), Math.round(Y + Math.sin(a) * r * 0.45 - sz / 4), sz, Math.round(sz / 2));
+      }
+      for (let k = 0; k < 60; k++) {
+        const fall = ((t * 0.9 + hash(k, 157)) % 1) * R * 0.9;
+        const ax = X + (hash(k, 159) - 0.5) * R * 1.8 + Math.sin(t + k) * 2;
+        b.fillStyle = k % 3 ? 'rgba(70, 64, 62, 0.8)' : 'rgba(140, 132, 128, 0.7)';
+        b.fillRect(Math.round(ax), Math.round(Y - R * 0.9 + fall), Math.max(1, Math.round(z)), Math.max(2, Math.round(2 * z)));
+      }
+      for (let k = 0; k < 46; k++) {
+        const a = hash(k, 131) * Math.PI * 2 + t * (0.15 + hash(k, 161) * 0.25);
+        const r = hash(k, 133) * R;
+        const sz = Math.max(3, Math.round(R * (0.25 + hash(k, 163) * 0.3)));
+        const shade = 22 + Math.round(hash(k, 165) * 30 + 10 * Math.sin(t * 1.5 + k));
+        b.fillStyle = `rgba(${shade + 6}, ${shade}, ${shade - 2}, ${0.55 + 0.25 * hash(k, 167)})`;
+        b.fillRect(Math.round(X + Math.cos(a) * r - sz / 2), Math.round(Y - R * 1.1 + Math.sin(a) * r * 0.45 - sz / 2), sz, Math.round(sz * 0.7));
       }
     } else if (c.kind === 'shoal') {
       for (let k = 0; k < 14; k++) {

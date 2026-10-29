@@ -18,6 +18,11 @@ export interface Crisis {
   y: number;
   until: number;
   day: number;
+  /** When it began (seconds into the day), and for a storm, where it's heading (it starts out
+   * at sea and rolls in toward the camp). */
+  start?: number;
+  toX?: number;
+  toY?: number;
   /** For one trapped: who. */
   who?: number;
 }
@@ -51,13 +56,22 @@ export function planCrisis(ex: ExtinctionState): void {
 }
 
 /** It happens (the scene has found where): it's on, with the clock running. */
-export function startCrisis(ex: ExtinctionState, at: { x: number; y: number; who?: number }): Crisis | null {
+export function startCrisis(ex: ExtinctionState, at: { x: number; y: number; who?: number; toX?: number; toY?: number }): Crisis | null {
   const plan = ex.crisisPlan;
   if (!plan) return null;
   ex.crisisPlan = undefined;
   const spell = CRISES[plan.kind].spells.find((s) => (ex.powers ?? []).includes(s))!;
-  ex.crisis = { kind: plan.kind, spell, x: at.x, y: at.y, until: Math.min(DAY_SEC - 1, ex.clock + CRISIS_SEC), day: ex.day, who: at.who };
+  ex.crisis = { kind: plan.kind, spell, x: at.x, y: at.y, until: Math.min(DAY_SEC - 1, ex.clock + CRISIS_SEC), day: ex.day, who: at.who, start: ex.clock, toX: at.toX, toY: at.toY };
   return ex.crisis;
+}
+
+/** Where a crisis is now (a storm moves: in from the sea toward the camp). */
+export function crisisAt(ex: ExtinctionState): { x: number; y: number } | null {
+  const c = ex.crisis;
+  if (!c) return null;
+  if (c.toX === undefined || c.toY === undefined || c.start === undefined) return { x: c.x, y: c.y };
+  const k = Math.max(0, Math.min(1, (ex.clock - c.start) / Math.max(1, c.until - c.start)));
+  return { x: c.x + (c.toX - c.x) * k, y: c.y + (c.toY - c.y) * k };
 }
 
 /** Answered in time (the miracle's own effect, doubled, is the caster's to apply). */
