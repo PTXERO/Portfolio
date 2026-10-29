@@ -109,6 +109,11 @@ export class RangeScene {
     this.baseKey = '';
   }
 
+  /** What the camera keeps centred: home. */
+  get focus(): Pt {
+    return this.home;
+  }
+
   drain(): PondEvent[] {
     return this.events.splice(0);
   }
@@ -156,21 +161,21 @@ export class RangeScene {
 
   // ---- The map ----
 
-  /** Where everything sits, over the whole screen. Home is near the top, so it shows
-   * above the open tab sheet; close the sheet to see the rest of the land. */
+  /** Where everything sits, over the whole screen, with home in the middle. (The camera
+   * keeps home centred in whatever the top bar and the tab sheet leave showing.) */
   private layout(f: Frame): void {
     const { W, H, top } = f;
     const map = H - top;
     const at = (u: number, v: number): Pt => ({ x: Math.round(u * W), y: Math.round(top + v * map) });
-    this.home = at(0.55, 0.2);
+    this.home = at(0.55, 0.45);
     this.places = {
-      shore: at(0.22, 0.17),
-      cliffs: at(0.3, 0.04),
-      caves: at(0.88, 0.05),
-      tidePools: at(0.2, 0.42),
-      forest: at(0.8, 0.3),
-      marsh: at(0.66, 0.56),
-      highlands: at(0.5, 0.86),
+      shore: at(0.2, 0.4),
+      cliffs: at(0.3, 0.2),
+      caves: at(0.86, 0.14),
+      tidePools: at(0.18, 0.66),
+      forest: at(0.84, 0.4),
+      marsh: at(0.68, 0.7),
+      highlands: at(0.5, 0.92),
     };
   }
 

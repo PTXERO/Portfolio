@@ -404,6 +404,9 @@ function render(): void {
   scene.setTopInset(overlayTop.getBoundingClientRect().bottom - stageEl.getBoundingClientRect().top);
   // The sheet's height when open (the same clamp as the stylesheet), open or not, so the floor never moves.
   scene.setBottomInset(Math.min(250, Math.max(215, window.innerHeight * 0.27)));
+  // Where the open (or closed) sheet starts: the map centres its known land above it.
+  // (The panel sits above the tab bar, so it's the panel's top when open, the bar's when closed.)
+  scene.setVisibleBottom((ui.open ? panel : sheet).getBoundingClientRect().top - stageEl.getBoundingClientRect().top);
   renderPanel();
   renderHint();
   showDiscovery();
