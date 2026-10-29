@@ -130,6 +130,8 @@ export function describeEffect(stage: StageId, e: Effect): string {
       return `Rare microbes ×${e.mult} as often`;
     case 'offlineHours':
       return `Time away counts ${e.hours}h longer`;
+    case 'guard':
+      return 'Your cell rams predators on its own, harder each level';
     case 'habitatMult':
       return `${STAGES[stage].habitats?.find((h) => h.id === e.habitat)?.name ?? e.habitat} life ×${e.mult}`;
   }

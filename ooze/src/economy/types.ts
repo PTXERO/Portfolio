@@ -57,6 +57,8 @@ export type Effect =
   | { kind: 'spawnMult'; mult: number }
   /** Adds to how much time away counts. */
   | { kind: 'offlineHours'; hours: number }
+  /** Your cell drives off predators on its own; each level rams harder. */
+  | { kind: 'guard'; level: number }
   /** One habitat's life produces more. */
   | { kind: 'habitatMult'; habitat: string; mult: number };
 

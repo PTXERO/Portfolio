@@ -21,7 +21,7 @@ import {
 } from '../src/economy/actions';
 import { D } from '../src/economy/num';
 import { applyOffline, timeBankCap } from '../src/economy/offline';
-import { defenseOf, dialMax, dietOf, forageMult, habitatMult, heroSpeed, milestonesReached, offlineBonusSec, spawnMult, stageRate, upgradeLevel } from '../src/economy/rates';
+import { defenseOf, dialMax, guardLevel, dietOf, forageMult, habitatMult, heroSpeed, milestonesReached, offlineBonusSec, spawnMult, stageRate, upgradeLevel } from '../src/economy/rates';
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
@@ -467,6 +467,19 @@ describe('cell stage', () => {
     tick(s, 60 * 60);
     expect(s.stages.cell.acclim.shallows).toBe(1);
     expect(deserialize(serialize(s)).stages.cell.acclim.shallows).toBe(1);
+  });
+
+  it('Guard Instinct needs Spikes and an Eyespot, and grows with each level', () => {
+    const s = cell();
+    expect(buyUpgrade(s, 'cell', 'guardInstinct')).toBe(false);
+    for (let i = 0; i < 3; i++) buyUpgrade(s, 'cell', 'thickMembrane');
+    for (const u of ['thickMembrane', 'thickMembrane']) buyUpgrade(s, 'cell', u);
+    moveHabitat(s, 'cell', 'depths');
+    buyUpgrade(s, 'cell', 'spikes');
+    buyUpgrade(s, 'cell', 'eyespot');
+    expect(buyUpgrade(s, 'cell', 'guardInstinct')).toBe(true);
+    buyUpgrade(s, 'cell', 'guardInstinct');
+    expect(guardLevel(s, 'cell')).toBe(2);
   });
 
   it('endless upgrades never run out, each level a little dearer', () => {

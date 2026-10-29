@@ -5,7 +5,7 @@
 
 import { PAL } from '../art/sprites';
 import { canEat, engulfable } from '../economy/actions';
-import { acclimOf, autopilot, defenseOf, habitatOf, heroSpeed, spawnMult, upgradeLevel } from '../economy/rates';
+import { acclimOf, autopilot, defenseOf, guardLevel, habitatOf, heroSpeed, spawnMult, upgradeLevel } from '../economy/rates';
 import type { FoodKind, GameState } from '../economy/types';
 import { drawBlob, type BlobStyle, type Core } from './blob';
 import { drawCellLook, lookOf, ORGANELLE_COLORS, type Look } from './cellLook';
@@ -72,6 +72,8 @@ interface Predator {
   /** Seconds of the flinch after being hit. */
   flinch: number;
   phase: number;
+  /** Rammed by a toxic cell: too sick to bite again. */
+  poisoned: boolean;
 }
 
 /** Art pixels per second, before mutations. */
@@ -86,6 +88,7 @@ export const SHAFT_SLANT = 0.3;
 /** Your cell's radius by size mutation: only a little bigger than the swarm's 4. */
 const HERO_RX = [5, 5, 6, 7];
 const PREDATOR_STYLE: BlobStyle = { edge: '#e8615a', body: '#8a2f45', nucleus: '#3a1020' };
+const PREDATOR_SICK: BlobStyle = { edge: '#b8d05a', body: '#5a6a2f', nucleus: '#2a3010' };
 const PREDATOR_FLINCH: BlobStyle = { edge: PAL.w, body: '#c4485a', nucleus: '#3a1020' };
 
 /** Hits a predator takes before giving up; tougher lineages scare it faster. */
@@ -163,8 +166,8 @@ export class Pond {
     return 'steer';
   }
 
-  private hitPredator(state: GameState, p: Predator): void {
-    p.hits++;
+  private hitPredator(state: GameState, p: Predator, power = 1): void {
+    p.hits += power;
     p.flinch = 0.3;
     if (p.hits >= hitsToFend(defenseOf(state, 'cell'))) {
       p.fleeing = true;
@@ -230,7 +233,12 @@ export class Pond {
     // Steering: toward the tap; with an eyespot, toward food once left alone.
     h.idle += dt;
     h.gulp = Math.max(0, h.gulp - dt);
-    if (h.tx === null && autopilot(state, 'cell') && h.idle > AUTOPILOT_AFTER) {
+    // Guard Instinct: left alone, your cell goes after any predator first, at full speed.
+    const guard = guardLevel(state, 'cell');
+    const threat = guard > 0 && h.tx === null && h.idle > AUTOPILOT_AFTER ? this.preds.find((p) => !p.fleeing) : undefined;
+    if (threat) {
+      this.goTo(h, threat.x, threat.y, HERO_SPEED * heroSpeed(state, 'cell') * (1 + 0.2 * guard), dt);
+    } else if (h.tx === null && autopilot(state, 'cell') && h.idle > AUTOPILOT_AFTER) {
       const wants = (q: Food) => canEat(state, 'cell', q.kind);
       let best: Food | null = null;
       let bd = Infinity;
@@ -348,7 +356,7 @@ export class Pond {
       const fromLeft = Math.random() < 0.5;
       const y = top + 10 + Math.random() * Math.max(1, floor - top - 20);
       const defense = defenseOf(state, 'cell');
-      this.preds.push({ x: fromLeft ? -10 : W + 10, y, vx: 0, vy: 0, hits: 0, life: 10 + 20 * (1 - defense), fleeing: false, bite: 2, flinch: 0, phase: Math.random() * 10 });
+      this.preds.push({ x: fromLeft ? -10 : W + 10, y, vx: 0, vy: 0, hits: 0, life: 10 + 20 * (1 - defense), fleeing: false, bite: 2, flinch: 0, phase: Math.random() * 10, poisoned: false });
       this.predTimer = danger <= 0.15 ? 90 + Math.random() * 30 : (16 + Math.random() * 10) / danger;
     }
     this.ramCooldown = Math.max(0, this.ramCooldown - dt);
@@ -378,7 +386,7 @@ export class Pond {
         if (best) [tx, ty] = [best.x, best.y];
         else [tx, ty] = [W / 2 + Math.sin(f.t * 0.4) * W * 0.3, (top + floor) / 2];
         speed = p.flinch > 0 ? 2 : 11;
-        if (best && bd < 5 && p.bite <= 0) {
+        if (best && bd < 5 && p.bite <= 0 && !p.poisoned) {
           // A bite: the cell bursts (the swarm divides again to replace it).
           best.dead = true;
           p.bite = 3;
@@ -392,7 +400,9 @@ export class Pond {
       // Ramming it with spikes counts as a hit.
       if (!p.fleeing && this.look.spikes && this.ramCooldown <= 0 && Math.hypot(p.x - h.x, p.y - h.y) < rx + 8) {
         this.ramCooldown = 0.8;
-        this.hitPredator(state, p);
+        // Guard Instinct rams harder; Toxin leaves it too sick to bite again.
+        if (this.look.toxin) p.poisoned = true;
+        this.hitPredator(state, p, 1 + (guard >= 2 ? 1 : 0));
       }
     }
     this.preds = this.preds.filter((p) => !(p.fleeing && (p.x < -30 || p.x > W + 30)));
@@ -499,7 +509,7 @@ export class Pond {
       const reach = 7 + Math.sin(t * 4 + p.phase) * 2;
       cores.push({ x: p.x + Math.cos(a) * reach, y: p.y + Math.sin(a) * reach * 0.7, r: 3.2, nucleus: false });
       cores.push({ x: p.x - Math.cos(a + 0.6) * 6, y: p.y - Math.sin(a + 0.6) * 5, r: 2.8, nucleus: false });
-      drawBlob(b, cores, p.flinch > 0 ? PREDATOR_FLINCH : PREDATOR_STYLE);
+      drawBlob(b, cores, p.flinch > 0 ? PREDATOR_FLINCH : p.poisoned ? PREDATOR_SICK : PREDATOR_STYLE);
       // Little eyes, so it reads as a hunter.
       b.fillStyle = PAL.y;
       const ex = Math.round(p.x + Math.cos(a) * 3);

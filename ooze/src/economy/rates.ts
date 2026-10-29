@@ -46,6 +46,8 @@ export function scaleEffect(e: Effect, n: number): Effect {
       return { ...e, amount: e.amount * n };
     case 'offlineHours':
       return { ...e, hours: e.hours * n };
+    case 'guard':
+      return { ...e, level: e.level * n };
     case 'tapFromRate':
       return { ...e, seconds: e.seconds * n };
     default:
@@ -144,6 +146,12 @@ export const heroSpeed = (state: GameState, stage: StageId) => product(state, st
 export const forageMult = (state: GameState, stage: StageId) => product(state, stage, 'forageMult');
 export const spawnMult = (state: GameState, stage: StageId) => product(state, stage, 'spawnMult');
 export const autopilot = (state: GameState, stage: StageId) => stageEffects(state, stage).some((e) => e.kind === 'autopilot');
+/** Guard Instinct level: 0 means your cell leaves predators to you. */
+export function guardLevel(state: GameState, stage: StageId): number {
+  let n = 0;
+  for (const e of stageEffects(state, stage)) if (e.kind === 'guard') n += e.level;
+  return n;
+}
 
 /** The habitat on screen (where your own cell swims). */
 export function habitatOf(state: GameState, stage: StageId): HabitatDef | undefined {

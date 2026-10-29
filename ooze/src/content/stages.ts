@@ -257,6 +257,7 @@ const cell: StageDef = {
     { id: 'thickMembrane', branch: 'Defense', name: 'Thick Membrane', flavor: 'Harder to bite through. Level 2 opens up the Depths.', cost: 1.2e6, levels: 5, costGrowth: 30, effect: { kind: 'defense', amount: 0.06 } },
     { id: 'spikes', branch: 'Defense', name: 'Spikes', flavor: 'Predators in the Depths think twice. Level 2 opens up the Vents.', cost: 3.6e15, levels: 5, costGrowth: 30, effect: { kind: 'defense', amount: 0.05 }, requires: { levels: { thickMembrane: 3 }, habitat: 'depths' } },
     { id: 'toxin', branch: 'Defense', name: 'Toxin', flavor: 'Made from what the Vents spew. Anything that bites you regrets it.', cost: 9.9e16, levels: 3, costGrowth: 30, effect: { kind: 'defense', amount: 0.07 }, extra: [{ kind: 'forageMult', mult: 1.15 }], requires: { levels: { spikes: 3 }, habitat: 'vents' } },
+    { id: 'guardInstinct', branch: 'Defense', name: 'Guard Instinct', flavor: 'When a predator comes, your cell stops feeding and goes for it.', cost: 2e16, levels: 3, costGrowth: 10, effect: { kind: 'guard', level: 1 }, requires: { upgrades: ['spikes', 'eyespot'] } },
     // Diet: one or the other, until Omnivore
     { id: 'grazer', branch: 'Diet', name: 'Grazer', flavor: 'Eats algae. Thrives in the Shallows.', cost: 390, effect: { kind: 'diet', diet: 'grazer' }, excludes: ['hunter', 'omnivore'] },
     { id: 'hunter', branch: 'Diet', name: 'Hunter', flavor: 'Eats bacteria. Thrives in the Depths and Vents.', cost: 300, effect: { kind: 'diet', diet: 'hunter' }, excludes: ['grazer', 'omnivore'] },
