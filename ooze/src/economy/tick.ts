@@ -1,6 +1,6 @@
 import { STAGES } from '../content/stages';
 import { affordableCount, buyGenerator, buyUpgrade, catalyze, discoverReactions, SWIRL_FADE_PER_SEC, visibleUpgrades } from './actions';
-import { stageRate } from './rates';
+import { ACCLIM_SEC, stageRate } from './rates';
 import type { GameState, StageId } from './types';
 
 export const TICK_SEC = 0.1;
@@ -30,6 +30,11 @@ export function tick(state: GameState, dt: number): void {
   if (!state.stages[state.current].complete) {
     catalyze(state, state.current, dt);
     discoverReactions(state, state.current);
+  }
+  // Your cell settles into whichever habitat it's living in (Cell stage).
+  for (const id of state.unlocked) {
+    const st = state.stages[id];
+    if (STAGES[id].habitats && st.habitat) st.acclim[st.habitat] = Math.min(1, (st.acclim[st.habitat] ?? 0) + dt / ACCLIM_SEC);
   }
   state.swirl = Math.max(0, state.swirl - SWIRL_FADE_PER_SEC * dt);
   state.playTime += dt;

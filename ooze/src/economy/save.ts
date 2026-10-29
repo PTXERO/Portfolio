@@ -41,6 +41,7 @@ export function deserialize(text: string): GameState {
           catalysis: { ...(s.catalysis ?? {}) },
           habitat: s.habitat || fresh.habitat,
           eaten: s.eaten ?? 0,
+          acclim: { ...(s.acclim ?? {}) },
         }
       : base.stages[id];
     // Saves from before reactions existed: anything owned counts as discovered.

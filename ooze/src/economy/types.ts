@@ -191,6 +191,8 @@ export interface StageState {
   habitat: string;
   /** Food the hero has eaten, for stats. */
   eaten: number;
+  /** How settled your lineage is in each habitat, 0 to 1. Grows while your cell lives there. */
+  acclim: Record<string, number>;
 }
 
 export type BuyAmount = 1 | 10 | 'max';

@@ -170,10 +170,20 @@ export function survival(state: GameState, stage: StageId, h = habitatOf(state, 
   return 1 - h.danger * (1 - defenseOf(state, stage));
 }
 
+/** Seconds of living in a habitat to settle in fully. */
+export const ACCLIM_SEC = 30 * 60;
+/** A fully settled habitat's life produces this much more (×1.5). */
+export const ACCLIM_BONUS = 0.5;
+
+/** How settled the lineage is in a habitat, 0 to 1. */
+export function acclimOf(state: GameState, stage: StageId, habitat: string): number {
+  return state.stages[stage].acclim[habitat] ?? 0;
+}
+
 /** Output multiplier from where the lineage lives: food that suits its diet, minus predators. */
 export function habitatMult(state: GameState, stage: StageId, h = habitatOf(state, stage)): number {
   if (!h) return 1;
-  return dietFit(dietOf(state, stage), h.food) * survival(state, stage, h);
+  return dietFit(dietOf(state, stage), h.food) * survival(state, stage, h) * (1 + ACCLIM_BONUS * acclimOf(state, stage, h.id));
 }
 
 /** Extra seconds of time away that count, from effects on the current stage. */

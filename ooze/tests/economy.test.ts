@@ -450,6 +450,18 @@ describe('cell stage', () => {
     }
   });
 
+  it('your lineage settles into the habitat it lives in, and life there does better', () => {
+    const s = cell();
+    s.stages.cell.generators.fission = 50;
+    const before = stageRate(s, 'cell').toNumber();
+    tick(s, 15 * 60);
+    expect(s.stages.cell.acclim.shallows).toBeCloseTo(0.5, 5);
+    expect(stageRate(s, 'cell').toNumber()).toBeGreaterThan(before * 1.2);
+    tick(s, 60 * 60);
+    expect(s.stages.cell.acclim.shallows).toBe(1);
+    expect(deserialize(serialize(s)).stages.cell.acclim.shallows).toBe(1);
+  });
+
   it('endless upgrades never run out, each level a little dearer', () => {
     const s = cell();
     const u = STAGES.cell.upgrades.find((x) => x.id === 'adaptation')!;

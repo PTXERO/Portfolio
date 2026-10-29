@@ -162,9 +162,9 @@ const cell: StageDef = {
     { id: 'chimney', name: 'Chimney City', flavor: 'Every vent in sight, claimed.', baseCost: 2.8e20, growth: 1.22, baseRate: 2.8e15, habitat: 'vents' },
   ],
   habitats: [
-    { id: 'shallows', name: 'Shallows', flavor: 'Warm, bright and full of algae. Hardly anything hunts here.', food: { algae: 1.5, bacteria: 0.6 }, danger: 0.1 },
-    { id: 'depths', name: 'Depths', flavor: 'Dark water thick with bacteria, and the things that eat them.', food: { algae: 0.5, bacteria: 1.8 }, danger: 0.4, unlock: { upgrade: 'thickMembrane', level: 2 } },
-    { id: 'vents', name: 'Vents', flavor: 'Scalding, rich and deadly. Only the toughest settle here.', food: { algae: 0.2, bacteria: 2.8 }, danger: 0.7, unlock: { upgrade: 'spikes', level: 2 } },
+    { id: 'shallows', name: 'Shallows', flavor: 'Warm and bright. Algae gathers where the sunlight falls.', food: { algae: 1.5, bacteria: 0.6 }, danger: 0.1 },
+    { id: 'depths', name: 'Depths', flavor: 'Dark water thick with bacteria. You only see what your cell can light: eyes help.', food: { algae: 0.5, bacteria: 1.8 }, danger: 0.4, unlock: { upgrade: 'thickMembrane', level: 2 } },
+    { id: 'vents', name: 'Vents', flavor: 'Scalding and rich. Hot plumes carry you up; strong tails and a thick skin hold steady.', food: { algae: 0.2, bacteria: 2.8 }, danger: 0.7, unlock: { upgrade: 'spikes', level: 2 } },
   ],
   reactions: [
     {

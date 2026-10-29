@@ -9,7 +9,7 @@ import type { GameState } from '../economy/types';
 import { Effects, ease, glints, hash, ring, visibleCount, water, type Frame } from './paint';
 import { drawBlob, type BlobStyle, type Core } from './blob';
 import { DIET_COLORS, drawCellLook, lookOf, type Look } from './cellLook';
-import { Pond } from './pond';
+import { Pond, SHAFT_SLANT } from './pond';
 import { SPLIT_AT, Swarm } from './swarm';
 
 /** How each habitat looks: water bands top to bottom, glints, and the floor. */
@@ -82,6 +82,8 @@ export class CellScene {
   /** Seconds of the dark wipe after moving habitat. */
   private wipe = 0;
   private look: Look | null = null;
+  /** The Depths' darkness, drawn on its own layer with a hole of light around your cell. */
+  private dark = document.createElement('canvas');
   private colonies: Colony[] = [];
   private pillars: Pillar[] = [];
   private matShown = 0;
@@ -286,6 +288,18 @@ export class CellScene {
 
     water(f, hab.water, floor);
     glints(f, hab.glint, floor);
+    if (st.habitat !== 'vents') this.pond.env = { shafts: [], plumes: [] };
+    if (st.habitat === 'shallows') {
+      // Sunlight falls in slanting shafts that drift across the water; algae gathers in them.
+      const shafts = [0, 1, 2].map((k) => Math.floor(W * (((t * 0.012 + k / 3) % 1) * 1.2 - 0.1)));
+      this.pond.env = { shafts, plumes: [] };
+      b.globalAlpha = 0.09;
+      b.fillStyle = PAL.w;
+      for (const sx of shafts) {
+        for (let y = 0; y < floor; y += 2) b.fillRect(Math.round(sx + y * SHAFT_SLANT) - 4, y, 9, 2);
+      }
+      b.globalAlpha = 1;
+    }
     if (st.habitat === 'depths') {
       // Marine snow drifting down through the dark.
       b.fillStyle = '#8fa8b8';
@@ -303,6 +317,16 @@ export class CellScene {
       }
       // Two natural chimneys, plus one more for each Chimney City (up to six).
       const spots = [0.3, 0.62, 0.12, 0.86, 0.46, 0.74].slice(0, 2 + Math.min(4, n('chimney')));
+      this.pond.env = { shafts: [], plumes: spots.map((cx) => Math.floor(W * cx)) };
+      // Heat shimmer rising the whole height of each plume.
+      for (const cx of spots) {
+        const x = Math.floor(W * cx);
+        for (let i = 0; i < 14; i++) {
+          const y = Math.round(floor - ((t * 26 + i * 13) % Math.max(1, floor - top)));
+          b.fillStyle = i % 3 ? '#4a2a30' : '#6a3a38';
+          b.fillRect(x + Math.round(Math.sin(t * 4 + i) * 3), y, 1, 2);
+        }
+      }
       for (const [k, cx] of spots.entries()) {
         const x = Math.floor(W * cx);
         const ch = 14 + ((k * 7) % 11);
@@ -470,6 +494,34 @@ export class CellScene {
 
     this.pond.drawFront(f);
     this.fx.run(f);
+
+    // The Depths are dark: you only see what your cell can light. Glowing things show through.
+    const at = this.pond.heroAt();
+    if (st.habitat === 'depths' && at) {
+      if (this.dark.width !== W || this.dark.height !== H) {
+        this.dark.width = W;
+        this.dark.height = H;
+      }
+      const d = this.dark.getContext('2d')!;
+      d.globalCompositeOperation = 'source-over';
+      d.clearRect(0, 0, W, H);
+      d.fillStyle = 'rgba(3, 8, 18, 0.78)';
+      d.fillRect(0, 0, W, H);
+      d.globalCompositeOperation = 'destination-out';
+      const r = this.pond.lightRadius(state) * (1 + Math.sin(t * 2) * 0.03);
+      for (const [rad, a] of [[r + 6, 0.35], [r + 3, 0.6], [r, 1]] as const) {
+        d.globalAlpha = a;
+        d.beginPath();
+        d.arc(Math.round(at[0]), Math.round(at[1]), rad, 0, Math.PI * 2);
+        d.fill();
+      }
+      d.globalAlpha = 1;
+      b.drawImage(this.dark, 0, 0);
+      // Lures on the ambushers, the glow swarm's lights, rare microbes and predators' eyes.
+      b.fillStyle = '#fff6a0';
+      for (const c of this.swarm.cells) b.fillRect(Math.round(c.x + (c.vx < 0 ? -6 : 6)), Math.round(c.y) - 3, 1, 1);
+      this.pond.drawGlows(f);
+    }
 
     if (this.wipe > 0) {
       this.wipe = Math.max(0, this.wipe - dt);

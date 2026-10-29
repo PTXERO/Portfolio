@@ -4,7 +4,7 @@
 // and cached, so a swarm of them costs no more than a sprite each.
 
 import { PAL } from '../art/sprites';
-import { dietOf, sizeOf } from '../economy/rates';
+import { acclimOf, dietOf, sizeOf } from '../economy/rates';
 import type { Diet, GameState, StageId } from '../economy/types';
 
 export interface Look {
@@ -20,6 +20,15 @@ export interface Look {
   organelles: string[];
   /** Which habitat's kind of cell this is: each place grows its own. Unset for your own cell. */
   species?: 'shallows' | 'depths' | 'vents';
+  /** Your own cell takes on the look of where it has settled: the habitat, and 0 to 3 steps of it. */
+  settled?: { habitat: string; step: number };
+}
+
+/** Mixes two #rrggbb colours. */
+function mix(a: string, b: string, t: number): string {
+  const p = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('');
 }
 
 /**
@@ -45,6 +54,7 @@ export function lookOf(state: GameState, stage: StageId): Look {
     eyespot: has('eyespot'),
     size: sizeOf(state, stage),
     organelles: st.discovered,
+    settled: { habitat: st.habitat, step: Math.floor(acclimOf(state, stage, st.habitat) * 3 + 1e-9) },
   };
 }
 
@@ -92,7 +102,13 @@ function bake(look: Look, rx: number, frame: number, squash: boolean, inner: boo
   const cx = pad + rx;
   const cy = pad + ry;
   const sp = look.species && look.species !== 'shallows' ? SPECIES[look.species] : null;
-  const [fill, edge] = sp ? [sp.fill, sp.edge] : DIET_COLORS[look.diet ?? 'none'];
+  let [fill, edge] = sp ? [sp.fill, sp.edge] : DIET_COLORS[look.diet ?? 'none'];
+  // Settling in: the Depths dim your cell and give it a glowing edge; the Vents flush it red.
+  const settle = inner && look.settled ? look.settled : null;
+  if (settle?.habitat === 'depths' && settle.step >= 1) edge = mix(edge, SPECIES.depths.edge, settle.step >= 2 ? 1 : 0.5);
+  if (settle?.habitat === 'depths' && settle.step >= 2) fill = mix(fill, SPECIES.depths.fill, 0.55);
+  if (settle?.habitat === 'vents' && settle.step >= 1) fill = mix(fill, SPECIES.vents.fill, settle.step >= 2 ? 0.7 : 0.4);
+  if (settle?.habitat === 'vents' && settle.step >= 3) edge = mix(edge, SPECIES.vents.edge, 0.7);
   const nucleus = sp ? sp.nucleus : PAL.n;
   const px = (x: number, y: number, col: string) => {
     b.fillStyle = col;
@@ -146,21 +162,22 @@ function bake(look: Look, rx: number, frame: number, squash: boolean, inner: boo
       for (let k = 1; k <= 2; k++) px(cx + Math.cos(a) * (rx * sx + k), cy + Math.sin(a) * (ry * sy + k), look.toxin ? PAL.p : PAL.w);
     }
   }
-  // Vents cells bristle with short hairs that flicker in the heat.
-  if (look.species === 'vents') {
+  // Vents cells bristle with short hairs that flicker in the heat (and so does yours, once settled there).
+  if (look.species === 'vents' || (settle?.habitat === 'vents' && settle.step >= 2)) {
     for (let x = Math.round(cx - rx + 1); x <= cx + rx - 1; x += 2) {
       px(x + frame, cy - ry - 1, edge);
       px(x + 1 - frame, cy + ry + 1, edge);
     }
   }
   // Depths cells dangle a glowing lure in front, to draw prey in the dark.
-  if (look.species === 'depths') {
+  if (look.species === 'depths' || (settle?.habitat === 'depths' && settle.step >= 3)) {
     px(cx + rx, cy - ry, edge);
     px(cx + rx + 1, cy - ry - 1, edge);
     px(cx + rx + 2, cy - ry - 1 + frame, '#fff6a0');
   }
   // Shallows cells carry a speck of green from all that sunlight.
-  if (look.species === 'shallows') px(cx - 2, cy + 1, PAL.l);
+  if (look.species === 'shallows' || (settle?.habitat === 'shallows' && settle.step >= 2)) px(cx - 2, cy + 1, PAL.l);
+  if (settle?.habitat === 'shallows' && settle.step >= 3) px(cx + 1, cy + 2, PAL.l);
   // Inside: a nucleus, organelles (hero only), and an eyespot at the front.
   px(cx, cy, nucleus);
   px(cx + 1, cy, nucleus);
@@ -178,7 +195,7 @@ function bake(look: Look, rx: number, frame: number, squash: boolean, inner: boo
 }
 
 function key(look: Look, rx: number, frame: number, squash: boolean, inner: boolean): string {
-  return [look.species ?? '', look.diet, look.flagella, look.cilia, look.spikes, look.toxin, look.thick, look.eyespot, inner ? look.organelles.join('.') : '', rx, frame, squash].join('|');
+  return [look.species ?? '', look.diet, look.flagella, look.cilia, look.spikes, look.toxin, look.thick, look.eyespot, inner ? look.organelles.join('.') : '', inner && look.settled ? `${look.settled.habitat}${look.settled.step}` : '', rx, frame, squash].join('|');
 }
 
 const flipped = new Map<string, HTMLCanvasElement>();

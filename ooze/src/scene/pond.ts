@@ -5,7 +5,7 @@
 
 import { PAL } from '../art/sprites';
 import { canEat, engulfable } from '../economy/actions';
-import { autopilot, defenseOf, habitatOf, heroSpeed, spawnMult } from '../economy/rates';
+import { acclimOf, autopilot, defenseOf, habitatOf, heroSpeed, spawnMult, upgradeLevel } from '../economy/rates';
 import type { FoodKind, GameState } from '../economy/types';
 import { drawBlob, type BlobStyle, type Core } from './blob';
 import { drawCellLook, lookOf, ORGANELLE_COLORS, type Look } from './cellLook';
@@ -76,6 +76,10 @@ const HERO_SPEED = 18;
 /** Seconds without steering before the eyespot's autopilot takes over. */
 const AUTOPILOT_AFTER = 2.5;
 const RARE_LIFE = 35;
+/** How fast a Vents plume carries an unprotected cell upward, art pixels per second. */
+const PLUME_LIFT = 24;
+/** How far a light shaft leans per art pixel down (it falls at a slant). */
+export const SHAFT_SLANT = 0.3;
 /** Your cell's radius by size mutation: only a little bigger than the swarm's 4. */
 const HERO_RX = [5, 5, 6, 7];
 const PREDATOR_STYLE: BlobStyle = { edge: '#e8615a', body: '#8a2f45', nucleus: '#3a1020' };
@@ -106,6 +110,8 @@ export class Pond {
   private floor = 0;
   private top = 0;
   private look: Look | null = null;
+  /** What the habitat is doing: light shafts (x at the surface) and hot plumes (x of each chimney). */
+  env: { shafts: number[]; plumes: number[] } = { shafts: [], plumes: [] };
 
   reset(): void {
     this.hero = null;
@@ -163,8 +169,30 @@ export class Pond {
     } else this.events.push({ type: 'hit', x: p.x, y: p.y });
   }
 
-  private spawnPos(): [number, number] {
-    return [6 + Math.random() * (this.W - 12), this.top + 8 + Math.random() * Math.max(1, this.floor - this.top - 16)];
+  private spawnPos(kind?: FoodKind): [number, number] {
+    const y = this.top + 8 + Math.random() * Math.max(1, this.floor - this.top - 16);
+    // In the Shallows, algae grows where the sunlight falls.
+    if (kind === 'algae' && this.env.shafts.length && Math.random() < 0.8) {
+      const sx = this.env.shafts[Math.floor(Math.random() * this.env.shafts.length)];
+      return [Math.max(6, Math.min(this.W - 6, sx + (y - this.top) * SHAFT_SLANT + (Math.random() - 0.5) * 10)), y];
+    }
+    return [6 + Math.random() * (this.W - 12), y];
+  }
+
+  /**
+   * How hard a Vents plume pushes your cell: strong tails swim against it and a
+   * thick membrane shrugs off the heat. Settling in at the Vents helps too.
+   */
+  private plumeGrip(state: GameState): number {
+    const lv = (id: string) => upgradeLevel(state, 'cell', id);
+    const resist = 0.09 * lv('flagellum') + 0.12 * lv('twinFlagella') + 0.06 * lv('thickMembrane') + 0.3 * acclimOf(state, 'cell', 'vents');
+    return Math.max(0.1, 1 - resist);
+  }
+
+  /** How far your cell can see in the dark Depths, in art pixels. */
+  lightRadius(state: GameState): number {
+    const lv = (id: string) => upgradeLevel(state, 'cell', id);
+    return 16 + (lv('eyespot') ? 6 : 0) + 3 * lv('photoreceptor') + 10 * acclimOf(state, 'cell', 'depths');
   }
 
   step(f: Frame, state: GameState, floor: number, swarm: Swarm): void {
@@ -190,7 +218,7 @@ export class Pond {
       const have = this.food.filter((q) => q.kind === kind).length;
       this.foodTimer[kind] -= dt;
       if (have < want && this.foodTimer[kind] <= 0) {
-        const [x, y] = this.spawnPos();
+        const [x, y] = this.spawnPos(kind);
         this.food.push({ x, y, vx: (Math.random() - 0.5) * 3, vy: (Math.random() - 0.5) * 2, kind, phase: Math.random() * 10, age: 0 });
         this.foodTimer[kind] = 2.5 / (level * spawn);
       }
@@ -217,8 +245,11 @@ export class Pond {
       if (Math.hypot(h.tx - h.x, h.ty - h.y) < 2) h.tx = null;
       else this.goTo(h, h.tx, h.ty, HERO_SPEED * heroSpeed(state, 'cell'), dt);
     } else this.drift(h, f.t, dt);
-    h.x = Math.max(rx, Math.min(W - rx, h.x + h.vx * dt));
-    h.y = Math.max(top + rx, Math.min(floor - rx, h.y + h.vy * dt));
+    // Hot plumes at the Vents carry anything in them upward.
+    const inPlume = (x: number) => this.env.plumes.some((p) => Math.abs(x - p) < 7);
+    const lift = inPlume(h.x) ? PLUME_LIFT * this.plumeGrip(state) : 0;
+    h.x = Math.max(rx, Math.min(W - rx, h.x + (h.vx + (lift ? Math.sin(f.t * 3) * lift * 0.3 : 0)) * dt));
+    h.y = Math.max(top + rx, Math.min(floor - rx, h.y + (h.vy - lift) * dt));
     if (Math.abs(h.vx) > 1) h.left = h.vx < 0;
 
     // Food: algae drifts, bacteria wriggle and dart away from the hero.
@@ -238,7 +269,7 @@ export class Pond {
       q.vx *= 1 - dt * 0.5;
       q.vy *= 1 - dt * 0.5;
       q.x += (q.vx + (q.kind === 'bacteria' ? Math.sin(f.t * 5 + q.phase) * 2 : 0)) * dt;
-      q.y += q.vy * dt;
+      q.y += q.vy * dt - (inPlume(q.x) ? PLUME_LIFT * 0.6 * dt : 0);
       if (q.x < 4 || q.x > W - 4) q.vx = (q.x < 4 ? 1 : -1) * Math.abs(q.vx || 2);
       if (q.y < top + 4 || q.y > floor - 4) q.vy = (q.y < top + 4 ? 1 : -1) * Math.abs(q.vy || 2);
       if (q.age > 0.5 && d < rx + 2) {
@@ -472,6 +503,26 @@ export class Pond {
         squash: h.gulp > 0 && Math.floor(t * 16) % 2 === 0,
         inner: true,
       });
+    }
+  }
+
+  /** Things that glow, drawn again over the Depths' darkness: rare microbes and predators' eyes. */
+  drawGlows(f: Frame): void {
+    const { b, t } = f;
+    const r = this.rare;
+    if (r) {
+      const col = ORGANELLE_COLORS[r.id] ?? PAL.y;
+      ring(b, Math.round(r.x), Math.round(r.y), 5 + ((t * 6) % 4), col);
+      b.fillStyle = col;
+      b.fillRect(Math.round(r.x) - 1, Math.round(r.y) - 1, 3, 3);
+    }
+    for (const p of this.preds) {
+      const a = Math.atan2(p.vy, p.vx || 0.01);
+      const ex = Math.round(p.x + Math.cos(a) * 3);
+      const ey = Math.round(p.y + Math.sin(a) * 2 - 2);
+      b.fillStyle = PAL.y;
+      b.fillRect(ex - 1, ey, 1, 1);
+      b.fillRect(ex + 1, ey, 1, 1);
     }
   }
 

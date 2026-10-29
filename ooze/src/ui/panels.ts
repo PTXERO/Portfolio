@@ -478,7 +478,8 @@ export function update(root: HTMLElement, state: GameState, tab: Tab): void {
     }
   } else if (tab === 'pond') {
     for (const h of STAGES[id].habitats ?? []) {
-      setText(root, `hab-${h.id}`, `Life here: output ×${habitatMult(state, id, h).toFixed(2)}`);
+      const settled = Math.round((state.stages[id].acclim[h.id] ?? 0) * 100);
+      setText(root, `hab-${h.id}`, `Life here: output ×${habitatMult(state, id, h).toFixed(2)} · settled in ${settled}%`);
     }
     bookUpdate(root, state);
   } else if (tab === 'lab') {
