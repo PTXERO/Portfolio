@@ -704,7 +704,7 @@ export class RangeScene {
           this.drawBeing(b, { ...look, parts: { ...look.parts, ...mate.parts } }, ox, me.y + 0.3 * (k + 1), { left, frame: walking ? Math.floor(t * 8 + k) % 2 : 0 });
         });
         this.drawBeing(b, look, me.x, me.y, { left, frame: walking ? Math.floor(t * 8) % 2 : 0, hero: true });
-        // A gold marker over it (easy to spot), or a blinking "!" when something's stopped it.
+        // A blinking "!" when something's stopped it on the road.
         const X = Math.round(this.sx(me.x));
         const Y = Math.round(this.sy(me.y)) - (this.zoom >= 6 ? 50 : this.zoom >= 1.6 ? 12 : 5);
         if (st.walk?.event) {
@@ -713,10 +713,6 @@ export class RangeScene {
             b.fillRect(X, Y - 5, 1, 3);
             b.fillRect(X, Y - 1, 1, 1);
           }
-        } else if (this.zoom >= 1.6) {
-          b.fillStyle = PAL.y;
-          b.fillRect(X - 1, Y - 1, 3, 1);
-          b.fillRect(X, Y, 1, 1);
         }
       },
     });

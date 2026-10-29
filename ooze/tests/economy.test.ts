@@ -617,7 +617,8 @@ describe('creature stage', () => {
         expect(q.x).toBeLessThan(ISLAND);
       }
       const d = (id: string) => Math.hypot(is.places[id].x - is.home.x, is.places[id].y - is.home.y);
-      expect(d('shore')).toBeLessThan(d('highlands'));
+      expect(d('shore')).toBe(0);
+      expect(d('tidePools')).toBeLessThan(d('highlands'));
     }
   });
 
@@ -627,15 +628,19 @@ describe('creature stage', () => {
     c.seed = 4242;
     c.pop = 10;
     const is = islandFor(s);
-    const shore = is.places.shore;
-    expect(walkTo(s, shore.x, shore.y)).toBe(true);
+    // Home is the Shoreline, found from the start.
+    expect(c.discovered).toContain('shore');
+    c.upgrades.push('trainSenses');
+    c.levels.trainSenses = 40;
+    const pools = is.places.tidePools;
+    expect(walkTo(s, pools.x, pools.y)).toBe(true);
     const before = c.currency;
     c.walk!.next = 1e9; // no run-ins for this test
-    for (let i = 0; i < 300 && c.walk; i++) tick(s, 1);
+    for (let i = 0; i < 400 && c.walk; i++) tick(s, 1);
     expect(c.walk).toBeNull();
-    expect(c.discovered).toContain('shore');
-    expect(placeSeen(s, 'shore')).toBe(true);
-    expect(c.parts).toContain('shell');
+    expect(c.discovered).toContain('tidePools');
+    expect(placeSeen(s, 'tidePools')).toBe(true);
+    expect(c.parts).toContain('stalkEyes');
     expect(c.mates.length).toBe(1);
     expect(c.currency.gt(before)).toBe(true);
     expect(s.reports.find((r) => r.kind === 'trip')?.success).toBe(true);
@@ -757,6 +762,7 @@ describe('creature stage', () => {
   it('a walk runs into things on the road, and the choice counts', () => {
     const s = creatureGame();
     const c = s.stages.creature;
+    c.seed = 4242;
     c.pop = 10;
     const is = islandFor(s);
     walkTo(s, is.places.highlands.x, is.places.highlands.y);
@@ -787,7 +793,7 @@ describe('creature stage', () => {
     const s = creatureGame();
     const c = s.stages.creature;
     const is = islandFor(s);
-    walkTo(s, is.places.shore.x, is.places.shore.y);
+    walkTo(s, is.places.marsh.x, is.places.marsh.y);
     tick(s, 5);
     c.mates.push({ id: 2, name: 'Silt', parts: {} });
     breed(s, 2);

@@ -216,7 +216,7 @@ export function familyLayout(state: GameState): string {
   return `<div class="panel-head"><h2>Generation ${s.generation}</h2><span class="label dim">Line ×${(GENERATION_MULT ** s.generation).toFixed(2)}</span></div>
     ${egg}
     <div class="panel-head"><h2>Mates</h2><span class="label dim">${s.mates.length} / ${MAX_MATES}</span></div>
-    ${mates || '<p class="note">Mates are met while roaming, or on the shore. The first roam along the Shoreline always finds one.</p>'}
+    ${mates || '<p class="note">Mates are met while roaming, or courted when one wanders by the herd. The first new place your creature finds always has one.</p>'}
     <p class="note">Each generation makes the whole line stronger (all output ×${GENERATION_MULT}, every stat +1), and the young inherit the mate's parts. Eggs take longer each generation; Charm hurries them.</p>`;
 }
 

@@ -33,7 +33,7 @@ export interface Island {
 
 /** Where each kind of place likes to be, and how far from home (in tiles). */
 export const PLACE_SPOTS: Record<string, { where: 'coast' | 'pools' | 'marsh' | 'forest' | 'cliff' | 'cave' | 'high'; dist: number }> = {
-  shore: { where: 'coast', dist: 22 },
+  shore: { where: 'coast', dist: 0 },
   tidePools: { where: 'pools', dist: 50 },
   marsh: { where: 'marsh', dist: 65 },
   forest: { where: 'forest', dist: 85 },
@@ -134,7 +134,7 @@ export function islandOf(seed: number, places: PlaceDef[] = []): Island {
   const at = (x: number, y: number): number => biome[Math.round(y) * N + Math.round(x)];
   const land = (b: number) => b >= Biome.Sand;
 
-  // Home: on grass a little way in from a beach, like stepping out of the sea.
+  // Home: the Shoreline, where it first crawled out of the sea, with grass just inland.
   let home: Pt = { x: N / 2, y: N / 2 };
   const ha = rand() * Math.PI * 2;
   for (let k = 0; k < 24; k++) {
@@ -149,8 +149,9 @@ export function islandOf(seed: number, places: PlaceDef[] = []): Island {
       }
     }
     if (!beach) continue;
-    const p = { x: Math.round(beach.x - Math.cos(a) * 12), y: Math.round(beach.y - Math.sin(a) * 12) };
-    if (at(p.x, p.y) === Biome.Grass) {
+    const p = { x: Math.round(beach.x - Math.cos(a) * 2), y: Math.round(beach.y - Math.sin(a) * 2) };
+    const inland = { x: beach.x - Math.cos(a) * 9, y: beach.y - Math.sin(a) * 9 };
+    if (land(at(p.x, p.y)) && at(inland.x, inland.y) === Biome.Grass) {
       home = p;
       break;
     }
@@ -175,6 +176,11 @@ export function islandOf(seed: number, places: PlaceDef[] = []): Island {
   for (const p of places) {
     const spot = PLACE_SPOTS[p.id];
     if (!spot) continue;
+    if (spot.dist === 0) {
+      // The place you start at.
+      placesOut[p.id] = { ...home };
+      continue;
+    }
     let best: Pt | null = null;
     let bestScore = Infinity;
     for (let tries = 0; tries < 4 && !best; tries++) {

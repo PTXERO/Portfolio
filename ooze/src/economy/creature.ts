@@ -152,13 +152,18 @@ export const EVENT_WAIT = 30;
 /** How close counts as arriving somewhere. */
 const ARRIVE = 3;
 
-/** The game's island. The first time, it's rolled and the creature set down at home. */
+/** The game's island. The first time, it's rolled and the creature set down at home, on the Shoreline. */
 export function islandFor(state: GameState): Island {
   const s = st(state);
   const is = islandOf(s.seed, def().places!);
   if (s.pos.x < 0) {
     s.pos = { ...is.home };
     reveal(is, s.seen, is.home.x, is.home.y, 22);
+  }
+  // Home is the Shoreline: found from the start.
+  if (!(s.trips.shore > 0)) {
+    s.trips.shore = 1;
+    if (!s.discovered.includes('shore')) s.discovered.push('shore');
   }
   return is;
 }
