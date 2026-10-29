@@ -73,6 +73,7 @@ const SEASON_LAND = [
 const FOG = ['#d4dbe0', '#bfc8cf'];
 /** Things that shine in the dark (fireflies, a beast's eye): alpha 254 tells the shader to make them glow. */
 const GLOW_Y = 'rgba(245, 196, 94, 0.996)';
+const GLOW_LIME = 'rgba(220, 250, 130, 0.996)';
 const DEEP = '#24506e';
 const DIET_DOT: Record<string, string> = { grazer: '#86dcd8', hunter: '#f2906c', omnivore: '#f5c45e', none: PAL.g };
 
@@ -116,6 +117,7 @@ export class RangeScene {
   private bow = 0;
   /** Where the camera was last frame (the air layer slides a little as it moves). */
   private airCam = { x: 0, y: 0 };
+  private flies: { x: number; y: number; ph: number }[] = [];
   /** Where the rainbow stands (its foot's centre on the land, and its size in tiles). */
   private bowAt: { x: number; y: number; r: number } | null = null;
   private bowView: [number, number, number, number] = [0, 0, 1, 0];
@@ -1387,15 +1389,31 @@ export class RangeScene {
         b.fillStyle = `rgba(16, 24, 56, ${0.5 * night})`;
         b.fillRect(0, 0, W, H);
       }
-      if (season.name === 'Summer' && this.zoom >= 1.6) {
-        for (let i = 0; i < 10; i++) {
-          if (Math.sin(t * 2 + i * 1.7) < 0.2) continue;
-          b.fillStyle = GLOW_Y;
-          const fx = home.x + Math.sin(t * 0.3 + i) * 6 + (hash(i, 71) - 0.5) * 8;
-          const fy = home.y + Math.cos(t * 0.4 + i * 2) * 4;
-          b.fillRect(Math.round(this.sx(fx)), Math.round(this.py(fx, fy)) - 3, 1, 1);
-        }
-      }
+    }
+    // Summer nights: fireflies in the air over everything (a layer over the view, like the
+    // seasons' motes, so they never look like something to tap). Each is a little dark body
+    // whose tail lights up, glows and goes out, drifting in lazy loops.
+    const flyWant = Math.round(14 * weight(1) * Math.max(0, (night - 0.3) / 0.7));
+    while (this.flies.length < flyWant) this.flies.push({ x: Math.random() * W, y: H * 0.2 + Math.random() * H * 0.7, ph: Math.random() * 20 });
+    this.flies.length = flyWant;
+    for (const f of this.flies) {
+      f.x += Math.sin(t * 0.6 + f.ph) * 4 * dt + (Math.abs(camDX) < W ? -camDX * 0.3 : 0);
+      f.y += Math.cos(t * 0.5 + f.ph * 1.3) * 3 * dt + (Math.abs(camDY) < H ? -camDY * 0.3 : 0);
+      if (f.x < -3) f.x += W + 6;
+      if (f.x > W + 3) f.x -= W + 6;
+      if (f.y < -3) f.y += H + 6;
+      if (f.y > H + 3) f.y -= H + 6;
+      const px = Math.round(f.x);
+      const py = Math.round(f.y);
+      const lit = Math.sin(t * 1.6 + f.ph) > 0.35;
+      // Dark between flashes (a firefly in the dark is only its light).
+      if (!lit) continue;
+      b.fillStyle = 'rgba(214, 240, 120, 0.28)';
+      b.fillRect(px - 1, py - 1, 3, 3);
+      b.fillStyle = GLOW_LIME;
+      b.fillRect(px, py, 1, 1);
+      b.fillStyle = '#2a2a1e';
+      b.fillRect(px - 1, py, 1, 1);
     }
 
     this.fx.run(f);

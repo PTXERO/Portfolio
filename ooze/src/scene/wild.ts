@@ -6,7 +6,7 @@
 // fruit trees at the forest's edge do the same in autumn. Crabs scuttle on the beaches and
 // duck away from feet; small birds peck about and burst up when anything comes close; fish
 // jump offshore; a little wild herd of grazers keeps to the far grass and bolts from you;
-// and once in a while a few birds come down near a nest, until you get too close.
+// and now and then giant dragonflies settle on the grass, until something comes too close.
 
 import { PAL } from '../art/sprites';
 import { Biome, ISLAND, isLand, type Island, type Pt } from '../economy/island';
@@ -45,14 +45,15 @@ interface Crab {
   hide: number;
 }
 
+/** A few giant dragonflies settled on the grass (there are no birds yet: insects had the air). */
 interface Flock {
   x: number;
   y: number;
-  /** Seconds since it took off (-1 while on the ground), and which way it went. */
+  /** Seconds since they took off (-1 while settled), and which way they went. */
   up: number;
   dir: number;
-  /** Seconds before it lands somewhere new. */
-  away: number;
+  /** Seconds they'll stay settled if left alone. */
+  stay: number;
 }
 
 interface Grazer {
@@ -72,8 +73,8 @@ const biomeAt = (is: Island, x: number, y: number) => is.biome[Math.round(y) * I
 export class Wild {
   bushes: Bush[] = [];
   private crabs: Crab[] = [];
-  private flock: Flock | null = null;
-  private flockTimer = 120 + Math.random() * 120;
+  private flocks: Flock[] = [];
+  private flockTimer = 40 + Math.random() * 60;
   private grazers: Grazer[] = [];
   private fishTimer = 3;
   private seed = -1;
@@ -182,41 +183,38 @@ export class Wild {
       }
     }
 
-    // Now and then (rarely) a few little birds come down to peck about near a nest. They stay
-    // until your creature comes close, then burst up and away, and it's a while before any
-    // come back.
-    if (!this.flock) {
-      this.flockTimer -= dt;
-      if (this.flockTimer <= 0 && o.night < 0.5 && o.season !== 3 && o.nests.length) {
-        this.flockTimer = 180 + Math.random() * 240;
-        const n = o.nests[Math.floor(Math.random() * o.nests.length)];
-        for (let i = 0; i < 20; i++) {
-          const a = Math.random() * Math.PI * 2;
-          const d = 5 + Math.random() * 7;
-          const x = n.x + Math.cos(a) * d;
-          const y = n.y + Math.sin(a) * d;
-          if (biomeAt(is, x, y) === Biome.Grass && Math.hypot(o.me.x - x, o.me.y - y) > 6) {
-            this.flock = { x, y, up: -1, dir: 1, away: 0 };
-            break;
-          }
+    // Giant dragonflies: now and then a few come down to rest on grass anywhere on the island
+    // (often somewhere in view). They sit with their wings out until something comes close
+    // (your creature or any of the herd) or they've rested long enough, then whirr up and
+    // away; it's a while before others settle.
+    this.flockTimer -= dt;
+    if (this.flockTimer <= 0 && this.flocks.length < 3 && o.night < 0.5 && o.season !== 3) {
+      this.flockTimer = 60 + Math.random() * 120;
+      for (let i = 0; i < 30; i++) {
+        const inView = Math.random() < 0.6;
+        const w = inView ? v.toWorld(v.W * (0.1 + Math.random() * 0.8), v.H * (0.2 + Math.random() * 0.6)) : { x: 2 + Math.random() * (ISLAND - 4), y: 2 + Math.random() * (ISLAND - 4) };
+        const g = biomeAt(is, w.x, w.y);
+        if ((g === Biome.Grass || g === Biome.Marsh || g === Biome.High) && !near(w.x, w.y, 6)) {
+          this.flocks.push({ x: w.x, y: w.y, up: -1, dir: 1, stay: 40 + Math.random() * 80 });
+          break;
         }
       }
     }
-    const f = this.flock;
-    if (f) {
-      if (f.up < 0 && Math.hypot(o.me.x - f.x, o.me.y - f.y) < 3.5) {
-        f.up = 0;
-        f.dir = o.me.x < f.x ? 1 : -1;
-      }
-      if (f.up >= 0) f.up += dt;
-      if (f.up > 3) this.flock = null;
-      else if (!(o.night > 0.5 && f.up < 0)) {
-        const X = v.sx(f.x);
-        const Y = v.py(f.x, f.y);
-        const lift = Math.max(0, f.up);
-        if (on(X, Y) || lift > 0) sprites.push({ y: f.y + (lift > 0 ? 50 : 0), draw: () => drawFlock(o.b, X, Y, z, t, lift, f.dir) });
-      }
+    for (const f of this.flocks) {
+      if (f.up < 0) {
+        f.stay -= dt;
+        const close = o.feet.find((p) => Math.hypot(p.x - f.x, p.y - f.y) < 3.5);
+        if (close || f.stay <= 0 || o.night > 0.5) {
+          f.up = 0;
+          f.dir = close ? (close.x < f.x ? 1 : -1) : Math.random() < 0.5 ? 1 : -1;
+        }
+      } else f.up += dt;
+      const X = v.sx(f.x);
+      const Y = v.py(f.x, f.y);
+      const lift = Math.max(0, f.up);
+      if (on(X, Y) || lift > 0) sprites.push({ y: f.y + (lift > 0 ? 50 : 0), draw: () => drawFlock(o.b, X, Y, z, t, lift, f.dir) });
     }
+    this.flocks = this.flocks.filter((f) => f.up < 3);
 
     // Fish jump now and then, just off the shore in view.
     this.fishTimer -= dt;
@@ -325,27 +323,29 @@ function drawCrab(b: CanvasRenderingContext2D, X: number, Y: number, k: number, 
   b.fillRect(X + 2 * k, Y - (step ? 1 : 2) * k, k, k);
 }
 
+/** Giant dragonflies: long bodies, four glassy wings; settled, the wings lie flat and catch
+ * the light; up, they blur and the insects dart off in quick zigzags. */
 function drawFlock(b: CanvasRenderingContext2D, X: number, Y: number, z: number, t: number, lift: number, dir: number): void {
   const k = z >= 6 ? 2 : 1;
-  for (let i = 0; i < 4; i++) {
-    const ox = (i - 1.5) * 3 * k + (lift > 0 ? dir * lift * lift * 10 * (1 + i * 0.2) : 0);
-    const oy = lift > 0 ? -lift * (14 + i * 3) : 0;
+  const n = 3;
+  for (let i = 0; i < n; i++) {
+    const ox = (i - 1) * 6 * k + (lift > 0 ? dir * lift * lift * 14 * (1 + i * 0.3) + Math.sin(t * 9 + i) * 2 : 0);
+    const oy = (i % 2) * 3 * k + (lift > 0 ? -lift * (16 + i * 4) : 0);
     const x = Math.round(X + ox);
-    const y = Math.round(Y + oy - (i % 2));
-    if (lift > 0) {
-      // Flapping.
-      const up = Math.floor(t * 12 + i) % 2;
-      b.fillStyle = '#4a4038';
-      b.fillRect(x - k, y - up * k, k, k);
-      b.fillRect(x + k, y - up * k, k, k);
-      b.fillRect(x, y, k, k);
-    } else {
-      // Pecking: heads bob.
-      const peck = Math.sin(t * 5 + i * 2) > 0.5 ? 1 : 0;
-      b.fillStyle = '#6a5a48';
-      b.fillRect(x, y - k, 2 * k, k);
-      b.fillStyle = '#3c3228';
-      b.fillRect(x + (i % 2 ? -1 : 2) * k, y - (2 - peck) * k, k, k);
+    const y = Math.round(Y + oy) - (lift > 0 ? 0 : 2 * k);
+    // Body: a long blue-green line with a darker head.
+    b.fillStyle = i === 1 ? '#3f9c7e' : '#4c8fb3';
+    b.fillRect(x - 2 * k, y, 5 * k, k);
+    b.fillStyle = '#1c3550';
+    b.fillRect(x + 3 * k, y, k, k);
+    // Wings: pale and see-through, flat at rest, a flicker in flight.
+    const beat = lift > 0 ? Math.floor(t * 20 + i) % 2 : 0;
+    b.fillStyle = 'rgba(220, 240, 250, 0.7)';
+    b.fillRect(x - k, y - k - beat * k, 2 * k, k);
+    b.fillRect(x + k, y - k - beat * k, 2 * k, k);
+    if (!beat) {
+      b.fillRect(x - k, y + k, 2 * k, k);
+      b.fillRect(x + k, y + k, 2 * k, k);
     }
   }
 }
