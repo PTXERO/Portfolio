@@ -86,11 +86,11 @@ describe('the spear\'s web of ideas', () => {
 });
 
 describe('the Extinction', () => {
-  it('kills a tribe that does nothing within a few days', () => {
+  it('kills a tribe left to itself within a few weeks', () => {
     const s = game('omnivore');
     const d = play(s, () => {});
     console.log('idle omnivore:', d, 'days');
-    expect(d).toBeLessThan(7);
+    expect(d).toBeLessThan(20);
     expect(s.stages.tribal.tribe!.ex!.over).toBe(true);
   });
 

@@ -12,6 +12,7 @@
 // When fewer than two are left, it's over: back to just after the waking, to try again (the
 // spear remembers what it taught, so those ideas come cheaper).
 
+import { discover, ordainedNeeds, tribeLaunches, tribeThinks, type SpellId } from './miracles';
 import { COST_STEP, MIND_NODE, modsOf, NODE_COST, reachable, type Mods } from './mindTree';
 import type { GameState, TribeState } from './types';
 
@@ -94,6 +95,21 @@ export interface ExtinctionState {
    * it work harder. And how many times today the leader has gathered by hand. */
   lead?: JobId | null;
   hand?: number;
+  /** The spear's will: prayer to spend on miracles, the dread they cause, the miracles found
+   * (and not yet shown), how often each has been worked, those ordained, and the Chronicle. */
+  prayer?: number;
+  dread?: number;
+  powers?: SpellId[];
+  newPowers?: SpellId[];
+  casts?: Partial<Record<SpellId, number>>;
+  ordained?: SpellId[];
+  log?: { day: number; text: string }[];
+  /** A miracle's lasting touch: a rich shore today; fire and warmth tonight. */
+  boost?: { day: number; fish: number };
+  fireTonight?: boolean;
+  warmTonight?: boolean;
+  /** Miracles the spear worked unasked last night (for the scene to show). */
+  worked?: SpellId[];
 }
 
 export type Focus = 'wood' | 'raft' | 'ideas';
@@ -114,6 +130,8 @@ export const RAFT: { id: RaftPart; name: string; work: number; wood: number; nee
 ];
 /** It carries four, and needs food for them for the crossing. */
 export const FAMILY = 4;
+/** Work a day the raft can take, however many are on it (about six at it). */
+const BUILD_CAP = 6;
 export const VOYAGE_FOOD = 20;
 /** The ash winter, and the first green after. */
 export const WINTER = [12, 26];
@@ -189,8 +207,8 @@ const YIELD: Record<JobId, number> = { forage: 1.3, scavenge: 1.9, dig: 1.1, fis
 /** Insight a day from the square root of the listening done. */
 const LISTEN = 1.4;
 /** (Low on their own: the ideas taken raise them, so the path chosen sets how many can live.) */
-const DIG_CAP = 0.2;
-const FISH_CAP = 0.22;
+const DIG_CAP = 0.11;
+const FISH_CAP = 0.12;
 /** Overnight: meat rots (much slower once dried), plants a little; carrion on the ground too. */
 const MEAT_KEEP = 0.62;
 const PLANT_KEEP = 0.95;
@@ -296,6 +314,13 @@ export function newExtinction(tribe: TribeState): ExtinctionState {
     luck: (tribe.seed * 7 + 3) >>> 0,
     auto: true,
     focus: 'ideas',
+    prayer: 6,
+    dread: 0,
+    powers: ['lightning'],
+    newPowers: ['lightning'],
+    casts: {},
+    ordained: [],
+    log: [{ day: 1, text: 'They woke on an island of ash, and knew that they were. They knew, too, that they were starving.' }],
     lead: null,
     hand: 0,
   };
@@ -320,7 +345,18 @@ export function exOf(state: GameState): ExtinctionState | undefined {
 export function startExtinction(state: GameState): ExtinctionState | undefined {
   const t = state.stages.tribal.tribe;
   if (!t || !t.awake) return undefined;
-  if (!t.ex) {
+  if (t.ex) {
+    // (A run begun before the spear's will: it gets its powers, and runs itself.)
+    const ex = t.ex;
+    if (!ex.powers) {
+      ex.powers = ['lightning'];
+      ex.newPowers = ['lightning'];
+      ex.prayer = 6;
+      ex.dread = 0;
+      ex.log = [];
+    }
+    ex.auto = true;
+  } else {
     t.ex = newExtinction(t);
     autoAssign(t.ex);
     t.start = JSON.stringify(t.ex);
@@ -375,7 +411,8 @@ function workOf(ex: ExtinctionState, p: Survivor, job: JobId, m = modsOf(ex.idea
   const shaking = p.sick !== undefined ? 0.5 : 1;
   const cold = seasonOf(ex) === 'winter' && (job === 'forage' || job === 'scavenge' || job === 'dig') ? WINTER_GATHER : 1;
   const lead = ex.lead === job && job !== 'rest' ? 1 + LEAD_BONUS : 1;
-  return (sk[job] ?? 1) * (sk.all ?? 1) * weak * dietSkill(ex.diet, job) * ideas * trait * shaking * cold * lead;
+  const cower = (ex.dread ?? 0) >= 60 ? 0.85 : 1;
+  return (sk[job] ?? 1) * (sk.all ?? 1) * weak * dietSkill(ex.diet, job) * ideas * trait * shaking * cold * lead * cower;
 }
 
 /** Hunger now (for sorting who's weakest). */
@@ -398,8 +435,11 @@ export function dayYield(ex: ExtinctionState): Record<JobId, number> {
   out.forage = Math.min(out.forage, ex.ash);
   out.scavenge = Math.min(out.scavenge, ex.carrion);
   out.dig = Math.min(out.dig, start * DIG_CAP * (1 + m.digCap));
-  out.fish = Math.min(out.fish, start * FISH_CAP * (1 + m.fishCap));
+  const rich = ex.boost && ex.boost.day === ex.day ? ex.boost.fish : 0;
+  out.fish = Math.min(out.fish, start * FISH_CAP * (1 + m.fishCap + rich));
   out.wood = Math.min(out.wood, ex.trees ?? 0);
+  // Only so many hands fit round a raft.
+  out.build = Math.min(out.build, BUILD_CAP);
   // The spear only says so much a day: more listening helps less and less.
   out.listen = LISTEN * Math.sqrt(out.listen);
   return out;
@@ -415,7 +455,8 @@ export function autoAssign(ex: ExtinctionState): void {
   const n = ex.people.length;
   if (!n) return;
   const m = modsOf(ex.ideas, ex.diet);
-  const need = ((n * ex.ration) / (1 + m.meal)) * 1.15;
+  // (Always for full meals: short rations are for when the work can't bring that in.)
+  const need = (n / (1 + m.meal)) * 1.15;
   const start = n + ex.deaths;
   const food = (['forage', 'scavenge', 'dig', 'fish'] as const).filter((j) => jobOpen(ex, j) && edible(ex.diet, jobFood(ex.diet, j)));
   // What a job's raw work turns into, as far as the land allows (as in dayYield).
@@ -481,7 +522,7 @@ export function autoAssign(ex: ExtinctionState): void {
   // The rest: most to the focus, some to wood (the fire and the raft run on it).
   const rest = free.size;
   const focusJob: JobId = ex.focus === 'wood' ? 'wood' : ex.focus === 'raft' && jobOpen(ex, 'build') ? ((ex.wood ?? 0) > 8 ? 'build' : 'wood') : 'listen';
-  put(focusJob, Math.round(rest * 0.6));
+  put(focusJob, focusJob === 'build' ? Math.min(Math.round(rest * 0.6), 7) : Math.round(rest * 0.6));
   if ((ex.trees ?? 0) > 0) put('wood', Math.round(free.size * 0.4));
 }
 
@@ -651,11 +692,17 @@ function night(ex: ExtinctionState): void {
   const m = modsOf(ex.ideas, ex.diet);
   // The fire (once they know it) burns wood each night; without wood, no cooking and no warmth.
   const fireKnown = ex.ideas.includes('fire');
-  const fire = fireKnown && (ex.wood ?? 0) >= FIRE_WOOD;
-  if (fire) ex.wood! -= FIRE_WOOD;
+  const burnt = fireKnown && (ex.wood ?? 0) >= FIRE_WOOD;
+  if (burnt) ex.wood! -= FIRE_WOOD;
+  // (A lightning-lit fire burns tonight whether they know fire or not.)
+  const fire = burnt || !!ex.fireTonight;
   const season = seasonOf(ex);
-  const cold = season === 'winter' && !fire ? WINTER_COLD : 0;
-  const value = (1 + (fire || !fireKnown ? m.meal : 0)) * (ex.ration < 1 ? 1 + m.ration : 1);
+  const cold = season === 'winter' && !fire && !ex.warmTonight ? WINTER_COLD : 0;
+  // Cooking: what fire they know, or (by lightning) the plain good of a cooked meal.
+  const cooking = fireKnown ? (fire ? m.meal : 0) : fire ? 0.35 : m.meal;
+  ex.fireTonight = false;
+  ex.warmTonight = false;
+  const value = (1 + cooking) * (ex.ration < 1 ? 1 + m.ration : 1);
   // The hungriest eat first (or, if the strong eat first, the workers do).
   const order = [...ex.people].sort((a, b) => (m.strongFirst ? Number(a.job === 'rest') - Number(b.job === 'rest') : 0) || b.hunger - a.hunger);
   let ate = 0;
@@ -721,8 +768,15 @@ function night(ex: ExtinctionState): void {
   ex.today = { plants: 0, meat: 0, insight: 0 };
   ex.last = { day: ex.day, ate, wanted: (ex.people.length + starved.length) * ex.ration, starved: starved.map((p) => ({ name: p.name, trait: p.trait })), spoiled: before - ex.meat - ex.plants, shook, killed, caught, fire, season: ex.day === WINTER[0] ? 'winter' : ex.day === WINTER[1] ? 'green' : null };
   if (ex.people.length < 2) ex.over = true;
-  // A new day: the tribe sets itself to work (unless managed by hand).
-  else if (ex.auto) autoAssign(ex);
+  else {
+    // A new day: the tribe thinks (rations, what to work toward), the spear finds new powers
+    // and works the ordained ones where they're needed, and everyone goes to work.
+    tribeThinks(ex);
+    discover(ex);
+    autoAssign(ex);
+    ex.worked = ordainedNeeds(ex);
+  }
+  if (ex.people.length < 2) ex.over = true;
 }
 
 /** Runs the Extinction on (only ever while being played). Returns true when a night passed. */
@@ -740,6 +794,7 @@ export function extinctionTick(state: GameState, dt: number): boolean {
     if (ex.clock >= DAY_SEC - 1e-9) {
       night(ex);
       nights = true;
+      if (tribeLaunches(state)) break;
     }
   }
   t.pop = ex.people.length;

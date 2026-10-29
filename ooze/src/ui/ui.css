@@ -623,8 +623,8 @@ textarea {
 .ex-people .person.chosen { background: rgba(245, 196, 94, 0.12); }
 .ex-raft { flex-direction: column; align-items: stretch; }
 .raft-part { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 8px; font-size: 12px; margin-top: 6px; }
-.raft-part .bar { height: 8px; background: var(--panel-lo); box-shadow: 0 0 0 2px var(--ink); }
-.raft-part .bar i { display: block; height: 100%; background: var(--gold); }
+.raft-part .meter { height: 8px; background: var(--panel-lo); box-shadow: 0 0 0 2px var(--ink); }
+.raft-part .meter i { display: block; height: 100%; background: var(--gold); }
 .ex-raft .launch { margin-top: 8px; width: 100%; }
 .sub.warn { color: #ff9a7a; }
 b.winter { color: #a8c8ff; }
@@ -636,3 +636,29 @@ b.green { color: var(--mint); }
 .ex-jobs .job.auto { padding-top: 5px; margin-top: 5px; }
 .ex-jobs .job.auto .num { font-size: 20px; color: var(--gold); min-width: 28px; text-align: right; }
 .ex-jobs .small-toggle { margin-top: 8px; font-size: 12px; align-self: flex-start; }
+
+/* ---- The spear's will ---- */
+.cinematic #spellbar, .cinematic #castbar { opacity: 0; pointer-events: none; }
+#spellbar { position: absolute; left: 8px; right: 8px; bottom: 12px; z-index: 3; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; pointer-events: none; }
+#spellbar > * { pointer-events: auto; }
+#spellbar .prayer { font-size: 20px; color: #e8b0ff; text-shadow: 0 2px 0 var(--ink); margin-right: 4px; display: flex; flex-direction: column; line-height: 0.9; }
+#spellbar .prayer i { font-style: normal; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
+#spellbar .spell-btn { display: flex; flex-direction: column; align-items: center; padding: 4px 6px calc(4px + var(--depth)); color: #e8b0ff; }
+#spellbar .spell-btn span { font-family: var(--digits); font-size: 13px; color: var(--cream); }
+#spellbar .spell-btn.poor { opacity: 0.45; }
+#castbar { position: absolute; left: 10px; right: 10px; top: calc(env(safe-area-inset-top) + 8px); z-index: 5; display: flex; align-items: center; gap: 10px; padding: 8px 10px; color: #e8b0ff; }
+#castbar div { flex: 1; display: flex; flex-direction: column; font-size: 13px; color: var(--cream); }
+#castbar b { color: #e8b0ff; font-size: 15px; }
+.spell { align-items: flex-start; }
+.spell .glyph-box { flex: none; width: 34px; height: 34px; display: grid; place-items: center; color: #e8b0ff; background: var(--panel-lo); box-shadow: 0 0 0 2px var(--ink); font-family: var(--digits); font-size: 20px; }
+.spell.unknown { opacity: 0.6; }
+.spell.ordained .glyph-box { color: var(--gold); }
+.spell .spell-row { margin-top: 4px; }
+.spell .px-btn.small { font-size: 12px; padding: 2px 8px calc(2px + var(--depth)); }
+.spell .px-btn.small.on { --face: var(--gold); --hi: var(--gold-hi); --lo: var(--gold-lo); color: var(--ink); }
+.dread .meter { position: relative; height: 8px; margin: 6px 0; background: var(--panel-lo); box-shadow: 0 0 0 2px var(--ink); }
+.dread .meter i { display: block; height: 100%; background: linear-gradient(90deg, #8a5ac8, #ff5a6e); }
+.dread .meter b { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--cream); opacity: 0.6; }
+.chronicle p { margin: 4px 0 0; font-size: 13px; color: var(--dim); }
+.chronicle p.now { color: var(--cream); }
+#modal .glyph-big { display: flex; justify-content: center; color: #e8b0ff; margin: 8px 0; }

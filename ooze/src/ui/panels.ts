@@ -1,7 +1,7 @@
 // The tab panels under the scene. Each panel is laid out once (when its rows
 // change) and then patched in place, so a button never vanishes under a finger.
 
-import { ideasLayout, tribeKey, tribeLayout } from './tribePanels';
+import { ideasLayout, spellsLayout, tribeKey, tribeLayout } from './tribePanels';
 import { icon, type SpriteName } from '../art/sprites';
 import { lifeIcon } from '../scene/icons';
 import { bodyLayout, creatureKey, creatureUpdate, exploreLayout, familyLayout, herdLayout } from './creaturePanels';
@@ -27,7 +27,7 @@ import { timeBankCap } from '../economy/offline';
 import { dialMax, dietOf, feedMult, generatorRate, habitatMult, maxLevel, milestoneMet, MILESTONES, nextMilestone, stageRate, upgradeLevel } from '../economy/rates';
 import { DIALS, type BuyAmount, type DialId, type Effect, type GameState, type ReactionDef, type StageId, type UpgradeDef } from '../economy/types';
 
-export type Tab = 'grow' | 'boosts' | 'lab' | 'mutate' | 'pond' | 'body' | 'explore' | 'family' | 'roots' | 'ideas' | 'menu';
+export type Tab = 'grow' | 'boosts' | 'lab' | 'mutate' | 'pond' | 'body' | 'explore' | 'family' | 'roots' | 'ideas' | 'miracles' | 'menu';
 
 export const TABS: { id: Tab; label: string; sprite: SpriteName }[] = [
   { id: 'grow', label: 'Grow', sprite: 'sprout' },
@@ -39,6 +39,7 @@ export const TABS: { id: Tab; label: string; sprite: SpriteName }[] = [
   { id: 'explore', label: 'Roam', sprite: 'explore' },
   { id: 'family', label: 'Family', sprite: 'family' },
   { id: 'roots', label: 'Roots', sprite: 'roots' },
+  { id: 'miracles', label: 'Miracles', sprite: 'bolt' },
   { id: 'ideas', label: 'Ideas', sprite: 'spark' },
   { id: 'menu', label: 'Menu', sprite: 'menu' },
 ];
@@ -62,6 +63,7 @@ export function tabsFor(state: GameState): Tab[] {
     family: creature && (cst.mates.length > 0 || !!cst.egg || cst.generation > 0),
     roots: hasRoots(state) && (!creature || cst.generation > 0),
     ideas: !!def.tribal && !!cst.tribe?.ex,
+    miracles: !!def.tribal && !!cst.tribe?.ex,
     menu: true,
   };
   return TABS.map((t) => t.id).filter((t) => has[t]);
@@ -255,6 +257,7 @@ export function layout(state: GameState, tab: Tab): string {
 
   if (def.tribal && tab === 'grow') return tribeLayout(state);
   if (def.tribal && tab === 'ideas') return ideasLayout(state);
+  if (def.tribal && tab === 'miracles') return spellsLayout(state);
   if (tab === 'grow' && def.places) {
     return herdLayout(
       state,

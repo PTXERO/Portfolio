@@ -2,8 +2,9 @@
 // the Ideas the spear can teach.
 
 import { STORY } from '../content/tribal';
-import { count, dayYield, type Focus, eatsMeat, eatsPlants, FAMILY, hungerWord, ideaCost, jobFood, jobInfo, JOBS, jobOpen, launchBlockers, provisions, RAFT, raftDone, raftPart, seasonOf, TRAITS, VOYAGE_FOOD, WINTER, type Diet, type ExtinctionState } from '../economy/extinction';
+import { count, dayYield, eatsMeat, eatsPlants, FAMILY, hungerWord, ideaCost, jobFood, jobInfo, JOBS, jobOpen, launchBlockers, provisions, RAFT, raftDone, raftPart, seasonOf, TRAITS, VOYAGE_FOOD, WINTER, type Diet, type ExtinctionState } from '../economy/extinction';
 import { BRANCHES, MIND_NODE, MIND_TREE, nodeFor, reachable } from '../economy/mindTree';
+import { DREAD_COWER, DREAD_FLEE, ORDAIN_AFTER, PRAYER_MAX, spellsFor, type Gesture } from '../economy/miracles';
 import { tribeOf } from '../economy/tribal';
 import type { GameState } from '../economy/types';
 
@@ -21,7 +22,7 @@ export function tribeKey(state: GameState): string {
   const t = tribeOf(state);
   const ex = t?.ex;
   if (!ex) return JSON.stringify([t?.awake]);
-  return JSON.stringify([ex.day, ex.people.map((p) => [p.id, p.job, Math.round(p.hunger * 4)]), Math.floor(ex.plants), Math.floor(ex.meat), Math.floor(ex.insight), ex.ration, ex.ideas, ex.diet, ex.over, picked, Math.floor(ex.wood ?? 0), ex.raft, ex.family, ex.escaped, ex.people.map((p) => p.sick), ex.auto, ex.focus, ex.lead]);
+  return JSON.stringify([ex.day, ex.people.map((p) => [p.id, p.job, Math.round(p.hunger * 4)]), Math.floor(ex.plants), Math.floor(ex.meat), Math.floor(ex.insight), ex.ration, ex.ideas, ex.diet, ex.over, picked, Math.floor(ex.wood ?? 0), ex.raft, ex.family, ex.escaped, ex.people.map((p) => p.sick), ex.auto, ex.focus, Math.floor(ex.prayer ?? 0), Math.floor(ex.dread ?? 0), ex.powers, ex.casts, ex.ordained, ex.log?.length]);
 }
 
 export function tribeLayout(state: GameState): string {
@@ -33,7 +34,7 @@ export function tribeLayout(state: GameState): string {
       <div class="card px-box"><div class="info"><div class="name">${t.survivors} of the herd lived</div>
       <div class="sub">${t.awake ? STORY.wakeSub : STORY.approach}</div></div></div>`;
   }
-  return [storesCard(ex), rationCard(ex), jobsCard(ex), raftCard(ex), peopleCard(ex)].join('');
+  return [storesCard(ex), chronicleCard(ex), workCard(ex), raftCard(ex), peopleCard(ex)].join('');
 }
 
 function storesCard(ex: ExtinctionState): string {
@@ -60,36 +61,28 @@ function seasonLine(ex: ExtinctionState): string {
   return '';
 }
 
-function rationCard(ex: ExtinctionState): string {
-  const opt = (v: number, label: string) => `<button class="px-btn${ex.ration === v ? ' on' : ''}" data-ration="${v}">${label}</button>`;
-  return `<div class="card px-box opts"><div class="info"><div class="name">Rations</div>
-    <div class="sub">Less food a night stretches it further, but hunger still builds, and the hungry work worse.</div>
-    <div class="policy">${opt(1, 'Full')}${opt(0.5, 'Half')}${opt(0.25, 'Quarter')}</div></div></div>`;
-}
-
-function jobsCard(ex: ExtinctionState): string {
+/** What they're doing today (their own choice): read only. */
+function workCard(ex: ExtinctionState): string {
   const y = dayYield(ex);
   const unit = (id: (typeof JOBS)[number]['id']) => jobFood(ex.diet, id) ?? (id === 'wood' ? 'wood' : id === 'build' ? 'work on the raft' : 'insight');
   const rows = JOBS.filter((j) => j.id !== 'rest' && jobOpen(ex, j.id))
     .map((plain) => {
       const j = jobInfo(ex.diet, plain.id);
       const c = count(ex, j.id);
+      if (!c) return '';
       const left = j.id === 'forage' ? ` · ${n0(ex.ash)} left` : j.id === 'scavenge' ? ` · ${n0(ex.carrion)} left` : j.id === 'wood' ? ` · ${n0(ex.trees ?? 0)} left` : j.id === 'build' ? ` · ${raftPart(ex)?.name ?? ''}` : '';
-      const lead = ex.lead === j.id ? ' <span class="gold">· you lead here (+25%)</span>' : '';
-      // Left to the tribe, just who's doing what; by hand, the buttons too.
-      if (ex.auto) return c ? `<div class="job auto"><div class="info"><div class="name">${j.name}</div><div class="sub gain">+${n0(y[j.id])} ${unit(j.id)} a day${left}${lead}</div></div><b class="num">${c}</b></div>` : '';
-      return `<div class="job"><div class="info"><div class="name">${j.name}</div><div class="sub">${j.does}</div>
-        <div class="sub gain">${c ? `+${n0(y[j.id])} ${unit(j.id)} a day` : unit(j.id)}${left}${lead}</div></div>
-        <div class="seg"><button class="px-btn" data-job="${j.id}" data-d="-5">−5</button><button class="px-btn" data-job="${j.id}" data-d="-1">−</button><b class="num">${c}</b><button class="px-btn" data-job="${j.id}" data-d="1">+</button><button class="px-btn" data-job="${j.id}" data-d="5">+5</button></div></div>`;
+      return `<div class="job auto"><div class="info"><div class="name">${j.name}</div><div class="sub gain">+${n0(y[j.id])} ${unit(j.id)} a day${left}</div></div><b class="num">${c}</b></div>`;
     })
     .join('');
-  const focus = (f: Focus, label: string) => `<button class="px-btn${ex.focus === f ? ' on' : ''}" data-focus="${f}">${label}</button>`;
-  const head = ex.auto
-    ? `<div class="sub">The tribe sets itself to work each dawn: enough on food first, then the rest to what you set them on.</div>
-       <div class="policy">${focus('ideas', 'Ideas')}${focus('wood', 'Wood')}${focus('raft', 'The raft')}</div>`
-    : `<div class="sub">${count(ex, 'rest')} resting (hunger comes on a little slower).</div>`;
-  return `<div class="card px-box ex-jobs opts"><div class="info"><div class="name">Work</div>${head}</div>${rows}
-    <button class="px-btn small-toggle" data-act="ex-auto">${ex.auto ? 'Manage by hand' : 'Let the tribe decide'}</button></div>`;
+  const rest = count(ex, 'rest');
+  return `<div class="card px-box ex-jobs"><div class="info"><div class="name">What they're doing</div>
+    <div class="sub">They decide for themselves: food first, then ${ex.focus === 'raft' ? 'the raft' : ex.focus === 'wood' ? 'wood' : 'listening to the spear'}.${rest ? ` ${rest} resting.` : ''}</div></div>${rows}</div>`;
+}
+
+/** The Chronicle: what they did, and why, newest first. */
+function chronicleCard(ex: ExtinctionState): string {
+  const lines = [...(ex.log ?? [])].reverse().slice(0, 10).map((l, i) => `<p class="${i ? '' : 'now'}"><span class="dim">Day ${l.day}.</span> ${l.text}</p>`).join('');
+  return `<div class="card px-box chronicle"><div class="info"><div class="name">The Chronicle</div>${lines}</div></div>`;
 }
 
 /** The raft: each part's progress, then (once it's done) the four who go, and the food. */
@@ -97,20 +90,18 @@ function raftCard(ex: ExtinctionState): string {
   const parts = RAFT.map((p) => {
     const done = Math.min(p.work, ex.raft?.[p.id] ?? 0);
     const blocked = p.needs && !ex.ideas.includes(p.needs) && done < p.work;
-    return `<div class="raft-part"><span>${p.name}</span><div class="bar"><i style="width:${(done / p.work) * 100}%"></i></div><span class="dim tiny">${done >= p.work ? 'done' : blocked ? 'needs Rope (an idea)' : `${n0(done)}/${p.work} · ${p.wood} wood`}</span></div>`;
+    return `<div class="raft-part"><span>${p.name}</span><div class="meter"><i style="width:${(done / p.work) * 100}%"></i></div><span class="dim tiny">${done >= p.work ? 'done' : blocked ? 'needs Rope (an idea)' : `${n0(done)}/${p.work} · ${p.wood} wood`}</span></div>`;
   }).join('');
   const ready = raftDone(ex);
   const blockers = launchBlockers(ex);
   const tail = ready
-    ? `<div class="sub">It carries ${FAMILY}. Choose them below (tap a name), and stock ${VOYAGE_FOOD} food for the crossing (${n0(provisions(ex))} now). Those left behind stay on the ash.</div>
-       ${blockers.length ? `<div class="sub warn">${blockers.join(' ')}</div>` : ''}
-       <button class="px-btn gold launch" data-act="launch"${blockers.length ? ' disabled' : ''}>Set off</button>`
-    : '<div class="sub">The way off this island. Put people on Build the raft: it takes wood as they work.</div>';
+    ? `<div class="sub">It carries ${FAMILY}. They'll choose who goes and set off once there's ${VOYAGE_FOOD} food for the crossing (${n0(provisions(ex))} now).</div>
+       ${blockers.length ? `<div class="sub warn">${blockers.filter((b) => !b.startsWith('Choose')).join(' ')}</div>` : ''}`
+    : '<div class="sub">The way off this island. They\'ll build it when they can spare the hands; it takes wood.</div>';
   return `<div class="card px-box ex-raft"><div class="info"><div class="name">The raft</div>${tail}</div>${parts}</div>`;
 }
 
 function peopleCard(ex: ExtinctionState): string {
-  const ready = raftDone(ex);
   const fam = ex.family ?? [];
   const rows = [...ex.people]
     .sort((a, b) => b.hunger - a.hunger)
@@ -118,10 +109,10 @@ function peopleCard(ex: ExtinctionState): string {
       const w = hungerWord(ex, p);
       const chosen = fam.includes(p.id);
       const inner = `<b>${chosen ? '» ' : ''}${p.name}</b><span class="dim">${TRAITS[p.trait].name}</span><span class="dim">${jobInfo(ex.diet, p.job).name.split(' ')[0]}</span><span class="hunger">${w}</span>`;
-      return ready ? `<button class="person pick ${w.toLowerCase()}${chosen ? ' chosen' : ''}" data-family="${p.id}">${inner}</button>` : `<div class="person ${w.toLowerCase()}">${inner}</div>`;
+      return `<div class="person ${w.toLowerCase()}">${inner}</div>`;
     })
     .join('');
-  return `<div class="card px-box ex-people"><div class="info"><div class="name">Who's left</div><div class="sub">${ready ? `Tap to choose the ${FAMILY} who go on the raft.` : 'Hungriest first. They eat in that order too.'}</div></div>${rows}</div>`;
+  return `<div class="card px-box ex-people"><div class="info"><div class="name">Who's left</div><div class="sub">Hungriest first. They eat in that order too.</div></div>${rows}</div>`;
 }
 
 /** The idea picked in the web (shown in the card under it). */
@@ -240,4 +231,44 @@ function pickedCard(state: GameState, ex: ExtinctionState): string {
   return `<div class="card px-box idea-card ${n.kind}"><div class="info"><div class="label dim">${KIND_NAME[n.kind]}${n.branch ? ` · ${BRANCHES.find((b) => b.id === n.branch)!.name}` : ''}</div>
     <div class="name">${n.name}</div><div class="sub">${n.does}</div>
     ${remembered && !known ? '<div class="sub tiny gold">The spear remembers: half the insight.</div>' : ''}</div>${btn}</div>`;
+}
+
+/** A miracle's shape, drawn in pixels (how to draw it). */
+export function glyph(g: Gesture, scale = 3): string {
+  const M: Record<Gesture, string[]> = {
+    zigzag: ['#.......', '##......', '.##..#..', '..####..', '..#..##.', '.....##.', '......##', '.......#'],
+    spiral: ['.#####..', '#.....#.', '#.###.#.', '#.#.#.#.', '#.#...#.', '#..###..', '#.......', '.######.'],
+    circle: ['..####..', '.#....#.', '#......#', '#......#', '#......#', '#......#', '.#....#.', '..####..'],
+    line: ['........', '........', '......#.', '.......#', '########', '.......#', '......#.', '........'],
+  };
+  const rects = M[g].flatMap((row, y) => [...row].map((c, x) => (c === '#' ? `<rect x="${x}" y="${y}" width="1" height="1"/>` : ''))).join('');
+  return `<svg class="glyph" viewBox="0 0 8 8" width="${8 * scale}" height="${8 * scale}" shape-rendering="crispEdges" fill="currentColor">${rects}</svg>`;
+}
+
+export function spellsLayout(state: GameState): string {
+  const ex = tribeOf(state)?.ex;
+  if (!ex) return '';
+  const prayer = ex.prayer ?? 0;
+  const dread = ex.dread ?? 0;
+  const known = ex.powers ?? [];
+  const cards = spellsFor(ex.diet)
+    .map((sp) => {
+      if (!known.includes(sp.id)) return `<div class="card px-box spell unknown"><div class="glyph-box">?</div><div class="info"><div class="name">???</div><div class="sub">${sp.hint}</div></div></div>`;
+      const casts = ex.casts?.[sp.id] ?? 0;
+      const ordained = (ex.ordained ?? []).includes(sp.id);
+      const ord = casts >= ORDAIN_AFTER
+        ? `<button class="px-btn small${ordained ? ' on' : ''}" data-ordain="${sp.id}">${ordained ? 'Ordained' : 'Ordain'}</button>`
+        : `<span class="tiny dim">Ordain after ${ORDAIN_AFTER} casts (${casts})</span>`;
+      return `<div class="card px-box spell${ordained ? ' ordained' : ''}"><div class="glyph-box">${glyph(sp.gesture)}</div><div class="info"><div class="name">${sp.name}</div>
+        <div class="sub">${sp.does}</div><div class="sub tiny gold">${sp.how}</div>
+        <div class="spell-row">${ord}</div></div>
+        <button class="px-btn${prayer >= sp.cost ? ' gold' : ''}" data-cast="${sp.id}"${prayer >= sp.cost ? '' : ' disabled'}>Cast · ${sp.cost}</button></div>`;
+    })
+    .join('');
+  return `<div class="panel-head"><h2>Miracles</h2><span class="dim">${n0(prayer)} / ${PRAYER_MAX} prayer</span></div>
+    <div class="card px-box dread"><div class="info"><div class="name">Dread <span class="dim">${n0(dread)}</span></div>
+    <div class="meter"><i style="width:${dread}%"></i><b style="left:${DREAD_COWER}%"></b><b style="left:${DREAD_FLEE}%"></b></div>
+    <div class="sub">Every miracle frightens them. Past ${DREAD_COWER} they cower from the spear and work less; past ${DREAD_FLEE}, some walk into the sea to get away from it. It fades a little each night.</div></div></div>
+    ${cards}
+    <p class="note">Ordained miracles the spear works by itself, when they're needed, for half again the prayer.</p>`;
 }

@@ -101,7 +101,7 @@ const PATHS: Record<BranchId, [Leaf, Leaf, Leaf, Leaf, Leaf, Leaf]> = {
     { id: 'rootlore', name: 'Root lore', does: 'Digging +15%, and roots stretch 15% further.', fx: { gather: { dig: 0.15 }, digCap: 0.15 } },
     { id: 'seeds', name: 'Seed keeping', does: 'A little of the ash grows back each day.', fx: { ashRegrow: 0.01 } },
     { id: 'deeproots', name: 'Deep roots', does: 'Roots stretch 80% further.', fx: { digCap: 0.8 } },
-    { id: 'tend', name: 'Tend the ash', does: 'The ash grows back four times as fast, and roots stretch 40% further; scavenging 30% worse.', fx: { ashRegrow: 0.04, digCap: 0.4, gather: { scavenge: -0.3 } } },
+    { id: 'tend', name: 'Tend the ash', does: 'The ash grows back much faster, and roots stretch 40% further; scavenging 30% worse.', fx: { ashRegrow: 0.025, digCap: 0.4, gather: { scavenge: -0.3 } } },
   ],
   kin: [
     { id: 'huddle', name: 'Huddle', does: 'Nights cost a little less hunger.', fx: { night: 0.06 } },
@@ -180,7 +180,7 @@ const MEAT_EATERS: Record<string, Partial<Leaf>> = {
   seeds: { name: 'Let some go', does: 'A few grubs are left to breed: a little of the ash comes back each day.' },
   deeproots: { name: 'Wide trapline', does: 'Snares reach 80% further.' },
   tides: { name: 'Read the tides', does: 'Fishing half again as good; grubbing and trapping 30% worse.' },
-  tend: { name: 'Breed the grubs', does: 'The ash comes back four times as fast, and snares reach 40% further; scavenging 30% worse.' },
+  tend: { name: 'Breed the grubs', does: 'The ash comes back much faster, and snares reach 40% further; scavenging 30% worse.' },
 };
 
 /** An idea as a diet knows it (its name, what it says and does). */

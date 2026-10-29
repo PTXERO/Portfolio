@@ -8,12 +8,11 @@ import { PAL } from '../art/sprites';
 import { SEASON_SEC } from '../economy/rates';
 import { Biome, CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
 import { BURNT, LAKE, ashenFor, tribeOf } from '../economy/tribal';
-import { DAY_SEC as EX_DAY, HAND_PER_DAY, RAFT, raftPart, type ExtinctionState, type JobId } from '../economy/extinction';
+import { DAY_SEC as EX_DAY, RAFT, raftPart, type ExtinctionState, type JobId } from '../economy/extinction';
+import type { SpellId } from '../economy/miracles';
 import type { GameState } from '../economy/types';
 import { hash, type Frame } from './paint';
 import { RangeScene } from './range';
-
-type TribeLook = { parts: Partial<Record<string, string>>; diet: string };
 
 interface Person {
   x: number;
@@ -93,11 +92,13 @@ export class TribeScene extends RangeScene {
   private spots: Spot[] = [];
   private raftAt: Pt | null = null;
   private spotSeed = -1;
-  /** The leader (the one who touched the spear): yours to walk about, after the waking. */
-  private leader: Pt | null = null;
-  private leaderGoal: Pt | null = null;
-  /** The job the leader is working beside (those at it work harder), for the economy. */
-  leadJob: JobId | null = null;
+  /** Piles a miracle left (fish, kelp, fruit, a fallen beast): the tribe goes to them. */
+  private piles: (Spot & { kind: 'fish' | 'kelp' | 'fruit' | 'beast'; until: number })[] = [];
+  /** Miracles playing out on the map (seconds since cast, and where, in tiles). */
+  private wonders: { id: SpellId; age: number; pts: Pt[] }[] = [];
+  /** The stroke being drawn to cast one (art pixels), shown as it's drawn. */
+  private stroke: Pt[] = [];
+  private strokeFade = 0;
   private people: Person[] = [];
   /** The one that walks to the spear: where it is, and whether it's got there. */
   private walker: Pt | null = null;
@@ -131,8 +132,9 @@ export class TribeScene extends RangeScene {
     this.people = [];
     this.walker = null;
     this.arrived = false;
-    this.leader = null;
-    this.leaderGoal = null;
+    this.piles = [];
+    this.wonders = [];
+    this.stroke = [];
     this.handed = null;
     this.burnAt = -1;
     this.burnDone = false;
@@ -157,28 +159,86 @@ export class TribeScene extends RangeScene {
     if (!t.awake && this.arrived && Math.abs(ax - X) < Math.max(8, tall * 0.25) && ay > Y - tall - 4 && ay < Y + 4) {
       this.events.push({ type: 'spear', x: X, y: Y - tall });
       this.wave = 0;
-      return;
     }
-    // After the waking: you lead. A tap on a work place beside the leader is a hand at it;
-    // further off, the leader walks there. A tap anywhere else on land walks there too.
-    if (!t.ex || !this.leader) return;
-    const w = this.toWorld(ax, ay);
-    const tapR = Math.max(2.5, 10 / this.zoom);
-    let spot: Spot | null = null;
-    let best = tapR;
+  }
+
+  // ---- Casting: the stroke, where things are, and the wonders themselves ----
+
+  /** The stroke so far (art pixels), or null when it's done (it fades). */
+  setStroke(pts: Pt[] | null): void {
+    if (pts) {
+      this.stroke = pts;
+      this.strokeFade = 1;
+    } else this.strokeFade = Math.min(this.strokeFade, 0.99);
+  }
+
+  /** The island under a point on screen (art pixels). */
+  worldAt(ax: number, ay: number): Pt {
+    return this.toWorld(ax, ay);
+  }
+
+  landAt(p: Pt): boolean {
+    return !!this.island && isLand(this.island, p.x, p.y);
+  }
+
+  /** The nearest work place of a kind (still there) within r tiles of p. */
+  nearSpot(ex: ExtinctionState, job: JobId, p: Pt, r: number): Pt | null {
+    let best: Spot | null = null;
+    let d0 = r;
     for (const s of this.spots) {
-      const d = Math.hypot(s.x - w.x, s.y - w.y);
-      if (d < best && this.spotShown(t.ex, s)) {
-        best = d;
-        spot = s;
+      if (s.job !== job || !this.spotShown(ex, s)) continue;
+      const d = Math.hypot(s.x - p.x, s.y - p.y);
+      if (d < d0) {
+        d0 = d;
+        best = s;
       }
     }
-    // The spear itself counts as the listening place.
-    if (!spot && Math.abs(ax - X) < Math.max(8, tall * 0.25) && ay > Y - tall - 4 && ay < Y + 4) spot = this.spots.find((s) => s.job === 'listen') ?? null;
-    if (spot) {
-      if (Math.hypot(spot.x - this.leader.x, spot.y - this.leader.y) < 4.5) this.events.push({ type: 'hand', job: spot.job, x: this.sx(spot.x), y: this.py(spot.x, spot.y) - 6 });
-      else this.leaderGoal = { x: spot.x + 1.2, y: spot.y + 0.6 };
-    } else if (isLand(this.island, w.x, w.y)) this.leaderGoal = { x: w.x, y: w.y };
+    return best;
+  }
+
+  /** Whether a point on land is by the water (within r tiles of the sea). */
+  byWater(p: Pt, r: number): boolean {
+    if (!this.island) return false;
+    for (let a = 0; a < 12; a++) {
+      const x = p.x + Math.cos((a / 12) * Math.PI * 2) * r;
+      const y = p.y + Math.sin((a / 12) * Math.PI * 2) * r;
+      if (!isLand(this.island, x, y)) return true;
+    }
+    return false;
+  }
+
+  /** Those (of the ones drawn) inside a circle on the island: their places in the tribe. */
+  inside(c: Pt, r: number): number[] {
+    const out: number[] = [];
+    this.people.forEach((p, i) => {
+      if (Math.hypot(p.x - c.x, p.y - c.y) <= r) out.push(i);
+    });
+    return out;
+  }
+
+  /** A miracle happens: show it, and leave what it leaves (the tribe goes to piles). */
+  wonder(id: SpellId, pts: Pt[]): void {
+    this.wonders.push({ id, age: 0, pts });
+    const end = pts[pts.length - 1];
+    const until = 60;
+    if (id === 'shake') this.piles.push({ job: 'scavenge', kind: 'fruit', x: end.x, y: end.y + 1, until });
+    if (id === 'kelp') this.piles.push({ job: 'fish', kind: 'kelp', x: end.x, y: end.y, until });
+    if (id === 'shoals') this.piles.push({ job: 'fish', kind: 'fish', x: end.x, y: end.y, until });
+  }
+
+  /** Where a miracle the spear works unasked lands: a fitting place near the camp. */
+  wonderPlace(id: SpellId): Pt[] {
+    const camp = this.spots.find((s) => s.job === 'build') ?? { x: 0, y: 0 };
+    const pick = (job: JobId) => this.spots.find((s) => s.job === job) ?? camp;
+    if (id === 'lightning' || id === 'shake') return [pick('wood')];
+    if (id === 'rain') return [pick('forage')];
+    if (id === 'ward') return [pick('listen')];
+    if (id === 'kelp' || id === 'shoals') {
+      const f = pick('fish');
+      return [{ x: f.x + 6, y: f.y + 6 }, f];
+    }
+    const s = pick('scavenge');
+    return [{ x: s.x - 18, y: s.y - 10 }, s];
   }
 
   /** Whether a work place is there to see (carcasses rot away and trees get cut down). */
@@ -190,54 +250,154 @@ export class TribeScene extends RangeScene {
     return true;
   }
 
-  /** The leader: walks where you tap, works (and leads) at the place it stands by. */
-  private drawLeader(sprites: { y: number; draw: () => void }[], b: CanvasRenderingContext2D, look: TribeLook, frag: { camp: Pt; spear: Pt }, ex: ExtinctionState, t: number, dt: number): void {
-    const L = this.leader!;
-    let moving = false;
-    let left = false;
-    if (this.leaderGoal) {
-      const dx = this.leaderGoal.x - L.x;
-      const dy = this.leaderGoal.y - L.y;
-      const d = Math.hypot(dx, dy);
-      if (d < 0.3) this.leaderGoal = null;
-      else {
-        const step = Math.min(d, 7 * dt);
-        const nx = L.x + (dx / d) * step;
-        const ny = L.y + (dy / d) * step;
-        if (isLand(this.island!, nx, ny) || Math.hypot(frag.spear.x - nx, frag.spear.y - ny) < LAKE + 3) {
-          L.x = nx;
-          L.y = ny;
-          moving = true;
-          left = dx < 0;
-        } else this.leaderGoal = null;
+  /** What miracles left lying: fish or kelp on the beach, fruit under a tree, a fallen beast. */
+  private drawPiles(sprites: { y: number; draw: () => void }[], b: CanvasRenderingContext2D, dt: number): void {
+    const z = Math.max(1, Math.round(this.zoom / 3));
+    for (const q of this.piles) q.until -= dt;
+    this.piles = this.piles.filter((q) => q.until > 0);
+    for (const q of this.piles) {
+      const X = Math.round(this.sx(q.x));
+      const Y = Math.round(this.py(q.x, q.y));
+      sprites.push({
+        y: q.y,
+        draw: () => {
+          const cols = q.kind === 'fish' ? ['#c8d8e0', '#8aa8b8'] : q.kind === 'kelp' ? ['#4a7a3a', '#2e5a2a'] : q.kind === 'fruit' ? ['#c0402a', '#e8a040'] : ['#5a3a30', '#8a5a48'];
+          for (let k = 0; k < 7; k++) {
+            b.fillStyle = cols[k % 2];
+            b.fillRect(X + (((k * 5) % 7) - 3) * z, Y - (1 + (k % 3)) * z, 2 * z, z);
+          }
+        },
+      });
+    }
+  }
+
+  /** Miracles playing out: lightning down onto a tree, rain over the ash, a ring of light, a
+   * wave up the beach, fruit falling, a beast staggering in to die. */
+  private drawWonders(b: CanvasRenderingContext2D, t: number, dt: number): void {
+    const glow = (col: string, x: number, y: number, w = 1, h = 1) => {
+      b.fillStyle = col;
+      b.fillRect(Math.round(x), Math.round(y), w, h);
+    };
+    for (const w of this.wonders) {
+      w.age += dt;
+      const a = w.age;
+      const end = w.pts[w.pts.length - 1];
+      const X = this.sx(end.x);
+      const Y = this.py(end.x, end.y);
+      const z = Math.max(1, Math.round(this.zoom / 3));
+      if (w.id === 'lightning') {
+        if (a < 0.6) {
+          // The bolt: jagged, white-violet, from the top of the sky to the tree.
+          let x = X + (Math.sin(w.pts.length + Math.floor(a * 20)) * 10);
+          for (let y = 0; y < Y; y += 2) {
+            x += (Math.sin(y * 0.7 + Math.floor(a * 30)) > 0 ? 1 : -1) * (y % 6 === 0 ? 2 : 0);
+            glow(a < 0.15 ? 'rgba(255, 255, 255, 0.996)' : 'rgba(210, 160, 255, 0.996)', x + (X - x) * (y / Y), y, 2, 2);
+          }
+          if (a < 0.12) {
+            b.fillStyle = `rgba(255, 245, 255, ${0.5 * (1 - a / 0.12)})`;
+            b.fillRect(0, 0, this.W, this.H);
+          }
+        }
+        // The tree burning after.
+        if (a < 5) {
+          const f = Math.floor(t * 9) % 3;
+          for (let k = 0; k < 4; k++) glow(k % 2 ? 'rgba(255, 200, 90, 0.996)' : 'rgba(255, 110, 40, 0.996)', X - 2 * z + k * z, Y - (5 + ((k + f) % 3)) * z, z, 2 * z);
+        }
+      } else if (w.id === 'rain') {
+        // Rain over a patch, then green coming up through the ash.
+        const r = 7;
+        if (a < 3.5) {
+          for (let k = 0; k < 60; k++) {
+            const dx = (hash(k, 71) - 0.5) * 2 * r;
+            const dy = (hash(k, 73) - 0.5) * 2 * r * 0.7;
+            const fall = ((a * 1.6 + hash(k, 75)) % 1) * 14;
+            glow('rgba(150, 190, 255, 0.85)', this.sx(end.x + dx), this.py(end.x + dx, end.y + dy) - 14 + fall, 1, 2);
+          }
+        }
+        if (a > 1.5 && a < 40) {
+          const k2 = Math.min(1, (a - 1.5) / 3) * Math.max(0, 1 - (a - 30) / 10);
+          for (let k = 0; k < 40; k++) {
+            if (hash(k, 77) > k2) continue;
+            const dx = (hash(k, 79) - 0.5) * 2 * r * 0.8;
+            const dy = (hash(k, 81) - 0.5) * 2 * r * 0.55;
+            glow(k % 3 ? '#5a8a3a' : '#7ab048', this.sx(end.x + dx), this.py(end.x + dx, end.y + dy) - 1, z, z);
+          }
+        }
+      } else if (w.id === 'ward') {
+        // A ring of gold light round them, rising.
+        if (a < 2.5) {
+          const c = w.pts[0];
+          const rr = (w.pts[1]?.x ?? 6) * this.zoom;
+          const cx = this.sx(c.x);
+          const cy = this.py(c.x, c.y);
+          b.globalAlpha = Math.max(0, 1 - a / 2.5);
+          const n = Math.ceil(rr * 4) + 12;
+          for (let i = 0; i < n; i++) {
+            const an = (i / n) * Math.PI * 2;
+            glow('rgba(255, 220, 140, 0.996)', cx + Math.cos(an) * rr, cy + Math.sin(an) * rr * 0.6 - a * 6, 1, 1);
+          }
+          b.globalAlpha = 1;
+        }
+      } else if (w.id === 'shake') {
+        // Fruit falling from the tree.
+        if (a < 2) for (let k = 0; k < 10; k++) glow(k % 2 ? '#c0402a' : '#e8a040', X + (hash(k, 83) - 0.5) * 8 * z, Y - 12 * z + Math.min(12 * z, ((a * 2 + hash(k, 85)) % 1.2) * 10 * z), z, z);
+      } else if (w.id === 'kelp' || w.id === 'shoals') {
+        // A wave running up onto the beach along the stroke.
+        if (a < 1.6) {
+          const s0 = w.pts[0];
+          const k = Math.min(1, a / 1.2);
+          const px = s0.x + (end.x - s0.x) * k;
+          const py = s0.y + (end.y - s0.y) * k;
+          for (let i = -6; i <= 6; i++) glow(i % 2 ? 'rgba(220, 240, 255, 0.996)' : 'rgba(140, 200, 230, 0.996)', this.sx(px) + i * 2 * z * Math.cos(Math.atan2(end.y - s0.y, end.x - s0.x) + Math.PI / 2), this.py(px, py) + i * z * Math.sin(Math.atan2(end.y - s0.y, end.x - s0.x) + Math.PI / 2), 2 * z, z);
+        }
+      } else if (w.id === 'dying') {
+        // A wounded beast staggering in along the stroke, and falling.
+        const s0 = w.pts[0];
+        const k = Math.min(1, a / 4);
+        const bx = s0.x + (end.x - s0.x) * k;
+        const by = s0.y + (end.y - s0.y) * k;
+        const BX = Math.round(this.sx(bx));
+        const BY = Math.round(this.py(bx, by));
+        const down = k >= 1;
+        if (!down || a < 60) {
+          b.fillStyle = '#3a2a24';
+          if (down) b.fillRect(BX - 5 * z, BY - 2 * z, 10 * z, 2 * z);
+          else {
+            b.fillRect(BX - 4 * z, BY - 5 * z, 8 * z, 3 * z);
+            b.fillRect(BX + 3 * z, BY - 7 * z, 3 * z, 2 * z);
+            const step = Math.floor(a * 4) % 2;
+            b.fillRect(BX - 3 * z, BY - 2 * z, z, (2 - step) * z);
+            b.fillRect(BX + 2 * z, BY - 2 * z, z, (1 + step) * z);
+          }
+          b.fillStyle = '#8a2a2a';
+          b.fillRect(BX - z, BY - (down ? 2 : 4) * z, 2 * z, z);
+        }
       }
     }
-    // Leading: the work place it's beside (the camp doesn't count).
-    let lead: JobId | null = null;
-    let best = 5;
-    for (const s of this.spots) {
-      const d = Math.hypot(s.x - L.x, s.y - L.y);
-      if (d < best && this.spotShown(ex, s)) {
-        best = d;
-        lead = s.job;
+    this.wonders = this.wonders.filter((w) => w.age < (w.id === 'dying' ? 60 : w.id === 'rain' ? 40 : 6));
+  }
+
+  /** The stroke being drawn: a trail of purple-red light, fading once it's done. */
+  private drawStroke(b: CanvasRenderingContext2D, dt: number): void {
+    if (!this.stroke.length) return;
+    if (this.strokeFade < 1) this.strokeFade -= dt * 1.5;
+    if (this.strokeFade <= 0) {
+      this.stroke = [];
+      return;
+    }
+    b.globalAlpha = Math.max(0, Math.min(1, this.strokeFade));
+    for (let i = 1; i < this.stroke.length; i++) {
+      const a = this.stroke[i - 1];
+      const c = this.stroke[i];
+      const n = Math.max(1, Math.ceil(Math.hypot(c.x - a.x, c.y - a.y)));
+      for (let k = 0; k < n; k++) {
+        const x = Math.round(a.x + ((c.x - a.x) * k) / n);
+        const y = Math.round(a.y + ((c.y - a.y) * k) / n);
+        b.fillStyle = (i + k) % 3 ? 'rgba(200, 90, 255, 0.996)' : 'rgba(255, 110, 150, 0.996)';
+        b.fillRect(x - 1, y - 1, 2, 2);
       }
     }
-    this.leadJob = moving ? null : lead;
-    const x = L.x;
-    const y = L.y;
-    const spent = (ex.hand ?? 0) >= HAND_PER_DAY;
-    sprites.push({
-      y,
-      draw: () => {
-        this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 10) % 2 : 0, sleeping: false, hop: moving ? Math.abs(Math.sin(t * 10)) * 2 : 0 });
-        // Marked as yours: a little gold mark over its head (dim once spent for the day).
-        const X = Math.round(this.sx(x));
-        const Y = Math.round(this.py(x, y) - Math.max(7, 2.4 * this.zoom) - (Math.floor(t * 2) % 2));
-        b.fillStyle = spent ? '#8a7a5a' : 'rgba(245, 196, 94, 0.996)';
-        b.fillRect(X - 1, Y, 3, 1);
-        b.fillRect(X, Y + 1, 1, 1);
-      },
-    });
+    b.globalAlpha = 1;
   }
 
   /** The work places: carcasses (or fallen fruit), charred trees, the fire at the camp, and the
@@ -581,7 +741,7 @@ export class TribeScene extends RangeScene {
         const evening = ex ? ex.clock > EX_DAY * 0.82 : false;
         if (woke && ex && job && job !== 'rest' && !evening) {
           // To work: their own spot of their job, a little apart from the others there.
-          const of = this.spots.filter((s) => s.job === job && this.spotShown(ex, s));
+          const of = [...this.piles.filter((q) => q.job === job), ...this.spots.filter((s) => s.job === job && this.spotShown(ex, s))];
           const s = of.length ? of[Math.floor(hash(ex.people[i].id, 31) * of.length)] : null;
           if (s) {
             const a = hash(ex.people[i].id, 33) * Math.PI * 2;
@@ -684,8 +844,7 @@ export class TribeScene extends RangeScene {
       const dy = frag.camp.y - w.y;
       const d = Math.hypot(dx, dy);
       if (back && d < 2) {
-        // Home: from here on, the one who touched the spear is yours to lead.
-        this.leader = { x: w.x, y: w.y };
+        // Home: one of them again.
         this.walker = null;
       } else {
         if (back) {
@@ -704,10 +863,6 @@ export class TribeScene extends RangeScene {
           },
         });
       }
-    }
-    if (tribe.ex && !this.walker) {
-      if (!this.leader) this.leader = { x: frag.camp.x + 1, y: frag.camp.y + 1 };
-      this.drawLeader(sprites, b, look, frag, tribe.ex, t, dt);
     }
     if (!tribe.awake) {
       if (!this.walker) this.walker = { ...frag.camp };
@@ -759,7 +914,10 @@ export class TribeScene extends RangeScene {
       }
     }
 
-    if (tribe.ex) this.drawWork(sprites, b, tribe.ex, frag.camp, t);
+    if (tribe.ex) {
+      this.drawWork(sprites, b, tribe.ex, frag.camp, t);
+      this.drawPiles(sprites, b, dt);
+    }
 
     // The spear, standing in its lake.
     const sx = this.sx(frag.spear.x);
@@ -776,6 +934,9 @@ export class TribeScene extends RangeScene {
       const sz = Math.max(1, Math.round((0.6 + m.z * 0.12) * this.zoom * 0.35));
       b.fillRect(X - sz, Y - sz, sz * 2, sz * 2);
     }
+
+    this.drawWonders(b, t, dt);
+    this.drawStroke(b, dt);
 
     // A red haze over the burnt world, thinning as it cools.
     b.fillStyle = `rgba(150, 30, 20, ${0.16 * heat})`;

@@ -69,9 +69,23 @@ export class Scene {
     return { x: r.left + p.x * this.px, y: r.top + p.y * this.px };
   }
 
-  /** The job the leader is working beside in the Extinction (it works harder). */
-  get leadJob(): import('../economy/extinction').JobId | null {
-    return this.stage === 'tribal' ? this.tribe.leadJob : null;
+  // ---- Casting miracles (screen points in CSS pixels) ----
+
+  /** The stroke being drawn (or null when done). */
+  castStroke(pts: { x: number; y: number }[] | null): void {
+    this.tribe.setStroke(pts ? pts.map((p) => ({ x: p.x / this.px, y: p.y / this.px })) : null);
+  }
+  worldAt(x: number, y: number): { x: number; y: number } {
+    return this.tribe.worldAt(x / this.px, y / this.px);
+  }
+  get tribeScene(): TribeScene {
+    return this.tribe;
+  }
+  /** World distance for a screen distance (CSS px), roughly, at the current zoom. */
+  tilesFor(cssPx: number): number {
+    const a = this.tribe.worldAt(0, 0);
+    const b = this.tribe.worldAt(cssPx / this.px, 0);
+    return Math.hypot(b.x - a.x, b.y - a.y);
   }
 
   /** After the waking's vision: it spreads from the one at the spear to the others. */

@@ -13,7 +13,9 @@ import { STAGES } from './content/stages';
 import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed } from './economy/tribal';
-import { assign, autoAssign, daysLeft, handGather, HAND_PER_DAY, type Focus, decideFallen, DAY_SEC, eatsPlants, extinctionTick, launch, learnIdea, startExtinction, toggleFamily, TRAITS, tryAgain, waitingOnChoice, WINTER, type JobId } from './economy/extinction';
+import { autoAssign, daysLeft, decideFallen, DAY_SEC, eatsPlants, extinctionTick, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
+import { cast, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
+import { readGesture } from './ui/gesture';
 import {
   addSwirl,
   buyCount,
@@ -47,7 +49,7 @@ import { Scene } from './scene/scene';
 import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
 import { miniIcon } from './scene/creatureLook';
-import { pickIdea } from './ui/tribePanels';
+import { glyph, pickIdea } from './ui/tribePanels';
 import { choiceButton } from './ui/creaturePanels';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
@@ -292,7 +294,7 @@ document.body.appendChild(extinctEl);
 function extinctionStep(sec: number): void {
   if (state.current !== 'tribal' || cine()) return;
   const t = state.stages.tribal.tribe;
-  if (t?.awake && !t.ex) {
+  if (t?.awake && (!t.ex || !t.ex.powers)) {
     startExtinction(state);
     panelKey = '';
     tabsKey = '';
@@ -314,9 +316,140 @@ function extinctionStep(sec: number): void {
   }
   if (extinctionTick(state, sec)) {
     save();
-    if (ex.over) showAlone();
-    else nightReport();
+    if (ex.escaped) showEscape();
+    else if (ex.over) showAlone();
+    else {
+      nightReport();
+      // What the spear worked unasked in the night, shown where it landed.
+      for (const id of ex.worked ?? []) scene.tribeScene.wonder(id, scene.tribeScene.wonderPlace(id));
+      ex.worked = [];
+    }
   }
+  showDiscovered();
+}
+
+// ---- The spear's will: miracles drawn on the world ----
+
+let casting: SpellId | null = null;
+let castPts: { x: number; y: number }[] = [];
+const castBar = document.createElement('div');
+castBar.id = 'castbar';
+castBar.className = 'px-box';
+castBar.hidden = true;
+stageEl.appendChild(castBar);
+const spellBar = document.createElement('div');
+spellBar.id = 'spellbar';
+spellBar.hidden = true;
+stageEl.appendChild(spellBar);
+
+/** Picks a miracle to cast: the menu steps aside and the next stroke on the map is it. */
+function startCast(id: SpellId): void {
+  const ex = state.stages.tribal.tribe?.ex;
+  const sp = SPELL[id];
+  if (!ex || (ex.prayer ?? 0) < sp.cost) return;
+  casting = id;
+  ui.open = false;
+  castBar.innerHTML = `${glyph(sp.gesture, 3)}<div><b>${sp.name}</b><span>${sp.how}</span></div><button class="px-btn" data-act="cast-cancel">×</button>`;
+  castBar.hidden = false;
+  render();
+}
+
+function endCast(): void {
+  casting = null;
+  castPts = [];
+  castBar.hidden = true;
+  scene.castStroke(null);
+}
+
+/** The stroke's done: read it, check it's where it should be, and if so, it happens. */
+function finishCast(): void {
+  const id = casting;
+  const ex = state.stages.tribal.tribe?.ex;
+  const pts = castPts;
+  castPts = [];
+  scene.castStroke(null);
+  if (!id || !ex || pts.length < 2) return;
+  const sp = SPELL[id];
+  const end = pts[pts.length - 1];
+  const fizzle = (why: string) => scene.float(end.x, end.y - 10, why, '#c8a0ff');
+  const shape = readGesture(pts);
+  const names = { zigzag: 'a zigzag', spiral: 'a spiral', circle: 'a circle', line: 'a line' };
+  if (shape !== sp.gesture) return fizzle(shape ? `That was ${names[shape]}: ${sp.name} needs ${names[sp.gesture]}` : `Draw ${names[sp.gesture]}`);
+  const tribe = scene.tribeScene;
+  const W = pts.map((p) => scene.worldAt(p.x, p.y));
+  const first = W[0];
+  const last = W[W.length - 1];
+  let at = [last];
+  let people: number[] | undefined;
+  if (id === 'lightning') {
+    // Where it comes down: the lowest point of the zigzag.
+    const low = pts.reduce((a, p) => (p.y > a.y ? p : a));
+    const tree = tribe.nearSpot(ex, 'wood', scene.worldAt(low.x, low.y), 6);
+    if (!tree) return fizzle('Bring it down onto a charred tree');
+    at = [tree];
+  } else if (id === 'rain') {
+    const c = { x: W.reduce((a, p) => a + p.x, 0) / W.length, y: W.reduce((a, p) => a + p.y, 0) / W.length };
+    if (!tribe.landAt(c)) return fizzle('Over the ash, not the sea');
+    at = [c];
+  } else if (id === 'ward') {
+    const cx = pts.reduce((a, p) => a + p.x, 0) / pts.length;
+    const cy = pts.reduce((a, p) => a + p.y, 0) / pts.length;
+    const rCss = pts.reduce((a, p) => a + Math.hypot(p.x - cx, p.y - cy), 0) / pts.length;
+    const c = scene.worldAt(cx, cy);
+    const r = Math.max(2, scene.tilesFor(rCss));
+    people = tribe.inside(c, r);
+    if (!people.length) return fizzle('Draw it round some of them');
+    at = [c, { x: r, y: 0 }];
+  } else if (id === 'shake') {
+    const tree = tribe.nearSpot(ex, 'wood', last, 6);
+    if (!tree) return fizzle('End it on a tree');
+    at = [first, tree];
+  } else if (id === 'kelp' || id === 'shoals') {
+    if (tribe.landAt(first) || !tribe.landAt(last) || !tribe.byWater(last, 4)) return fizzle('From the sea, up onto the shore');
+    at = [first, last];
+  } else if (id === 'dying') {
+    if (!tribe.landAt(last) || Math.hypot(last.x - first.x, last.y - first.y) < 8) return fizzle('A long line, in toward them');
+    at = [first, last];
+  }
+  const r = cast(ex, id, { people });
+  if (!r.ok) return fizzle(r.text);
+  tribe.wonder(id, at);
+  scene.float(end.x, end.y - 12, r.text, '#e8b0ff');
+  endCast();
+  panelKey = '';
+  goalKey = '';
+  save();
+}
+
+/** The quick bar of miracles on the map (when the menu's down): tap one, then draw it. */
+function renderSpellbar(): void {
+  const ex = state.current === 'tribal' ? state.stages.tribal.tribe?.ex : undefined;
+  // (On the map when the menu's down; in the Miracles tab when it's up.)
+  const show = !!ex && !cine() && !ex.over && !ex.escaped && !casting && !ui.open;
+  spellBar.hidden = !show;
+  if (!show || !ex) return;
+  const prayer = Math.floor(ex.prayer ?? 0);
+  const key = JSON.stringify([prayer, ex.powers, ex.diet]);
+  if (spellBar.dataset.key === key) return;
+  spellBar.dataset.key = key;
+  const known = spellsFor(ex.diet).filter((sp) => (ex.powers ?? []).includes(sp.id));
+  spellBar.innerHTML = `<span class="prayer num">${prayer}<i>prayer</i></span>${known.map((sp) => `<button class="px-btn spell-btn${prayer >= sp.cost ? '' : ' poor'}" data-cast="${sp.id}"${prayer >= sp.cost ? '' : ' disabled'} aria-label="${sp.name}">${glyph(sp.gesture, 2)}<span>${sp.cost}</span></button>`).join('')}`;
+}
+
+/** A miracle found: the spear stirs, and shows how it's done. */
+function showDiscovered(): void {
+  const ex = state.stages.tribal.tribe?.ex;
+  if (!ex?.newPowers?.length || !modal.hidden || cine()) return;
+  const id = ex.newPowers.shift()!;
+  const sp = SPELL[id];
+  showModal(`<p class="label dim">${id === 'lightning' ? 'The spear\'s will' : 'The spear stirs'}</p>
+    <h3>${sp.name}</h3>
+    <div class="glyph-big">${glyph(sp.gesture, 6)}</div>
+    <p>${sp.does}</p>
+    <p class="fx">${sp.how}</p>
+    ${id === 'lightning' ? '<p class="small dim">They live or die by their own choices now. You are the voice in the spear: teach them ideas, and work miracles, drawn on the world, paid for in their prayer. Every miracle frightens them a little more.</p>' : ''}
+    <button class="px-btn gold" data-act="dismiss">${id === 'lightning' ? 'Watch over them' : 'Let it be'}</button>`);
+  save();
 }
 
 /** The morning after: who starved, and how much there was. */
@@ -663,7 +796,7 @@ function renderHint(): void {
   } else if (state.current === 'tribal') {
     if (!state.stages.tribal.tribe?.awake) text = 'Tap the spear';
     else if (state.stages.tribal.tribe?.ex && state.stages.tribal.tribe.ex.day === 0 && state.stages.tribal.tribe.ex.people.every((p) => p.job === 'rest')) text = 'Set them to work, or they starve';
-    else if (state.stages.tribal.tribe?.ex && (state.stages.tribal.tribe.ex.day < 2 && (state.stages.tribal.tribe.ex.hand ?? 0) === 0)) text = 'Tap to lead · tap work beside you to help';
+    else if (state.stages.tribal.tribe?.ex && !Object.keys(state.stages.tribal.tribe.ex.casts ?? {}).length && !casting) text = 'They live or die on their own. Work miracles to save them';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
   hint.hidden = !text || !modal.hidden || (ui.open && ui.full);
@@ -806,11 +939,7 @@ function pondEvents(): void {
       const got = e.party ? state.stages.creature.lastParty : state.stages.creature.lastForage;
       if (got) scene.float(e.x, e.y, `${e.party ? 'party home ' : ''}+${format(D(got))}`, '#f5c45e');
     } else if (e.type === 'place') showPlaceCard(e.id, e.x, e.y);
-    else if (e.type === 'hand') {
-      const got = handGather(state, e.job);
-      if (got.amount > 0) scene.float(e.x, e.y, `+${got.amount < 1 ? got.amount.toFixed(1) : Math.round(got.amount * 10) / 10} ${got.what}`, got.what === 'insight' ? '#c4f7dd' : got.what === 'wood' ? '#c8a070' : '#f5c45e');
-      else scene.float(e.x, e.y, (state.stages.tribal.tribe?.ex?.hand ?? 0) >= HAND_PER_DAY ? 'too tired: tomorrow' : 'nothing left here', '#f2ead7');
-    } else if (e.type === 'spear' && awaken(state)) {
+    else if (e.type === 'spear' && awaken(state)) {
       // The waking: it touches the spear, and they know that they are. A flash, the
       // shockwave rolling out across the world, then the words; then the Extinction begins.
       // Inside its mind: the vision. Then out again, and the waking spreads to the others.
@@ -883,6 +1012,38 @@ let swirlSpin = 0;
 /** Fingers on the Creature's map: one taps (or drags, when zoomed in), two pinch to zoom. */
 const fingers = new Map<number, { x: number; y: number; sx: number; sy: number }>();
 let mapDragged = false;
+
+// Casting: while a miracle is picked, a finger on the map draws it (no panning, no taps).
+stageEl.addEventListener(
+  'pointerdown',
+  (e) => {
+    if (!casting || (e.target as HTMLElement).closest('button, #castbar')) return;
+    e.stopImmediatePropagation();
+    stageEl.setPointerCapture(e.pointerId);
+    const r = stageEl.getBoundingClientRect();
+    castPts = [{ x: e.clientX - r.left, y: e.clientY - r.top }];
+    scene.castStroke(castPts);
+  },
+  true,
+);
+stageEl.addEventListener(
+  'pointermove',
+  (e) => {
+    if (!casting || !castPts.length) return;
+    e.stopImmediatePropagation();
+    const r = stageEl.getBoundingClientRect();
+    castPts.push({ x: e.clientX - r.left, y: e.clientY - r.top });
+    scene.castStroke(castPts);
+  },
+  true,
+);
+const castUp = (e: PointerEvent) => {
+  if (!casting || !castPts.length) return;
+  e.stopImmediatePropagation();
+  finishCast();
+};
+stageEl.addEventListener('pointerup', castUp, true);
+stageEl.addEventListener('pointercancel', castUp, true);
 
 stageEl.addEventListener('pointerdown', (e) => {
   if (!modal.hidden || (e.target as HTMLElement).closest('#evolve, button, #placecard')) return;
@@ -1003,28 +1164,18 @@ function act(el: HTMLElement): void {
   else if (el.dataset.amount) state.buyAmount = el.dataset.amount === 'max' ? 'max' : (Number(el.dataset.amount) as BuyAmount);
   else if (el.dataset.warp) state.warp = Number(el.dataset.warp);
   else if (el.dataset.policy) state.stages.creature.roamOpts.policy = el.dataset.policy as RunInPolicy;
-  else if (el.dataset.family) {
+  else if (el.dataset.node) pickIdea(el.dataset.node);
+  else if (el.dataset.cast) startCast(el.dataset.cast as SpellId);
+  else if (el.dataset.ordain) {
     const ex = state.stages.tribal.tribe?.ex;
-    if (ex) toggleFamily(ex, Number(el.dataset.family));
-  } else if (el.dataset.focus) {
-    const ex = state.stages.tribal.tribe?.ex;
-    if (ex) {
-      ex.focus = el.dataset.focus as Focus;
-      autoAssign(ex);
-    }
-  } else if (el.dataset.job) {
-    const ex = state.stages.tribal.tribe?.ex;
-    if (ex) assign(ex, el.dataset.job as JobId, Number(el.dataset.d));
-  } else if (el.dataset.ration) {
-    const ex = state.stages.tribal.tribe?.ex;
-    if (ex) ex.ration = Number(el.dataset.ration);
-  } else if (el.dataset.node) pickIdea(el.dataset.node);
+    if (ex) toggleOrdain(ex, el.dataset.ordain as SpellId);
+  }
   else if (el.dataset.learn) {
     if (learnIdea(state, el.dataset.learn)) {
       scene.purchase(state, 'idea');
       // A new job may have opened: the tribe takes it into account straight away.
       const ex = state.stages.tribal.tribe?.ex;
-      if (ex?.auto) autoAssign(ex);
+      if (ex) autoAssign(ex);
     }
   }
   else if (el.dataset.roamopt) {
@@ -1098,20 +1249,8 @@ function act(el: HTMLElement): void {
         panelKey = '';
         save();
         break;
-      case 'ex-auto': {
-        const ex = state.stages.tribal.tribe?.ex;
-        if (ex) {
-          ex.auto = !ex.auto;
-          ex.focus ??= 'ideas';
-          if (ex.auto) autoAssign(ex);
-        }
-        break;
-      }
-      case 'launch':
-        if (launch(state)) {
-          save();
-          showEscape();
-        }
+      case 'cast-cancel':
+        endCast();
         break;
       case 'retry':
         tryAgain(state);
@@ -1307,9 +1446,7 @@ function frame(now: number): void {
   scene.draw(state, dt);
   pondEvents();
   syncCine();
-  // Lead by example: the work the leader stands by goes better.
-  const ex = state.stages.tribal.tribe?.ex;
-  if (ex && state.current === 'tribal' && ex.lead !== scene.leadJob) ex.lead = scene.leadJob;
+  renderSpellbar();
 }
 
 // A save made mid-ending (closed during the credits) picks up at the reveal. This also
