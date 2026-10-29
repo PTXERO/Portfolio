@@ -193,17 +193,31 @@ export class RangeScene {
     this.auto = true;
     this.snap = true;
     this.pinned = false;
+    this.glide = null;
     this.zoom = 3;
   }
 
-  /** Puts the camera on a spot and holds it there (for a cutscene). */
-  pinCamera(x: number, y: number, zoom: number): void {
+  /** Takes the camera for a cutscene and holds it: after `delay` seconds it glides over `dur`
+   * seconds to a spot and zoom, and stays there. */
+  pinCamera(x: number, y: number, zoom: number, delay = 0, dur = 0): void {
     this.auto = false;
     this.snap = false;
     this.pinned = true;
-    this.camX = x;
-    this.camY = y;
-    this.zoom = zoom;
+    this.glide = { x0: this.camX, y0: this.camY, z0: this.zoom, x1: x, y1: y, z1: zoom, at: performance.now() / 1000 + delay, dur };
+    this.stepGlide();
+  }
+
+  private glide: { x0: number; y0: number; z0: number; x1: number; y1: number; z1: number; at: number; dur: number } | null = null;
+
+  private stepGlide(): void {
+    const g = this.glide;
+    if (!g) return;
+    const k = Math.max(0, Math.min(1, g.dur > 0 ? (performance.now() / 1000 - g.at) / g.dur : 1));
+    const e = k * k * (3 - 2 * k);
+    // The zoom eases in log space (so pulling far out doesn't rush the start).
+    this.zoom = g.z0 * (g.z1 / g.z0) ** e;
+    this.camX = g.x0 + (g.x1 - g.x0) * e;
+    this.camY = g.y0 + (g.y1 - g.y0) * e;
   }
 
   /** Where a point of the island is on screen, in art pixels. */
@@ -760,6 +774,7 @@ export class RangeScene {
     this.W = W;
     this.H = H;
     if (!this.viewBottom) this.viewTop = f.top;
+    this.stepGlide();
     const is = islandFor(state);
     this.island = is;
     const st = state.stages.creature;

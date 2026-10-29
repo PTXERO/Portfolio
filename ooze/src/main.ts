@@ -1024,6 +1024,7 @@ async function startFromLink(): Promise<void> {
       c.generation = 6;
       c.generators.territory = 8;
       c.pop = 400;
+      if (c.seen) c.seen.fill(1);
     }
     scene.reload();
     save();

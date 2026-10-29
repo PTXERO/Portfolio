@@ -328,13 +328,13 @@ export class TribeScene extends RangeScene {
       // After the strike, a beat while the camera finds them, then the walk.
       if (!this.hold && this.released < 0) this.released = t;
       const finding = this.hold || t - this.released < 3;
-      const moving = d > stop && !finding;
+      const moving = d > stop + 0.05 && !finding;
       if (moving) {
         const sp = Math.max(2.5, Math.hypot(frag.spear.x - frag.camp.x, frag.spear.y - frag.camp.y) / 14);
         const step = Math.min(d - stop, sp * dt);
         w.x += (dx / d) * step;
         w.y += (dy / d) * step;
-      } else if (d <= stop) this.arrived = true;
+      } else if (d <= stop + 0.05) this.arrived = true;
       if (!this.hold) {
         const k = Math.min(1, dt * (finding ? 1.4 : 2.5));
         this.camX += (w.x - this.camX) * k;

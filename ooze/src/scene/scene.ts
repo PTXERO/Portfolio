@@ -55,10 +55,11 @@ export class Scene {
   get spearReady(): boolean {
     return this.tribe.arrived;
   }
-  /** Frames the island's heart, where the spear will come down (before the strike). */
+  /** As the spear comes down, the camera pulls out to the whole island, centred on where it
+   * lands (the timing matches the strike's: from the omen to just before it hits). */
   frameStrike(state: GameState): void {
     const { spear } = ashenFor(state);
-    this.shore.pinCamera(spear.x, spear.y, 0.9);
+    this.shore.pinCamera(spear.x, spear.y, 0.5, 1, 4.4);
   }
 
   /** Where the spear comes down, on screen (CSS pixels). */
