@@ -13,7 +13,7 @@
 // spear remembers what it taught, so those ideas come cheaper).
 
 import { discover, ordainedNeeds, say, tribeLaunches, tribeThinks, type SpellId } from './miracles';
-import { ensureSociety, flushNotes, mourn, nightTheft, sharing, socialNight, spirit, type Bond, type Quirk } from './society';
+import { ensureSociety, flushNotes, mourn, nightTheft, remember, sharing, socialNight, spirit, type Bond, type Quirk } from './society';
 import { COST_STEP, MIND_NODE, modsOf, NODE_COST, reachable, type Mods } from './mindTree';
 import type { GameState, TribeState } from './types';
 
@@ -39,6 +39,8 @@ export interface Survivor {
   grief?: number;
   hurt?: number;
   broken?: boolean;
+  /** What's happened to them (the last few things), for the player to read. */
+  memories?: string[];
 }
 
 export interface NightReport {
@@ -638,6 +640,7 @@ function eatDead(ex: ExtinctionState, bodies: number, caught: string[]): void {
   const p = well[Math.floor(roll(ex) * well.length)];
   p.sick = SHAKING_DAYS;
   caught.push(p.name);
+  remember(ex, p, 'began to shake, after eating the dead');
 }
 
 /** The raft part being built now (null once it's done, or when the next needs an idea not

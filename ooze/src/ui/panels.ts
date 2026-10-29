@@ -637,13 +637,21 @@ export function heirloomReady(state: GameState): boolean {
 /** The Chronicle: everything so far, newest first, under the era it happened in. */
 function chronicleLayout(state: GameState): string {
   const all = state.chronicle ?? [];
-  const shown = all.slice(-200).reverse();
+  const shown = all.slice(-300).reverse();
+  // Everything from the same day (or minute, or season) under one heading, in the order it
+  // happened; the newest days first.
+  const groups: { era: string; when: string; lines: string[] }[] = [];
+  for (const e of shown) {
+    const g = groups[groups.length - 1];
+    if (g && g.era === e.era && g.when === e.when) g.lines.unshift(e.text);
+    else groups.push({ era: e.era, when: e.when, lines: [e.text] });
+  }
   let era = '';
-  const rows = shown
-    .map((e) => {
-      const head = e.era !== era ? `<h3 class="chron-era">${eraName(e.era)}</h3>` : '';
-      era = e.era;
-      return `${head}<p class="chron"><span class="when">${e.when}</span> ${e.text}</p>`;
+  const rows = groups
+    .map((g) => {
+      const head = g.era !== era ? `<h3 class="chron-era">${eraName(g.era as StageId)}</h3>` : '';
+      era = g.era;
+      return `${head}<div class="chron-day"><span class="when">${g.when}</span>${g.lines.map((l) => `<p>${l}</p>`).join('')}</div>`;
     })
     .join('');
   return `<div class="panel-head"><h2>Chronicle</h2><span class="dim">${all.length} entries</span></div>

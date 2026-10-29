@@ -27,7 +27,9 @@ export type PondEvent =
   /** Tribal era: the spear was touched. */
   | { type: 'spear'; x: number; y: number }
   /** Extinction: the leader gathered by hand at a work place (or listened at the spear). */
-  | { type: 'hand'; job: import('../economy/extinction').JobId; x: number; y: number };
+  | { type: 'hand'; job: import('../economy/extinction').JobId; x: number; y: number }
+  /** Extinction: one of them was tapped (their place in the tribe). */
+  | { type: 'person'; i: number; x: number; y: number };
 
 interface Hero {
   x: number;

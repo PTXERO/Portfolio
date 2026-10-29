@@ -21,6 +21,7 @@ import {
   type ExtinctionState,
   type Focus,
 } from './extinction';
+import { remember } from './society';
 import type { GameState } from './types';
 
 export type SpellId = 'lightning' | 'rain' | 'ward' | 'quicken' | 'kelp' | 'shoals' | 'dying';
@@ -127,6 +128,7 @@ export function cast(ex: ExtinctionState, id: SpellId, opts: { people?: number[]
       let cured = 0;
       for (const p of inside) {
         if (p.sick !== undefined) cured++;
+        remember(ex, p, p.sick !== undefined ? 'was cured of the shaking by a light from the spear' : 'felt a light from the spear ease the hunger');
         delete p.sick;
         p.hunger = Math.max(0, p.hunger - 0.5);
       }
@@ -255,6 +257,7 @@ export function tribeLaunches(state: GameState): boolean {
   // The healthiest, favouring the young and the strong.
   const score = (p: ExtinctionState['people'][number]) => (p.sick !== undefined ? -10 : 0) - p.hunger + (p.trait === 'young' ? 1 : p.trait === 'strong' || p.trait === 'hardy' ? 0.6 : p.trait === 'frail' || p.trait === 'old' ? -1 : 0);
   ex.family = [...ex.people].sort((a, b) => score(b) - score(a)).slice(0, FAMILY).map((p) => p.id);
+  for (const p of ex.people) if (ex.family.includes(p.id)) remember(ex, p, 'was chosen to go on the raft');
   const names = ex.people.filter((p) => ex.family!.includes(p.id)).map((p) => p.name);
   say(ex, `The raft was ready. “We'll go mad if we stay.” ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} pushed it out past the breakers, with forty days of scraps.`);
   return launch(state);

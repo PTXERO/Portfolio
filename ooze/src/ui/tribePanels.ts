@@ -4,7 +4,7 @@
 import { STORY } from '../content/tribal';
 import { count, dayYield, eatsMeat, eatsPlants, FAMILY, hungerWord, ideaCost, jobFood, jobInfo, JOBS, jobOpen, launchBlockers, RAFT, raftDone, raftPart, seasonOf, TRAITS, VOYAGE_FOOD, WINTER, type Diet, type ExtinctionState } from '../economy/extinction';
 import { BRANCHES, MIND_NODE, MIND_TREE, nodeFor, RAFT_IDEAS, reachable } from '../economy/mindTree';
-import { moodWord, QUIRKS } from '../economy/society';
+import { hopeOf, moodWord, QUIRKS } from '../economy/society';
 import { DREAD_COWER, DREAD_FLEE, ORDAIN_AFTER, PRAYER_MAX, spellsFor, type Gesture } from '../economy/miracles';
 import { tribeOf } from '../economy/tribal';
 import type { GameState } from '../economy/types';
@@ -35,7 +35,7 @@ export function tribeLayout(state: GameState): string {
       <div class="card px-box"><div class="info"><div class="name">${t.survivors} of the herd lived</div>
       <div class="sub">${t.awake ? STORY.wakeSub : STORY.approach}</div></div></div>`;
   }
-  return [storesCard(ex), latestCard(ex), workCard(ex), raftCard(ex), peopleCard(ex)].join('');
+  return [storesCard(ex), hopeCard(ex), workCard(ex), raftCard(ex), peopleCard(ex)].join('');
 }
 
 function storesCard(ex: ExtinctionState): string {
@@ -80,10 +80,13 @@ function workCard(ex: ExtinctionState): string {
     <div class="sub">They decide for themselves: food first, then ${ex.focus === 'raft' ? 'the raft' : ex.focus === 'wood' ? 'wood' : 'listening to the spear'}.${rest ? ` ${rest} resting.` : ''}</div></div>${rows}</div>`;
 }
 
-/** The latest few lines of what they've done (the rest is in the Chronicle tab). */
-function latestCard(ex: ExtinctionState): string {
-  const lines = [...(ex.log ?? [])].reverse().slice(0, 3).map((l, i) => `<p class="${i ? '' : 'now'}"><span class="dim">Day ${l.day}.</span> ${l.text}</p>`).join('');
-  return `<div class="card px-box chronicle"><div class="info"><div class="name">Lately</div>${lines}<p class="tiny dim">The rest is in the Chronicle.</p></div></div>`;
+/** Hope: how the tribe is bearing it, all together (and what it brings). */
+function hopeCard(ex: ExtinctionState): string {
+  const h = hopeOf(ex);
+  const word = h >= 70 ? 'Hopeful' : h >= 55 ? 'Holding together' : h >= 30 ? 'Bearing up' : h >= 15 ? 'Despairing' : 'Broken';
+  return `<div class="card px-box hope"><div class="info"><div class="name">Hope <span class="num gold">${h}</span> <span class="dim">· ${word}</span></div>
+    <div class="meter"><i style="width:${h}%"></i><b style="left:55%"></b><b style="left:30%"></b></div>
+    <div class="sub">Their mood all together: hunger, grief, the spear's dread, the fire, friends. Above 55, fed, they have children; below 30, people break.</div></div></div>`;
 }
 
 /** The raft: each part's progress, then (once it's done) the four who go, and the food. */

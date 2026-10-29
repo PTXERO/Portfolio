@@ -160,8 +160,29 @@ export class TribeScene extends RangeScene {
     if (!t.awake && this.arrived && Math.abs(ax - X) < Math.max(8, tall * 0.25) && ay > Y - tall - 4 && ay < Y + 4) {
       this.events.push({ type: 'spear', x: X, y: Y - tall });
       this.wave = 0;
+      return;
+    }
+    // After the waking: a tap on one of them says who they are.
+    if (!t.ex) return;
+    let best = -1;
+    let d0 = Math.max(6, this.zoom * 2);
+    this.people.forEach((p, i) => {
+      const X = this.sx(p.x);
+      const Y = this.py(p.x, p.y) - Math.max(2, this.zoom);
+      const d = Math.hypot(X - ax, Y - ay);
+      if (d < d0) {
+        d0 = d;
+        best = i;
+      }
+    });
+    if (best >= 0) {
+      const p = this.people[best];
+      this.events.push({ type: 'person', i: best, x: this.sx(p.x), y: this.py(p.x, p.y) - Math.max(8, this.zoom * 3) });
     }
   }
+
+  /** The one whose card is open (marked over their head), or -1. */
+  chosen = -1;
 
   // ---- Casting: the stroke, where things are, and the wonders themselves ----
 
@@ -1006,6 +1027,14 @@ export class TribeScene extends RangeScene {
           this.drawBeing(b, look, x, yy, { left, frame: moving ? Math.floor(t * 8 + p.ph) % 2 : 0, sleeping: sleeping && !struck, hop });
           // The spark as it reaches them: a point of light over each head, fading.
           if (lit >= 0 && lit < 3) this.spark(b, x, yy, lit);
+          if (i === this.chosen) {
+            // Picked out: a small gold mark over their head.
+            const X = Math.round(this.sx(x));
+            const Y = Math.round(this.py(x, yy) - Math.max(7, 2.4 * this.zoom) - (Math.floor(t * 2) % 2));
+            b.fillStyle = 'rgba(245, 196, 94, 0.996)';
+            b.fillRect(X - 1, Y, 3, 1);
+            b.fillRect(X, Y + 1, 1, 1);
+          }
         },
       });
     });

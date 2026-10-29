@@ -87,6 +87,20 @@ export function moodOf(ex: ExtinctionState, p: Survivor): number {
   return Math.max(-100, Math.min(30, m));
 }
 
+/** Hope: the tribe's mood as a whole, 0 to 100 (50 is bearing up). High, children are born;
+ * low, people break. */
+export function hopeOf(ex: ExtinctionState): number {
+  if (!ex.people.length) return 0;
+  const avg = ex.people.reduce((a, p) => a + moodOf(ex, p), 0) / ex.people.length;
+  return Math.round(Math.max(0, Math.min(100, 70 + avg * 1.1)));
+}
+
+/** Something that happened to someone, kept with them (the last few). */
+export function remember(ex: ExtinctionState, p: Survivor, text: string): void {
+  (p.memories ??= []).push(`Day ${ex.day + 1}: ${text}`);
+  if (p.memories.length > 6) p.memories.splice(0, p.memories.length - 6);
+}
+
 /** How their mood and state shows in their work. */
 export function spirit(ex: ExtinctionState, p: Survivor): number {
   const m = moodOf(ex, p);
@@ -147,6 +161,7 @@ export function nightTheft(ex: ExtinctionState): void {
   ex.meat -= fromMeat;
   ex.plants -= Math.min(ex.plants, took - fromMeat);
   thief.hunger = Math.max(0, thief.hunger - 0.6);
+  remember(ex, thief, 'stole from the stores in the night');
   const witness = ex.people.find((p) => p !== thief && (p.quirk === 'brave' || p.quirk === 'quarrelsome') && roll(ex) < 0.5);
   if (!witness) {
     note(ex, 2, `Someone ate from the stores in the night. ${thief.name} slept well.`);
@@ -165,6 +180,8 @@ function fight(ex: ExtinctionState, a: Survivor, b: Survivor, why: string): void
   const loser = roll(ex) < 0.5 ? a : b;
   const winner = loser === a ? b : a;
   loser.hurt = 3;
+  remember(ex, loser, `fought ${winner.name}, and came off worse`);
+  remember(ex, winner, `fought ${loser.name}`);
   if (!bondOf(a, b.id)) bond(a, b, 'rival', 'rival');
   else {
     const ab = bondOf(a, b.id)!;
@@ -192,6 +209,8 @@ export function sharing(ex: ExtinctionState): void {
     const [b, q] = near;
     giver.hunger += 0.35;
     q!.hunger -= 0.35;
+    remember(ex, giver, `gave half their share to ${q!.name}`);
+    remember(ex, q!, `was given ${giver.name}'s share`);
     note(ex, b.kind === 'parent' ? 6 : 4, `${giver.name} gave half their share to ${q!.name}, their ${whatIs[b.kind]}.`);
   }
 }
@@ -204,6 +223,7 @@ export function mourn(ex: ExtinctionState, dead: Survivor[], how: string): void 
       const p = byId(ex, b.id);
       if (!p || b.kind === 'rival') continue;
       p.grief = b.kind === 'friend' ? 2 : 4;
+      remember(ex, p, `lost ${d.name}, their ${b.kind === 'parent' ? 'child' : b.kind === 'child' ? 'parent' : b.kind}`);
       p.bonds = (p.bonds ?? []).filter((x) => x.id !== d.id);
       if (!mourner || b.kind === 'parent' || b.kind === 'mate') mourner = { p, kind: b.kind };
     }
@@ -238,6 +258,8 @@ export function socialNight(ex: ExtinctionState, fire: boolean): number {
     if (mates.length) {
       const b = pick(ex, mates);
       bond(a, b, 'friend', 'friend');
+      remember(ex, a, `became friends with ${b.name}`);
+      remember(ex, b, `became friends with ${a.name}`);
       const at: Record<string, string> = { forage: 'picking over the ash', scavenge: 'at the carcasses', dig: 'digging', fish: 'at the shore', wood: 'cutting the dead trees', build: 'lashing the raft', listen: 'kneeling at the spear' };
       told(ex, 'friend');
       const where = at[a.job] ?? 'working';
@@ -257,9 +279,10 @@ export function socialNight(ex: ExtinctionState, fire: boolean): number {
     const b = (rival && byId(ex, rival.id)) || pick(ex, ex.people.filter((q) => q !== a));
     if (b) fight(ex, a, b, pick(ex, [`${a.name} said ${b.name} wasn't working`, `${a.name} and ${b.name} argued over the last of the food`, `${a.name} blamed ${b.name} for the dead`]));
   }
-  // Births: only when they're fed and calm.
-  const calm = ex.ration >= 1 && ex.people.reduce((s, p) => s + p.hunger, 0) / ex.people.length < 0.6 && (ex.dread ?? 0) < 50;
-  if (calm && ex.people.length < 80 && ex.day - (ex.lastBirth ?? -99) >= 4 && roll(ex) < 0.3) {
+  // Births: when there's Hope (and food for a full meal). The higher it is, the more often.
+  const hope = hopeOf(ex);
+  const fed = ex.ration >= 1 && ex.people.reduce((s, p) => s + p.hunger, 0) / ex.people.length < 1;
+  if (fed && hope >= 55 && ex.people.length < 120 && ex.day - (ex.lastBirth ?? -99) >= 2 && roll(ex) < (hope - 45) / 60) {
     const pairs = ex.people.filter((p) => p.bonds?.some((b) => b.kind === 'mate' && byId(ex, b.id)));
     if (pairs.length) {
       const a = pick(ex, pairs);
@@ -270,6 +293,9 @@ export function socialNight(ex: ExtinctionState, fire: boolean): number {
       bond(a, kid, 'parent', 'child');
       bond(b, kid, 'parent', 'child');
       ex.lastBirth = ex.day;
+      remember(ex, a, `had a child, ${name}`);
+      remember(ex, b, `had a child, ${name}`);
+      remember(ex, kid, `born to ${a.name} and ${b.name}`);
       ex.dread = Math.max(0, (ex.dread ?? 0) - 8);
       ex.births = (ex.births ?? 0) + 1;
       note(ex, 8, ex.births === 1 ? `A child was born to ${a.name} and ${b.name}, the first since the strike. They called it ${name}. For a night, no one spoke of the spear.` : pick(ex, [`${a.name} and ${b.name} had a child, ${name}. Another mouth, and still they were glad.`, `A child was born in the night: ${name}, to ${a.name} and ${b.name}. The others brought what food they could spare.`, `${name} was born to ${a.name} and ${b.name}. ${ex.births} born on the ash now.`]));
@@ -280,6 +306,7 @@ export function socialNight(ex: ExtinctionState, fire: boolean): number {
   if (lowest && lowest[1] < -65 && roll(ex) < 0.3) {
     const [p] = lowest;
     p.broken = true;
+    remember(ex, p, 'broke under it all');
     const kind = roll(ex);
     if (kind < 0.4) note(ex, 6, `${p.name} walked out into the ash at dawn and wouldn't come back until dark.`);
     else if (kind < 0.75) {
@@ -297,6 +324,7 @@ export function socialNight(ex: ExtinctionState, fire: boolean): number {
   const preacher = due(ex, 'preach', 5) ? devout.find(() => roll(ex) < 0.25) : undefined;
   if (preacher) {
     told(ex, 'preach');
+    remember(ex, preacher, 'preached of the spear');
     note(ex, 3, pick(ex, [
       `${preacher.name} told them the spear had chosen them, and that it would not let them die. More knelt at it that night.`,
       `${preacher.name} said the miracles were the spear's answer, and that it wanted more of their prayers.`,

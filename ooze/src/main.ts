@@ -13,7 +13,8 @@ import { STAGES } from './content/stages';
 import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed } from './economy/tribal';
-import { autoAssign, daysLeft, decideFallen, DAY_SEC, eatsPlants, extinctionTick, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
+import { autoAssign, daysLeft, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
+import { moodWord, QUIRKS } from './economy/society';
 import { cast, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
 import { readGesture } from './ui/gesture';
 import {
@@ -292,6 +293,7 @@ function step(): void {
 
 let alone = false;
 let guessSig = '';
+let tickerText = '';
 /** Whether the menu was pulled full height for the web of ideas (and so goes back after). */
 let ideasFull = false;
 let guess: number | null = null;
@@ -515,6 +517,35 @@ function chronicleStep(): void {
 let seenFound: Set<string> | null = null;
 const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
 
+/** One of them, tapped: who they are, who they have, how they're doing, and what's
+ * happened to them. */
+function showPersonCard(i: number, x: number, y: number): void {
+  const ex = state.stages.tribal.tribe?.ex;
+  const p = ex?.people[i];
+  if (!ex || !p) return;
+  const name = (id: number) => ex.people.find((q) => q.id === id)?.name;
+  const kin = (p.bonds ?? [])
+    .map((b) => [b, name(b.id)] as const)
+    .filter(([, n]) => n)
+    .map(([b, n]) => `${b.kind === 'parent' ? 'parent of' : b.kind === 'child' ? 'child of' : `${b.kind} of`} ${n}`);
+  const state2 = [hungerWord(ex, p), moodWord(ex, p)].filter((v, k, a) => a.indexOf(v) === k).join(', ');
+  const mem = [...(p.memories ?? [])].reverse();
+  placeCard.className = 'px-box person';
+  placeCard.innerHTML = `<h4>${p.name}${p.id === ex.leader ? ' <span class="dim">· the one they follow</span>' : ''}</h4>
+    <div class="who">${TRAITS[p.trait].name}${p.quirk ? ` · ${QUIRKS[p.quirk]}` : ''} · ${jobInfo(ex.diet, p.job).name} · ${state2}</div>
+    <div class="sub">${kin.length ? kin.slice(0, 4).join(', ') : 'No one left of their own.'}</div>
+    ${mem.length ? `<ul>${mem.map((m) => `<li>${m}</li>`).join('')}</ul>` : '<p class="sub dim">Nothing yet has happened to them that the others would remember.</p>'}`;
+  placeCard.hidden = false;
+  placeCard.style.left = `${Math.max(8, Math.min(stageEl.clientWidth - 248, x - 120))}px`;
+  placeCard.style.top = `${Math.max(8, y - placeCard.offsetHeight - 16)}px`;
+  scene.tribeScene.chosen = i;
+  window.clearTimeout(placeCardTimer);
+  placeCardTimer = window.setTimeout(() => {
+    placeCard.hidden = true;
+    scene.tribeScene.chosen = -1;
+  }, 9000);
+}
+
 /** The morning after: who starved, and how much there was. */
 function nightReport(): void {
   const r = state.stages.tribal.tribe?.ex?.last;
@@ -537,6 +568,7 @@ function nightReport(): void {
     ${more.join('')}`,
     more.length ? 9 : 6,
   );
+  modal.dataset.kind = 'night';
 }
 
 /** The first dead: what's to be done with them. Eating them changes the tribe for good. */
@@ -692,13 +724,32 @@ function renderGoal(): void {
       }
       const d = guess;
       const night = Math.max(0, Math.ceil(DAY_SEC - ex.clock));
-      const key = `ex:${ex.day}:${night}:${d}:${ex.over}`;
-      if (key !== goalKey) {
-        goalKey = key;
+      // Built once; after that only its words change (so the ticker keeps scrolling).
+      if (goalKey !== 'ex') {
+        goalKey = 'ex';
+        tickerText = '';
         evolveEl.hidden = false;
-        const cls = d === null ? 'safe' : d <= 2 ? 'dire' : d <= 5 ? 'warn' : '';
-        evolveEl.innerHTML = `<div class="evolve-row"><span class="label">Day ${ex.day + 1}</span><span class="label dim">Night in ${night}s</span></div>
-          <div class="ex-count ${cls}">${d === null ? 'Holding on' : `Extinction in ${d} day${d === 1 ? '' : 's'}`}</div>`;
+        evolveEl.innerHTML = `<div class="evolve-row"><span class="label" data-g="day"></span><span class="label dim" data-g="night"></span></div>
+          <div class="ex-row"><div class="ex-count" data-g="count"></div><div class="ticker"><span data-g="tick"></span></div></div>`;
+      }
+      const g = (k: string) => evolveEl.querySelector<HTMLElement>(`[data-g="${k}"]`)!;
+      const put = (k: string, text: string) => {
+        if (g(k).textContent !== text) g(k).textContent = text;
+      };
+      put('day', `Day ${ex.day + 1}`);
+      put('night', `Night in ${night}s`);
+      put('count', d === null ? 'Holding on' : `Extinction in ${d} day${d === 1 ? '' : 's'}`);
+      g('count').className = `ex-count ${d === null ? 'safe' : d <= 2 ? 'dire' : d <= 5 ? 'warn' : ''}`;
+      // The news: the latest few things that happened, going by.
+      const news = (ex.log ?? []).slice(-3).map((l) => l.text).join('   ·   ');
+      if (news !== tickerText) {
+        tickerText = news;
+        const t = g('tick');
+        t.textContent = news;
+        t.style.setProperty('--dur', `${Math.max(10, news.length * 0.16)}s`);
+        t.style.animation = 'none';
+        void t.offsetWidth;
+        t.style.animation = '';
       }
       return;
     }
@@ -1015,6 +1066,7 @@ function pondEvents(): void {
       const got = e.party ? state.stages.creature.lastParty : state.stages.creature.lastForage;
       if (got) scene.float(e.x, e.y, `${e.party ? 'party home ' : ''}+${format(D(got))}`, '#f5c45e');
     } else if (e.type === 'place') showPlaceCard(e.id, e.x, e.y);
+    else if (e.type === 'person') showPersonCard(e.i, e.x, e.y);
     else if (e.type === 'spear' && awaken(state)) {
       // The waking: it touches the spear, and they know that they are. A flash, the
       // shockwave rolling out across the world, then the words; then the Extinction begins.
@@ -1051,6 +1103,7 @@ stageEl.appendChild(placeCard);
 let placeCardTimer = 0;
 
 function showPlaceCard(id: string, x: number, y: number): void {
+  placeCard.className = 'px-box';
   const def = STAGES.creature;
   const p = def.places!.find((q) => q.id === id);
   if (!p) return;
@@ -1088,6 +1141,11 @@ let swirlSpin = 0;
 /** Fingers on the Creature's map: one taps (or drags, when zoomed in), two pinch to zoom. */
 const fingers = new Map<number, { x: number; y: number; sx: number; sy: number }>();
 let mapDragged = false;
+
+// A report that closes itself (the night's news) also closes at a tap.
+modal.addEventListener('click', (e) => {
+  if (modal.dataset.kind === 'night' && !(e.target as HTMLElement).closest('button')) modal.hidden = true;
+});
 
 // The web of ideas: one finger drags it about, two pinch to zoom (the window's in the menu).
 const webFingers = new Map<number, { x: number; y: number }>();
@@ -1156,6 +1214,7 @@ stageEl.addEventListener('pointercancel', castUp, true);
 stageEl.addEventListener('pointerdown', (e) => {
   if (!modal.hidden || (e.target as HTMLElement).closest('#evolve, button, #placecard')) return;
   placeCard.hidden = true;
+  if (state.current === 'tribal') scene.tribeScene.chosen = -1;
   stageEl.setPointerCapture(e.pointerId);
   const r = stageEl.getBoundingClientRect();
   const x = e.clientX - r.left;
