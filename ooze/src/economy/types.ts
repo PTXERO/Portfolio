@@ -71,9 +71,11 @@ export type Effect =
   /** The herd eats less (upkeep ×mult). */
   | { kind: 'upkeepMult'; mult: number }
   /** Winter takes less of the herd (losses ×mult). */
-  | { kind: 'winterMult'; mult: number };
+  | { kind: 'winterMult'; mult: number }
+  /** An instinct bred into the line: this share of the herd does it, on its own. */
+  | { kind: 'instinct'; role: Role; share: number };
 
-/** What members of the herd can be set to do. */
+/** What members of the herd do, by instinct (nobody is told to: these are animals). */
 export type Role = 'forager' | 'carer' | 'digger' | 'guard' | 'scout';
 export const ROLES: Role[] = ['forager', 'carer', 'digger', 'guard', 'scout'];
 

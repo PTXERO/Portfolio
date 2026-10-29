@@ -1,8 +1,8 @@
 // The Creature stage scene: a side-on shoreline. The sea on the left, beach, then
 // grass and hills. Your creature walks the ground (tap to send it somewhere),
 // eats from bushes and catches bugs, and chases off the odd beast. What you own
-// fills the land: nests, burrows, a watering hole, dens and territory markers,
-// and the herd itself, each member at its job. The seasons turn: green spring,
+// fills the land: nests, burrows, marsh pools, caves and far-off grazers,
+// and the herd itself, each member doing what its instincts say. The seasons turn: green spring,
 // gold summer, red autumn, snow in winter. While it's away exploring, it walks off-screen.
 
 import { PAL } from '../art/sprites';
@@ -200,15 +200,14 @@ export class ShoreScene {
       const h = 6 + Math.round(Math.sin(x * 0.05) * 4 + Math.sin(x * 0.13) * 2);
       b.fillRect(x, horizon - h, 1, h);
     }
-    // Territory markers on the hills, one per few owned.
-    const markers = Math.min(6, Math.ceil(gens.territory / 3));
-    for (let i = 0; i < markers; i++) {
-      const x = Math.floor(W * (0.42 + i * 0.1));
+    // The home range: more of the herd grazing far off on the hills as it spreads.
+    const far = Math.min(14, gens.territory * 2);
+    for (let i = 0; i < far; i++) {
+      const x = Math.floor(W * (0.4 + hash(i, 11) * 0.58) + Math.sin(t * 0.05 + i) * 3);
       const h = 6 + Math.round(Math.sin(x * 0.05) * 4 + Math.sin(x * 0.13) * 2);
-      b.fillStyle = PAL.r;
-      b.fillRect(x, horizon - h - 4, 1, 4);
-      b.fillStyle = PAL.o;
-      b.fillRect(x + 1, horizon - h - 4, 2 + (Math.floor(t * 3 + i) % 2), 1);
+      b.fillStyle = '#4a5a3a';
+      b.fillRect(x, horizon - h - 1, 2, 1);
+      if (Math.floor(t * 0.5 + i) % 3) b.fillRect(x + (i % 2 ? 2 : -1), horizon - h - 2, 1, 1);
     }
     // Sea on the left, meeting the beach.
     b.fillStyle = '#3f8aa5';
@@ -332,8 +331,8 @@ export class ShoreScene {
       b.globalAlpha = 1;
     }
 
-    // The herd, each at its job: foragers peck about the grass, carers sit by the nests,
-    // diggers work the burrows, guards stand at the edges (and run at beasts). Scouts are out.
+    // The herd, each doing what its instincts say: foragers peck about the grass, nesters sit
+    // by the nests, burrowers dig, sentries watch from the edges (and mob beasts). Followers are out roaming.
     this.syncHerd(state, W);
     const beastNow = this.beast && !this.beast.fleeing ? this.beast : null;
     for (const m of this.members) {

@@ -1,4 +1,4 @@
-// The Creature stage's own tabs: Body (parts and training), Explore (expeditions
+// The Creature stage's own tabs: Body (parts and training), Roam (roaming
 // and the Field Guide) and Family (mates, the egg and the generations).
 // Laid out once per layout key, then patched in place like the other panels.
 
@@ -43,19 +43,19 @@ const statText = (p: PartDef) =>
     .join(' · ') || 'No stats') + (partEnergy(p) ? ` · ⚡${partEnergy(p)}` : '');
 
 const ROLE_INFO: Record<Role, { name: string; text: string }> = {
-  forager: { name: 'Foragers', text: 'Gather food. Anyone without a job forages.' },
-  carer: { name: 'Carers', text: 'Births +8% each; eggs hatch a little sooner.' },
-  digger: { name: 'Diggers', text: 'Dig out room for half a member each.' },
-  guard: { name: 'Guards', text: 'Keep the herd safe through winter.' },
-  scout: { name: 'Scouts', text: 'Expeditions 3% quicker each, and find more parts.' },
+  forager: { name: 'Foragers', text: 'Gather food: everyone whose instincts don\'t send them elsewhere.' },
+  carer: { name: 'Nesters', text: 'Births +8% each; eggs hatch a little sooner.' },
+  digger: { name: 'Burrowers', text: 'Dig out room for half a member each.' },
+  guard: { name: 'Sentries', text: 'Fewer lost to winter; they mob beasts.' },
+  scout: { name: 'Followers', text: 'Roams 3% quicker each, and turn up more parts.' },
 };
 
-const BUILDING_TEXT: Record<string, string> = {
+const PLACE_TEXT: Record<string, string> = {
   nest: 'Births +0.04/s each',
-  burrow: 'Room for 5 more',
+  burrow: 'Room for 3 more',
   waterhole: 'The herd eats 4% less each (down to half)',
-  den: 'Room for 40 more, and shelter from winter',
-  territory: 'Room for 200 more, and food +2% each',
+  den: 'Room for 15 more, and shelter from winter',
+  territory: 'Room for 50 more, and food +2% each',
 };
 
 /** What changes the creature tabs' layout. */
@@ -65,33 +65,41 @@ export function creatureKey(state: GameState): unknown {
 }
 
 /** The Herd tab: how many, how fed, what season, who does what, and the buildings. */
-export function herdLayout(state: GameState, amounts: string): string {
+export function herdLayout(state: GameState, amounts: string, upgradeCard: (u: (typeof STAGES)['creature']['upgrades'][number]) => string): string {
   const def = STAGES[CREATURE];
   const cur = icon('biomass', 2);
-  const roles = ROLES.map(
-    (r) => `<div class="card px-box role">
-      <div class="info"><div class="name">${ROLE_INFO[r].name}<span class="count" data-t="role-${r}"></span></div><div class="sub">${ROLE_INFO[r].text}</div></div>
-      ${r === 'forager' ? '' : `<div class="seg"><button class="px-btn" data-role="${r}" data-delta="-1">−</button><button class="px-btn" data-role="${r}" data-delta="1">+</button></div>`}
-    </div>`,
-  ).join('');
+  const s = state.stages[CREATURE];
+  // Who's doing what: only the instincts the line has show up.
+  const roles = ROLES.filter((r) => r === 'forager' || s.roles[r] > 0 || def.upgrades.some((u) => u.effect.kind === 'instinct' && u.effect.role === r && (s.levels[u.id] ?? 0) > 0))
+    .map(
+      (r) => `<div class="role-row"><span class="name">${ROLE_INFO[r].name}<span class="count" data-t="role-${r}"></span></span><span class="sub">${ROLE_INFO[r].text}</span></div>`,
+    )
+    .join('');
+  const instincts = visibleUpgrades(state, CREATURE)
+    .filter((u) => u.branch === 'Instincts')
+    .map(upgradeCard)
+    .join('');
   const buildings = def.generators
     .filter((g) => generatorVisible(state, CREATURE, g))
     .map(
       (g) => `<div class="card px-box">
-        <div class="info"><div class="name">${esc(g.name)}<span class="count" data-t="owned-${g.id}"></span></div><div class="sub">${esc(BUILDING_TEXT[g.id] ?? g.flavor)}</div></div>
+        <div class="info"><div class="name">${esc(g.name)}<span class="count" data-t="owned-${g.id}"></span></div><div class="sub">${esc(PLACE_TEXT[g.id] ?? g.flavor)}</div></div>
         <button class="px-btn buy" data-gen="${g.id}"><span class="cost">${cur}<span data-t="cost-${g.id}"></span></span><span class="qty" data-t="qty-${g.id}"></span></button>
       </div>`,
     )
     .join('');
-  const locked = def.generators.some((g) => !generatorVisible(state, CREATURE, g)) ? '<p class="note">New places to explore bring new kinds of shelter.</p>' : '';
+  const locked = def.generators.some((g) => !generatorVisible(state, CREATURE, g)) ? '<p class="note">Roaming further finds new places for the herd to live.</p>' : '';
   return `<div class="card px-box herd"><div class="info">
       <div class="name" data-t="herd-pop"></div>
       <div class="sub" data-t="herd-food"></div>
       <div class="sub" data-t="herd-season"></div>
       <div class="making-bar on" data-bar="season"><i></i></div>
     </div></div>
-    <div class="panel-head"><h2>Roles</h2><div class="seg">${amounts}</div></div>${roles}
-    <div class="panel-head"><h2>Shelter</h2></div>${buildings}${locked}`;
+    <div class="card px-box roles"><div class="info">${roles}</div></div>
+    <div class="panel-head"><h2>Instincts</h2></div>
+    <p class="note">Nobody tells an animal what to do. Breed an instinct into the line and a share of the herd does it on its own.</p>
+    ${instincts}
+    <div class="panel-head"><h2>Where they live</h2><div class="seg">${amounts}</div></div>${buildings}${locked}`;
 }
 
 export function bodyLayout(state: GameState, upgradeCard: (u: (typeof STAGES)['creature']['upgrades'][number]) => string): string {
@@ -150,13 +158,13 @@ export function exploreLayout(state: GameState): string {
       const found = p.parts.filter((id) => s.parts.includes(id)).length;
       return `<div class="card px-box place${explored ? ' owned' : ''}">
         <div class="info">
-          <div class="name">${esc(p.name)} ${explored ? '<span class="tag">Explored</span>' : ''}</div>
+          <div class="name">${esc(p.name)} ${explored ? '<span class="tag">Known</span>' : ''}</div>
           <div class="flavor">${esc(p.flavor)}</div>
           ${needs ? `<ul class="checks">${needs}</ul>` : ''}
           <div class="sub" data-t="place-${p.id}"></div>
           <div class="fx">${!explored && reward ? `First visit: ${esc(reward)} · ` : ''}Parts here: ${found}/${p.parts.length}</div>
         </div>
-        ${open ? `<button class="px-btn buy" data-trip="${p.id}">Go</button>` : `<button class="px-btn buy locked" disabled><span class="qty">Explore ${esc((p.after ?? []).map((id) => def.places!.find((x) => x.id === id)!.name).join(' & '))} first</span></button>`}
+        ${open ? `<button class="px-btn buy" data-trip="${p.id}">Roam</button>` : `<button class="px-btn buy locked" disabled><span class="qty">Roam ${esc((p.after ?? []).map((id) => def.places!.find((x) => x.id === id)!.name).join(' & '))} first</span></button>`}
       </div>`;
     })
     .join('');
@@ -169,7 +177,7 @@ export function exploreLayout(state: GameState): string {
           .parts.map((p, i) => `<li data-check="${fin.id}-${i}">${esc(p.label)}</li>`)
           .join('')}<li data-check="${fin.id}-cost" data-t="cost-${fin.id}"></li></ul>
         <button class="px-btn gold pulse finale" data-act="finale" hidden>${esc(fin.name)}</button></div></div>`;
-  return `<div class="panel-head"><h2>Expedition</h2></div>${trip}
+  return `<div class="panel-head"><h2>Roaming</h2></div>${trip}
     <div class="panel-head"><h2>${def.bookName}</h2><span class="label dim">${s.discovered.filter((id) => id !== fin.id).length} / ${def.places!.length}</span></div>${places}${finale}`;
 }
 
@@ -190,7 +198,7 @@ export function familyLayout(state: GameState): string {
   return `<div class="panel-head"><h2>Generation ${s.generation}</h2><span class="label dim">Line ×${(GENERATION_MULT ** s.generation).toFixed(2)}</span></div>
     ${egg}
     <div class="panel-head"><h2>Mates</h2><span class="label dim">${s.mates.length} / ${MAX_MATES}</span></div>
-    ${mates || '<p class="note">Mates are met on expeditions. The first trip to the Shoreline always finds one.</p>'}
+    ${mates || '<p class="note">Mates are met while roaming, or on the shore. The first roam along the Shoreline always finds one.</p>'}
     <p class="note">Each generation makes the whole line stronger (all output ×${GENERATION_MULT}, every stat +1), and the young inherit the mate's parts. Eggs take longer each generation; Charm hurries them.</p>`;
 }
 
@@ -230,16 +238,18 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
     setText(root, 'herd-season', `${season.name}: ${tip} · ${formatTime(left)} left`);
     bar(root, 'season', 1 - left / SEASON_SEC);
     for (const r of ROLES) setText(root, `role-${r}`, ` ×${r === 'forager' ? foragers(state) : s.roles[r]}`);
-    for (const b of root.querySelectorAll<HTMLButtonElement>('[data-role]')) {
-      const r = b.dataset.role as Role;
-      b.disabled = b.dataset.delta === '1' ? foragers(state) <= 0 : s.roles[r] <= 0;
+    for (const u of visibleUpgrades(state, CREATURE).filter((x) => x.branch === 'Instincts')) {
+      const btn = root.querySelector<HTMLButtonElement>(`[data-up="${u.id}"]`);
+      if (!btn) continue;
+      btn.disabled = s.currency.lt(upgradeCost(state, CREATURE, u));
+      btn.classList.toggle('gold', !btn.disabled);
     }
     for (const g of def.generators.filter((x) => generatorVisible(state, CREATURE, x))) {
       const n = buyCount(state, CREATURE, g.id, state.buyAmount);
       const cost = generatorCost(state, CREATURE, g.id, n);
       setText(root, `owned-${g.id}`, s.generators[g.id] ? ` ×${s.generators[g.id]}` : '');
       setText(root, `cost-${g.id}`, format(cost));
-      setText(root, `qty-${g.id}`, `BUILD ${n}`);
+      setText(root, `qty-${g.id}`, `+${n}`);
       const btn = root.querySelector<HTMLButtonElement>(`[data-gen="${g.id}"]`);
       if (btn) {
         btn.disabled = s.currency.lt(cost);
@@ -268,12 +278,12 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
   } else if (tab === 'explore') {
     if (s.trip) {
       const p = def.places!.find((x) => x.id === s.trip!.place)!;
-      setText(root, 'trip-title', `Exploring the ${p.name}`);
-      setText(root, 'trip-sub', tripEventDue(state) ? 'Something on the way. Choose, or it plays safe.' : `Back in ${formatTime(s.trip.left)}`);
+      setText(root, 'trip-title', `Roaming the ${p.name}`);
+      setText(root, 'trip-sub', tripEventDue(state) ? 'It ran into something. Choose, or instinct plays safe.' : `Back in ${formatTime(s.trip.left)}`);
       bar(root, 'trip', 1 - s.trip.left / s.trip.total);
     } else {
       setText(root, 'trip-title', 'Your creature is home');
-      setText(root, 'trip-sub', 'Pick a place to explore. Trips carry on while you are away.');
+      setText(root, 'trip-sub', 'Pick where it roams next. It keeps going while you are away.');
       bar(root, 'trip', 0);
     }
     for (const p of def.places!) {
@@ -306,7 +316,7 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
       bar(root, 'egg', 1 - s.egg.left / s.egg.total);
     } else {
       setText(root, 'egg-title', 'No egg yet');
-      setText(root, 'egg-sub', s.mates.length ? `Breed with a mate below. It would take ${formatTime(eggSeconds(state))}.` : 'Find a mate on an expedition first.');
+      setText(root, 'egg-sub', s.mates.length ? `Breed with a mate below. It would take ${formatTime(eggSeconds(state))}.` : 'Find a mate while roaming first.');
       bar(root, 'egg', 0);
     }
     for (const b of root.querySelectorAll<HTMLButtonElement>('[data-breed]')) {

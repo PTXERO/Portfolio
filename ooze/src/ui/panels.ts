@@ -35,7 +35,7 @@ export const TABS: { id: Tab; label: string; sprite: SpriteName }[] = [
   { id: 'mutate', label: 'Mutate', sprite: 'helix' },
   { id: 'pond', label: 'Pond', sprite: 'pond' },
   { id: 'body', label: 'Body', sprite: 'body' },
-  { id: 'explore', label: 'Explore', sprite: 'explore' },
+  { id: 'explore', label: 'Roam', sprite: 'explore' },
   { id: 'family', label: 'Family', sprite: 'family' },
   { id: 'roots', label: 'Roots', sprite: 'roots' },
   { id: 'menu', label: 'Menu', sprite: 'menu' },
@@ -105,6 +105,14 @@ function visibleDials(state: GameState): DialId[] {
   return DIALS.filter((d) => dialMax(state, state.current, d) > 0);
 }
 
+const INSTINCT_VERB: Record<string, string> = {
+  carer: 'tends the nests',
+  digger: 'digs burrows',
+  guard: 'keeps watch',
+  scout: 'follows when it roams',
+  forager: 'forages',
+};
+
 export function describeEffect(stage: StageId, e: Effect): string {
   switch (e.kind) {
     case 'genMult':
@@ -151,6 +159,8 @@ export function describeEffect(stage: StageId, e: Effect): string {
       return `The herd eats ×${e.mult}`;
     case 'winterMult':
       return `Winter takes ×${e.mult}`;
+    case 'instinct':
+      return `${Math.round(e.share * 100)}% of the herd ${INSTINCT_VERB[e.role]}`;
   }
 }
 
@@ -229,7 +239,11 @@ export function layout(state: GameState, tab: Tab): string {
   const cur = icon(CURRENCY_ICON[id], 2);
 
   if (tab === 'grow' && def.places) {
-    return herdLayout(state, AMOUNTS.map((a) => `<button class="px-btn" data-amount="${a}">${a === 'max' ? 'MAX' : `×${a}`}</button>`).join(''));
+    return herdLayout(
+      state,
+      AMOUNTS.map((a) => `<button class="px-btn" data-amount="${a}">${a === 'max' ? 'MAX' : `×${a}`}</button>`).join(''),
+      (u) => upgradeCard(state, id, u, 'spark'),
+    );
   }
   if (tab === 'grow') {
     const rows = shownGenerators(state)

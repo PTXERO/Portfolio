@@ -1,9 +1,10 @@
 // The Creature stage: many cells became one body, and it crawls out of the water.
-// A game of its own: not a price ladder but a herd to run. Your line grows from
-// births into a population you set to work (foragers, carers, diggers, guards,
-// scouts) through a cycle of seasons. You build one body within an energy budget,
-// send it on expeditions that throw up choices, and breed generations. It ends
-// when the line is many.
+// A game of its own: not a price ladder but a herd to keep alive. Your line grows
+// from births through a cycle of seasons, fed by whoever forages. Nobody is told
+// what to do (these are animals): instincts bred into the line send a share of the
+// herd to nest, burrow, keep watch or follow. You grow one body within an energy
+// budget, roam with it (meeting things that need a snap decision), and breed
+// generations. It ends when the line is many.
 //
 // Numbers here are tuned with the simulator (npm run sim). Names and lines are
 // placeholders until the real script is written.
@@ -23,7 +24,7 @@ export const PARTS: PartDef[] = [
   { id: 'lensEyes', slot: 'eyes', name: 'Lens Eyes', flavor: 'Shapes, at last.', stats: { senses: 4 }, cost: 1.5e4 },
   { id: 'spines', slot: 'back', name: 'Spines', flavor: 'A row of needles down the back.', stats: { toughness: 4 }, cost: 8e4 },
   { id: 'finTail', slot: 'tail', name: 'Fin Tail', flavor: 'Still half a swimmer.', stats: { speed: 2, charm: 1 }, cost: 4e5 },
-  // Found on expeditions (or inherited from a mate).
+  // Found while roaming (or inherited from a mate).
   { id: 'shell', slot: 'back', name: 'Shell', flavor: 'A house you carry.', stats: { toughness: 8 } },
   { id: 'stalkEyes', slot: 'eyes', name: 'Stalk Eyes', flavor: 'They see round corners. Almost.', stats: { senses: 7 } },
   { id: 'runner', slot: 'legs', name: 'Runner Legs', flavor: 'Long, light and quick.', stats: { speed: 8 } },
@@ -51,7 +52,7 @@ const pages: ReactionDef[] = PLACES.map((p) => ({
   id: p.id,
   name: p.name,
   flavor: p.flavor,
-  hints: [`Somewhere out there: ${p.name.toLowerCase()}.`, 'Send your creature on an expedition to explore it.'],
+  hints: [`Somewhere out there: ${p.name.toLowerCase()}.`, 'Let your creature roam there.'],
   needs: {},
   manual: true,
   bonus: p.bonus,
@@ -62,13 +63,13 @@ const final: ReactionDef = {
   id: 'many',
   name: 'Many',
   flavor: 'A line long enough to fill the land.',
-  hints: ['One is not enough.', 'Every place explored, a line six generations long, and a great herd across the land.'],
-  needs: { found: 7, generation: 6, pop: 500, gens: { territory: 5 } },
+  hints: ['One is not enough.', 'Every place roamed, a line six generations long, and a great herd across the land.'],
+  needs: { found: 7, generation: 6, pop: 200, gens: { territory: 5 } },
   final: true,
   cost: 1e12,
 };
 
-/** Things that happen partway through an expedition. Unanswered, the creature plays safe (the last option). */
+/** Things it runs into partway through a roam. Left alone, instinct plays safe (the last option). */
 export const EVENTS: TripEventDef[] = [
   { id: 'rockslide', text: 'A rockslide blocks the path.', options: [
     { label: 'Climb over', stat: 'strength', need: 8, good: 'It scrambled over and found the way beyond.', bad: 'It slipped and limped home early.', reward: 'pay' },
@@ -107,6 +108,11 @@ const UPGRADES: UpgradeDef[] = [
   { id: 'trainToughness', branch: 'Training', name: 'Hard Knocks', flavor: 'Every bruise teaches something.', cost: 800, levels: Infinity, costGrowth: 2.2, effect: { kind: 'stat', stat: 'toughness', amount: 1 } },
   { id: 'trainCharm', branch: 'Training', name: 'Display', flavor: 'Puff up. Look grand. Hope.', cost: 1200, levels: Infinity, costGrowth: 2.3, effect: { kind: 'stat', stat: 'charm', amount: 1 } },
   { id: 'bigHeart', branch: 'Training', name: 'Bigger Heart', flavor: 'More blood, more body to move.', cost: 600, levels: Infinity, costGrowth: 2.6, effect: { kind: 'energy', amount: 1 } },
+  // Instincts: bred into the line, each sends a share of the herd to do something on its own.
+  { id: 'nesting', branch: 'Instincts', name: 'Nesting Instinct', flavor: 'Some stay by the eggs, and will not be moved.', cost: 800, levels: 5, costGrowth: 8, effect: { kind: 'instinct', role: 'carer', share: 0.03 } },
+  { id: 'burrowing', branch: 'Instincts', name: 'Burrowing', flavor: 'Claws that itch to dig.', cost: 6000, levels: 5, costGrowth: 8, effect: { kind: 'instinct', role: 'digger', share: 0.03 }, requires: { reaction: 'tidePools' } },
+  { id: 'sentries', branch: 'Instincts', name: 'Sentries', flavor: 'Someone always has its head up.', cost: 5e4, levels: 5, costGrowth: 8, effect: { kind: 'instinct', role: 'guard', share: 0.02 }, requires: { reaction: 'marsh' } },
+  { id: 'following', branch: 'Instincts', name: 'Follow the Leader', flavor: 'The young trail after the one who knows the way.', cost: 4e5, levels: 5, costGrowth: 8, effect: { kind: 'instinct', role: 'scout', share: 0.02 }, requires: { reaction: 'forest' } },
   // Herd and seasons.
   { id: 'fatStores', name: 'Fat Stores', flavor: 'Eat in summer, live on it in winter.', cost: 400, levels: 5, costGrowth: 6, effect: { kind: 'upkeepMult', mult: 0.85 } },
   { id: 'thickCoats', name: 'Thick Coats', flavor: 'Fur, feathers or blubber: whatever keeps the cold out.', cost: 2000, levels: 5, costGrowth: 6, effect: { kind: 'winterMult', mult: 0.7 } },
@@ -144,14 +150,14 @@ export const creature: StageDef = {
   startingGenerators: 1,
   bookName: 'Field Guide',
   ending: { title: 'Many.', line: 'There were more of them now, and they were not all the same.' },
-  // Buildings, not producers: the herd forages (see economy/creature.ts). Each one
-  // shapes the herd instead: births, housing, food and shelter.
+  // Not producers: the herd forages (see economy/creature.ts). These are where it
+  // lives and feeds, dug or found or spread into: births, room, food and shelter.
   generators: [
-    { id: 'nest', name: 'Nesting Ground', flavor: 'Rows of eggs warming in the sand. More births.', baseCost: 1e3, growth: 1.15, baseRate: 0 },
-    { id: 'burrow', name: 'Burrow', flavor: 'A hole in the bank: room for five more.', baseCost: 1e4, growth: 1.15, baseRate: 0 },
-    { id: 'waterhole', name: 'Watering Hole', flavor: 'Everyone drinks, everyone eats a little less.', baseCost: 1e6, growth: 1.3, baseRate: 0, unlockedBy: 'marsh' },
-    { id: 'den', name: 'Cave Den', flavor: 'Out of the wind: room for forty, and shelter from winter.', baseCost: 3e7, growth: 1.2, baseRate: 0, unlockedBy: 'caves' },
-    { id: 'territory', name: 'Territory', flavor: 'Land that is yours: room for two hundred, and richer foraging.', baseCost: 3e10, growth: 1.25, baseRate: 0, unlockedBy: 'highlands' },
+    { id: 'nest', name: 'Nests', flavor: 'Scraped hollows in the warm sand. More births.', baseCost: 1e3, growth: 1.15, baseRate: 0 },
+    { id: 'burrow', name: 'Burrows', flavor: 'Holes dug into the bank: room for three more.', baseCost: 1e4, growth: 1.15, baseRate: 0 },
+    { id: 'waterhole', name: 'Marsh Grazing', flavor: 'The herd spreads into the reeds: the same food goes further.', baseCost: 1e6, growth: 1.3, baseRate: 0, unlockedBy: 'marsh' },
+    { id: 'den', name: 'Caves', flavor: 'Out of the wind: room for fifteen, and shelter from winter.', baseCost: 3e7, growth: 1.2, baseRate: 0, unlockedBy: 'caves' },
+    { id: 'territory', name: 'Home Range', flavor: 'More land roamed and grazed: room for fifty, and richer foraging.', baseCost: 3e10, growth: 1.25, baseRate: 0, unlockedBy: 'highlands' },
   ],
   upgrades: UPGRADES,
   reactions: [...pages, final],

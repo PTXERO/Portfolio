@@ -28,7 +28,7 @@ import {
 import { formatTime } from '../src/economy/num';
 import { dialMax, spawnMult, stageRate, tapValue } from '../src/economy/rates';
 import { cloneState, createState } from '../src/economy/state';
-import { assign, birthRate, breed, buyPart, canWear, equipPart, housing, partDef, placeOpen, startTrip, statsOf, tripChance, upkeep } from '../src/economy/creature';
+import { birthRate, breed, buyPart, canWear, equipPart, housing, partDef, placeOpen, startTrip, statsOf, tripChance, upkeep } from '../src/economy/creature';
 import { EVENTS } from '../src/content/creature';
 import { herdMult } from '../src/economy/rates';
 import { tick } from '../src/economy/tick';
@@ -273,18 +273,13 @@ function creatureVisit(s: GameState): void {
 }
 
 /**
- * The herd: jobs in sensible shares (guards for winter, carers while there's room
- * to grow, a few diggers and scouts), then shelter by payback, keeping a winter's food in store.
+ * The herd: places to live by payback, keeping a winter's food in store.
+ * (Instincts are upgrades, bought in the main loop like any boost.)
  */
 function herdVisit(s: GameState): void {
   const st = s.stages.creature;
   const pop = Math.floor(st.pop);
   const room = housing(s);
-  const share = { guard: 0.08, carer: pop < room ? 0.1 : 0.02, digger: 0.05, scout: st.trip ? 0.05 : 0 } as const;
-  for (const [r, f] of Object.entries(share) as [keyof typeof share, number][]) {
-    const want = Math.floor(pop * f);
-    assign(s, r, want - st.roles[r]);
-  }
   // Each room filled forages about this much, net of eating, over a year.
   const perHead = herdMult(s) * 0.44;
   const reserve = () => upkeep(s) * 1.4 * 150;
@@ -296,7 +291,7 @@ function herdVisit(s: GameState): void {
       if (!generatorVisible(s, 'creature', def)) continue;
       const cost = generatorCost(s, 'creature', def.id).toNumber();
       let gain = 0;
-      const rooms = { burrow: 5, den: 40, territory: 200 }[def.id as 'burrow'];
+      const rooms = { burrow: 3, den: 15, territory: 50 }[def.id as 'burrow'];
       if (rooms) gain = rooms * perHead * (pop >= room - 2 ? 1 : 0.2);
       else if (def.id === 'nest') gain = pop < room ? ((0.04 * (room - pop)) / Math.max(0.05, birthRate(s))) * 0.02 * perHead : 0;
       else if (def.id === 'waterhole' && g.waterhole < 12) gain = upkeep(s) * 0.04;

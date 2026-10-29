@@ -42,7 +42,13 @@ export function scaleEffect(e: Effect, n: number): Effect {
     case 'spawnMult':
     case 'habitatMult':
     case 'tripMult':
+    case 'upkeepMult':
+    case 'winterMult':
       return { ...e, mult: Math.pow(e.mult, n) };
+    case 'energy':
+      return { ...e, amount: e.amount * n };
+    case 'instinct':
+      return { ...e, share: e.share * n };
     case 'defense':
       return { ...e, amount: e.amount * n };
     case 'offlineHours':

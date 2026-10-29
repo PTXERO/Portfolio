@@ -25,7 +25,7 @@ import { softCap, defenseOf, dialMax, guardLevel, dietOf, forageMult, habitatMul
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
-import { assign, breed, buyPart, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, startTrip, statsOf, tripChance, tripEventDue, upkeep } from '../src/economy/creature';
+import { breed, buyPart, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, startTrip, statsOf, tripChance, tripEventDue, upkeep } from '../src/economy/creature';
 import { foragers, herdMult, SEASON_SEC } from '../src/economy/rates';
 
 /** A game where the player has already made their first move. */
@@ -660,19 +660,21 @@ describe('creature stage', () => {
     expect(dietOf(s, 'creature')).toBe('hunter');
   });
 
-  it('everyone forages unless given a job, and jobs only come out of the herd', () => {
+  it('nobody is told what to do: instincts send a share of the herd off foraging', () => {
     const s = creatureGame();
     const c = s.stages.creature;
-    c.pop = 10;
-    expect(foragers(s)).toBe(10);
+    c.pop = 100;
+    c.generators.burrow = 40;
+    c.currency = D(1e9);
+    tick(s, 0.1);
+    expect(foragers(s)).toBe(100);
     const full = stageRate(s, 'creature').toNumber();
-    expect(assign(s, 'carer', 3)).toBe(true);
-    expect(assign(s, 'guard', 100)).toBe(true);
-    expect(c.roles.guard).toBe(7);
-    expect(foragers(s)).toBe(0);
-    expect(stageRate(s, 'creature').toNumber()).toBe(0);
-    assign(s, 'guard', -7);
-    expect(stageRate(s, 'creature').toNumber()).toBeCloseTo(full * 0.7, 6);
+    c.upgrades.push('nesting');
+    c.levels.nesting = 5;
+    tick(s, 0.1);
+    expect(c.roles.carer).toBe(15);
+    expect(foragers(s)).toBe(85);
+    expect(stageRate(s, 'creature').toNumber()).toBeLessThan(full);
   });
 
   it('a fed herd grows to its housing; a hungry one shrinks', () => {
@@ -683,7 +685,7 @@ describe('creature stage', () => {
     expect(Math.floor(c.pop)).toBe(housing(s));
     c.generators.burrow = 0;
     c.pop = 10;
-    assign(s, 'carer', 10);
+    c.year = SEASON_SEC * 3.2; // winter: foraging can't keep up
     c.currency = D(0);
     expect(upkeep(s)).toBeGreaterThan(0);
     tick(s, 30);

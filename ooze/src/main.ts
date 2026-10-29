@@ -38,8 +38,7 @@ import { clearStorage, exportSave, importSave, loadFromStorage, saveToStorage } 
 import { createState } from './economy/state';
 import { liveTick, TICK_SEC } from './economy/tick';
 import type { BuyAmount, DialId, GameState, StageId } from './economy/types';
-import { assign, breed, buyPart, chooseEvent, court, equipPart, netRate, releaseMate, startTrip, tripEventDue } from './economy/creature';
-import type { Role } from './economy/types';
+import { breed, buyPart, chooseEvent, court, equipPart, netRate, releaseMate, startTrip, tripEventDue } from './economy/creature';
 import { Scene } from './scene/scene';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
@@ -112,7 +111,7 @@ function showReport(r: OfflineReport): void {
     <button class="px-btn gold" data-act="dismiss">Nice</button>`);
 }
 
-/** Shows what came back from an expedition or out of an egg. */
+/** Shows what came back from a roam or out of an egg. */
 function showTripReport(): boolean {
   if (!modal.hidden || !state.reports.length) return false;
   const r = state.reports.shift()!;
@@ -284,13 +283,13 @@ function renderGoal(): void {
     const n = nextReaction(state, state.current);
     let text = '';
     const cr = state.stages[state.current];
-    if (def.places && tripEventDue(state)) text = 'Your creature ran into something on the way. Choose in the Explore tab!';
-    else if (def.places && netRate(state).lt(0) && cr.currency.lt(netRate(state).abs().mul(60))) text = 'The herd is going hungry! More foragers, or fewer mouths (Herd tab).';
+    if (def.places && tripEventDue(state)) text = 'Your creature ran into something! Choose in the Roam tab.';
+    else if (def.places && netRate(state).lt(0) && cr.currency.lt(netRate(state).abs().mul(60))) text = 'The herd is going hungry! Stores run out, and the weakest go first (Herd tab).';
     else if (def.places && cr.trip) {
-      // Creature: the expedition under way is the thing to watch.
-      text = `Exploring the ${def.places.find((p) => p.id === cr.trip!.place)!.name} · back in ${formatTime(cr.trip.left)}`;
+      // Creature: the roam under way is the thing to watch.
+      text = `Roaming the ${def.places.find((p) => p.id === cr.trip!.place)!.name} · back in ${formatTime(cr.trip.left)}`;
     } else if (def.places && n && !n.r.final) {
-      text = `Next: explore the ${n.r.name} (Explore tab)`;
+      text = `Next: roam the ${n.r.name} (Roam tab)`;
     } else if (engulfable(state, state.current).length) text = 'A rare microbe is about. Catch it before it gets away!';
     else if (n && !finaleReady(state)) {
       const name = n.r.final ? n.r.name : '???';
@@ -522,10 +521,7 @@ function act(el: HTMLElement): void {
     if (startTrip(state, el.dataset.trip)) scene.purchase(state, 'trip');
   } else if (el.dataset.breed) breed(state, Number(el.dataset.breed));
   else if (el.dataset.release) releaseMate(state, Number(el.dataset.release));
-  else if (el.dataset.role) {
-    const step = state.buyAmount === 'max' ? 1e9 : state.buyAmount;
-    assign(state, el.dataset.role as Role, Number(el.dataset.delta) * step);
-  } else if (el.dataset.choice) {
+  else if (el.dataset.choice) {
     if (chooseEvent(state, Number(el.dataset.choice))) panelKey = '';
   }
   else if (el.dataset.stage) {

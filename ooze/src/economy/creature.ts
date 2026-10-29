@@ -1,4 +1,4 @@
-// The Creature stage's own rules: stats from the body and training, expeditions
+// The Creature stage's own rules: stats from the body and training, roaming trips
 // that take real time and come back with finds, and breeding a line of generations.
 // Everything here runs inside the tick, so it carries on while the game is closed.
 
@@ -10,7 +10,7 @@ import { ROLES, SLOTS, STATS } from './types';
 import { EVENTS } from '../content/creature';
 
 export const CREATURE: StageId = 'creature';
-/** Share of an expedition's time paid out as output, before Trail Memory. */
+/** Share of a roam's time paid out as output, before Trail Memory. */
 export const TRIP_PAYOUT = 0.6;
 /** Seconds the first egg takes; each generation after takes longer. */
 export const EGG_BASE_SEC = 600;
@@ -31,7 +31,7 @@ export const placeDef = (id: string) => def().places!.find((p) => p.id === id)!;
 /** Share of a forager's haul each member eats (so a quarter of the herd feeds everyone, in a good season). */
 export const UPKEEP = 0.25;
 /** Housing with no buildings at all. */
-export const BASE_HOUSING = 10;
+export const BASE_HOUSING = 8;
 
 function effectProduct(state: GameState, kind: 'upkeepMult' | 'winterMult'): number {
   let m = 1;
@@ -39,27 +39,27 @@ function effectProduct(state: GameState, kind: 'upkeepMult' | 'winterMult'): num
   return m;
 }
 
-/** How many the herd has room for: burrows, dens, territory, and diggers. */
+/** How many the herd has room for: burrows, caves, its range, and what the burrowers dig. */
 export function housing(state: GameState): number {
   const s = st(state);
   const g = s.generators;
-  return Math.floor(BASE_HOUSING + 5 * g.burrow + 40 * g.den + 200 * g.territory + 0.5 * s.roles.digger);
+  return Math.floor(BASE_HOUSING + 3 * g.burrow + 15 * g.den + 50 * g.territory + 0.5 * s.roles.digger);
 }
 
-/** Births per second: a trickle, more with nesting grounds and carers, a boom in spring. */
+/** Births per second: a trickle, more with nests and nesters, a boom in spring. */
 export function birthRate(state: GameState): number {
   const s = st(state);
   return (0.03 + 0.04 * s.generators.nest) * (1 + 0.08 * s.roles.carer) * seasonOf(state).season.births;
 }
 
-/** Biomass the herd eats per second: less with watering holes and fat stores, more in winter. */
+/** Biomass the herd eats per second: less with marsh grazing and fat stores, more in winter. */
 export function upkeep(state: GameState): number {
   const s = st(state);
   const water = Math.max(0.5, 1 - 0.04 * s.generators.waterhole);
   return Math.floor(s.pop) * UPKEEP * herdMult(state) * water * effectProduct(state, 'upkeepMult') * seasonOf(state).season.upkeep;
 }
 
-/** Share of the herd winter takes per second: less with guards, dens and thick coats. */
+/** Share of the herd winter takes per second: less with sentries, caves and thick coats. */
 export function winterLoss(state: GameState): number {
   const s = st(state);
   if (!seasonOf(state).season.winter || s.pop < 1) return 0;
@@ -72,17 +72,18 @@ export function netRate(state: GameState): Decimal {
   return stageRate(state, CREATURE).sub(upkeep(state));
 }
 
-/** Moves members between roles (foraging is the default; `delta` can be negative). */
-export function assign(state: GameState, role: Role, delta: number): boolean {
+/** Share of the herd each instinct claims (whatever's left forages). */
+export function instinctShares(state: GameState): Record<Role, number> {
+  const out = Object.fromEntries(ROLES.map((r) => [r, 0])) as Record<Role, number>;
+  for (const e of stageEffects(state, CREATURE)) if (e.kind === 'instinct') out[e.role] += e.share;
+  return out;
+}
+
+/** Nobody assigns anything: each instinct takes its share of the herd, the rest forage. */
+function settleRoles(state: GameState): void {
   const s = st(state);
-  if (role === 'forager') return false;
-  const next = Math.max(0, s.roles[role] + delta);
-  const others = ROLES.filter((r) => r !== 'forager' && r !== role).reduce((n, r) => n + s.roles[r], 0);
-  const cap = Math.max(0, Math.floor(s.pop) - others);
-  const v = Math.min(next, cap);
-  if (v === s.roles[role]) return false;
-  s.roles[role] = v;
-  return true;
+  const shares = instinctShares(state);
+  for (const r of ROLES) if (r !== 'forager') s.roles[r] = Math.floor(Math.floor(s.pop) * shares[r]);
 }
 
 /** If the herd shrinks, roles shrink with it (foragers first, then the rest evenly). */
@@ -145,7 +146,7 @@ export function placeOpen(state: GameState, p: PlaceDef): boolean {
   return (p.after ?? []).every((id) => (st(state).trips[id] ?? 0) > 0);
 }
 
-/** Chance an expedition succeeds: each stat short of what the place needs cuts it, squared. */
+/** Chance a roam succeeds: each stat short of what the place needs cuts it, squared. */
 export function tripChance(state: GameState, p: PlaceDef): number {
   const stats = statsOf(state);
   let c = 1;
@@ -153,7 +154,7 @@ export function tripChance(state: GameState, p: PlaceDef): number {
   return c;
 }
 
-/** Seconds an expedition takes: Speed shortens it. */
+/** Seconds a roam takes: Speed shortens it. */
 export function tripSeconds(state: GameState, p: PlaceDef): number {
   return (p.minutes * 60) / (1 + 0.02 * statsOf(state).speed) / (1 + 0.03 * st(state).roles.scout);
 }
@@ -259,7 +260,7 @@ export function eggSeconds(state: GameState): number {
   return (EGG_BASE_SEC * EGG_GROWTH ** st(state).generation) / (1 + 0.04 * statsOf(state).charm) / (1 + 0.01 * st(state).roles.carer);
 }
 
-/** Answers the choice the expedition ran into. */
+/** Answers the choice the roam ran into. */
 export function chooseEvent(state: GameState, option: number): boolean {
   const ev = st(state).trip?.event;
   if (!ev || ev.choice !== null || !tripEventDue(state)) return false;
@@ -319,7 +320,7 @@ export function equipPart(state: GameState, id: string): boolean {
   return true;
 }
 
-/** Counts down the expedition and the egg. Called every tick, live or offline. */
+/** Counts down the roam and the egg. Called every tick, live or offline. */
 export function creatureTick(state: GameState, dt: number, rand: () => number = Math.random): void {
   if (!state.unlocked.includes(CREATURE)) return;
   const s = st(state);
@@ -332,6 +333,7 @@ export function creatureTick(state: GameState, dt: number, rand: () => number = 
   if (hungry) s.pop = Math.max(1, s.pop * Math.exp(-0.01 * dt));
   else s.pop = Math.max(Math.min(s.pop, housing(state)), Math.min(housing(state), s.pop + birthRate(state) * dt));
   s.pop = Math.max(1, s.pop * Math.exp(-winterLoss(state) * dt));
+  settleRoles(state);
   fitRoles(s);
   if (s.trip) {
     s.trip.left -= dt;
