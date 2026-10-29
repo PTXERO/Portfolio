@@ -13,7 +13,7 @@ import { STAGES } from './content/stages';
 import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed } from './economy/tribal';
-import { assign, daysLeft, decideFallen, DAY_SEC, eatsPlants, extinctionTick, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, type IdeaId, type JobId } from './economy/extinction';
+import { assign, daysLeft, decideFallen, DAY_SEC, eatsPlants, extinctionTick, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, type JobId } from './economy/extinction';
 import {
   addSwirl,
   buyCount,
@@ -46,6 +46,7 @@ import { breed, buyPart, chooseEvent, EVENT_DC, court, equipPart, FARM_PAY, foun
 import { Scene } from './scene/scene';
 import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
+import { pickIdea } from './ui/tribePanels';
 import { choiceButton } from './ui/creaturePanels';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
@@ -613,7 +614,7 @@ function renderHint(): void {
     else if (state.stages.tribal.tribe?.ex && state.stages.tribal.tribe.ex.day === 0 && state.stages.tribal.tribe.ex.people.every((p) => p.job === 'rest')) text = 'Set them to work, or they starve';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
-  hint.hidden = !text || !modal.hidden;
+  hint.hidden = !text || !modal.hidden || (ui.open && ui.full);
   if (hint.textContent !== text) hint.textContent = text;
 }
 
@@ -952,8 +953,9 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.ration) {
     const ex = state.stages.tribal.tribe?.ex;
     if (ex) ex.ration = Number(el.dataset.ration);
-  } else if (el.dataset.idea) {
-    if (learnIdea(state, el.dataset.idea as IdeaId)) scene.purchase(state, 'idea');
+  } else if (el.dataset.node) pickIdea(el.dataset.node);
+  else if (el.dataset.learn) {
+    if (learnIdea(state, el.dataset.learn)) scene.purchase(state, 'idea');
   }
   else if (el.dataset.roamopt) {
     const c = state.stages.creature;

@@ -8,12 +8,12 @@
 // When fewer than two are left, it's over: back to just after the waking, to try again (the
 // spear remembers what it taught, so those ideas come cheaper).
 
+import { MIND_NODE, modsOf, NODE_COST, reachable, type Mods } from './mindTree';
 import type { GameState, TribeState } from './types';
 
 export type Diet = 'herbivore' | 'carnivore' | 'omnivore' | 'cannibal';
 export type JobId = 'forage' | 'scavenge' | 'dig' | 'fish' | 'listen' | 'rest';
 export type TraitId = 'strong' | 'swift' | 'keen' | 'hardy' | 'frail' | 'old' | 'young';
-export type IdeaId = 'fire' | 'tools' | 'stick' | 'line' | 'racks';
 
 export interface Survivor {
   id: number;
@@ -53,7 +53,8 @@ export interface ExtinctionState {
   ash: number;
   ashMax: number;
   carrion: number;
-  ideas: IdeaId[];
+  /** Ideas learned from the spear (nodes of its web, see mindTree). */
+  ideas: string[];
   /** Share of a full meal each gets at night: 1, 0.5 or 0.25. */
   ration: number;
   /** What's done with the dead: not yet decided, left to the ash, or eaten. */
@@ -67,22 +68,15 @@ export interface ExtinctionState {
 /** Seconds of play in a day. */
 export const DAY_SEC = 45;
 
-export const JOBS: { id: JobId; name: string; does: string; needs?: IdeaId }[] = [
+export const JOBS: { id: JobId; name: string; does: string }[] = [
   { id: 'forage', name: 'Forage the ash', does: 'Plants, from what the fire left. It runs out.' },
   { id: 'scavenge', name: 'Scavenge the dead', does: 'Meat, from what the strike killed. It rots away.' },
-  { id: 'dig', name: 'Dig for roots', does: 'Plants. Roots live through fire, but there are only so many.', needs: 'stick' },
-  { id: 'fish', name: 'Fish the shore', does: 'Meat. The sea still has fish, but the shore holds only so many lines.', needs: 'line' },
+  { id: 'dig', name: 'Dig for roots', does: 'Plants. Roots live through fire, but there are only so many.' },
+  { id: 'fish', name: 'Fish the shore', does: 'Meat. The sea still has fish, but the shore holds only so many lines.' },
   { id: 'listen', name: 'Listen to the spear', does: 'Insight, to learn ideas from it. No food.' },
   { id: 'rest', name: 'Rest', does: 'No work. Hunger comes on a little slower.' },
 ];
 
-export const IDEAS: { id: IdeaId; name: string; does: string; cost: number }[] = [
-  { id: 'fire', name: 'Fire', does: 'Cooked food goes further: every meal counts for more.', cost: 8 },
-  { id: 'tools', name: 'Stone tools', does: 'Foraging, scavenging and digging bring in more.', cost: 10 },
-  { id: 'stick', name: 'Digging stick', does: 'Dig for roots: plants that keep coming.', cost: 10 },
-  { id: 'line', name: 'Fishing line', does: 'Fish the shore: meat that keeps coming.', cost: 12 },
-  { id: 'racks', name: 'Drying racks', does: 'Meat keeps for days instead of rotting overnight.', cost: 10 },
-];
 
 export const TRAITS: Record<TraitId, { name: string; does: string }> = {
   strong: { name: 'Strong', does: 'scavenges and digs well' },
@@ -116,11 +110,8 @@ const DIG_CAP = 0.32;
 const FISH_CAP = 0.36;
 /** Overnight: meat rots (much slower once dried), plants a little; carrion on the ground too. */
 const MEAT_KEEP = 0.62;
-const MEAT_KEEP_DRIED = 0.93;
 const PLANT_KEEP = 0.95;
 const CARRION_KEEP = 0.86;
-/** A cooked meal goes this much further. */
-const FIRE_VALUE = 1.35;
 /** Each of the dead, eaten: this much meat. */
 const CORPSE_MEAT = 2.5;
 
@@ -234,16 +225,20 @@ export function tryAgain(state: GameState): void {
   t.pop = t.ex.people.length;
 }
 
-/** An idea's cost in insight: half, if the spear taught it before (in a run that failed). */
-export function ideaCost(state: GameState, id: IdeaId): number {
-  const def = IDEAS.find((i) => i.id === id)!;
-  return (state.stages.tribal.tribe?.remembered ?? []).includes(id) ? Math.ceil(def.cost / 2) : def.cost;
+/** An idea's cost in insight: by its size, and half if the spear taught it before (in a run
+ * that failed). */
+export function ideaCost(state: GameState, id: string): number {
+  const n = MIND_NODE[id];
+  if (!n) return Infinity;
+  const c = NODE_COST[n.kind];
+  return (state.stages.tribal.tribe?.remembered ?? []).includes(id) ? Math.ceil(c / 2) : c;
 }
 
-export function learnIdea(state: GameState, id: IdeaId): boolean {
+/** Learns an idea: it must be next to one already known, and paid for in insight. */
+export function learnIdea(state: GameState, id: string): boolean {
   const t = state.stages.tribal.tribe;
   const ex = t?.ex;
-  if (!t || !ex || ex.over || ex.ideas.includes(id)) return false;
+  if (!t || !ex || ex.over || !reachable(ex.ideas, id)) return false;
   const cost = ideaCost(state, id);
   if (ex.insight < cost) return false;
   ex.insight -= cost;
@@ -253,27 +248,36 @@ export function learnIdea(state: GameState, id: IdeaId): boolean {
 }
 
 export function jobOpen(ex: ExtinctionState, job: JobId): boolean {
-  const need = JOBS.find((j) => j.id === job)!.needs;
-  return !need || ex.ideas.includes(need);
+  return (job !== 'dig' && job !== 'fish') || modsOf(ex.ideas).unlock.has(job);
 }
 
 /** How well one survivor works at a job today. */
-function workOf(ex: ExtinctionState, p: Survivor, job: JobId): number {
+function workOf(ex: ExtinctionState, p: Survivor, job: JobId, m = modsOf(ex.ideas)): number {
   const sk = SKILL[p.trait];
   const weak = Math.max(0.3, 1 - 0.18 * p.hunger);
-  return (sk[job] ?? 1) * (sk.all ?? 1) * weak * dietSkill(ex.diet, job) * (ex.ideas.includes('tools') && (job === 'forage' || job === 'scavenge' || job === 'dig') ? 1.4 : 1);
+  const ideas = Math.max(0.1, 1 + m.gather[job] + m.gather.all);
+  const trait = (p.trait === 'keen' ? 1 + m.keen : 1) * (p.trait === 'strong' ? 1 + m.strong : 1 + m.others);
+  return (sk[job] ?? 1) * (sk.all ?? 1) * weak * dietSkill(ex.diet, job) * ideas * trait;
+}
+
+/** Hunger someone can bear before dying. */
+function limitOf(p: Survivor, m: Mods): number {
+  const weak = p.trait === 'frail' || p.trait === 'old' || p.trait === 'young' ? m.weak : 0;
+  const first = m.strongFirst ? (p.job === 'rest' ? -0.5 : 0.3) : 0;
+  return LIMIT[p.trait] + m.limit + weak + first;
 }
 
 /** What each job brings in over a whole day, as things stand. */
 export function dayYield(ex: ExtinctionState): Record<JobId, number> {
   const out: Record<JobId, number> = { forage: 0, scavenge: 0, dig: 0, fish: 0, listen: 0, rest: 0 };
-  for (const p of ex.people) out[p.job] += YIELD[p.job] * workOf(ex, p, p.job);
+  const m = modsOf(ex.ideas);
+  for (const p of ex.people) out[p.job] += YIELD[p.job] * workOf(ex, p, p.job, m);
   const start = ex.people.length + ex.deaths;
   out.forage *= Math.sqrt(Math.max(0, ex.ash / ex.ashMax));
   out.forage = Math.min(out.forage, ex.ash);
   out.scavenge = Math.min(out.scavenge, ex.carrion);
-  out.dig = Math.min(out.dig, start * DIG_CAP);
-  out.fish = Math.min(out.fish, start * FISH_CAP);
+  out.dig = Math.min(out.dig, start * DIG_CAP * (1 + m.digCap));
+  out.fish = Math.min(out.fish, start * FISH_CAP * (1 + m.fishCap));
   return out;
 }
 
@@ -329,8 +333,10 @@ function work(ex: ExtinctionState, sec: number): void {
 /** Night: everyone eats what there is (the hungriest first), the hungry get hungrier, and some
  * don't see the morning. Then food spoils, and a new day starts. */
 function night(ex: ExtinctionState): void {
-  const value = ex.ideas.includes('fire') ? FIRE_VALUE : 1;
-  const order = [...ex.people].sort((a, b) => b.hunger - a.hunger);
+  const m = modsOf(ex.ideas);
+  const value = (1 + m.meal) * (ex.ration < 1 ? 1 + m.ration : 1);
+  // The hungriest eat first (or, if the strong eat first, the workers do).
+  const order = [...ex.people].sort((a, b) => (m.strongFirst ? Number(a.job === 'rest') - Number(b.job === 'rest') : 0) || b.hunger - a.hunger);
   let ate = 0;
   for (const p of order) {
     let want = ex.ration / value;
@@ -349,17 +355,20 @@ function night(ex: ExtinctionState): void {
     }
     const meal = got * value;
     ate += meal;
-    p.hunger = Math.max(0, p.hunger + 1 - 1.5 * meal - (p.job === 'rest' ? 0.25 : 0));
+    const rest = p.job === 'rest' ? 0.25 + m.rest : 0;
+    const listen = p.job === 'listen' ? m.listenHunger : 0;
+    p.hunger = Math.max(0, p.hunger + 1 - 1.5 * meal - rest - m.night + listen);
   }
-  const starved = ex.people.filter((p) => p.hunger >= LIMIT[p.trait]);
-  ex.people = ex.people.filter((p) => p.hunger < LIMIT[p.trait]);
+  const starved = ex.people.filter((p) => p.hunger >= limitOf(p, m));
+  ex.people = ex.people.filter((p) => p.hunger < limitOf(p, m));
   ex.deaths += starved.length;
   if (ex.fallen === 'eat') ex.meat += starved.length * CORPSE_MEAT;
   else if (ex.fallen === 'undecided') ex.corpses += starved.length;
   const before = ex.meat + ex.plants;
-  ex.meat *= ex.ideas.includes('racks') ? MEAT_KEEP_DRIED : MEAT_KEEP;
+  ex.meat *= Math.min(0.95, MEAT_KEEP + m.meatKeep);
   ex.plants *= PLANT_KEEP;
   ex.carrion *= CARRION_KEEP;
+  ex.ash = Math.min(ex.ashMax, ex.ash + ex.ashMax * m.ashRegrow);
   ex.day += 1;
   ex.clock = 0;
   ex.today = { plants: 0, meat: 0, insight: 0 };
@@ -405,7 +414,7 @@ export function daysLeft(ex: ExtinctionState): number | null {
 }
 
 /** How hungry someone is, in words. */
-export function hungerWord(p: Survivor): string {
-  const near = LIMIT[p.trait] - p.hunger;
+export function hungerWord(ex: ExtinctionState, p: Survivor): string {
+  const near = limitOf(p, modsOf(ex.ideas)) - p.hunger;
   return near <= 1 ? 'Dying' : p.hunger >= 2 ? 'Starving' : p.hunger >= 1 ? 'Hungry' : 'Fed';
 }

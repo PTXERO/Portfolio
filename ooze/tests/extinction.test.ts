@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { assign, count, daysLeft, decideFallen, DAY_SEC, extinctionTick, ideaCost, IDEAS, learnIdea, startExtinction, tryAgain, type ExtinctionState, type IdeaId } from '../src/economy/extinction';
+import { assign, count, daysLeft, decideFallen, DAY_SEC, extinctionTick, ideaCost, learnIdea, startExtinction, tryAgain, type ExtinctionState } from '../src/economy/extinction';
+import { MIND_TREE, NODE_COST, reachable } from '../src/economy/mindTree';
 import { createState as newGame } from '../src/economy/state';
 import type { GameState } from '../src/economy/types';
 
@@ -30,7 +31,7 @@ function setJobs(ex: ExtinctionState, want: Partial<Record<string, number>>): vo
 
 const smart = (food: 'plants' | 'meat' | 'both') => (ex: ExtinctionState, s: GameState) => {
   const n = ex.people.length;
-  const order: IdeaId[] = food === 'plants' ? ['stick', 'fire', 'tools', 'racks'] : food === 'meat' ? ['line', 'fire', 'racks', 'tools'] : ['fire', 'line', 'stick', 'tools', 'racks'];
+  const order: string[] = food === 'plants' ? ['green', 'stick', 'warmth', 'fire', 'rootlore', 'deeproots'] : food === 'meat' ? ['watch', 'line', 'warmth', 'fire', 'smoke', 'racks'] : ['warmth', 'fire', 'watch', 'line', 'green', 'stick'];
   for (const id of order) if (!ex.ideas.includes(id) && ex.insight >= ideaCost(s, id)) learnIdea(s, id);
   const need = order.some((id) => !ex.ideas.includes(id));
   const listen = need ? Math.ceil(n * 0.15) : 0;
@@ -50,6 +51,20 @@ const smart = (food: 'plants' | 'meat' | 'both') => (ex: ExtinctionState, s: Gam
   setJobs(ex, w);
   ex.ration = ex.people.length > 40 ? 0.5 : 1;
 };
+
+describe('the spear\'s web of ideas', () => {
+  it('is all linked up, and learned outward from the middle', () => {
+    for (const n of MIND_TREE) for (const l of n.links) expect(MIND_TREE.find((o) => o.id === l)?.links).toContain(n.id);
+    expect(reachable([], 'warmth')).toBe(true);
+    expect(reachable([], 'fire')).toBe(false);
+    expect(reachable(['warmth'], 'fire')).toBe(true);
+    const s = game('omnivore', 10);
+    s.stages.tribal.tribe!.ex!.insight = 100;
+    expect(learnIdea(s, 'fire')).toBe(false);
+    expect(learnIdea(s, 'warmth')).toBe(true);
+    expect(learnIdea(s, 'fire')).toBe(true);
+  });
+});
 
 describe('the Extinction', () => {
   it('kills a tribe that does nothing within a few days', () => {
@@ -101,12 +116,12 @@ describe('the Extinction', () => {
     const s = game('omnivore', 10);
     const t = s.stages.tribal.tribe!;
     t.ex!.insight = 50;
-    learnIdea(s, 'fire');
+    learnIdea(s, 'warmth');
     play(s, () => {});
     tryAgain(s);
     expect(t.ex!.day).toBe(0);
     expect(t.ex!.people.length).toBe(10);
     expect(t.attempts).toBe(1);
-    expect(ideaCost(s, 'fire')).toBe(Math.ceil(IDEAS[0].cost / 2));
+    expect(ideaCost(s, 'warmth')).toBe(Math.ceil(NODE_COST.minor / 2));
   });
 });

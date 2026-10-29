@@ -1,4 +1,4 @@
-import type { ExtinctionState, IdeaId } from './extinction';
+import type { ExtinctionState } from './extinction';
 import type { Decimal } from './num';
 
 export type StageId = 'soup' | 'cell' | 'creature' | 'tribal';
@@ -329,7 +329,7 @@ export interface TribeState {
   start?: string;
   attempts?: number;
   best?: number;
-  remembered?: IdeaId[];
+  remembered?: string[];
 }
 
 export interface StageState {
