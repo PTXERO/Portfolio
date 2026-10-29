@@ -201,13 +201,101 @@ export function creatureIcon(look: CreatureLook, scale = 3): string {
 }
 
 /**
- * A herd member, small enough to see dozens at once: a hand-drawn 9-pixel animal in
- * the line's colours with a hint of its back part, rather than a shrunken portrait.
- * E edge (light), F body, D underside, k ink. Facing right; legs step between frames.
+ * Your creature at herd size: a 14x10 sprite built from the same parts as its portrait
+ * (legs, tail, eyes, mouth, back), so you and your herd are plainly the same animal at
+ * any zoom. Facing right; drawn bottom-centre at (x, groundY), at a whole-number scale.
  */
-const MINI = ['...EEE...', '..EFFFE.E', '.DFFFFFEF', 'DFFFFFFFk', '.DFFFFFFF', '..DDDDDD.'];
-const MINI_LEGS = ['..k..k.k.', '...k..k.k'];
-const MINI_SLEEP = ['.........', '...EEE...', '.EFFFFFE.', 'DFFFFFFFE', '.DDDDDDD.', '.........'];
+const MW = 14;
+const MH = 11;
+const miniCache = new Map<string, HTMLCanvasElement>();
+
+function bakeMini(look: CreatureLook, frame: number, sleeping: boolean): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = MW;
+  c.height = MH;
+  const b = c.getContext('2d')!;
+  const [fill, edge] = DIET_COLORS[look.diet] ?? DIET_COLORS.none;
+  const dark = mix(fill, '#10141f', 0.45);
+  const px = (x: number, y: number, col: string) => {
+    b.fillStyle = col;
+    b.fillRect(x, y, 1, 1);
+  };
+  const p = look.parts;
+  // The body's top row is `by`; it's four rows deep, with legs below and the shadow last.
+  const lift = sleeping ? 1 : 0;
+  const by = 3 + lift;
+  // Back first (behind the body's top edge).
+  if (p.back === 'shell') {
+    for (let x = 4; x <= 9; x++) px(x, by - 1, x % 2 ? '#8a6a3a' : '#b08850');
+    for (let x = 5; x <= 8; x++) px(x, by - 2, '#b08850');
+  }
+  if (p.back === 'spines') for (const x of [4, 6, 8]) px(x, by - 1, PAL.w);
+  if (p.back === 'sail') for (let x = 5; x <= 8; x++) for (let y = by - 3 + Math.abs(x - 6.5) * 0.7; y < by; y++) px(x, Math.round(y), x === 6 || x === 7 ? PAL.p : PAL.P);
+  // Body: an oval, light on top, dark underneath.
+  const rows: [number, number, string][] = [
+    [4, 9, edge],
+    [3, 10, fill],
+    [3, 10, fill],
+    [4, 9, dark],
+  ];
+  rows.forEach(([x0, x1, col], j) => {
+    for (let x = x0; x <= x1; x++) px(x, by + j, col);
+  });
+  px(3, by + 1, edge);
+  // Head, at the front.
+  px(11, by + 1, fill);
+  px(11, by + 2, fill);
+  px(12, by + 1, fill);
+  px(12, by + 2, dark);
+  px(11, by, edge);
+  // Eyes.
+  if (!sleeping) {
+    if (p.eyes === 'stalkEyes') {
+      px(11, by - 1, edge);
+      px(11, by - 2, PAL.k);
+    } else if (p.eyes === 'nightEyes') {
+      px(11, by + 1, PAL.y);
+      px(12, by + 1, PAL.k);
+    } else if (p.eyes === 'lensEyes') {
+      px(11, by + 1, PAL.w);
+      px(12, by + 1, PAL.k);
+    } else px(12, by + 1, PAL.k);
+  } else px(12, by + 1, dark);
+  // Mouth.
+  if (p.mouth === 'jaws') px(13, by + 2, PAL.w);
+  else if (p.mouth === 'beak') px(13, by + 2, PAL.o);
+  else if (p.mouth === 'tusks') {
+    px(13, by + 2, PAL.w);
+    px(13, by + 1, PAL.w);
+  }
+  // Tail, at the back.
+  if (p.tail === 'finTail') {
+    px(2, by + 1, edge);
+    px(1, by, edge);
+    px(1, by + 2, edge);
+  } else if (p.tail === 'clubTail') {
+    px(2, by + 1, edge);
+    px(1, by + 1, PAL.r);
+    px(0, by + 1, PAL.r);
+    px(1, by + 2, PAL.R);
+  } else if (p.tail === 'crestTail') {
+    px(2, by + 1, edge);
+    px(1, by, PAL.p);
+    px(1, by - 1, PAL.y);
+    px(0, by, PAL.o);
+  } else px(2, by + 2, edge);
+  // Legs, stepping between frames.
+  if (!sleeping) {
+    const step = frame ? 1 : 0;
+    const long = p.legs === 'runner' || p.legs === 'climber' ? 2 : 1;
+    for (const lx of [5 - step, 9 + step]) {
+      for (let k = 0; k < long; k++) px(lx, by + 4 + k, p.legs === 'stubby' ? dark : PAL.k);
+      if (p.legs === 'climber') px(lx + 1, by + 4 + long - 1, PAL.w);
+      if (p.legs === 'stubby') px(lx + 1, by + 4, dark);
+    }
+  }
+  return c;
+}
 
 export function drawMini(
   b: CanvasRenderingContext2D,
@@ -216,34 +304,29 @@ export function drawMini(
   groundY: number,
   opts: { left?: boolean; frame?: number; sleeping?: boolean; scale?: number } = {},
 ): void {
-  const [fill, edge] = DIET_COLORS[look.diet] ?? DIET_COLORS.none;
-  const dark = mix(fill, '#10141f', 0.45);
   const k = Math.max(1, Math.round(opts.scale ?? 1));
-  const X = Math.round(x) - 4 * k;
-  const Y = Math.round(groundY);
-  const put = (dx: number, dy: number, c: string) => {
-    b.fillStyle = c;
-    b.fillRect(opts.left ? X + (8 - dx) * k : X + dx * k, Y + dy * k, k, k);
-  };
+  const key = `${look.diet}|${Object.values(look.parts).join('.')}|${opts.frame ? 1 : 0}|${opts.sleeping ? 1 : 0}`;
+  let c = miniCache.get(key);
+  if (!c) {
+    if (miniCache.size > 300) miniCache.clear();
+    c = bakeMini(look, opts.frame ?? 0, !!opts.sleeping);
+    miniCache.set(key, c);
+  }
+  const X = Math.round(x) - (MW / 2) * k;
+  const Y = Math.round(groundY) - (MH - 1) * k;
   b.fillStyle = 'rgba(16,20,31,0.25)';
-  b.fillRect(X, Y, 9 * k, k);
-  const rows = opts.sleeping ? MINI_SLEEP : MINI;
-  const legs = opts.sleeping ? '.........' : MINI_LEGS[opts.frame ? 1 : 0];
-  const all = [...rows, legs];
-  all.forEach((row, j) => {
-    const dy = j - all.length;
-    for (let i = 0; i < 9; i++) {
-      const ch = row[i];
-      if (ch === '.') continue;
-      put(i, dy, ch === 'E' ? edge : ch === 'F' ? fill : ch === 'D' ? dark : PAL.k);
-    }
-  });
-  // What it wears on its back shows.
-  const top = -all.length;
-  const back = look.parts.back;
-  if (back === 'shell') for (let i = 2; i < 6; i++) put(i, top, i % 2 ? '#8a6a3a' : '#b08850');
-  else if (back === 'spines') for (let i = 2; i < 7; i += 2) put(i, top - 1, PAL.w);
-  else if (back === 'sail') for (let i = 3; i < 6; i++) put(i, top - 1, PAL.p);
+  b.fillRect(X + 2 * k, Y + (MH - 2) * k, (MW - 4) * k, k);
+  b.save();
+  b.imageSmoothingEnabled = false;
+  if (opts.left) {
+    b.translate(X + MW * k, Y);
+    b.scale(-k, k);
+  } else {
+    b.translate(X, Y);
+    b.scale(k, k);
+  }
+  b.drawImage(c, 0, 0);
+  b.restore();
 }
 
 function mix(a: string, b: string, t: number): string {

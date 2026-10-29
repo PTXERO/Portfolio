@@ -14,7 +14,7 @@ import { Biome, CELL, CELLS, ISLAND, isLand, type Island, type Pt } from '../eco
 import { seasonOf } from '../economy/rates';
 import type { GameState, Role } from '../economy/types';
 import { drawBlob, type BlobStyle } from './blob';
-import { creatureLookOf, drawCreature, drawMini, type CreatureLook } from './creatureLook';
+import { creatureLookOf, drawMini, type CreatureLook } from './creatureLook';
 import { Effects, hash, mixColor, visibleCount, type Frame } from './paint';
 import type { PondEvent } from './pond';
 
@@ -353,9 +353,16 @@ export class RangeScene {
       const have = this.members.filter((m) => m.role === r).length;
       for (let i = have; i < want[r]!; i++) {
         // Newborns appear at the nests; on first sight, everyone's already about.
-        const a = Math.random() * Math.PI * 2;
-        const d = fresh ? 1 + Math.random() * 5 : 0.5;
-        this.members.push({ x: home.x + Math.cos(a) * d, y: home.y + Math.sin(a) * d, vx: 0, vy: 0, role: r, phase: Math.random() * 10, flee: 0 });
+        let x = home.x;
+        let y = home.y;
+        for (let tries = 0; tries < 12; tries++) {
+          const a = Math.random() * Math.PI * 2;
+          const d = fresh ? 1 + Math.random() * 5 : 0.5;
+          x = home.x + Math.cos(a) * d;
+          y = home.y + Math.sin(a) * d;
+          if (isLand(this.island!, x, y)) break;
+        }
+        this.members.push({ x, y, vx: 0, vy: 0, role: r, phase: Math.random() * 10, flee: 0 });
       }
       let extra = have - want[r]!;
       if (extra > 0) this.members = this.members.filter((m) => m.role !== r || extra-- <= 0);
@@ -396,11 +403,6 @@ export class RangeScene {
       b.fillStyle = o.hero ? PAL.y : DIET_DOT[look.diet] ?? PAL.g;
       const s = o.hero ? 2 : 1;
       b.fillRect(Math.round(X), Math.round(Y) - s, s, s);
-      return;
-    }
-    if (o.hero && z >= 6) {
-      // Up close, your creature in full, a size up on the herd around it.
-      drawCreature(b, look, X, Y, { left: o.left, frame: o.frame, scale: 2 });
       return;
     }
     drawMini(b, look, X, Y, { left: o.left, frame: o.frame, sleeping: o.sleeping, scale: z >= 6 ? 2 : 1 });
@@ -582,7 +584,8 @@ export class RangeScene {
       m.vy += ((d ? (dy / d) * Math.min(sp, d * 2) : 0) - m.vy) * Math.min(1, dt * 3);
       const nx = m.x + m.vx * dt;
       const ny = m.y + m.vy * dt;
-      if (isLand(is, nx, ny)) {
+      // Never into the sea (but one that's somehow in it can always walk out).
+      if (isLand(is, nx, ny) || !isLand(is, m.x, m.y)) {
         m.x = nx;
         m.y = ny;
       }
@@ -681,7 +684,7 @@ export class RangeScene {
           if (Math.floor(t * 2) % 2 && this.zoom >= 1.6) {
             b.fillStyle = PAL.p;
             const hx = Math.round(this.sx(vx));
-            const hy = Math.round(this.sy(vy) - 13 * (this.zoom >= 6 ? 2 : 1));
+            const hy = Math.round(this.sy(vy) - 14 * (this.zoom >= 6 ? 2 : 1));
             b.fillRect(hx - 2, hy, 2, 1);
             b.fillRect(hx + 1, hy, 2, 1);
             b.fillRect(hx - 2, hy + 1, 5, 1);
@@ -706,7 +709,7 @@ export class RangeScene {
         this.drawBeing(b, look, me.x, me.y, { left, frame: walking ? Math.floor(t * 8) % 2 : 0, hero: true });
         // A blinking "!" when something's stopped it on the road.
         const X = Math.round(this.sx(me.x));
-        const Y = Math.round(this.sy(me.y)) - (this.zoom >= 6 ? 50 : this.zoom >= 1.6 ? 12 : 5);
+        const Y = Math.round(this.sy(me.y)) - (this.zoom >= 6 ? 26 : this.zoom >= 1.6 ? 14 : 5);
         if (st.walk?.event) {
           if (Math.floor(t * 3) % 2) {
             b.fillStyle = PAL.o;
