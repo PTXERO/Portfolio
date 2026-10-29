@@ -15,6 +15,7 @@ export const CHANNELS: { id: Channel; label: string }[] = [
 ];
 
 const KEY = 'ooze-to-orbit/sound';
+const CDN = 'https://cdn.jsdelivr.net/gh/PTXERO/Portfolio@691dae7770be4b6edff560a9755cb7a4d0c79d01/ooze/public/sfx/';
 const DEFAULTS: Record<Channel, number> = { master: 0.8, ambience: 0.6, clicks: 0.7, whirlpool: 0.7 };
 
 /** The loops are padded either side (so the mp3's own gaps fall outside them): where each
@@ -72,7 +73,11 @@ export function unlockSound(): void {
   }
   const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
   if (!AC) return;
+  // On iPhone, Web Audio follows the silent switch unless the page says it's playing sound.
+  const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
+  if (session) session.type = 'playback';
   ctx = new AC();
+  void ctx.resume();
   master = ctx.createGain();
   master.connect(ctx.destination);
   for (const k of ['ambience', 'clicks', 'whirlpool'] as const) {
@@ -81,8 +86,11 @@ export function unlockSound(): void {
   }
   applyVolumes();
   for (const name of ['drops', 'underwater', 'river'] as const) {
-    fetch(`${import.meta.env.BASE_URL}sfx/${name}.mp3`)
-      .then((r) => r.arrayBuffer())
+    // From beside the game, or (where the host won't keep audio, as Neocities' free plan
+    // won't) from the repository through a CDN, pinned to the commit that added them.
+    const get = (url: string) => fetch(url).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))));
+    get(`${import.meta.env.BASE_URL}sfx/${name}.mp3`)
+      .catch(() => get(`${CDN}${name}.mp3`))
       .then((a) => new Promise<AudioBuffer>((ok, no) => ctx!.decodeAudioData(a, ok, no)))
       .then((b) => (buffers[name] = b))
       .catch(() => {

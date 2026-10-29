@@ -1327,7 +1327,7 @@ stageEl.addEventListener('pointerup', castUp, true);
 stageEl.addEventListener('pointercancel', castUp, true);
 
 // Sound can only start from a tap: the first one anywhere wakes it.
-document.addEventListener('pointerdown', unlockSound, true);
+for (const ev of ['pointerdown', 'touchend', 'click']) document.addEventListener(ev, unlockSound, true);
 
 stageEl.addEventListener('pointerdown', (e) => {
   if (!modal.hidden || (e.target as HTMLElement).closest('#evolve, button, #placecard')) return;
