@@ -11,6 +11,8 @@ export interface Frame {
   dt: number;
   /** Rows hidden behind the overlays at the top; keep life below this. */
   top: number;
+  /** Rows the open tab sheet covers at the bottom; the floor sits above them. */
+  bottom: number;
 }
 
 /** Stable pseudo-random number in [0, 1) for a given index and salt. */
@@ -49,6 +51,37 @@ export function glints(f: Frame, color: string, floorY: number): void {
     const x = Math.floor((i * 37 + t * (2 + (i % 4))) % (W + 20)) - 10;
     const y = 4 + ((i * 23) % Math.max(1, floorY - 16));
     b.fillRect(x, y, 3 + (i % 3) * 2, 1);
+  }
+}
+
+/** Mixes two #rrggbb colours. */
+export function mixColor(a: string, b: string, t: number): string {
+  const p = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Sediment below the floor: wavy bands that darken with depth, so the ground
+ * under the scene (seen with the tab sheet closed) looks like layers of time.
+ */
+export function strata(f: Frame, floor: number, sand: string, deep: string): void {
+  const { b, W, H } = f;
+  const start = floor + 8;
+  for (let y = start; y < H; y++) {
+    const band = Math.floor((y - start) / 5);
+    b.fillStyle = mixColor(sand, deep, Math.min(0.8, 0.1 + band * 0.09));
+    b.fillRect(0, y, W, 1);
+  }
+  // Each band's top edge wanders a little, and the odd pebble is buried in it.
+  for (let band = 1; start + band * 5 < H; band++) {
+    const y0 = start + band * 5;
+    b.fillStyle = mixColor(sand, deep, Math.min(0.9, 0.2 + band * 0.09));
+    for (let x = 0; x < W; x += 2) b.fillRect(x, y0 + Math.round(Math.sin(x * 0.08 + band * 1.7) * 1.2), 2, 1);
+    if (band % 2) {
+      b.fillStyle = mixColor(sand, '#ffffff', 0.15);
+      b.fillRect(Math.floor(hash(band, 5) * (W - 3)), y0 + 2, 2, 1);
+    }
   }
 }
 

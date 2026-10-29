@@ -313,6 +313,8 @@ function render(): void {
   renderHud();
   renderGoal();
   scene.setTopInset(overlayTop.getBoundingClientRect().bottom - stageEl.getBoundingClientRect().top);
+  // The sheet's height when open (the same clamp as the stylesheet), open or not, so the floor never moves.
+  scene.setBottomInset(Math.min(250, Math.max(215, window.innerHeight * 0.27)));
   renderPanel();
   renderHint();
   showDiscovery();

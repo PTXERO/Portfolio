@@ -6,7 +6,7 @@ import { blit, PAL, type SpriteName } from '../art/sprites';
 import { STAGES } from '../content/stages';
 import { conditionsHold, nextReaction } from '../economy/actions';
 import type { GameState, ReactionDef } from '../economy/types';
-import { Effects, ease, glints, hash, ring, visibleCount, water, type Frame } from './paint';
+import { Effects, ease, glints, hash, ring, strata, visibleCount, water, type Frame } from './paint';
 
 type Displace = (x: number, y: number) => [number, number];
 
@@ -324,7 +324,7 @@ export class SoupScene {
 
   draw(f: Frame, state: GameState, displace: Displace): void {
     const { b, W, H, t, dt, top } = f;
-    const floor = Math.floor(H * 0.86);
+    const floor = Math.floor((H - f.bottom) * 0.86);
     this.W = W;
     this.floor = floor;
     this.t = t;
@@ -362,7 +362,8 @@ export class SoupScene {
     b.fillStyle = '#3b3a2f';
     b.fillRect(0, floor, W, H - floor);
     b.fillStyle = '#2b2a22';
-    for (let i = 0; i < 30; i++) b.fillRect((i * 29) % W, floor + 2 + ((i * 7) % Math.max(1, H - floor - 2)), 2, 1);
+    for (let i = 0; i < 30; i++) b.fillRect((i * 29) % W, floor + 2 + ((i * 7) % Math.max(1, Math.min(8, H - floor - 2))), 2, 1);
+    strata(f, floor, '#3b3a2f', '#0e0d0a');
     for (const vx of this.vents()) {
       for (let y = 0; y < 8; y++) {
         const half = Math.round((8 - y) * 0.9);

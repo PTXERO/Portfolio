@@ -6,7 +6,7 @@
 import { PAL } from '../art/sprites';
 import { habitatOf } from '../economy/rates';
 import type { GameState } from '../economy/types';
-import { Effects, ease, glints, hash, ring, visibleCount, water, type Frame } from './paint';
+import { Effects, ease, glints, hash, ring, strata, visibleCount, water, type Frame } from './paint';
 import { drawBlob, type BlobStyle, type Core } from './blob';
 import { DIET_COLORS, drawCellLook, lookOf, type Look } from './cellLook';
 import { Pond, SHAFT_SLANT } from './pond';
@@ -250,7 +250,8 @@ export class CellScene {
 
   draw(f: Frame, state: GameState): void {
     const { b, W, H, t, dt, top } = f;
-    const floor = Math.floor(H * 0.82);
+    // The floor sits where it does with the sheet open; closing it just shows more sand.
+    const floor = Math.floor((H - f.bottom) * 0.82);
     this.W = W;
     this.floor = floor;
     this.top = top;
@@ -365,7 +366,8 @@ export class CellScene {
       b.fillRect(x, top, 1, H - top);
     }
     b.fillStyle = hab.sand[1];
-    for (let i = 0; i < 40; i++) b.fillRect((i * 29) % W, floor + 4 + ((i * 13) % Math.max(1, H - floor - 5)), 2, 1);
+    for (let i = 0; i < 40; i++) b.fillRect((i * 29) % W, floor + 4 + ((i * 13) % Math.max(1, Math.min(8, H - floor - 5))), 2, 1);
+    strata(f, floor, hab.sand[0], '#14100e');
 
     // Microbial mats unroll outward from the middle.
     this.matShown += (this.matTarget(n('mat')) - this.matShown) * Math.min(1, dt * 2.5);

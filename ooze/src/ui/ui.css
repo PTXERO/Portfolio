@@ -235,8 +235,16 @@ html, body {
   position: relative;
   z-index: 1;
 }
-/* Short on purpose: about two and a bit cards, so the scene stays the main thing. */
+/* Short on purpose: about two and a bit cards, so the scene stays the main thing.
+   It slides up over the bottom of the scene rather than squeezing it, so the
+   scene never changes size. */
 #panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  background: var(--night);
+  box-shadow: 0 calc(var(--u) * -1) 0 0 var(--ink), 0 calc(var(--u) * -2) 0 0 var(--panel-hi);
   height: clamp(215px, 27dvh, 250px);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;

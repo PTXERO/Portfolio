@@ -47,6 +47,8 @@ export class Scene {
   private displace = (x: number, y: number) => this.push(x, y);
   /** CSS pixels covered by the overlays at the top of the scene. */
   private topCss = 0;
+  /** CSS pixels the open tab sheet covers at the bottom of the scene. */
+  private bottomCss = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -105,6 +107,11 @@ export class Scene {
     else this.cell.purchase(state, id);
   }
 
+  /** Tells the scene how much of its bottom the open sheet covers, so the floor stays in view. */
+  setBottomInset(cssPx: number): void {
+    this.bottomCss = cssPx;
+  }
+
   /** Tells the scene how much of its top is covered, so life stays visible. */
   setTopInset(cssPx: number): void {
     this.topCss = cssPx;
@@ -155,7 +162,7 @@ export class Scene {
       this.soup.reset();
       this.cell.reset();
     }
-    const frame: Frame = { b: this.b, W: this.W, H: this.H, t: this.time, dt, top: Math.ceil(this.topCss / this.px) };
+    const frame: Frame = { b: this.b, W: this.W, H: this.H, t: this.time, dt, top: Math.ceil(this.topCss / this.px), bottom: Math.ceil(this.bottomCss / this.px) };
     if (state.current === 'soup') this.soup.draw(frame, state, this.displace);
     else this.cell.draw(frame, state);
     for (const r of this.ripples) {
