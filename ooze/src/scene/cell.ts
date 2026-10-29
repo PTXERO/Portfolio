@@ -6,7 +6,7 @@
 import { PAL } from '../art/sprites';
 import { habitatOf } from '../economy/rates';
 import type { GameState } from '../economy/types';
-import { Effects, ease, glints, hash, ring, strata, visibleCount, water, type Frame } from './paint';
+import { Effects, ease, floorY, glints, hash, ring, strata, visibleCount, water, type Frame } from './paint';
 import { drawBlob, type BlobStyle, type Core } from './blob';
 import { DIET_COLORS, drawCellLook, lookOf, type Look } from './cellLook';
 import { Pond, SHAFT_SLANT } from './pond';
@@ -251,7 +251,7 @@ export class CellScene {
   draw(f: Frame, state: GameState): void {
     const { b, W, H, t, dt, top } = f;
     // The floor sits where it does with the sheet open; closing it just shows more sand.
-    const floor = Math.floor((H - f.bottom) * 0.82);
+    const floor = floorY(f, 0.82);
     this.W = W;
     this.floor = floor;
     this.top = top;

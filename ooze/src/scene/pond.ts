@@ -275,6 +275,8 @@ export class Pond {
       q.y += q.vy * dt - (inPlume(q.x) ? PLUME_LIFT * 0.6 * dt : 0);
       if (q.x < 4 || q.x > W - 4) q.vx = (q.x < 4 ? 1 : -1) * Math.abs(q.vx || 2);
       if (q.y < top + 4 || q.y > floor - 4) q.vy = (q.y < top + 4 ? 1 : -1) * Math.abs(q.vy || 2);
+      // When the floor rises (the sheet opening), food is lifted with it, never buried.
+      q.y = Math.min(q.y, floor - 3);
       if (q.age > 0.5 && d < rx + 2) {
         if (canEat(state, 'cell', q.kind)) {
           q.age = -1;

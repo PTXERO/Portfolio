@@ -198,7 +198,8 @@ export class Swarm {
         c.vy *= max / sp;
       }
       c.x += c.vx * dt;
-      c.y += c.vy * dt;
+      // Never below the floor, even while it rises with the sheet.
+      c.y = Math.min(c.y + c.vy * dt, floor - 3);
       if (c.poked > 0) c.poked = Math.max(0, c.poked - dt);
       if (c.pop > 0) c.pop = Math.max(0, c.pop - dt);
       if (c.fade > 0) {

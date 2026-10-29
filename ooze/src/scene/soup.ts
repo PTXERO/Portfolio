@@ -6,7 +6,7 @@ import { blit, PAL, type SpriteName } from '../art/sprites';
 import { STAGES } from '../content/stages';
 import { conditionsHold, nextReaction } from '../economy/actions';
 import type { GameState, ReactionDef } from '../economy/types';
-import { Effects, ease, glints, hash, ring, strata, visibleCount, water, type Frame } from './paint';
+import { Effects, ease, floorY, glints, hash, ring, strata, visibleCount, water, type Frame } from './paint';
 
 type Displace = (x: number, y: number) => [number, number];
 
@@ -324,7 +324,7 @@ export class SoupScene {
 
   draw(f: Frame, state: GameState, displace: Displace): void {
     const { b, W, H, t, dt, top } = f;
-    const floor = Math.floor((H - f.bottom) * 0.86);
+    const floor = floorY(f, 0.86);
     this.W = W;
     this.floor = floor;
     this.t = t;
