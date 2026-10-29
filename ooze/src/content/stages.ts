@@ -172,8 +172,9 @@ const cell: StageDef = {
       name: 'Chloroplast',
       flavor: 'A green stowaway that turns sunlight into food.',
       hints: ['Something green glows in the bright water.', 'A grazer living in the Shallows might catch it.'],
-      needs: { habitat: 'shallows', anyUpgrade: ['grazer', 'omnivore'] },
+      needs: { habitat: 'shallows', anyUpgrade: ['grazer', 'omnivore'], settled: 0.25 },
       manual: true,
+      captures: 2,
       bonus: { kind: 'stageMult', mult: 1.5 },
     },
     {
@@ -181,8 +182,9 @@ const cell: StageDef = {
       name: 'Mitochondrion',
       flavor: 'Swallowed whole. Now it powers everything.',
       hints: ['Something twitchy hides in the dark.', 'A hunter living in the Depths might catch it.'],
-      needs: { habitat: 'depths', anyUpgrade: ['hunter', 'omnivore'] },
+      needs: { habitat: 'depths', anyUpgrade: ['hunter', 'omnivore'], settled: 0.4 },
       manual: true,
+      captures: 3,
       bonus: { kind: 'stageMult', mult: 2 },
     },
     {
@@ -190,8 +192,9 @@ const cell: StageDef = {
       name: 'Vacuole',
       flavor: 'A pantry inside the cell. Nothing goes to waste while you\'re away.',
       hints: ['Something too big for a small cell drifts in the Shallows.', 'Grow your cell bigger, then look in the Shallows.'],
-      needs: { habitat: 'shallows', upgrades: ['bigger'] },
+      needs: { habitat: 'shallows', upgrades: ['bigger'], settled: 0.5 },
       manual: true,
+      captures: 3,
       bonus: { kind: 'offlineHours', hours: 4 },
     },
     {
@@ -199,8 +202,9 @@ const cell: StageDef = {
       name: 'Peroxisome',
       flavor: 'It breaks down poisons before they do harm.',
       hints: ['A tough little thing lives where the predators are.', 'A thick-skinned cell that can see, in the Depths.'],
-      needs: { habitat: 'depths', upgrades: ['thickMembrane', 'eyespot'] },
+      needs: { habitat: 'depths', upgrades: ['thickMembrane', 'eyespot'], settled: 0.25 },
       manual: true,
+      captures: 2,
       bonus: { kind: 'defense', amount: 0.2 },
     },
     {
@@ -208,8 +212,9 @@ const cell: StageDef = {
       name: 'Golgi Body',
       flavor: 'Packages and ships. The colony runs like clockwork.',
       hints: ['Something busy darts around the Vents.', 'Only a cell with cilia is nimble enough, at the Vents.'],
-      needs: { habitat: 'vents', upgrades: ['cilia'] },
+      needs: { habitat: 'vents', upgrades: ['cilia'], settled: 0.3 },
       manual: true,
+      captures: 3,
       bonus: { kind: 'genMult', target: 'colony', mult: 3 },
     },
     {
@@ -217,8 +222,9 @@ const cell: StageDef = {
       name: 'Lysosome',
       flavor: 'A stomach inside a stomach.',
       hints: ['Something dangerous lurks at the Vents.', 'A poisonous cell could handle it, at the Vents.'],
-      needs: { habitat: 'vents', upgrades: ['toxin'] },
+      needs: { habitat: 'vents', upgrades: ['toxin'], settled: 0.6 },
       manual: true,
+      captures: 3,
       bonus: { kind: 'forageMult', mult: 2 },
     },
     {
@@ -228,6 +234,7 @@ const cell: StageDef = {
       hints: ['The rarest microbe of all. It only shows itself to a well-equipped cell.', 'Five organelles and a chemoreceptor to sniff it out, anywhere.'],
       needs: { found: 5, upgrades: ['chemoreceptor'] },
       manual: true,
+      captures: 4,
       bonus: { kind: 'stageMult', mult: 2 },
     },
     {

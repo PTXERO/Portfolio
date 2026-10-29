@@ -26,7 +26,7 @@ import {
   visibleUpgrades,
 } from '../src/economy/actions';
 import { formatTime } from '../src/economy/num';
-import { dialMax, stageRate, tapValue } from '../src/economy/rates';
+import { dialMax, spawnMult, stageRate, tapValue } from '../src/economy/rates';
 import { cloneState, createState } from '../src/economy/state';
 import { tick } from '../src/economy/tick';
 import { DIALS, type DialId, type GameState, type ReactionDef, type StageId } from '../src/economy/types';
@@ -126,7 +126,7 @@ function chaseReaction(s: GameState): ReactionDef | null {
 }
 
 /** One visit: chase reactions, buy unlocks, then the best-payback items, saving for the finale when it's close. */
-function visit(s: GameState, tapsPerSec: number): void {
+function visit(s: GameState, tapsPerSec: number, now = 0): void {
   const stage = s.current;
   const fin = finalReaction(stage);
   for (let i = 0; i < 2000; i++) {
@@ -174,7 +174,7 @@ function visit(s: GameState, tapsPerSec: number): void {
     if (!best || best.cost / best.gain > toGoal) break;
     best.apply(s);
   }
-  if (s.current === stage && STAGES[stage].habitats) cellVisit(s);
+  if (s.current === stage && STAGES[stage].habitats) cellVisit(s, now);
   else if (s.current === stage && fin) chaseReaction(s);
   spendPast(s);
 }
@@ -213,25 +213,53 @@ function spendPast(s: GameState): void {
   }
 }
 
-/** Cell stage: catch any organelle that's within reach (trying each habitat), then live where output is best. */
-function cellVisit(s: GameState): void {
-  const st = s.stages[s.current];
-  const habitats = (STAGES[s.current].habitats ?? []).filter((h) => habitatUnlocked(s, s.current, h));
-  for (const h of habitats) {
-    st.habitat = h.id;
-    for (const r of engulfable(s, s.current)) engulf(s, s.current, r.id);
+/** When each simulated game last caught a rare microbe. */
+const lastCatch = new WeakMap<GameState, number>();
+/** Seconds per rare microbe caught: one turns up every ~55 s, and chasing it takes a while. */
+const CATCH_SEC = 75;
+
+/**
+ * Cell stage: catch a rare microbe if one is about (one per CATCH_SEC, more with
+ * a chemoreceptor), then decide where to live: where a microbe is about, else
+ * where an organelle is waiting on the lineage to settle in, else where output is best.
+ */
+function cellVisit(s: GameState, t: number): void {
+  const id = s.current;
+  const st = s.stages[id];
+  const habitats = (STAGES[id].habitats ?? []).filter((h) => habitatUnlocked(s, id, h));
+  const findableIn = (h: string) => {
+    const was = st.habitat;
+    st.habitat = h;
+    const out = engulfable(s, id);
+    st.habitat = was;
+    return out;
+  };
+  const due = (lastCatch.get(s) ?? -Infinity) + CATCH_SEC / spawnMult(s, id) <= t;
+  const huntHere = habitats.find((h) => findableIn(h.id).length);
+  if (huntHere && due) {
+    st.habitat = huntHere.id;
+    engulf(s, id, findableIn(huntHere.id)[0].id);
+    lastCatch.set(s, t);
   }
+  const waiting = reactions(id).find((r) => {
+    if (!r.manual || !r.needs.habitat || st.discovered.includes(r.id)) return false;
+    const was = st.habitat;
+    st.habitat = r.needs.habitat;
+    const missing = checkReaction(s, id, r).parts.filter((p) => !p.ok);
+    st.habitat = was;
+    return missing.length > 0 && missing.every((p) => p.label.startsWith('Settled'));
+  });
   let best = habitats[0].id;
   let bestRate = -1;
   for (const h of habitats) {
     st.habitat = h.id;
-    const rate = stageRate(s, s.current).toNumber();
+    const rate = stageRate(s, id).toNumber();
     if (rate > bestRate) {
       bestRate = rate;
       best = h.id;
     }
   }
-  st.habitat = best;
+  st.habitat = huntHere?.id ?? waiting?.needs.habitat ?? best;
   s.news = [];
 }
 
@@ -289,7 +317,7 @@ export function run(strategy: Strategy, events?: Map<string, number>, hook?: (s:
     }
     if (t >= nextVisit) {
       const before = s.current;
-      visit(s, strategy.tapsPerSec);
+      visit(s, strategy.tapsPerSec, t);
       if (s.current !== before) done[before] = t;
       nextVisit += strategy.checkEvery;
     }

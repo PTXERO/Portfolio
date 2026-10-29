@@ -129,13 +129,17 @@ export interface ReactionDef {
     upgrades?: string[];
     /** Any one of these upgrades will do (e.g. either diet). */
     anyUpgrade?: string[];
-    /** Habitat the lineage must be living in. */
+    /** Habitat your cell must be in. */
     habitat?: string;
+    /** How settled in that habitat (0 to 1) the lineage must be. */
+    settled?: number;
     /** How many other entries must already be found. */
     found?: number;
   };
   /** Found by the player steering into it (engulfing), not automatically. */
   manual?: boolean;
+  /** Rare microbes to catch before it's found (default 1). */
+  captures?: number;
   /** The two molecules seen combining in the scene (looks only). */
   pair?: [string, string];
   /** Generator this reveals. */
@@ -193,6 +197,8 @@ export interface StageState {
   eaten: number;
   /** How settled your lineage is in each habitat, 0 to 1. Grows while your cell lives there. */
   acclim: Record<string, number>;
+  /** Rare microbes caught toward each organelle not yet found. */
+  captured: Record<string, number>;
 }
 
 export type BuyAmount = 1 | 10 | 'max';

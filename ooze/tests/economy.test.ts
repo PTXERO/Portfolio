@@ -488,8 +488,14 @@ describe('cell stage', () => {
     const s = cell();
     expect(engulf(s, 'cell', 'chloroplast')).toBe(false);
     buyUpgrade(s, 'cell', 'grazer');
+    // It also needs the lineage settled into the Shallows a little.
+    expect(engulfable(s, 'cell').map((r) => r.id)).not.toContain('chloroplast');
+    tick(s, 0.25 * 30 * 60);
     expect(engulfable(s, 'cell').map((r) => r.id)).toContain('chloroplast');
-    expect(engulf(s, 'cell', 'chloroplast')).toBe(true);
+    // And it takes a couple of catches.
+    expect(engulf(s, 'cell', 'chloroplast')).toBe('caught');
+    expect(s.stages.cell.discovered).not.toContain('chloroplast');
+    expect(engulf(s, 'cell', 'chloroplast')).toBe('found');
     expect(s.stages.cell.discovered).toContain('chloroplast');
     expect(s.news).toContain('chloroplast');
     // Organelles are never discovered by just waiting.

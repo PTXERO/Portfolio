@@ -52,6 +52,9 @@ interface Rare {
   vy: number;
   id: string;
   life: number;
+  /** Seconds of dash left before it tires, and of rest before it can dash again. */
+  dash: number;
+  rest: number;
 }
 
 interface Predator {
@@ -98,7 +101,7 @@ export class Pond {
   private events: PondEvent[] = [];
   private foodTimer: Record<FoodKind, number> = { algae: 0, bacteria: 0 };
   /** Seconds until a rare microbe may appear. */
-  private rareTimer = 6;
+  private rareTimer = 20;
   private predTimer = 30;
   private marker: { x: number; y: number; age: number } | null = null;
   private ramCooldown = 0;
@@ -120,7 +123,7 @@ export class Pond {
     this.preds = [];
     this.events = [];
     this.marker = null;
-    this.rareTimer = 6;
+    this.rareTimer = 20;
     this.predTimer = 30;
   }
 
@@ -129,7 +132,7 @@ export class Pond {
     this.food = [];
     this.preds = [];
     this.rare = null;
-    this.rareTimer = 6;
+    this.rareTimer = 20;
     this.predTimer = 20;
   }
 
@@ -293,7 +296,7 @@ export class Pond {
       this.rareTimer -= dt;
       if (this.rareTimer <= 0) {
         const [x, y] = this.spawnPos();
-        this.rare = { x, y, vx: 4, vy: 2, id: findable[Math.floor(Math.random() * findable.length)], life: RARE_LIFE };
+        this.rare = { x, y, vx: 4, vy: 2, id: findable[Math.floor(Math.random() * findable.length)], life: RARE_LIFE, dash: 1.6, rest: 0 };
         this.rareTimer = (40 + Math.random() * 30) / spawn;
         this.events.push({ type: 'rare', x, y });
       }
@@ -304,10 +307,25 @@ export class Pond {
       const a = Math.sin(f.t * 0.6) * 2 + f.t * 0.3;
       r.vx += Math.cos(a) * 6 * dt;
       r.vy += Math.sin(a) * 6 * dt;
+      // It darts away when your cell comes near, until it tires and has to rest:
+      // a fast cell (or a patient one) catches it.
+      const away = Math.hypot(r.x - h.x, r.y - h.y);
+      let top = 6;
+      r.rest = Math.max(0, r.rest - dt);
+      if (away < 26 && r.rest <= 0 && r.dash > 0) {
+        r.dash -= dt;
+        r.vx += ((r.x - h.x) / (away || 1)) * 90 * dt;
+        r.vy += ((r.y - h.y) / (away || 1)) * 90 * dt;
+        top = 24;
+        if (r.dash <= 0) {
+          r.rest = 1.4;
+          r.dash = 1.6;
+        }
+      }
       const sp = Math.hypot(r.vx, r.vy);
-      if (sp > 6) {
-        r.vx *= 6 / sp;
-        r.vy *= 6 / sp;
+      if (sp > top) {
+        r.vx *= top / sp;
+        r.vy *= top / sp;
       }
       r.x = Math.max(6, Math.min(W - 6, r.x + r.vx * dt));
       r.y = Math.max(top + 6, Math.min(floor - 6, r.y + r.vy * dt));

@@ -157,7 +157,13 @@ export function checkReaction(state: GameState, stage: StageId, r: ReactionDef):
   if (r.needs.habitat) {
     const ok = st.habitat === r.needs.habitat;
     dials &&= ok;
-    parts.push({ label: `Your cell in the ${def.habitats?.find((h) => h.id === r.needs.habitat)?.name ?? r.needs.habitat}`, ok });
+    const name = def.habitats?.find((h) => h.id === r.needs.habitat)?.name ?? r.needs.habitat;
+    parts.push({ label: `Your cell in the ${name}`, ok });
+    if (r.needs.settled) {
+      const settledOk = (st.acclim[r.needs.habitat] ?? 0) >= r.needs.settled - 1e-9;
+      dials &&= settledOk;
+      parts.push({ label: `Settled in the ${name} ${Math.round(r.needs.settled * 100)}%`, ok: settledOk });
+    }
   }
   for (const d of DIALS) {
     const range = r.needs.dials?.[d];
@@ -327,13 +333,20 @@ export function engulfable(state: GameState, stage: StageId): ReactionDef[] {
   return reactions(stage).filter((r) => r.manual && !st.discovered.includes(r.id) && reactionReady(state, stage, r));
 }
 
-/** The hero engulfs a rare microbe, gaining its organelle. */
-export function engulf(state: GameState, stage: StageId, id: string): boolean {
+/**
+ * The hero engulfs a rare microbe. Each organelle takes a few: returns 'caught'
+ * for one more toward it, 'found' when that was the last, or false if it couldn't.
+ */
+export function engulf(state: GameState, stage: StageId, id: string): 'caught' | 'found' | false {
   const r = engulfable(state, stage).find((x) => x.id === id);
   if (!r) return false;
-  state.stages[stage].discovered.push(r.id);
+  const st = state.stages[stage];
+  st.captured[id] = (st.captured[id] ?? 0) + 1;
+  if (st.captured[id] < (r.captures ?? 1)) return 'caught';
+  delete st.captured[id];
+  st.discovered.push(r.id);
   state.news.push(r.id);
-  return true;
+  return 'found';
 }
 
 export function finalReaction(stage: StageId): ReactionDef | undefined {

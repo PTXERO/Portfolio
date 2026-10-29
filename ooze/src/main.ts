@@ -240,7 +240,7 @@ function renderGoal(): void {
   if (nextEl) {
     const n = nextReaction(state, state.current);
     let text = '';
-    if (engulfable(state, state.current).length) text = 'A rare microbe is about: steer your cell into it!';
+    if (engulfable(state, state.current).length) text = 'A rare microbe is about. Catch it before it gets away!';
     else if (n && !finaleReady(state)) {
       const name = n.r.final ? n.r.name : '???';
       const missing = n.check.parts.filter((p) => !p.ok);
@@ -370,7 +370,10 @@ function pondEvents(): void {
   for (const e of scene.pondEvents()) {
     if (e.type === 'eat') scene.float(e.x, e.y - 8, `+${format(forage(state, e.food))}`, '#7fe0b0');
     else if (e.type === 'engulf') {
-      if (engulf(state, state.current, e.id)) scene.float(e.x, e.y - 10, 'engulfed!', '#f5c45e');
+      const got = engulf(state, state.current, e.id);
+      const r = reactions(state.current).find((x) => x.id === e.id);
+      if (got === 'found') scene.float(e.x, e.y - 10, 'engulfed!', '#f5c45e');
+      else if (got === 'caught') scene.float(e.x, e.y - 10, `caught ${state.stages[state.current].captured[e.id]} of ${r?.captures ?? 1}`, '#f5c45e');
     } else if (e.type === 'rare') scene.float(e.x, e.y - 10, 'a rare microbe!', '#f5c45e');
     else if (e.type === 'hit') scene.float(e.x, e.y - 10, ['thwack', 'ow!', 'scram!'][Math.floor(Math.random() * 3)], '#f2ead7');
     else if (e.type === 'fend') scene.float(e.x, e.y - 10, `driven off! +${format(fendOff(state))}`, '#f5c45e');
