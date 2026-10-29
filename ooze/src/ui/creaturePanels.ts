@@ -43,9 +43,14 @@ export function bodyLayout(state: GameState, upgradeCard: (u: (typeof STAGES)['c
     return `<div class="slot-row"><div class="label dim">${SLOT_NAMES[slot]}${hidden ? ` <span class="tag">+${hidden} out there</span>` : ''}</div><div class="parts">${chips}</div></div>`;
   }).join('');
   const training = def.upgrades.filter((u) => u.branch === 'Training').map(upgradeCard).join('');
+  const boosts = visibleUpgrades(state, CREATURE)
+    .filter((u) => !u.branch && !u.pay && !u.target)
+    .map(upgradeCard)
+    .join('');
   return `<div class="portrait">${creatureIcon(creatureLookOf(state), 4)}<div class="stats">${stats}</div></div>
     <div class="panel-head"><h2>Body</h2><span class="label dim">Tap a part to wear it</span></div>${slots}
-    <div class="panel-head"><h2>Training</h2></div>${training}`;
+    <div class="panel-head"><h2>Training</h2></div>${training}
+    ${boosts ? `<div class="panel-head"><h2>Boosts</h2></div>${boosts}` : ''}`;
 }
 
 export function exploreLayout(state: GameState): string {

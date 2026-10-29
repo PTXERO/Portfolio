@@ -64,7 +64,7 @@ export function tabsFor(state: GameState): Tab[] {
 /** A stage has Roots when earlier stages can still help it: heirlooms or milestones. */
 function hasRoots(state: GameState): boolean {
   const def = STAGES[state.current];
-  return !!def.milestones?.length || def.upgrades.some((u) => u.pay);
+  return !!def.milestones?.length || def.upgrades.some((u) => u.pay || u.target);
 }
 
 /** The previous stage, which feeds this one. */
@@ -149,8 +149,10 @@ export function describeEffect(stage: StageId, e: Effect): string {
 }
 
 function upgradeText(stage: StageId, u: UpgradeDef): string {
-  const text = [u.effect, ...(u.extra ?? [])].map((e) => describeEffect(stage, e)).join(' · ');
-  return maxLevel(u) > 1 ? `Each level: ${text}` : text;
+  const on = u.target ?? stage;
+  const text = [u.effect, ...(u.extra ?? [])].map((e) => describeEffect(on, e)).join(' · ');
+  const where = u.target && u.target !== stage ? `In the ${STAGES[u.target].name}: ` : '';
+  return `${maxLevel(u) > 1 ? 'Each level: ' : ''}${where}${text}`;
 }
 
 /** A card for an upgrade (mutation, boost or heirloom), with its level and its next price. */
@@ -260,7 +262,7 @@ export function layout(state: GameState, tab: Tab): string {
 
   if (tab === 'boosts') {
     const rows = visibleUpgrades(state, id)
-      .filter((u) => !u.pay)
+      .filter((u) => !u.pay && !u.target)
       .map((u) => upgradeCard(state, id, u, 'spark'))
       .join('');
     return `<div class="panel-head"><h2>Boosts</h2></div>${rows || '<p class="note">Nothing new yet. More boosts appear as you grow.</p>'}`;
@@ -289,7 +291,7 @@ export function layout(state: GameState, tab: Tab): string {
     // A branch hangs off a choice (a diet): until that choice is made, or if another was, it stays hidden.
     const offPath = (u: UpgradeDef) =>
       (u.requires?.upgrades ?? []).some((x) => !st.upgrades.includes(x) && def.upgrades.find((y) => y.id === x)?.excludes);
-    const own = def.upgrades.filter((u) => !u.pay && !offPath(u));
+    const own = def.upgrades.filter((u) => !u.pay && !u.target && !offPath(u));
     // What's left to evolve comes first, cheapest first, so the next goal is always on top.
     // A choice already made elsewhere (the other diet) drops out of the tree.
     const open = own
@@ -307,6 +309,7 @@ export function layout(state: GameState, tab: Tab): string {
   if (tab === 'roots') {
     const prev = prevStage(id);
     const heirlooms = def.upgrades.filter((u) => u.pay && upgradeUnlocked(state, id, u));
+    const giveBack = def.upgrades.filter((u) => u.target && upgradeUnlocked(state, id, u));
     const milestones = (def.milestones ?? [])
       .map((m) => {
         const g = STAGES[m.stage].generators.find((x) => x.id === m.gen)!;
@@ -317,6 +320,7 @@ export function layout(state: GameState, tab: Tab): string {
     return `<div class="panel-head"><h2>Roots</h2>${visit}</div>
       <p class="note" data-t="feed"></p>
       ${heirlooms.length ? `<div class="panel-head"><h2>Heirlooms</h2><span class="label dim" data-t="wallet"></span></div>${heirlooms.map((u) => upgradeCard(state, id, u, 'nutrient')).join('')}` : ''}
+      ${giveBack.length ? `<div class="panel-head"><h2>Give back</h2></div><p class="note">Paid here, felt in earlier eras, which then feed this one even more.</p>${giveBack.map((u) => upgradeCard(state, id, u, 'roots')).join('')}` : ''}
       ${milestones ? `<div class="panel-head"><h2>Milestones</h2></div><p class="note">Grow the old stage to reach these. They boost everything here.</p><div class="goals">${milestones}</div>` : ''}`;
   }
 
@@ -349,6 +353,7 @@ export function layout(state: GameState, tab: Tab): string {
   }
 
   if (tab === 'body') return bodyLayout(state, (u) => upgradeCard(state, id, u, 'spark'));
+  // (Body lists Training and the plain boosts; Roots lists heirlooms and giving back.)
   if (tab === 'explore') return exploreLayout(state);
   if (tab === 'family') return familyLayout(state);
 
@@ -565,11 +570,11 @@ export function finaleReady(state: GameState): boolean {
 /** True when the Boosts (or Mutate) tab has something affordable, for the red dot. */
 export function boostReady(state: GameState): boolean {
   const st = state.stages[state.current];
-  return visibleUpgrades(state, state.current).some((u) => !u.pay && st.currency.gte(upgradeCost(state, state.current, u)));
+  return visibleUpgrades(state, state.current).some((u) => !u.pay && !u.target && u.levels !== Infinity && st.currency.gte(upgradeCost(state, state.current, u)));
 }
 
 /** True when an heirloom is affordable, for the Roots tab's dot. */
 export function heirloomReady(state: GameState): boolean {
   const id = state.current;
-  return visibleUpgrades(state, id).some((u) => u.pay && state.stages[u.pay].currency.gte(upgradeCost(state, id, u)));
+  return visibleUpgrades(state, id).some((u) => (u.pay || u.target) && state.stages[payStage(id, u)].currency.gte(upgradeCost(state, id, u)));
 }

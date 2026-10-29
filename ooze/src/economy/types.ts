@@ -152,6 +152,8 @@ export interface UpgradeDef {
   costGrowth?: number;
   /** Paid in an earlier stage's currency instead of this stage's. */
   pay?: StageId;
+  /** Its effects land on another (earlier) stage instead of this one: giving back down the line. */
+  target?: StageId;
   /** Mutation Tree branch; upgrades without one are plain boosts. */
   branch?: string;
   /** Can't be bought alongside these (a choice, like diets). */

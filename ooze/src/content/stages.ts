@@ -303,6 +303,12 @@ const cell: StageDef = {
     { id: 'signaling', name: 'Cell Signaling', flavor: 'Cells start passing messages along. Everyone listens.', cost: 2.1e23, effect: { kind: 'stageMult', mult: 1.5 }, requires: { reaction: 'nucleus' } },
     // Endless: never maxes out, each level a little more
     { id: 'adaptation', name: 'Adaptation', flavor: 'Always a little better suited. Never quite done.', cost: 1e10, levels: Infinity, costGrowth: 2.5, effect: { kind: 'stageMult', mult: 1.02 } },
+    // Giving back: bought with DNA, felt in the Soup (which then feeds the Cell even more).
+    { id: 'leakyMembranes', name: 'Leaky Membranes', flavor: 'Living cells leak sugars and amino acids back into the water.', cost: 1e6, levels: 5, costGrowth: 40, target: 'soup', effect: { kind: 'stageMult', mult: 1.4 } },
+    { id: 'decomposition', name: 'Decomposition', flavor: 'Dead cells break back down into building blocks.', cost: 1e8, target: 'soup', effect: { kind: 'genMult', target: 'amino', mult: 4 } },
+    { id: 'membraneRecycling', name: 'Membrane Recycling', flavor: 'Spent membranes come apart into fresh lipids.', cost: 1e11, target: 'soup', effect: { kind: 'genMult', target: 'lipid', mult: 4 } },
+    { id: 'oxygenation', name: 'Oxygen Bubbles', flavor: 'Photosynthesis fizzes the water with oxygen and sugars.', cost: 1e13, target: 'soup', effect: { kind: 'genMult', target: 'sugar', mult: 4 }, requires: { reaction: 'chloroplast' } },
+    { id: 'ribosomeSpill', name: 'Spilled Ribosomes', flavor: 'When cells burst, their RNA spills out to copy itself again.', cost: 1e17, target: 'soup', effect: { kind: 'genMult', target: 'rna', mult: 4 }, requires: { reaction: 'nucleus' } },
     // Heirlooms: paid for with the Soup's Nutrients
     { id: 'oldRecipes', name: 'Old Recipes', flavor: 'What worked in the soup still works.', cost: 5e9, levels: 10, costGrowth: 1.8, pay: 'soup', effect: { kind: 'stageMult', mult: 1.1 } },
     { id: 'richBroth', name: 'Rich Broth', flavor: 'Food in the pond tastes of the old soup.', cost: 8e9, levels: 5, costGrowth: 2.5, pay: 'soup', effect: { kind: 'forageMult', mult: 1.2 } },

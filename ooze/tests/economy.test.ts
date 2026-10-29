@@ -505,6 +505,20 @@ describe('cell stage', () => {
     expect(upgradeLevel(s, 'cell', 'adaptation')).toBe(40);
   });
 
+  it('giving back: a Cell upgrade boosts the Soup, which feeds the Cell even more', () => {
+    const s = cell();
+    s.stages.cell.generators.fission = 50;
+    s.stages.soup.generators.protocell = 20;
+    s.stages.cell.currency = D(1e7);
+    const soupBefore = stageRate(s, 'soup').toNumber();
+    const cellBefore = stageRate(s, 'cell').toNumber();
+    expect(buyUpgrade(s, 'cell', 'leakyMembranes')).toBe(true);
+    expect(stageRate(s, 'soup').toNumber()).toBeCloseTo(soupBefore * 1.4, 3);
+    expect(stageRate(s, 'cell').toNumber()).toBeGreaterThan(cellBefore);
+    // Paid in DNA, not Nutrients.
+    expect(s.stages.cell.currency.toNumber()).toBe(9e6);
+  });
+
   it('you can go back to the Soup without it ending again', () => {
     const s = cell();
     expect(visitStage(s, 'soup')).toBe(true);

@@ -69,8 +69,18 @@ export function stageEffects(state: GameState, stage: StageId): Effect[] {
   const def = STAGES[stage];
   const out: Effect[] = [];
   for (const u of def.upgrades) {
+    if (u.target && u.target !== stage) continue;
     const n = upgradeLevel(state, stage, u.id);
     if (n > 0) for (const e of [u.effect, ...(u.extra ?? [])]) out.push(scaleEffect(e, n));
+  }
+  // Later stages can give back: upgrades bought there whose effects land here.
+  for (const other of STAGE_ORDER) {
+    if (other === stage || !state.unlocked.includes(other)) continue;
+    for (const u of STAGES[other].upgrades) {
+      if (u.target !== stage) continue;
+      const n = upgradeLevel(state, other, u.id);
+      if (n > 0) for (const e of [u.effect, ...(u.extra ?? [])]) out.push(scaleEffect(e, n));
+    }
   }
   for (const r of def.reactions ?? []) if (r.bonus && st.discovered.includes(r.id)) out.push(r.bonus);
   for (const m of def.milestones ?? []) if (milestoneMet(state, m)) out.push(m.bonus);

@@ -82,6 +82,12 @@ const UPGRADES: UpgradeDef[] = [
   { id: 'borders', name: 'Scent Borders', flavor: 'Everyone knows whose land this is.', cost: 6e11, effect: { kind: 'genMult', target: 'territory', mult: 2 }, requires: { generator: 'territory', owned: 10 } },
   { id: 'packMemory', name: 'Trail Memory', flavor: 'The way home, remembered.', cost: 5000, effect: { kind: 'tripMult', mult: 2 }, requires: { reaction: 'shore' } },
   { id: 'cellFeeding', name: 'Old Cell Lines', flavor: 'Every cell in it remembers the pond.', cost: 2e4, effect: { kind: 'feedMult', mult: 2 } },
+  // Giving back: bought with Biomass, felt in the Cell and the Soup (which feed back up).
+  { id: 'gutFlora', name: 'Gut Flora', flavor: 'Bacteria thrive inside the creature\'s gut, and spread wherever it goes.', cost: 1e4, levels: 5, costGrowth: 25, target: 'cell', effect: { kind: 'stageMult', mult: 1.5 } },
+  { id: 'droppings', name: 'Droppings', flavor: 'What goes in comes out, and washes back into the Shallows.', cost: 1e7, target: 'cell', effect: { kind: 'habitatMult', habitat: 'shallows', mult: 3 } },
+  { id: 'mudStirring', name: 'Stirred Mud', flavor: 'Feet churn the bottom mud and feed the dark below.', cost: 1e9, target: 'cell', effect: { kind: 'habitatMult', habitat: 'depths', mult: 3 } },
+  { id: 'fallenGiants', name: 'Fallen Giants', flavor: 'When a big one dies at sea, it sinks and feeds the deep for years.', cost: 1e11, target: 'cell', effect: { kind: 'habitatMult', habitat: 'vents', mult: 3 } },
+  { id: 'tidalRunoff', name: 'Tidal Runoff', flavor: 'Rain washes the land\'s leftovers back to the sea, where it all began.', cost: 1e13, target: 'soup', effect: { kind: 'stageMult', mult: 2 } },
   // Heirlooms, paid for in the Cell's DNA.
   { id: 'denseCells', name: 'Dense Tissue', flavor: 'Packed tighter than any cell before.', cost: 1e27, levels: 10, costGrowth: 5, pay: 'cell', effect: { kind: 'stageMult', mult: 1.15 } },
   { id: 'oldSenses', name: 'Old Senses', flavor: 'The eyespot was only the beginning.', cost: 3e27, levels: 5, costGrowth: 8, pay: 'cell', effect: { kind: 'stat', stat: 'senses', amount: 2 } },
