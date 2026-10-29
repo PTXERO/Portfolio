@@ -311,9 +311,11 @@ function revisit(state: GameState, p: PlaceDef, rand: () => number): void {
   s.trips[p.id] = (s.trips[p.id] ?? 0) + 1;
   // Grown back since it was last foraged: it gives again.
   if (placeRested(state, p.id)) {
-    earn(state, tripPay(state, p).mul(FARM_PAY));
+    const got = tripPay(state, p).mul(FARM_PAY);
+    earn(state, got);
     s.partyReady[p.id] = s.year + PLACE_REST;
     s.foraged = (s.foraged ?? 0) + 1;
+    s.lastForage = got.toString();
   }
   const report: GameState['reports'][number] = { kind: 'trip', place: p.id, success: true, earned: '0', parts: [] };
   const missing = p.parts.filter((id) => !s.parts.includes(id));
@@ -620,7 +622,10 @@ function partyTick(state: GameState, dt: number): void {
   for (const party of s.parties) party.t += dt;
   s.parties = s.parties.filter((party) => {
     if (party.t < 2 * partyLeg(state, party.place)) return true;
-    earn(state, tripPay(state, def().places!.find((p) => p.id === party.place)!).mul(PARTY_PAY));
+    const got = tripPay(state, def().places!.find((p) => p.id === party.place)!).mul(PARTY_PAY);
+    earn(state, got);
+    s.partiesHome = (s.partiesHome ?? 0) + 1;
+    s.lastParty = got.toString();
     return false;
   });
   // Send the next party to the nearest found place (beyond home's own beach) that's rested

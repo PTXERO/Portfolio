@@ -540,3 +540,9 @@ textarea {
 .nest .row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 /* What opens next in a section: one quiet line instead of a locked card. */
 .note.lock { font-style: italic; opacity: 0.8; border-left: var(--u) solid var(--panel-hi); padding-left: 8px; }
+
+/* The card over a tapped flag on the map. */
+#placecard { position: absolute; z-index: 6; padding: 8px 10px; max-width: 220px; font-size: 13px; background: rgba(22, 28, 44, 0.94); }
+#placecard .name { font-weight: 700; color: var(--gold); margin-bottom: 2px; }
+#placecard .sub { color: var(--dim); line-height: 1.35; }
+#placecard .px-btn { margin: 6px 0 0; width: 100%; }

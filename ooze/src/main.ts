@@ -38,7 +38,7 @@ import { clearStorage, exportSave, importSave, loadFromStorage, saveToStorage } 
 import { createState } from './economy/state';
 import { liveTick, TICK_SEC } from './economy/tick';
 import type { BuyAmount, DialId, GameState, StageId } from './economy/types';
-import { breed, buyPart, chooseEvent, court, equipPart, foundNest, islandFor, netRate, SIGHTINGS, placeSeen, releaseMate, tripEventDue, walkHome, walkTo } from './economy/creature';
+import { breed, buyPart, chooseEvent, court, equipPart, FARM_PAY, foundNest, islandFor, netRate, SIGHTINGS, placeRestLeft, placeSeen, placeShort, releaseMate, tripEventDue, tripPay, walkHome, walkSeconds, walkTo } from './economy/creature';
 import { Scene } from './scene/scene';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
@@ -526,8 +526,50 @@ function pondEvents(): void {
       const name = court(state);
       scene.float(e.x, e.y, name ? `${name} joins you!` : 'not interested…', name ? '#e68ab8' : '#f2ead7');
     } else if (e.type === 'fend') scene.float(e.x, e.y - 10, `driven off! +${format(fendOff(state))}`, '#f5c45e');
+    else if (e.type === 'forage') {
+      const got = e.party ? state.stages.creature.lastParty : state.stages.creature.lastForage;
+      if (got) scene.float(e.x, e.y, `${e.party ? 'party home ' : ''}+${format(D(got))}`, '#f5c45e');
+    } else if (e.type === 'place') showPlaceCard(e.id, e.x, e.y);
   }
   collectNews();
+}
+
+/** A little card over a tapped flag: what the place is, how it stands, and a button to go. */
+const placeCard = document.createElement('div');
+placeCard.id = 'placecard';
+placeCard.className = 'px-box';
+placeCard.hidden = true;
+stageEl.appendChild(placeCard);
+let placeCardTimer = 0;
+
+function showPlaceCard(id: string, x: number, y: number): void {
+  const def = STAGES.creature;
+  const p = def.places!.find((q) => q.id === id);
+  if (!p) return;
+  const s = state.stages.creature;
+  const q = islandFor(state).places[id];
+  const found = (s.trips[id] ?? 0) > 0;
+  const rest = placeRestLeft(state, id);
+  const short = placeShort(state, p);
+  const status = !found
+    ? short.length
+      ? `Too much for it yet: ${short.map(([k, n]) => `${k} ${n}`).join(', ')}`
+      : `Finding it: about ${format(tripPay(state, p))} ${def.currency}`
+    : rest > 0
+      ? `Growing back, ${formatTime(rest)}`
+      : `Ready to forage: ${format(tripPay(state, p).mul(FARM_PAY))} ${def.currency}`;
+  const parts = p.parts.filter((pid) => s.parts.includes(pid)).length;
+  placeCard.innerHTML = `<div class="name">${found ? p.name : 'Something out here'}</div>
+    <div class="sub">${formatTime(walkSeconds(state, q.x, q.y))} away · parts ${parts}/${p.parts.length}</div>
+    <div class="sub">${status}</div>
+    <button class="px-btn small gold" data-goto="${id}">Go here</button>`;
+  placeCard.hidden = false;
+  const w = placeCard.offsetWidth;
+  const h = placeCard.offsetHeight;
+  placeCard.style.left = `${Math.max(8, Math.min(stageEl.clientWidth - w - 8, x - w / 2))}px`;
+  placeCard.style.top = `${Math.max(8, y - h - 6)}px`;
+  clearTimeout(placeCardTimer);
+  placeCardTimer = window.setTimeout(() => (placeCard.hidden = true), 8000);
 }
 
 // ---- Input ----
@@ -542,7 +584,8 @@ const fingers = new Map<number, { x: number; y: number; sx: number; sy: number }
 let mapDragged = false;
 
 stageEl.addEventListener('pointerdown', (e) => {
-  if (!modal.hidden || (e.target as HTMLElement).closest('#evolve, button')) return;
+  if (!modal.hidden || (e.target as HTMLElement).closest('#evolve, button, #placecard')) return;
+  placeCard.hidden = true;
   stageEl.setPointerCapture(e.pointerId);
   const r = stageEl.getBoundingClientRect();
   const x = e.clientX - r.left;
@@ -669,6 +712,7 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.goto) {
     const p = islandFor(state).places[el.dataset.goto];
     if (p && walkTo(state, p.x, p.y)) scene.purchase(state, 'trip');
+    placeCard.hidden = true;
   } else if (el.dataset.nest) {
     if (foundNest(state, el.dataset.nest)) scene.purchase(state, 'nest');
   } else if (el.dataset.breed) breed(state, Number(el.dataset.breed));

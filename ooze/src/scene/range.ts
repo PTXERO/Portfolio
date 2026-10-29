@@ -35,6 +35,8 @@ interface Member {
   act?: Act;
   /** Which nest it lives at (0 home, then the nests founded since). */
   base: number;
+  /** Waypoints over land when it's moving to live at another nest. */
+  path?: Pt[];
 }
 
 /** Herd life: little things members do now and then, on their own or in twos. */
@@ -258,6 +260,8 @@ export class RangeScene {
   /** Places parties were bound for last frame (to puff when one gets home). */
   private partiesOut = new Set<string>();
   private foragedSeen = 0;
+  private partiesSeen = 0;
+  private lastPartyNest: Pt | null = null;
 
   get camParams(): [number, number, number, number] {
     return [this.camX, this.camY, this.zoom, this.midY()];
@@ -321,6 +325,23 @@ export class RangeScene {
       this.events.push({ type: 'court', x: this.sx(v.x), y: this.py(v.x, v.y) - 12 });
       this.visitor = null;
       return;
+    }
+    // A place's flag (or "!"): a little card about it, with a button to go (so a stray tap
+    // near a flag doesn't send it off).
+    const is = this.island;
+    if (is) {
+      const st = state.stages.creature;
+      for (const pl of STAGES.creature.places!) {
+        const p = is.places[pl.id];
+        const found = (st.trips[pl.id] ?? 0) > 0;
+        if (!found && !st.seen[Math.floor(p.y / CELL) * CELLS + Math.floor(p.x / CELL)]) continue;
+        const X = this.sx(p.x);
+        const Y = this.py(p.x, p.y);
+        if (Math.abs(X + 1 - ax) < 5 && ay > Y - 11 && ay < Y + 2) {
+          this.events.push({ type: 'place', id: pl.id, x: X, y: Y - 10 });
+          return;
+        }
+      }
     }
     // Anywhere else: walk there. Into the fog is how the island gets explored.
     const w = this.toWorld(ax, ay);
@@ -531,6 +552,37 @@ export class RangeScene {
       if (isLand(is, p.x, p.y)) return p;
     }
     return { ...is.home };
+  }
+
+  /** Paths over land between two spots, found once and kept (a breadth-first walk over the map's cells). */
+  private paths = new Map<string, Pt[]>();
+  private landPath(is: Island, from: Pt, to: Pt): Pt[] {
+    const cell = (p: Pt) => Math.min(CELLS - 1, Math.max(0, Math.floor(p.y / CELL))) * CELLS + Math.min(CELLS - 1, Math.max(0, Math.floor(p.x / CELL)));
+    const a = cell(from);
+    const b = cell(to);
+    const key = `${a}>${b}`;
+    const known = this.paths.get(key);
+    if (known) return known.map((p) => ({ ...p }));
+    const prev = new Int32Array(CELLS * CELLS).fill(-1);
+    const land = (i: number) => isLand(is, (i % CELLS) * CELL + CELL / 2, Math.floor(i / CELLS) * CELL + CELL / 2);
+    const queue = [a];
+    prev[a] = a;
+    for (let h = 0; h < queue.length && prev[b] < 0; h++) {
+      const i = queue[h];
+      const x = i % CELLS;
+      for (const j of [x > 0 ? i - 1 : -1, x < CELLS - 1 ? i + 1 : -1, i - CELLS, i + CELLS]) {
+        if (j < 0 || j >= CELLS * CELLS || prev[j] >= 0 || (!land(j) && j !== b)) continue;
+        prev[j] = i;
+        queue.push(j);
+      }
+    }
+    const out: Pt[] = [];
+    if (prev[b] >= 0) {
+      for (let i = b, k = 0; i !== a; i = prev[i], k++) if (k % 3 === 0) out.unshift({ x: (i % CELLS) * CELL + CELL / 2, y: Math.floor(i / CELLS) * CELL + CELL / 2 });
+    }
+    out.push({ ...to });
+    this.paths.set(key, out);
+    return out.map((p) => ({ ...p }));
   }
 
   /** The camera and effects, for the island's wild life. */
@@ -839,16 +891,22 @@ export class RangeScene {
     // With nests away from home, the herd spreads between them (foragers only; the rest keep
     // to home), and now and then one sets off to live at another, walking the trail between.
     if (bases.length > 1) {
+      const setOff = (m: Member, base: number) => {
+        m.base = base;
+        // The long way round over land if it must (never straight into the sea).
+        if (Math.hypot(m.x - bases[base].x, m.y - bases[base].y) > 8) m.path = this.landPath(is, m, bases[base]);
+      };
       this.members.forEach((m, i) => {
         if (m.base >= bases.length) m.base = 0;
-        if (m.role === 'forager' && m.base === 0 && i % bases.length !== 0 && !this.based.has(m)) m.base = i % bases.length;
+        if (m.role === 'forager' && m.base === 0 && i % bases.length !== 0 && !this.based.has(m)) setOff(m, i % bases.length);
         this.based.add(m);
       });
       this.moveTimer -= dt;
       if (this.moveTimer <= 0 && this.members.length > 2) {
         this.moveTimer = 30 + Math.random() * 30;
-        const m = this.members.filter((x) => x.role === 'forager' && !x.act)[Math.floor(Math.random() * this.members.length)];
-        if (m) m.base = (m.base + 1 + Math.floor(Math.random() * (bases.length - 1))) % bases.length;
+        const free = this.members.filter((x) => x.role === 'forager' && !x.act && !x.path?.length);
+        const m = free[Math.floor(Math.random() * free.length)];
+        if (m) setOff(m, (m.base + 1 + Math.floor(Math.random() * (bases.length - 1))) % bases.length);
       }
     }
     // Herd life: every so often one or two of them break off to do something of their own.
@@ -888,8 +946,18 @@ export class RangeScene {
         }
       }
       // Its own moment, if it's in one.
-      const act = m.act;
+      const act = m.path?.length ? undefined : m.act;
       let fast = false;
+      // On its way to live at another nest: follow the way over land.
+      const travel = m.path?.length ? m.path : null;
+      if (travel) {
+        if (Math.hypot(travel[0].x - m.x, travel[0].y - m.y) < 1.5) travel.shift();
+        if (travel.length) {
+          gx = travel[0].x;
+          gy = travel[0].y;
+          fast = true;
+        }
+      }
       if (act) {
         act.t -= dt;
         const there = Math.hypot(act.x - m.x, act.y - m.y) < 0.4;
@@ -918,7 +986,7 @@ export class RangeScene {
       // Within the grazing range of its nest (unless running for its life).
       const own = bases[m.base] ?? home;
       const out = Math.hypot(gx - own.x, gy - own.y);
-      if (out > grazeR + 1 && !(m.act?.kind === 'chase')) {
+      if (out > grazeR + 1 && !(m.act?.kind === 'chase') && !travel) {
         gx = own.x + ((gx - own.x) / out) * grazeR;
         gy = own.y + ((gy - own.y) / out) * grazeR;
       }
@@ -1112,11 +1180,27 @@ export class RangeScene {
         });
       }
     }
-    // Your creature forages a place that's grown back: a little puff where it stands.
-    if ((st.foraged ?? 0) > this.foragedSeen) this.fx.pulse(Math.round(this.sx(me.x)), Math.round(this.py(me.x, me.y)) - 4, PAL.y);
+    // Your creature forages a place that's grown back: a little puff where it stands, and
+    // what it brought in.
+    if ((st.foraged ?? 0) > this.foragedSeen) {
+      const X = Math.round(this.sx(me.x));
+      const Y = Math.round(this.py(me.x, me.y)) - 4;
+      this.fx.pulse(X, Y, PAL.y);
+      this.events.push({ type: 'forage', party: false, x: X, y: Y - 8 });
+    }
     this.foragedSeen = st.foraged ?? 0;
+    if ((st.partiesHome ?? 0) > this.partiesSeen) {
+      const n = this.lastPartyNest ?? home;
+      this.events.push({ type: 'forage', party: true, x: Math.round(this.sx(n.x)), y: Math.round(this.py(n.x, n.y)) - 14 });
+    }
+    this.partiesSeen = st.partiesHome ?? 0;
     const nowOut = new Set(st.parties.map((p) => p.place));
-    for (const was of this.partiesOut) if (!nowOut.has(was)) this.fx.pulse(Math.round(this.sx(home.x)), Math.round(this.py(home.x, home.y)), PAL.g);
+    for (const was of this.partiesOut) {
+      if (nowOut.has(was)) continue;
+      const n = is.places[was] ? nearestNest(state, was) : home;
+      this.lastPartyNest = n;
+      this.fx.pulse(Math.round(this.sx(n.x)), Math.round(this.py(n.x, n.y)), PAL.g);
+    }
     this.partiesOut = nowOut;
 
     const walking = !!st.walk && !st.walk.event;

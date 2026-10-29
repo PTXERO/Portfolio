@@ -151,7 +151,7 @@ export function describeEffect(stage: StageId, e: Effect): string {
     case 'stat':
       return `${e.stat[0].toUpperCase()}${e.stat.slice(1)} +${e.amount}`;
     case 'tripMult':
-      return `Expeditions bring back ×${e.mult}`;
+      return `Finding and foraging places brings back ×${e.mult}`;
     case 'guard':
       return 'Your cell rams predators on its own, harder each level';
     case 'habitatMult':

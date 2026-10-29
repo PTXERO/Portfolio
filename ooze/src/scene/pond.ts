@@ -19,7 +19,11 @@ export type PondEvent =
   | { type: 'fend'; x: number; y: number }
   | { type: 'hit'; x: number; y: number }
   /** A visiting creature on the shore was courted (Creature stage). */
-  | { type: 'court'; x: number; y: number };
+  | { type: 'court'; x: number; y: number }
+  /** Creature stage: a found place was foraged again (by your creature, or a party home). */
+  | { type: 'forage'; party: boolean; x: number; y: number }
+  /** Creature stage: a place's flag was tapped. */
+  | { type: 'place'; id: string; x: number; y: number };
 
 interface Hero {
   x: number;
