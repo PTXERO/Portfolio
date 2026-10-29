@@ -35,9 +35,9 @@ function setJobs(ex: ExtinctionState, want: Partial<Record<string, number>>): vo
 }
 
 const PATHS: Record<string, string[]> = {
-  plants: ['green', 'stick', 'rootlore', 'warmth', 'fire', 'deeproots', 'seeds', 'tend', 'edges', 'tools', 'rope'],
-  meat: ['watch', 'line', 'bait', 'warmth', 'fire', 'deeper', 'nets', 'edges', 'tools', 'rope'],
-  both: ['watch', 'line', 'green', 'stick', 'warmth', 'fire', 'bait', 'rootlore', 'deeper', 'deeproots', 'edges', 'tools', 'rope'],
+  plants: ['green', 'stick', 'rootlore', 'tubers', 'warmth', 'fire', 'deeproots', 'mulch', 'rope', 'smoke', 'embers', 'racks', 'charcoal', 'hollow'],
+  meat: ['watch', 'line', 'bait', 'deeper', 'warmth', 'fire', 'nets', 'green', 'stick', 'rootlore', 'tubers', 'deeproots', 'mulch', 'rope', 'smoke', 'embers', 'racks', 'charcoal', 'hollow'],
+  both: ['watch', 'line', 'green', 'stick', 'bait', 'rootlore', 'warmth', 'fire', 'deeper', 'tubers', 'deeproots', 'mulch', 'rope', 'smoke', 'embers', 'racks', 'charcoal', 'hollow'],
 };
 
 /** A decent player: rushes a lasting food source and the ideas that stretch it, keeps the fire

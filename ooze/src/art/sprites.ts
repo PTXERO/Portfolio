@@ -73,6 +73,7 @@ export const SPRITES = {
   hourglass: ['bbbbbbb.', '.bwwwb..', '..bwb...', '...b....', '..byb...', '.byyyb..', 'bbbbbbb.', '........'],
   sprout: ['...ll...', '..lLLl..', '.l.L..l.', '...L.ll.', '...LlL..', '...L....', '..sSs...', '.sSSSs..'],
   menu: ['........', 'wwwwwww.', '........', 'wwwwwww.', '........', 'wwwwwww.', '........', '........'],
+  book: ['.OOOOOO.', 'Owwwwww.', 'Owkkwww.', 'Owwwwww.', 'Owkkkww.', 'Owwwwww.', 'OOOOOOO.', '........'],
   helix: ['.g....p.', '..g..p..', '...gp...', '...pg...', '..p..g..', '.p....g.', '.g....p.', '..g..p..'],
   pond: ['........', '..bbbb..', '.bBBBBb.', 'bBwBBBBb', 'bBBBBwBb', '.bBBBBb.', '..bbbb..', '........'],
   organelle: ['..oooo....', '.oOOOOo...', 'oOoOoOOo..', 'oOOoOoOo..', 'oOoOOoOo..', '.oOOOOo...', '..oooo....', '..........', '..........', '..........'],

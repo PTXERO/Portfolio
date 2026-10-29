@@ -283,7 +283,19 @@ export class RangeScene {
     const span = (LIFT * 1.05) / TILT;
     for (let i = 0; i <= 60; i++) {
       const y = base + span - (i * span) / 60;
-      if (this.py(x, y) <= ay) return { x, y };
+      if (this.py(x, y) <= ay) {
+        if (i === 0) return { x, y };
+        // Narrow it down between this step and the one before (so zooming about a point
+        // doesn't creep: the coarse step alone was always a little to the north).
+        let lo = y;
+        let hi = y + span / 60;
+        for (let k = 0; k < 14; k++) {
+          const mid = (lo + hi) / 2;
+          if (this.py(x, mid) <= ay) lo = mid;
+          else hi = mid;
+        }
+        return { x, y: lo };
+      }
     }
     return { x, y: base };
   }

@@ -54,9 +54,11 @@ export interface MindNode {
   links: string[];
 }
 
-export const NODE_COST: Record<NodeKind, number> = { start: 0, minor: 4, notable: 10, keystone: 16 };
+export const NODE_COST: Record<NodeKind, number> = { start: 0, minor: 3, notable: 6, keystone: 10 };
 /** Each idea known makes the next cost this much more (the further in, the harder). */
-export const COST_STEP = 1.5;
+export const COST_STEP = 0.5;
+/** The ideas the raft can't be built without: rope to lash it, hollowing for its hull. */
+export const RAFT_IDEAS = ['rope', 'hollow'];
 
 export const BRANCHES: { id: BranchId; name: string; angle: number }[] = [
   { id: 'fire', name: 'Fire', angle: -90 },
@@ -68,60 +70,103 @@ export const BRANCHES: { id: BranchId; name: string; angle: number }[] = [
 ];
 
 type Leaf = { id: string; name: string; does: string; fx: Fx };
-/** Each branch: its first small idea, its great idea, two small ideas past that, then a second
- * great idea down one side and a keystone down the other. */
-const PATHS: Record<BranchId, [Leaf, Leaf, Leaf, Leaf, Leaf, Leaf]> = {
+type Twelve = [Leaf, Leaf, Leaf, Leaf, Leaf, Leaf, Leaf, Leaf, Leaf, Leaf, Leaf, Leaf];
+const L = (id: string, name: string, does: string, fx: Fx): Leaf => ({ id, name, does, fx });
+/**
+ * Each branch, out from the middle: a first small idea and a great one; then it forks, each
+ * side a path of small ideas, one side to two more great ideas, the other to the keystone. In
+ * order: first, great; left 1, right 1; left 2, right 2; great (left), right 3; left 4, right 4;
+ * great (left), keystone (right).
+ */
+const PATHS: Record<BranchId, Twelve> = {
   fire: [
-    { id: 'warmth', name: 'Warmth', does: 'Huddled close, nights cost a little less hunger.', fx: { night: 0.06 } },
-    { id: 'fire', name: 'Fire', does: 'Cooked food goes further: every meal counts for a third more.', fx: { meal: 0.35 } },
-    { id: 'smoke', name: 'Smoke', does: 'Meat hung over the fire keeps a little longer.', fx: { meatKeep: 0.1 } },
-    { id: 'hearth', name: 'Hearth stones', does: 'Those resting by the fire get less hungry.', fx: { rest: 0.12 } },
-    { id: 'racks', name: 'Drying racks', does: 'Dried meat keeps for days instead of rotting overnight.', fx: { meatKeep: 0.25 } },
-    { id: 'cookall', name: 'Cook everything', does: 'Meals count for even more (+30%), but all the cooking slows gathering (−15%).', fx: { meal: 0.3, gather: { all: -0.15 } } },
+    L('warmth', 'Warmth', 'Huddled close, nights cost a little less hunger.', { night: 0.03 }),
+    L('fire', 'Fire', 'Cooked food goes a little further: meals +15%.', { meal: 0.15 }),
+    L('smoke', 'Smoke', 'Meat hung in the smoke keeps a little longer.', { meatKeep: 0.06 }),
+    L('hearth', 'Hearth stones', 'Those resting by the fire get a little less hungry.', { rest: 0.06 }),
+    L('embers', 'Slow coals', 'Food cooked slow over coals: meals +4%.', { meal: 0.04 }),
+    L('pits', 'Roasting pits', 'Food baked in the ground: meals +5%.', { meal: 0.05 }),
+    L('racks', 'Drying racks', 'Dried meat keeps for days instead of rotting overnight.', { meatKeep: 0.18 }),
+    L('firewatch', 'Fire-watch', 'Someone always keeps the fire: nights are a little kinder.', { night: 0.03 }),
+    L('charcoal', 'Charcoal', 'Fire-hardened edges: wood cutting +8%.', { gather: { wood: 0.08 } }),
+    L('torches', 'Torches', 'They work on past dusk by torchlight: all work +3%.', { gather: { all: 0.03 } }),
+    L('hollow', 'Hollowing', 'Burn a log, scrape out the char, burn again: logs hollowed into hulls. The raft can have one. Raft work +10%.', { gather: { build: 0.1 } }),
+    L('cookall', 'Cook everything', 'Meals go further still (+12%), but all the cooking slows the work (−10%).', { meal: 0.12, gather: { all: -0.1 } }),
   ],
   stone: [
-    { id: 'edges', name: 'Sharp edges', does: 'Scavenging +10%.', fx: { gather: { scavenge: 0.1 } } },
-    { id: 'tools', name: 'Stone tools', does: 'Foraging, scavenging and digging +40%.', fx: { gather: { forage: 0.4, scavenge: 0.4, dig: 0.4 } } },
-    { id: 'knapping', name: 'Knapping', does: 'All gathering +10%.', fx: { gather: { all: 0.1 } } },
-    { id: 'rope', name: 'Rope', does: 'Bark and sinew twisted into cord: the raft can be lashed together. Wood cutting +10%.', fx: { gather: { wood: 0.1 } } },
-    { id: 'butcher', name: 'Butchering', does: 'Nothing on a carcass wasted: scavenging +30%.', fx: { gather: { scavenge: 0.3 } } },
-    { id: 'mightmakes', name: 'Strength above all', does: 'The strong work half again as hard; everyone else, 15% less.', fx: { strong: 0.5, others: -0.15 } },
+    L('edges', 'Sharp edges', 'Scavenging +5%.', { gather: { scavenge: 0.05 } }),
+    L('tools', 'Stone tools', 'Foraging, scavenging and digging +20%.', { gather: { forage: 0.2, scavenge: 0.2, dig: 0.2 } }),
+    L('knapping', 'Knapping', 'All work +4%.', { gather: { all: 0.04 } }),
+    L('scrapers', 'Scrapers', 'Scavenging +6%.', { gather: { scavenge: 0.06 } }),
+    L('flint', 'Flint axes', 'Wood cutting +8%.', { gather: { wood: 0.08 } }),
+    L('hammers', 'Hammerstones', 'Digging +6%.', { gather: { dig: 0.06 } }),
+    L('butcher', 'Butchering', 'Nothing on a carcass wasted: scavenging +15%.', { gather: { scavenge: 0.15 } }),
+    L('grinders', 'Grindstones', 'Foraging +8%.', { gather: { forage: 0.08 } }),
+    L('blades', 'Blades', 'All work +3%.', { gather: { all: 0.03 } }),
+    L('bars', 'Digging bars', 'Digging +8%.', { gather: { dig: 0.08 } }),
+    L('axes', 'Hafted axes', 'A stone head bound to a handle: wood cutting +20%, raft work +10%.', { gather: { wood: 0.2, build: 0.1 } }),
+    L('mightmakes', 'Strength above all', 'The strong work a third again as hard; everyone else, 12% less.', { strong: 0.35, others: -0.12 }),
   ],
   sea: [
-    { id: 'watch', name: 'Watch the water', does: 'Fishing +10%.', fx: { gather: { fish: 0.1 } } },
-    { id: 'line', name: 'Fishing line', does: 'Fish the shore: meat that keeps coming.', fx: { unlock: 'fish' } },
-    { id: 'bait', name: 'Bait', does: 'Fishing +15%, and the shore holds 15% more lines.', fx: { gather: { fish: 0.15 }, fishCap: 0.15 } },
-    { id: 'deeper', name: 'Deeper water', does: 'The shore holds 40% more lines.', fx: { fishCap: 0.4 } },
-    { id: 'nets', name: 'Nets', does: 'Fishing +20%, and the shore holds 80% more.', fx: { gather: { fish: 0.2 }, fishCap: 0.8 } },
-    { id: 'tides', name: 'Read the tides', does: 'Fishing half again as good, and the shore holds 50% more; foraging and digging 30% worse.', fx: { gather: { fish: 0.5, forage: -0.3, dig: -0.3 }, fishCap: 0.5 } },
+    L('watch', 'Watch the water', 'Fishing +5%.', { gather: { fish: 0.05 } }),
+    L('line', 'Fishing line', 'Fish the shore: meat that keeps coming.', { unlock: 'fish' }),
+    L('bait', 'Bait', 'Fishing +8%, and the shore holds 10% more lines.', { gather: { fish: 0.08 }, fishCap: 0.1 }),
+    L('pools', 'Tide-pool lore', 'Fishing +5%.', { gather: { fish: 0.05 } }),
+    L('deeper', 'Deeper water', 'The shore holds 20% more lines.', { fishCap: 0.2 }),
+    L('driftwood', 'Driftwood', 'The sea brings wood up the beach: wood cutting +10%.', { gather: { wood: 0.1 } }),
+    L('nets', 'Nets', 'Fishing +10%, and the shore holds 35% more.', { gather: { fish: 0.1 }, fishCap: 0.35 }),
+    L('weirs', 'Stone weirs', 'The shore holds 12% more.', { fishCap: 0.12 }),
+    L('hooks', 'Bone hooks', 'Fishing +6%.', { gather: { fish: 0.06 } }),
+    L('currents', 'Read the currents', 'They know which way the sea runs: raft work +8%.', { gather: { build: 0.08 } }),
+    L('traps', 'Fish traps', 'The shore holds 25% more.', { fishCap: 0.25 }),
+    L('tides', 'Read the tides', 'Fishing a third again as good, and the shore holds 30% more; foraging and digging 25% worse.', { gather: { fish: 0.35, forage: -0.25, dig: -0.25 }, fishCap: 0.3 }),
   ],
   earth: [
-    { id: 'green', name: 'Know the green', does: 'Foraging +10%.', fx: { gather: { forage: 0.1 } } },
-    { id: 'stick', name: 'Digging stick', does: 'Dig for roots: plants that keep coming.', fx: { unlock: 'dig' } },
-    { id: 'rootlore', name: 'Root lore', does: 'Digging +15%, and roots stretch 15% further.', fx: { gather: { dig: 0.15 }, digCap: 0.15 } },
-    { id: 'seeds', name: 'Seed keeping', does: 'A little of the ash grows back each day.', fx: { ashRegrow: 0.01 } },
-    { id: 'deeproots', name: 'Deep roots', does: 'Roots stretch 80% further.', fx: { digCap: 0.8 } },
-    { id: 'tend', name: 'Tend the ash', does: 'The ash grows back much faster, and roots stretch 40% further; scavenging 30% worse.', fx: { ashRegrow: 0.025, digCap: 0.4, gather: { scavenge: -0.3 } } },
+    L('green', 'Know the green', 'Foraging +5%.', { gather: { forage: 0.05 } }),
+    L('stick', 'Digging stick', 'Dig for roots: plants that keep coming.', { unlock: 'dig' }),
+    L('rootlore', 'Root lore', 'Digging +8%, and roots stretch 8% further.', { gather: { dig: 0.08 }, digCap: 0.08 }),
+    L('seeds', 'Seed keeping', 'A little of the ash grows back each day.', { ashRegrow: 0.005 }),
+    L('tubers', 'Tubers', 'Roots stretch 15% further.', { digCap: 0.15 }),
+    L('bark', 'Bark stripping', 'Wood cutting +6%.', { gather: { wood: 0.06 } }),
+    L('deeproots', 'Deep roots', 'Roots stretch 35% further.', { digCap: 0.35 }),
+    L('fibre', 'Root fibre', 'Raft work +5%.', { gather: { build: 0.05 } }),
+    L('mulch', 'Mulch', 'A little more of the ash grows back each day.', { ashRegrow: 0.005 }),
+    L('twine', 'Twine', 'Raft work +5%.', { gather: { build: 0.05 } }),
+    L('rope', 'Rope', 'Root fibre and bark twisted into cord that holds wet: the raft can be lashed together.', {}),
+    L('tend', 'Tend the ash', 'The ash grows back faster (+1.5% a day), and roots stretch 20% further; scavenging 25% worse.', { ashRegrow: 0.015, digCap: 0.2, gather: { scavenge: -0.25 } }),
   ],
   kin: [
-    { id: 'huddle', name: 'Huddle', does: 'Nights cost a little less hunger.', fx: { night: 0.06 } },
-    { id: 'care', name: 'Care for the weak', does: 'The frail, old and young last much longer starving.', fx: { weak: 0.5 } },
-    { id: 'sleepclose', name: 'Sleep close', does: 'Those resting get less hungry.', fx: { rest: 0.1 } },
-    { id: 'tough', name: 'Tough it out', does: 'Everyone lasts a little longer starving.', fx: { limit: 0.2 } },
-    { id: 'rationing', name: 'Rationing', does: 'Short rations count for 15% more.', fx: { ration: 0.15 } },
-    { id: 'strongfirst', name: 'The strong eat first', does: 'Workers eat first and last longer; the resting eat last and starve sooner.', fx: { strongFirst: true } },
+    L('huddle', 'Huddle', 'Nights cost a little less hunger.', { night: 0.03 }),
+    L('care', 'Care for the weak', 'The frail, old and young last longer starving.', { weak: 0.3 }),
+    L('sleepclose', 'Sleep close', 'Those resting get a little less hungry.', { rest: 0.05 }),
+    L('songs', 'Work songs', 'All work +3%.', { gather: { all: 0.03 } }),
+    L('tough', 'Tough it out', 'Everyone lasts a little longer starving.', { limit: 0.12 }),
+    L('mourning', 'Mourning', 'The dead named and sung for: everyone lasts a little longer.', { limit: 0.05 }),
+    L('rationing', 'Rationing', 'Short rations count for 10% more.', { ration: 0.1 }),
+    L('nightwatch', 'Night watch', 'Nights are a little kinder.', { night: 0.02 }),
+    L('elders', 'Heed the old', 'Insight +8%.', { gather: { listen: 0.08 } }),
+    L('kinship', 'Kinship', 'All work +3%.', { gather: { all: 0.03 } }),
+    L('shelters', 'Lean-tos', 'Shelter from the ash: nights kinder, and everyone lasts a little longer.', { night: 0.05, limit: 0.1 }),
+    L('strongfirst', 'The strong eat first', 'Workers eat first and last longer; the resting eat last and starve sooner.', { strongFirst: true }),
   ],
   mind: [
-    { id: 'stillness', name: 'Stillness', does: 'Insight +15%.', fx: { gather: { listen: 0.15 } } },
-    { id: 'memory', name: 'Memory', does: 'Insight +30%.', fx: { gather: { listen: 0.3 } } },
-    { id: 'dreams', name: 'Dreams', does: 'Insight +15%.', fx: { gather: { listen: 0.15 } } },
-    { id: 'ears', name: 'Keen ears', does: 'The keen work 30% harder at everything.', fx: { keen: 0.3 } },
-    { id: 'teaching', name: 'Teaching', does: 'All work +10%.', fx: { gather: { all: 0.1 } } },
-    { id: 'voices', name: 'Voices', does: 'Insight doubled, but those listening get hungrier each night.', fx: { gather: { listen: 1 }, listenHunger: 0.25 } },
+    L('stillness', 'Stillness', 'Insight +8%.', { gather: { listen: 0.08 } }),
+    L('memory', 'Memory', 'Insight +15%.', { gather: { listen: 0.15 } }),
+    L('dreams', 'Dreams', 'Insight +8%.', { gather: { listen: 0.08 } }),
+    L('counting', 'Counting', 'All work +2%.', { gather: { all: 0.02 } }),
+    L('ears', 'Keen ears', 'The keen work 15% harder at everything.', { keen: 0.15 }),
+    L('stars', 'Read the stars', 'Raft work +5%.', { gather: { build: 0.05 } }),
+    L('teaching', 'Teaching', 'All work +6%.', { gather: { all: 0.06 } }),
+    L('patience', 'Patience', 'Everyone lasts a little longer starving.', { limit: 0.05 }),
+    L('visions', 'Visions', 'Insight +10%.', { gather: { listen: 0.1 } }),
+    L('plans', 'Planning', 'Raft work +8%.', { gather: { build: 0.08 } }),
+    L('speech', 'Shared words', 'All work +5%.', { gather: { all: 0.05 } }),
+    L('voices', 'Voices', 'Insight much greater (+60%), but those listening get hungrier each night.', { gather: { listen: 0.6 }, listenHunger: 0.25 }),
   ],
 };
 
-const R = [0, 22, 42, 64, 88];
+/** Ring radii (web units, out from the middle). */
+const R = [0, 15, 28, 41, 54, 67, 80, 93];
 const polar = (deg: number, r: number) => ({ x: Math.cos((deg * Math.PI) / 180) * r, y: Math.sin((deg * Math.PI) / 180) * r });
 
 function build(): MindNode[] {
@@ -131,22 +176,30 @@ function build(): MindNode[] {
     out.find((n) => n.id === from)!.links.push(leaf.id);
   };
   for (const br of BRANCHES) {
-    const [m1, n1, m2a, m2b, n2, k] = PATHS[br.id];
+    const [m1, n1, l1, r1, l2, r2, n2, r3, l4, r4, n3, k] = PATHS[br.id];
     const a = br.angle;
     add(br.id, m1, 'minor', a, R[1], 'mind0');
     add(br.id, n1, 'notable', a, R[2], m1.id);
-    add(br.id, m2a, 'minor', a - 11, R[3], n1.id);
-    add(br.id, m2b, 'minor', a + 11, R[3], n1.id);
-    add(br.id, n2, 'notable', a - 12, R[4], m2a.id);
-    add(br.id, k, 'keystone', a + 13, R[4] + 4, m2b.id);
+    add(br.id, l1, 'minor', a - 9, R[3], n1.id);
+    add(br.id, r1, 'minor', a + 9, R[3], n1.id);
+    add(br.id, l2, 'minor', a - 11, R[4], l1.id);
+    add(br.id, r2, 'minor', a + 11, R[4], r1.id);
+    add(br.id, n2, 'notable', a - 12, R[5], l2.id);
+    add(br.id, r3, 'minor', a + 12, R[5], r2.id);
+    add(br.id, l4, 'minor', a - 13, R[6], n2.id);
+    add(br.id, r4, 'minor', a + 13, R[6], r3.id);
+    add(br.id, n3, 'notable', a - 12, R[7], l4.id);
+    add(br.id, k, 'keystone', a + 14, R[7] + 3, r4.id);
   }
-  // The outer ring: each branch's far side reaches the next branch's near side.
+  // Rings across: each branch's right side reaches the next branch's left, twice over.
   BRANCHES.forEach((br, i) => {
     const next = BRANCHES[(i + 1) % BRANCHES.length];
-    const a = out.find((n) => n.id === PATHS[br.id][3].id)!;
-    const b = out.find((n) => n.id === PATHS[next.id][2].id)!;
-    a.links.push(b.id);
-    b.links.push(a.id);
+    for (const [mine, theirs] of [[5, 4], [9, 8]]) {
+      const a = out.find((n) => n.id === PATHS[br.id][mine].id)!;
+      const b = out.find((n) => n.id === PATHS[next.id][theirs].id)!;
+      a.links.push(b.id);
+      b.links.push(a.id);
+    }
   });
   return out;
 }
@@ -160,27 +213,37 @@ export const MIND_NODE: Record<string, MindNode> = Object.fromEntries(MIND_TREE.
  * others butcher; meat-eaters set snares where others dig roots, and grub in the ash.
  */
 const PLANT_EATERS: Record<string, Partial<Leaf>> = {
-  smoke: { name: 'Roast roots', does: 'Roasted, roots and seeds go further: meals +10%.', fx: { meal: 0.1 } },
-  racks: { name: 'Seed cakes', does: 'Pressed and dried, plants keep almost for good, and meals go 10% further.', fx: { plantKeep: 0.04, meal: 0.1 } },
-  edges: { name: 'Fruit sense', does: 'Gathering fallen fruit +10%.' },
-  tools: { name: 'Stone tools', does: 'Foraging, fruit gathering and digging +40%.' },
-  butcher: { name: 'Pick clean', does: 'Nothing on a branch wasted: fruit gathering +30%.' },
-  watch: { name: 'Kelp lore', does: 'Kelp gathering +10%.' },
+  smoke: { name: 'Roast roots', does: 'Roasted, roots and seeds go further: meals +5%.', fx: { meal: 0.05 } },
+  racks: { name: 'Seed cakes', does: 'Pressed and dried, plants keep almost for good, and meals go 5% further.', fx: { plantKeep: 0.04, meal: 0.05 } },
+  edges: { name: 'Fruit sense', does: 'Gathering fallen fruit +5%.' },
+  tools: { name: 'Stone tools', does: 'Foraging, fruit gathering and digging +20%.' },
+  scrapers: { name: 'Husking stones', does: 'Gathering fallen fruit +6%.' },
+  butcher: { name: 'Pick clean', does: 'Nothing on a branch wasted: fruit gathering +15%.' },
+  watch: { name: 'Kelp lore', does: 'Kelp gathering +5%.' },
   line: { name: 'Kelp knife', does: 'Gather kelp from the shallows: plants that keep coming.' },
-  bait: { name: 'Tide flats', does: 'Kelp gathering +15%, and the shallows hold 15% more.' },
-  deeper: { name: 'Deeper beds', does: 'The shallows hold 40% more gatherers.' },
-  nets: { name: 'Kelp baskets', does: 'Kelp gathering +20%, and the shallows hold 80% more.' },
-  tides: { name: 'Read the tides', does: 'Kelp gathering half again as good, and the shallows hold 50% more; foraging and digging 30% worse.' },
+  bait: { name: 'Tide flats', does: 'Kelp gathering +8%, and the shallows hold 10% more.' },
+  pools: { name: 'Tide-pool lore', does: 'Kelp gathering +5%.' },
+  deeper: { name: 'Deeper beds', does: 'The shallows hold 20% more gatherers.' },
+  nets: { name: 'Kelp baskets', does: 'Kelp gathering +10%, and the shallows hold 35% more.' },
+  weirs: { name: 'Kelp beds', does: 'The shallows hold 12% more.' },
+  hooks: { name: 'Kelp hooks', does: 'Kelp gathering +6%.' },
+  traps: { name: 'Kelp rafts', does: 'The shallows hold 25% more.' },
+  tides: { name: 'Read the tides', does: 'Kelp gathering a third again as good, and the shallows hold 30% more; foraging and digging 25% worse.' },
 };
 const MEAT_EATERS: Record<string, Partial<Leaf>> = {
-  green: { name: 'Tracks in the ash', does: 'Grubbing in the ash +10%.' },
-  tools: { name: 'Stone tools', does: 'Grubbing, scavenging and trapping +40%.' },
+  green: { name: 'Tracks in the ash', does: 'Grubbing in the ash +5%.' },
+  tools: { name: 'Stone tools', does: 'Grubbing, scavenging and trapping +20%.' },
+  grinders: { name: 'Grub sieves', does: 'Grubbing +8%.' },
   stick: { name: 'Snares', does: 'Set snares for what hid underground: meat that keeps coming.' },
-  rootlore: { name: 'Trap lore', does: 'Trapping +15%, and snares reach 15% further.' },
+  rootlore: { name: 'Trap lore', does: 'Trapping +8%, and snares reach 8% further.' },
   seeds: { name: 'Let some go', does: 'A few grubs are left to breed: a little of the ash comes back each day.' },
-  deeproots: { name: 'Wide trapline', does: 'Snares reach 80% further.' },
-  tides: { name: 'Read the tides', does: 'Fishing half again as good; grubbing and trapping 30% worse.' },
-  tend: { name: 'Breed the grubs', does: 'The ash comes back much faster, and snares reach 40% further; scavenging 30% worse.' },
+  tubers: { name: 'Burrow lore', does: 'Snares reach 15% further.' },
+  deeproots: { name: 'Wide trapline', does: 'Snares reach 35% further.' },
+  mulch: { name: 'Leave the young', does: 'A little more of the ash comes back each day.' },
+  hammers: { name: 'Deadfalls', does: 'Trapping +6%.' },
+  bars: { name: 'Pit traps', does: 'Trapping +8%.' },
+  tides: { name: 'Read the tides', does: 'Fishing a third again as good; grubbing and trapping 25% worse.' },
+  tend: { name: 'Breed the grubs', does: 'The ash comes back faster, and snares reach 20% further; scavenging 25% worse.' },
 };
 
 /** An idea as a diet knows it (its name, what it says and does). */

@@ -663,3 +663,10 @@ b.green { color: var(--mint); }
 .chronicle p.now { color: var(--cream); }
 #modal .glyph-big { display: flex; justify-content: center; color: #e8b0ff; margin: 8px 0; }
 .ex-people .person .bond { grid-column: 1 / -1; font-size: 11px; color: var(--dim); margin-top: -2px; }
+.tl.raft { color: #e0a060; }
+.raft-note { color: #e0a060; }
+.chronicle-all { flex-direction: column; align-items: stretch; }
+.chron-era { margin: 10px 0 4px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mint); }
+.chron-era:first-child { margin-top: 0; }
+p.chron { margin: 0 0 5px; font-size: 13px; line-height: 1.35; }
+p.chron .when { color: var(--gold); font-family: var(--digits); font-size: 13px; margin-right: 4px; }

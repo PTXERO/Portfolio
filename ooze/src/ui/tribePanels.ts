@@ -3,7 +3,7 @@
 
 import { STORY } from '../content/tribal';
 import { count, dayYield, eatsMeat, eatsPlants, FAMILY, hungerWord, ideaCost, jobFood, jobInfo, JOBS, jobOpen, launchBlockers, RAFT, raftDone, raftPart, seasonOf, TRAITS, VOYAGE_FOOD, WINTER, type Diet, type ExtinctionState } from '../economy/extinction';
-import { BRANCHES, MIND_NODE, MIND_TREE, nodeFor, reachable } from '../economy/mindTree';
+import { BRANCHES, MIND_NODE, MIND_TREE, nodeFor, RAFT_IDEAS, reachable } from '../economy/mindTree';
 import { moodWord, QUIRKS } from '../economy/society';
 import { DREAD_COWER, DREAD_FLEE, ORDAIN_AFTER, PRAYER_MAX, spellsFor, type Gesture } from '../economy/miracles';
 import { tribeOf } from '../economy/tribal';
@@ -35,7 +35,7 @@ export function tribeLayout(state: GameState): string {
       <div class="card px-box"><div class="info"><div class="name">${t.survivors} of the herd lived</div>
       <div class="sub">${t.awake ? STORY.wakeSub : STORY.approach}</div></div></div>`;
   }
-  return [storesCard(ex), chronicleCard(ex), workCard(ex), raftCard(ex), peopleCard(ex)].join('');
+  return [storesCard(ex), latestCard(ex), workCard(ex), raftCard(ex), peopleCard(ex)].join('');
 }
 
 function storesCard(ex: ExtinctionState): string {
@@ -80,10 +80,10 @@ function workCard(ex: ExtinctionState): string {
     <div class="sub">They decide for themselves: food first, then ${ex.focus === 'raft' ? 'the raft' : ex.focus === 'wood' ? 'wood' : 'listening to the spear'}.${rest ? ` ${rest} resting.` : ''}</div></div>${rows}</div>`;
 }
 
-/** The Chronicle: what they did, and why, newest first. */
-function chronicleCard(ex: ExtinctionState): string {
-  const lines = [...(ex.log ?? [])].reverse().slice(0, 10).map((l, i) => `<p class="${i ? '' : 'now'}"><span class="dim">Day ${l.day}.</span> ${l.text}</p>`).join('');
-  return `<div class="card px-box chronicle"><div class="info"><div class="name">The Chronicle</div>${lines}</div></div>`;
+/** The latest few lines of what they've done (the rest is in the Chronicle tab). */
+function latestCard(ex: ExtinctionState): string {
+  const lines = [...(ex.log ?? [])].reverse().slice(0, 3).map((l, i) => `<p class="${i ? '' : 'now'}"><span class="dim">Day ${l.day}.</span> ${l.text}</p>`).join('');
+  return `<div class="card px-box chronicle"><div class="info"><div class="name">Lately</div>${lines}<p class="tiny dim">The rest is in the Chronicle.</p></div></div>`;
 }
 
 /** The raft: each part's progress, then (once it's done) the four who go, and the food. */
@@ -91,7 +91,7 @@ function raftCard(ex: ExtinctionState): string {
   const parts = RAFT.map((p) => {
     const done = Math.min(p.work, ex.raft?.[p.id] ?? 0);
     const blocked = p.needs && !ex.ideas.includes(p.needs) && done < p.work;
-    return `<div class="raft-part"><span>${p.name}</span><div class="meter"><i style="width:${(done / p.work) * 100}%"></i></div><span class="dim tiny">${done >= p.work ? 'done' : blocked ? 'needs Rope (an idea)' : `${n0(done)}/${p.work} · ${p.wood} wood`}</span></div>`;
+    return `<div class="raft-part"><span>${p.name}</span><div class="meter"><i style="width:${(done / p.work) * 100}%"></i></div><span class="dim tiny">${done >= p.work ? 'done' : blocked ? `needs ${MIND_NODE[p.needs!]?.name ?? 'an idea'} (an idea)` : `${n0(done)}/${p.work} · ${p.wood} wood`}</span></div>`;
   }).join('');
   const ready = raftDone(ex);
   const blockers = launchBlockers(ex);
@@ -131,7 +131,7 @@ export function pickIdea(id: string): void {
 const KIND_NAME = { start: 'Where it began', minor: 'Idea', notable: 'Great idea', keystone: 'Keystone' };
 
 /** The web's art grid: G pixels across, drawn as crisp squares (the game's pixel look). */
-const G = 128;
+const G = 176;
 const gx = (x: number) => Math.round(((x + 112) / 224) * (G - 1));
 const at = (v: number) => `${((v + 0.5) / G) * 100}%`;
 
@@ -142,7 +142,7 @@ const SPRITE: Record<string, string[]> = {
   keystone: ['....#....', '...#o#...', '..#ooo#..', '.#ooooo#.', '#ooooooo#', '.#ooooo#.', '..#ooo#..', '...#o#...', '....#....'],
   start: ['#...#...#', '.#..#..#.', '..#ooo#..', '..ooooo..', '##ooooo##', '..ooooo..', '..#ooo#..', '.#..#..#.', '#...#...#'],
 };
-const COL = { dim: '#3a4460', near: '#7fe0b0', lit: '#f5c45e', litHi: '#ffe39a', hole: '#141a28', open: '#7fe0b0', afford: '#c4f7dd', locked: '#4a5470', picked: '#f2ead7' };
+const COL = { raft: '#e0a060', raftHi: '#ffd08a', dim: '#3a4460', near: '#7fe0b0', lit: '#f5c45e', litHi: '#ffe39a', hole: '#141a28', open: '#7fe0b0', afford: '#c4f7dd', locked: '#4a5470', picked: '#f2ead7' };
 
 export function ideasLayout(state: GameState): string {
   const ex = tribeOf(state)?.ex;
@@ -182,7 +182,9 @@ export function ideasLayout(state: GameState): string {
     const sp = SPRITE[n.kind];
     const h = Math.floor(sp.length / 2);
     const cx = gx(n.x), cy = gx(n.y);
-    const edge = k ? COL.litHi : afford ? COL.afford : open ? COL.open : COL.locked;
+    // The raft's ideas burn amber, whether known or not, so the way off is always plain.
+    const raft = RAFT_IDEAS.includes(n.id);
+    const edge = raft ? (k ? COL.raftHi : COL.raft) : k ? COL.litHi : afford ? COL.afford : open ? COL.open : COL.locked;
     const fill = k ? COL.lit : COL.hole;
     sp.forEach((row, ry) => {
       for (let rx = 0; rx < row.length; rx++) {
@@ -203,8 +205,10 @@ export function ideasLayout(state: GameState): string {
     const size = ((sp.length + 4) / G) * 100;
     buttons.push(`<button class="tn" style="left:${at(cx)};top:${at(cy)};width:${size}%;height:${size}%" data-node="${n.id}" aria-label="${n.name}"></button>`);
     // Great ideas named below, keystones above (so neighbours' names don't run together).
-    if (n.kind === 'notable') buttons.push(`<span class="tl${k ? ' known' : ''}" style="left:${at(cx)};top:${at(cy + h + 1)}">${n.name}</span>`);
-    if (n.kind === 'keystone') buttons.push(`<span class="tl up${k ? ' known' : ''}" style="left:${at(cx)};top:${at(cy - h - 1)}">${n.name}</span>`);
+    // Named: the keystones, the raft's ideas, and great ideas once learned (the rest on a tap).
+    if (raft) buttons.push(`<span class="tl raft" style="left:${at(cx)};top:${at(cy + h + 1)}">${n.name}</span>`);
+    else if (n.kind === 'notable' && k) buttons.push(`<span class="tl known" style="left:${at(cx)};top:${at(cy + h + 1)}">${n.name}</span>`);
+    else if (n.kind === 'keystone') buttons.push(`<span class="tl up${k ? ' known' : ''}" style="left:${at(cx)};top:${at(cy - h - 1)}">${n.name}</span>`);
   }
   const paths = [...px.entries()]
     .map(([key, cells]) => {
@@ -237,6 +241,7 @@ function pickedCard(state: GameState, ex: ExtinctionState): string {
       : '<span class="label dim">Out of reach</span>';
   return `<div class="card px-box idea-card ${n.kind}"><div class="info"><div class="label dim">${KIND_NAME[n.kind]}${n.branch ? ` · ${BRANCHES.find((b) => b.id === n.branch)!.name}` : ''}</div>
     <div class="name">${n.name}</div><div class="sub">${n.does}</div>
+    ${RAFT_IDEAS.includes(n.id) ? '<div class="sub tiny raft-note">Needed for the raft.</div>' : ''}
     ${remembered && !known ? '<div class="sub tiny gold">The spear remembers: half the insight.</div>' : ''}</div>${btn}</div>`;
 }
 

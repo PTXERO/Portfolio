@@ -112,6 +112,8 @@ export interface ExtinctionState {
   casts?: Partial<Record<SpellId, number>>;
   ordained?: SpellId[];
   log?: { day: number; text: string }[];
+  /** Lines ever written to the log (it keeps only the last so many). */
+  logN?: number;
   /** A miracle's lasting touch: a rich shore today; fire and warmth tonight. */
   boost?: { day: number; fish: number };
   fireTonight?: boolean;
@@ -140,11 +142,11 @@ const HAND_WOOD = 1;
 const HAND_INSIGHT = 0.35;
 
 export type RaftPart = 'frame' | 'lashing' | 'hull';
-/** The raft's parts, in order: work and wood for each (lashing needs rope). */
+/** The raft's parts, in order: work and wood for each (lashing needs rope, the hull hollowing). */
 export const RAFT: { id: RaftPart; name: string; work: number; wood: number; needs?: string }[] = [
   { id: 'frame', name: 'Frame', work: 30, wood: 50 },
   { id: 'lashing', name: 'Lashing', work: 20, wood: 15, needs: 'rope' },
-  { id: 'hull', name: 'Hull', work: 45, wood: 70 },
+  { id: 'hull', name: 'Hull', work: 45, wood: 70, needs: 'hollow' },
 ];
 /** It carries four, and needs food for them for the crossing. */
 export const FAMILY = 4;
@@ -226,8 +228,8 @@ const YIELD: Record<JobId, number> = { forage: 1.3, scavenge: 1.9, dig: 1.1, fis
 /** Insight a day from the square root of the listening done. */
 const LISTEN = 1.4;
 /** (Low on their own: the ideas taken raise them, so the path chosen sets how many can live.) */
-const DIG_CAP = 0.11;
-const FISH_CAP = 0.12;
+const DIG_CAP = 0.15;
+const FISH_CAP = 0.16;
 /** Overnight: meat rots (much slower once dried), plants a little; carrion on the ground too. */
 const MEAT_KEEP = 0.62;
 const PLANT_KEEP = 0.95;
@@ -515,6 +517,15 @@ export function autoAssign(ex: ExtinctionState): void {
   // A few always listen (the spear is the only way to more food); a fire needs wood.
   put('listen', Math.max(1, Math.round(n * (ex.focus === 'ideas' ? 0.12 : 0.06))));
   if (ex.ideas.includes('fire') && (ex.wood ?? 0) < 6 && (ex.trees ?? 0) > 0) put('wood', 2);
+  // Once they've set their minds on leaving, a raft crew is kept to it, fed or not.
+  if (ex.focus === 'raft' && jobOpen(ex, 'build')) {
+    const crew = Math.min(7, Math.max(3, Math.round(n * 0.12)));
+    if ((ex.wood ?? 0) < 10 && (ex.trees ?? 0) > 0) put('wood', crew);
+    else {
+      put('build', Math.min(crew, 6));
+      if ((ex.trees ?? 0) > 0) put('wood', 2);
+    }
+  }
   // Food: one at a time to whichever food job adds most, until there's enough (or more
   // workers would add next to nothing).
   const raw: Record<string, number> = {};

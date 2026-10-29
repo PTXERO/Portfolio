@@ -425,6 +425,10 @@ export interface GameState {
   stages: Record<StageId, StageState>;
   /** Seconds of saved-up fast-forward. */
   timeBank: number;
+  /** Everything that happened, era by era (see chronicle.ts), and how much of the
+   * Extinction's own log has been copied into it. */
+  chronicle?: import('./chronicle').ChronicleEntry[];
+  chronicleMark?: number;
   /** Fast-forward speed while the bank lasts; 1 = off. */
   warp: number;
   offlineCapSec: number;

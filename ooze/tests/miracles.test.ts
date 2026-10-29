@@ -14,9 +14,9 @@ function game(diet: string): GameState {
 }
 
 const PATHS: Record<string, string[]> = {
-  grazer: ['green', 'stick', 'rootlore', 'warmth', 'fire', 'deeproots', 'seeds', 'tend', 'edges', 'tools', 'rope'],
-  hunter: ['watch', 'line', 'bait', 'warmth', 'fire', 'deeper', 'nets', 'edges', 'tools', 'rope'],
-  omnivore: ['watch', 'line', 'green', 'stick', 'warmth', 'fire', 'bait', 'rootlore', 'deeper', 'deeproots', 'edges', 'tools', 'rope'],
+  grazer: ['green', 'stick', 'rootlore', 'tubers', 'warmth', 'fire', 'deeproots', 'mulch', 'rope', 'smoke', 'embers', 'racks', 'charcoal', 'hollow'],
+  hunter: ['watch', 'line', 'bait', 'deeper', 'warmth', 'fire', 'nets', 'green', 'stick', 'rootlore', 'tubers', 'deeproots', 'mulch', 'rope', 'smoke', 'embers', 'racks', 'charcoal', 'hollow'],
+  omnivore: ['watch', 'line', 'green', 'stick', 'bait', 'rootlore', 'warmth', 'fire', 'deeper', 'tubers', 'deeproots', 'mulch', 'rope', 'smoke', 'embers', 'racks', 'charcoal', 'hollow'],
 };
 
 /** Plays a run: `ideas` teaches the path, `god` works miracles as a sensible player would. */
@@ -57,7 +57,7 @@ describe('the spear\'s will', () => {
       const none = run(diet, false, false);
       const ideasOnly = run(diet, true, false);
       const both = run(diet, true, true);
-      const tag = (r: ReturnType<typeof run>) => `${r.days}d ${r.ex.escaped ? 'ESCAPED' : r.ex.over ? 'extinct' : 'holding'} (${r.ex.people.length} alive, dread ${Math.round(r.ex.dread ?? 0)}, ${r.casts} casts)`;
+      const tag = (r: ReturnType<typeof run>) => `${r.days}d ${r.ex.escaped ? 'ESCAPED' : r.ex.over ? 'extinct' : 'holding'} (${r.ex.people.length} alive, dread ${Math.round(r.ex.dread ?? 0)}, ${r.casts} casts, ${r.ex.ideas.length} ideas, raft ${Object.values(r.ex.raft ?? {}).map(Math.round).join("/")}, voyage ${Math.round(r.ex.voyage ?? 0)})`;
       console.log(`${diet}: no god ${tag(none)} · ideas only ${tag(ideasOnly)} · ideas + miracles ${tag(both)}`);
       expect(none.ex.over).toBe(true);
     }

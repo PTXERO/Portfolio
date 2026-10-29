@@ -50,6 +50,8 @@ import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
 import { miniIcon } from './scene/creatureLook';
 import { glyph, pickIdea } from './ui/tribePanels';
+import { record } from './economy/chronicle';
+import { PARTS } from './content/creature';
 import { choiceButton } from './ui/creaturePanels';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
@@ -254,7 +256,12 @@ function showDiscovery(): void {
 
 function collectNews(): void {
   if (state.made.length) scene.made(state.made.splice(0));
+  chronicleStep();
   if (!state.news.length) return;
+  for (const id of state.news) {
+    const r = reactions(state.current).find((x) => x.id === id);
+    if (r) record(state, `${STAGES[state.current].habitats ? 'Took in' : 'Discovered'} ${r.name}.`);
+  }
   discoveryQueue.push(...state.news);
   state.news = [];
   save();
@@ -451,6 +458,60 @@ function showDiscovered(): void {
     <button class="px-btn gold" data-act="dismiss">${id === 'lightning' ? 'Watch over them' : 'Let it be'}</button>`);
   save();
 }
+
+// ---- The Chronicle: what to write down, from every era ----
+
+/** The last counts seen (so a change is noticed once), and whether they've been read yet. */
+let seenCounts: Record<string, number> | null = null;
+
+function chronicleStep(): void {
+  // The Extinction keeps its own log: copy across whatever's new in it.
+  const t = state.stages.tribal.tribe;
+  const ex = t?.ex;
+  if (ex?.log) {
+    const n = ex.logN ?? ex.log.length;
+    let mark = state.chronicleMark ?? 0;
+    if (mark > n) {
+      // A new try (the log started over).
+      mark = 0;
+      record(state, 'Back on the ash, just woken, to try again. The spear remembered.', 'tribal');
+    }
+    const fresh = Math.min(n - mark, ex.log.length);
+    if (fresh > 0) for (const l of ex.log.slice(-fresh)) record(state, l.text, 'tribal', `Day ${l.day}${t!.attempts ? ` · try ${t!.attempts + 1}` : ''}`);
+    state.chronicleMark = n;
+  }
+  // The Creature's milestones: a new generation, a mate, a place found, a nest, a new part.
+  if (!state.unlocked.includes('creature') || sealed(state, 'creature')) return;
+  const c = state.stages.creature;
+  const now: Record<string, number> = {
+    gen: c.generation,
+    mates: c.mates.length,
+    found: Object.values(c.trips).filter((v) => v > 0).length,
+    nests: c.nests.length,
+    parts: c.parts.length,
+  };
+  if (!seenCounts) {
+    // (The first look just notes how things stand: only what changes after is news.)
+    seenCounts = now;
+    seenFound = new Set(Object.keys(c.trips).filter((k) => (c.trips[k] ?? 0) > 0));
+    return;
+  }
+  if (now.gen > seenCounts.gen) record(state, `A new generation hatched: the ${ordinal(now.gen)}.`, 'creature');
+  if (now.mates > seenCounts.mates) record(state, `A mate joined the herd (${now.mates} now).`, 'creature');
+  if (now.found > seenCounts.found) {
+    const p = STAGES.creature.places?.find((q) => (c.trips[q.id] ?? 0) > 0 && !(seenFound ??= new Set()).has(q.id));
+    record(state, p ? `Found ${p.name}.` : 'Found a new place.', 'creature');
+  }
+  if (now.nests > seenCounts.nests) record(state, `Some of the herd set off to found a new nest.`, 'creature');
+  if (now.parts > seenCounts.parts) {
+    const id = c.parts[c.parts.length - 1];
+    record(state, `Grew something new: ${PARTS.find((q) => q.id === id)?.name ?? id}.`, 'creature');
+  }
+  for (const q of STAGES.creature.places ?? []) if ((c.trips[q.id] ?? 0) > 0) (seenFound ??= new Set()).add(q.id);
+  seenCounts = now;
+}
+let seenFound: Set<string> | null = null;
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
 
 /** The morning after: who starved, and how much there was. */
 function nightReport(): void {
@@ -895,7 +956,10 @@ function closeEnding(): void {
 }
 
 function moveOn(): void {
+  const was = state.current;
   if (evolve(state)) {
+    record(state, `The ${STAGES[was].name} was over.`, was);
+    record(state, STAGES[state.current].tribal ? 'The spear fell, and the world burned.' : `The ${STAGES[state.current].name} began.`);
     scene.evolveFlash();
     pokedThisStage = false;
     ui.tab = 'grow';

@@ -2,6 +2,7 @@
 // change) and then patched in place, so a button never vanishes under a finger.
 
 import { ideasLayout, spellsLayout, tribeKey, tribeLayout } from './tribePanels';
+import { eraName } from '../economy/chronicle';
 import { icon, type SpriteName } from '../art/sprites';
 import { lifeIcon } from '../scene/icons';
 import { bodyLayout, creatureKey, creatureUpdate, exploreLayout, familyLayout, herdLayout } from './creaturePanels';
@@ -27,7 +28,7 @@ import { timeBankCap } from '../economy/offline';
 import { dialMax, dietOf, feedMult, generatorRate, habitatMult, maxLevel, milestoneMet, MILESTONES, nextMilestone, stageRate, upgradeLevel } from '../economy/rates';
 import { DIALS, type BuyAmount, type DialId, type Effect, type GameState, type ReactionDef, type StageId, type UpgradeDef } from '../economy/types';
 
-export type Tab = 'grow' | 'boosts' | 'lab' | 'mutate' | 'pond' | 'body' | 'explore' | 'family' | 'roots' | 'ideas' | 'miracles' | 'menu';
+export type Tab = 'grow' | 'boosts' | 'lab' | 'mutate' | 'pond' | 'body' | 'explore' | 'family' | 'roots' | 'ideas' | 'miracles' | 'chronicle' | 'menu';
 
 export const TABS: { id: Tab; label: string; sprite: SpriteName }[] = [
   { id: 'grow', label: 'Grow', sprite: 'sprout' },
@@ -41,6 +42,7 @@ export const TABS: { id: Tab; label: string; sprite: SpriteName }[] = [
   { id: 'roots', label: 'Roots', sprite: 'roots' },
   { id: 'miracles', label: 'Miracles', sprite: 'bolt' },
   { id: 'ideas', label: 'Ideas', sprite: 'spark' },
+  { id: 'chronicle', label: 'Chronicle', sprite: 'book' },
   { id: 'menu', label: 'Menu', sprite: 'menu' },
 ];
 
@@ -64,6 +66,8 @@ export function tabsFor(state: GameState): Tab[] {
     roots: hasRoots(state) && (!creature || cst.generation > 0),
     ideas: !!def.tribal && !!cst.tribe?.ex,
     miracles: !!def.tribal && !!cst.tribe?.ex,
+    // The Chronicle, once there's something in it.
+    chronicle: (state.chronicle?.length ?? 0) > 0,
     menu: true,
   };
   return TABS.map((t) => t.id).filter((t) => has[t]);
@@ -244,6 +248,7 @@ export function layoutKey(state: GameState, tab: Tab): string {
       : 0,
     tab === 'roots' ? (STAGES[state.current].milestones ?? []).map((m) => milestoneMet(state, m)) : 0,
     STAGES[state.current].tribal ? tribeKey(state) : 0,
+    tab === 'chronicle' ? state.chronicle?.length ?? 0 : 0,
     tab === 'body' || tab === 'explore' || tab === 'family' || (tab === 'grow' && STAGES[state.current].places) ? creatureKey(state) : 0,
     tab === 'lab' || tab === 'pond' ? [visibleDials(state), state.stages[state.current].discovered, reactions(state.current).map((r) => hintLevel(state, r))] : 0,
     tab === 'pond' ? [state.stages[state.current].habitat, (STAGES[state.current].habitats ?? []).map((h) => habitatUnlocked(state, state.current, h))] : 0,
@@ -258,6 +263,7 @@ export function layout(state: GameState, tab: Tab): string {
   if (def.tribal && tab === 'grow') return tribeLayout(state);
   if (def.tribal && tab === 'ideas') return ideasLayout(state);
   if (def.tribal && tab === 'miracles') return spellsLayout(state);
+  if (tab === 'chronicle') return chronicleLayout(state);
   if (tab === 'grow' && def.places) {
     return herdLayout(
       state,
@@ -626,4 +632,20 @@ export function boostReady(state: GameState): boolean {
 export function heirloomReady(state: GameState): boolean {
   const id = state.current;
   return visibleUpgrades(state, id).some((u) => (u.pay || u.target) && state.stages[payStage(id, u)].currency.gte(upgradeCost(state, id, u)));
+}
+
+/** The Chronicle: everything so far, newest first, under the era it happened in. */
+function chronicleLayout(state: GameState): string {
+  const all = state.chronicle ?? [];
+  const shown = all.slice(-200).reverse();
+  let era = '';
+  const rows = shown
+    .map((e) => {
+      const head = e.era !== era ? `<h3 class="chron-era">${eraName(e.era)}</h3>` : '';
+      era = e.era;
+      return `${head}<p class="chron"><span class="when">${e.when}</span> ${e.text}</p>`;
+    })
+    .join('');
+  return `<div class="panel-head"><h2>Chronicle</h2><span class="dim">${all.length} entries</span></div>
+    <div class="card px-box chronicle-all"><div class="info">${rows || '<p class="dim">Nothing yet.</p>'}</div></div>`;
 }

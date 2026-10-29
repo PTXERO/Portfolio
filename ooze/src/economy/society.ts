@@ -224,6 +224,7 @@ export function mourn(ex: ExtinctionState, dead: Survivor[], how: string): void 
  * ones who break, the preaching, the stories by the fire, and who they follow. */
 export function socialNight(ex: ExtinctionState, fire: boolean): number {
   let prayer = 0;
+  if (ex.people.length < 2) return 0;
   // Days pass on grief and hurt; the broken come back to themselves.
   for (const p of ex.people) {
     if (p.grief) p.grief -= 1;

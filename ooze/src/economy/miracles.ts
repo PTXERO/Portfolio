@@ -46,12 +46,12 @@ const carrionStart = (ex: ExtinctionState) => (ex.people.length + ex.deaths) * 6
 
 export const SPELLS: SpellDef[] = [
   { id: 'lightning', name: 'Lightning', gesture: 'zigzag', how: 'Draw a zigzag down onto a charred tree.', does: 'The tree burns down to wood (+10), and tonight they have fire, even without knowing it.', cost: 6, dread: 12, diets: ALL, hint: '', found: () => true },
-  { id: 'rain', name: 'Rain', gesture: 'spiral', how: 'Draw a spiral over the ash.', does: 'Rain falls and green comes up through the ash (its food grows back), and tonight is not cold.', cost: 8, dread: 6, diets: ALL, hint: 'When the ash runs thin.', found: (ex) => ex.ash < ex.ashMax * 0.7 || ex.day >= 3 },
-  { id: 'ward', name: 'Ward', gesture: 'circle', how: 'Draw a circle round some of them.', does: 'Those inside are cured of the shaking, and the hunger eases a little.', cost: 9, dread: 4, diets: ALL, hint: 'When the first of them dies.', found: (ex) => ex.deaths > 0 },
-  { id: 'quicken', name: 'Quicken the ash', gesture: 'line', how: 'Draw a line across the ash.', does: 'Seeds buried under the fire wake all at once: a furrow of fireweed springs up along the line (+24 plants).', cost: 8, dread: 8, diets: ['herbivore', 'omnivore'], hint: 'When the fallen fruit runs low.', found: (ex) => ex.carrion < carrionStart(ex) * 0.4 || ex.day >= 5 },
-  { id: 'kelp', name: 'Kelp tide', gesture: 'line', how: 'Draw a line from the sea onto the shore.', does: 'A wave throws kelp up the beach (+20 plants), and the shallows are rich all day.', cost: 10, dread: 8, diets: ['herbivore'], hint: 'When they look to the sea.', found: (ex) => ex.day >= 6 },
-  { id: 'shoals', name: 'Drive the shoals', gesture: 'line', how: 'Draw a line from the sea onto the shore.', does: 'Fish pile onto the beach (+20 meat), and the shore teems all day.', cost: 10, dread: 8, diets: ['carnivore', 'omnivore', 'cannibal'], hint: 'When they look to the sea.', found: (ex) => ex.day >= 6 },
-  { id: 'dying', name: 'Call the dying', gesture: 'line', how: 'Draw a long line in toward their camp.', does: 'A wounded beast staggers in along it and falls by the camp (+30 meat to scavenge).', cost: 9, dread: 10, diets: ['carnivore', 'cannibal'], hint: 'When the carcasses run low.', found: (ex) => ex.carrion < carrionStart(ex) * 0.4 || ex.day >= 5 },
+  { id: 'rain', name: 'Rain', gesture: 'spiral', how: 'Draw a spiral over the ash.', does: 'Rain falls and green comes up through the ash (its food grows back), and tonight is not cold.', cost: 8, dread: 6, diets: ALL, hint: 'When the ash runs thin.', found: (ex) => ex.day >= 5 && ex.ash < ex.ashMax * 0.45 },
+  { id: 'ward', name: 'Ward', gesture: 'circle', how: 'Draw a circle round some of them.', does: 'Those inside are cured of the shaking, and the hunger eases a little.', cost: 9, dread: 4, diets: ALL, hint: 'When death comes for them in earnest.', found: (ex) => ex.day >= 4 && ex.deaths >= 4 },
+  { id: 'quicken', name: 'Quicken the ash', gesture: 'line', how: 'Draw a line across the ash.', does: 'Seeds buried under the fire wake all at once: a furrow of fireweed springs up along the line (+16 plants).', cost: 8, dread: 8, diets: ['herbivore', 'omnivore'], hint: 'When the fallen fruit is gone.', found: (ex) => ex.day >= 7 && ex.carrion < carrionStart(ex) * 0.15 },
+  { id: 'kelp', name: 'Kelp tide', gesture: 'line', how: 'Draw a line from the sea onto the shore.', does: 'A wave throws kelp up the beach (+14 plants), and the shallows are rich all day.', cost: 10, dread: 8, diets: ['herbivore'], hint: 'When they look to the sea.', found: (ex) => ex.day >= 10 && (ex.ideas.includes('line') || ex.day >= 16) },
+  { id: 'shoals', name: 'Drive the shoals', gesture: 'line', how: 'Draw a line from the sea onto the shore.', does: 'Fish pile onto the beach (+14 meat), and the shore teems all day.', cost: 10, dread: 8, diets: ['carnivore', 'omnivore', 'cannibal'], hint: 'When they look to the sea.', found: (ex) => ex.day >= 10 && (ex.ideas.includes('line') || ex.day >= 16) },
+  { id: 'dying', name: 'Call the dying', gesture: 'line', how: 'Draw a long line in toward their camp.', does: 'A wounded beast staggers in along it and falls by the camp (+22 meat to scavenge).', cost: 9, dread: 10, diets: ['carnivore', 'cannibal'], hint: 'When the carcasses are picked clean.', found: (ex) => ex.day >= 7 && ex.carrion < carrionStart(ex) * 0.15 },
 ];
 export const SPELL: Record<SpellId, SpellDef> = Object.fromEntries(SPELLS.map((s) => [s.id, s])) as Record<SpellId, SpellDef>;
 
@@ -74,6 +74,7 @@ export const ORDAIN_COST = 1.5;
 /** The Chronicle: what happened, day by day (newest last, the last 150 kept). */
 export function say(ex: ExtinctionState, text: string): void {
   (ex.log ??= []).push({ day: ex.day + 1, text });
+  ex.logN = (ex.logN ?? 0) + 1;
   if (ex.log.length > 150) ex.log.splice(0, ex.log.length - 150);
 }
 
@@ -86,6 +87,8 @@ export function discover(ex: ExtinctionState): SpellId[] {
     known.push(s.id);
     fresh.push(s.id);
     if (s.id !== 'lightning') say(ex, `The spear stirred. Something new could be done: ${s.name}.`);
+    // One a night at most: each is its own moment.
+    break;
   }
   (ex.newPowers ??= []).push(...fresh);
   return fresh;
@@ -132,25 +135,25 @@ export function cast(ex: ExtinctionState, id: SpellId, opts: { people?: number[]
       break;
     }
     case 'quicken':
-      ex.plants += 24;
-      text = '+24 plants';
+      ex.plants += 16;
+      text = '+16 plants';
       say(ex, 'A line of green came up through the ash overnight, as if drawn there: fireweed, flowering pink.');
       break;
     case 'kelp':
-      ex.plants += 20;
+      ex.plants += 14;
       ex.boost = { day: ex.day, fish: 1 };
-      text = '+20 plants · rich shallows';
+      text = '+14 plants · rich shallows';
       say(ex, 'A wave out of a calm sea threw kelp the length of the beach.');
       break;
     case 'shoals':
-      ex.meat += 20;
+      ex.meat += 14;
       ex.boost = { day: ex.day, fish: 1 };
-      text = '+20 meat · the shore teems';
+      text = '+14 meat · the shore teems';
       say(ex, 'The water boiled with fish, and they leapt onto the sand.');
       break;
     case 'dying':
-      ex.carrion += 30;
-      text = '+30 meat to scavenge';
+      ex.carrion += 22;
+      text = '+22 meat to scavenge';
       say(ex, 'A wounded beast came out of the ash, walked into the camp, and lay down.');
       break;
   }
