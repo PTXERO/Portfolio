@@ -233,6 +233,17 @@ function creatureVisit(s: GameState): void {
   for (const p of def.parts!.filter((x) => x.cost && !st.parts.includes(x.id)).sort((a, b) => a.cost! - b.cost!)) {
     if (st.currency.toNumber() >= p.cost! * 2) buyPart(s, p.id);
   }
+  // Grow a bigger heart while a better part is waiting that the body can't power.
+  const heart = def.upgrades.find((u) => u.id === 'bigHeart')!;
+  const income = stageRate(s, 'creature').toNumber();
+  for (let i = 0; i < 20; i++) {
+    const blocked = SLOTS.some((slot) => {
+      const score = (id: string) => Object.entries(partDef(id).stats).reduce((n, [k, v]) => n + (v ?? 0) * want(k), 0);
+      const best = st.parts.filter((id) => partDef(id).slot === slot).sort((a, b) => score(b) - score(a))[0];
+      return best && st.equipped[slot] !== best && !canWear(s, best);
+    });
+    if (!blocked || upgradeCost(s, 'creature', heart).toNumber() > income * 300 || !buyUpgrade(s, 'creature', heart.id)) break;
+  }
   // Wear the best part per slot that fits the energy budget (big slots first).
   for (const slot of SLOTS) {
     const score = (id: string) => Object.entries(partDef(id).stats).reduce((n, [k, v]) => n + (v ?? 0) * want(k), 0);

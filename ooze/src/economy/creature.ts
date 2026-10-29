@@ -117,7 +117,7 @@ export function partEnergy(p: PartDef): number {
 
 /** The body's energy budget: grows with generations and Bigger Heart. */
 export function energyBudget(state: GameState): number {
-  let n = 6 + 3 * st(state).generation;
+  let n = 3 + 3 * st(state).generation;
   for (const e of stageEffects(state, CREATURE)) if (e.kind === 'energy') n += e.amount;
   return n;
 }

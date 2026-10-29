@@ -592,7 +592,12 @@ describe('creature stage', () => {
     expect(statsOf(s).speed).toBe(2);
     s.stages.creature.currency = D(1e6);
     expect(buyPart(s, 'stubby')).toBe(true);
-    expect(s.stages.creature.equipped.legs).toBe('stubby');
+    // The starting body's 3 energy is all spent: bigger legs need a bigger heart.
+    expect(s.stages.creature.equipped.legs).toBe('nubs');
+    expect(equipPart(s, 'stubby')).toBe(false);
+    s.stages.creature.upgrades.push('bigHeart');
+    s.stages.creature.levels.bigHeart = 1;
+    expect(equipPart(s, 'stubby')).toBe(true);
     expect(statsOf(s).speed).toBe(4);
     expect(equipPart(s, 'nubs')).toBe(true);
     expect(statsOf(s).speed).toBe(2);
