@@ -13,18 +13,15 @@ export interface Frame {
   top: number;
   /** Rows the open tab sheet covers at the bottom; the floor sits above them. */
   bottom: number;
-  /** How open the tab sheet is, 0 (closed) to 1, eased. */
-  open: number;
 }
 
 /**
- * Where the floor sits: just above the sheet when it's open, and lower (with half
- * as much ground showing) when it's closed. `share` is how far down the open
- * view the floor sits. It glides between the two as the sheet moves.
+ * Where the floor sits. It never moves: the tab sheet simply covers it when open.
+ * `share` sets how much ground shows (sized against the view above the open sheet).
  */
 export function floorY(f: Frame, share: number): number {
-  const groundOpen = f.H - Math.floor((f.H - f.bottom) * share);
-  return f.H - Math.round(groundOpen * (0.5 + 0.5 * f.open));
+  const ground = f.H - Math.floor((f.H - f.bottom) * share);
+  return f.H - Math.round(ground / 2);
 }
 
 /** Stable pseudo-random number in [0, 1) for a given index and salt. */

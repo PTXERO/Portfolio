@@ -49,9 +49,7 @@ export class Scene {
   private topCss = 0;
   /** CSS pixels the open tab sheet covers at the bottom of the scene. */
   private bottomCss = 0;
-  private sheetOpen = true;
-  /** Eased 0..1 toward sheetOpen, so the floor glides. */
-  private openK = 1;
+
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -111,9 +109,8 @@ export class Scene {
   }
 
   /** Tells the scene how much of its bottom the open sheet covers, so the floor stays in view. */
-  setBottomInset(cssPx: number, open: boolean): void {
+  setBottomInset(cssPx: number): void {
     this.bottomCss = cssPx;
-    this.sheetOpen = open;
   }
 
   /** Tells the scene how much of its top is covered, so life stays visible. */
@@ -160,14 +157,13 @@ export class Scene {
     for (const f of this.floaters) f.age += dt;
     this.floaters = this.floaters.filter((f) => f.age < 1.1);
     this.flash = Math.max(0, this.flash - dt * 1.5);
-    this.openK += ((this.sheetOpen ? 1 : 0) - this.openK) * Math.min(1, dt * 7);
 
     if (this.stage !== state.current) {
       this.stage = state.current;
       this.soup.reset();
       this.cell.reset();
     }
-    const frame: Frame = { b: this.b, W: this.W, H: this.H, t: this.time, dt, top: Math.ceil(this.topCss / this.px), bottom: Math.ceil(this.bottomCss / this.px), open: this.openK };
+    const frame: Frame = { b: this.b, W: this.W, H: this.H, t: this.time, dt, top: Math.ceil(this.topCss / this.px), bottom: Math.ceil(this.bottomCss / this.px) };
     if (state.current === 'soup') this.soup.draw(frame, state, this.displace);
     else this.cell.draw(frame, state);
     for (const r of this.ripples) {
