@@ -257,6 +257,8 @@ function arrive(state: GameState, p: PlaceDef, rand: () => number): void {
   const pay = tripPay(state, p);
   earn(state, pay);
   s.trips[p.id] = (s.trips[p.id] ?? 0) + 1;
+  // It stops to take the place in.
+  s.walk = null;
   const report: GameState['reports'][number] = { kind: 'trip', place: p.id, success: true, earned: pay.toString(), parts: [] };
   if (!s.discovered.includes(p.id)) {
     s.discovered.push(p.id);

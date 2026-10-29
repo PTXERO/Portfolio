@@ -624,22 +624,27 @@ describe('creature stage', () => {
   it('walking clears the fog, pays for new ground, and reaching a place finds it', () => {
     const s = creatureGame();
     const c = s.stages.creature;
+    c.seed = 4242;
     c.pop = 10;
     const is = islandFor(s);
-    const seen0 = seenShare(is, c.seen);
     const shore = is.places.shore;
     expect(walkTo(s, shore.x, shore.y)).toBe(true);
     const before = c.currency;
     c.walk!.next = 1e9; // no run-ins for this test
     for (let i = 0; i < 300 && c.walk; i++) tick(s, 1);
     expect(c.walk).toBeNull();
-    expect(seenShare(is, c.seen)).toBeGreaterThan(seen0);
     expect(c.discovered).toContain('shore');
     expect(placeSeen(s, 'shore')).toBe(true);
     expect(c.parts).toContain('shell');
     expect(c.mates.length).toBe(1);
     expect(c.currency.gt(before)).toBe(true);
     expect(s.reports.find((r) => r.kind === 'trip')?.success).toBe(true);
+    // Off toward the far side of the island: the fog clears as it goes.
+    const seen0 = seenShare(is, c.seen);
+    walkTo(s, is.places.highlands.x, is.places.highlands.y);
+    c.walk!.next = 1e9;
+    tick(s, 60);
+    expect(seenShare(is, c.seen)).toBeGreaterThan(seen0);
   });
 
   it('a place the creature is too weak for turns it back, until it is strong enough', () => {
