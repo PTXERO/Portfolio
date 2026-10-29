@@ -422,6 +422,12 @@ describe('cell stage', () => {
     expect(stageRate(s, 'cell').toNumber()).toBeGreaterThan(before);
   });
 
+  it('a save sitting in a habitat that is no longer open goes back to the Shallows', () => {
+    const s = cell();
+    s.stages.cell.habitat = 'depths';
+    expect(deserialize(serialize(s)).stages.cell.habitat).toBe('shallows');
+  });
+
   it('every organelle is a permanent bonus that takes effect at once', () => {
     for (const r of STAGES.cell.reactions!.filter((x) => x.bonus)) {
       const s = cell();

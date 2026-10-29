@@ -262,6 +262,16 @@ export function habitatUnlocked(state: GameState, stage: StageId, h: HabitatDef)
   return true;
 }
 
+/** Sends your cell back to the first habitat if the one it's in isn't open (older saves, changed rules). */
+export function settleHabitat(state: GameState): void {
+  for (const id of state.unlocked) {
+    const hs = STAGES[id].habitats;
+    const st = state.stages[id];
+    const h = hs?.find((x) => x.id === st.habitat);
+    if (hs && (!h || !habitatUnlocked(state, id, h))) st.habitat = hs[0].id;
+  }
+}
+
 export function moveHabitat(state: GameState, stage: StageId, id: string): boolean {
   const h = STAGES[stage].habitats?.find((x) => x.id === id);
   if (!h || !habitatUnlocked(state, stage, h)) return false;

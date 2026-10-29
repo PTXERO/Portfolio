@@ -1,4 +1,5 @@
 import { STAGES, STAGE_ORDER } from '../content/stages';
+import { settleHabitat } from './actions';
 import { createStageState, createState } from './state';
 import { D } from './num';
 import type { GameState, StageId, StageState } from './types';
@@ -53,7 +54,9 @@ export function deserialize(text: string): GameState {
   }
   // Saves from before the start flag existed: anyone who had played has started.
   const started = saved.started ?? (saved.playTime > 0 || saved.taps > 0);
-  return { ...base, ...saved, stages, started, swirl: 0, news: [], made: [] };
+  const state: GameState = { ...base, ...saved, stages, started, swirl: 0, news: [], made: [] };
+  settleHabitat(state);
+  return state;
 }
 
 /** Save as a copyable text string, for backups (iOS can clear web storage). */
