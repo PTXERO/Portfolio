@@ -60,6 +60,10 @@ export function upgradeUnlocked(state: GameState, stage: StageId, u: UpgradeDef)
   const st = state.stages[stage];
   const r = u.requires;
   if (u.pay && !state.unlocked.includes(u.pay)) return false;
+  if (r?.habitat) {
+    const h = STAGES[stage].habitats?.find((x) => x.id === r.habitat);
+    if (h && !habitatUnlocked(state, stage, h)) return false;
+  }
   if (r?.levels && !Object.entries(r.levels).every(([id, n]) => upgradeLevel(state, stage, id) >= n)) return false;
   if (r?.generator && (st.generators[r.generator] ?? 0) < (r.owned ?? 1)) return false;
   if (r?.reaction && !st.discovered.includes(r.reaction)) return false;

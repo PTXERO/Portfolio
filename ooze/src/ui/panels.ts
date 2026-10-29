@@ -163,6 +163,7 @@ function lockReason(state: GameState, stage: StageId, u: UpgradeDef): string {
   const def = STAGES[stage];
   const r = u.requires;
   const missing = (r?.upgrades ?? []).filter((x) => !st.upgrades.includes(x)).map((x) => def.upgrades.find((y) => y.id === x)?.name ?? x);
+  if (r?.habitat && !habitatUnlocked(state, stage, def.habitats!.find((h) => h.id === r.habitat)!)) return `Opens with the ${def.habitats!.find((h) => h.id === r.habitat)!.name}`;
   if (missing.length) return `Needs ${missing.join(' and ')}`;
   const low = Object.entries(r?.levels ?? {}).find(([x, n]) => upgradeLevel(state, stage, x) < n);
   if (low) return `Needs ${def.upgrades.find((y) => y.id === low[0])?.name ?? low[0]} ${low[1]}/${maxLevel(def.upgrades.find((y) => y.id === low[0])!)}`;
@@ -176,7 +177,7 @@ function rewardText(stage: StageId, r: ReactionDef): string {
   const parts: string[] = [];
   if (r.unlocks) parts.push(`New: ${STAGES[stage].generators.find((g) => g.id === r.unlocks)?.name}`);
   if (r.bonus) parts.push(describeEffect(stage, r.bonus));
-  return parts.join(' · ');
+  return parts.length ? `Permanent: ${parts.join(' · ')}` : '';
 }
 
 export { rewardText };

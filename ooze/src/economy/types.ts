@@ -75,6 +75,8 @@ export interface UpgradeDef {
     anyReaction?: string[];
     /** Other upgrades at these levels or higher. */
     levels?: Record<string, number>;
+    /** Only offered once this habitat is open (Cell stage). */
+    habitat?: string;
   };
   /** How many times it can be bought, each level adding the effect again (default 1). */
   levels?: number;

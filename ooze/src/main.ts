@@ -167,20 +167,20 @@ function renderHud(): void {
     const el = $(id);
     if (el.textContent !== text) el.textContent = text;
   };
-  set('stage-name', def.name);
   set('currency', format(st.currency));
   set('rate', `${format(stageRate(state, state.current))} ${def.currency}\nper second`);
   set('bank-chip', state.timeBank > 0 ? `⧗ ${formatTime(state.timeBank)}${state.warp > 1 ? ` · ${state.warp}×` : ''}` : '');
-  // Every stage reached stays open: a chip in the top bar hops between them.
-  const others = state.unlocked.filter((s) => s !== state.current);
-  const sw = $('stage-switch');
-  const swKey = others.join();
-  if (sw.dataset.key !== swKey) {
-    sw.dataset.key = swKey;
-    const here = state.unlocked.indexOf(state.current);
-    sw.innerHTML = others
-      .map((s) => `<button class="px-btn stage-chip" data-stage="${s}">${state.unlocked.indexOf(s) < here ? '‹ ' : ''}${STAGES[s].name}${state.unlocked.indexOf(s) > here ? ' ›' : ''}</button>`)
-      .join('');
+  // The stage label doubles as tabs once there's more than one stage: "SOUP · CELL".
+  const tabs = $('stage-tabs');
+  const tabsKey2 = `${state.unlocked.join()}|${state.current}`;
+  if (tabs.dataset.key !== tabsKey2) {
+    tabs.dataset.key = tabsKey2;
+    tabs.innerHTML =
+      state.unlocked.length < 2
+        ? `<span class="stage-tab on">${def.name}</span>`
+        : state.unlocked
+            .map((s) => `<button class="stage-tab${s === state.current ? ' on' : ''}" data-stage="${s}">${STAGES[s].name.split(' ').pop()}</button>`)
+            .join('<span class="stage-dot">·</span>');
   }
   const iconEl = $('currency-icon');
   if (iconEl.dataset.stage !== state.current) {

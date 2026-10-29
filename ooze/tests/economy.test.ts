@@ -21,7 +21,7 @@ import {
 } from '../src/economy/actions';
 import { D } from '../src/economy/num';
 import { applyOffline, timeBankCap } from '../src/economy/offline';
-import { dialMax, dietOf, habitatMult, heroSpeed, milestonesReached, stageRate, upgradeLevel } from '../src/economy/rates';
+import { defenseOf, dialMax, dietOf, forageMult, habitatMult, heroSpeed, milestonesReached, offlineBonusSec, spawnMult, stageRate, upgradeLevel } from '../src/economy/rates';
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
@@ -374,6 +374,7 @@ describe('cell stage', () => {
     const s = cell();
     buyUpgrade(s, 'cell', 'thickMembrane');
     expect(moveHabitat(s, 'cell', 'depths')).toBe(false); // needs level 2
+    expect(buyUpgrade(s, 'cell', 'chemoreceptor')).toBe(false); // a Depths mutation
     buyUpgrade(s, 'cell', 'thickMembrane');
     buyUpgrade(s, 'cell', 'hunter');
     const before = habitatMult(s, 'cell');
@@ -421,6 +422,28 @@ describe('cell stage', () => {
     expect(stageRate(s, 'cell').toNumber()).toBeGreaterThan(before);
   });
 
+  it('every organelle is a permanent bonus that takes effect at once', () => {
+    for (const r of STAGES.cell.reactions!.filter((x) => x.bonus)) {
+      const s = cell();
+      s.current = 'cell';
+      Object.assign(s.stages.cell.generators, { fission: 50, colony: 20 });
+      const measure = () => {
+        const b = r.bonus!;
+        if (b.kind === 'defense') return defenseOf(s, 'cell');
+        if (b.kind === 'forageMult') return forageMult(s, 'cell');
+        if (b.kind === 'offlineHours') return offlineBonusSec(s);
+        if (b.kind === 'spawnMult') return spawnMult(s, 'cell');
+        return stageRate(s, 'cell').toNumber();
+      };
+      const before = measure();
+      s.stages.cell.discovered.push(r.id);
+      const after = measure();
+      expect(after, r.id).toBeGreaterThan(before);
+      tick(s, 600);
+      expect(measure(), `${r.id} still there later`).toBeGreaterThanOrEqual(after);
+    }
+  });
+
   it('you can go back to the Soup without it ending again', () => {
     const s = cell();
     expect(visitStage(s, 'soup')).toBe(true);
@@ -460,10 +483,12 @@ describe('cell stage', () => {
   it('multicellularity ends the stage, with nothing to evolve into yet', () => {
     const s = cell();
     s.stages.cell.discovered = STAGES.cell.reactions!.filter((r) => !r.final).map((r) => r.id);
-    s.stages.cell.generators.colony = 40;
+    Object.assign(s.stages.cell.generators, { colony: 40, pack: 10 });
     buyUpgrade(s, 'cell', 'bigger');
     for (let i = 0; i < 5; i++) buyUpgrade(s, 'cell', 'cytoplasm');
     buyUpgrade(s, 'cell', 'giant');
+    expect(triggerFinale(s)).toBe(false); // the Vents still need a reef
+    s.stages.cell.generators.reef = 10;
     expect(triggerFinale(s)).toBe(true);
     expect(canEvolve(s)).toBe(false);
   });

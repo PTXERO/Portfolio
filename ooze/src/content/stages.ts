@@ -232,8 +232,8 @@ const cell: StageDef = {
       id: 'multicellularity',
       name: 'Multicellularity',
       flavor: 'Cells that stay together.',
-      hints: ['What if they didn\'t let go?', 'A nucleus, a giant cell and a crowd of colonies, all at once.'],
-      needs: { found: 7, gens: { colony: 40 }, upgrades: ['giant'] },
+      hints: ['What if they didn\'t let go?', 'Every organelle, a giant cell, and life thriving in all three habitats.'],
+      needs: { found: 7, gens: { colony: 40, pack: 10, reef: 10 }, upgrades: ['giant'] },
       final: true,
       cost: 1.5e24,
     },
@@ -243,21 +243,21 @@ const cell: StageDef = {
     // Motility
     { id: 'flagellum', branch: 'Motility', name: 'Flagellum', flavor: 'A whip-like tail. Your cell can chase things now.', cost: 100, levels: 5, costGrowth: 30, effect: { kind: 'heroSpeed', mult: 1.12 }, extra: [{ kind: 'genMult', target: 'fission', mult: 1.4 }] },
     { id: 'cilia', branch: 'Motility', name: 'Cilia', flavor: 'Thousands of tiny oars.', cost: 2.9e10, levels: 5, costGrowth: 25.86, effect: { kind: 'heroSpeed', mult: 1.06 }, extra: [{ kind: 'stageMult', mult: 1.08 }], requires: { levels: { flagellum: 2 } } },
-    { id: 'twinFlagella', branch: 'Motility', name: 'Twin Flagella', flavor: 'Two tails are better than one.', cost: 1.2e15, levels: 3, costGrowth: 30, effect: { kind: 'heroSpeed', mult: 1.1 }, extra: [{ kind: 'stageMult', mult: 1.12 }], requires: { levels: { flagellum: 5 } } },
+    { id: 'twinFlagella', branch: 'Motility', name: 'Twin Flagella', flavor: 'Two tails, to fight the currents at the Vents.', cost: 1.2e15, levels: 3, costGrowth: 30, effect: { kind: 'heroSpeed', mult: 1.1 }, extra: [{ kind: 'stageMult', mult: 1.12 }], requires: { levels: { flagellum: 5 }, habitat: 'vents' } },
     // Defense
     { id: 'thickMembrane', branch: 'Defense', name: 'Thick Membrane', flavor: 'Harder to bite through. Level 2 opens up the Depths.', cost: 8.6e5, levels: 5, costGrowth: 30, effect: { kind: 'defense', amount: 0.06 } },
-    { id: 'spikes', branch: 'Defense', name: 'Spikes', flavor: 'Predators think twice. Level 2 opens up the Vents.', cost: 1.9e13, levels: 5, costGrowth: 15.31, effect: { kind: 'defense', amount: 0.05 }, extra: [{ kind: 'heroSpeed', mult: 0.98 }], requires: { levels: { thickMembrane: 3 } } },
-    { id: 'toxin', branch: 'Defense', name: 'Toxin', flavor: 'Anything that bites you regrets it.', cost: 3.3e14, levels: 3, costGrowth: 30, effect: { kind: 'defense', amount: 0.07 }, extra: [{ kind: 'forageMult', mult: 1.15 }], requires: { levels: { spikes: 3 } } },
+    { id: 'spikes', branch: 'Defense', name: 'Spikes', flavor: 'Predators in the Depths think twice. Level 2 opens up the Vents.', cost: 1.9e13, levels: 5, costGrowth: 15.31, effect: { kind: 'defense', amount: 0.05 }, requires: { levels: { thickMembrane: 3 }, habitat: 'depths' } },
+    { id: 'toxin', branch: 'Defense', name: 'Toxin', flavor: 'Made from what the Vents spew. Anything that bites you regrets it.', cost: 3.3e14, levels: 3, costGrowth: 30, effect: { kind: 'defense', amount: 0.07 }, extra: [{ kind: 'forageMult', mult: 1.15 }], requires: { levels: { spikes: 3 }, habitat: 'vents' } },
     // Diet: one or the other, until Omnivore
     { id: 'grazer', branch: 'Diet', name: 'Grazer', flavor: 'Eats algae. Thrives in the Shallows.', cost: 370, effect: { kind: 'diet', diet: 'grazer' }, excludes: ['hunter'] },
     { id: 'hunter', branch: 'Diet', name: 'Hunter', flavor: 'Eats bacteria. Thrives in the Depths and Vents.', cost: 300, effect: { kind: 'diet', diet: 'hunter' }, excludes: ['grazer'] },
     { id: 'omnivore', branch: 'Diet', name: 'Omnivore', flavor: 'Eats anything, anywhere.', cost: 1.7e16, effect: { kind: 'diet', diet: 'omnivore' }, requires: { anyReaction: ['chloroplast', 'mitochondrion'] } },
     // Senses
     { id: 'eyespot', branch: 'Senses', name: 'Eyespot', flavor: 'A speck that sees light. Your cell forages on its own.', cost: 1.5e8, effect: { kind: 'autopilot' } },
-    { id: 'photoreceptor', branch: 'Senses', name: 'Photoreceptor', flavor: 'Sharper eyes find richer food.', cost: 1.1e11, levels: 5, costGrowth: 30, effect: { kind: 'forageMult', mult: 1.12 }, requires: { upgrades: ['eyespot'] } },
-    { id: 'chemoreceptor', branch: 'Senses', name: 'Chemoreceptor', flavor: 'It smells food from far away. Rare microbes turn up more often.', cost: 1.1e16, levels: 3, costGrowth: 30, effect: { kind: 'spawnMult', mult: 1.3 } },
+    { id: 'photoreceptor', branch: 'Senses', name: 'Photoreceptor', flavor: 'Sharper eyes, trained in the bright Shallows.', cost: 1.1e11, levels: 5, costGrowth: 30, effect: { kind: 'forageMult', mult: 1.12 }, requires: { upgrades: ['eyespot'] } },
+    { id: 'chemoreceptor', branch: 'Senses', name: 'Chemoreceptor', flavor: 'In the dark, smell beats sight. Rare microbes turn up more often.', cost: 1.1e16, levels: 3, costGrowth: 30, effect: { kind: 'spawnMult', mult: 1.3 }, requires: { habitat: 'depths' } },
     // Size
-    { id: 'bigger', branch: 'Size', name: 'Bigger Cell', flavor: 'Room for more. Slower, but can swallow bigger things.', cost: 9.2e11, effect: { kind: 'size', size: 2 }, extra: [{ kind: 'heroSpeed', mult: 0.9 }, { kind: 'stageMult', mult: 1.15 }] },
+    { id: 'bigger', branch: 'Size', name: 'Bigger Cell', flavor: 'Room for more. It can swallow bigger things.', cost: 9.2e11, effect: { kind: 'size', size: 2 }, extra: [{ kind: 'stageMult', mult: 1.15 }] },
     { id: 'cytoplasm', branch: 'Size', name: 'More Cytoplasm', flavor: 'A little more room inside, every time.', cost: 1.7e12, levels: 10, costGrowth: 10.24, effect: { kind: 'stageMult', mult: 1.06 }, requires: { upgrades: ['bigger'] } },
     { id: 'giant', branch: 'Size', name: 'Giant Cell', flavor: 'Visible without a microscope.', cost: 1.9e20, effect: { kind: 'size', size: 3 }, extra: [{ kind: 'stageMult', mult: 1.25 }], requires: { levels: { cytoplasm: 5 } } },
     { id: 'innerMembranes', branch: 'Size', name: 'Inner Membranes', flavor: 'Rooms within rooms. A giant needs them.', cost: 9.7e19, levels: 5, costGrowth: 7.78, effect: { kind: 'stageMult', mult: 1.1 }, requires: { upgrades: ['giant'] } },

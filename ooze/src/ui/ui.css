@@ -154,7 +154,11 @@ html, body {
 .hud-main { justify-content: flex-start; gap: 10px; margin-top: 4px; }
 .hud-main .big { margin-top: 2px; }
 #rate { font-size: 13px; margin-left: auto; text-align: right; white-space: pre-line; line-height: 1.2; }
-#stage-name { color: var(--mint); }
+#stage-tabs { display: flex; align-items: center; gap: 6px; pointer-events: auto; }
+.stage-tab { all: unset; font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--dim); cursor: pointer; padding: 2px 0; }
+.stage-tab.on { color: var(--mint); box-shadow: 0 2px 0 0 var(--mint); }
+button.stage-tab:not(.on):active { color: var(--cream); }
+.stage-dot { color: var(--dim); opacity: 0.6; }
 
 #hint {
   position: absolute;
@@ -399,8 +403,6 @@ textarea {
 .making-bar.on > i { background: var(--gold); }
 
 /* ---- Stage switch, habitat switch, Roots ---- */
-#stage-switch { display: flex; gap: 6px; margin-left: 8px; pointer-events: auto; }
-.stage-chip { padding: 2px 8px calc(2px + var(--depth)); font-size: 12px; }
 .hab-next { padding: 2px 8px calc(2px + var(--depth)); font-size: 12px; margin-left: 8px; vertical-align: middle; letter-spacing: 0; text-transform: none; }
 .mini.lv > i { width: 10px; }
 .goals { margin: 0 6px 10px; }

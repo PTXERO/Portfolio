@@ -472,17 +472,6 @@ export class Pond {
         squash: h.gulp > 0 && Math.floor(t * 16) % 2 === 0,
         inner: true,
       });
-      // A little bobbing arrow marks which one is you.
-      const ay = Math.round(h.y - rx * 0.75 - 6 + Math.sin(t * 4));
-      const ax = Math.round(h.x);
-      b.fillStyle = PAL.k;
-      b.fillRect(ax - 3, ay - 1, 7, 2);
-      b.fillRect(ax - 2, ay + 1, 5, 1);
-      b.fillRect(ax - 1, ay + 2, 3, 1);
-      b.fillStyle = PAL.y;
-      b.fillRect(ax - 2, ay - 1 + 1, 5, 1);
-      b.fillRect(ax - 1, ay + 1, 3, 1);
-      b.fillRect(ax, ay + 2, 1, 1);
     }
   }
 

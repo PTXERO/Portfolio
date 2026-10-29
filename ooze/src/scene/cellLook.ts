@@ -104,15 +104,8 @@ function bake(look: Look, rx: number, frame: number, squash: boolean, inner: boo
       if (!inside(x, y)) continue;
       const rim = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1);
       const rim2 = look.thick && (!inside(x - 2, y) || !inside(x + 2, y) || !inside(x, y - 2) || !inside(x, y + 2));
-      px(x, y, rim ? edge : rim2 ? PAL.w : fill);
-    }
-  }
-  // Your own cell catches the light along its top-left edge, a quiet way to tell it from its kin.
-  if (inner) {
-    for (let y = 0; y < cy; y++) {
-      for (let x = 0; x < cx + 1; x++) {
-        if (inside(x, y) && (!inside(x - 1, y) || !inside(x, y - 1))) px(x, y, PAL.w);
-      }
+      // A thick membrane shows as a second, inner outline in the body's own edge colour.
+      px(x, y, rim || rim2 ? edge : fill);
     }
   }
   // Cilia: short hairs all round, alternating frames.
