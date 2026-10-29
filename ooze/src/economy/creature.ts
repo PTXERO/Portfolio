@@ -517,7 +517,6 @@ export const SIGHTINGS: Record<string, { name: string; text: string; seconds: nu
   tortoise: { name: 'Old Tortoise', text: 'An ancient tortoise trudged along the beach, older than anything on the island. It did not hurry.', seconds: 150 },
   comet: { name: 'Comet', text: 'A light with a long tail crept across the night. Nobody slept much.', seconds: 180 },
   aurora: { name: 'Sky Fire', text: 'Green and violet curtains rippled over the winter dark.', seconds: 200 },
-  flock: { name: 'Great Flock', text: 'Thousands of birds poured over the island, so many the ground went dark.', seconds: 120 },
 };
 
 /** You noticed it: a share of output as a reward, and it goes in the tally. */

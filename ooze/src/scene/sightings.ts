@@ -1,7 +1,7 @@
 // Rare sightings: every few minutes something unusual crosses the island, for a little
 // while only. Tap it in time and the herd remembers it (a reward, and a note). A whale rolls
 // offshore; an old tortoise trudges a beach; a comet creeps over the night; sky fire ripples
-// on winter nights; a great flock darkens the sky.
+// on winter nights.
 
 import { PAL } from '../art/sprites';
 import { Biome, ISLAND, isLand, type Island } from '../economy/island';
@@ -24,11 +24,11 @@ export class Sightings {
 
   /** Something new, if one's due and there's a place in view for it. */
   private start(v: WildView, is: Island, night: number, winter: boolean): void {
-    const kinds = night > 0.5 ? (winter ? ['aurora', 'comet'] : ['comet']) : ['whale', 'tortoise', 'flock', 'whale'];
+    const kinds = night > 0.5 ? (winter ? ['aurora', 'comet'] : ['comet']) : ['whale', 'tortoise'];
     const kind = kinds[Math.floor(Math.random() * kinds.length)];
     const dir = Math.random() < 0.5 ? -1 : 1;
-    if (kind === 'comet' || kind === 'aurora' || kind === 'flock') {
-      this.cur = { kind, x: dir > 0 ? -10 : v.W + 10, y: v.H * (0.2 + Math.random() * 0.25), sky: true, age: 0, life: kind === 'flock' ? 16 : 20, dir };
+    if (kind === 'comet' || kind === 'aurora') {
+      this.cur = { kind, x: dir > 0 ? -10 : v.W + 10, y: v.H * (0.2 + Math.random() * 0.25), sky: true, age: 0, life: 20, dir };
       return;
     }
     // On the map, in view: deep-ish water for the whale, a beach for the tortoise.
@@ -157,26 +157,6 @@ export class Sightings {
         });
         break;
       }
-      case 'flock': {
-        s.x += s.dir * 14 * dt;
-        sprites.push({
-          y: 2e9,
-          draw: () => {
-            b.fillStyle = '#2e2e3a';
-            for (let i = 0; i < 70; i++) {
-              const ox = (((i * 37) % 41) - 20) * 1.6 - s.dir * (i % 9);
-              const oy = (((i * 53) % 23) - 11) * 1.2 + Math.sin(t * 2 + i) * 1.5;
-              const up = Math.floor(t * 8 + i) % 2;
-              const x = Math.round(s.x + ox);
-              const y = Math.round(s.y + oy);
-              b.fillRect(x - 1, y - up, 1, 1);
-              b.fillRect(x + 1, y - up, 1, 1);
-              b.fillRect(x, y, 1, 1);
-            }
-          },
-        });
-        break;
-      }
     }
   }
 
@@ -186,7 +166,7 @@ export class Sightings {
     if (!s) return null;
     let near: boolean;
     if (s.kind === 'aurora') near = ay < v.H * 0.35;
-    else if (s.sky) near = Math.hypot(s.x - ax, s.y - ay) < (s.kind === 'flock' ? 40 : 14);
+    else if (s.sky) near = Math.hypot(s.x - ax, s.y - ay) < 14;
     else {
       near = Math.hypot(v.sx(s.x) - ax, v.py(s.x, s.y) - 3 - ay) < Math.max(12, v.zoom * 4);
     }

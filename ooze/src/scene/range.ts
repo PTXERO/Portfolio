@@ -109,7 +109,7 @@ export class RangeScene {
   private stormTimer = 90;
   private wet = 0;
   private weather: [number, number, number, number] = [0, 0, 0, 0];
-  private rain: { x: number; y: number; v: number }[] = [];
+  private rain: { x: number; y: number; z: number; v: number }[] = [];
   private flash = 0;
   private momentTimer = 6;
   private moveTimer = 30;
@@ -123,7 +123,7 @@ export class RangeScene {
   private graze: Pt | null = null;
   private grazeTimer = 0;
   /** Seasonal bits in the air: snow, falling leaves, blossom petals, summer pollen. */
-  private flakes: { x: number; y: number; v: number; kind: Mote; ph: number }[] = [];
+  private flakes: { x: number; y: number; z: number; v: number; kind: Mote; ph: number }[] = [];
   /** Each season's painted ground, for the island it was painted for. */
   private ground = new Map<number, HTMLCanvasElement>();
   private groundSeed = -1;
@@ -1106,7 +1106,7 @@ export class RangeScene {
     this.trails.update(is.seed, walkers, dt);
 
     // The island's own life: bushes, crabs, birds, fish, the wild grazers.
-    this.wild.update(this.wildView, is, sprites, { b, t, dt, season: si, night, feet: [me, ...this.members], me });
+    this.wild.update(this.wildView, is, sprites, { b, t, dt, nests: bases, season: si, night, feet: [me, ...this.members], me });
     this.sightings.update(this.wildView, is, sprites, { b, t, dt, night, winter });
 
     sprites.sort((a, c) => a.y - c.y);
@@ -1133,59 +1133,80 @@ export class RangeScene {
       for (const [k, n] of mix) if ((r -= n) < 0) return k;
       return mix[0][0];
     };
-    while (this.flakes.length < want) this.flakes.push({ x: Math.random() * W, y: Math.random() * H, v: 4 + Math.random() * 6, kind: pick(), ph: Math.random() * 10 });
+    // They're out in the world (not stuck to the screen): each drifts down from a height over
+    // a bit of ground in view and lands; scroll, and they stay where they are over the land.
+    const respawn = <Q extends { x: number; y: number; z: number }>(q: Q, z: number): Q => {
+      const w = this.toWorld(Math.random() * W, Math.random() * H);
+      q.x = w.x;
+      q.y = w.y;
+      q.z = z;
+      return q;
+    };
+    const lift = (q: { x: number; y: number; z: number }) => this.py(q.x, q.y) - q.z * this.zoom;
+    while (this.flakes.length < want) {
+      const kind = pick();
+      this.flakes.push(respawn({ x: 0, y: 0, z: 0, v: 4 + Math.random() * 6, kind, ph: Math.random() * 10 }, kind === 'pollen' ? Math.random() * 3 : Math.random() * 10));
+    }
     this.flakes.length = want;
     for (const q of this.flakes) {
       if (q.kind === 'pollen') {
-        // Pollen hangs in the warm air, drifting and slowly rising, and glints now and then.
-        q.y -= q.v * 0.15 * dt;
-        q.x += (Math.sin(t * 0.7 + q.ph) * 2 + 1.5) * dt;
+        // Pollen hangs in the warm air near the ground, drifting and slowly rising.
+        q.z += 0.12 * dt;
+        q.x += (Math.sin(t * 0.7 + q.ph) * 0.3 + 0.15) * dt;
       } else {
-        q.y += q.v * (q.kind === 'snow' ? 1 : 0.7) * dt;
-        q.x += Math.sin(t * (q.kind === 'snow' ? 1 : 2) + q.ph) * (q.kind === 'snow' ? 3 : 6) * dt + (q.kind === 'snow' ? 0 : 5 * dt);
+        q.z -= q.v * (q.kind === 'snow' ? 0.25 : 0.15) * dt;
+        q.x += Math.sin(t * (q.kind === 'snow' ? 1 : 2) + q.ph) * (q.kind === 'snow' ? 0.3 : 0.6) * dt + (q.kind === 'snow' ? 0 : 0.5 * dt);
       }
-      if (q.y > H || q.y < 0) {
-        q.y = q.y < 0 ? H : 0;
-        q.x = Math.random() * W;
+      let X = this.sx(q.x);
+      let Y = lift(q);
+      if (q.z <= 0 || q.z > 4.5 && q.kind === 'pollen' || X < -4 || X > W + 4 || Y < -4 || Y > H + 4) {
         q.kind = pick();
+        respawn(q, q.kind === 'pollen' ? Math.random() * 1.5 : 6 + Math.random() * 6);
+        X = this.sx(q.x);
+        Y = lift(q);
       }
-      if (q.x > W) q.x -= W;
+      // Pollen is a thing of warm days, not nights.
+      if (q.kind === 'pollen' && night > 0.5) continue;
       const flip = Math.sin(t * 3 + q.ph) > 0;
+      const px = Math.round(X);
+      const py = Math.round(Y);
       switch (q.kind) {
         case 'snow':
           b.fillStyle = PAL.w;
-          b.fillRect(Math.round(q.x), Math.round(q.y), 1, 1);
+          b.fillRect(px, py, 1, 1);
           break;
         case 'leaf':
           // Leaves tumble: two pixels that turn as they fall.
           b.fillStyle = q.v > 7 ? PAL.o : q.v > 5.5 ? '#c8702e' : PAL.O;
-          b.fillRect(Math.round(q.x), Math.round(q.y), flip ? 2 : 1, flip ? 1 : 2);
+          b.fillRect(px, py, flip ? 2 : 1, flip ? 1 : 2);
           break;
         case 'petal':
           b.fillStyle = q.v > 7 ? '#f6b8cf' : '#e98bb0';
-          b.fillRect(Math.round(q.x), Math.round(q.y), flip ? 2 : 1, 1);
+          b.fillRect(px, py, flip ? 2 : 1, 1);
           break;
         case 'pollen':
-          b.fillStyle = Math.sin(t * 2 + q.ph * 3) > 0.85 ? GLOW_Y : '#e2c860';
-          b.fillRect(Math.round(q.x), Math.round(q.y), 1, 1);
+          b.fillStyle = Math.sin(t * 2 + q.ph * 3) > 0.85 ? '#fff0b0' : '#e2c860';
+          b.fillRect(px, py, 1, 1);
           break;
       }
     }
 
     // Rain, lightning, and the rainbow after.
     const want2 = Math.round(this.storm * 90);
-    while (this.rain.length < want2) this.rain.push({ x: Math.random() * W, y: Math.random() * H, v: 60 + Math.random() * 40 });
+    while (this.rain.length < want2) this.rain.push(respawn({ x: 0, y: 0, z: 0, v: 20 + Math.random() * 10 }, Math.random() * 14));
     this.rain.length = want2;
     b.fillStyle = 'rgba(190, 210, 230, 0.75)';
     for (const r of this.rain) {
-      r.y += r.v * dt;
-      r.x -= r.v * 0.25 * dt;
-      if (r.y > H) {
-        r.y = -3;
-        r.x = Math.random() * (W + 20);
+      r.z -= r.v * dt;
+      r.x -= r.v * 0.08 * dt;
+      let Y = lift(r);
+      let X = this.sx(r.x);
+      if (r.z <= 0 || X < -4 || X > W + 4 || Y < -6 || Y > H + 4) {
+        respawn(r, 8 + Math.random() * 6);
+        X = this.sx(r.x);
+        Y = lift(r);
       }
-      if (r.x < 0) r.x += W;
-      b.fillRect(Math.round(r.x), Math.round(r.y), 1, 2);
+      b.fillRect(Math.round(X), Math.round(Y), 1, 2);
     }
     if (this.storm > 0.7 && Math.random() < dt * 0.12) this.flash = 0.25;
     if (this.flash > 0) {

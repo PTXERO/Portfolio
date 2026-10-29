@@ -6,7 +6,7 @@
 // fruit trees at the forest's edge do the same in autumn. Crabs scuttle on the beaches and
 // duck away from feet; small birds peck about and burst up when anything comes close; fish
 // jump offshore; a little wild herd of grazers keeps to the far grass and bolts from you;
-// and now and then a skein of birds crosses the sky.
+// and once in a while a few birds come down near a nest, until you get too close.
 
 import { PAL } from '../art/sprites';
 import { Biome, ISLAND, isLand, type Island, type Pt } from '../economy/island';
@@ -72,10 +72,9 @@ const biomeAt = (is: Island, x: number, y: number) => is.biome[Math.round(y) * I
 export class Wild {
   bushes: Bush[] = [];
   private crabs: Crab[] = [];
-  private flocks: Flock[] = [];
+  private flock: Flock | null = null;
+  private flockTimer = 120 + Math.random() * 120;
   private grazers: Grazer[] = [];
-  private skein: { x: number; y: number; vx: number; vy: number } | null = null;
-  private skeinTimer = 40;
   private fishTimer = 3;
   private seed = -1;
 
@@ -103,7 +102,6 @@ export class Wild {
       ...spots(10, 23, 4, 40, edge).map((p) => ({ ...p, ripe: 0.3, tree: true })),
     ];
     this.crabs = spots(7, 37, 1, 45, sand).map((p, i) => ({ ...p, ph: i * 1.7, hide: 0 }));
-    this.flocks = spots(4, 41, 5, 30, grass).map((p, i) => ({ ...p, up: -1, dir: i % 2 ? 1 : -1, away: 0 }));
     const far = spots(1, 53, 30, 70, (x, y) => grass(x, y) || biomeAt(is, x, y) === Biome.High)[0];
     this.grazers = far ? Array.from({ length: 5 }, (_, i) => ({ x: far.x + (hash(i, 59) - 0.5) * 4, y: far.y + (hash(i, 61) - 0.5) * 3, vx: 0, vy: 0, ph: i * 2.1 })) : [];
   }
@@ -138,7 +136,7 @@ export class Wild {
    * Moves everything on a step and queues it to be drawn. `feet` are where your creature and
    * herd are (crabs and birds keep clear of them); `me` is your creature (the grazers fear it).
    */
-  update(v: WildView, is: Island, sprites: Sprite[], o: { b: CanvasRenderingContext2D; t: number; dt: number; season: number; night: number; feet: Pt[]; me: Pt }): void {
+  update(v: WildView, is: Island, sprites: Sprite[], o: { b: CanvasRenderingContext2D; t: number; dt: number; nests: Pt[]; season: number; night: number; feet: Pt[]; me: Pt }): void {
     if (this.seed !== is.seed) this.setup(is);
     const { t, dt } = o;
     const z = v.zoom;
@@ -173,40 +171,40 @@ export class Wild {
       }
     }
 
-    // Little birds pecking; anything close and they're off, to land somewhere else later.
-    for (const f of this.flocks) {
-      if (f.up < 0) {
-        if (near(f.x, f.y, 3)) {
-          f.up = 0;
-          f.dir = Math.random() < 0.5 ? -1 : 1;
-        }
-      } else {
-        f.up += dt;
-        if (f.up > 3) {
-          f.away -= dt;
-          if (f.away <= -25) {
-            // Land again somewhere grassy nearby.
-            for (let i = 0; i < 10; i++) {
-              const x = f.x + (Math.random() - 0.5) * 24;
-              const y = f.y + (Math.random() - 0.5) * 18;
-              if (biomeAt(is, x, y) === Biome.Grass && !near(x, y, 5)) {
-                f.x = x;
-                f.y = y;
-                break;
-              }
-            }
-            f.up = -1;
-            f.away = 0;
+    // Now and then (rarely) a few little birds come down to peck about near a nest. They stay
+    // until your creature comes close, then burst up and away, and it's a while before any
+    // come back.
+    if (!this.flock) {
+      this.flockTimer -= dt;
+      if (this.flockTimer <= 0 && o.night < 0.5 && o.nests.length) {
+        this.flockTimer = 180 + Math.random() * 240;
+        const n = o.nests[Math.floor(Math.random() * o.nests.length)];
+        for (let i = 0; i < 20; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const d = 5 + Math.random() * 7;
+          const x = n.x + Math.cos(a) * d;
+          const y = n.y + Math.sin(a) * d;
+          if (biomeAt(is, x, y) === Biome.Grass && Math.hypot(o.me.x - x, o.me.y - y) > 6) {
+            this.flock = { x, y, up: -1, dir: 1, away: 0 };
+            break;
           }
-          continue;
         }
       }
-      if (o.night > 0.5 && f.up < 0) continue;
-      const X = v.sx(f.x);
-      const Y = v.py(f.x, f.y);
-      if (!on(X, Y) && f.up < 0) continue;
-      const lift = f.up < 0 ? 0 : f.up;
-      sprites.push({ y: f.y + (f.up < 0 ? 0 : 50), draw: () => drawFlock(o.b, X, Y, z, t, lift, f.dir) });
+    }
+    const f = this.flock;
+    if (f) {
+      if (f.up < 0 && Math.hypot(o.me.x - f.x, o.me.y - f.y) < 3.5) {
+        f.up = 0;
+        f.dir = o.me.x < f.x ? 1 : -1;
+      }
+      if (f.up >= 0) f.up += dt;
+      if (f.up > 3) this.flock = null;
+      else if (!(o.night > 0.5 && f.up < 0)) {
+        const X = v.sx(f.x);
+        const Y = v.py(f.x, f.y);
+        const lift = Math.max(0, f.up);
+        if (on(X, Y) || lift > 0) sprites.push({ y: f.y + (lift > 0 ? 50 : 0), draw: () => drawFlock(o.b, X, Y, z, t, lift, f.dir) });
+      }
     }
 
     // Fish jump now and then, just off the shore in view.
@@ -272,21 +270,6 @@ export class Wild {
         const graze = !moving && Math.sin(t * 0.7 + g.ph) > 0.2;
         sprites.push({ y: g.y, draw: () => drawGrazer(o.b, X, Y, z, left, step, graze, o.night > 0.5) });
       }
-    }
-
-    // A skein of birds across the sky, high over everything, now and then (by day).
-    this.skeinTimer -= dt;
-    if (!this.skein && this.skeinTimer <= 0 && o.night < 0.5) {
-      const ltr = Math.random() < 0.5;
-      this.skein = { x: ltr ? -20 : v.W + 20, y: v.H * (0.15 + Math.random() * 0.4), vx: (ltr ? 1 : -1) * 9, vy: -1.5 };
-      this.skeinTimer = 50 + Math.random() * 60;
-    }
-    if (this.skein) {
-      const s = this.skein;
-      s.x += s.vx * dt;
-      s.y += s.vy * dt;
-      if (s.x < -40 || s.x > v.W + 40) this.skein = null;
-      else sprites.push({ y: 1e9, draw: () => drawSkein(o.b, s.x, s.y, s.vx < 0, t) });
     }
   }
 
@@ -383,19 +366,4 @@ function drawGrazer(b: CanvasRenderingContext2D, X: number, Y: number, z: number
   }
   b.fillStyle = night ? '#9a9ab0' : PAL.w;
   b.fillRect(X - d * 3 * k - (d > 0 ? k : 0), Y - 4 * k, k, k);
-}
-
-function drawSkein(b: CanvasRenderingContext2D, x: number, y: number, left: boolean, t: number): void {
-  b.fillStyle = '#3a3a48';
-  const d = left ? 1 : -1;
-  for (let i = 0; i < 7; i++) {
-    const row = Math.ceil(i / 2);
-    const side = i % 2 ? 1 : -1;
-    const bx = Math.round(x + d * row * 4);
-    const by = Math.round(y + side * row * 2.5 * (i ? 1 : 0));
-    const up = Math.floor(t * 6 + i) % 2;
-    b.fillRect(bx - 1, by - up, 1, 1);
-    b.fillRect(bx + 1, by - up, 1, 1);
-    b.fillRect(bx, by, 1, 1);
-  }
 }
