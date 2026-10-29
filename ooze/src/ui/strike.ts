@@ -26,7 +26,8 @@ interface Bit {
   hot: boolean;
 }
 
-export function playStrike(onImpact: () => void, onDone: () => void): void {
+/** `target` says where on screen (CSS px) the spear comes down: the island's heart. */
+export function playStrike(onImpact: () => void, onDone: () => void, target: () => { x: number; y: number }): void {
   const app = document.getElementById('app')!;
   const cv = document.createElement('canvas');
   cv.id = 'strike';
@@ -43,7 +44,12 @@ export function playStrike(onImpact: () => void, onDone: () => void): void {
   const from = { x: W * 0.86, y: -H * 0.15 };
   const stars = Array.from({ length: 70 }, () => ({ x: Math.random() * W, y: Math.random() * H * 0.7, p: Math.random() * 6 }));
   // Fires breaking out across the land as the white clears.
-  const fires = Array.from({ length: 90 }, () => ({ x: Math.random() * W, y: H * (0.12 + Math.random() * 0.8), at: 0.4 + Math.random() * 3, ph: Math.random() * 9, sz: 1 + Math.floor(Math.random() * 3) }));
+  // (Out from the impact, catching as the fire on the ground below reaches them.)
+  const fires = Array.from({ length: 70 }, () => {
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.random() ** 0.7;
+    return { a, r, at: 0.6 + r * 7, ph: Math.random() * 9, sz: 1 + Math.floor(Math.random() * 3) };
+  });
   const bits: Bit[] = [];
   let changed = false;
   let last = start;
@@ -56,6 +62,12 @@ export function playStrike(onImpact: () => void, onDone: () => void): void {
 
   const frame = (now: number) => {
     const t = (now - start) / 1000;
+    // Aim at the island's heart until it lands (the screen may still be settling).
+    if (t < HIT) {
+      const p = target();
+      at.x = Math.max(W * 0.15, Math.min(W * 0.85, p.x / 3));
+      at.y = Math.max(H * 0.2, Math.min(H * 0.8, p.y / 3));
+    }
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     b.clearRect(0, 0, W, H);
@@ -156,7 +168,7 @@ export function playStrike(onImpact: () => void, onDone: () => void): void {
       // lifting before the end (the map below carries on smouldering).
       if (s > 0.3) {
         const k = Math.min(1, (s - 0.3) / 0.8);
-        b.fillStyle = `rgba(120, 14, 10, ${k * Math.max(0.35, 0.62 - s * 0.02)})`;
+        b.fillStyle = `rgba(120, 14, 10, ${k * Math.max(0.22, 0.42 - s * 0.02)})`;
         b.fillRect(0, 0, W, H);
         const g = b.createRadialGradient(at.x, at.y, 0, at.x, at.y, W * 0.9);
         g.addColorStop(0, `rgba(255, 120, 60, ${0.45 * k})`);
@@ -167,14 +179,16 @@ export function playStrike(onImpact: () => void, onDone: () => void): void {
       // Fire: flickering tongues across the land, then burning low.
       for (const f of fires) {
         if (s < f.at) continue;
+        const fx = at.x + Math.cos(f.a) * f.r * W * 0.75;
+        const fy = at.y + Math.sin(f.a) * f.r * W * 0.75 * 0.62;
         const life = Math.min(1, (s - f.at) / 0.4) * Math.max(0.25, 1 - (s - f.at) / 9);
         const fl = Math.sin(t * 14 + f.ph) * 0.5 + 0.5;
         const h = Math.round((2 + f.sz * 2) * life * (0.7 + 0.5 * fl));
         b.fillStyle = `rgba(255, ${Math.round(90 + 90 * fl)}, 40, ${0.9 * life})`;
-        b.fillRect(Math.round(f.x), Math.round(f.y) - h, f.sz, h);
+        b.fillRect(Math.round(fx), Math.round(fy) - h, f.sz, h);
         b.fillStyle = `rgba(255, 236, 170, ${0.9 * life})`;
-        b.fillRect(Math.round(f.x), Math.round(f.y) - 1, f.sz, 1);
-        if (Math.random() < 0.04 * life) bits.push({ x: f.x, y: f.y - h, vx: (Math.random() - 0.5) * 6, vy: -10 - Math.random() * 14, life: 1.2, size: 1, hot: true });
+        b.fillRect(Math.round(fx), Math.round(fy) - 1, f.sz, 1);
+        if (Math.random() < 0.04 * life) bits.push({ x: fx, y: fy - h, vx: (Math.random() - 0.5) * 6, vy: -10 - Math.random() * 14, life: 1.2, size: 1, hot: true });
       }
       // Dust and smoke rolling out and up, then thinning.
       if (s > 0.2) {

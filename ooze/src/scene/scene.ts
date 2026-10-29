@@ -6,6 +6,7 @@
 // first, then the log), so the scene fills up without drawing thousands of sprites.
 
 import { PAL } from '../art/sprites';
+import { ashenFor } from '../economy/tribal';
 import type { GameState, StageId } from '../economy/types';
 import { CellScene } from './cell';
 import { RangeScene } from './range';
@@ -54,6 +55,19 @@ export class Scene {
   get spearReady(): boolean {
     return this.tribe.arrived;
   }
+  /** Frames the island's heart, where the spear will come down (before the strike). */
+  frameStrike(state: GameState): void {
+    const { spear } = ashenFor(state);
+    this.shore.pinCamera(spear.x, spear.y, 0.9);
+  }
+
+  /** Where the spear comes down, on screen (CSS pixels). */
+  strikePoint(state: GameState): { x: number; y: number } {
+    const p = this.shore.screenOf(ashenFor(state).spear);
+    const r = this.canvas.getBoundingClientRect();
+    return { x: r.left + p.x * this.px, y: r.top + p.y * this.px };
+  }
+
   /** Holds the walk to the spear (while the strike plays over it). */
   set holdWalk(on: boolean) {
     this.tribe.hold = on;
@@ -230,11 +244,15 @@ export class Scene {
     this.flash = Math.max(0, this.flash - dt * 1.5);
 
     if (this.stage !== state.current) {
+      // Into the Extinction the camera carries straight on (the strike lands where it looks).
+      const [cx, cy, cz] = this.shore.camParams;
+      const handOn = state.current === 'tribal' && this.stage === 'creature';
       this.stage = state.current;
       this.soup.reset();
       this.cell.reset();
       this.shore.reset();
       this.tribe.reset();
+      if (handOn) this.tribe.takeCamera(cx, cy, cz);
     }
     const frame: Frame = { b: this.b, W: this.W, H: this.H, t: this.time, dt, top: Math.ceil(this.topCss / this.px), bottom: Math.ceil(this.bottomCss / this.px) };
     if (state.current === 'soup') this.soup.draw(frame, state, this.displace);

@@ -166,6 +166,8 @@ export class RangeScene {
   protected camY = 0;
   protected zoom = 3;
   protected auto = true;
+  /** Held by a cutscene: nothing hands the camera back. */
+  protected pinned = false;
   protected snap = true;
   protected viewTop = 0;
   protected viewBottom = 0;
@@ -192,7 +194,23 @@ export class RangeScene {
     this.graze = null;
     this.auto = true;
     this.snap = true;
+    this.pinned = false;
     this.zoom = 3;
+  }
+
+  /** Puts the camera on a spot and holds it there (for a cutscene). */
+  pinCamera(x: number, y: number, zoom: number): void {
+    this.auto = false;
+    this.snap = false;
+    this.pinned = true;
+    this.camX = x;
+    this.camY = y;
+    this.zoom = zoom;
+  }
+
+  /** Where a point of the island is on screen, in art pixels. */
+  screenOf(p: Pt): Pt {
+    return { x: this.sx(p.x), y: this.py(p.x, p.y) };
   }
 
   drain(): PondEvent[] {
@@ -204,7 +222,7 @@ export class RangeScene {
   /** The band of the screen that shows the map (between the top bar and the sheet), in art pixels. */
   setView(top: number, bottom: number): void {
     // Opening or closing the sheet hands the camera back.
-    if (Math.abs(bottom - this.viewBottom) > 12) this.auto = true;
+    if (!this.pinned && Math.abs(bottom - this.viewBottom) > 12) this.auto = true;
     this.viewTop = top;
     this.viewBottom = bottom;
   }

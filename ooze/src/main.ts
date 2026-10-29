@@ -568,12 +568,14 @@ function closeEnding(): void {
   if (STAGES[state.current].next === 'tribal') {
     striking = true;
     syncCine();
+    scene.frameStrike(state);
     playStrike(
       () => moveOn(),
       () => {
         striking = false;
         syncCine();
       },
+      () => scene.strikePoint(state),
     );
     return;
   }

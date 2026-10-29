@@ -6,7 +6,7 @@
 
 import { PAL } from '../art/sprites';
 import { SEASON_SEC } from '../economy/rates';
-import { CELLS, ISLAND, isLand, type Pt } from '../economy/island';
+import { CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
 import { BURNT, LAKE, ashenFor, tribeOf } from '../economy/tribal';
 import type { GameState } from '../economy/types';
 import { creatureLookOf } from './creatureLook';
@@ -27,6 +27,8 @@ interface Person {
 /** Every cell seen: there is no fog on what's left (they know every step of it). */
 const ALL_SEEN = new Uint8Array(CELLS * CELLS).fill(1);
 const DAY_SEC = 120;
+/** How long the fire takes to run over the island after the strike (seconds). */
+const BURN_SEC = 9;
 
 export class TribeScene extends RangeScene {
   private people: Person[] = [];
@@ -39,6 +41,16 @@ export class TribeScene extends RangeScene {
   private wave = -1;
   private smoke: { x: number; y: number; z: number; life: number }[] = [];
   private placed = false;
+  /** The camera handed on from the Creature's map at the strike. */
+  private handed: { x: number; y: number; z: number } | null = null;
+  /** The burning after the strike: when it started (scene seconds), whether it's over, and the
+   * ground it's painting (green and ash, and the order each cell catches). */
+  private burnAt = -1;
+  private burnReach = 1;
+  private burnDone = false;
+  private burn: { cv: HTMLCanvasElement; img: ImageData; green: Uint8ClampedArray; ash: Uint8ClampedArray; order: Float32Array; v: number; season: number } | null = null;
+  /** When the strike let go of the walk (scene seconds). */
+  private released = -1;
   private seedSeen = -1;
 
   reset(): void {
@@ -46,6 +58,11 @@ export class TribeScene extends RangeScene {
     this.people = [];
     this.walker = null;
     this.arrived = false;
+    this.handed = null;
+    this.burnAt = -1;
+    this.burnDone = false;
+    this.burn = null;
+    this.released = -1;
     this.placed = false;
     this.auto = false;
   }
@@ -64,6 +81,65 @@ export class TribeScene extends RangeScene {
     }
   }
 
+  /** Takes the camera as the Creature's map left it (so the strike lands where it looked). */
+  takeCamera(x: number, y: number, z: number): void {
+    this.handed = { x, y, z };
+    this.placed = false;
+  }
+
+  /** Paints the ground part burnt: ash inside the fire's reach, a glowing front, green beyond. */
+  private paintBurn(is: Island, si: number, spear: Pt, p: number): void {
+    const N = ISLAND;
+    if (!this.burn || this.burn.season !== si) {
+      const read = (cv: HTMLCanvasElement) => cv.getContext('2d')!.getImageData(0, 0, N, N).data;
+      const green = read(this.paintGround({ ...is, scar: undefined }, si));
+      const ash = read(this.ground.get(si)!);
+      const order = new Float32Array(N * N);
+      let far = 1;
+      for (let i = 0; i < N * N; i++) if (is.height[i] > 0) far = Math.max(far, Math.hypot((i % N) - spear.x, Math.floor(i / N) - spear.y));
+      for (let i = 0; i < N * N; i++) {
+        const x = i % N;
+        const y = Math.floor(i / N);
+        // Ragged: it runs ahead in some places and lags in others.
+        const rag = 0.88 + 0.24 * hash(Math.floor(x / 5) + Math.floor(y / 5) * 97, 51) + 0.06 * hash(x, y);
+        order[i] = (Math.hypot(x - spear.x, y - spear.y) / far) * rag;
+      }
+      const cv = document.createElement('canvas');
+      cv.width = N;
+      cv.height = N;
+      const img = cv.getContext('2d')!.createImageData(N, N);
+      this.burn = { cv, img, green, ash, order, v: 0, season: si };
+    }
+    const { img, green, ash, order } = this.burn;
+    const d = img.data;
+    // Eased: it races out from the blow and slows as it reaches the shore.
+    const reach = 1 - (1 - Math.min(1, p)) ** 2;
+    this.burnReach = reach;
+    const front = 0.05;
+    for (let i = 0; i < N * N; i++) {
+      const o = order[i];
+      const j = i * 4;
+      if (o < reach - front) {
+        d[j] = ash[j];
+        d[j + 1] = ash[j + 1];
+        d[j + 2] = ash[j + 2];
+      } else if (o < reach) {
+        // The fire itself: white-yellow at the leading edge, red behind it, going to char.
+        const k = (reach - o) / front;
+        d[j] = 255 - 120 * k;
+        d[j + 1] = 220 - 190 * k;
+        d[j + 2] = 120 - 100 * k;
+      } else {
+        d[j] = green[j];
+        d[j + 1] = green[j + 1];
+        d[j + 2] = green[j + 2];
+      }
+      d[j + 3] = 255;
+    }
+    this.burn.cv.getContext('2d')!.putImageData(img, 0, 0);
+    this.burn.cv.dataset.v = String(++this.burn.v);
+  }
+
   /** How tall the spear stands on screen (art px): a giant, whatever the zoom. */
   private spearHeight(): number {
     return Math.max(30, 15 * this.zoom);
@@ -79,11 +155,13 @@ export class TribeScene extends RangeScene {
     const frag = ashenFor(state);
     const is = frag.island;
     this.island = is;
-    // First look: the camera on the camp (before waking it follows the walk to the spear).
+    // First look: the camera where the Creature's left it (at the strike), or on the camp.
     if (!this.placed || this.seedSeen !== is.seed) {
-      this.camX = tribe.awake ? (frag.camp.x + frag.spear.x) / 2 : frag.camp.x;
-      this.camY = tribe.awake ? (frag.camp.y + frag.spear.y) / 2 : frag.camp.y;
-      this.zoom = 3;
+      const h = this.handed;
+      this.camX = h ? h.x : tribe.awake ? (frag.camp.x + frag.spear.x) / 2 : frag.camp.x;
+      this.camY = h ? h.y : tribe.awake ? (frag.camp.y + frag.spear.y) / 2 : frag.camp.y;
+      this.zoom = h ? h.z : 3;
+      this.handed = null;
       this.auto = false;
       this.placed = true;
       this.seedSeen = is.seed;
@@ -107,6 +185,22 @@ export class TribeScene extends RangeScene {
     if (!this.ground.has(si)) this.ground.set(si, this.paintGround(is, si));
     if (!this.ground.has(next)) this.ground.set(next, this.paintGround(is, next));
     this.groundPair = [this.ground.get(si)!, this.ground.get(next)!];
+    // The burning: the first time the burnt island is seen (just after the strike), the fire
+    // runs out from the spear across the green, leaving ash behind it.
+    if (!this.burnDone) {
+      if (this.burnAt < 0) {
+        if (tribe.awake || tribe.year > 40) this.burnDone = true;
+        else this.burnAt = t;
+      }
+      const p = (t - this.burnAt) / BURN_SEC;
+      if (this.burnDone || p >= 1.15) {
+        this.burnDone = true;
+        this.burn = null;
+      } else {
+        this.paintBurn(is, si, frag.spear, p);
+        this.groundPair = [this.burn!.cv, this.burn!.cv];
+      }
+    }
     this.paintFog(ALL_SEEN);
     b.imageSmoothingEnabled = false;
     if (this.shaded) b.clearRect(0, 0, W, H);
@@ -135,7 +229,7 @@ export class TribeScene extends RangeScene {
     const embers: Pt[] = [];
     for (let y = y0; y <= y1; y += stride) {
       for (let x = x0; x <= x1; x += stride) {
-        if (is.scar?.[y * ISLAND + x] === BURNT && hash(x * 7 + y * 131, 49) < 0.035) embers.push({ x: x + 0.5, y: y + 0.5 });
+        if (is.scar?.[y * ISLAND + x] === BURNT && hash(x * 7 + y * 131, 49) < 0.035 && (!this.burn || this.burn.order[y * ISLAND + x] < this.burnReach)) embers.push({ x: x + 0.5, y: y + 0.5 });
       }
     }
     if (embers.length && Math.random() < heat * dt * 12) {
@@ -231,16 +325,22 @@ export class TribeScene extends RangeScene {
       const dy = frag.spear.y - w.y;
       const d = Math.hypot(dx, dy);
       const stop = LAKE + 1.2;
-      const moving = d > stop && !this.hold;
+      // After the strike, a beat while the camera finds them, then the walk.
+      if (!this.hold && this.released < 0) this.released = t;
+      const finding = this.hold || t - this.released < 3;
+      const moving = d > stop && !finding;
       if (moving) {
         const sp = Math.max(2.5, Math.hypot(frag.spear.x - frag.camp.x, frag.spear.y - frag.camp.y) / 14);
         const step = Math.min(d - stop, sp * dt);
         w.x += (dx / d) * step;
         w.y += (dy / d) * step;
       } else if (d <= stop) this.arrived = true;
-      this.camX += (w.x - this.camX) * Math.min(1, dt * 2.5);
-      this.camY += (w.y - 3 - this.camY) * Math.min(1, dt * 2.5);
-      this.zoom += (3 - this.zoom) * Math.min(1, dt * 2);
+      if (!this.hold) {
+        const k = Math.min(1, dt * (finding ? 1.4 : 2.5));
+        this.camX += (w.x - this.camX) * k;
+        this.camY += (w.y - 3 - this.camY) * k;
+        this.zoom += (3 - this.zoom) * Math.min(1, dt * (finding ? 1.2 : 2));
+      }
       const wx = w.x;
       const wy = w.y;
       const hop = moving ? Math.abs(Math.sin(t * 7)) * 2 : 0;

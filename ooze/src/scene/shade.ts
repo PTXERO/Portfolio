@@ -327,6 +327,7 @@ export class MapShader {
   private overTex: WebGLTexture;
   /** Ground textures by the canvas they came from (one per season), uploaded once. */
   private grounds = new Map<HTMLCanvasElement, WebGLTexture>();
+  private groundVer = new Map<HTMLCanvasElement, string>();
   private heightSeed = -1;
   private fogVersion = -1;
   private trailTex: WebGLTexture;
@@ -399,13 +400,19 @@ export class MapShader {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
   }
 
+  /** A ground canvas's texture: uploaded once, and again whenever its `data-v` changes (the
+   * ground burning, after the strike). */
   private groundTex(c: HTMLCanvasElement): WebGLTexture {
     let t = this.grounds.get(c);
-    if (!t) {
+    const v = c.dataset.v ?? '';
+    if (!t || this.groundVer.get(c) !== v) {
       const gl = this.gl;
-      t = texture(gl, gl.NEAREST);
+      if (!t) {
+        t = texture(gl, gl.NEAREST);
+        this.grounds.set(c, t);
+      } else gl.bindTexture(gl.TEXTURE_2D, t);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
-      this.grounds.set(c, t);
+      this.groundVer.set(c, v);
     }
     return t;
   }
