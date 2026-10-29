@@ -109,9 +109,19 @@ const discoveryQueue: string[] = [];
 
 // ---- Economy clock ----
 
-function showModal(html: string): void {
-  modal.innerHTML = `<div class="px-box">${html}</div>`;
+let modalTimer = 0;
+/** Shows a card. With `autoSec`, it clears itself after that long, a bar draining as it waits. */
+function showModal(html: string, autoSec = 0): void {
+  clearTimeout(modalTimer);
+  const bar = autoSec ? `<div class="making-bar on auto-close" style="--dur: ${autoSec}s"><i></i></div>` : '';
+  modal.innerHTML = `<div class="px-box">${html}${bar}</div>`;
   modal.hidden = false;
+  if (autoSec) {
+    const shown = modal.firstElementChild;
+    modalTimer = window.setTimeout(() => {
+      if (modal.firstElementChild === shown) modal.hidden = true;
+    }, autoSec * 1000);
+  }
 }
 
 function showReport(r: OfflineReport): void {
@@ -138,7 +148,7 @@ function showTripReport(): boolean {
       <h3>An egg hatched!</h3>
       <p>The young one is yours and ${r.mate}'s. The whole line grows stronger.</p>
       ${parts.length ? `<p class="fx">Inherited: ${parts.join(', ')}</p>` : ''}
-      <button class="px-btn gold" data-act="dismiss">Welcome</button>`);
+      <button class="px-btn gold" data-act="dismiss">Welcome</button>`, 8);
     return true;
   }
   if (r.sighting) {
@@ -147,7 +157,7 @@ function showTripReport(): boolean {
       <h3>${d.name}</h3>
       <p>${r.event}</p>
       <p>+${format(D(r.earned))} ${def.currency}</p>
-      <button class="px-btn gold" data-act="dismiss">Wonderful</button>`);
+      <button class="px-btn gold" data-act="dismiss">Wonderful</button>`, 8);
     return true;
   }
   if (r.kind === 'event') {
@@ -157,7 +167,7 @@ function showTripReport(): boolean {
       ${D(r.earned).gt(0) ? `<p>+${format(D(r.earned))} ${def.currency}</p>` : ''}
       ${parts.length ? `<p class="fx">Found: ${parts.join(', ')} (in the Body tab)</p>` : ''}
       ${r.mate ? `<p class="fx">Met ${r.mate}, who follows it now (Family tab)</p>` : ''}
-      <button class="px-btn gold" data-act="dismiss">On we go</button>`);
+      <button class="px-btn gold" data-act="dismiss">On we go</button>`, 8);
     return true;
   }
   const place = def.places!.find((p) => p.id === r.place)!;
@@ -167,7 +177,7 @@ function showTripReport(): boolean {
       <h3>Too much for it, for now</h3>
       <p>It turned back. To get in, it needs: ${(r.short ?? []).map((x) => x[0].toUpperCase() + x.slice(1)).join(', ')}.</p>
       <p class="dim">Train in the Body tab, wear better parts, or breed a stronger generation.</p>
-      <button class="px-btn gold" data-act="dismiss">Okay</button>`);
+      <button class="px-btn gold" data-act="dismiss">Okay</button>`, 8);
     return true;
   }
   showModal(`<p class="label dim">Found: the ${place.name}</p>
@@ -176,7 +186,7 @@ function showTripReport(): boolean {
     ${page ? `<p class="fx">${rewardText('creature', page)}</p>` : ''}
     ${parts.length ? `<p class="fx">Found: ${parts.join(', ')} (in the Body tab)</p>` : ''}
     ${r.mate ? `<p class="fx">Met ${r.mate}, who follows it now (Family tab)</p>` : ''}
-    <button class="px-btn gold" data-act="dismiss">Nice</button>`);
+    <button class="px-btn gold" data-act="dismiss">Nice</button>`, 12);
   return true;
 }
 

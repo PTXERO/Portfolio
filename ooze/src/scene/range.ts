@@ -1118,10 +1118,13 @@ export class RangeScene {
     // The air through the year (screen space), easing from one season's to the next: blossom
     // petals in spring, slow pollen motes in summer, falling leaves in autumn, snow in winter.
     const weight = (n: number) => (si === n ? 1 - turn : 0) + (next === n ? turn : 0);
+    // Petals, pollen and leaves are small things: from far up only a few are seen (else,
+    // zoomed out, they read as snow). Snow is weather, and falls at any height.
+    const near = Math.max(0.15, Math.min(1, (this.zoom - 0.6) / 2));
     const mix: [Mote, number][] = [
-      ['petal', 16 * weight(0)],
-      ['pollen', 18 * weight(1)],
-      ['leaf', 16 * weight(2)],
+      ['petal', 16 * weight(0) * near],
+      ['pollen', 14 * weight(1) * near],
+      ['leaf', 16 * weight(2) * near],
       ['snow', 45 * weight(3)],
     ];
     const want = Math.round(mix.reduce((a, [, n]) => a + n, 0));
@@ -1159,11 +1162,11 @@ export class RangeScene {
           b.fillRect(Math.round(q.x), Math.round(q.y), flip ? 2 : 1, flip ? 1 : 2);
           break;
         case 'petal':
-          b.fillStyle = q.v > 7 ? '#fbe4ee' : '#f2a7c3';
+          b.fillStyle = q.v > 7 ? '#f6b8cf' : '#e98bb0';
           b.fillRect(Math.round(q.x), Math.round(q.y), flip ? 2 : 1, 1);
           break;
         case 'pollen':
-          b.fillStyle = Math.sin(t * 2 + q.ph * 3) > 0.85 ? GLOW_Y : '#f6eaa0';
+          b.fillStyle = Math.sin(t * 2 + q.ph * 3) > 0.85 ? GLOW_Y : '#e2c860';
           b.fillRect(Math.round(q.x), Math.round(q.y), 1, 1);
           break;
       }

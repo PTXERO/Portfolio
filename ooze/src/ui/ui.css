@@ -462,6 +462,10 @@ textarea {
 .making-bar { height: 4px; margin-top: 4px; background: var(--slot); max-width: 160px; }
 .making-bar > i { display: block; height: 100%; width: 0; background: #5a5f78; transition: width 250ms linear; }
 .making-bar.on > i { background: var(--gold); }
+/* A card that clears itself: the bar drains as it waits. */
+.making-bar.auto-close { max-width: none; margin-top: 10px; }
+.making-bar.auto-close > i { width: 100%; animation: drain var(--dur, 8s) linear forwards; transition: none; }
+@keyframes drain { to { width: 0; } }
 
 /* ---- Stage switch, habitat switch, Roots ---- */
 .hab-next { padding: 2px 8px calc(2px + var(--depth)); font-size: 12px; margin-left: 8px; vertical-align: middle; letter-spacing: 0; text-transform: none; }
