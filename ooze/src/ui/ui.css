@@ -697,3 +697,6 @@ p.chron .when { display: block; }
 #crisisbar .warn-mark { font-family: var(--digits); font-size: 26px; color: #f0a0d8; animation: pulse 0.8s steps(2) infinite; }
 .cinematic #crisisbar { opacity: 0; pointer-events: none; }
 #crisisbar.top { bottom: auto; top: 6px; }
+#crisisbar .answer { display: flex; align-items: center; gap: 6px; padding: 6px 10px calc(6px + var(--depth)); font-size: 13px; white-space: nowrap; color: var(--ink); }
+#crisisbar .answer .glyph { color: var(--ink); }
+#crisisbar i { font-style: normal; color: #f0a0d8; }

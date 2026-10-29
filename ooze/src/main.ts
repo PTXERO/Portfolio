@@ -464,8 +464,17 @@ function renderCrisis(): void {
   const who = c.who !== undefined ? ex.people.find((p) => p.id === c.who)?.name : '';
   const left = Math.max(0, Math.ceil(c.until - ex.clock));
   const sp = SPELL[c.spell];
-  const html = `<span class="warn-mark">!</span><div><b>${who ? `${who} ${CRISES[c.kind].call}` : CRISES[c.kind].call}</b><span>${CRISES[c.kind].how}: ${sp.name}. ${left}s</span></div><button class="px-btn gold" data-cast="${c.spell}"${(ex.prayer ?? 0) >= sp.cost ? '' : ' disabled'}>${glyph(sp.gesture, 2)}</button>`;
-  if (crisisBar.innerHTML !== html) crisisBar.innerHTML = html;
+  const poor = (ex.prayer ?? 0) < sp.cost;
+  // Built once for each crisis (a button rebuilt under the finger never takes the tap); only
+  // the countdown changes after.
+  const key = `${c.kind}:${c.day}:${c.until}:${poor}`;
+  if (crisisBar.dataset.key !== key) {
+    crisisBar.dataset.key = key;
+    crisisBar.innerHTML = `<span class="warn-mark">!</span><div><b>${who ? `${who} ${CRISES[c.kind].call}` : CRISES[c.kind].call}</b><span>${CRISES[c.kind].how}. <i data-left></i></span></div>
+      <button class="px-btn gold answer" data-cast="${c.spell}"${poor ? ' disabled' : ''}>${glyph(sp.gesture, 2)}<span>${poor ? `${sp.cost} prayer` : sp.name}</span></button>`;
+  }
+  const t = crisisBar.querySelector<HTMLElement>('[data-left]');
+  if (t && t.textContent !== `${left}s left`) t.textContent = `${left}s left`;
 }
 
 /** The quick bar of miracles on the map (when the menu's down): tap one, then draw it. */
