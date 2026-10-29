@@ -17,6 +17,8 @@ import {
   partDef,
   partEnergy,
   curiosity,
+  partySlots,
+  partyLeg,
   EVENT_WAIT,
   islandFor,
   placeSeen,
@@ -178,6 +180,7 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
       .filter((u) => u.branch === 'Wandering')
       .map(upgradeCard)
       .join('')}
+    ${partySlots(state) ? '<p class="note" data-t="parties"></p>' : ''}
     ${curiosity(state) ? `<button class="px-btn small${s.autoRoam ? ' on' : ''}" data-act="autoroam">Exploring on its own: ${s.autoRoam ? 'on' : 'off'}</button>` : ''}`;
   const places = def
     .places!.map((p) => {
@@ -355,6 +358,11 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
     const home = root.querySelector<HTMLButtonElement>('[data-act="walkhome"]');
     if (home) home.hidden = atHome || !!s.walk?.event;
     setText(root, 'seen', `${Math.floor(seenShare(is, s.seen) * 100)}% seen`);
+    if (partySlots(state)) {
+      const out = s.parties.map((p) => `${p.t > partyLeg(state, p.place) ? 'home from' : 'to'} the ${def.places!.find((q) => q.id === p.place)?.name ?? p.place}`);
+      const resting = def.places!.filter((p) => s.trips[p.id] > 0 && (s.partyReady[p.id] ?? 0) > s.year && !s.parties.some((q) => q.place === p.id)).length;
+      setText(root, 'parties', `Foraging parties ${s.parties.length}/${partySlots(state)}${out.length ? `: ${out.join(', ')}` : ''}${resting ? ` · ${resting} place${resting > 1 ? 's' : ''} resting` : ''}`);
+    }
     for (const p of def.places!) {
       for (const [k, need] of Object.entries(p.needs)) {
         const li = root.querySelector<HTMLElement>(`[data-need="${p.id}-${k}"]`);

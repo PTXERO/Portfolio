@@ -265,16 +265,27 @@ html, body {
 .menu-full #evolve, .menu-full #age-nav { opacity: 0; pointer-events: none !important; }
 #sheet.full #panel { background: rgba(22, 28, 44, 0.8); }
 #sheet.full #panel .px-box { background: rgba(35, 43, 66, 0.86); }
-/* The knob on the menu's top left edge that pulls it up or lets it back down. */
+/* A tab on the menu's top left edge, cut from the menu itself, that pulls it up or lets it
+   back down: same colour and outline as the menu, open at the bottom where they meet. */
 #expand {
   position: absolute;
-  left: 10px;
-  bottom: calc(100% + var(--ph) + var(--u) * 2);
+  left: 12px;
+  bottom: calc(100% + var(--ph));
   margin: 0;
-  padding: 4px 10px calc(4px + var(--depth));
+  padding: 5px 14px 2px;
   z-index: 2;
-  transition: bottom 300ms cubic-bezier(0.3, 1.35, 0.5, 1), transform 40ms;
+  color: var(--dim);
+  background: var(--night);
+  box-shadow:
+    calc(var(--u) * -1) 0 0 0 var(--ink),
+    var(--u) 0 0 0 var(--ink),
+    0 calc(var(--u) * -1) 0 0 var(--ink),
+    calc(var(--u) * -2) 0 0 0 var(--panel-hi),
+    calc(var(--u) * 2) 0 0 0 var(--panel-hi),
+    0 calc(var(--u) * -2) 0 0 var(--panel-hi);
+  transition: bottom 300ms cubic-bezier(0.3, 1.35, 0.5, 1);
 }
+#expand:active:not(:disabled) { transform: none; filter: none; color: var(--cream); }
 #expand svg { display: block; transition: transform 200ms; }
 #expand.on svg { transform: scaleY(-1); }
 #sheet.closed #expand { display: none; }

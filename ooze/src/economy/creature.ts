@@ -504,6 +504,48 @@ export function curiosity(state: GameState): number {
   return n;
 }
 
+/** How many foraging parties the herd can have out at once. */
+export function partySlots(state: GameState): number {
+  let n = 0;
+  for (const e of stageEffects(state, CREATURE)) if (e.kind === 'parties') n += e.count;
+  return n;
+}
+/** Seconds a place rests after a party forages it. */
+export const PARTY_REST = 240;
+/** A party brings home this share of what your creature's own trip there pays. */
+export const PARTY_PAY = 0.5;
+/** Parties walk a little quicker than the leader (they know the way). */
+const PARTY_SPEED = 1.2;
+
+/** Seconds a party takes to walk from home to a place (and the same back). */
+export function partyLeg(state: GameState, place: string): number {
+  const is = islandFor(state);
+  const p = is.places[place];
+  return Math.hypot(p.x - is.home.x, p.y - is.home.y) / (walkSpeed(state) * PARTY_SPEED);
+}
+
+/** Parties walk out, forage, walk home and drop off what they carry; then the next sets off. */
+function partyTick(state: GameState, dt: number): void {
+  const s = st(state);
+  const slots = partySlots(state);
+  if (!slots && !s.parties.length) return;
+  for (const party of s.parties) party.t += dt;
+  s.parties = s.parties.filter((party) => {
+    if (party.t < 2 * partyLeg(state, party.place)) return true;
+    earn(state, tripPay(state, def().places!.find((p) => p.id === party.place)!).mul(PARTY_PAY));
+    return false;
+  });
+  // Send the next party to the nearest found place that's rested and nobody's bound for.
+  while (s.parties.length < slots) {
+    const next = def()
+      .places!.filter((p) => s.trips[p.id] > 0 && (s.partyReady[p.id] ?? 0) <= s.year && !s.parties.some((q) => q.place === p.id))
+      .sort((a, b) => partyLeg(state, a.id) - partyLeg(state, b.id))[0];
+    if (!next) break;
+    s.parties.push({ place: next.id, t: 0 });
+    s.partyReady[next.id] = s.year + 2 * partyLeg(state, next.id) + PARTY_REST;
+  }
+}
+
 /** Fog maps with no land left under them (not saved: found again after a load). */
 const fullySeen = new WeakSet<Uint8Array>();
 
@@ -566,6 +608,7 @@ export function creatureTick(state: GameState, dt: number, rand: () => number = 
   fitRoles(s);
   walkTick(state, dt, rand);
   autoRoam(state);
+  partyTick(state, dt);
   if (s.egg) {
     s.egg.left -= dt;
     if (s.egg.left <= 0) hatch(state);

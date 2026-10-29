@@ -161,6 +161,8 @@ export function describeEffect(stage: StageId, e: Effect): string {
       return `Winter takes ×${e.mult}`;
     case 'instinct':
       return `${Math.round(e.share * 100)}% of the herd ${INSTINCT_VERB[e.role]}`;
+    case 'parties':
+      return `${e.count === 1 ? 'A party' : `${e.count} parties`} of the herd ${e.count === 1 ? 'heads' : 'head'} out to found places on ${e.count === 1 ? 'its' : 'their'} own and ${e.count === 1 ? 'carries' : 'carry'} food home (each place rests a while after)`;
     case 'curiosity':
       return 'Level 1: wanders into the fog on its own · 2: heads for places it can get into · 3: settles run-ins on the road itself';
   }

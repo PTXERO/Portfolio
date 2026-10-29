@@ -76,7 +76,9 @@ export type Effect =
   | { kind: 'instinct'; role: Role; share: number }
   /** Your creature explores on its own: 1 wanders into the fog, 2 heads for places it can
    * get into, 3 also settles run-ins on the road itself. */
-  | { kind: 'curiosity'; level: number };
+  | { kind: 'curiosity'; level: number }
+  /** Parties of the herd head out to found places on their own and carry food home. */
+  | { kind: 'parties'; count: number };
 
 /** What members of the herd do, by instinct (nobody is told to: these are animals). */
 export type Role = 'forager' | 'carer' | 'digger' | 'guard' | 'scout';
@@ -324,6 +326,10 @@ export interface StageState {
   nextFind: number;
   /** Whether Curiosity sends it exploring on its own (the player can switch it off). */
   autoRoam: boolean;
+  /** Herd parties out on the road: the place they're bound for and seconds since they left. */
+  parties: { place: string; t: number }[];
+  /** When (seasons' clock) each place is ready to be foraged by a party again. */
+  partyReady: Record<string, number>;
   /** The herd: how many, and what they're set to do (the rest forage). */
   pop: number;
   roles: Record<Role, number>;

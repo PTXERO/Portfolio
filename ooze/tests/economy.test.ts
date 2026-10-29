@@ -20,12 +20,12 @@ import {
   triggerFinale,
 } from '../src/economy/actions';
 import { D } from '../src/economy/num';
-import { applyOffline, timeBankCap } from '../src/economy/offline';
+import { applyOffline, simulate, timeBankCap } from '../src/economy/offline';
 import { softCap, defenseOf, dialMax, guardLevel, dietOf, forageMult, habitatMult, heroSpeed, milestonesReached, offlineBonusSec, spawnMult, stageRate, upgradeLevel } from '../src/economy/rates';
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
-import { breed, buyPart, partEnergy, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, islandFor, placeSeen, statsOf, tripEventDue, upkeep, walkTo } from '../src/economy/creature';
+import { breed, buyPart, partEnergy, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, islandFor, partyLeg, placeSeen, statsOf, tripEventDue, upkeep, walkTo } from '../src/economy/creature';
 import { islandOf, ISLAND, isLand, seenShare } from '../src/economy/island';
 import { foragers, herdMult, SEASON_SEC } from '../src/economy/rates';
 
@@ -784,6 +784,33 @@ describe('creature stage', () => {
     c.walk!.event = { id: 'storm', choice: null, left: 30 };
     tick(s, 0.1);
     expect(tripEventDue(s)).toBe(false);
+  });
+
+  it('foraging parties walk to found places, bring food home, and let each place rest', () => {
+    const s = creatureGame();
+    const c = s.stages.creature;
+    c.seed = 4242;
+    c.pop = 10;
+    islandFor(s);
+    c.trips.shore = 1;
+    c.trips.tidePools = 1;
+    c.upgrades.push('parties');
+    c.levels.parties = 1;
+    c.currency = c.currency.add(1e9);
+    tick(s, 0.1);
+    expect(c.parties.length).toBe(1);
+    const first = c.parties[0].place;
+    const leg = partyLeg(s, first);
+    const before = c.totalEarned;
+    simulate(s, 2 * leg + 1);
+    expect(c.totalEarned.gt(before)).toBe(true);
+    // The place it foraged rests; the next party goes elsewhere.
+    expect(c.parties.length).toBe(1);
+    expect(c.parties[0].place).not.toBe(first);
+    expect(c.partyReady[first]).toBeGreaterThan(c.year);
+    // Saved and loaded, parties are still out.
+    const back = importSave(exportSave(s));
+    expect(back.stages.creature.parties).toEqual(c.parties);
   });
 
   it('a walk runs into things on the road, and the choice counts', () => {

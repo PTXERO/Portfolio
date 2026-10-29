@@ -9,7 +9,7 @@
 
 import { PAL } from '../art/sprites';
 import { STAGES } from '../content/stages';
-import { islandFor, statsOf, walkTo } from '../economy/creature';
+import { islandFor, partyLeg, statsOf, walkTo } from '../economy/creature';
 import { Biome, CELL, CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
 import { SEASON_SEC, seasonOf } from '../economy/rates';
 import { H_LO, H_SPAN, LIFT, TILT } from './shade';
@@ -204,6 +204,8 @@ export class RangeScene {
   /** The camera, for the shader: centre (tiles), zoom, and the screen row of the centre. */
   /** Your creature's little pool of light at night: where it is on screen and how wide (art px). */
   lamp: [number, number, number] = [0, 0, 0];
+  /** Places parties were bound for last frame (to puff when one gets home). */
+  private partiesOut = new Set<string>();
 
   get camParams(): [number, number, number, number] {
     return [this.camX, this.camY, this.zoom, this.midY()];
@@ -797,6 +799,39 @@ export class RangeScene {
     }
 
     // Your creature, wherever it is on the island, with its mates trailing behind.
+    // Foraging parties: two of the herd trot out to a found place and back, the food they
+    // carry bobbing over them on the way home. A puff at home when they drop it off.
+    for (const party of st.parties) {
+      const leg = partyLeg(state, party.place);
+      const q = is.places[party.place];
+      if (!q) continue;
+      const back = party.t > leg;
+      const k = Math.min(1, back ? 2 - party.t / leg : party.t / leg);
+      const px = home.x + (q.x - home.x) * k;
+      const py = home.y + (q.y - home.y) * k;
+      const pleft = (q.x < home.x) !== back;
+      const ux = (q.x - home.x) / (Math.hypot(q.x - home.x, q.y - home.y) || 1);
+      const uy = (q.y - home.y) / (Math.hypot(q.x - home.x, q.y - home.y) || 1);
+      for (let j = 0; j < 2; j++) {
+        const lag = (back ? 1.4 : -1.4) * j;
+        const x = px - ux * lag + (j ? 0.5 : 0);
+        const y = py - uy * lag;
+        sprites.push({
+          y,
+          draw: () => {
+            this.drawBeing(b, look, x, y, { left: pleft, frame: Math.floor(t * 8 + j) % 2, hop: Math.abs(Math.sin(t * 7 + j * 1.7)) * 2 });
+            if (back && this.zoom >= 1.6) {
+              b.fillStyle = j ? PAL.o : PAL.g;
+              b.fillRect(Math.round(this.sx(x)), Math.round(this.py(x, y)) - (this.zoom >= 6 ? 22 : 12) - Math.round(Math.abs(Math.sin(t * 7 + j)) * 1), 2, 2);
+            }
+          },
+        });
+      }
+    }
+    const nowOut = new Set(st.parties.map((p) => p.place));
+    for (const was of this.partiesOut) if (!nowOut.has(was)) this.fx.pulse(Math.round(this.sx(home.x)), Math.round(this.py(home.x, home.y)), PAL.g);
+    this.partiesOut = nowOut;
+
     const walking = !!st.walk && !st.walk.event;
     this.lamp = [this.sx(me.x), this.py(me.x, me.y) - Math.min(6, 2 * this.zoom), Math.max(9, 4.5 * this.zoom)];
     const left = st.walk ? st.walk.tx < me.x : false;

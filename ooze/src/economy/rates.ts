@@ -51,6 +51,8 @@ export function scaleEffect(e: Effect, n: number): Effect {
       return { ...e, share: e.share * n };
     case 'curiosity':
       return { ...e, level: e.level * n };
+    case 'parties':
+      return { ...e, count: e.count * n };
     case 'defense':
       return { ...e, amount: e.amount * n };
     case 'offlineHours':
