@@ -262,6 +262,7 @@ export class TribeScene extends RangeScene {
   /** What miracles left lying: fish or kelp on the beach, fruit under a tree, a fallen beast. */
   private drawPiles(sprites: { y: number; draw: () => void }[], b: CanvasRenderingContext2D, dt: number): void {
     const z = Math.max(1, Math.round(this.zoom / 3));
+    const close = this.zoom >= 1.6;
     for (const q of this.piles) q.until -= dt;
     this.piles = this.piles.filter((q) => q.until > 0);
     for (const q of this.piles) {
@@ -271,6 +272,11 @@ export class TribeScene extends RangeScene {
         y: q.y,
         draw: () => {
           const cols = q.kind === 'green' ? ['#4a8a3a', '#c84a98'] : q.kind === 'fish' ? ['#c8d8e0', '#8aa8b8'] : q.kind === 'kelp' ? ['#4a7a3a', '#2e5a2a'] : q.kind === 'fruit' ? ['#c0402a', '#e8a040'] : ['#5a3a30', '#8a5a48'];
+          if (!close) {
+            b.fillStyle = cols[1];
+            b.fillRect(X - 1, Y - 1, 2, 1);
+            return;
+          }
           for (let k = 0; k < 7; k++) {
             b.fillStyle = cols[k % 2];
             b.fillRect(X + (((k * 5) % 7) - 3) * z, Y - (1 + (k % 3)) * z, 2 * z, z);
@@ -426,9 +432,12 @@ export class TribeScene extends RangeScene {
    * raft on its beach, growing part by part. */
   private drawWork(sprites: { y: number; draw: () => void }[], b: CanvasRenderingContext2D, ex: ExtinctionState, camp: Pt, t: number): void {
     const z = Math.max(1, Math.round(this.zoom / 3));
+    // Small things (trees, carcasses) only close up: zoomed out, a pixel would be too big for
+    // them, and they'd tower over the island.
+    const close = this.zoom >= 1.6;
     const plantEaters = ex.diet === 'herbivore';
     for (const s of this.spots) {
-      if (!this.spotShown(ex, s)) continue;
+      if (!close || !this.spotShown(ex, s)) continue;
       const X = Math.round(this.sx(s.x));
       const Y = Math.round(this.py(s.x, s.y));
       if (X < -10 || X > this.W + 10 || Y < -20 || Y > this.H + 10) continue;
@@ -457,25 +466,12 @@ export class TribeScene extends RangeScene {
         sprites.push({
           y: s.y,
           draw: () => {
-            // A charred tree, standing out against the ash: a pale scorch-ring at its foot, a
-            // black trunk with the sun-side still ash-grey, bare forked branches, and a coal
-            // or two glowing at the broken tips.
-            const k = Math.max(1, Math.round(this.zoom / 2));
-            b.fillStyle = 'rgba(200, 190, 175, 0.35)';
-            b.fillRect(X - 3 * k, Y - k, 7 * k, k);
-            b.fillStyle = '#120c0a';
-            b.fillRect(X - k, Y - 10 * k, 2 * k, 10 * k);
-            b.fillRect(X - 4 * k, Y - 8 * k, 3 * k, k);
-            b.fillRect(X - 4 * k, Y - 10 * k, k, 2 * k);
-            b.fillRect(X + k, Y - 7 * k, 3 * k, k);
-            b.fillRect(X + 3 * k, Y - 9 * k, k, 2 * k);
-            b.fillRect(X - k, Y - 12 * k, k, 2 * k);
-            b.fillStyle = '#7a6e66';
-            b.fillRect(X, Y - 10 * k, k, 9 * k);
-            const glow = Math.sin(t * 2 + s.x) > 0.3;
-            b.fillStyle = glow ? 'rgba(255, 120, 50, 0.996)' : '#8a3a1e';
-            b.fillRect(X - 4 * k, Y - 10 * k, k, k);
-            b.fillRect(X + 3 * k, Y - 9 * k, k, k);
+            // A charred tree: a black trunk and a few bare branches.
+            b.fillStyle = '#0c0908';
+            b.fillRect(X, Y - 7 * z, z, 7 * z);
+            b.fillRect(X - 2 * z, Y - 6 * z, 2 * z, z);
+            b.fillRect(X + z, Y - 5 * z, 2 * z, z);
+            b.fillRect(X - z, Y - 8 * z, z, z);
           },
         });
       } else if (s.job === 'dig' && ex.ideas.includes('stick')) {
@@ -490,6 +486,11 @@ export class TribeScene extends RangeScene {
       sprites.push({
         y: camp.y,
         draw: () => {
+          if (!close) {
+            b.fillStyle = 'rgba(255, 150, 60, 0.996)';
+            b.fillRect(X, Y - 1, 1, 1);
+            return;
+          }
           const f = Math.floor(t * 8) % 3;
           b.fillStyle = '#3a2a20';
           b.fillRect(X - 2 * z, Y - z, 4 * z, z);
@@ -516,6 +517,12 @@ export class TribeScene extends RangeScene {
         sprites.push({
           y: r.y - 0.5,
           draw: () => {
+            if (!close) {
+              // Far off: just a mark on the beach.
+              b.fillStyle = '#6a4a30';
+              b.fillRect(X - 1, Y - 1, 3, 1);
+              return;
+            }
             const w = 10 * z;
             const logs = Math.round(frame * 5);
             b.fillStyle = '#6a4a30';
