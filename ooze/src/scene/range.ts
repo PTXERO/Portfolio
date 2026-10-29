@@ -45,7 +45,7 @@ const SEASON_LAND = [
   { grass: '#6faa5c', dark: '#5a9450', forest: '#2f7048', marsh: '#4f8f7a', high: '#8fa860', sand: '#d8c08a', water: '#3f7f95' },
   { grass: '#86b050', dark: '#709a42', forest: '#3b7a3e', marsh: '#5a9070', high: '#a2ae62', sand: '#dcc58e', water: '#3f7f95' },
   { grass: '#b39a52', dark: '#9a8244', forest: '#a8582e', marsh: '#7a8058', high: '#a88e5a', sand: '#d0b884', water: '#3a7d98' },
-  { grass: '#e8eef0', dark: '#cdd8de', forest: '#5d7a6a', marsh: '#bcd6e2', high: '#dfe6ea', sand: '#e4e6e2', water: '#cfe4ee' },
+  { grass: '#d3dde4', dark: '#b6c4cf', forest: '#5d7a6a', marsh: '#a8c0cd', high: '#cad4dc', sand: '#d0d4d2', water: '#b2cad6' },
 ];
 const FOG = ['#d4dbe0', '#bfc8cf'];
 const DEEP = '#24506e';

@@ -201,12 +201,14 @@ void main() {
   vec3 glow = vec3(0.0);
   for (int i = 0; i < 8; i++) {
     float a = float(i) * 0.785;
-    vec4 c = texture2D(uOver, vUv + vec2(cos(a), sin(a)) * 1.6 / uArt);
+    vec4 c = texture2D(uOver, vUv + vec2(cos(a), sin(a)) * 0.9 / uArt);
     glow += c.rgb * c.a * smoothstep(0.75, 1.0, lum(c.rgb));
   }
   lit += glow / 8.0 * (0.12 + uNight * 0.9);
 
-  // Grade: a touch more colour and contrast, and a soft vignette.
+  // Grade: highlights roll off instead of burning out (snow in the sun keeps its shape),
+  // a touch more colour and contrast, and a soft vignette.
+  lit -= max(lit - 0.72, 0.0) * 0.55;
   float l = lum(lit);
   lit = mix(vec3(l), lit, 1.12);
   lit = (lit - 0.5) * 1.05 + 0.5;

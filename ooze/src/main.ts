@@ -733,8 +733,16 @@ async function checkForUpdate(): Promise<void> {
     const html = await (await fetch('./', { cache: 'no-store' })).text();
     const live = html.match(/index-[^"/]+\.js/)?.[0];
     if (mine && live && live !== mine) {
+      // A plain reload can come back from the browser's cache (iOS Safari does), so ask
+      // for the page by a fresh address; once per build, so a stale server can't loop us.
+      try {
+        if (sessionStorage.getItem('oozeTried') === live) return;
+        sessionStorage.setItem('oozeTried', live);
+      } catch {
+        /* private mode: try anyway */
+      }
       save();
-      location.reload();
+      location.replace(`${location.pathname}?v=${live.slice(6, -3)}`);
     }
   } catch {
     /* offline: keep playing this build */
@@ -750,6 +758,11 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 window.addEventListener('pagehide', save);
+// Also look for a newer build on opening, and now and then while playing.
+if (!import.meta.env.DEV) {
+  void checkForUpdate();
+  setInterval(() => void checkForUpdate(), 5 * 60_000);
+}
 // The scene resizes as the sheet slides; redraw at once so it never flashes blank.
 new ResizeObserver(() => {
   scene.fit();
