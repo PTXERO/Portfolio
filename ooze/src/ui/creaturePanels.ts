@@ -280,7 +280,7 @@ export function familyLayout(state: GameState): string {
     ${egg}
     <div class="panel-head"><h2>Mates</h2><span class="label dim">${s.mates.length} / ${MAX_MATES}</span></div>
     ${mates || '<p class="note">Mates are met while roaming, or courted when one wanders by the herd. The first new place your creature finds always has one.</p>'}
-    <p class="note">Each generation makes the whole line stronger (all output ×${GENERATION_MULT}, every stat +1), and the young inherit one of the mate's parts that the line doesn't have yet. Eggs take longer each generation; Charm hurries them.</p>`;
+    <p class="note">Each generation makes the whole line stronger (all output ×${GENERATION_MULT}, every stat +1), and the young inherit one of the mate's parts that the line doesn't have yet. Eggs take longer each generation; Charm, Nesting Instinct and Warm Brooding hurry them.</p>`;
 }
 
 function setText(root: HTMLElement, key: string, text: string): void {

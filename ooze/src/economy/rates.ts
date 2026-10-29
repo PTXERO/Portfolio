@@ -45,6 +45,7 @@ export function scaleEffect(e: Effect, n: number): Effect {
     case 'tripMult':
     case 'upkeepMult':
     case 'winterMult':
+    case 'eggMult':
       return { ...e, mult: Math.pow(e.mult, n) };
     case 'energy':
       return { ...e, amount: e.amount * n };

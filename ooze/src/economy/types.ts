@@ -70,6 +70,8 @@ export type Effect =
   | { kind: 'energy'; amount: number }
   /** The herd eats less (upkeep ×mult). */
   | { kind: 'upkeepMult'; mult: number }
+  /** Eggs hatch sooner (egg time ×mult). */
+  | { kind: 'eggMult'; mult: number }
   /** Winter takes less of the herd (losses ×mult). */
   | { kind: 'winterMult'; mult: number }
   /** An instinct bred into the line: this share of the herd does it, on its own. */

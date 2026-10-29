@@ -14,7 +14,7 @@ export const CREATURE: StageId = 'creature';
 /** Share of a roam's time paid out as output, before Trail Memory. */
 export const TRIP_PAYOUT = 0.6;
 /** Seconds the first egg takes; each generation after takes longer. */
-export const EGG_BASE_SEC = 1500;
+export const EGG_BASE_SEC = 1900;
 export const EGG_GROWTH = 1.6;
 /** Output multiplier per generation bred. */
 export const GENERATION_MULT = 1.25;
@@ -34,7 +34,7 @@ export const UPKEEP = 0.25;
 /** Housing with no buildings at all. */
 export const BASE_HOUSING = 8;
 
-function effectProduct(state: GameState, kind: 'upkeepMult' | 'winterMult'): number {
+function effectProduct(state: GameState, kind: 'upkeepMult' | 'winterMult' | 'eggMult'): number {
   let m = 1;
   for (const e of stageEffects(state, CREATURE)) if (e.kind === kind) m *= e.mult;
   return m;
@@ -433,7 +433,7 @@ export function court(state: GameState, rand: () => number = Math.random): strin
 
 /** Seconds the next egg will take: longer each generation, shorter with Charm. */
 export function eggSeconds(state: GameState): number {
-  return (EGG_BASE_SEC * EGG_GROWTH ** st(state).generation) / (1 + 0.04 * statsOf(state).charm) / (1 + 0.01 * st(state).roles.carer);
+  return ((EGG_BASE_SEC * EGG_GROWTH ** st(state).generation) / (1 + 0.04 * statsOf(state).charm) / (1 + 0.01 * st(state).roles.carer)) * effectProduct(state, 'eggMult');
 }
 
 /** Answers the run-in on the road; it's settled at once and the walk goes on. */

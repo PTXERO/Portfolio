@@ -162,6 +162,8 @@ export function describeEffect(stage: StageId, e: Effect): string {
       return `The herd eats ×${e.mult}`;
     case 'winterMult':
       return `Winter takes ×${e.mult}`;
+    case 'eggMult':
+      return `Eggs hatch in ×${e.mult} the time`;
     case 'instinct':
       return `${Math.round(e.share * 100)}% of the herd ${INSTINCT_VERB[e.role]}`;
     case 'rounds':

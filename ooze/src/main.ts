@@ -342,7 +342,8 @@ function renderGoal(): void {
     else if (n && !finaleReady(state)) {
       const name = n.r.final ? n.r.name : '???';
       const missing = n.check.parts.filter((p) => !p.ok);
-      if (!n.check.gens && !def.habitats) text = `Next ${name}: grow ${missing.find((p) => /^\d/.test(p.label))?.label ?? 'more molecules'}`;
+      const grow = missing.find((p) => /^\d/.test(p.label))?.label;
+      if (!n.check.gens && !def.habitats && grow) text = `Next ${name}: grow ${grow}`;
       else if (missing.length || !n.check.cost) {
         const met = n.check.parts.length - missing.length;
         let need = missing[0]?.label;
