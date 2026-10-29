@@ -199,3 +199,36 @@ export function creatureIcon(look: CreatureLook, scale = 3): string {
   drawCreature(c.getContext('2d')!, look, W / 2, H - 1);
   return `<img class="px-icon" src="${c.toDataURL()}" width="${W * scale}" height="${H * scale}" alt="" draggable="false">`;
 }
+
+/**
+ * A herd member, small enough to see dozens at once: a crisp 9-pixel body in the
+ * line's colours with a hint of its back part, rather than a shrunken portrait.
+ */
+export function drawMini(b: CanvasRenderingContext2D, look: CreatureLook, x: number, groundY: number, opts: { left?: boolean; frame?: number; sleeping?: boolean } = {}): void {
+  const [fill, edge] = DIET_COLORS[look.diet] ?? DIET_COLORS.none;
+  const d = opts.left ? -1 : 1;
+  const X = Math.round(x);
+  const Y = Math.round(groundY);
+  const at = (dx: number, dy: number, w: number, h: number, c: string) => {
+    b.fillStyle = c;
+    b.fillRect(d > 0 ? X + dx : X - dx - w + 1, Y + dy, w, h);
+  };
+  // Shadow, legs (stepping), body, head, eye.
+  at(-4, 0, 9, 1, 'rgba(16,20,31,0.25)');
+  if (!opts.sleeping) {
+    const step = opts.frame ? 1 : 0;
+    at(-2 - step, -1, 1, 1, PAL.k);
+    at(2 + step, -1, 1, 1, PAL.k);
+  }
+  const lift = opts.sleeping ? 1 : 0;
+  at(-3, -4 + lift, 7, 3 - lift, fill);
+  at(-2, -5 + lift, 5, 1, edge);
+  at(3, -5 + lift, 2, 2, fill);
+  at(4, -5 + lift, 1, 1, opts.sleeping ? fill : PAL.k);
+  at(-4, -3 + lift, 1, 1, edge);
+  // What it wears on its back shows.
+  const back = look.parts.back;
+  if (back === 'shell') at(-2, -6 + lift, 4, 2, '#8a6a3a');
+  else if (back === 'spines') for (let i = 0; i < 3; i++) at(-2 + i * 2, -6 + lift, 1, 1, PAL.w);
+  else if (back === 'sail') at(-1, -7 + lift, 3, 2, PAL.p);
+}

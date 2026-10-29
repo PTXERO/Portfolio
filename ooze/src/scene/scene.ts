@@ -8,7 +8,7 @@
 import { PAL } from '../art/sprites';
 import type { GameState, StageId } from '../economy/types';
 import { CellScene } from './cell';
-import { ShoreScene } from './shore';
+import { RangeScene } from './range';
 import type { PondEvent } from './pond';
 import { ring, type Frame } from './paint';
 import { SoupScene } from './soup';
@@ -45,7 +45,7 @@ export class Scene {
   private stage: StageId | '' = '';
   private soup = new SoupScene();
   private cell = new CellScene();
-  private shore = new ShoreScene();
+  private shore = new RangeScene();
   private displace = (x: number, y: number) => this.push(x, y);
   /** CSS pixels covered by the overlays at the top of the scene. */
   private topCss = 0;
