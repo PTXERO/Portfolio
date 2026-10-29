@@ -261,7 +261,7 @@ export class TribeScene extends RangeScene {
 
   /** What miracles left lying: fish or kelp on the beach, fruit under a tree, a fallen beast. */
   private drawPiles(sprites: { y: number; draw: () => void }[], b: CanvasRenderingContext2D, dt: number): void {
-    const z = Math.max(1, Math.round(this.zoom / 3));
+    const z = this.detail();
     const close = this.zoom >= 1.6;
     for (const q of this.piles) q.until -= dt;
     this.piles = this.piles.filter((q) => q.until > 0);
@@ -299,7 +299,7 @@ export class TribeScene extends RangeScene {
       const end = w.pts[w.pts.length - 1];
       const X = this.sx(end.x);
       const Y = this.py(end.x, end.y);
-      const z = Math.max(1, Math.round(this.zoom / 3));
+      const z = this.detail();
       if (w.id === 'lightning') {
         if (a < 0.6) {
           // The bolt: jagged, white-violet, from the top of the sky to the tree.
@@ -431,7 +431,7 @@ export class TribeScene extends RangeScene {
   /** The work places: carcasses (or fallen fruit), charred trees, the fire at the camp, and the
    * raft on its beach, growing part by part. */
   private drawWork(sprites: { y: number; draw: () => void }[], b: CanvasRenderingContext2D, ex: ExtinctionState, camp: Pt, t: number): void {
-    const z = Math.max(1, Math.round(this.zoom / 3));
+    const z = this.detail();
     // Small things (trees, carcasses) only close up: zoomed out, a pixel would be too big for
     // them, and they'd tower over the island.
     const close = this.zoom >= 1.6;
@@ -517,13 +517,17 @@ export class TribeScene extends RangeScene {
             b.fillRect(X, Y - 1, 1, 1);
             return;
           }
+          // Logs, flames that lick up and fall back, a bright heart.
           const f = Math.floor(t * 8) % 3;
           b.fillStyle = '#3a2a20';
-          b.fillRect(X - 2 * z, Y - z, 4 * z, z);
-          b.fillStyle = 'rgba(255, 150, 60, 0.996)';
-          b.fillRect(X - z, Y - (3 + (f % 2)) * z, 2 * z, (2 + (f % 2)) * z);
-          b.fillStyle = 'rgba(255, 230, 150, 0.996)';
-          b.fillRect(X - (f === 1 ? z : 0), Y - 2 * z, z, z);
+          b.fillRect(X - 3 * z, Y - z, 6 * z, z);
+          b.fillStyle = 'rgba(255, 110, 40, 0.996)';
+          b.fillRect(X - 2 * z, Y - 3 * z, 4 * z, 2 * z);
+          b.fillStyle = 'rgba(255, 160, 60, 0.996)';
+          b.fillRect(X - z, Y - (4 + (f % 2)) * z, 2 * z, (2 + (f % 2)) * z);
+          b.fillRect(X + (f === 2 ? z : -2 * z), Y - (5 + (f % 2)) * z, z, z);
+          b.fillStyle = 'rgba(255, 235, 160, 0.996)';
+          b.fillRect(X - (f === 1 ? z : 0), Y - 3 * z, z, z);
         },
       });
     }
@@ -566,6 +570,12 @@ export class TribeScene extends RangeScene {
         });
       }
     }
+  }
+
+  /** How big a detail's pixels are drawn at this zoom: one screen pixel each at the usual
+   * zoom, growing as it zooms in (so small things keep their size against the land). */
+  private detail(): number {
+    return Math.max(1, Math.round(this.zoom / 2.4));
   }
 
   /** Keeps the spear's island on screen while the crossing is told (then the new island). */
@@ -888,12 +898,15 @@ export class TribeScene extends RangeScene {
       m.x += dt * 0.5;
     }
     this.smoke = this.smoke.filter((m) => m.life > 0);
-    embers.forEach((e) => {
-      const glow = Math.sin(t * (0.8 + hash(Math.floor(e.x), Math.floor(e.y))) + e.x) * 0.5 + 0.5;
-      if (glow < 1 - heat * 0.8) return;
-      b.fillStyle = glow > 0.85 ? 'rgba(255, 170, 80, 0.996)' : 'rgba(220, 60, 30, 0.996)';
-      b.fillRect(Math.round(this.sx(e.x)), Math.round(this.py(e.x, e.y)), 1, 1);
-    });
+    // (An ember is a speck: zoomed far out, a pixel of one would be far too big, so they go.)
+    const ez = this.detail();
+    if (this.zoom >= 1.8)
+      embers.forEach((e) => {
+        const glow = Math.sin(t * (0.8 + hash(Math.floor(e.x), Math.floor(e.y))) + e.x) * 0.5 + 0.5;
+        if (glow < 1 - heat * 0.8) return;
+        b.fillStyle = glow > 0.85 ? 'rgba(255, 170, 80, 0.996)' : 'rgba(220, 60, 30, 0.996)';
+        b.fillRect(Math.round(this.sx(e.x)), Math.round(this.py(e.x, e.y)), ez, ez);
+      });
 
     // The survivors (up to 40 drawn; more are about, off where you can't see them).
     const shown = Math.min(40, Math.max(1, Math.round(tribe.pop)));
@@ -1116,6 +1129,7 @@ export class TribeScene extends RangeScene {
     sprites.sort((a, c) => a.y - c.y);
     for (const s of sprites) s.draw();
     for (const m of this.smoke) {
+      if (this.zoom < 1.2) break;
       const X = Math.round(this.sx(m.x));
       const Y = Math.round(this.py(m.x, m.y) - m.z * this.zoom * 0.6);
       const k = Math.min(1, m.life / 2) * Math.min(1, m.z) * 0.3;
