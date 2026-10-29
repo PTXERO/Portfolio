@@ -271,17 +271,36 @@ export class Pond {
         q.vx += ((q.x - h.x) / (d || 1)) * 40 * dt;
         q.vy += ((q.y - h.y) / (d || 1)) * 40 * dt;
       }
+      if (q.kind === 'algae') {
+        // Algae has no will of its own: it rides a slow current that wanders across the
+        // pond (gentler in the still Depths), bobs as it goes and sinks a little.
+        const flow = hab?.id === 'depths' ? 0.4 : hab?.id === 'vents' ? 0.2 : 1;
+        const curX = (Math.sin(f.t * 0.11 + q.y * 0.045) * 2.5 + 1.3) * flow;
+        const curY = 0.35 + Math.sin(f.t * 0.7 + q.phase) * 1.1;
+        q.vx += (curX - q.vx) * Math.min(1, dt * 0.8);
+        q.vy += (curY - q.vy) * Math.min(1, dt * 0.8);
+        // A passing cell's wake pushes it along.
+        if (d < rx + 10) {
+          q.vx += h.vx * 1.2 * dt;
+          q.vy += h.vy * 1.2 * dt;
+        }
+      } else {
+        q.vx *= 1 - dt * 0.5;
+        q.vy *= 1 - dt * 0.5;
+      }
       const sp = Math.hypot(q.vx, q.vy);
-      const max = q.kind === 'bacteria' ? 11 : 3;
+      const max = q.kind === 'bacteria' ? 11 : 6;
       if (sp > max) {
         q.vx *= max / sp;
         q.vy *= max / sp;
       }
-      q.vx *= 1 - dt * 0.5;
-      q.vy *= 1 - dt * 0.5;
       q.x += (q.vx + (q.kind === 'bacteria' ? Math.sin(f.t * 5 + q.phase) * 2 : 0)) * dt;
       q.y += q.vy * dt - (inPlume(q.x) ? PLUME_LIFT * 0.6 * dt : 0);
-      if (q.x < 4 || q.x > W - 4) q.vx = (q.x < 4 ? 1 : -1) * Math.abs(q.vx || 2);
+      if (q.kind === 'algae') {
+        // Carried off one side by the current, it drifts back in on the other.
+        if (q.x < -3) q.x = W + 2;
+        else if (q.x > W + 3) q.x = -2;
+      } else if (q.x < 4 || q.x > W - 4) q.vx = (q.x < 4 ? 1 : -1) * Math.abs(q.vx || 2);
       // Food carried up a Vents plume to the top is swept away (a fresh piece drifts in later).
       if (q.y < top + 6 && inPlume(q.x)) {
         q.age = -1;
