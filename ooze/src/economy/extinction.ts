@@ -245,12 +245,12 @@ const MEAT_KEEP = 0.62;
 const PLANT_KEEP = 0.95;
 const CARRION_KEEP = 0.9;
 /** Each of the dead, eaten: this much meat (a body feeds several). */
-const CORPSE_MEAT = 8;
+const CORPSE_MEAT = 3;
 /** Each body eaten: the chance one of the living catches the shaking, and how long it takes
  * to kill them. Each night some are starving, the chance cannibals kill one of their own. */
-const SHAKING_CHANCE = 0.3;
+const SHAKING_CHANCE = 0.45;
 const SHAKING_DAYS = 10;
-const KILL_CHANCE = 0.25;
+const KILL_CHANCE = 0.35;
 /** A lit fire burns this much wood a night; the ash winter's toll on gathering and nights. */
 const FIRE_WOOD = 2;
 const WINTER_GATHER = 0.65;
@@ -282,7 +282,8 @@ export function eatsMeat(d: Diet): boolean {
 /** How a diet does at a food job: specialists are better at their own food. */
 function dietSkill(d: Diet, job: JobId): number {
   if (job === 'listen' || job === 'rest' || job === 'wood' || job === 'build') return 1;
-  return d === 'omnivore' ? 0.85 : 1.1;
+  // (Cannibals are no hunters by nature: what they gain is what they're willing to eat.)
+  return d === 'omnivore' ? 0.85 : d === 'cannibal' ? 1 : 1.1;
 }
 
 /** The Extinction as it begins, just after the waking. */
@@ -644,7 +645,7 @@ export function decideFallen(state: GameState, eat: boolean): void {
 function eatDead(ex: ExtinctionState, bodies: number, caught: string[]): void {
   ex.meat += bodies * CORPSE_MEAT;
   // More bodies, more likely, but at most one falls sick a night.
-  if (bodies <= 0 || roll(ex) >= Math.min(0.7, SHAKING_CHANCE + 0.04 * bodies)) return;
+  if (bodies <= 0 || roll(ex) >= Math.min(0.85, SHAKING_CHANCE + 0.04 * bodies)) return;
   const well = ex.people.filter((p) => p.sick === undefined);
   if (!well.length) return;
   const p = well[Math.floor(roll(ex) * well.length)];

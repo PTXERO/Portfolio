@@ -82,6 +82,8 @@ export function moodOf(ex: ExtinctionState, p: Survivor): number {
   m -= (ex.dread ?? 0) * (p.quirk === 'devout' ? 0.05 : p.quirk === 'brave' ? 0.12 : 0.25);
   if (ex.last?.fire) m += 6;
   m += Math.min(3, (p.bonds ?? []).filter((b) => b.kind !== 'rival' && byId(ex, b.id)).length) * 4;
+  // Having eaten their own sits on all of them.
+  if (ex.diet === 'cannibal') m -= p.quirk === 'bitter' ? 6 : 12;
   if (p.quirk === 'cheerful') m += 10;
   if (p.quirk === 'bitter') m -= 10;
   return Math.max(-100, Math.min(30, m));
