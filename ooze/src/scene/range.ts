@@ -136,6 +136,8 @@ export class RangeScene {
   protected stormTimer = 90;
   protected wet = 0;
   protected weather: [number, number, number, number] = [0, 0, 0, 0];
+  /** How deep in an ash winter the world is, 0 to 1 (the Extinction's; never on the Creature's). */
+  protected ash = 0;
   protected rain: { x: number; y: number; z: number; v: number }[] = [];
   protected flash = 0;
   protected bow = 0;
@@ -337,7 +339,7 @@ export class RangeScene {
   }
 
   /** What the shader needs: the island's heights and kinds, the fog, and the seasons' ground. */
-  shadeInputs(): { seed: number; heights: Uint8Array; fog: HTMLCanvasElement; fogVersion: number; ground: [HTMLCanvasElement, HTMLCanvasElement]; blend: number; tint: [number, number, number]; trail: HTMLCanvasElement; trailVersion: number; weather: [number, number, number, number]; bow: [number, number, number, number] } | null {
+  shadeInputs(): { seed: number; heights: Uint8Array; fog: HTMLCanvasElement; fogVersion: number; ground: [HTMLCanvasElement, HTMLCanvasElement]; blend: number; tint: [number, number, number]; trail: HTMLCanvasElement; trailVersion: number; weather: [number, number, number, number]; bow: [number, number, number, number]; ash: number } | null {
     const is = this.island;
     if (!is || !this.fog || !this.groundPair) return null;
     if (!this.heightData || this.heightDataSeed !== is.seed) {
@@ -354,7 +356,7 @@ export class RangeScene {
     }
     const [a, c] = this.seasonPair;
     const tint = SEASON_TINT[a].map((v, i) => v + (SEASON_TINT[c][i] - v) * this.seasonBlend) as [number, number, number];
-    return { seed: is.seed, heights: this.heightData, fog: this.fog, fogVersion: this.fogVersion, ground: this.groundPair, blend: this.seasonBlend, tint, trail: this.trails.canvas, trailVersion: this.trails.version, weather: this.weather, bow: this.bowView };
+    return { seed: is.seed, heights: this.heightData, fog: this.fog, fogVersion: this.fogVersion, ground: this.groundPair, blend: this.seasonBlend, tint, trail: this.trails.canvas, trailVersion: this.trails.version, weather: this.weather, bow: this.bowView, ash: this.ash };
   }
 
   // ---- Input ----

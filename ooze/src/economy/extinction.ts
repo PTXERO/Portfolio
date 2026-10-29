@@ -57,7 +57,7 @@ export interface NightReport {
   caught?: string[];
   /** Whether the fire was kept lit, and what the season did. */
   fire?: boolean;
-  season?: 'winter' | 'green' | null;
+  season?: 'coming' | 'winter' | 'green' | null;
 }
 
 export interface ExtinctionState {
@@ -845,7 +845,7 @@ function night(ex: ExtinctionState): void {
   ex.hand = 0;
   ex.clock = 0;
   ex.today = { plants: 0, meat: 0, insight: 0 };
-  ex.last = { day: ex.day, ate, wanted: (ex.people.length + starved.length) * ex.ration, starved: starved.map((p) => ({ name: p.name, trait: p.trait })), spoiled: before - ex.meat - ex.plants, shook, killed, caught, fire, season: ex.day === WINTER[0] ? 'winter' : ex.day === WINTER[1] ? 'green' : null };
+  ex.last = { day: ex.day, ate, wanted: (ex.people.length + starved.length) * ex.ration, starved: starved.map((p) => ({ name: p.name, trait: p.trait })), spoiled: before - ex.meat - ex.plants, shook, killed, caught, fire, season: ex.day === WINTER[0] - 2 ? 'coming' : ex.day === WINTER[0] ? 'winter' : ex.day === WINTER[1] ? 'green' : null };
   if (ex.people.length < 2) ex.over = true;
   else {
     // A new day: the tribe thinks (rations, what to work toward), the spear finds new powers

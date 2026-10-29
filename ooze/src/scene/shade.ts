@@ -77,6 +77,7 @@ uniform sampler2D uOver;
 uniform sampler2D uLight;
 uniform sampler2D uTrail; // paths worn into the ground (alpha)
 uniform vec4 uWeather; // storm, morning mist, winter ice, wet ground (each 0 to 1)
+uniform float uAsh; // an ash winter: the sky full of ash, the light gone brown and low (0 to 1)
 uniform vec4 uBow; // after rain, the sun breaking through: strength in w
 uniform float uBlend;
 uniform vec2 uArt;
@@ -205,8 +206,10 @@ void main() {
   }
 
   // Clouds drift over, their shadows darkening the land below (heavy and grey in a storm).
-  float cloud = smoothstep(0.52 - uWeather.x * 0.4, 0.78, fbm(w * 0.018 + vec2(uTime * 0.012, uTime * 0.005) * (1.0 + uWeather.x * 2.0)));
-  lit *= 1.0 - cloud * (0.22 + uWeather.x * 0.2) * (1.0 - uNight);
+  float cloud = smoothstep(0.52 - uWeather.x * 0.4 - uAsh * 0.3, 0.78, fbm(w * 0.018 + vec2(uTime * 0.012, uTime * 0.005) * (1.0 + uWeather.x * 2.0)));
+  lit *= 1.0 - cloud * (0.22 + uWeather.x * 0.2 + uAsh * 0.25) * (1.0 - uNight);
+  // The ash winter: the light drained, brown and low, the colour gone out of everything.
+  lit = mix(lit, vec3(lum(lit)) * vec3(0.95, 0.86, 0.8), uAsh * 0.8) * (1.0 - uAsh * 0.55);
   lit = mix(lit, vec3(lum(lit)) * vec3(0.86, 0.9, 1.0), uWeather.x * 0.45) * (1.0 - uWeather.x * 0.3);
 
   // Fog of war: soft, rolling cloud, with wisps at its edge.
@@ -218,6 +221,8 @@ void main() {
   float fog = smoothstep(0.3, 0.7, fogA + (fn - 0.5) * 0.6 + (fn2 - 0.5) * 0.2);
   float bright = clamp(lum(uAmb + uSunCol), 0.15, 1.2);
   vec3 fogCol = mix(vec3(0.70, 0.74, 0.79), vec3(0.95, 0.96, 0.97), smoothstep(0.3, 0.75, fn * 0.7 + fn2 * 0.3)) * (0.3 + bright * 0.72);
+  // In an ash winter the clouds are ash: dark, brown-grey, heavy.
+  fogCol = mix(fogCol, mix(vec3(0.2, 0.18, 0.17), vec3(0.42, 0.38, 0.35), smoothstep(0.3, 0.75, fn * 0.7 + fn2 * 0.3)) * (0.45 + bright * 0.4), uAsh * 0.9);
   lit = mix(lit, fogCol, fog);
   // Morning mist lies in the low ground and burns off as the sun climbs.
   float mist = uWeather.y * (1.0 - smoothstep(0.02, 0.3, h)) * smoothstep(0.35, 0.7, fbm(w * 0.05 + vec2(uTime * 0.01, 0.0)));
@@ -280,6 +285,8 @@ export interface ShadeParams {
   weather: [number, number, number, number];
   /** After rain, the sun breaking through (strength in the last of the four). */
   bow: [number, number, number, number];
+  /** How deep in an ash winter the world is (0 to 1). */
+  ash?: number;
 }
 
 function compile(gl: WebGLRenderingContext, vs: string, fs: string): WebGLProgram {
@@ -485,6 +492,7 @@ export class MapShader {
     }
     gl.uniform1i(this.u('uTrail'), 6);
     gl.uniform4fv(this.u('uWeather'), p.weather);
+    gl.uniform1f(this.u('uAsh'), p.ash ?? 0);
     gl.uniform4fv(this.u('uBow'), p.bow);
     gl.uniform1f(this.u('uBlend'), p.blend);
     gl.uniform2f(this.u('uArt'), artW, artH);

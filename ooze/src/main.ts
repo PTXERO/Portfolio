@@ -623,6 +623,7 @@ function nightReport(): void {
   if (r.shook?.length) more.push(`<p class="grim">${r.shook.join(', ')} died of the shaking.</p>`);
   if (r.caught?.length) more.push(`<p class="shake">${r.caught.join(', ')} began to shake.</p>`);
   if (r.fire === false && state.stages.tribal.tribe?.ex?.ideas.includes('fire')) more.push('<p class="dim">The fire went out: no wood to keep it.</p>');
+  if (r.season === 'coming') more.push('<p class="winter">To the west the sky has gone brown, and it is spreading. The old ones say it is ash: the strike\'s, coming back down.</p>');
   if (r.season === 'winter') more.push(`<p class="winter">The sky has gone dark with ash. The ash winter: gathering will be poor, and nights cold without a fire, until day ${WINTER[1] + 1}.</p>`);
   if (r.season === 'green') more.push('<p class="green">Something green pushed up through the ash this morning.</p>');
   showModal(

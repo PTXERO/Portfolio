@@ -8,7 +8,7 @@ import { PAL } from '../art/sprites';
 import { SEASON_SEC } from '../economy/rates';
 import { Biome, CELLS, ISLAND, isLand, islandOf, type Island, type Pt } from '../economy/island';
 import { BURNT, LAKE, ashenFor, tribeOf } from '../economy/tribal';
-import { DAY_SEC as EX_DAY, RAFT, raftPart, type ExtinctionState, type JobId } from '../economy/extinction';
+import { DAY_SEC as EX_DAY, RAFT, raftPart, WINTER, type ExtinctionState, type JobId } from '../economy/extinction';
 import type { SpellId } from '../economy/miracles';
 import { crisisAt } from '../economy/crises';
 import type { GameState } from '../economy/types';
@@ -39,6 +39,16 @@ const SPREAD_SPEED = 9;
 const SPREAD_SEC = 4;
 /** How fast the spear turns in its pool. */
 const SPIN = 1.2;
+
+/** How deep the ash winter is on a given (fractional) day: rising over the three days before it,
+ * full through it, lifting over the four after. */
+function ashWinter(day: number): number {
+  const [a, b] = WINTER;
+  const up = Math.max(0, Math.min(1, (day - (a - 3)) / 3));
+  const down = Math.max(0, Math.min(1, (b + 3 - day) / 4));
+  const k = Math.min(up, down);
+  return k * k * (3 - 2 * k);
+}
 
 /** Where each kind of work is done on the island (tiles), found once per island. */
 interface Spot {
@@ -298,6 +308,19 @@ export class TribeScene extends RangeScene {
       b.fillStyle = 'rgba(232, 120, 200, 0.996)';
       b.fillRect(X, Y - 14, 1, 4);
       b.fillRect(X, Y - 7, 1, 1);
+    }
+  }
+
+  /** Ash coming down out of a dark sky, thick as the winter is deep (across the screen). */
+  private drawAshfall(b: CanvasRenderingContext2D, t: number): void {
+    if (this.ash < 0.05) return;
+    const n = Math.round(160 * this.ash);
+    for (let k = 0; k < n; k++) {
+      const speed = 6 + hash(k, 171) * 8;
+      const x = (hash(k, 173) * this.W + t * (3 + hash(k, 175) * 4) + Math.sin(t * 0.8 + k) * 3) % this.W;
+      const y = (hash(k, 177) * this.H + t * speed) % this.H;
+      b.fillStyle = k % 4 ? `rgba(120, 112, 108, ${0.55 * this.ash})` : `rgba(190, 182, 176, ${0.6 * this.ash})`;
+      b.fillRect(Math.round(x), Math.round(y), 1, 1);
     }
   }
 
@@ -732,6 +755,7 @@ export class TribeScene extends RangeScene {
     const { b, W, H, t, dt } = f;
     const is = islandOf(tribe.landed!.seed);
     this.island = is;
+    this.ash = 0;
     if (this.landSeed !== is.seed) {
       this.landSeed = is.seed;
       this.ground.clear();
@@ -1296,10 +1320,13 @@ export class TribeScene extends RangeScene {
 
     this.drawWonders(b, t, dt);
     if (tribe.ex) this.drawCrisis(b, tribe.ex, t);
+    // The ash winter: coming on over a few days, holding, then lifting.
+    this.ash = tribe.ex ? ashWinter(tribe.ex.day + tribe.ex.clock / EX_DAY) : 0;
+    this.drawAshfall(b, t);
     this.drawStroke(b, dt);
 
     // A red haze over the burnt world, thinning as it cools.
-    b.fillStyle = `rgba(150, 30, 20, ${0.16 * heat})`;
+    b.fillStyle = `rgba(150, 30, 20, ${0.16 * heat * (1 - this.ash)})`;
     b.fillRect(0, 0, W, H);
 
     // The waking: a shockwave of purple and red light rolls out from the spear across the
