@@ -454,11 +454,12 @@ function finishCast(): void {
     if (!tribe.landAt(last) || Math.hypot(last.x - first.x, last.y - first.y) < 8) return fizzle('A long line, in toward them');
     at = [first, last];
   }
-  // Answering a crisis: the right miracle, near enough to it (or round the one trapped).
+  // Answering a crisis: the right miracle, with any part of the stroke near enough to it (or
+  // round the one trapped).
   const c = ex.crisis;
   const now = crisisAt(ex);
   const near = (p: { x: number; y: number }) => !!now && Math.hypot(p.x - now.x, p.y - now.y) < (c?.kind === 'storm' ? 12 : 9);
-  const answers = !!c && c.spell === id && (c.kind === 'trapped' ? !!people?.some((i) => ex.people[i]?.id === c.who) : c.kind === 'cold' ? true : at.some(near) || near(first) || near(last));
+  const answers = !!c && c.spell === id && (c.kind === 'trapped' ? !!people?.some((i) => ex.people[i]?.id === c.who) : c.kind === 'cold' ? true : at.some(near) || W.some(near));
   const r = cast(ex, id, { people, power: answers && c!.kind !== 'trapped' && c!.kind !== 'cold' ? 2 : 1 });
   if (!r.ok) return fizzle(r.text);
   tribe.wonder(id, at);

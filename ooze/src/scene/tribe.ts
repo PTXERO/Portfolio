@@ -311,6 +311,35 @@ export class TribeScene extends RangeScene {
     }
   }
 
+  /** The level of green the ground was last painted at. */
+  private greenPainted = -1;
+
+  /** Green coming back into the burnt ground: shoots and fireweed on the ash (never in the
+   * fissures), thicker as `green` goes from 0 to 1. */
+  private greenUp(cv: HTMLCanvasElement, is: Island, green: number): HTMLCanvasElement {
+    if (green <= 0 || !is.scar) return cv;
+    const b = cv.getContext('2d')!;
+    const img = b.getImageData(0, 0, ISLAND, ISLAND);
+    const d = img.data;
+    const cols = [[74, 122, 58], [98, 150, 70], [60, 104, 52], [200, 74, 152]];
+    for (let i = 0; i < ISLAND * ISLAND; i++) {
+      if (is.scar[i] !== BURNT) continue;
+      const x = i % ISLAND;
+      const y = (i / ISLAND) | 0;
+      // Patchy: it comes up in clumps (where the seed lay), filling in between as it goes.
+      const clump = hash((x >> 3) + (y >> 3) * 977, 181);
+      const n = hash(x * 13 + y * 71, 183);
+      if (n > green * (0.25 + clump * 0.75)) continue;
+      const c = cols[n < green * 0.04 ? 3 : Math.floor(hash(x, y) * 3)];
+      d[i * 4] = c[0];
+      d[i * 4 + 1] = c[1];
+      d[i * 4 + 2] = c[2];
+    }
+    b.putImageData(img, 0, 0);
+    cv.dataset.v = String(green);
+    return cv;
+  }
+
   /** Ash coming down out of a dark sky, thick as the winter is deep (across the screen). */
   private drawAshfall(b: CanvasRenderingContext2D, t: number): void {
     if (this.ash < 0.05) return;
@@ -1000,9 +1029,22 @@ export class TribeScene extends RangeScene {
       this.fogKnown = null;
       this.groundSeed = is.seed;
     }
-    if (!this.ground.has(si)) this.ground.set(si, this.paintGround(is, si));
-    if (!this.ground.has(next)) this.ground.set(next, this.paintGround(is, next));
+    // The first green: after the ash winter, green coming back into the ash, more each day
+    // (the ground repainted as it spreads, a tenth at a time).
+    const dayNow = tribe.ex ? tribe.ex.day + tribe.ex.clock / EX_DAY : 0;
+    const green = Math.round(Math.max(0, Math.min(1, (dayNow - WINTER[1]) / 18)) * 10) / 10;
+    if (green !== this.greenPainted) {
+      this.ground.clear();
+      this.greenPainted = green;
+    }
+    const paint = (k: number) => this.greenUp(this.paintGround(is, k), is, green);
+    if (!this.ground.has(si)) this.ground.set(si, paint(si));
+    if (!this.ground.has(next)) this.ground.set(next, paint(next));
     this.groundPair = [this.ground.get(si)!, this.ground.get(next)!];
+    // The morning it comes: the sun breaking through the ash in long rays, then a gentler light
+    // that stays while the green spreads.
+    const since = dayNow - WINTER[1];
+    this.bowView = [0, 0, 0, since < 0 ? 0 : since < 0.15 ? (since / 0.15) * 2.5 : since < 1 ? 2.5 * (1 - (since - 0.15) / 0.85) + 0.35 : since < 18 ? 0.35 : 0];
     // The burning: the first time the burnt island is seen (just after the strike), the fire
     // runs out from the spear across the green, leaving ash behind it.
     if (!this.burnDone) {

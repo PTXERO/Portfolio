@@ -846,6 +846,9 @@ function night(ex: ExtinctionState): void {
   ex.clock = 0;
   ex.today = { plants: 0, meat: 0, insight: 0 };
   ex.last = { day: ex.day, ate, wanted: (ex.people.length + starved.length) * ex.ration, starved: starved.map((p) => ({ name: p.name, trait: p.trait })), spoiled: before - ex.meat - ex.plants, shook, killed, caught, fire, season: ex.day === WINTER[0] - 2 ? 'coming' : ex.day === WINTER[0] ? 'winter' : ex.day === WINTER[1] ? 'green' : null };
+  if (ex.day === WINTER[0] - 2) say(ex, 'To the west the sky went brown, and the brown spread.');
+  if (ex.day === WINTER[0]) say(ex, 'The ash came down out of the sky and the sun went dim. The ash winter had come.');
+  if (ex.day === WINTER[1]) say(ex, 'In the morning the sun broke through the ash, and something green had pushed up through it.');
   if (ex.people.length < 2) ex.over = true;
   else {
     // A new day: the tribe thinks (rations, what to work toward), the spear finds new powers
