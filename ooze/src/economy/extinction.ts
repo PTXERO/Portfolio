@@ -136,6 +136,8 @@ export interface ExtinctionState {
   crisis?: import('./crises').Crisis;
   crisisPlan?: { kind: import('./crises').CrisisKind; at: number };
   coldTonight?: boolean;
+  /** When the land can't feed them all: the workers and the strong eat, the weakest don't. */
+  triage?: boolean;
   /** Miracles the spear worked unasked last night (for the scene to show). */
   worked?: SpellId[];
 }
@@ -236,8 +238,8 @@ const YIELD: Record<JobId, number> = { forage: 1.3, scavenge: 1.9, dig: 1.1, fis
 /** Insight a day from the square root of the listening done. */
 const LISTEN = 1.4;
 /** (Low on their own: the ideas taken raise them, so the path chosen sets how many can live.) */
-const DIG_CAP = 0.15;
-const FISH_CAP = 0.16;
+const DIG_CAP = 0.125;
+const FISH_CAP = 0.125;
 /** Overnight: meat rots (much slower once dried), plants a little; carrion on the ground too. */
 const MEAT_KEEP = 0.62;
 const PLANT_KEEP = 0.95;
@@ -755,8 +757,13 @@ function night(ex: ExtinctionState): void {
   const value = (1 + cooking) * (ex.ration < 1 ? 1 + m.ration : 1);
   // In the dark, before the meal, the greedy may help themselves.
   nightTheft(ex);
-  // The hungriest eat first (or, if the strong eat first, the workers do).
-  const order = [...ex.people].sort((a, b) => (m.strongFirst ? Number(a.job === 'rest') - Number(b.job === 'rest') : 0) || b.hunger - a.hunger);
+  // Who eats first when there isn't enough: by standing (the strong and hardy, those who
+  // worked, then the rest; the frail, old and young last), so the weak go without and the tribe
+  // thins to what the land can feed, rather than everyone starving together. (The kind and
+  // parents still give their share away, after.) If the strong eat first, workers come first
+  // outright.
+  const standing = (p: Survivor) => (p.trait === 'strong' || p.trait === 'hardy' ? 2 : p.trait === 'frail' || p.trait === 'old' || p.trait === 'young' ? -1 : 0) + (p.job !== 'rest' ? 1 : 0) + (p.id === ex.leader ? 1 : 0) + (p.grit ?? 0) * 2;
+  const order = [...ex.people].sort((a, b) => (m.strongFirst ? Number(a.job === 'rest') - Number(b.job === 'rest') : 0) || standing(b) - standing(a));
   let ate = 0;
   for (const p of order) {
     let want = ex.ration / value;

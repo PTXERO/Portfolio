@@ -64,7 +64,7 @@ export function spellsFor(diet: Diet): SpellDef[] {
 
 /** Prayer each night: from everyone left, and a little from the spear itself. */
 export const PRAYER_MAX = 40;
-const prayerFor = (alive: number) => 1.5 + 0.5 * Math.sqrt(alive);
+const prayerFor = (alive: number) => 1.2 + 0.4 * Math.sqrt(alive);
 /** Dread fades each night; past these they cower (work less), then walk into the sea. */
 const DREAD_FADE = 2.5;
 export const DREAD_COWER = 60;
@@ -137,7 +137,7 @@ export function cast(ex: ExtinctionState, id: SpellId, opts: { people?: number[]
         if (p.sick !== undefined) cured++;
         remember(ex, p, p.sick !== undefined ? 'was cured of the shaking by a light from the spear' : 'felt a light from the spear ease the hunger');
         delete p.sick;
-        p.hunger = Math.max(0, p.hunger - 0.5 * k);
+        p.hunger = Math.max(0, p.hunger - 0.25 * k);
       }
       text = cured ? `${cured} cured` : `${inside.length} strengthened`;
       say(ex, cured ? `A light came round ${inside.length} of them. ${cured === 1 ? 'One' : cured} stopped shaking.` : `A light came round ${inside.length} of them, and the hunger eased.`);
@@ -236,10 +236,18 @@ export function tribeThinks(ex: ExtinctionState): void {
   }
   const have = provisions(ex) + coming;
   const was = ex.ration;
-  ex.ration = have >= n * 1.1 ? 1 : have >= n * 0.5 ? 0.5 : 0.25;
+  const wasTriage = !!ex.triage;
+  // Short for a while, they share it thin; but when the land itself can't feed them all
+  // (what comes in each day is far short of what they need), sharing thin only kills everyone
+  // slowly. Then the hard thing: full meals for the workers and the strong, and the weakest
+  // go without.
+  ex.triage = coming < n * 0.6 && have < n * 1.1;
+  ex.ration = ex.triage || have >= n * 1.1 ? 1 : have >= n * 0.5 ? 0.5 : 0.25;
   const lead = ex.people.find((p) => p.id === ex.leader)?.name;
   const word = lead ? `On ${lead}'s word, they` : 'They';
-  if (ex.ration !== was) say(ex, ex.ration > was ? `There was enough again. They ate ${ex.ration === 1 ? 'full meals' : 'half meals'}.` : ex.ration === 0.5 ? `${word} halved the rations. The old ate last.` : `${word} cut the rations to scraps. Some stopped eating so the young could.`);
+  if (ex.triage && !wasTriage) say(ex, `There wasn't enough for everyone, and there wasn't going to be. ${lead ? `${lead} said it aloud: ` : ''}the ones who worked would eat, and the weakest would not.`);
+  else if (!ex.triage && wasTriage) say(ex, 'There was enough to go round again. Everyone ate.');
+  else if (ex.ration !== was) say(ex, ex.ration > was ? `There was enough again. They ate ${ex.ration === 1 ? 'full meals' : 'half meals'}.` : ex.ration === 0.5 ? `${word} halved the rations. The old ate last.` : `${word} cut the rations to scraps. Some stopped eating so the young could.`);
   // What to put spare hands to: ideas first, then the raft (wood for it before building).
   const was2 = ex.focus;
   ex.focus = aiFocus(ex);

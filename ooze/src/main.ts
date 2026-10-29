@@ -645,6 +645,7 @@ function showEscape(fresh = false): void {
       <p>They survived the Extinction</p>
       <h1>${ex.day} days</h1>
       <dl>${(t.family ?? []).map((p) => `<dt>${p.name}</dt><dd>${TRAITS[p.trait as keyof typeof TRAITS]?.name ?? ''}</dd>`).join('')}
+      <dt>Lost</dt><dd>${ex.deaths}</dd><dt>Born on the ash</dt><dd>${ex.births ?? 0}</dd>
       <dt>Left on the ash</dt><dd>${t.ashIsland?.left ?? ex.people.length - (t.family?.length ?? 0)}</dd><dt>Days adrift</dt><dd>40</dd><dt>Tries</dt><dd>${(t.attempts ?? 0) + 1}</dd></dl>
       ${t.cannibal ? '<p class="dim">They are cannibals now, and always will be.</p>' : ''}
       <p>Ashore on a new island. Someone was already there.</p>

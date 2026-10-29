@@ -281,7 +281,7 @@ export function socialNight(ex: ExtinctionState, fire: boolean): number {
   }
   // Births: when there's Hope (and food for a full meal). The higher it is, the more often.
   const hope = hopeOf(ex);
-  const fed = ex.ration >= 1 && ex.people.reduce((s, p) => s + p.hunger, 0) / ex.people.length < 1;
+  const fed = ex.ration >= 1 && !ex.triage && ex.people.reduce((s, p) => s + p.hunger, 0) / ex.people.length < 1;
   if (fed && hope >= 55 && ex.people.length < 120 && ex.day - (ex.lastBirth ?? -99) >= 2 && roll(ex) < (hope - 45) / 60) {
     const pairs = ex.people.filter((p) => p.bonds?.some((b) => b.kind === 'mate' && byId(ex, b.id)));
     if (pairs.length) {
