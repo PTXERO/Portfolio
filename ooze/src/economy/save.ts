@@ -98,9 +98,24 @@ export function exportSave(state: GameState): string {
   return btoa(bin);
 }
 
+/**
+ * Reads a save code. Forgiving about how it was copied: spaces, line breaks and stray
+ * characters are dropped, and a few extra (or missing) characters at the end, as a phone's
+ * copy and paste can add, are worked around.
+ */
 export function importSave(code: string): GameState {
-  const bytes = Uint8Array.from(atob(code.trim()), (c) => c.charCodeAt(0));
-  return deserialize(new TextDecoder().decode(bytes));
+  const clean = code.replace(/[^A-Za-z0-9+/]/g, '');
+  let firstError: unknown = null;
+  for (let cut = 0; cut <= 3 && cut < clean.length; cut++) {
+    const body = clean.slice(0, clean.length - cut);
+    try {
+      const bytes = Uint8Array.from(atob(body + '='.repeat((4 - (body.length % 4)) % 4)), (c) => c.charCodeAt(0));
+      return deserialize(new TextDecoder().decode(bytes));
+    } catch (e) {
+      firstError ??= e;
+    }
+  }
+  throw firstError ?? new Error('empty save code');
 }
 
 export function saveToStorage(state: GameState): void {
