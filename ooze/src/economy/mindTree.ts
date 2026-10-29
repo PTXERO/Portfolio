@@ -105,7 +105,7 @@ const PATHS: Record<BranchId, Twelve> = {
     L('blades', 'Blades', 'All work +3%.', { gather: { all: 0.03 } }),
     L('bars', 'Digging bars', 'Digging +8%.', { gather: { dig: 0.08 } }),
     L('axes', 'Hafted axes', 'A stone head bound to a handle: wood cutting +20%, raft work +10%.', { gather: { wood: 0.2, build: 0.1 } }),
-    L('mightmakes', 'Strength above all', 'The strong work a third again as hard; everyone else, 12% less.', { strong: 0.35, others: -0.12 }),
+    L('mightmakes', 'Strength above all', 'The Strong work 35% harder; everyone else works 12% less.', { strong: 0.35, others: -0.12 }),
   ],
   sea: [
     L('watch', 'Watch the water', 'Fishing +5%.', { gather: { fish: 0.05 } }),
@@ -119,7 +119,7 @@ const PATHS: Record<BranchId, Twelve> = {
     L('hooks', 'Bone hooks', 'Fishing +6%.', { gather: { fish: 0.06 } }),
     L('currents', 'Read the currents', 'They know which way the sea runs: raft work +8%.', { gather: { build: 0.08 } }),
     L('traps', 'Fish traps', 'The shore holds 25% more.', { fishCap: 0.25 }),
-    L('tides', 'Read the tides', 'Fishing a third again as good, and the shore holds 30% more; foraging and digging 25% worse.', { gather: { fish: 0.35, forage: -0.25, dig: -0.25 }, fishCap: 0.3 }),
+    L('tides', 'Read the tides', 'Fishing +35%, and the shore holds 30% more; foraging and digging 25% worse.', { gather: { fish: 0.35, forage: -0.25, dig: -0.25 }, fishCap: 0.3 }),
   ],
   earth: [
     L('green', 'Know the green', 'Foraging +5%.', { gather: { forage: 0.05 } }),
@@ -228,7 +228,7 @@ const PLANT_EATERS: Record<string, Partial<Leaf>> = {
   weirs: { name: 'Kelp beds', does: 'The shallows hold 12% more.' },
   hooks: { name: 'Kelp hooks', does: 'Kelp gathering +6%.' },
   traps: { name: 'Kelp rafts', does: 'The shallows hold 25% more.' },
-  tides: { name: 'Read the tides', does: 'Kelp gathering a third again as good, and the shallows hold 30% more; foraging and digging 25% worse.' },
+  tides: { name: 'Read the tides', does: 'Kelp gathering +35%, and the shallows hold 30% more; foraging and digging 25% worse.' },
 };
 const MEAT_EATERS: Record<string, Partial<Leaf>> = {
   green: { name: 'Tracks in the ash', does: 'Grubbing in the ash +5%.' },
@@ -242,7 +242,7 @@ const MEAT_EATERS: Record<string, Partial<Leaf>> = {
   mulch: { name: 'Leave the young', does: 'A little more of the ash comes back each day.' },
   hammers: { name: 'Deadfalls', does: 'Trapping +6%.' },
   bars: { name: 'Pit traps', does: 'Trapping +8%.' },
-  tides: { name: 'Read the tides', does: 'Fishing a third again as good; grubbing and trapping 25% worse.' },
+  tides: { name: 'Read the tides', does: 'Fishing +35%, and the shore holds 30% more; grubbing and trapping 25% worse.' },
   tend: { name: 'Breed the grubs', does: 'The ash comes back faster, and snares reach 20% further; scavenging 25% worse.' },
 };
 
