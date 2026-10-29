@@ -1,25 +1,22 @@
-// The Creature stage scene: the land seen from above, a new way of looking after
-// two stages of peering side-on into water. The herd moves as a herd: it drifts
-// between grazing spots, beds down at the nests at night, huddles in winter and
-// scatters from a stalking beast. Every Field Guide place sits somewhere on the
-// map under fog; your creature walks off into the fog to roam, and finding a
-// place clears it. As the home range grows, so does the land you can see.
+// The Creature stage scene: the game's island, seen from above, at true scale. Zoomed
+// out it's the whole island and your herd is a cluster of dots; zoomed in it's the
+// grass at their feet. Fog lies over everything your creature hasn't seen: it clears
+// as it walks (further with Senses). Tap anywhere to send it there.
 //
-// The creatures themselves are drawn side-on (the old pixel-RPG convention), sorted
-// by depth so nearer ones overlap farther ones.
+// The herd lives at home: it drifts between grazing spots, beds down at the nests at
+// night, huddles in winter and scatters from a stalking beast (sentries charge it).
+// Creatures are drawn side-on (the old pixel-RPG convention), sorted by depth.
 
 import { PAL } from '../art/sprites';
 import { STAGES } from '../content/stages';
-import { canEat } from '../economy/actions';
-import { statsOf } from '../economy/creature';
+import { islandFor, statsOf, walkTo } from '../economy/creature';
+import { Biome, CELL, CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
 import { seasonOf } from '../economy/rates';
-import type { FoodKind, GameState, Role } from '../economy/types';
+import type { GameState, Role } from '../economy/types';
 import { drawBlob, type BlobStyle } from './blob';
 import { creatureLookOf, drawCreature, drawMini, type CreatureLook } from './creatureLook';
 import { Effects, hash, mixColor, visibleCount, type Frame } from './paint';
 import type { PondEvent } from './pond';
-
-type Pt = { x: number; y: number };
 
 interface Member {
   x: number;
@@ -32,13 +29,6 @@ interface Member {
   flee: number;
 }
 
-interface Bug {
-  x: number;
-  y: number;
-  hop: number;
-  age: number;
-}
-
 interface Beast {
   x: number;
   y: number;
@@ -49,74 +39,124 @@ interface Beast {
   left: boolean;
 }
 
-type Biome = 'sea' | 'sand' | 'grass' | 'forest' | 'rock' | 'marsh' | 'pool' | 'high';
-
-/** Each season's ground: grass, darker grass, flowers or none, the sea. */
+/** Each season's ground colours. */
 const SEASON_LAND = [
-  { grass: '#6faa5c', dark: '#5a9450', forest: '#2f7048', sea: '#3f8aa5', marsh: '#4f8f7a', high: '#7f9e5a' },
-  { grass: '#86b050', dark: '#709a42', forest: '#3b7a3e', sea: '#3f8aa5', marsh: '#5a9070', high: '#94a85a' },
-  { grass: '#b39a52', dark: '#9a8244', forest: '#a8582e', sea: '#3a7d98', marsh: '#7a8058', high: '#a08a56' },
-  { grass: '#e8eef0', dark: '#cdd8de', forest: '#5d7a6a', sea: '#2f6a86', marsh: '#bcd6e2', high: '#dfe6ea' },
+  { grass: '#6faa5c', dark: '#5a9450', forest: '#2f7048', marsh: '#4f8f7a', high: '#8fa860', sand: '#d8c08a', water: '#3f7f95' },
+  { grass: '#86b050', dark: '#709a42', forest: '#3b7a3e', marsh: '#5a9070', high: '#a2ae62', sand: '#dcc58e', water: '#3f7f95' },
+  { grass: '#b39a52', dark: '#9a8244', forest: '#a8582e', marsh: '#7a8058', high: '#a88e5a', sand: '#d0b884', water: '#3a7d98' },
+  { grass: '#e8eef0', dark: '#cdd8de', forest: '#5d7a6a', marsh: '#bcd6e2', high: '#dfe6ea', sand: '#e4e6e2', water: '#cfe4ee' },
 ];
+const FOG = ['#d4dbe0', '#bfc8cf'];
+const DEEP = '#24506e';
+const DIET_DOT: Record<string, string> = { grazer: '#86dcd8', hunter: '#f2906c', omnivore: '#f5c45e', none: PAL.g };
 
 const BEAST_STYLE: BlobStyle = { edge: '#e8615a', body: '#7a3a2a', nucleus: '#2a1008' };
 const BEAST_FLINCH: BlobStyle = { edge: PAL.w, body: '#b0503a', nucleus: '#2a1008' };
 /** Seconds in a day; the last quarter is night. */
 const DAY_SEC = 120;
-/** Art pixels per second for the herd, and for your creature before Speed. */
-const HERD_WALK = 7;
-const WALK = 13;
+/** Tiles a second the herd ambles at. */
+const HERD_WALK = 0.7;
+const ZOOM_MIN = 0.3;
+const ZOOM_MAX = 8;
+
+const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const mixRgb = (a: number[], b: number[], t: number) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 
 export class RangeScene {
   private fx = new Effects();
   private events: PondEvent[] = [];
-  private me = { x: 0, y: 0, tx: null as number | null, ty: 0, left: false, idle: 0, away: false, placed: false };
   private members: Member[] = [];
-  private bugs: Bug[] = [];
-  private berries: number[] = [];
   private beast: Beast | null = null;
   private beastTimer = 50;
   private visitor: { x: number; y: number; tx: number; ty: number; life: number; look: CreatureLook } | null = null;
   private visitorTimer = 40;
-  /** Where the herd is grazing now, and when it moves on. */
   private graze: Pt | null = null;
   private grazeTimer = 0;
   private flakes: { x: number; y: number; v: number }[] = [];
-  private terrain: HTMLCanvasElement | null = null;
-  private terrainKey = '';
-  /** The ground's colours (painted once a season) and which fog shade covers each pixel. */
-  private base: Uint8ClampedArray | null = null;
-  private fogShade: Uint8Array | null = null;
-  private baseKey = '';
-  /** Each season's ground, kept once painted, so the seasons turning never stalls either. */
-  private bases = new Map<string, { data: Uint8ClampedArray; shade: Uint8Array; biomes: Biome[] }>();
-  private biomes: Biome[] = [];
+  /** Each season's painted ground, for the island it was painted for. */
+  private ground = new Map<number, HTMLCanvasElement>();
+  private groundSeed = -1;
+  /** Fog over the island, and which cells it was last painted for. */
+  private fog: HTMLCanvasElement | null = null;
+  private fogKnown: Uint8Array | null = null;
+  // The camera: what's in the middle (in tiles), and how many art pixels a tile is.
+  private camX = 0;
+  private camY = 0;
+  private zoom = 3;
+  private auto = true;
+  private snap = true;
+  private viewTop = 0;
+  private viewBottom = 0;
   private W = 0;
-  private places: Record<string, Pt> = {};
-  /** Where it last roamed, so it comes home from there. */
-  private lastPlace: Pt | null = null;
-  private home: Pt = { x: 0, y: 0 };
+  private H = 0;
+  private island: Island | null = null;
+  private lastPos: Pt | null = null;
 
   reset(): void {
     this.fx.clear();
     this.members = [];
-    this.bugs = [];
     this.beast = null;
     this.visitor = null;
     this.graze = null;
-    this.me.placed = false;
-    this.terrainKey = '';
-    this.baseKey = '';
-  }
-
-  /** What the camera keeps centred: home. */
-  get focus(): Pt {
-    return this.home;
+    this.auto = true;
+    this.snap = true;
+    this.zoom = 3;
   }
 
   drain(): PondEvent[] {
     return this.events.splice(0);
   }
+
+  // ---- Camera ----
+
+  /** The band of the screen that shows the map (between the top bar and the sheet), in art pixels. */
+  setView(top: number, bottom: number): void {
+    // Opening or closing the sheet hands the camera back.
+    if (Math.abs(bottom - this.viewBottom) > 12) this.auto = true;
+    this.viewTop = top;
+    this.viewBottom = bottom;
+  }
+
+  private midY(): number {
+    return (this.viewTop + (this.viewBottom || this.H)) / 2;
+  }
+
+  /** Screen position (art pixels) of a point on the island. */
+  private sx(x: number): number {
+    return (x - this.camX) * this.zoom + this.W / 2;
+  }
+
+  private sy(y: number): number {
+    return (y - this.camY) * this.zoom + this.midY();
+  }
+
+  private toWorld(ax: number, ay: number): Pt {
+    return { x: this.camX + (ax - this.W / 2) / this.zoom, y: this.camY + (ay - this.midY()) / this.zoom };
+  }
+
+  zoomAt(ax: number, ay: number, factor: number): void {
+    const before = this.toWorld(ax, ay);
+    this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom * factor));
+    const after = this.toWorld(ax, ay);
+    this.camX += before.x - after.x;
+    this.camY += before.y - after.y;
+    this.auto = false;
+    this.clamp();
+  }
+
+  pan(dx: number, dy: number): void {
+    this.camX -= dx / this.zoom;
+    this.camY -= dy / this.zoom;
+    this.auto = false;
+    this.clamp();
+  }
+
+  private clamp(): void {
+    this.camX = Math.max(0, Math.min(ISLAND, this.camX));
+    this.camY = Math.max(0, Math.min(ISLAND, this.camY));
+  }
+
+  // ---- Input ----
 
   /** Hits needed to drive a beast off: fewer with Strength. */
   private hitsNeeded(state: GameState): number {
@@ -129,261 +169,178 @@ export class RangeScene {
     b.flinch = 0.4;
     if (b.hits >= this.hitsNeeded(state)) {
       b.fleeing = true;
-      this.events.push({ type: 'fend', x: b.x, y: b.y - 6 });
-    } else this.events.push({ type: 'hit', x: b.x, y: b.y - 6 });
+      this.events.push({ type: 'fend', x: this.sx(b.x), y: this.sy(b.y) - 8 });
+    } else this.events.push({ type: 'hit', x: this.sx(b.x), y: this.sy(b.y) - 8 });
   }
 
-  tap(state: GameState, x: number, y: number): void {
+  tap(state: GameState, ax: number, ay: number): void {
+    const near = (x: number, y: number) => Math.hypot(this.sx(x) - ax, this.sy(y) - 3 - ay) < Math.max(9, this.zoom * 2);
     const b = this.beast;
-    if (b && !b.fleeing && Math.hypot(x - b.x, y - (b.y - 4)) < 12) {
+    if (b && !b.fleeing && near(b.x, b.y)) {
       this.hitBeast(state, b);
       return;
     }
     const v = this.visitor;
-    if (v && Math.hypot(x - v.x, y - (v.y - 5)) < 12) {
-      this.events.push({ type: 'court', x: v.x, y: v.y - 10 });
+    if (v && near(v.x, v.y)) {
+      this.events.push({ type: 'court', x: this.sx(v.x), y: this.sy(v.y) - 12 });
       this.visitor = null;
       return;
     }
-    if (this.me.away || !this.revealed(state, x, y) || !this.land(x, y)) return;
-    this.me.tx = x;
-    this.me.ty = y;
-    this.me.idle = 0;
+    // Anywhere else: walk there. Into the fog is how the island gets explored.
+    const w = this.toWorld(ax, ay);
+    if (walkTo(state, w.x, w.y)) {
+      this.auto = true;
+      this.fx.pulse(ax, ay, PAL.w);
+    }
   }
 
   purchase(state: GameState, id: string): void {
     void state;
-    if (id === 'trip') return;
-    const at = this.me.away ? this.home : this.me;
-    this.fx.sparkle(at.x, at.y - 8);
-    this.fx.pulse(at.x, at.y - 4, PAL.y);
-  }
-
-  // ---- The map ----
-
-  /** Where everything sits, over the whole screen, with home in the middle. (The camera
-   * keeps home centred in whatever the top bar and the tab sheet leave showing.) */
-  private layout(f: Frame): void {
-    const { W, H, top } = f;
-    const map = H - top;
-    const at = (u: number, v: number): Pt => ({ x: Math.round(u * W), y: Math.round(top + v * map) });
-    this.home = at(0.55, 0.45);
-    this.places = {
-      shore: at(0.2, 0.4),
-      cliffs: at(0.3, 0.2),
-      caves: at(0.86, 0.14),
-      tidePools: at(0.18, 0.66),
-      forest: at(0.84, 0.4),
-      marsh: at(0.68, 0.7),
-      highlands: at(0.5, 0.92),
-    };
-  }
-
-  private coast(y: number): number {
-    return this.W * 0.1 + Math.sin(y * 0.08) * 3 + Math.sin(y * 0.21) * 2;
-  }
-
-  /** Smooth 2D value noise in [0, 1). */
-  private noise(x: number, y: number, s: number, salt: number): number {
-    const gx = x / s;
-    const gy = y / s;
-    const ix = Math.floor(gx);
-    const iy = Math.floor(gy);
-    const fx = gx - ix;
-    const fy = gy - iy;
-    const h = (a: number, b: number) => hash(a * 57 + b * 131, salt);
-    const sx = fx * fx * (3 - 2 * fx);
-    const sy = fy * fy * (3 - 2 * fy);
-    const top = h(ix, iy) + (h(ix + 1, iy) - h(ix, iy)) * sx;
-    const bot = h(ix, iy + 1) + (h(ix + 1, iy + 1) - h(ix, iy + 1)) * sx;
-    return top + (bot - top) * sy;
-  }
-
-  private biome(x: number, y: number): Biome {
-    const c = this.coast(y);
-    if (x < c) return 'sea';
-    const d = (id: string) => Math.hypot(x - this.places[id].x, y - this.places[id].y);
-    const wob = this.noise(x, y, 6, 3) * 8;
-    if (d('tidePools') < 14 + wob && x < c + 20) return 'pool';
-    if (x < c + 4) return 'sand';
-    if (d('cliffs') < 17 + wob || d('caves') < 15 + wob) return 'rock';
-    if (d('marsh') < 20 + wob) return 'marsh';
-    if (d('forest') < 22 + wob) return 'forest';
-    if (y > this.places.highlands.y - 24 - wob) return 'high';
-    return 'grass';
-  }
-
-  land(x: number, y: number): boolean {
-    const b = this.biomes[Math.round(y) * this.W + Math.round(x)];
-    return !!b && b !== 'sea' && b !== 'rock';
-  }
-
-  /** How far the land is known around home: wider with the range and each generation. */
-  private knownRadius(state: GameState): number {
-    const c = state.stages.creature;
-    return 26 + 4 * Math.min(10, c.generation) + 7 * Math.min(10, c.generators.territory) + Math.min(12, c.generators.burrow);
-  }
-
-  revealed(state: GameState, x: number, y: number): boolean {
-    return this.fog(state, x, y) < 0.5;
-  }
-
-  /** 0 = clear, 1 = thick fog. Home and every place found are clear. */
-  private fog(state: GameState, x: number, y: number): number {
-    const c = state.stages.creature;
-    let clear = (this.knownRadius(state) - Math.hypot(x - this.home.x, y - this.home.y)) / 6;
-    for (const [id, p] of Object.entries(this.places)) {
-      if ((c.trips[id] ?? 0) > 0) clear = Math.max(clear, (26 - Math.hypot(x - p.x, y - p.y)) / 6);
+    if (id === 'trip') {
+      this.auto = true;
+      return;
     }
-    return Math.max(0, Math.min(1, 0.5 - clear));
+    const at = this.lastPos ?? this.island?.home;
+    if (!at) return;
+    this.fx.sparkle(this.sx(at.x), this.sy(at.y) - 8);
+    this.fx.pulse(this.sx(at.x), this.sy(at.y) - 4, PAL.y);
   }
 
-  /**
-   * The ground is painted once a season (the slow part: noise for every pixel). The fog
-   * over it is laid on separately, and cheaply, whenever what's known changes, so a
-   * purchase that widens the land never stalls a tap.
-   */
-  private paintTerrain(f: Frame, state: GameState): void {
-    const c = state.stages.creature;
-    const { season } = seasonOf(state);
-    const si = ['Spring', 'Summer', 'Autumn', 'Winter'].indexOf(season.name);
-    const baseKey = [f.W, f.H, f.top, si].join('|');
-    if (baseKey !== this.baseKey || !this.base) {
-      this.baseKey = baseKey;
-      this.terrainKey = '';
-      if (!this.bases.has(baseKey)) {
-        this.paintBase(f, si);
-        this.bases.set(baseKey, { data: this.base!, shade: this.fogShade!, biomes: this.biomes });
-      }
-      const got = this.bases.get(baseKey)!;
-      this.base = got.data;
-      this.fogShade = got.shade;
-      this.biomes = got.biomes;
-    }
-    const key = [baseKey, this.knownRadius(state), Object.keys(c.trips).join()].join('|');
-    if (key === this.terrainKey && this.terrain) return;
-    this.terrainKey = key;
-    const { W, H } = f;
-    const cv = this.terrain ?? document.createElement('canvas');
-    if (cv.width !== W || cv.height !== H) {
-      cv.width = W;
-      cv.height = H;
-    }
-    this.terrain = cv;
+  // ---- The ground and the fog ----
+
+  private paintGround(is: Island, si: number): HTMLCanvasElement {
+    const N = ISLAND;
+    const cv = document.createElement('canvas');
+    cv.width = N;
+    cv.height = N;
     const b = cv.getContext('2d')!;
-    const img = b.createImageData(W, H);
-    img.data.set(this.base!);
-    const fogs = [[0xd4, 0xdb, 0xe0], [0xb9, 0xc3, 0xcb]];
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        // Fog over what hasn't been found: dithered at its edge.
-        const fg = this.fog(state, x, y);
-        if (fg <= 0) continue;
-        if (fg < 1 && hash(x * 3 + y * 17, 29) >= fg * 1.6 - 0.3) continue;
-        const p = fogs[this.fogShade![y * W + x]];
-        const i = (y * W + x) * 4;
-        img.data[i] = p[0];
-        img.data[i + 1] = p[1];
-        img.data[i + 2] = p[2];
-      }
-    }
-    b.putImageData(img, 0, 0);
-    // Cave mouths in the rock, once they're found.
-    if ((c.trips.caves ?? 0) > 0) {
-      const p = this.places.caves;
-      for (const [dx, dy] of [[-4, 2], [3, -1]]) {
-        b.fillStyle = PAL.k;
-        b.fillRect(p.x + dx - 2, p.y + dy - 1, 4, 3);
-        b.fillRect(p.x + dx - 1, p.y + dy - 2, 2, 1);
-      }
-    }
-  }
-
-  private paintBase(f: Frame, si: number): void {
-    const { W, H } = f;
-    const data = new Uint8ClampedArray(W * H * 4);
-    this.fogShade = new Uint8Array(W * H);
+    const img = b.createImageData(N, N);
     const L = SEASON_LAND[si];
-    const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-    const col = {
-      sea: rgb(L.sea),
-      seaDeep: rgb(mixColor(L.sea, '#1f3f5a', 0.4)),
-      sand: rgb(PAL.s),
-      sandDark: rgb(PAL.S),
+    const c = {
+      deep: rgb(DEEP),
+      sea: rgb(si === 3 ? '#356a88' : '#3f8aa5'),
+      foam: rgb('#7fc3d8'),
+      sand: rgb(L.sand),
       grass: rgb(L.grass),
       grassDark: rgb(L.dark),
       forest: rgb(L.forest),
-      forestHi: rgb(mixColor(L.forest, '#ffffff', 0.18)),
-      forestLo: rgb(mixColor(L.forest, '#000000', 0.3)),
+      forestHi: rgb(mixColor(L.forest, '#ffffff', 0.2)),
+      forestLo: rgb(mixColor(L.forest, '#000000', 0.35)),
+      marsh: rgb(L.marsh),
+      water: rgb(L.water),
+      reed: rgb(si === 2 ? '#a0884a' : si === 3 ? '#8a9a8a' : '#3e6e3a'),
+      high: rgb(L.high),
+      highDark: rgb(mixColor(L.high, '#000000', 0.15)),
       rock: rgb(PAL.r),
       rockHi: rgb(PAL.R),
-      marsh: rgb(L.marsh),
-      water: rgb(si === 3 ? '#cfe4ee' : '#3f7f95'),
-      reed: rgb(si === 2 ? '#a0884a' : '#3e6e3a'),
-      high: rgb(L.high),
-      highDark: rgb(mixColor(L.high, '#000000', 0.18)),
+      rockLo: rgb('#3e474e'),
+      peak: rgb(si >= 2 ? '#f2f4f5' : '#9aa6ad'),
+      snow: rgb('#f6f9fa'),
       flower: rgb(PAL.y),
       flower2: rgb(PAL.w),
-      snow: rgb('#f6f9fa'),
     };
-    this.biomes = new Array(W * H);
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const bi = this.biome(x, y);
-        this.biomes[y * W + x] = bi;
-        const n = this.noise(x, y, 4, 7);
-        const n2 = hash(x * 13 + y * 7, 5);
+    const H = is.height;
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const i = y * N + x;
+        const bi = is.biome[i];
+        const n = hash(x * 31 + y * 17, 3);
+        // Light from the top left: darker where the ground falls away from it.
+        const slope = H[i] - (y > 0 && x > 0 ? H[i - N - 1] : H[i]);
         let p: number[];
         switch (bi) {
-          case 'sea':
-            p = x < this.coast(y) - 8 ? col.seaDeep : col.sea;
+          case Biome.Deep:
+            p = c.deep;
             break;
-          case 'sand':
-            p = n2 < 0.12 ? col.sandDark : col.sand;
+          case Biome.Sea:
+            p = H[i] > -0.02 && n < 0.35 ? c.foam : c.sea;
             break;
-          case 'pool':
-            p = this.noise(x, y, 3, 11) > 0.6 ? col.water : n2 < 0.3 ? col.rockHi : col.rock;
+          case Biome.Sand:
+            p = n < 0.1 ? mixRgb(c.sand, [0, 0, 0], 0.12) : c.sand;
             break;
-          case 'rock': {
-            // Lit from the top left: a light edge where the rock above is lower.
-            const r = this.noise(x, y, 5, 13);
-            p = r > 0.62 ? col.rockHi : r < 0.3 ? mixRgb(col.rock, [30, 36, 40], 0.4) : col.rock;
+          case Biome.Forest:
+            // Tree crowns: a lit top and a dark gap, in a loose grid.
+            p = (x + (y % 3)) % 3 === 0 && n < 0.7 ? c.forestLo : n > 0.75 ? c.forestHi : c.forest;
             break;
-          }
-          case 'marsh':
-            p = this.noise(x, y, 3, 17) > 0.58 ? col.water : n2 < 0.25 ? col.reed : col.marsh;
+          case Biome.Marsh:
+            p = hash(Math.floor(x / 2) + Math.floor(y / 2) * 999, 7) > 0.55 ? c.water : n < 0.3 ? c.reed : c.marsh;
             break;
-          case 'forest': {
-            // Round tree crowns: brighter on top, dark in the gaps.
-            const t = this.noise(x, y, 3, 19);
-            p = t > 0.66 ? col.forestHi : t < 0.32 ? col.forestLo : col.forest;
+          case Biome.High:
+            p = slope > 0.004 ? c.highDark : c.high;
             break;
-          }
-          case 'high':
-            p = Math.sin(y * 0.5 + this.noise(x, y, 8, 23) * 6) > 0.8 ? col.highDark : col.high;
+          case Biome.Rock:
+            p = slope < -0.006 ? c.rockHi : slope > 0.006 ? c.rockLo : c.rock;
+            break;
+          case Biome.Peak:
+            p = slope > 0.006 ? c.rock : c.peak;
             break;
           default:
-            p = n > 0.62 ? col.grassDark : col.grass;
-            if (si === 0 && n2 < 0.02) p = n2 < 0.008 ? col.flower : col.flower2;
+            p = n < 0.18 ? c.grassDark : c.grass;
+            if (si === 0 && n > 0.985) p = n > 0.993 ? c.flower : c.flower2;
         }
-        this.fogShade[y * W + x] = this.noise(x, y, 7, 31) > 0.55 ? 1 : 0;
-        const i = (y * W + x) * 4;
-        data[i] = p[0];
-        data[i + 1] = p[1];
-        data[i + 2] = p[2];
-        data[i + 3] = 255;
+        if (si === 3 && (bi === Biome.Grass || bi === Biome.High || bi === Biome.Sand) && n > 0.15) p = c.snow;
+        img.data[i * 4] = p[0];
+        img.data[i * 4 + 1] = p[1];
+        img.data[i * 4 + 2] = p[2];
+        img.data[i * 4 + 3] = 255;
       }
     }
-    this.base = data;
+    b.putImageData(img, 0, 0);
+    return cv;
+  }
+
+  /** Clears the fog wherever new cells have been seen since last time. */
+  private paintFog(seen: Uint8Array): void {
+    const N = ISLAND;
+    if (!this.fog || !this.fogKnown) {
+      this.fog = document.createElement('canvas');
+      this.fog.width = N;
+      this.fog.height = N;
+      this.fogKnown = new Uint8Array(CELLS * CELLS);
+      const b = this.fog.getContext('2d')!;
+      const img = b.createImageData(N, N);
+      const f0 = rgb(FOG[0]);
+      const f1 = rgb(FOG[1]);
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          const p = hash(Math.floor(x / 6) + Math.floor(y / 6) * 977, 5) > 0.5 ? f1 : f0;
+          const i = (y * N + x) * 4;
+          img.data[i] = p[0];
+          img.data[i + 1] = p[1];
+          img.data[i + 2] = p[2];
+          img.data[i + 3] = 255;
+        }
+      }
+      b.putImageData(img, 0, 0);
+    }
+    const known = this.fogKnown;
+    const b = this.fog.getContext('2d')!;
+    for (let i = 0; i < CELLS * CELLS; i++) {
+      if (!seen[i] || known[i]) continue;
+      known[i] = 1;
+      b.clearRect((i % CELLS) * CELL, Math.floor(i / CELLS) * CELL, CELL, CELL);
+    }
+  }
+
+  /** Copies the part of a world-sized layer that's on screen, scaled to the zoom. */
+  private blitWorld(b: CanvasRenderingContext2D, layer: HTMLCanvasElement): void {
+    const tl = this.toWorld(0, 0);
+    const br = this.toWorld(this.W, this.H);
+    const x0 = Math.max(0, Math.floor(tl.x));
+    const y0 = Math.max(0, Math.floor(tl.y));
+    const x1 = Math.min(ISLAND, Math.ceil(br.x));
+    const y1 = Math.min(ISLAND, Math.ceil(br.y));
+    if (x1 <= x0 || y1 <= y0) return;
+    // (Safari won't draw a source rectangle that reaches outside the image, so it's clipped.)
+    b.drawImage(layer, x0, y0, x1 - x0, y1 - y0, this.sx(x0), this.sy(y0), (x1 - x0) * this.zoom, (y1 - y0) * this.zoom);
   }
 
   // ---- The herd ----
 
-  /** Keeps the drawn herd in step with the real one: a sample of it, roles in proportion. */
-  private syncHerd(state: GameState): void {
+  private syncHerd(state: GameState, home: Pt): void {
     const st = state.stages.creature;
     const pop = Math.max(1, Math.floor(st.pop));
-    const n = visibleCount(pop - 1, 18);
+    const n = visibleCount(pop - 1, 40);
     const want: Partial<Record<Role, number>> = {};
     let given = 0;
     for (const r of ['carer', 'digger', 'guard'] as Role[]) {
@@ -397,187 +354,214 @@ export class RangeScene {
       for (let i = have; i < want[r]!; i++) {
         // Newborns appear at the nests; on first sight, everyone's already about.
         const a = Math.random() * Math.PI * 2;
-        const d = fresh ? 4 + Math.random() * 14 : 2;
-        this.members.push({ x: this.home.x + Math.cos(a) * d, y: this.home.y + Math.sin(a) * d * 0.6, vx: 0, vy: 0, role: r, phase: Math.random() * 10, flee: 0 });
+        const d = fresh ? 1 + Math.random() * 5 : 0.5;
+        this.members.push({ x: home.x + Math.cos(a) * d, y: home.y + Math.sin(a) * d, vx: 0, vy: 0, role: r, phase: Math.random() * 10, flee: 0 });
       }
       let extra = have - want[r]!;
       if (extra > 0) this.members = this.members.filter((m) => m.role !== r || extra-- <= 0);
     }
   }
 
-  /** A grassy spot within what's known, for the herd to wander to next. */
-  private pickGraze(state: GameState): Pt {
-    const r = this.knownRadius(state) * 0.7;
+  /** A grassy spot near home for the herd to wander to next (further with a bigger range). */
+  private pickGraze(is: Island, state: GameState): Pt {
+    const range = 4 + Math.min(12, state.stages.creature.generators.territory) * 1.5;
     for (let i = 0; i < 20; i++) {
       const a = Math.random() * Math.PI * 2;
-      const d = Math.random() * r;
-      const p = { x: this.home.x + Math.cos(a) * d, y: this.home.y + Math.sin(a) * d * 0.7 };
-      if (this.land(p.x, p.y) && this.biomes[Math.round(p.y) * this.W + Math.round(p.x)] !== 'forest') return p;
+      const d = Math.random() * range;
+      const p = { x: is.home.x + Math.cos(a) * d, y: is.home.y + Math.sin(a) * d };
+      const b = is.biome[Math.round(p.y) * ISLAND + Math.round(p.x)];
+      if (b === Biome.Grass || b === Biome.High) return p;
     }
-    return { ...this.home };
+    return { ...is.home };
   }
 
-  private nestSpots(n: number): Pt[] {
-    return Array.from({ length: n }, (_, i) => ({ x: this.home.x - 6 + (i % 3) * 6 - (i >> 1), y: this.home.y + 2 + Math.floor(i / 3) * 4 }));
+  private nestSpots(home: Pt, n: number): Pt[] {
+    return Array.from({ length: n }, (_, i) => ({ x: home.x - 1.5 + (i % 3) * 1.5, y: home.y + 0.5 + Math.floor(i / 3) * 1.2 }));
   }
 
-  private burrowSpots(n: number): Pt[] {
+  private burrowSpots(home: Pt, n: number): Pt[] {
     return Array.from({ length: n }, (_, i) => {
       const a = -0.6 + i * 0.55;
-      return { x: this.home.x + Math.cos(a) * 15, y: this.home.y - 4 + Math.sin(a) * 8 };
+      return { x: home.x + Math.cos(a) * 4, y: home.y - 1 + Math.sin(a) * 3 };
     });
   }
 
-  private berrySpots(): Pt[] {
-    return Array.from({ length: 6 }, (_, i) => ({ x: this.home.x + Math.round((hash(i, 41) - 0.5) * 50), y: this.home.y + Math.round((hash(i, 43) - 0.5) * 34) }));
+  /** A creature at the right size for the zoom: a dot from far away, a full sprite up close. */
+  private drawBeing(b: CanvasRenderingContext2D, look: CreatureLook, x: number, y: number, o: { left?: boolean; frame?: number; sleeping?: boolean; hero?: boolean }): void {
+    const z = this.zoom;
+    const X = this.sx(x);
+    const Y = this.sy(y);
+    if (X < -40 || X > this.W + 40 || Y < -40 || Y > this.H + 40) return;
+    if (z < 1.6) {
+      b.fillStyle = o.hero ? PAL.y : DIET_DOT[look.diet] ?? PAL.g;
+      const s = o.hero ? 2 : 1;
+      b.fillRect(Math.round(X), Math.round(Y) - s, s, s);
+      return;
+    }
+    if (o.hero && z >= 6) {
+      // Up close, your creature in full, a size up on the herd around it.
+      drawCreature(b, look, X, Y, { left: o.left, frame: o.frame, scale: 2 });
+      return;
+    }
+    drawMini(b, look, X, Y, { left: o.left, frame: o.frame, sleeping: o.sleeping, scale: z >= 6 ? 2 : 1 });
   }
 
   draw(f: Frame, state: GameState): void {
-    const { b, W, H, t, dt, top } = f;
+    const { b, W, H, t, dt } = f;
     this.W = W;
-    this.layout(f);
-    this.paintTerrain(f, state);
+    this.H = H;
+    if (!this.viewBottom) this.viewTop = f.top;
+    const is = islandFor(state);
+    this.island = is;
     const st = state.stages.creature;
     const gens = st.generators;
     const look = creatureLookOf(state);
     const { season } = seasonOf(state);
+    const si = ['Spring', 'Summer', 'Autumn', 'Winter'].indexOf(season.name);
     const winter = season.name === 'Winter';
-    // Night: the last quarter of each day, fading in and out.
     const dayT = (t % DAY_SEC) / DAY_SEC;
-    const night = Math.max(0, Math.min(1, (Math.abs(dayT - 0.875) < 0.125 ? 1 : 0) * Math.min(1, (0.125 - Math.abs(dayT - 0.875)) * 40)));
+    const night = Math.max(0, Math.min(1, (0.125 - Math.abs(dayT - 0.875)) * 40));
     const asleep = night > 0.5;
+    const home = is.home;
+    const me = st.pos;
+    this.lastPos = me;
 
-    b.drawImage(this.terrain!, 0, 0);
-    // Glints on the sea and the marsh pools.
-    b.fillStyle = PAL.b;
-    for (let i = 0; i < 10; i++) {
-      const y = top + Math.floor(hash(i, 51) * (H - top));
-      const x = Math.floor(this.coast(y) - 3 - ((t * 2 + i * 7) % 12));
-      if (x > 0) b.fillRect(x, y, 2, 1);
+    // The camera follows your creature until you take it.
+    if (this.auto) {
+      const k = this.snap ? 1 : Math.min(1, dt * 3);
+      this.camX += (me.x - this.camX) * k;
+      this.camY += (me.y - this.camY) * k;
+      this.snap = false;
     }
 
-    // What the herd has made of home: nests (with the egg), burrow mounds, berry bushes.
-    const nests = this.nestSpots(Math.min(6, Math.max(1, gens.nest)));
+    // Ground (painted once a season) and fog (patched as cells are seen).
+    if (this.groundSeed !== is.seed) {
+      this.ground.clear();
+      this.fog = null;
+      this.fogKnown = null;
+      this.groundSeed = is.seed;
+    }
+    if (!this.ground.has(si)) this.ground.set(si, this.paintGround(is, si));
+    this.paintFog(st.seen);
+    b.fillStyle = DEEP;
+    b.fillRect(0, 0, W, H);
+    b.imageSmoothingEnabled = false;
+    this.blitWorld(b, this.ground.get(si)!);
+    // Waves glint on the open sea.
+    b.fillStyle = '#4c7f9c';
+    for (let i = 0; i < 18; i++) {
+      const x = Math.round(((hash(i, 81) * W + t * 3 * (1 + (i % 3))) % (W + 10)) - 5);
+      const y = Math.round(hash(i, 83) * H);
+      const w = this.toWorld(x, y);
+      if (!isLand(is, w.x, w.y)) b.fillRect(x, y, 2, 1);
+    }
+
+    // Home: nests (with the egg) and burrow mounds, in tile units.
+    const tile = (x: number, y: number, w: number, h: number, col: string) => {
+      b.fillStyle = col;
+      b.fillRect(Math.round(this.sx(x)), Math.round(this.sy(y)), Math.max(1, Math.round(w * this.zoom)), Math.max(1, Math.round(h * this.zoom)));
+    };
+    const nests = this.nestSpots(home, Math.min(9, Math.max(1, gens.nest)));
     for (const n of nests) {
-      b.fillStyle = PAL.S;
-      b.fillRect(n.x - 2, n.y - 1, 5, 2);
-      b.fillStyle = PAL.Y;
-      b.fillRect(n.x - 1, n.y - 1, 3, 1);
+      tile(n.x - 0.5, n.y - 0.3, 1, 0.5, PAL.S);
+      tile(n.x - 0.3, n.y - 0.3, 0.6, 0.2, PAL.Y);
     }
     if (st.egg) {
       const n = nests[0];
-      const wob = st.egg.left < 30 ? Math.round(Math.sin(t * 12)) : 0;
-      b.fillStyle = PAL.w;
-      b.fillRect(n.x - 1 + wob, n.y - 4, 3, 3);
-      b.fillRect(n.x + wob, n.y - 5, 1, 1);
-      b.fillStyle = PAL.p;
-      b.fillRect(n.x + wob, n.y - 3, 1, 1);
+      const wob = st.egg.left < 30 ? Math.sin(t * 12) * 0.1 : 0;
+      tile(n.x - 0.25 + wob, n.y - 0.8, 0.5, 0.6, PAL.w);
     }
-    for (const p of this.burrowSpots(Math.min(8, gens.burrow))) {
-      b.fillStyle = '#7a5a3a';
-      b.fillRect(p.x - 3, p.y, 6, 2);
-      b.fillStyle = '#3a2a1a';
-      b.fillRect(p.x - 1, p.y, 3, 2);
-    }
-    const bushes = this.berrySpots();
-    while (this.berries.length < bushes.length) this.berries.push(3);
-    const edible = { algae: canEat(state, 'creature', 'algae'), bacteria: canEat(state, 'creature', 'bacteria') };
-    bushes.forEach((p, i) => {
-      if (!this.land(p.x, p.y) || !this.revealed(state, p.x, p.y)) return;
-      // Berries grow back, but not in winter.
-      if (!winter) this.berries[i] = Math.min(3, this.berries[i] + dt * 0.08);
-      b.fillStyle = winter ? '#8a9a8a' : PAL.L;
-      b.fillRect(p.x - 3, p.y - 3, 7, 4);
-      b.fillRect(p.x - 2, p.y - 4, 5, 1);
-      b.fillStyle = winter ? '#a8b8a8' : PAL.l;
-      b.fillRect(p.x - 2, p.y - 4, 2, 1);
-      b.globalAlpha = edible.algae ? 1 : 0.5;
-      b.fillStyle = PAL.p;
-      for (let k = 0; k < Math.floor(this.berries[i]); k++) b.fillRect(p.x - 2 + k * 2, p.y - 2 + (k % 2), 1, 1);
-      b.globalAlpha = 1;
-    });
-
-    // Bugs hop about the grass near home.
-    if (!winter && this.bugs.length < 4 && Math.random() < dt * 0.3) {
-      const p = this.pickGraze(state);
-      this.bugs.push({ x: p.x, y: p.y, hop: -1, age: 0 });
+    const burrows = this.burrowSpots(home, Math.min(10, gens.burrow));
+    for (const p of burrows) {
+      tile(p.x - 0.7, p.y, 1.4, 0.5, '#7a5a3a');
+      tile(p.x - 0.3, p.y, 0.6, 0.5, '#3a2a1a');
     }
 
-    // The places still to find: a "?" in the fog, where the next roam could go.
+    // The Field Guide's places: a "!" once seen, a flag once found.
     for (const pl of STAGES.creature.places!) {
-      if ((st.trips[pl.id] ?? 0) > 0) continue;
-      const open = (pl.after ?? []).every((id) => (st.trips[id] ?? 0) > 0);
-      if (!open) continue;
-      const p = this.places[pl.id];
-      if (Math.floor(t * 1.5) % 2 || st.trip?.place === pl.id) {
+      const p = is.places[pl.id];
+      const found = (st.trips[pl.id] ?? 0) > 0;
+      if (!found && !st.seen[Math.floor(p.y / CELL) * CELLS + Math.floor(p.x / CELL)]) continue;
+      const X = Math.round(this.sx(p.x));
+      const Y = Math.round(this.sy(p.y));
+      if (X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;
+      if (found) {
         b.fillStyle = PAL.k;
-        b.fillRect(p.x - 1, p.y - 4, 3, 1);
-        b.fillRect(p.x + 1, p.y - 3, 1, 1);
-        b.fillRect(p.x, p.y - 2, 1, 1);
-        b.fillRect(p.x, p.y, 1, 1);
+        b.fillRect(X, Y - 7, 1, 7);
+        b.fillStyle = PAL.y;
+        b.fillRect(X + 1, Y - 7, 3, 2);
+      } else if (Math.floor(t * 2) % 2) {
+        b.fillStyle = PAL.k;
+        b.fillRect(X - 1, Y - 10, 3, 6);
+        b.fillRect(X - 1, Y - 3, 3, 2);
+        b.fillStyle = PAL.y;
+        b.fillRect(X, Y - 9, 1, 4);
+        b.fillRect(X, Y - 2, 1, 1);
       }
     }
 
-    // A trail of footprints out to where it's roaming.
-    if (st.trip) {
-      const p = this.places[st.trip.place];
-      const done = 1 - st.trip.left / st.trip.total;
-      const steps = Math.floor(Math.hypot(p.x - this.home.x, p.y - this.home.y) / 4);
-      b.fillStyle = mixColor(PAL.S, '#000000', 0.2);
-      for (let i = 1; i < steps; i++) {
-        const k = i / steps;
-        // Out, then back: the prints reach as far as it has gone.
-        if (k > Math.min(1, done * 2)) break;
-        b.fillRect(Math.round(this.home.x + (p.x - this.home.x) * k + (i % 2 ? 1 : -1)), Math.round(this.home.y + (p.y - this.home.y) * k), 1, 1);
+    // Where it's walking: footprints out to the target, and an X there.
+    if (st.walk) {
+      const d = Math.hypot(st.walk.tx - me.x, st.walk.ty - me.y);
+      const step = 3 / this.zoom;
+      b.fillStyle = PAL.w;
+      for (let k = step * 2; k < d; k += step * 2) {
+        b.fillRect(Math.round(this.sx(me.x + ((st.walk.tx - me.x) * k) / d)), Math.round(this.sy(me.y + ((st.walk.ty - me.y) * k) / d)), 1, 1);
+      }
+      const X = Math.round(this.sx(st.walk.tx));
+      const Y = Math.round(this.sy(st.walk.ty));
+      b.fillStyle = PAL.o;
+      for (let k = -2; k <= 2; k++) {
+        b.fillRect(X + k, Y + k, 1, 1);
+        b.fillRect(X + k, Y - k, 1, 1);
       }
     }
 
     // ---- Everyone who moves, sorted by depth. ----
-    this.syncHerd(state);
+    const sprites: { y: number; draw: () => void }[] = [];
+    this.syncHerd(state, home);
     this.grazeTimer -= dt;
     if (!this.graze || this.grazeTimer <= 0) {
-      this.graze = this.pickGraze(state);
+      this.graze = this.pickGraze(is, state);
       this.grazeTimer = 20 + Math.random() * 15;
     }
-    const center = asleep || winter ? this.home : this.graze;
-    // Bedded down at night and huddled in winter: closer, but still a body apart.
-    const spread = (asleep || winter ? 5 : 10) + Math.sqrt(this.members.length) * (asleep || winter ? 2 : 3);
+    const center = asleep || winter ? home : this.graze;
+    const spread = (asleep || winter ? 1.2 : 2.5) + Math.sqrt(this.members.length) * (asleep || winter ? 0.5 : 0.8);
     const bt = this.beast && !this.beast.fleeing ? this.beast : null;
-    const sprites: { y: number; draw: () => void }[] = [];
     this.members.forEach((m, i) => {
       // Where instinct takes each one.
       let gx = center.x + Math.cos(i * 2.4 + m.phase) * spread * (0.4 + hash(i, 61) * 0.6);
-      let gy = center.y + Math.sin(i * 2.4 + m.phase) * spread * 0.55 * (0.4 + hash(i, 61) * 0.6);
+      let gy = center.y + Math.sin(i * 2.4 + m.phase) * spread * (0.4 + hash(i, 61) * 0.6);
       if (!asleep) {
         if (m.role === 'carer') {
           const n = nests[i % nests.length];
-          gx = n.x + Math.sin(t * 0.3 + m.phase) * 3;
-          gy = n.y + 3;
-        } else if (m.role === 'digger' && gens.burrow > 0) {
-          const p = this.burrowSpots(Math.min(8, gens.burrow))[i % Math.min(8, gens.burrow)];
-          gx = p.x + 3;
-          gy = p.y + 2;
+          gx = n.x + Math.sin(t * 0.3 + m.phase) * 0.8;
+          gy = n.y + 0.8;
+        } else if (m.role === 'digger' && burrows.length) {
+          const p = burrows[i % burrows.length];
+          gx = p.x + 1;
+          gy = p.y + 0.6;
         } else if (m.role === 'guard') {
-          // Sentries ring the herd, a little way out, facing out; at a beast, they charge.
+          // Sentries ring the herd, a little way out; at a beast, they charge.
           const a = (i * 2.4) % (Math.PI * 2);
-          gx = center.x + Math.cos(a) * (spread + 10);
-          gy = center.y + Math.sin(a) * (spread + 10) * 0.6;
+          gx = center.x + Math.cos(a) * (spread + 2.5);
+          gy = center.y + Math.sin(a) * (spread + 2.5);
           if (bt) {
             gx = bt.x;
-            gy = bt.y + 2;
+            gy = bt.y + 0.4;
           }
         } else {
-          gx += Math.sin(t * 0.17 + m.phase * 3) * 4;
-          gy += Math.cos(t * 0.13 + m.phase * 2) * 2;
+          gx += Math.sin(t * 0.17 + m.phase * 3);
+          gy += Math.cos(t * 0.13 + m.phase * 2) * 0.6;
         }
       }
       // A beast close by: run from it (sentries excepted).
-      if (bt && m.role !== 'guard' && Math.hypot(bt.x - m.x, bt.y - m.y) < 22) m.flee = 2;
+      if (bt && m.role !== 'guard' && Math.hypot(bt.x - m.x, bt.y - m.y) < 6) m.flee = 2;
       m.flee = Math.max(0, m.flee - dt);
       if (m.flee > 0 && bt) {
         const d = Math.hypot(m.x - bt.x, m.y - bt.y) || 1;
-        gx = m.x + ((m.x - bt.x) / d) * 20;
-        gy = m.y + ((m.y - bt.y) / d) * 12;
+        gx = m.x + ((m.x - bt.x) / d) * 6;
+        gy = m.y + ((m.y - bt.y) / d) * 6;
       }
       // Keep a body's width apart.
       for (const o of this.members) {
@@ -585,89 +569,38 @@ export class RangeScene {
         const ox = m.x - o.x;
         const oy = m.y - o.y;
         const od = Math.hypot(ox, oy);
-        if (od > 0 && od < 7) {
-          gx += (ox / od) * (7 - od) * 3;
-          gy += (oy / od) * (7 - od) * 2;
+        if (od > 0 && od < 1.4) {
+          gx += (ox / od) * (1.4 - od) * 3;
+          gy += (oy / od) * (1.4 - od) * 3;
         }
       }
       const dx = gx - m.x;
       const dy = gy - m.y;
       const d = Math.hypot(dx, dy);
-      const sp = (m.flee > 0 || (m.role === 'guard' && bt) ? 22 : HERD_WALK) * (d > 1 ? 1 : 0);
+      const sp = (m.flee > 0 || (m.role === 'guard' && bt) ? 3 : HERD_WALK) * (d > 0.2 ? 1 : 0);
       m.vx += ((d ? (dx / d) * Math.min(sp, d * 2) : 0) - m.vx) * Math.min(1, dt * 3);
       m.vy += ((d ? (dy / d) * Math.min(sp, d * 2) : 0) - m.vy) * Math.min(1, dt * 3);
       const nx = m.x + m.vx * dt;
       const ny = m.y + m.vy * dt;
-      if (this.land(nx, ny)) {
+      if (isLand(is, nx, ny)) {
         m.x = nx;
         m.y = ny;
-      } else {
-        m.vx = -m.vx;
-        m.vy = -m.vy;
       }
-      // Sentries strike the beast they reach.
-      if (m.role === 'guard' && bt && bt.flinch <= 0 && Math.hypot(bt.x - m.x, bt.y - m.y) < 7 && Math.random() < dt * 1.2) this.hitBeast(state, bt);
-      const moving = Math.hypot(m.vx, m.vy) > 1;
+      if (m.role === 'guard' && bt && bt.flinch <= 0 && Math.hypot(bt.x - m.x, bt.y - m.y) < 1.5 && Math.random() < dt * 1.2) this.hitBeast(state, bt);
+      const moving = Math.hypot(m.vx, m.vy) > 0.15;
       const left = moving ? m.vx < 0 : m.role === 'guard' ? m.x < center.x : Math.sin(m.phase * 3) < 0;
-      const peck = !moving && !asleep && (m.role === 'forager' || m.role === 'digger') && Math.sin(t * 3 + m.phase * 5) > 0.6 ? 1 : 0;
       const x = m.x;
       const y = m.y;
-      sprites.push({
-        y,
-        draw: () => {
-          drawMini(b, look, x, y + peck, { left, frame: moving ? Math.floor(t * 8 + m.phase) % 2 : 0, sleeping: asleep });
-          if (asleep && Math.floor(t + m.phase) % 3 === 0) {
-            b.fillStyle = PAL.w;
-            b.fillRect(Math.round(x + 2), Math.round(y - 9 - ((t + m.phase) % 1) * 3), 1, 1);
-          }
-          if (m.role === 'digger' && peck && Math.floor(t * 6 + m.phase) % 3 === 0) {
-            b.fillStyle = '#3a2a1a';
-            b.fillRect(Math.round(x + (left ? 3 : -3)), Math.round(y - 3), 1, 1);
-          }
-        },
-      });
+      sprites.push({ y, draw: () => this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 8 + m.phase) % 2 : 0, sleeping: asleep }) });
     });
 
-    // Bugs.
-    for (const q of this.bugs) {
-      q.age += dt;
-      if (q.hop < 0 && Math.random() < dt * 0.5) q.hop = 0;
-      let lift = 0;
-      if (q.hop >= 0) {
-        q.hop += dt;
-        const d = Math.hypot(q.x - this.me.x, q.y - this.me.y) || 1;
-        const nx = q.x + ((q.x - this.me.x) / d) * 14 * dt;
-        const ny = q.y + ((q.y - this.me.y) / d) * 8 * dt;
-        if (this.land(nx, ny)) {
-          q.x = nx;
-          q.y = ny;
-        }
-        lift = Math.round(Math.sin(Math.min(1, q.hop / 0.4) * Math.PI) * 3);
-        if (q.hop > 0.4) q.hop = -1;
-      }
-      const x = Math.round(q.x);
-      const y = Math.round(q.y);
-      sprites.push({
-        y,
-        draw: () => {
-          b.globalAlpha = edible.bacteria ? 1 : 0.5;
-          b.fillStyle = PAL.k;
-          b.fillRect(x - 1, y - lift, 3, 1);
-          b.fillStyle = PAL.P;
-          b.fillRect(x, y - 1 - lift, 1, 1);
-          b.globalAlpha = 1;
-        },
-      });
-    }
-
-    // A beast slinks in from the fog now and then, and stalks the nearest of the herd.
+    // A beast slinks in now and then and stalks the nearest of the herd.
     this.beastTimer -= dt;
     if (!this.beast && this.beastTimer <= 0 && !asleep) {
       const a = Math.random() * Math.PI * 2;
-      const r = this.knownRadius(state) + 8;
-      const x = Math.max(this.coast(this.home.y) + 6, Math.min(W - 4, this.home.x + Math.cos(a) * r));
-      const y = Math.max(top + 4, Math.min(H - 4, this.home.y + Math.sin(a) * r * 0.7));
-      this.beast = { x, y, hits: 0, flinch: 0, fleeing: false, life: 30, left: false };
+      const x = home.x + Math.cos(a) * 14;
+      const y = home.y + Math.sin(a) * 14;
+      if (isLand(is, x, y)) this.beast = { x, y, hits: 0, flinch: 0, fleeing: false, life: 30, left: false };
       this.beastTimer = 60 + Math.random() * 45;
     }
     const beast = this.beast;
@@ -675,46 +608,41 @@ export class RangeScene {
       beast.life -= dt;
       beast.flinch = Math.max(0, beast.flinch - dt);
       if (beast.life <= 0) beast.fleeing = true;
-      let tx = this.home.x;
-      let ty = this.home.y;
+      let tx = home.x;
+      let ty = home.y;
       if (beast.fleeing) {
-        tx = beast.x + (beast.x - this.home.x) * 4;
-        ty = beast.y + (beast.y - this.home.y) * 4;
+        tx = beast.x + (beast.x - home.x) * 4;
+        ty = beast.y + (beast.y - home.y) * 4;
       } else if (this.members.length) {
         const prey = this.members.reduce((a, m) => (Math.hypot(m.x - beast.x, m.y - beast.y) < Math.hypot(a.x - beast.x, a.y - beast.y) ? m : a));
         tx = prey.x;
         ty = prey.y;
       }
       const d = Math.hypot(tx - beast.x, ty - beast.y) || 1;
-      const sp = beast.fleeing ? 26 : beast.flinch > 0 ? 0 : 6;
+      const sp = beast.fleeing ? 4 : beast.flinch > 0 ? 0 : 0.9;
       beast.x += ((tx - beast.x) / d) * sp * dt;
       beast.y += ((ty - beast.y) / d) * sp * dt;
-      if (Math.abs(tx - beast.x) > 1) beast.left = tx < beast.x;
-      // It snatches berries it passes.
-      bushes.forEach((p, i) => {
-        if (Math.hypot(p.x - beast.x, p.y - beast.y) < 5) this.berries[i] = Math.max(0, this.berries[i] - dt);
-      });
+      if (Math.abs(tx - beast.x) > 0.2) beast.left = tx < beast.x;
       const bx = beast.x;
       const by = beast.y;
-      const dir = beast.left ? -1 : 1;
-      const wob = beast.flinch > 0 ? 1.3 : 1;
-      const hits = beast.hits;
-      const fleeing = beast.fleeing;
       sprites.push({
         y: by,
         draw: () => {
-          b.fillStyle = 'rgba(16,20,31,0.25)';
-          b.fillRect(Math.round(bx - 6), Math.round(by), 12, 2);
-          drawBlob(b, [{ x: bx, y: by - 5, r: 4.5 * wob, nucleus: false }, { x: bx + dir * 5, y: by - 7, r: 2.8, nucleus: false }, { x: bx - dir * 5, y: by - 4, r: 2, nucleus: false }], beast.flinch > 0 ? BEAST_FLINCH : BEAST_STYLE);
+          const X = this.sx(bx);
+          const Y = this.sy(by);
+          const z = Math.max(0.5, this.zoom / 3);
+          const dir = beast.left ? -1 : 1;
+          const wob = beast.flinch > 0 ? 1.3 : 1;
+          drawBlob(b, [{ x: X, y: Y - 5 * z, r: 4.5 * z * wob, nucleus: false }, { x: X + dir * 5 * z, y: Y - 7 * z, r: 2.8 * z, nucleus: false }], beast.flinch > 0 ? BEAST_FLINCH : BEAST_STYLE);
           b.fillStyle = PAL.y;
-          b.fillRect(Math.round(bx + dir * 6), Math.round(by - 8), 1, 1);
-          if (!fleeing && hits > 0) {
+          b.fillRect(Math.round(X + dir * 6 * z), Math.round(Y - 8 * z), 1, 1);
+          if (!beast.fleeing && beast.hits > 0) {
             b.fillStyle = PAL.w;
-            for (let i = 0; i < hits; i++) b.fillRect(Math.round(bx - 2 + i * 2), Math.round(by - 13), 1, 1);
+            for (let i = 0; i < beast.hits; i++) b.fillRect(Math.round(X - 2 + i * 2), Math.round(Y - 13 * z), 1, 1);
           }
         },
       });
-      if (fleeing && (bx < -20 || bx > W + 20 || by < -20 || by > H + 20 || !this.revealed(state, bx, by))) this.beast = null;
+      if (beast.fleeing && Math.hypot(bx - home.x, by - home.y) > 30) this.beast = null;
     }
 
     // A visitor: one of your kind from elsewhere, in a different coat. Tap it to court it.
@@ -727,22 +655,19 @@ export class RangeScene {
         if (opts.length) parts[slot] = opts[Math.floor(Math.random() * opts.length)];
       }
       const a = Math.random() * Math.PI * 2;
-      const r = this.knownRadius(state) + 6;
-      const x = Math.max(this.coast(this.home.y) + 6, Math.min(W - 6, this.home.x + Math.cos(a) * r));
-      const y = Math.max(top + 6, Math.min(H - 6, this.home.y + Math.sin(a) * r * 0.7));
-      const g = this.pickGraze(state);
-      this.visitor = { x, y, tx: g.x, ty: g.y, life: 30, look: { parts, diet: look.diet === 'grazer' ? 'omnivore' : look.diet === 'hunter' ? 'grazer' : 'hunter' } };
+      const g = this.pickGraze(is, state);
+      this.visitor = { x: home.x + Math.cos(a) * 16, y: home.y + Math.sin(a) * 16, tx: g.x, ty: g.y, life: 40, look: { parts, diet: look.diet === 'grazer' ? 'omnivore' : look.diet === 'hunter' ? 'grazer' : 'hunter' } };
       this.visitorTimer = 90 + Math.random() * 60;
     }
     const v = this.visitor;
     if (v) {
       v.life -= dt;
       if (v.life <= 0) {
-        v.tx = v.x + (v.x - this.home.x) * 3;
-        v.ty = v.y + (v.y - this.home.y) * 3;
+        v.tx = v.x + (v.x - home.x) * 3;
+        v.ty = v.y + (v.y - home.y) * 3;
       }
       const d = Math.hypot(v.tx - v.x, v.ty - v.y);
-      const k = d > 1 ? Math.min(d, 9 * dt) / d : 0;
+      const k = d > 0.2 ? Math.min(d, dt) / d : 0;
       const left = v.tx < v.x;
       v.x += (v.tx - v.x) * k;
       v.y += (v.ty - v.y) * k;
@@ -751,12 +676,12 @@ export class RangeScene {
       sprites.push({
         y: vy,
         draw: () => {
-          drawCreature(b, v.look, vx, vy, { left, frame: d > 1 ? Math.floor(t * 7) % 2 : 0 });
+          this.drawBeing(b, v.look, vx, vy, { left, frame: d > 0.2 ? Math.floor(t * 7) % 2 : 0 });
           // A little heart over it, so it reads as "come say hello".
-          if (Math.floor(t * 2) % 2) {
+          if (Math.floor(t * 2) % 2 && this.zoom >= 1.6) {
             b.fillStyle = PAL.p;
-            const hx = Math.round(vx);
-            const hy = Math.round(vy - 26);
+            const hx = Math.round(this.sx(vx));
+            const hy = Math.round(this.sy(vy) - 13 * (this.zoom >= 6 ? 2 : 1));
             b.fillRect(hx - 2, hy, 2, 1);
             b.fillRect(hx + 1, hy, 2, 1);
             b.fillRect(hx - 2, hy + 1, 5, 1);
@@ -765,124 +690,53 @@ export class RangeScene {
           }
         },
       });
-      if (v.life <= 0 && !this.revealed(state, v.x, v.y)) this.visitor = null;
+      if (v.life <= 0 && Math.hypot(v.x - home.x, v.y - home.y) > 30) this.visitor = null;
     }
 
-    // Your creature: walks where you tap, forages when left alone, and roams off into the fog.
-    const me = this.me;
-    if (!me.placed) {
-      me.x = this.home.x + 8;
-      me.y = this.home.y + 6;
-      me.placed = true;
-      me.away = !!st.trip;
-    }
-    const roaming = !!st.trip;
-    if (roaming && !me.away) {
-      const p = this.places[st.trip!.place];
-      me.tx = p.x;
-      me.ty = p.y;
-      // Once it's into the fog (or there), it's gone.
-      if (!this.revealed(state, me.x, me.y) || Math.hypot(p.x - me.x, p.y - me.y) < 3) me.away = true;
-    }
-    if (!roaming && me.away) {
-      // Home again: back from wherever it went.
-      me.away = false;
-      const back = this.lastPlace ?? this.places.shore;
-      me.x = back.x;
-      me.y = back.y;
-      me.tx = this.home.x + 6;
-      me.ty = this.home.y + 4;
-    }
-    if (roaming) this.lastPlace = this.places[st.trip!.place];
-    me.idle += dt;
-    if (!roaming && me.tx === null && me.idle > 3 && !asleep) {
-      // Left alone, it heads for the nearest food it can eat.
-      let best: Pt | null = null;
-      let bd = 45;
-      if (edible.bacteria) for (const q of this.bugs) if (Math.hypot(q.x - me.x, q.y - me.y) < bd) [best, bd] = [q, Math.hypot(q.x - me.x, q.y - me.y)];
-      if (edible.algae) bushes.forEach((p, i) => {
-        if (this.berries[i] >= 1 && Math.hypot(p.x - me.x, p.y - me.y) < bd && this.revealed(state, p.x, p.y)) [best, bd] = [{ x: p.x, y: p.y + 2 }, Math.hypot(p.x - me.x, p.y - me.y)];
-      });
-      const g = best ?? { x: center.x + (Math.random() - 0.5) * 30, y: center.y + (Math.random() - 0.5) * 16 };
-      if (this.land(g.x, g.y)) {
-        me.tx = g.x;
-        me.ty = g.y;
-      }
-      me.idle = 0;
-    }
-    if (asleep && !roaming && me.tx === null) {
-      me.tx = this.home.x + 7;
-      me.ty = this.home.y + 5;
-    }
-    const speed = WALK * (1 + 0.03 * statsOf(state).speed);
-    let walking = false;
-    if (me.tx !== null) {
-      const dx = me.tx - me.x;
-      const dy = me.ty - me.y;
-      const d = Math.hypot(dx, dy);
-      if (d < 1.5) me.tx = null;
-      else {
-        const s = Math.min(speed * dt, d);
-        me.x += (dx / d) * s;
-        me.y += (dy / d) * s;
-        if (Math.abs(dx) > 0.5) me.left = dx < 0;
-        walking = true;
-      }
-    }
-    if (!me.away) {
-      // Eating what it reaches.
-      if (edible.bacteria) {
-        this.bugs = this.bugs.filter((q) => {
-          if (q.age > 0.4 && q.hop < 0.2 && Math.hypot(q.x - me.x, q.y - me.y) < 5) {
-            this.events.push({ type: 'eat', food: 'bacteria' as FoodKind, x: q.x, y: q.y - 6 });
-            return false;
-          }
-          return true;
+    // Your creature, wherever it is on the island, with its mates trailing behind.
+    const walking = !!st.walk && !st.walk.event;
+    const left = st.walk ? st.walk.tx < me.x : false;
+    sprites.push({
+      y: me.y,
+      draw: () => {
+        st.mates.forEach((mate, k) => {
+          const ox = me.x + (left ? 1.6 : -1.6) * (k + 1);
+          this.drawBeing(b, { ...look, parts: { ...look.parts, ...mate.parts } }, ox, me.y + 0.3 * (k + 1), { left, frame: walking ? Math.floor(t * 8 + k) % 2 : 0 });
         });
-      }
-      if (edible.algae) {
-        bushes.forEach((p, i) => {
-          if (this.berries[i] >= 1 && Math.hypot(p.x - me.x, p.y + 2 - me.y) < 5) {
-            this.berries[i] -= 1;
-            this.events.push({ type: 'eat', food: 'algae', x: p.x, y: p.y - 6 });
+        this.drawBeing(b, look, me.x, me.y, { left, frame: walking ? Math.floor(t * 8) % 2 : 0, hero: true });
+        // A gold marker over it (easy to spot), or a blinking "!" when something's stopped it.
+        const X = Math.round(this.sx(me.x));
+        const Y = Math.round(this.sy(me.y)) - (this.zoom >= 6 ? 50 : this.zoom >= 1.6 ? 12 : 5);
+        if (st.walk?.event) {
+          if (Math.floor(t * 3) % 2) {
+            b.fillStyle = PAL.o;
+            b.fillRect(X, Y - 5, 1, 3);
+            b.fillRect(X, Y - 1, 1, 1);
           }
-        });
-      }
-      // Bumping into a beast counts as a hit once it's strong enough to matter.
-      if (beast && !beast.fleeing && beast.flinch <= 0 && Math.hypot(beast.x - me.x, beast.y - me.y) < 8 && statsOf(state).strength >= 6) this.hitBeast(state, beast);
-      const mx = me.x;
-      const my = me.y;
-      const left = me.left;
-      sprites.push({
-        y: my,
-        draw: () => {
-          b.fillStyle = 'rgba(16,20,31,0.25)';
-          b.fillRect(Math.round(mx - 6), Math.round(my), 12, 1);
-          // Mates follow it about.
-          st.mates.forEach((mate, k) => {
-            const ox = mx + (left ? 14 : -14) + (left ? 7 : -7) * k;
-            drawMini(b, { ...look, parts: { ...look.parts, ...mate.parts } }, ox, my + 1 + k, { left, frame: walking ? Math.floor(t * 8 + k) % 2 : 0 });
-            b.fillStyle = PAL.p;
-            if (Math.floor(t * 1.5 + k) % 3 === 0) b.fillRect(Math.round(ox), Math.round(my - 9), 1, 1);
-          });
-          drawCreature(b, look, mx, my, { left, frame: walking ? Math.floor(t * 8) % 2 : 0 });
-        },
-      });
-    }
+        } else if (this.zoom >= 1.6) {
+          b.fillStyle = PAL.y;
+          b.fillRect(X - 1, Y - 1, 3, 1);
+          b.fillRect(X, Y, 1, 1);
+        }
+      },
+    });
 
     sprites.sort((a, c) => a.y - c.y);
     for (const s of sprites) s.draw();
 
-    // Falling leaves in autumn, snow in winter.
+    // The fog, over everything on the ground.
+    this.blitWorld(b, this.fog!);
+
+    // Falling leaves in autumn, snow in winter (screen space).
     if (season.name === 'Autumn' || winter) {
       const want = winter ? 45 : 12;
-      while (this.flakes.length < want) this.flakes.push({ x: Math.random() * W, y: top + Math.random() * (H - top), v: 4 + Math.random() * 6 });
+      while (this.flakes.length < want) this.flakes.push({ x: Math.random() * W, y: Math.random() * H, v: 4 + Math.random() * 6 });
       this.flakes.length = want;
       for (const q of this.flakes) {
         q.y += q.v * dt;
         q.x += Math.sin(t + q.v) * 3 * dt + (winter ? 0 : 6 * dt);
         if (q.y > H) {
-          q.y = top;
+          q.y = 0;
           q.x = Math.random() * W;
         }
         if (q.x > W) q.x -= W;
@@ -891,23 +745,19 @@ export class RangeScene {
       }
     } else this.flakes.length = 0;
 
-    // Night falls over everything; in summer, fireflies.
+    // Night falls over everything; in summer, fireflies around home.
     if (night > 0) {
       b.fillStyle = `rgba(16, 24, 56, ${0.5 * night})`;
       b.fillRect(0, 0, W, H);
-      if (season.name === 'Summer') {
-        for (let i = 0; i < 8; i++) {
+      if (season.name === 'Summer' && this.zoom >= 1.6) {
+        for (let i = 0; i < 10; i++) {
           if (Math.sin(t * 2 + i * 1.7) < 0.2) continue;
           b.fillStyle = PAL.y;
-          b.fillRect(Math.round(this.home.x + Math.sin(t * 0.3 + i) * 30 + (hash(i, 71) - 0.5) * 40), Math.round(this.home.y + Math.cos(t * 0.4 + i * 2) * 14), 1, 1);
+          b.fillRect(Math.round(this.sx(home.x + Math.sin(t * 0.3 + i) * 6 + (hash(i, 71) - 0.5) * 8)), Math.round(this.sy(home.y + Math.cos(t * 0.4 + i * 2) * 4)), 1, 1);
         }
       }
     }
 
     this.fx.run(f);
   }
-}
-
-function mixRgb(a: number[], b: number[], t: number): number[] {
-  return a.map((v, i) => Math.round(v + (b[i] - v) * t));
 }

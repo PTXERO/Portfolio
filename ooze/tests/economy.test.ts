@@ -25,7 +25,8 @@ import { softCap, defenseOf, dialMax, guardLevel, dietOf, forageMult, habitatMul
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
-import { breed, buyPart, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, startTrip, statsOf, tripChance, tripEventDue, upkeep } from '../src/economy/creature';
+import { breed, buyPart, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, islandFor, placeSeen, statsOf, tripEventDue, upkeep, walkTo } from '../src/economy/creature';
+import { islandOf, ISLAND, isLand, seenShare } from '../src/economy/island';
 import { foragers, herdMult, SEASON_SEC } from '../src/economy/rates';
 
 /** A game where the player has already made their first move. */
@@ -603,32 +604,62 @@ describe('creature stage', () => {
     expect(statsOf(s).speed).toBe(2);
   });
 
-  it('expeditions take time, pay out and bring back a page, a part and a first mate', () => {
-    const s = creatureGame();
-    s.stages.creature.pop = 10;
-    expect(startTrip(s, 'shore')).toBe(true);
-    expect(startTrip(s, 'shore')).toBe(false); // one at a time
-    expect(startTrip(s, 'tidePools')).toBe(false); // not open yet
-    const before = s.stages.creature.currency;
-    tick(s, 30);
-    expect(s.stages.creature.trip).not.toBeNull();
-    tick(s, 120);
-    expect(s.stages.creature.trip).toBeNull();
-    expect(s.stages.creature.discovered).toContain('shore');
-    expect(s.stages.creature.parts).toContain('shell');
-    expect(s.stages.creature.mates.length).toBe(1);
-    expect(s.stages.creature.currency.gt(before)).toBe(true);
-    expect(s.reports.at(-1)?.kind).toBe('trip');
+  it('every game rolls its own island, with every place at its distance from home', () => {
+    const a = islandOf(11, STAGES.creature.places);
+    const b = islandOf(12, STAGES.creature.places);
+    expect(a.home).not.toEqual(b.home);
+    for (const is of [a, b]) {
+      expect(isLand(is, is.home.x, is.home.y)).toBe(true);
+      for (const p of STAGES.creature.places!) {
+        const q = is.places[p.id];
+        expect(isLand(is, q.x, q.y)).toBe(true);
+        expect(q.x).toBeGreaterThan(0);
+        expect(q.x).toBeLessThan(ISLAND);
+      }
+      const d = (id: string) => Math.hypot(is.places[id].x - is.home.x, is.places[id].y - is.home.y);
+      expect(d('shore')).toBeLessThan(d('highlands'));
+    }
   });
 
-  it('a weak creature often fails somewhere hard; a strong one never does', () => {
+  it('walking clears the fog, pays for new ground, and reaching a place finds it', () => {
     const s = creatureGame();
-    const cliffs = STAGES.creature.places!.find((p) => p.id === 'cliffs')!;
-    expect(tripChance(s, cliffs)).toBeLessThan(0.1);
-    s.stages.creature.upgrades.push('trainStrength', 'trainToughness');
-    s.stages.creature.levels.trainStrength = 20;
-    s.stages.creature.levels.trainToughness = 20;
-    expect(tripChance(s, cliffs)).toBe(1);
+    const c = s.stages.creature;
+    c.pop = 10;
+    const is = islandFor(s);
+    const seen0 = seenShare(is, c.seen);
+    const shore = is.places.shore;
+    expect(walkTo(s, shore.x, shore.y)).toBe(true);
+    const before = c.currency;
+    c.walk!.next = 1e9; // no run-ins for this test
+    for (let i = 0; i < 300 && c.walk; i++) tick(s, 1);
+    expect(c.walk).toBeNull();
+    expect(seenShare(is, c.seen)).toBeGreaterThan(seen0);
+    expect(c.discovered).toContain('shore');
+    expect(placeSeen(s, 'shore')).toBe(true);
+    expect(c.parts).toContain('shell');
+    expect(c.mates.length).toBe(1);
+    expect(c.currency.gt(before)).toBe(true);
+    expect(s.reports.find((r) => r.kind === 'trip')?.success).toBe(true);
+  });
+
+  it('a place the creature is too weak for turns it back, until it is strong enough', () => {
+    const s = creatureGame();
+    const c = s.stages.creature;
+    const is = islandFor(s);
+    const cliffs = is.places.cliffs;
+    c.pos = { x: cliffs.x + 8, y: cliffs.y };
+    walkTo(s, cliffs.x, cliffs.y);
+    c.walk!.next = 1e9;
+    for (let i = 0; i < 60 && c.walk; i++) tick(s, 1);
+    expect(c.discovered).not.toContain('cliffs');
+    expect(s.reports.find((r) => r.place === 'cliffs')?.success).toBe(false);
+    c.upgrades.push('trainStrength', 'trainToughness');
+    c.levels.trainStrength = 40;
+    c.levels.trainToughness = 40;
+    walkTo(s, cliffs.x, cliffs.y);
+    c.walk!.next = 1e9;
+    for (let i = 0; i < 60 && c.walk; i++) tick(s, 1);
+    expect(c.discovered).toContain('cliffs');
   });
 
   it('breeding lays an egg that hatches into a stronger generation with the mate\'s parts', () => {
@@ -718,30 +749,50 @@ describe('creature stage', () => {
     expect(STAGES.creature.parts!.some((p) => !canWear(s, p.id))).toBe(true);
   });
 
-  it('an expedition can run into something halfway, and the choice counts', () => {
+  it('a walk runs into things on the road, and the choice counts', () => {
     const s = creatureGame();
-    s.stages.creature.pop = 10;
-    startTrip(s, 'shore');
-    const t = s.stages.creature.trip!;
-    t.event = { id: 'glut', choice: null };
-    expect(chooseEvent(s, 0)).toBe(false); // not halfway yet
-    t.left = t.total / 2 - 1;
+    const c = s.stages.creature;
+    c.pop = 10;
+    const is = islandFor(s);
+    walkTo(s, is.places.highlands.x, is.places.highlands.y);
+    c.walk!.next = 0;
+    c.pos = { x: (c.pos.x + is.places.highlands.x) / 2, y: (c.pos.y + is.places.highlands.y) / 2 };
+    tick(s, 0.1);
     expect(tripEventDue(s)).toBe(true);
+    const at = { ...c.pos };
+    tick(s, 5);
+    expect(c.pos).toEqual(at); // it waits for the choice
     expect(chooseEvent(s, 0)).toBe(true);
     expect(tripEventDue(s)).toBe(false);
-    tick(s, t.total);
-    const r = s.reports.find((x) => x.kind === 'trip')!;
-    expect(r.event).toBeTruthy();
+    expect(s.reports.find((x) => x.kind === 'event')?.event).toBeTruthy();
   });
 
-  it('a creature save survives a round trip, mid-expedition and mid-egg', () => {
+  it('left alone, a run-in settles itself the safe way', () => {
     const s = creatureGame();
-    startTrip(s, 'shore');
-    s.stages.creature.mates.push({ id: 2, name: 'Silt', parts: {} });
+    const c = s.stages.creature;
+    const is = islandFor(s);
+    walkTo(s, is.places.highlands.x, is.places.highlands.y);
+    c.walk!.event = { id: 'storm', choice: null, left: 30 };
+    tick(s, 31);
+    expect(tripEventDue(s)).toBe(false);
+    expect(s.reports.find((x) => x.kind === 'event')?.event).toContain('Turn back');
+  });
+
+  it('a creature save survives a round trip: the island, the fog, the walk and the egg', () => {
+    const s = creatureGame();
+    const c = s.stages.creature;
+    const is = islandFor(s);
+    walkTo(s, is.places.shore.x, is.places.shore.y);
+    tick(s, 5);
+    c.mates.push({ id: 2, name: 'Silt', parts: {} });
     breed(s, 2);
     const back = deserialize(serialize(s));
-    expect(back.stages.creature.trip?.place).toBe('shore');
-    expect(back.stages.creature.egg?.mate.name).toBe('Silt');
+    const b = back.stages.creature;
+    expect(b.seed).toBe(c.seed);
+    expect(b.pos).toEqual(c.pos);
+    expect(b.walk?.tx).toBe(c.walk?.tx);
+    expect([...b.seen]).toEqual([...c.seen]);
+    expect(b.egg?.mate.name).toBe('Silt');
   });
 });
 

@@ -51,15 +51,6 @@ export class Scene {
   private topCss = 0;
   /** CSS pixels the open tab sheet covers at the bottom of the scene. */
   private bottomCss = 0;
-  /** The Creature's map can be zoomed and panned: how far in, and the view's top-left in art pixels. */
-  private zoom = 1;
-  private camX = 0;
-  private camY = 0;
-  /** The camera keeps the known land centred until the player pans or pinches. */
-  private autoCam = true;
-  private camSnap = true;
-  /** CSS pixels from the top of the scene to where the tab sheet starts. */
-  private visBottomCss = 0;
 
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -83,45 +74,29 @@ export class Scene {
   }
 
   private toArt(x: number, y: number): [number, number] {
-    return [this.camX + x / this.px / this.zoom, this.camY + y / this.px / this.zoom];
+    return [x / this.px, y / this.px];
   }
 
-  /** The camera may look a little past the map's edges (into fog), never further. */
-  private clampCam(): void {
-    const vw = this.W / this.zoom;
-    const vh = this.H / this.zoom;
-    this.camX = Math.max(-vw / 2, Math.min(this.W - vw / 2, this.camX));
-    this.camY = Math.max(-vh / 2, Math.min(this.H - vh / 2, this.camY));
-  }
-
-  setVisibleBottom(cssPx: number): void {
-    // Opening or closing the sheet re-centres the land in what's left of the screen.
-    if (Math.abs(cssPx - this.visBottomCss) > 40) this.autoCam = true;
-    this.visBottomCss = cssPx;
-  }
-
-  /** Pinch or wheel on the map: zooms by `factor`, keeping the point under the fingers still. */
+  /** Pinch or wheel on the Creature's map: zooms by `factor` about the point under the fingers. */
   zoomAt(cssX: number, cssY: number, factor: number): void {
     if (this.stage !== 'creature') return;
-    const [wx, wy] = this.toArt(cssX, cssY);
-    this.autoCam = false;
-    this.zoom = Math.max(1, Math.min(4, this.zoom * factor));
-    this.camX = wx - cssX / this.px / this.zoom;
-    this.camY = wy - cssY / this.px / this.zoom;
-    this.clampCam();
+    const [x, y] = this.toArt(cssX, cssY);
+    this.shore.zoomAt(x, y, factor);
   }
 
-  /** Dragging the zoomed map. */
+  /** Dragging the Creature's map. */
   panBy(dxCss: number, dyCss: number): void {
     if (this.stage !== 'creature') return;
-    this.autoCam = false;
-    this.camX -= dxCss / this.px / this.zoom;
-    this.camY -= dyCss / this.px / this.zoom;
-    this.clampCam();
+    this.shore.pan(dxCss / this.px, dyCss / this.px);
+  }
+
+  /** Where the tab sheet starts (CSS pixels from the top), so the map centres above it. */
+  setVisibleBottom(cssPx: number): void {
+    this.shore.setView(this.topCss / this.px, cssPx / this.px);
   }
 
   get zoomed(): boolean {
-    return this.zoom > 1.01;
+    return this.stage === 'creature';
   }
 
   ripple(cssX: number, cssY: number): void {
@@ -154,8 +129,7 @@ export class Scene {
   /** What happened in the pond since last asked, with positions in CSS pixels. */
   pondEvents(): PondEvent[] {
     if (this.stage !== 'cell' && this.stage !== 'creature') return [];
-    const k = this.px * this.zoom;
-    return (this.stage === 'cell' ? this.cell.pond.drain() : this.shore.drain()).map((e) => ({ ...e, x: (e.x - this.camX) * k, y: (e.y - this.camY) * k }));
+    return (this.stage === 'cell' ? this.cell.pond.drain() : this.shore.drain()).map((e) => ({ ...e, x: e.x * this.px, y: e.y * this.px }));
   }
 
   /** Plays a purchase out in the scene. Call after the purchase went through. */
@@ -220,28 +194,11 @@ export class Scene {
       this.soup.reset();
       this.cell.reset();
       this.shore.reset();
-      this.zoom = 1;
-      this.camX = 0;
-      this.camY = 0;
-      this.autoCam = true;
-      this.camSnap = true;
     }
     const frame: Frame = { b: this.b, W: this.W, H: this.H, t: this.time, dt, top: Math.ceil(this.topCss / this.px), bottom: Math.ceil(this.bottomCss / this.px) };
     if (state.current === 'soup') this.soup.draw(frame, state, this.displace);
     else if (state.current === 'creature') {
       this.shore.draw(frame, state);
-      if (this.autoCam) {
-        // Home in the middle of the space between the top bar and the sheet.
-        const home = this.shore.focus;
-        const midCss = (this.topCss + (this.visBottomCss || this.H * this.px)) / 2;
-        const tx = home.x - this.W / this.zoom / 2;
-        const ty = home.y - midCss / this.px / this.zoom;
-        const k = this.camSnap ? 1 : Math.min(1, dt * 4);
-        this.camX += (tx - this.camX) * k;
-        this.camY += (ty - this.camY) * k;
-        this.camSnap = false;
-        this.clampCam();
-      }
     } else this.cell.draw(frame, state);
     for (const r of this.ripples) {
       this.b.globalAlpha = 1 - r.age;
@@ -252,18 +209,7 @@ export class Scene {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    if (this.stage === 'creature') {
-      // Past the map's edges is more fog. Only the part of the map in view is copied
-      // (Safari won't draw a source rectangle that reaches outside the image).
-      ctx.fillStyle = '#d4dbe0';
-      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-      const k = this.px * this.dpr * this.zoom;
-      const x0 = Math.max(0, this.camX);
-      const y0 = Math.max(0, this.camY);
-      const x1 = Math.min(this.W, this.camX + this.W / this.zoom);
-      const y1 = Math.min(this.H, this.camY + this.H / this.zoom);
-      if (x1 > x0 && y1 > y0) ctx.drawImage(this.buffer, x0, y0, x1 - x0, y1 - y0, (x0 - this.camX) * k, (y0 - this.camY) * k, (x1 - x0) * k, (y1 - y0) * k);
-    } else ctx.drawImage(this.buffer, 0, 0, this.W * this.px * this.dpr, this.H * this.px * this.dpr);
+    ctx.drawImage(this.buffer, 0, 0, this.W * this.px * this.dpr, this.H * this.px * this.dpr);
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.font = '700 18px "Ooze Digits", "Pixelify Sans", monospace';

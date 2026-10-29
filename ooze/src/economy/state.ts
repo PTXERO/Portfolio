@@ -1,18 +1,25 @@
 import { STAGES, STAGE_ORDER } from '../content/stages';
 import { ZERO, D } from './num';
+import { CELLS } from './island';
 import type { GameState, StageDef, StageId, StageState } from './types';
 
 export const BASE_OFFLINE_CAP_SEC = 8 * 3600;
 
 /** The Creature stage starts with the free parts (no price) worn, one per slot. */
-function creatureStart(def: StageDef): Pick<StageState, 'parts' | 'equipped' | 'trip' | 'trips' | 'mates' | 'egg' | 'generation' | 'pop' | 'roles' | 'year'> {
+/** A fresh island for a new Creature: just its seed. The island itself is rolled the
+ * first time it's needed (see islandFor), which also puts the creature at home. */
+export function newIsland(def: StageDef, seed = Math.floor(Math.random() * 2 ** 31)): Pick<StageState, 'seed' | 'pos' | 'seen' | 'walk'> {
+  return { seed: def.places ? seed : 0, pos: { x: -1, y: -1 }, seen: new Uint8Array(CELLS * CELLS), walk: null };
+}
+
+function creatureStart(def: StageDef): Pick<StageState, 'parts' | 'equipped' | 'seed' | 'pos' | 'seen' | 'walk' | 'trips' | 'mates' | 'egg' | 'generation' | 'pop' | 'roles' | 'year'> {
   const starters = (def.parts ?? []).filter((p) => p.cost === 0);
   const equipped: StageState['equipped'] = {};
   for (const p of starters) equipped[p.slot] ??= p.id;
   return {
     parts: starters.map((p) => p.id),
     equipped,
-    trip: null,
+    ...newIsland(def),
     trips: {},
     mates: [],
     egg: null,
@@ -77,7 +84,10 @@ export function cloneState(s: GameState): GameState {
       time: st.time,
       parts: [...st.parts],
       equipped: { ...st.equipped },
-      trip: st.trip && { ...st.trip, event: st.trip.event && { ...st.trip.event } },
+      seed: st.seed,
+      pos: { ...st.pos },
+      seen: st.seen.slice(),
+      walk: st.walk && { ...st.walk, event: st.walk.event && { ...st.walk.event } },
       trips: { ...st.trips },
       mates: st.mates.map((m) => ({ ...m, parts: { ...m.parts } })),
       egg: st.egg && { ...st.egg, mate: { ...st.egg.mate, parts: { ...st.egg.mate.parts } } },

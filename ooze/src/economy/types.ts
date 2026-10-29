@@ -135,7 +135,7 @@ export interface Mate {
 
 /** What came back from an expedition or a hatching, for the interface to show. */
 export interface Report {
-  kind: 'trip' | 'hatch';
+  kind: 'trip' | 'hatch' | 'event';
   place?: string;
   success: boolean;
   /** Currency earned, as a string (Decimal). */
@@ -146,6 +146,8 @@ export interface Report {
   found?: string;
   /** What happened on the way, and how the choice turned out. */
   event?: string;
+  /** Turned back from a place: the stats it was short of. */
+  short?: string[];
   generation?: number;
 }
 
@@ -305,14 +307,19 @@ export interface StageState {
   /** Body parts owned, and the one worn in each slot. */
   parts: string[];
   equipped: Partial<Record<Slot, string>>;
-  /** The expedition under way, if any, and the choice it ran into on the way. */
-  trip: { place: string; left: number; total: number; event?: { id: string; choice: number | null } } | null;
+  /** The island this game rolled, where your creature is on it, and what's been seen. */
+  seed: number;
+  pos: { x: number; y: number };
+  /** Cells of the map seen (1) or still in fog (0). Saved packed. */
+  seen: Uint8Array;
+  /** Where it's walking, seconds of walking till its next run-in, and the run-in it's stopped at. */
+  walk: { tx: number; ty: number; next: number; event?: { id: string; choice: number | null; left: number } } | null;
   /** The herd: how many, and what they're set to do (the rest forage). */
   pop: number;
   roles: Record<Role, number>;
   /** Seconds into the current year (seasons). */
   year: number;
-  /** Successful trips to each place. */
+  /** Times each place has been reached (found once it's 1). */
   trips: Record<string, number>;
   mates: Mate[];
   /** The egg incubating, if any. */

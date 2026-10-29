@@ -2,18 +2,19 @@ import { STAGES, STAGE_ORDER } from '../content/stages';
 import { settleHabitat } from './actions';
 import { createStageState, createState } from './state';
 import { D } from './num';
+import { packSeen, unpackSeen } from './island';
 import type { GameState, StageId, StageState } from './types';
 
 const STORAGE_KEY = 'ooze-to-orbit/save';
 
-type SavedStage = Omit<StageState, 'currency' | 'totalEarned'> & { currency: string; totalEarned: string };
+type SavedStage = Omit<StageState, 'currency' | 'totalEarned' | 'seen'> & { currency: string; totalEarned: string; seen: string };
 type SavedGame = Omit<GameState, 'stages'> & { stages: Record<string, SavedStage> };
 
 export function serialize(state: GameState): string {
   const stages: Record<string, SavedStage> = {};
   for (const id of STAGE_ORDER) {
     const st = state.stages[id];
-    stages[id] = { ...st, currency: st.currency.toString(), totalEarned: st.totalEarned.toString() };
+    stages[id] = { ...st, currency: st.currency.toString(), totalEarned: st.totalEarned.toString(), seen: id === 'creature' ? packSeen(st.seen) : '' };
   }
   return JSON.stringify({ ...state, stages } satisfies SavedGame);
 }
@@ -46,8 +47,12 @@ export function deserialize(text: string): GameState {
           time: s.time ?? 0,
           parts: s.parts ?? fresh.parts,
           equipped: s.equipped ?? fresh.equipped,
-          trip: s.trip ?? null,
-          trips: { ...(s.trips ?? {}) },
+          // Saves from before the island: a new one is rolled (and old trips start over).
+          seed: s.seed ?? fresh.seed,
+          pos: s.seed !== undefined && s.pos ? s.pos : fresh.pos,
+          seen: s.seed !== undefined ? unpackSeen(s.seen) : fresh.seen,
+          walk: s.seed !== undefined ? (s.walk ?? null) : null,
+          trips: s.seed !== undefined ? { ...(s.trips ?? {}) } : {},
           mates: s.mates ?? [],
           egg: s.egg ?? null,
           generation: s.generation ?? 0,

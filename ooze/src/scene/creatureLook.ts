@@ -209,17 +209,24 @@ const MINI = ['...EEE...', '..EFFFE.E', '.DFFFFFEF', 'DFFFFFFFk', '.DFFFFFFF', '
 const MINI_LEGS = ['..k..k.k.', '...k..k.k'];
 const MINI_SLEEP = ['.........', '...EEE...', '.EFFFFFE.', 'DFFFFFFFE', '.DDDDDDD.', '.........'];
 
-export function drawMini(b: CanvasRenderingContext2D, look: CreatureLook, x: number, groundY: number, opts: { left?: boolean; frame?: number; sleeping?: boolean } = {}): void {
+export function drawMini(
+  b: CanvasRenderingContext2D,
+  look: CreatureLook,
+  x: number,
+  groundY: number,
+  opts: { left?: boolean; frame?: number; sleeping?: boolean; scale?: number } = {},
+): void {
   const [fill, edge] = DIET_COLORS[look.diet] ?? DIET_COLORS.none;
   const dark = mix(fill, '#10141f', 0.45);
-  const X = Math.round(x) - 4;
+  const k = Math.max(1, Math.round(opts.scale ?? 1));
+  const X = Math.round(x) - 4 * k;
   const Y = Math.round(groundY);
   const put = (dx: number, dy: number, c: string) => {
     b.fillStyle = c;
-    b.fillRect(opts.left ? X + 8 - dx : X + dx, Y + dy, 1, 1);
+    b.fillRect(opts.left ? X + (8 - dx) * k : X + dx * k, Y + dy * k, k, k);
   };
   b.fillStyle = 'rgba(16,20,31,0.25)';
-  b.fillRect(X, Y, 9, 1);
+  b.fillRect(X, Y, 9 * k, k);
   const rows = opts.sleeping ? MINI_SLEEP : MINI;
   const legs = opts.sleeping ? '.........' : MINI_LEGS[opts.frame ? 1 : 0];
   const all = [...rows, legs];

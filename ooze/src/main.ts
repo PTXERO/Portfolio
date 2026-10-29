@@ -38,7 +38,7 @@ import { clearStorage, exportSave, importSave, loadFromStorage, saveToStorage } 
 import { createState } from './economy/state';
 import { liveTick, TICK_SEC } from './economy/tick';
 import type { BuyAmount, DialId, GameState, StageId } from './economy/types';
-import { breed, buyPart, chooseEvent, court, equipPart, netRate, releaseMate, startTrip, tripEventDue } from './economy/creature';
+import { breed, buyPart, chooseEvent, court, equipPart, islandFor, netRate, placeSeen, releaseMate, tripEventDue, walkHome, walkTo } from './economy/creature';
 import { Scene } from './scene/scene';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
@@ -126,16 +126,32 @@ function showTripReport(): boolean {
       <button class="px-btn gold" data-act="dismiss">Welcome</button>`);
     return true;
   }
+  if (r.kind === 'event') {
+    showModal(`<p class="label dim">On the road</p>
+      <h3>${r.success ? 'It went well' : 'That went badly'}</h3>
+      <p>${r.event}</p>
+      <p>+${format(D(r.earned))} ${def.currency}</p>
+      ${parts.length ? `<p class="fx">Found: ${parts.join(', ')} (in the Body tab)</p>` : ''}
+      ${r.mate ? `<p class="fx">Met ${r.mate}, who follows it now (Family tab)</p>` : ''}
+      <button class="px-btn gold" data-act="dismiss">On we go</button>`);
+    return true;
+  }
   const place = def.places!.find((p) => p.id === r.place)!;
   const page = r.found ? def.reactions!.find((x) => x.id === r.found) : undefined;
-  showModal(`<p class="label dim">${r.success ? 'Back from' : 'Turned back at'} the ${place.name}</p>
-    <h3>${r.success ? (page ? `New in the ${def.bookName}: ${page.name}` : 'A good trip') : 'Too much for it, this time'}</h3>
+  if (!r.success) {
+    showModal(`<p class="label dim">The ${place.name}</p>
+      <h3>Too much for it, for now</h3>
+      <p>It turned back. To get in, it needs: ${(r.short ?? []).map((x) => x[0].toUpperCase() + x.slice(1)).join(', ')}.</p>
+      <p class="dim">Train in the Body tab, wear better parts, or breed a stronger generation.</p>
+      <button class="px-btn gold" data-act="dismiss">Okay</button>`);
+    return true;
+  }
+  showModal(`<p class="label dim">Found: the ${place.name}</p>
+    <h3>${page ? `New in the ${def.bookName}: ${page.name}` : 'Back again'}</h3>
     <p>+${format(D(r.earned))} ${def.currency}</p>
     ${page ? `<p class="fx">${rewardText('creature', page)}</p>` : ''}
     ${parts.length ? `<p class="fx">Found: ${parts.join(', ')} (in the Body tab)</p>` : ''}
-    ${r.event ? `<p>${r.event}</p>` : ''}
-    ${r.mate ? `<p class="fx">Met ${r.mate}, who followed it home (Family tab)</p>` : ''}
-    ${r.success ? '' : '<p class="dim">Stronger stats make trips safer.</p>'}
+    ${r.mate ? `<p class="fx">Met ${r.mate}, who follows it now (Family tab)</p>` : ''}
     <button class="px-btn gold" data-act="dismiss">Nice</button>`);
   return true;
 }
@@ -285,11 +301,9 @@ function renderGoal(): void {
     const cr = state.stages[state.current];
     if (def.places && tripEventDue(state)) text = 'Your creature ran into something! Choose in the Roam tab.';
     else if (def.places && netRate(state).lt(0) && cr.currency.lt(netRate(state).abs().mul(60))) text = 'The herd is going hungry! Stores run out, and the weakest go first (Herd tab).';
-    else if (def.places && cr.trip) {
-      // Creature: the roam under way is the thing to watch.
-      text = `Roaming the ${def.places.find((p) => p.id === cr.trip!.place)!.name} · back in ${formatTime(cr.trip.left)}`;
-    } else if (def.places && n && !n.r.final) {
-      text = `Next: roam the ${n.r.name} (Roam tab)`;
+    else if (def.places && n && !n.r.final) {
+      // Creature: the next place, in sight or still somewhere in the fog.
+      text = placeSeen(state, n.r.id) ? `The ${n.r.name} is in sight. Send your creature there (Roam tab).` : `Next: find the ${n.r.name}. Explore the island!`;
     } else if (engulfable(state, state.current).length) text = 'A rare microbe is about. Catch it before it gets away!';
     else if (n && !finaleReady(state)) {
       const name = n.r.final ? n.r.name : '???';
@@ -610,8 +624,9 @@ function act(el: HTMLElement): void {
   else if (el.dataset.equip) equipPart(state, el.dataset.equip);
   else if (el.dataset.buypart) {
     if (buyPart(state, el.dataset.buypart)) scene.purchase(state, el.dataset.buypart);
-  } else if (el.dataset.trip) {
-    if (startTrip(state, el.dataset.trip)) scene.purchase(state, 'trip');
+  } else if (el.dataset.goto) {
+    const p = islandFor(state).places[el.dataset.goto];
+    if (p && walkTo(state, p.x, p.y)) scene.purchase(state, 'trip');
   } else if (el.dataset.breed) breed(state, Number(el.dataset.breed));
   else if (el.dataset.release) releaseMate(state, Number(el.dataset.release));
   else if (el.dataset.choice) {
@@ -655,6 +670,9 @@ function act(el: HTMLElement): void {
         break;
       case 'dismiss':
         modal.hidden = true;
+        break;
+      case 'walkhome':
+        walkHome(state);
         break;
       case 'export':
         if (ta) {

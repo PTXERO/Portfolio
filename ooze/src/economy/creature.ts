@@ -8,6 +8,7 @@ import { herdMult, seasonOf, stageEffects, stageRate } from './rates';
 import type { GameState, Mate, PartDef, PlaceDef, Role, Slot, Stat, StageId, StageState } from './types';
 import { ROLES, SLOTS, STATS } from './types';
 import { EVENTS } from '../content/creature';
+import { cellOf, ISLAND, islandOf, reveal, type Island } from './island';
 
 export const CREATURE: StageId = 'creature';
 /** Share of a roam's time paid out as output, before Trail Memory. */
@@ -141,39 +142,77 @@ function tripMult(state: GameState): number {
   return m;
 }
 
-/** A place can be explored once the places before it have been. */
-export function placeOpen(state: GameState, p: PlaceDef): boolean {
-  return (p.after ?? []).every((id) => (st(state).trips[id] ?? 0) > 0);
+/** Tiles a second your creature walks, before Speed and followers. */
+export const WALK_BASE = 0.5;
+/** Seconds of output each newly seen bit of land is worth (before Trail Memory). */
+export const EXPLORE_PAY_SEC = 0.6;
+/** Seconds of walking between run-ins, and how long one waits for a choice. */
+export const EVENT_GAP: [number, number] = [70, 140];
+export const EVENT_WAIT = 30;
+/** How close counts as arriving somewhere. */
+const ARRIVE = 3;
+
+/** The game's island. The first time, it's rolled and the creature set down at home. */
+export function islandFor(state: GameState): Island {
+  const s = st(state);
+  const is = islandOf(s.seed, def().places!);
+  if (s.pos.x < 0) {
+    s.pos = { ...is.home };
+    reveal(is, s.seen, is.home.x, is.home.y, 22);
+  }
+  return is;
 }
 
-/** Chance a roam succeeds: each stat short of what the place needs cuts it, squared. */
-export function tripChance(state: GameState, p: PlaceDef): number {
+/** Tiles a second: faster with Speed, and with followers to show the way. */
+export function walkSpeed(state: GameState): number {
+  return WALK_BASE * (1 + 0.04 * statsOf(state).speed) * (1 + 0.03 * st(state).roles.scout);
+}
+
+/** How far it sees, in tiles: everything within this clears as it walks. */
+export function sightRadius(state: GameState): number {
+  return 4 + 0.4 * statsOf(state).senses;
+}
+
+/** A place shows on the map once the fog over it has been cleared. */
+export function placeSeen(state: GameState, id: string): boolean {
+  const p = islandFor(state).places[id];
+  return !!p && !!st(state).seen[cellOf(p.x, p.y)];
+}
+
+/** What a place still needs: the stats short of its requirements (empty when it can be entered). */
+export function placeShort(state: GameState, p: PlaceDef): [Stat, number][] {
   const stats = statsOf(state);
-  let c = 1;
-  for (const [k, need] of Object.entries(p.needs)) c *= Math.min(1, stats[k as Stat] / (need ?? 1)) ** 2;
-  return c;
+  return (Object.entries(p.needs) as [Stat, number][]).filter(([k, n]) => stats[k] < n);
 }
 
-/** Seconds a roam takes: Speed shortens it. */
-export function tripSeconds(state: GameState, p: PlaceDef): number {
-  return (p.minutes * 60) / (1 + 0.02 * statsOf(state).speed) / (1 + 0.03 * st(state).roles.scout);
+/** Seconds to walk from where it is to a point. */
+export function walkSeconds(state: GameState, x: number, y: number): number {
+  const s = st(state);
+  return Math.hypot(x - s.pos.x, y - s.pos.y) / walkSpeed(state);
 }
 
-/** What a successful trip pays: a share of the time away in output. */
+/** What finding a place pays: a share of its distance in output. */
 export function tripPay(state: GameState, p: PlaceDef): Decimal {
   return Decimal.max(stageRate(state, CREATURE).mul(p.minutes * 60 * TRIP_PAYOUT * tripMult(state)), 10 * p.minutes);
 }
 
-export function startTrip(state: GameState, placeId: string): boolean {
+/** Sends your creature walking to a point on the map. It uncovers what it sees on the way. */
+export function walkTo(state: GameState, x: number, y: number): boolean {
   const s = st(state);
-  const p = placeDef(placeId);
-  if (s.trip || !p || !placeOpen(state, p)) return false;
-  const total = tripSeconds(state, p);
-  // Most trips run into something halfway.
-  const event = Math.random() < 0.7 ? { id: EVENTS[Math.floor(Math.random() * EVENTS.length)].id, choice: null } : undefined;
-  s.trip = { place: p.id, left: total, total, event };
+  if (s.walk?.event) return false;
+  const tx = Math.max(1, Math.min(ISLAND - 2, x));
+  const ty = Math.max(1, Math.min(ISLAND - 2, y));
+  if (Math.hypot(tx - s.pos.x, ty - s.pos.y) < 0.5) return false;
+  const gap = s.walk?.next ?? EVENT_GAP[0] + Math.random() * (EVENT_GAP[1] - EVENT_GAP[0]);
+  s.walk = { tx, ty, next: gap };
   state.started = true;
   return true;
+}
+
+/** Calls it home. */
+export function walkHome(state: GameState): boolean {
+  const h = islandFor(state).home;
+  return walkTo(state, h.x, h.y);
 }
 
 function earn(state: GameState, amount: Decimal): void {
@@ -194,51 +233,153 @@ function randomMate(state: GameState, p: PlaceDef): Mate {
   return { id: Date.now() + Math.floor(Math.random() * 1e6), name: NAMES[Math.floor(Math.random() * NAMES.length)], parts };
 }
 
-/** The expedition comes home: pays out, and on success may bring a page, a part and a mate. */
-function finishTrip(state: GameState, rand: () => number): void {
+/** The place nearest to where it is (what's around shapes what it finds). */
+function nearestPlace(state: GameState): PlaceDef {
   const s = st(state);
-  const p = placeDef(s.trip!.place);
-  const ev = s.trip!.event;
-  s.trip = null;
-  const success = rand() < tripChance(state, p);
-  // The choice on the way: unanswered, it plays safe (the last option).
-  let evMult = 1;
-  let extra: 'part' | 'mate' | null = null;
-  let evLine: string | undefined;
-  if (ev && success) {
-    const def = EVENTS.find((e) => e.id === ev.id)!;
-    const opt = def.options[ev.choice ?? def.options.length - 1];
-    const ok = !opt.stat || statsOf(state)[opt.stat] >= (opt.need ?? 0);
-    evLine = `${def.text} ${opt.label}: ${ok ? opt.good : opt.bad ?? opt.good}`;
-    if (ok && opt.stat) {
-      if (opt.reward === 'pay') evMult = 1.8;
-      else extra = opt.reward;
-    } else if (!ok) evMult = 0.6;
+  const is = islandFor(state);
+  return def().places!.reduce((a, p) => (Math.hypot(is.places[p.id].x - s.pos.x, is.places[p.id].y - s.pos.y) < Math.hypot(is.places[a.id].x - s.pos.x, is.places[a.id].y - s.pos.y) ? p : a));
+}
+
+/** It walks into a place: if its stats are up to it, the place is found. */
+function arrive(state: GameState, p: PlaceDef, rand: () => number): void {
+  const s = st(state);
+  const short = placeShort(state, p);
+  if (short.length) {
+    // Turned back: stop just short, and say what it would take.
+    const is = islandFor(state);
+    const q = is.places[p.id];
+    const d = Math.hypot(s.pos.x - q.x, s.pos.y - q.y) || 1;
+    s.pos = { x: q.x + ((s.pos.x - q.x) / d) * (ARRIVE + 2), y: q.y + ((s.pos.y - q.y) / d) * (ARRIVE + 2) };
+    s.walk = s.walk && { ...s.walk, tx: s.pos.x, ty: s.pos.y };
+    state.reports.push({ kind: 'trip', place: p.id, success: false, earned: '0', parts: [], short: short.map(([k, n]) => `${k} ${n}`) });
+    return;
   }
-  const pay = tripPay(state, p).mul((success ? 1 : 0.2) * evMult);
+  const pay = tripPay(state, p);
   earn(state, pay);
-  const report: GameState['reports'][number] = { kind: 'trip', place: p.id, success, earned: pay.toString(), parts: [], event: evLine };
-  if (success) {
-    const first = !(s.trips[p.id] > 0);
-    s.trips[p.id] = (s.trips[p.id] ?? 0) + 1;
-    if (first && !s.discovered.includes(p.id)) {
-      s.discovered.push(p.id);
-      report.found = p.id;
-    }
-    // The first visit always turns up a part; later ones sometimes do.
-    const missing = p.parts.filter((id) => !s.parts.includes(id));
-    if (missing.length && (first || extra === 'part' || rand() < 0.35 * (1 + 0.05 * s.roles.scout))) {
-      const id = missing[Math.floor(rand() * missing.length)];
-      s.parts.push(id);
-      report.parts.push(id);
-    }
-    if (s.mates.length < MAX_MATES && (extra === 'mate' || (s.generation === 0 && s.mates.length === 0 && !s.egg) || rand() < p.mateChance)) {
-      const m = randomMate(state, p);
-      s.mates.push(m);
-      report.mate = m.name;
-    }
+  s.trips[p.id] = (s.trips[p.id] ?? 0) + 1;
+  const report: GameState['reports'][number] = { kind: 'trip', place: p.id, success: true, earned: pay.toString(), parts: [] };
+  if (!s.discovered.includes(p.id)) {
+    s.discovered.push(p.id);
+    report.found = p.id;
+  }
+  const missing = p.parts.filter((id) => !s.parts.includes(id));
+  if (missing.length) {
+    const id = missing[Math.floor(rand() * missing.length)];
+    s.parts.push(id);
+    report.parts.push(id);
+  }
+  if (s.mates.length < MAX_MATES && ((s.generation === 0 && s.mates.length === 0 && !s.egg) || rand() < p.mateChance)) {
+    const m = randomMate(state, p);
+    s.mates.push(m);
+    report.mate = m.name;
   }
   state.reports.push(report);
+}
+
+/** Back at a place it already knows: maybe a mate there, maybe a part it missed. */
+function revisit(state: GameState, p: PlaceDef, rand: () => number): void {
+  const s = st(state);
+  s.trips[p.id] = (s.trips[p.id] ?? 0) + 1;
+  const report: GameState['reports'][number] = { kind: 'trip', place: p.id, success: true, earned: '0', parts: [] };
+  const missing = p.parts.filter((id) => !s.parts.includes(id));
+  if (missing.length && rand() < 0.35) {
+    const id = missing[Math.floor(rand() * missing.length)];
+    s.parts.push(id);
+    report.parts.push(id);
+  }
+  if (s.mates.length < MAX_MATES && rand() < p.mateChance * 0.6) {
+    const m = randomMate(state, p);
+    s.mates.push(m);
+    report.mate = m.name;
+  }
+  // Only worth a word when something came of it.
+  if (report.parts.length || report.mate) state.reports.push(report);
+}
+
+/** Settles the run-in on the road, with the choice made (or the safe one). */
+function resolveEvent(state: GameState, rand: () => number): void {
+  const s = st(state);
+  const ev = s.walk!.event!;
+  const evDef = EVENTS.find((e) => e.id === ev.id)!;
+  const opt = evDef.options[ev.choice ?? evDef.options.length - 1];
+  const ok = !opt.stat || statsOf(state)[opt.stat] >= (opt.need ?? 0);
+  const report: GameState['reports'][number] = { kind: 'event', success: ok, earned: '0', parts: [], event: `${evDef.text} ${opt.label}: ${ok ? opt.good : opt.bad ?? opt.good}` };
+  let mult = ok ? (opt.stat ? 1.8 : 1) : 0.3;
+  if (ok && opt.reward === 'part') {
+    const near = nearestPlace(state);
+    const pool = [...new Set([...near.parts, ...def().places!.filter((p) => s.trips[p.id] > 0).flatMap((p) => p.parts)])].filter((id) => !s.parts.includes(id));
+    if (pool.length) {
+      const id = pool[Math.floor(rand() * pool.length)];
+      s.parts.push(id);
+      report.parts.push(id);
+      mult = 0.5;
+    }
+  } else if (ok && opt.reward === 'mate' && s.mates.length < MAX_MATES) {
+    const m = randomMate(state, nearestPlace(state));
+    s.mates.push(m);
+    report.mate = m.name;
+    mult = 0.5;
+  }
+  const pay = stageRate(state, CREATURE).mul(60 * mult * tripMult(state));
+  earn(state, pay);
+  report.earned = pay.toString();
+  state.reports.push(report);
+  s.walk = { ...s.walk!, event: undefined, next: EVENT_GAP[0] + rand() * (EVENT_GAP[1] - EVENT_GAP[0]) };
+}
+
+/** Walks for `dt` seconds: moves, clears the fog, finds places, runs into things. */
+function walkTick(state: GameState, dt: number, rand: () => number): void {
+  const s = st(state);
+  const w = s.walk;
+  if (!w) return;
+  if (w.event) {
+    w.event.left -= dt;
+    if (w.event.left <= 0) resolveEvent(state, rand);
+    return;
+  }
+  const is = islandFor(state);
+  const v = walkSpeed(state);
+  const r = sightRadius(state);
+  let left = dt;
+  let fresh = 0;
+  let arrived = false;
+  while (left > 1e-9 && s.walk && !s.walk.event) {
+    const cur = s.walk;
+    const d = Math.hypot(cur.tx - s.pos.x, cur.ty - s.pos.y);
+    if (d < 1e-6) {
+      s.walk = null;
+      break;
+    }
+    // Small steps, so fog and places along the way are never skipped.
+    const step = Math.min(d, v * left, 2);
+    s.pos = { x: s.pos.x + ((cur.tx - s.pos.x) / d) * step, y: s.pos.y + ((cur.ty - s.pos.y) / d) * step };
+    const spent = step / v;
+    left -= spent;
+    cur.next -= spent;
+    fresh += reveal(is, s.seen, s.pos.x, s.pos.y, r);
+    for (const p of def().places!) {
+      if (s.trips[p.id] > 0) continue;
+      const q = is.places[p.id];
+      if (Math.hypot(q.x - s.pos.x, q.y - s.pos.y) <= ARRIVE) {
+        arrive(state, p, rand);
+        arrived = true;
+        break;
+      }
+    }
+    if (!s.walk) break;
+    if (Math.hypot(s.walk.tx - s.pos.x, s.walk.ty - s.pos.y) < 1e-6) {
+      s.walk = null;
+      // Walked to a place it already knows: a look around.
+      const known = def().places!.find((p) => s.trips[p.id] > 0 && Math.hypot(is.places[p.id].x - s.pos.x, is.places[p.id].y - s.pos.y) <= ARRIVE);
+      if (known && !arrived) revisit(state, known, rand);
+      break;
+    }
+    // Something on the road (mostly away from home).
+    if (s.walk.next <= 0 && Math.hypot(s.pos.x - is.home.x, s.pos.y - is.home.y) > 15) {
+      s.walk.event = { id: EVENTS[Math.floor(rand() * EVENTS.length)].id, choice: null, left: EVENT_WAIT };
+    }
+  }
+  if (fresh) earn(state, stageRate(state, CREATURE).mul(fresh * EXPLORE_PAY_SEC * tripMult(state)));
 }
 
 /** Chance a visitor on the shore agrees to join the line: better with Charm. */
@@ -260,18 +401,18 @@ export function eggSeconds(state: GameState): number {
   return (EGG_BASE_SEC * EGG_GROWTH ** st(state).generation) / (1 + 0.04 * statsOf(state).charm) / (1 + 0.01 * st(state).roles.carer);
 }
 
-/** Answers the choice the roam ran into. */
-export function chooseEvent(state: GameState, option: number): boolean {
-  const ev = st(state).trip?.event;
-  if (!ev || ev.choice !== null || !tripEventDue(state)) return false;
+/** Answers the run-in on the road; it's settled at once and the walk goes on. */
+export function chooseEvent(state: GameState, option: number, rand: () => number = Math.random): boolean {
+  const ev = st(state).walk?.event;
+  if (!ev) return false;
   ev.choice = option;
+  resolveEvent(state, rand);
   return true;
 }
 
-/** True once the trip is halfway and its event is waiting on a choice. */
+/** True while it's stopped on the road, waiting on a choice. */
 export function tripEventDue(state: GameState): boolean {
-  const t = st(state).trip;
-  return !!t?.event && t.event.choice === null && t.left <= t.total / 2;
+  return !!st(state).walk?.event;
 }
 
 export function breed(state: GameState, mateId: number): boolean {
@@ -335,10 +476,7 @@ export function creatureTick(state: GameState, dt: number, rand: () => number = 
   s.pop = Math.max(1, s.pop * Math.exp(-winterLoss(state) * dt));
   settleRoles(state);
   fitRoles(s);
-  if (s.trip) {
-    s.trip.left -= dt;
-    if (s.trip.left <= 0) finishTrip(state, rand);
-  }
+  walkTick(state, dt, rand);
   if (s.egg) {
     s.egg.left -= dt;
     if (s.egg.left <= 0) hatch(state);

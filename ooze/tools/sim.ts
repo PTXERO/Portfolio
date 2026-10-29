@@ -28,7 +28,8 @@ import {
 import { formatTime } from '../src/economy/num';
 import { dialMax, spawnMult, stageRate, tapValue } from '../src/economy/rates';
 import { cloneState, createState } from '../src/economy/state';
-import { birthRate, breed, buyPart, canWear, equipPart, housing, partDef, placeOpen, startTrip, statsOf, tripChance, upkeep } from '../src/economy/creature';
+import { birthRate, breed, buyPart, canWear, chooseEvent, court, equipPart, housing, islandFor, partDef, placeShort, statsOf, upkeep, walkTo } from '../src/economy/creature';
+import { CELL, CELLS, isLand, seenShare } from '../src/economy/island';
 import { EVENTS } from '../src/content/creature';
 import { herdMult } from '../src/economy/rates';
 import { tick } from '../src/economy/tick';
@@ -227,7 +228,10 @@ function spendPast(s: GameState): void {
 function creatureVisit(s: GameState): void {
   const st = s.stages.creature;
   const def = STAGES.creature;
-  const next = def.places!.find((p) => !(st.trips[p.id] > 0) && placeOpen(s, p));
+  // The next place to find: the nearest one not found yet.
+  const is = islandFor(s);
+  const dist = (id: string) => Math.hypot(is.places[id].x - is.home.x, is.places[id].y - is.home.y);
+  const next = def.places!.filter((p) => !(st.trips[p.id] > 0)).sort((a, b) => dist(a.id) - dist(b.id))[0];
   const want = (k: string) => 1 + (next?.needs[k as keyof typeof next.needs] ? 3 : 0);
   // Buy shop parts as they become affordable (cheapest first), then wear the best in each slot.
   for (const p of def.parts!.filter((x) => x.cost && !st.parts.includes(x.id)).sort((a, b) => a.cost! - b.cost!)) {
@@ -262,23 +266,41 @@ function creatureVisit(s: GameState): void {
     if (cost > rate * 300 || !buyUpgrade(s, 'creature', u.id)) break;
   }
   if (!st.egg && st.mates.length) breed(s, st.mates[0].id);
-  if (!st.trip) {
-    if (next && tripChance(s, next) >= 0.75) startTrip(s, next.id);
+  // Visitors wander by the herd every couple of minutes; players court them when a mate is wanted.
+  if (!st.mates.length && Math.random() < 0.25) court(s);
+  // Walk to the next place once it's up to it; meanwhile, explore the nearest fog. With
+  // everything seen, go back to known places to look for mates.
+  if (!st.walk) {
+    const known = def.places!.filter((p) => st.trips[p.id] > 0);
+    if (next && !placeShort(s, next).length) walkTo(s, is.places[next.id].x, is.places[next.id].y);
+    else if (!st.mates.length && known.length && seenShare(is, st.seen) > 0.97) {
+      const p = known[Math.floor(Math.random() * known.length)];
+      walkTo(s, is.places[p.id].x, is.places[p.id].y);
+    }
     else {
-      // Short trips while a mate is wanted (more chances to meet one), long ones otherwise.
-      const wantMate = !st.egg && !st.mates.length;
-      const safe = def.places!.filter((p) => placeOpen(s, p) && tripChance(s, p) >= 0.9);
-      const best = safe.sort((a, b) => (wantMate ? a.minutes - b.minutes : b.minutes - a.minutes))[0];
-      if (best) startTrip(s, best.id);
+      let best = -1;
+      let bd = Infinity;
+      for (let i = 0; i < CELLS * CELLS; i++) {
+        if (st.seen[i]) continue;
+        const x = (i % CELLS) * CELL + CELL / 2;
+        const y = Math.floor(i / CELLS) * CELL + CELL / 2;
+        if (!isLand(is, x, y)) continue;
+        const d = Math.hypot(x - st.pos.x, y - st.pos.y);
+        if (d < bd) {
+          bd = d;
+          best = i;
+        }
+      }
+      if (best >= 0) walkTo(s, (best % CELLS) * CELL + CELL / 2, Math.floor(best / CELLS) * CELL + CELL / 2);
     }
   }
-  // Answer the trip's event with the first option whose check passes (the player sees the numbers).
-  const ev = st.trip?.event;
-  if (ev && ev.choice === null) {
+  // Answer a run-in on the road with the first option whose check passes (the player sees the numbers).
+  const ev = st.walk?.event;
+  if (ev) {
     const stats = statsOf(s);
     const d = EVENTS.find((e) => e.id === ev.id)!;
     const i = d.options.findIndex((o) => o.stat && stats[o.stat] >= (o.need ?? 0));
-    ev.choice = i >= 0 ? i : d.options.length - 1;
+    chooseEvent(s, i >= 0 ? i : d.options.length - 1);
   }
   s.reports = [];
 }

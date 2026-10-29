@@ -16,16 +16,18 @@ import {
   MAX_MATES,
   partDef,
   partEnergy,
-  placeOpen,
+  islandFor,
+  placeSeen,
+  placeShort,
   statsOf,
-  tripChance,
-  tripEventDue,
   tripPay,
-  tripSeconds,
+  walkSeconds,
+  walkSpeed,
   upkeep,
   winterLoss,
 } from '../economy/creature';
 import { EVENTS } from '../content/creature';
+import { PLACE_SPOTS, seenShare } from '../economy/island';
 import { buyCount, generatorCost, generatorVisible } from '../economy/actions';
 import { foragers, SEASON_SEC, seasonOf, stageRate } from '../economy/rates';
 import { D, format, formatTime } from '../economy/num';
@@ -61,7 +63,7 @@ const PLACE_TEXT: Record<string, string> = {
 /** What changes the creature tabs' layout. */
 export function creatureKey(state: GameState): unknown {
   const s = state.stages[CREATURE];
-  return [s.parts, s.equipped, s.trip?.place ?? '', tripEventDue(state), s.trips, energyBudget(state), state.unlocked.length, s.mates.map((m) => m.id), !!s.egg, s.generation, s.discovered, s.levels, visibleUpgrades(state, CREATURE).map((u) => u.id)];
+  return [s.parts, s.equipped, s.walk?.event?.id ?? '', s.trips, STAGES[CREATURE].places!.map((p) => placeSeen(state, p.id)), energyBudget(state), state.unlocked.length, s.mates.map((m) => m.id), !!s.egg, s.generation, s.discovered, s.levels, visibleUpgrades(state, CREATURE).map((u) => u.id)];
 }
 
 /** The Herd tab: how many, how fed, what season, who does what, and the buildings. */
@@ -130,11 +132,21 @@ export function bodyLayout(state: GameState, upgradeCard: (u: (typeof STAGES)['c
     ${boosts ? `<div class="panel-head"><h2>Boosts</h2></div>${boosts}` : ''}`;
 }
 
+/** Where each kind of place is, as a hint while it's still in the fog. */
+const WHERE: Record<string, string> = {
+  coast: 'Somewhere along the coast',
+  pools: 'Where rocks meet the sea',
+  marsh: 'In wet, low ground',
+  forest: 'Deep in the trees',
+  cliff: 'Where the hills turn to rock',
+  cave: 'In the mountains',
+  high: 'Up on the high plateau',
+};
+
 export function exploreLayout(state: GameState): string {
   const s = state.stages[CREATURE];
   const def = STAGES[CREATURE];
-  const due = tripEventDue(state);
-  const ev = due ? EVENTS.find((e) => e.id === s.trip!.event!.id)! : null;
+  const ev = s.walk?.event ? EVENTS.find((e) => e.id === s.walk!.event!.id)! : null;
   const stats = statsOf(state);
   const choice = ev
     ? `<div class="event"><div class="flavor">${esc(ev.text)}</div><div class="choices">${ev.options
@@ -144,27 +156,33 @@ export function exploreLayout(state: GameState): string {
         )
         .join('')}</div></div>`
     : '';
-  const trip = `<div class="card px-box trip"><div class="info"><div class="name" data-t="trip-title"></div><div class="sub" data-t="trip-sub"></div><div class="making-bar on" data-bar="trip"><i></i></div>${choice}</div></div>`;
+  const walk = `<div class="card px-box trip"><div class="info"><div class="name" data-t="walk-title"></div><div class="sub" data-t="walk-sub"></div>${choice}</div>
+    <button class="px-btn small" data-act="walkhome" data-t="home-btn">Home</button></div>
+    <p class="note">Tap anywhere on the map to send your creature there. It clears the fog as it walks: Senses lets it see further, Speed gets it there sooner. <span data-t="seen"></span></p>`;
   const places = def
-    .places!.filter((p) => placeOpen(state, p) || (p.after ?? []).some((id) => (s.trips[id] ?? 0) > 0))
-    .map((p) => {
-      const open = placeOpen(state, p);
-      const explored = (s.trips[p.id] ?? 0) > 0;
+    .places!.map((p) => {
+      const found = (s.trips[p.id] ?? 0) > 0;
+      const seen = placeSeen(state, p.id);
       const page = def.reactions!.find((r) => r.id === p.id)!;
       const reward = page.unlocks ? `New: ${def.generators.find((g) => g.id === page.unlocks)?.name}` : page.bonus ? 'A lasting boost' : '';
       const needs = Object.entries(p.needs)
         .map(([k]) => `<li data-need="${p.id}-${k}"></li>`)
         .join('');
-      const found = p.parts.filter((id) => s.parts.includes(id)).length;
-      return `<div class="card px-box place${explored ? ' owned' : ''}">
+      const parts = p.parts.filter((id) => s.parts.includes(id)).length;
+      if (!found && !seen) {
+        return `<div class="card px-box place"><div class="info"><div class="name">???</div>
+          <div class="flavor">${esc(WHERE[PLACE_SPOTS[p.id]?.where ?? ''] ?? 'Somewhere out there')}, still in the fog.</div>
+          ${needs ? `<ul class="checks">${needs}</ul>` : ''}</div></div>`;
+      }
+      return `<div class="card px-box place${found ? ' owned' : ''}">
         <div class="info">
-          <div class="name">${esc(p.name)} ${explored ? '<span class="tag">Known</span>' : ''}</div>
+          <div class="name">${esc(p.name)} ${found ? '<span class="tag">Found</span>' : ''}</div>
           <div class="flavor">${esc(p.flavor)}</div>
-          ${needs ? `<ul class="checks">${needs}</ul>` : ''}
+          ${!found && needs ? `<ul class="checks">${needs}</ul>` : ''}
           <div class="sub" data-t="place-${p.id}"></div>
-          <div class="fx">${!explored && reward ? `First visit: ${esc(reward)} · ` : ''}Parts here: ${found}/${p.parts.length}</div>
+          <div class="fx">${!found && reward ? `Finding it: ${esc(reward)} · ` : ''}Parts here: ${parts}/${p.parts.length}</div>
         </div>
-        ${open ? `<button class="px-btn buy" data-trip="${p.id}">Roam</button>` : `<button class="px-btn buy locked" disabled><span class="qty">Roam ${esc((p.after ?? []).map((id) => def.places!.find((x) => x.id === id)!.name).join(' & '))} first</span></button>`}
+        <button class="px-btn buy" data-goto="${p.id}">Go</button>
       </div>`;
     })
     .join('');
@@ -177,7 +195,7 @@ export function exploreLayout(state: GameState): string {
           .parts.map((p, i) => `<li data-check="${fin.id}-${i}">${esc(p.label)}</li>`)
           .join('')}<li data-check="${fin.id}-cost" data-t="cost-${fin.id}"></li></ul>
         <button class="px-btn gold pulse finale" data-act="finale" hidden>${esc(fin.name)}</button></div></div>`;
-  return `<div class="panel-head"><h2>Roaming</h2></div>${trip}
+  return `<div class="panel-head"><h2>Roaming</h2></div>${walk}
     <div class="panel-head"><h2>${def.bookName}</h2><span class="label dim">${s.discovered.filter((id) => id !== fin.id).length} / ${def.places!.length}</span></div>${places}${finale}`;
 }
 
@@ -276,16 +294,22 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
       btn.classList.toggle('gold', !btn.disabled);
     }
   } else if (tab === 'explore') {
-    if (s.trip) {
-      const p = def.places!.find((x) => x.id === s.trip!.place)!;
-      setText(root, 'trip-title', `Roaming the ${p.name}`);
-      setText(root, 'trip-sub', tripEventDue(state) ? 'It ran into something. Choose, or instinct plays safe.' : `Back in ${formatTime(s.trip.left)}`);
-      bar(root, 'trip', 1 - s.trip.left / s.trip.total);
+    const is = islandFor(state);
+    const atHome = Math.hypot(s.pos.x - is.home.x, s.pos.y - is.home.y) < 3;
+    if (s.walk?.event) {
+      setText(root, 'walk-title', 'Something on the road!');
+      setText(root, 'walk-sub', `Choose, or instinct plays safe in ${Math.ceil(s.walk.event.left)}s.`);
+    } else if (s.walk) {
+      const d = Math.hypot(s.walk.tx - s.pos.x, s.walk.ty - s.pos.y);
+      setText(root, 'walk-title', `Walking · ${Math.ceil(d)} steps to go`);
+      setText(root, 'walk-sub', `There in ${formatTime(d / walkSpeed(state))}. It keeps going while you're away.`);
     } else {
-      setText(root, 'trip-title', 'Your creature is home');
-      setText(root, 'trip-sub', 'Pick where it roams next. It keeps going while you are away.');
-      bar(root, 'trip', 0);
+      setText(root, 'walk-title', atHome ? 'Home with the herd' : 'Resting where it stopped');
+      setText(root, 'walk-sub', 'Tap the map to send it somewhere.');
     }
+    const home = root.querySelector<HTMLButtonElement>('[data-act="walkhome"]');
+    if (home) home.hidden = atHome || !!s.walk?.event;
+    setText(root, 'seen', `${Math.floor(seenShare(is, s.seen) * 100)}% of the island seen.`);
     for (const p of def.places!) {
       for (const [k, need] of Object.entries(p.needs)) {
         const li = root.querySelector<HTMLElement>(`[data-need="${p.id}-${k}"]`);
@@ -294,12 +318,13 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
         if (li.textContent !== text) li.textContent = text;
         li.classList.toggle('ok', stats[k as Stat] >= (need ?? 0));
       }
-      const chance = Math.round(tripChance(state, p) * 100);
-      setText(root, `place-${p.id}`, `${chance}% safe · ${formatTime(tripSeconds(state, p))} · brings about ${format(tripPay(state, p))} ${def.currency}`);
-      const go = root.querySelector<HTMLButtonElement>(`[data-trip="${p.id}"]`);
+      const q = is.places[p.id];
+      const ready = !placeShort(state, p).length;
+      setText(root, `place-${p.id}`, `${formatTime(walkSeconds(state, q.x, q.y))} away${(s.trips[p.id] ?? 0) > 0 ? '' : ` · finding it brings about ${format(tripPay(state, p))} ${def.currency}`}`);
+      const go = root.querySelector<HTMLButtonElement>(`[data-goto="${p.id}"]`);
       if (go) {
-        go.disabled = !!s.trip;
-        go.classList.toggle('gold', !s.trip && chance >= 70);
+        go.disabled = !!s.walk?.event;
+        go.classList.toggle('gold', !go.disabled && ready && !((s.trips[p.id] ?? 0) > 0));
       }
     }
     const fin = def.reactions!.find((r) => r.final)!;
