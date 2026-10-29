@@ -316,7 +316,7 @@ function extinctionStep(sec: number): void {
   }
   if (extinctionTick(state, sec)) {
     save();
-    if (ex.escaped) showEscape();
+    if (ex.escaped) showEscape(true);
     else if (ex.over) showAlone();
     else {
       nightReport();
@@ -400,10 +400,10 @@ function finishCast(): void {
     people = tribe.inside(c, r);
     if (!people.length) return fizzle('Draw it round some of them');
     at = [c, { x: r, y: 0 }];
-  } else if (id === 'shake') {
-    const tree = tribe.nearSpot(ex, 'wood', last, 6);
-    if (!tree) return fizzle('End it on a tree');
-    at = [first, tree];
+  } else if (id === 'quicken') {
+    if (!tribe.landAt(first) || !tribe.landAt(last)) return fizzle('Across the ash, not the sea');
+    if (Math.hypot(last.x - first.x, last.y - first.y) < 3) return fizzle('A longer line');
+    at = [first, last];
   } else if (id === 'kelp' || id === 'shoals') {
     if (tribe.landAt(first) || !tribe.landAt(last) || !tribe.byWater(last, 4)) return fizzle('From the sea, up onto the shore');
     at = [first, last];
@@ -491,29 +491,39 @@ function askFallen(): void {
 }
 
 /** They set off: the four on the raft, the ash behind them. */
-function showEscape(): void {
+function showEscape(fresh = false): void {
   if (alone) return;
   const t = state.stages.tribal.tribe!;
   const ex = t.ex!;
   alone = true;
   modal.hidden = true;
   syncCine();
-  storyLine(STORY.launch);
-  window.setTimeout(() => storyLine(STORY.crossing), 6000);
-  window.setTimeout(() => {
+  const screen = () => {
     storyLine('');
     extinctEl.innerHTML = `<div class="ending-inner">
       <p class="label dim">Extinction</p>
       <p>They survived the Extinction</p>
       <h1>${ex.day} days</h1>
       <dl>${(t.family ?? []).map((p) => `<dt>${p.name}</dt><dd>${TRAITS[p.trait as keyof typeof TRAITS]?.name ?? ''}</dd>`).join('')}
-      <dt>Left on the ash</dt><dd>${ex.people.length - (t.family?.length ?? 0)}</dd><dt>Tries</dt><dd>${(t.attempts ?? 0) + 1}</dd></dl>
+      <dt>Left on the ash</dt><dd>${t.ashIsland?.left ?? ex.people.length - (t.family?.length ?? 0)}</dd><dt>Days adrift</dt><dd>40</dd><dt>Tries</dt><dd>${(t.attempts ?? 0) + 1}</dd></dl>
       ${t.cannibal ? '<p class="dim">They are cannibals now, and always will be.</p>' : ''}
+      <p>Ashore on a new island. Someone was already there.</p>
       <p class="stir">The story continues in a future update.</p>
+      <button class="px-btn gold" data-act="look-landed">Look around</button>
     </div>`;
     extinctEl.hidden = false;
     requestAnimationFrame(() => extinctEl.classList.add('in'));
-  }, 12000);
+  };
+  if (!fresh) return screen();
+  // The raft goes; forty days adrift; then the new island, and smoke on a hill.
+  scene.tribeScene.holdOld = true;
+  storyLine(STORY.launch);
+  window.setTimeout(() => storyLine(STORY.crossing), 6000);
+  window.setTimeout(() => {
+    scene.tribeScene.holdOld = false;
+    storyLine(STORY.landing);
+  }, 12500);
+  window.setTimeout(screen, 19000);
 }
 
 /** No one left: the last of them looks round, alone. Then how long they lasted, and again. */
@@ -1248,6 +1258,10 @@ function act(el: HTMLElement): void {
         modal.hidden = true;
         panelKey = '';
         save();
+        break;
+      case 'look-landed':
+        extinctEl.classList.remove('in');
+        window.setTimeout(() => (extinctEl.hidden = true), 600);
         break;
       case 'cast-cancel':
         endCast();

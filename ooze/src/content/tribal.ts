@@ -24,7 +24,9 @@ export const STORY = {
   wake: '[STORY] It touched the spear, and for the first time, it knew that it was.',
   /** Setting off on the raft, and the crossing. */
   launch: '[STORY] Four of them pushed the raft out past the breakers. The others watched from the ash.',
-  crossing: '[STORY] For days there was only sea. Then, one morning, land.',
+  crossing: '[STORY] Forty days they drifted, where the sea took them. On the fortieth, a bird landed on the raft with something green in its beak.',
+  /** Coming ashore on the new island. */
+  landing: '[STORY] There was smoke on the far hill. Someone was already here.',
   /** When there's no one left. */
   alone: 'Your critter looks around, and realizes, it\'s alone… there\'s no one left.',
   /** Inside its mind, as it sees things for what they are. */

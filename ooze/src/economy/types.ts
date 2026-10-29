@@ -333,6 +333,11 @@ export interface TribeState {
   /** Once the Extinction is survived: the four who set off, and whether they ate their dead. */
   family?: { name: string; trait: string }[];
   cannibal?: boolean;
+  /** Where the raft came ashore: a new island, already lived on (from its seed), and the day. */
+  landed?: { seed: number; day: number };
+  /** The spear's island, as they left it (kept: it may matter again): the island's seed, how
+   * many were left on the ash, and how many days they'd lasted there. */
+  ashIsland?: { seed: number; left: number; days: number; cannibal: boolean };
 }
 
 export interface StageState {

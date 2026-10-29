@@ -36,7 +36,7 @@ function run(diet: string, ideas: boolean, god: boolean, cap = 90): { days: numb
       };
       const weak = e.people.map((p, i) => [p, i] as const).filter(([p]) => p.sick !== undefined || p.hunger >= 2);
       if (weak.length >= 3) tryCast('ward', weak.slice(0, 10).map(([, i]) => i));
-      const food = spellsFor(e.diet).filter((sp) => ['shake', 'kelp', 'shoals', 'dying'].includes(sp.id)).map((sp) => sp.id);
+      const food = spellsFor(e.diet).filter((sp) => ['quicken', 'kelp', 'shoals', 'dying'].includes(sp.id)).map((sp) => sp.id);
       if ((e.last?.ate ?? 0) < (e.last?.wanted ?? 0) || e.ration < 1) for (const id of food) tryCast(id);
       if ((e.ideas.includes('fire') && (e.wood ?? 0) < 4) || (e.day >= 12 && e.day < 26 && !e.ideas.includes('fire'))) tryCast('lightning');
       if (e.ash < e.ashMax * 0.4) tryCast('rain');

@@ -12,7 +12,7 @@
 // When fewer than two are left, it's over: back to just after the waking, to try again (the
 // spear remembers what it taught, so those ideas come cheaper).
 
-import { discover, ordainedNeeds, tribeLaunches, tribeThinks, type SpellId } from './miracles';
+import { discover, ordainedNeeds, say, tribeLaunches, tribeThinks, type SpellId } from './miracles';
 import { COST_STEP, MIND_NODE, modsOf, NODE_COST, reachable, type Mods } from './mindTree';
 import type { GameState, TribeState } from './types';
 
@@ -108,6 +108,8 @@ export interface ExtinctionState {
   boost?: { day: number; fish: number };
   fireTonight?: boolean;
   warmTonight?: boolean;
+  /** Food set aside for the crossing (wrapped and smoked: it keeps). */
+  voyage?: number;
   /** Miracles the spear worked unasked last night (for the scene to show). */
   worked?: SpellId[];
 }
@@ -132,7 +134,8 @@ export const RAFT: { id: RaftPart; name: string; work: number; wood: number; nee
 export const FAMILY = 4;
 /** Work a day the raft can take, however many are on it (about six at it). */
 const BUILD_CAP = 6;
-export const VOYAGE_FOOD = 20;
+/** Forty days adrift, a quarter meal a day for the four (no sails: it goes where it's carried). */
+export const VOYAGE_FOOD = 40;
 /** The ash winter, and the first green after. */
 export const WINTER = [12, 26];
 
@@ -356,6 +359,7 @@ export function startExtinction(state: GameState): ExtinctionState | undefined {
       ex.log = [];
     }
     ex.auto = true;
+    ex.powers = (ex.powers as string[]).map((p) => (p === 'shake' ? 'quicken' : p)) as SpellId[];
   } else {
     t.ex = newExtinction(t);
     autoAssign(t.ex);
@@ -640,7 +644,7 @@ export function launchBlockers(ex: ExtinctionState): string[] {
   const fam = (ex.family ?? []).filter((id) => ex.people.some((p) => p.id === id));
   if (ex.people.length < FAMILY) out.push(`It needs ${FAMILY} to go; only ${ex.people.length} are left.`);
   else if (fam.length < FAMILY) out.push(`Choose who goes: ${fam.length} of ${FAMILY} chosen.`);
-  if (provisions(ex) < VOYAGE_FOOD) out.push(`Food for the crossing: ${Math.floor(provisions(ex))} of ${VOYAGE_FOOD}.`);
+  if ((ex.voyage ?? 0) < VOYAGE_FOOD) out.push(`Food set aside for the crossing: ${Math.floor(ex.voyage ?? 0)} of ${VOYAGE_FOOD}.`);
   return out;
 }
 
@@ -653,6 +657,10 @@ export function launch(state: GameState): boolean {
   t.best = Math.max(t.best ?? 0, ex.day);
   t.family = ex.people.filter((p) => ex.family!.includes(p.id)).map((p) => ({ name: p.name, trait: p.trait }));
   t.cannibal = ex.diet === 'cannibal';
+  // The spear's island is remembered as they left it; forty days adrift, they come ashore on
+  // another.
+  t.ashIsland = { seed: t.seed, left: ex.people.length - FAMILY, days: ex.day, cannibal: t.cannibal };
+  t.landed = { seed: ((t.seed * 7919 + 104729) >>> 0) % 2 ** 31, day: ex.day + 40 };
   return true;
 }
 
@@ -756,6 +764,17 @@ function night(ex: ExtinctionState): void {
   ex.deaths += starved.length;
   if (ex.fallen === 'eat') eatDead(ex, starved.length, caught);
   else if (ex.fallen === 'undecided') ex.corpses += starved.length;
+  // Once the raft's built, a share of what's left each night is wrapped and smoked for the
+  // crossing (it keeps), until there's enough.
+  if (raftDone(ex) && (ex.voyage ?? 0) < VOYAGE_FOOD && ex.people.length >= FAMILY) {
+    const want = VOYAGE_FOOD - (ex.voyage ?? 0);
+    const fromMeat = eatsMeat(ex.diet) ? Math.min(ex.meat * 0.35, want) : 0;
+    const fromPlants = eatsPlants(ex.diet) ? Math.min(ex.plants * 0.35, want - fromMeat) : 0;
+    ex.meat -= fromMeat;
+    ex.plants -= fromPlants;
+    if (!ex.voyage && fromMeat + fromPlants > 0) say(ex, 'They began setting food aside for the crossing, wrapped in leaves and smoked.');
+    ex.voyage = (ex.voyage ?? 0) + fromMeat + fromPlants;
+  }
   const before = ex.meat + ex.plants;
   ex.meat *= Math.min(0.95, MEAT_KEEP + m.meatKeep);
   ex.plants *= Math.min(0.995, PLANT_KEEP + m.plantKeep);

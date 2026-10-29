@@ -2,7 +2,7 @@
 // the Ideas the spear can teach.
 
 import { STORY } from '../content/tribal';
-import { count, dayYield, eatsMeat, eatsPlants, FAMILY, hungerWord, ideaCost, jobFood, jobInfo, JOBS, jobOpen, launchBlockers, provisions, RAFT, raftDone, raftPart, seasonOf, TRAITS, VOYAGE_FOOD, WINTER, type Diet, type ExtinctionState } from '../economy/extinction';
+import { count, dayYield, eatsMeat, eatsPlants, FAMILY, hungerWord, ideaCost, jobFood, jobInfo, JOBS, jobOpen, launchBlockers, RAFT, raftDone, raftPart, seasonOf, TRAITS, VOYAGE_FOOD, WINTER, type Diet, type ExtinctionState } from '../economy/extinction';
 import { BRANCHES, MIND_NODE, MIND_TREE, nodeFor, reachable } from '../economy/mindTree';
 import { DREAD_COWER, DREAD_FLEE, ORDAIN_AFTER, PRAYER_MAX, spellsFor, type Gesture } from '../economy/miracles';
 import { tribeOf } from '../economy/tribal';
@@ -95,7 +95,7 @@ function raftCard(ex: ExtinctionState): string {
   const ready = raftDone(ex);
   const blockers = launchBlockers(ex);
   const tail = ready
-    ? `<div class="sub">It carries ${FAMILY}. They'll choose who goes and set off once there's ${VOYAGE_FOOD} food for the crossing (${n0(provisions(ex))} now).</div>
+    ? `<div class="sub">It carries ${FAMILY}. They'll choose who goes and set off once they've set aside ${VOYAGE_FOOD} food for forty days adrift (${n0(ex.voyage ?? 0)} so far).</div>
        ${blockers.length ? `<div class="sub warn">${blockers.filter((b) => !b.startsWith('Choose')).join(' ')}</div>` : ''}`
     : '<div class="sub">The way off this island. They\'ll build it when they can spare the hands; it takes wood.</div>';
   return `<div class="card px-box ex-raft"><div class="info"><div class="name">The raft</div>${tail}</div>${parts}</div>`;

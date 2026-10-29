@@ -23,7 +23,7 @@ import {
 } from './extinction';
 import type { GameState } from './types';
 
-export type SpellId = 'lightning' | 'rain' | 'ward' | 'shake' | 'kelp' | 'shoals' | 'dying';
+export type SpellId = 'lightning' | 'rain' | 'ward' | 'quicken' | 'kelp' | 'shoals' | 'dying';
 export type Gesture = 'zigzag' | 'spiral' | 'circle' | 'line';
 
 export interface SpellDef {
@@ -48,7 +48,7 @@ export const SPELLS: SpellDef[] = [
   { id: 'lightning', name: 'Lightning', gesture: 'zigzag', how: 'Draw a zigzag down onto a charred tree.', does: 'The tree burns down to wood (+10), and tonight they have fire, even without knowing it.', cost: 6, dread: 12, diets: ALL, hint: '', found: () => true },
   { id: 'rain', name: 'Rain', gesture: 'spiral', how: 'Draw a spiral over the ash.', does: 'Rain falls and green comes up through the ash (its food grows back), and tonight is not cold.', cost: 8, dread: 6, diets: ALL, hint: 'When the ash runs thin.', found: (ex) => ex.ash < ex.ashMax * 0.7 || ex.day >= 3 },
   { id: 'ward', name: 'Ward', gesture: 'circle', how: 'Draw a circle round some of them.', does: 'Those inside are cured of the shaking, and the hunger eases a little.', cost: 9, dread: 4, diets: ALL, hint: 'When the first of them dies.', found: (ex) => ex.deaths > 0 },
-  { id: 'shake', name: 'Shake the trees', gesture: 'line', how: 'Draw a line down onto a tree.', does: 'Fruit and seed rain down into a pile (+24 plants).', cost: 8, dread: 8, diets: ['herbivore', 'omnivore'], hint: 'When the fallen fruit runs low.', found: (ex) => ex.carrion < carrionStart(ex) * 0.4 || ex.day >= 5 },
+  { id: 'quicken', name: 'Quicken the ash', gesture: 'line', how: 'Draw a line across the ash.', does: 'Seeds buried under the fire wake all at once: a furrow of fireweed springs up along the line (+24 plants).', cost: 8, dread: 8, diets: ['herbivore', 'omnivore'], hint: 'When the fallen fruit runs low.', found: (ex) => ex.carrion < carrionStart(ex) * 0.4 || ex.day >= 5 },
   { id: 'kelp', name: 'Kelp tide', gesture: 'line', how: 'Draw a line from the sea onto the shore.', does: 'A wave throws kelp up the beach (+20 plants), and the shallows are rich all day.', cost: 10, dread: 8, diets: ['herbivore'], hint: 'When they look to the sea.', found: (ex) => ex.day >= 6 },
   { id: 'shoals', name: 'Drive the shoals', gesture: 'line', how: 'Draw a line from the sea onto the shore.', does: 'Fish pile onto the beach (+20 meat), and the shore teems all day.', cost: 10, dread: 8, diets: ['carnivore', 'omnivore', 'cannibal'], hint: 'When they look to the sea.', found: (ex) => ex.day >= 6 },
   { id: 'dying', name: 'Call the dying', gesture: 'line', how: 'Draw a long line in toward their camp.', does: 'A wounded beast staggers in along it and falls by the camp (+30 meat to scavenge).', cost: 9, dread: 10, diets: ['carnivore', 'cannibal'], hint: 'When the carcasses run low.', found: (ex) => ex.carrion < carrionStart(ex) * 0.4 || ex.day >= 5 },
@@ -131,11 +131,10 @@ export function cast(ex: ExtinctionState, id: SpellId, opts: { people?: number[]
       say(ex, cured ? `A light came round ${inside.length} of them. ${cured === 1 ? 'One' : cured} stopped shaking.` : `A light came round ${inside.length} of them, and the hunger eased.`);
       break;
     }
-    case 'shake':
-      if (ex.diet === 'herbivore') ex.carrion += 24;
-      else ex.plants += 24;
+    case 'quicken':
+      ex.plants += 24;
       text = '+24 plants';
-      say(ex, 'The trees shook with no wind, and fruit came down.');
+      say(ex, 'A line of green came up through the ash overnight, as if drawn there: fireweed, flowering pink.');
       break;
     case 'kelp':
       ex.plants += 20;
@@ -231,7 +230,7 @@ export function tribeThinks(ex: ExtinctionState): void {
   // What to put spare hands to: ideas first, then the raft (wood for it before building).
   const was2 = ex.focus;
   ex.focus = aiFocus(ex);
-  if (ex.focus !== was2 && ex.focus === 'raft') say(ex, 'They began to talk about the sea, and what lay past it. Some started on a raft.');
+  if (ex.focus !== was2 && ex.focus === 'raft') say(ex, '“If we stay any longer we\'ll go mad. We need to get off this island.” Some started on a raft.');
 }
 
 function aiFocus(ex: ExtinctionState): Focus {
@@ -243,11 +242,11 @@ function aiFocus(ex: ExtinctionState): Focus {
 /** When the raft is ready and there's food for the crossing, they choose the four and go. */
 export function tribeLaunches(state: GameState): boolean {
   const ex = state.stages.tribal.tribe?.ex;
-  if (!ex || ex.escaped || ex.over || !raftDone(ex) || ex.people.length < FAMILY || provisions(ex) < VOYAGE_FOOD) return false;
+  if (!ex || ex.escaped || ex.over || !raftDone(ex) || ex.people.length < FAMILY || (ex.voyage ?? 0) < VOYAGE_FOOD) return false;
   // The healthiest, favouring the young and the strong.
   const score = (p: ExtinctionState['people'][number]) => (p.sick !== undefined ? -10 : 0) - p.hunger + (p.trait === 'young' ? 1 : p.trait === 'strong' || p.trait === 'hardy' ? 0.6 : p.trait === 'frail' || p.trait === 'old' ? -1 : 0);
   ex.family = [...ex.people].sort((a, b) => score(b) - score(a)).slice(0, FAMILY).map((p) => p.id);
   const names = ex.people.filter((p) => ex.family!.includes(p.id)).map((p) => p.name);
-  say(ex, `The raft was ready. ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} pushed it out past the breakers.`);
+  say(ex, `The raft was ready. “We'll go mad if we stay.” ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} pushed it out past the breakers, with forty days of scraps.`);
   return launch(state);
 }

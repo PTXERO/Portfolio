@@ -6,7 +6,7 @@
 
 import { PAL } from '../art/sprites';
 import { SEASON_SEC } from '../economy/rates';
-import { Biome, CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
+import { Biome, CELLS, ISLAND, isLand, islandOf, type Island, type Pt } from '../economy/island';
 import { BURNT, LAKE, ashenFor, tribeOf } from '../economy/tribal';
 import { DAY_SEC as EX_DAY, RAFT, raftPart, type ExtinctionState, type JobId } from '../economy/extinction';
 import type { SpellId } from '../economy/miracles';
@@ -93,7 +93,7 @@ export class TribeScene extends RangeScene {
   private raftAt: Pt | null = null;
   private spotSeed = -1;
   /** Piles a miracle left (fish, kelp, fruit, a fallen beast): the tribe goes to them. */
-  private piles: (Spot & { kind: 'fish' | 'kelp' | 'fruit' | 'beast'; until: number })[] = [];
+  private piles: (Spot & { kind: 'fish' | 'kelp' | 'fruit' | 'beast' | 'green'; until: number })[] = [];
   /** Miracles playing out on the map (seconds since cast, and where, in tiles). */
   private wonders: { id: SpellId; age: number; pts: Pt[] }[] = [];
   /** The stroke being drawn to cast one (art pixels), shown as it's drawn. */
@@ -133,6 +133,7 @@ export class TribeScene extends RangeScene {
     this.walker = null;
     this.arrived = false;
     this.piles = [];
+    this.landSeed = -1;
     this.wonders = [];
     this.stroke = [];
     this.handed = null;
@@ -221,7 +222,11 @@ export class TribeScene extends RangeScene {
     this.wonders.push({ id, age: 0, pts });
     const end = pts[pts.length - 1];
     const until = 60;
-    if (id === 'shake') this.piles.push({ job: 'scavenge', kind: 'fruit', x: end.x, y: end.y + 1, until });
+    if (id === 'quicken') {
+      // A furrow of fireweed along the stroke: the foragers go to it.
+      const s0 = pts[0];
+      for (let k = 0; k <= 2; k++) this.piles.push({ job: 'forage', kind: 'green', x: s0.x + ((end.x - s0.x) * k) / 2, y: s0.y + ((end.y - s0.y) * k) / 2, until });
+    }
     if (id === 'kelp') this.piles.push({ job: 'fish', kind: 'kelp', x: end.x, y: end.y, until });
     if (id === 'shoals') this.piles.push({ job: 'fish', kind: 'fish', x: end.x, y: end.y, until });
   }
@@ -230,7 +235,11 @@ export class TribeScene extends RangeScene {
   wonderPlace(id: SpellId): Pt[] {
     const camp = this.spots.find((s) => s.job === 'build') ?? { x: 0, y: 0 };
     const pick = (job: JobId) => this.spots.find((s) => s.job === job) ?? camp;
-    if (id === 'lightning' || id === 'shake') return [pick('wood')];
+    if (id === 'lightning') return [pick('wood')];
+    if (id === 'quicken') {
+      const f = pick('forage');
+      return [{ x: f.x - 4, y: f.y }, { x: f.x + 4, y: f.y + 1 }];
+    }
     if (id === 'rain') return [pick('forage')];
     if (id === 'ward') return [pick('listen')];
     if (id === 'kelp' || id === 'shoals') {
@@ -261,7 +270,7 @@ export class TribeScene extends RangeScene {
       sprites.push({
         y: q.y,
         draw: () => {
-          const cols = q.kind === 'fish' ? ['#c8d8e0', '#8aa8b8'] : q.kind === 'kelp' ? ['#4a7a3a', '#2e5a2a'] : q.kind === 'fruit' ? ['#c0402a', '#e8a040'] : ['#5a3a30', '#8a5a48'];
+          const cols = q.kind === 'green' ? ['#4a8a3a', '#c84a98'] : q.kind === 'fish' ? ['#c8d8e0', '#8aa8b8'] : q.kind === 'kelp' ? ['#4a7a3a', '#2e5a2a'] : q.kind === 'fruit' ? ['#c0402a', '#e8a040'] : ['#5a3a30', '#8a5a48'];
           for (let k = 0; k < 7; k++) {
             b.fillStyle = cols[k % 2];
             b.fillRect(X + (((k * 5) % 7) - 3) * z, Y - (1 + (k % 3)) * z, 2 * z, z);
@@ -338,9 +347,22 @@ export class TribeScene extends RangeScene {
           }
           b.globalAlpha = 1;
         }
-      } else if (w.id === 'shake') {
-        // Fruit falling from the tree.
-        if (a < 2) for (let k = 0; k < 10; k++) glow(k % 2 ? '#c0402a' : '#e8a040', X + (hash(k, 83) - 0.5) * 8 * z, Y - 12 * z + Math.min(12 * z, ((a * 2 + hash(k, 85)) % 1.2) * 10 * z), z, z);
+      } else if (w.id === 'quicken') {
+        // Fireweed springing up along the stroke, start to end, and flowering pink.
+        const s0 = w.pts[0];
+        const grown = Math.min(1, a / 1.5);
+        const n = 26;
+        for (let k = 0; k < n * grown; k++) {
+          const f = k / n;
+          const gx = s0.x + (end.x - s0.x) * f + (hash(k, 87) - 0.5) * 1.2;
+          const gy = s0.y + (end.y - s0.y) * f + (hash(k, 89) - 0.5) * 1.2;
+          const tall = Math.min(3, Math.floor((a - f * 1.5) * 4) + 1);
+          if (tall <= 0 || a > 40) continue;
+          const sx = this.sx(gx);
+          const sy = this.py(gx, gy);
+          glow('#4a8a3a', sx, sy - tall * z, z, tall * z);
+          if (tall >= 3) glow(k % 2 ? '#e070b0' : '#c84a98', sx, sy - (tall + 1) * z, z, z);
+        }
       } else if (w.id === 'kelp' || w.id === 'shoals') {
         // A wave running up onto the beach along the stroke.
         if (a < 1.6) {
@@ -374,7 +396,7 @@ export class TribeScene extends RangeScene {
         }
       }
     }
-    this.wonders = this.wonders.filter((w) => w.age < (w.id === 'dying' ? 60 : w.id === 'rain' ? 40 : 6));
+    this.wonders = this.wonders.filter((w) => w.age < (w.id === 'dying' ? 60 : w.id === 'rain' || w.id === 'quicken' ? 40 : 6));
   }
 
   /** The stroke being drawn: a trail of purple-red light, fading once it's done. */
@@ -500,6 +522,122 @@ export class TribeScene extends RangeScene {
     }
   }
 
+  /** Keeps the spear's island on screen while the crossing is told (then the new island). */
+  holdOld = false;
+  private landSeed = -1;
+  private family: Person[] = [];
+  private locals: Person[] = [];
+  private localCamp: Pt = { x: 0, y: 0 };
+
+  /** The new island: green, unburnt, the four come ashore on its beach, and on a rise inland
+   * the smoke of someone else's fire, and them. */
+  private drawLanded(f: Frame, tribe: NonNullable<ReturnType<typeof tribeOf>>): void {
+    const { b, W, H, t, dt } = f;
+    const is = islandOf(tribe.landed!.seed);
+    this.island = is;
+    if (this.landSeed !== is.seed) {
+      this.landSeed = is.seed;
+      this.ground.clear();
+      this.fog = null;
+      this.fogKnown = null;
+      this.groundSeed = is.seed;
+      // Their camp: on land a fair way inland from the beach.
+      this.localCamp = { ...is.home };
+      for (let k = 0; k < 200; k++) {
+        const a = hash(k, 91) * Math.PI * 2;
+        const r = 30 + hash(k, 93) * 18;
+        const p = { x: is.home.x + Math.cos(a) * r, y: is.home.y + Math.sin(a) * r };
+        if (isLand(is, p.x, p.y) && isLand(is, p.x + 3, p.y) && isLand(is, p.x - 3, p.y)) {
+          this.localCamp = p;
+          break;
+        }
+      }
+      const at = (c: Pt, k: number, r: number): Person => ({ x: c.x + (hash(k, 95) - 0.5) * r, y: c.y + (hash(k, 97) - 0.5) * r * 0.7, vx: 0, vy: 0, ph: hash(k, 99) * 9, goal: null, wait: hash(k, 101) * 3, lit: -100 });
+      this.family = Array.from({ length: 4 }, (_, k) => at(is.home, k, 3));
+      this.locals = Array.from({ length: 14 }, (_, k) => at(this.localCamp, k + 10, 7));
+      this.camX = (is.home.x * 2 + this.localCamp.x) / 3;
+      this.camY = (is.home.y * 2 + this.localCamp.y) / 3;
+      this.zoom = 3;
+      this.auto = false;
+    }
+    this.seasonBlend = 0;
+    this.seasonPair = [0, 0];
+    if (!this.ground.has(0)) this.ground.set(0, this.paintGround(is, 0));
+    this.groundPair = [this.ground.get(0)!, this.ground.get(0)!];
+    this.paintFog(ALL_SEEN);
+    b.imageSmoothingEnabled = false;
+    if (this.shaded) b.clearRect(0, 0, W, H);
+    else {
+      b.fillStyle = '#24506e';
+      b.fillRect(0, 0, W, H);
+      this.blitWorld(b, this.ground.get(0)!);
+    }
+    const sprites: { y: number; draw: () => void }[] = [];
+    const ours = tribe.look as never;
+    // The locals: another kind altogether (other legs, other jaws, the other diet).
+    const p = tribe.look.parts;
+    const theirs = { parts: { legs: p.legs === 'hooves' ? 'runner' : 'hooves', mouth: p.mouth === 'tusks' ? 'fangs' : 'tusks', back: p.back === 'spines' ? 'sail' : 'spines', eyes: 'periscope' }, diet: tribe.look.diet === 'hunter' ? 'grazer' : 'hunter' } as never;
+    const move = (list: Person[], home: Pt, r: number, look: never, wary: boolean) =>
+      list.forEach((q, i) => {
+        q.wait -= dt;
+        if (!q.goal || q.wait <= 0) {
+          q.wait = 3 + hash(i, Math.floor(t / 5)) * 5;
+          const a = hash(i * 7, Math.floor(t / 6)) * Math.PI * 2;
+          const g = { x: home.x + Math.cos(a) * r * hash(i, 103), y: home.y + Math.sin(a) * r * 0.7 * hash(i, 103) };
+          q.goal = isLand(this.island!, g.x, g.y) ? g : { ...home };
+        }
+        const dx = q.goal.x - q.x;
+        const dy = q.goal.y - q.y;
+        const d = Math.hypot(dx, dy);
+        const moving = d > 0.3;
+        if (moving) {
+          q.x += (dx / d) * Math.min(d, 1.2 * dt);
+          q.y += (dy / d) * Math.min(d, 1.2 * dt);
+        }
+        const x = q.x;
+        const y = q.y;
+        // The family keeps looking toward the smoke; the locals, at first, toward the beach.
+        const left = moving ? dx < 0 : wary ? this.localCamp.x < x : is.home.x < x;
+        sprites.push({ y, draw: () => this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 7 + q.ph) % 2 : 0, sleeping: false, hop: moving ? Math.abs(Math.sin(t * 7 + q.ph)) * 1.5 : 0 }) });
+      });
+    move(this.family, is.home, 4, ours, true);
+    move(this.locals, this.localCamp, 8, theirs, false);
+    // Their fire, and its smoke going up: seen from the beach before anything else.
+    const FX = Math.round(this.sx(this.localCamp.x));
+    const FY = Math.round(this.py(this.localCamp.x, this.localCamp.y));
+    sprites.push({
+      y: this.localCamp.y,
+      draw: () => {
+        const fl = Math.floor(t * 8) % 3;
+        b.fillStyle = '#3a2a20';
+        b.fillRect(FX - 2, FY - 1, 4, 1);
+        b.fillStyle = 'rgba(255, 150, 60, 0.996)';
+        b.fillRect(FX - 1, FY - 3 - (fl % 2), 2, 2 + (fl % 2));
+        for (let k = 0; k < 8; k++) {
+          const h = ((t * 4 + k * 5) % 40);
+          b.fillStyle = `rgba(200, 200, 205, ${0.35 * (1 - h / 40)})`;
+          b.fillRect(FX + Math.round(Math.sin(h * 0.15 + k) * 2 + h * 0.2), FY - 6 - Math.round(h), 2, 2);
+        }
+      },
+    });
+    // The raft, pulled up on the sand.
+    const RX = Math.round(this.sx(is.home.x - 2));
+    const RY = Math.round(this.py(is.home.x - 2, is.home.y + 1));
+    sprites.push({
+      y: is.home.y + 1,
+      draw: () => {
+        b.fillStyle = '#6a4a30';
+        for (let k = 0; k < 4; k++) b.fillRect(RX - 5, RY - 4 + k, 10, 1);
+        b.fillStyle = '#c8b080';
+        b.fillRect(RX - 3, RY - 4, 1, 4);
+        b.fillRect(RX + 2, RY - 4, 1, 4);
+      },
+    });
+    sprites.sort((a, c) => a.y - c.y);
+    for (const s of sprites) s.draw();
+    this.fx.run(f);
+  }
+
   /** Sends the waking out from the one at the spear to the others. */
   spreadWake(): void {
     this.spreadPending = true;
@@ -592,6 +730,11 @@ export class TribeScene extends RangeScene {
     if (!this.viewBottom) this.viewTop = f.top;
     const tribe = tribeOf(state);
     if (!tribe) return;
+    // Ashore on the new island (once the crossing's been told).
+    if (tribe.landed && !this.holdOld) {
+      this.drawLanded(f, tribe);
+      return;
+    }
     const frag = ashenFor(state);
     const is = frag.island;
     this.island = is;
