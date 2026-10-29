@@ -418,8 +418,8 @@ describe('cell stage', () => {
     expect(s.stages.soup.currency.lt(1e15)).toBe(true);
     s.stages.cell.generators.fission = 10;
     const before = stageRate(s, 'cell').toNumber();
-    s.stages.soup.generators.protocell = 30;
-    expect(stageRate(s, 'cell').toNumber()).toBeGreaterThan(before);
+    s.stages.soup.generators.protocell = 60;
+    expect(stageRate(s, 'cell').toNumber()).toBeGreaterThan(before * 1.5);
   });
 
   it('a save sitting in a habitat that is no longer open goes back to the Shallows', () => {
@@ -448,6 +448,19 @@ describe('cell stage', () => {
       tick(s, 600);
       expect(measure(), `${r.id} still there later`).toBeGreaterThanOrEqual(after);
     }
+  });
+
+  it('endless upgrades never run out, each level a little dearer', () => {
+    const s = cell();
+    const u = STAGES.cell.upgrades.find((x) => x.id === 'adaptation')!;
+    let last = upgradeCost(s, 'cell', u);
+    for (let i = 0; i < 40; i++) {
+      expect(buyUpgrade(s, 'cell', 'adaptation')).toBe(true);
+      const next = upgradeCost(s, 'cell', u);
+      expect(next.gt(last)).toBe(true);
+      last = next;
+    }
+    expect(upgradeLevel(s, 'cell', 'adaptation')).toBe(40);
   });
 
   it('you can go back to the Soup without it ending again', () => {

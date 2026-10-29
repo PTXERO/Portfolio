@@ -124,6 +124,8 @@ const soup: StageDef = {
     { id: 'catalyticRna', name: 'Catalytic RNA', flavor: 'Strands that speed up other strands.', cost: 4e8, effect: { kind: 'genMult', target: 'rna', mult: 2 }, requires: { generator: 'rna', owned: 25 } },
     { id: 'thunderhead', name: 'Thunderhead', flavor: 'The storm parks itself overhead.', cost: 1e9, effect: { kind: 'dialMax', dial: 'charge', max: 3 }, requires: { reaction: 'encapsulation' } },
     { id: 'protoMembranes', name: 'Tougher Membranes', flavor: 'Harder to pop.', cost: 6e9, effect: { kind: 'genMult', target: 'protocell', mult: 2 }, requires: { generator: 'protocell', owned: 25 } },
+    // Endless, once the soup has done its job: a little more Nutrients each level, forever.
+    { id: 'simmer', name: 'Long Simmer', flavor: 'The soup never really stops cooking.', cost: 2e10, levels: Infinity, costGrowth: 1.8, effect: { kind: 'stageMult', mult: 1.03 }, requires: { reaction: 'sparkOfLife' } },
   ],
 };
 
@@ -282,20 +284,24 @@ const cell: StageDef = {
     { id: 'reefCrest', name: 'Reef Crest', flavor: 'It towers over the vents.', cost: 5.4e20, effect: { kind: 'genMult', target: 'reef', mult: 2 }, requires: { generator: 'reef', owned: 1 } },
     { id: 'chimneyStack', name: 'Stacked Chimneys', flavor: 'Chimneys on chimneys.', cost: 1.2e21, effect: { kind: 'genMult', target: 'chimney', mult: 2 }, requires: { generator: 'chimney', owned: 1 } },
     { id: 'signaling', name: 'Cell Signaling', flavor: 'Cells start passing messages along. Everyone listens.', cost: 6.3e21, effect: { kind: 'stageMult', mult: 1.5 }, requires: { reaction: 'nucleus' } },
+    // Endless: never maxes out, each level a little more
+    { id: 'adaptation', name: 'Adaptation', flavor: 'Always a little better suited. Never quite done.', cost: 1e10, levels: Infinity, costGrowth: 2.5, effect: { kind: 'stageMult', mult: 1.02 } },
     // Heirlooms: paid for with the Soup's Nutrients
     { id: 'oldRecipes', name: 'Old Recipes', flavor: 'What worked in the soup still works.', cost: 5e9, levels: 10, costGrowth: 1.8, pay: 'soup', effect: { kind: 'stageMult', mult: 1.1 } },
     { id: 'richBroth', name: 'Rich Broth', flavor: 'Food in the pond tastes of the old soup.', cost: 8e9, levels: 5, costGrowth: 2.5, pay: 'soup', effect: { kind: 'forageMult', mult: 1.2 } },
     { id: 'warmCurrents', name: 'Warm Currents', flavor: 'The soup still stirs the water.', cost: 4e9, levels: 5, costGrowth: 2.5, pay: 'soup', effect: { kind: 'heroSpeed', mult: 1.08 } },
     { id: 'primordialSpark', name: 'Primordial Spark', flavor: 'A little of the first spark, scattered in the pond.', cost: 6e9, levels: 5, costGrowth: 2.5, pay: 'soup', effect: { kind: 'spawnMult', mult: 1.15 } },
+    { id: 'deepRoots', name: 'Deep Roots', flavor: 'The old soup keeps feeding the new life, a little more each time.', cost: 5e10, levels: Infinity, costGrowth: 2, pay: 'soup', effect: { kind: 'stageMult', mult: 1.02 } },
   ],
+  // Long goals in the Soup that keep paying off to the end of the Cell.
   milestones: [
-    { id: 'p30', stage: 'soup', gen: 'protocell', owned: 30, bonus: { kind: 'stageMult', mult: 1.5 } },
-    { id: 'lipid150', stage: 'soup', gen: 'lipid', owned: 150, bonus: { kind: 'defense', amount: 0.1 } },
-    { id: 'p50', stage: 'soup', gen: 'protocell', owned: 50, bonus: { kind: 'stageMult', mult: 2 } },
-    { id: 'rna100', stage: 'soup', gen: 'rna', owned: 100, bonus: { kind: 'forageMult', mult: 2 } },
-    { id: 'nucleo130', stage: 'soup', gen: 'nucleotide', owned: 130, bonus: { kind: 'spawnMult', mult: 1.5 } },
-    { id: 'amino350', stage: 'soup', gen: 'amino', owned: 350, bonus: { kind: 'heroSpeed', mult: 1.25 } },
-    { id: 'p80', stage: 'soup', gen: 'protocell', owned: 80, bonus: { kind: 'stageMult', mult: 3 } },
+    { id: 'p60', stage: 'soup', gen: 'protocell', owned: 60, bonus: { kind: 'stageMult', mult: 1.5 } },
+    { id: 'p100', stage: 'soup', gen: 'protocell', owned: 100, bonus: { kind: 'stageMult', mult: 2 } },
+    { id: 'lipid190', stage: 'soup', gen: 'lipid', owned: 190, bonus: { kind: 'defense', amount: 0.1 } },
+    { id: 'amino450', stage: 'soup', gen: 'amino', owned: 450, bonus: { kind: 'heroSpeed', mult: 1.25 } },
+    { id: 'rna150', stage: 'soup', gen: 'rna', owned: 150, bonus: { kind: 'forageMult', mult: 2 } },
+    { id: 'nucleo180', stage: 'soup', gen: 'nucleotide', owned: 180, bonus: { kind: 'spawnMult', mult: 1.5 } },
+    { id: 'p150', stage: 'soup', gen: 'protocell', owned: 150, bonus: { kind: 'stageMult', mult: 3 } },
   ],
 };
 

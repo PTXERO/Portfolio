@@ -194,7 +194,8 @@ function renderHud(): void {
 function renderGoal(): void {
   const def = STAGES[state.current];
   const rs = reactions(state.current);
-  const shown = goalShown(state);
+  // Once every page of the book is found, the strip has nothing left to say.
+  const shown = goalShown(state) && !(rs.length > 0 && rs.every((r) => state.stages[state.current].discovered.includes(r.id)));
   const finale = finaleReady(state);
   const almost = finaleNeedsSwirl(state);
   const ready = canEvolve(state);

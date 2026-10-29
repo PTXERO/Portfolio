@@ -148,10 +148,10 @@ function upgradeCard(state: GameState, stage: StageId, u: UpgradeDef, sprite: Sp
   return `<div class="card px-box">
     <div class="slot">${icon(sprite, 3)}</div>
     <div class="info">
-      <div class="name">${esc(u.name)}${max > 1 ? ` <span class="count">${lv}/${max}</span>` : ''}${u.branch ? ` <span class="tag">${esc(u.branch)}</span>` : ''}</div>
+      <div class="name">${esc(u.name)}${max === Infinity ? ` <span class="count">Lv ${lv}</span> <span class="tag">Endless</span>` : max > 1 ? ` <span class="count">${lv}/${max}</span>` : ''}${u.branch ? ` <span class="tag">${esc(u.branch)}</span>` : ''}</div>
       <div class="fx">${esc(upgradeText(stage, u))}</div>
       <div class="flavor">${esc(u.flavor)}</div>
-      ${max > 1 ? `<div class="mini lv">${Array.from({ length: max }, (_, i) => `<i${i < lv ? ' class="on"' : ''}></i>`).join('')}</div>` : ''}
+      ${max > 1 && max < Infinity ? `<div class="mini lv">${Array.from({ length: max }, (_, i) => `<i${i < lv ? ' class="on"' : ''}></i>`).join('')}</div>` : ''}
     </div>
     ${action}
   </div>`;
