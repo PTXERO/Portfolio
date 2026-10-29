@@ -170,17 +170,18 @@ function renderHud(): void {
   set('currency', format(st.currency));
   set('rate', `${format(stageRate(state, state.current))} ${def.currency}\nper second`);
   set('bank-chip', state.timeBank > 0 ? `⧗ ${formatTime(state.timeBank)}${state.warp > 1 ? ` · ${state.warp}×` : ''}` : '');
-  // The stage label doubles as tabs once there's more than one stage: "SOUP · CELL".
-  const tabs = $('stage-tabs');
-  const tabsKey2 = `${state.unlocked.join()}|${state.current}`;
-  if (tabs.dataset.key !== tabsKey2) {
-    tabs.dataset.key = tabsKey2;
-    tabs.innerHTML =
-      state.unlocked.length < 2
-        ? `<span class="stage-tab on">${def.name}</span>`
-        : state.unlocked
-            .map((s) => `<button class="stage-tab${s === state.current ? ' on' : ''}" data-stage="${s}">${STAGES[s].name.split(' ').pop()}</button>`)
-            .join('<span class="stage-dot">·</span>');
+  set('stage-name', def.name);
+  // Small buttons under the banner hop to the previous age (left) or the next one (right).
+  const ageNav = $('age-nav');
+  const i = state.unlocked.indexOf(state.current);
+  const prev = state.unlocked[i - 1];
+  const next = state.unlocked[i + 1];
+  const navKey = `${prev ?? ''}|${next ?? ''}`;
+  if (ageNav.dataset.key !== navKey) {
+    ageNav.dataset.key = navKey;
+    const btn = (s: StageId, side: 'prev' | 'next') =>
+      `<button class="px-btn age-btn ${side}" data-stage="${s}" aria-label="Go to the ${STAGES[s].name}">${side === 'prev' ? '<span class="arrow">‹</span>' : ''}${icon(CURRENCY_ICON[s], 2)}${side === 'next' ? '<span class="arrow">›</span>' : ''}</button>`;
+    ageNav.innerHTML = `${prev ? btn(prev, 'prev') : '<span></span>'}${next ? btn(next, 'next') : '<span></span>'}`;
   }
   const iconEl = $('currency-icon');
   if (iconEl.dataset.stage !== state.current) {
