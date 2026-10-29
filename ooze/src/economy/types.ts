@@ -336,6 +336,9 @@ export interface StageState {
   nextFind: number;
   /** Whether Curiosity sends it exploring on its own (the player can switch it off). */
   autoRoam: boolean;
+  /** What Curiosity is allowed to do on its own (each can be switched off), and whether
+   * run-ins wait for your choice instead of instinct deciding when time runs out. */
+  roamOpts: { places: boolean; settle: boolean; mandatory: boolean };
   /** Herd parties out on the road: the place they're bound for and seconds since they left. */
   parties: { place: string; t: number }[];
   /** When (seasons' clock) each place is ready to be foraged by a party again. */

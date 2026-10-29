@@ -546,3 +546,11 @@ textarea {
 #placecard .name { font-weight: 700; color: var(--gold); margin-bottom: 2px; }
 #placecard .sub { color: var(--dim); line-height: 1.35; }
 #placecard .px-btn { margin: 6px 0 0; width: 100%; }
+/* "On its own": a row of switches for what Curiosity and Instinct may do by themselves. */
+.opts .info { width: 100%; }
+.px-btn.opt { display: flex; align-items: center; gap: 10px; width: calc(100% - 6px); text-align: left; padding: 6px 8px calc(6px + var(--depth)); margin-top: 6px; }
+.px-btn.opt .tick { width: 18px; height: 18px; flex: none; display: grid; place-items: center; background: var(--slot); color: var(--mint); font-size: 14px; }
+.px-btn.opt b { display: block; font-size: 13px; }
+.px-btn.opt .dim { display: block; font-size: 11px; line-height: 1.3; margin-top: 2px; }
+.px-btn.opt.on { --face: #2f5a4e; --hi: #3f7a68; --lo: #1f3c34; }
+#modal .choices .px-btn { margin-top: 0; }

@@ -50,7 +50,9 @@ export function housing(state: GameState): number {
 /** Births per second: a trickle, more with nests and nesters, a boom in spring. */
 export function birthRate(state: GameState): number {
   const s = st(state);
-  return (0.03 + 0.04 * s.generators.nest) * (1 + 0.08 * s.roles.carer) * seasonOf(state).season.births;
+  // Nests help less and less as there get to be many; nesters help by the share of the
+  // herd they are (not their number), so a big herd doesn't refill in moments.
+  return (0.02 + 0.03 * Math.sqrt(s.generators.nest)) * (1 + 2 * (s.roles.carer / Math.max(1, s.pop))) * seasonOf(state).season.births;
 }
 
 /** Biomass the herd eats per second: less with marsh grazing and fat stores, more in winter. */
@@ -147,7 +149,7 @@ export const WALK_BASE = 0.5;
 /** Seconds of output each newly seen bit of land is worth (before Trail Memory). */
 export const EXPLORE_PAY_SEC = 0.6;
 /** Seconds of walking between run-ins, and how long one waits for a choice. */
-export const EVENT_GAP: [number, number] = [70, 140];
+export const EVENT_GAP: [number, number] = [40, 90];
 export const EVENT_WAIT = 30;
 /** How close counts as arriving somewhere. */
 const ARRIVE = 3;
@@ -365,7 +367,8 @@ function walkTick(state: GameState, dt: number, rand: () => number): void {
   const w = s.walk;
   if (!w) return;
   if (w.event) {
-    w.event.left -= dt;
+    // With choices mandatory, it waits for you (instinct never decides).
+    if (!s.roamOpts?.mandatory) w.event.left -= dt;
     if (w.event.left <= 0) resolveEvent(state, rand);
     return;
   }
@@ -687,9 +690,10 @@ const fullySeen = new WeakSet<Uint8Array>();
 function autoRoam(state: GameState): void {
   const s = st(state);
   const level = curiosity(state);
-  if (!level || !s.autoRoam) return;
+  if (!level) return;
+  const opts = s.roamOpts ?? { places: true, settle: true, mandatory: false };
   const ev = s.walk?.event;
-  if (ev && level >= 3) {
+  if (ev && level >= 3 && opts.settle) {
     // It knows what it's good at: the first choice its stats can carry, else the safe one.
     const stats = statsOf(state);
     const d = EVENTS.find((e) => e.id === ev.id)!;
@@ -699,7 +703,7 @@ function autoRoam(state: GameState): void {
   }
   if (s.walk) return;
   const is = islandFor(state);
-  if (level >= 2) {
+  if (level >= 2 && opts.places) {
     const ready = def().places!.find((p) => !(s.trips[p.id] > 0) && placeSeen(state, p.id) && !placeShort(state, p).length);
     if (ready) {
       walkTo(state, is.places[ready.id].x, is.places[ready.id].y);
@@ -707,7 +711,7 @@ function autoRoam(state: GameState): void {
     }
   }
   // The nearest fog over land.
-  if (fullySeen.has(s.seen)) return;
+  if (!s.autoRoam || fullySeen.has(s.seen)) return;
   let best = -1;
   let bd = Infinity;
   for (let i = 0; i < CELLS * CELLS; i++) {

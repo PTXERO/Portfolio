@@ -10,6 +10,7 @@ import jerseyDigits from '@fontsource/jersey-10/files/jersey-10-latin-400-normal
 
 import { icon } from './art/sprites';
 import { STAGES } from './content/stages';
+import { EVENTS } from './content/creature';
 import {
   addSwirl,
   buyCount,
@@ -38,7 +39,7 @@ import { clearStorage, exportSave, importSave, loadFromStorage, saveToStorage } 
 import { createState } from './economy/state';
 import { liveTick, TICK_SEC } from './economy/tick';
 import type { BuyAmount, DialId, GameState, StageId } from './economy/types';
-import { breed, buyPart, chooseEvent, court, equipPart, FARM_PAY, foundNest, islandFor, netRate, SIGHTINGS, placeRestLeft, placeSeen, placeShort, releaseMate, tripEventDue, tripPay, walkHome, walkSeconds, walkTo } from './economy/creature';
+import { breed, buyPart, chooseEvent, statsOf, court, equipPart, FARM_PAY, foundNest, islandFor, netRate, SIGHTINGS, placeRestLeft, placeSeen, placeShort, releaseMate, tripEventDue, tripPay, walkHome, walkSeconds, walkTo } from './economy/creature';
 import { Scene } from './scene/scene';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
@@ -113,6 +114,7 @@ let modalTimer = 0;
 /** Shows a card. With `autoSec`, it clears itself after that long, a bar draining as it waits. */
 function showModal(html: string, autoSec = 0): void {
   clearTimeout(modalTimer);
+  modal.dataset.kind = '';
   const bar = autoSec ? `<div class="making-bar on auto-close" style="--dur: ${autoSec}s"><i></i></div>` : '';
   modal.innerHTML = `<div class="px-box">${html}${bar}</div>`;
   modal.hidden = false;
@@ -180,7 +182,7 @@ function showTripReport(): boolean {
       <button class="px-btn gold" data-act="dismiss">Okay</button>`, 8);
     return true;
   }
-  showModal(`<p class="label dim">Found: the ${place.name}</p>
+  showModal(`<p class="label dim">Settled: the ${place.name}</p>
     <h3>${page ? `New in the ${def.bookName}: ${page.name}` : 'Back again'}</h3>
     <p>+${format(D(r.earned))} ${def.currency}</p>
     ${page ? `<p class="fx">${rewardText('creature', page)}</p>` : ''}
@@ -190,8 +192,40 @@ function showTripReport(): boolean {
   return true;
 }
 
+/** Run-ins already shown (each pops up once; after that it's in the Roam tab too). */
+const shownRunIns = new WeakSet<object>();
+
+/** A run-in on the road pops up with its choices. Unless choices wait for you, a bar drains
+ * for the time left, and instinct plays safe when it runs out. */
+function showRunIn(): boolean {
+  if (state.current !== 'creature' || !modal.hidden) return false;
+  const c = state.stages.creature;
+  const ev = c.walk?.event;
+  if (!ev || ev.choice !== null || shownRunIns.has(ev)) return false;
+  shownRunIns.add(ev);
+  const d = EVENTS.find((e) => e.id === ev.id);
+  if (!d) return false;
+  const stats = statsOf(state);
+  const cap = (x: string) => x[0].toUpperCase() + x.slice(1);
+  showModal(
+    `<p class="label dim">On the road</p>
+    <h3>A run-in!</h3>
+    <p>${d.text}</p>
+    <div class="choices">${d.options
+      .map(
+        (o, i) =>
+          `<button class="px-btn choice${!o.stat || stats[o.stat] >= (o.need ?? 0) ? ' gold' : ''}" data-choice="${i}"><b>${o.label}</b>${o.stat ? `<span>${cap(o.stat)} ${o.need} (yours ${stats[o.stat]})</span>` : '<span>Safe</span>'}</button>`,
+      )
+      .join('')}</div>`,
+    c.roamOpts.mandatory ? 0 : Math.max(1, ev.left),
+  );
+  modal.dataset.kind = 'runin';
+  return true;
+}
+
 /** Shows the next discovered reaction, if nothing else is on screen. */
 function showDiscovery(): void {
+  if (showRunIn()) return;
   if (showTripReport()) return;
   if (!modal.hidden || !discoveryQueue.length) return;
   const id = discoveryQueue.shift()!;
@@ -705,7 +739,12 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.dial) setDial(state, id, el.dataset.dial as DialId, Number(el.dataset.level));
   else if (el.dataset.amount) state.buyAmount = el.dataset.amount === 'max' ? 'max' : (Number(el.dataset.amount) as BuyAmount);
   else if (el.dataset.warp) state.warp = Number(el.dataset.warp);
-  else if (el.dataset.uiscale) {
+  else if (el.dataset.roamopt) {
+    const c = state.stages.creature;
+    const k = el.dataset.roamopt;
+    if (k === 'explore') c.autoRoam = !c.autoRoam;
+    else if (k === 'places' || k === 'settle' || k === 'mandatory') c.roamOpts[k] = !c.roamOpts[k];
+  } else if (el.dataset.uiscale) {
     ui.scale = Number(el.dataset.uiscale);
     saveUi();
   }
@@ -723,6 +762,7 @@ function act(el: HTMLElement): void {
   else if (el.dataset.release) releaseMate(state, Number(el.dataset.release));
   else if (el.dataset.choice) {
     if (chooseEvent(state, Number(el.dataset.choice))) panelKey = '';
+    if (modal.dataset.kind === 'runin') modal.hidden = true;
   }
   else if (el.dataset.stage) {
     if (visitStage(state, el.dataset.stage as StageId)) {

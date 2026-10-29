@@ -88,7 +88,7 @@ export function lockHint(state: GameState, stage: StageId, u: UpgradeDef): strin
   if (!r) return null;
   const placeName = (id: string) => def.places?.find((p) => p.id === id)?.name ?? def.reactions?.find((x) => x.id === id)?.name ?? id;
   if (r.reaction && !st.discovered.includes(r.reaction)) return `find the ${placeName(r.reaction)}`;
-  if (r.found && st.discovered.length < r.found) return `find ${r.found} places`;
+  if (r.found && st.discovered.length < r.found) return `settle ${r.found} places`;
   if (r.generation && st.generation < r.generation) return r.generation === 1 ? 'hatch a first egg' : `breed generation ${r.generation}`;
   if (r.pop && st.pop < r.pop) return `grow the herd to ${r.pop}`;
   if (r.upgrades) {
@@ -175,7 +175,7 @@ export function checkReaction(state: GameState, stage: StageId, r: ReactionDef):
     const n = st.discovered.filter((x) => x !== r.id).length;
     const ok = n >= r.needs.found;
     gens &&= ok;
-    parts.push({ label: `${r.needs.found} ${def.bookName?.toLowerCase() ?? 'discoveries'} found`, ok });
+    parts.push({ label: def.places ? `${r.needs.found} places settled` : `${r.needs.found} ${def.bookName?.toLowerCase() ?? 'discoveries'} found`, ok });
   }
   if (r.needs.generation) {
     const ok = st.generation >= r.needs.generation;

@@ -43,6 +43,21 @@ import { D, format, formatTime } from '../economy/num';
 import { checkReaction, lockHint, payStage, reactionReady, upgradeCost, upgradeUnlocked, visibleUpgrades } from '../economy/actions';
 import type { UpgradeDef } from '../economy/types';
 
+/** All the choices about how much it does on its own, in one place. */
+function roamOptions(state: GameState): string {
+  const s = state.stages[CREATURE];
+  const level = curiosity(state);
+  const row = (key: string, on: boolean, label: string, sub: string) =>
+    `<button class="px-btn opt${on ? ' on' : ''}" data-roamopt="${key}"><span class="tick">${on ? '✓' : ''}</span><span><b>${label}</b><span class="dim">${sub}</span></span></button>`;
+  const rows = [
+    level >= 1 ? row('explore', s.autoRoam, 'Curiosity: explore the fog', 'With nothing to do, it wanders into the unknown') : '',
+    level >= 2 ? row('places', s.roamOpts.places, 'Curiosity: head for new places', 'It goes to places it can get into') : '',
+    level >= 3 ? row('settle', s.roamOpts.settle, 'Instinct: settle run-ins', 'It answers run-ins itself, by what it\'s good at') : '',
+    row('mandatory', s.roamOpts.mandatory, 'Run-ins wait for me', 'Off: if you don\'t choose in time, instinct plays safe'),
+  ].join('');
+  return `<div class="card px-box opts"><div class="info"><div class="name">On its own</div>${rows}</div></div>`;
+}
+
 /**
  * A locked part of a section shows as one line saying what opens it (the next thing to
  * come, not a card), so nothing clogs the screen before it's useful.
@@ -86,7 +101,7 @@ const PLACE_TEXT: Record<string, string> = {
 /** What changes the creature tabs' layout. */
 export function creatureKey(state: GameState): unknown {
   const s = state.stages[CREATURE];
-  return [s.parts, s.equipped, s.autoRoam, s.walk?.event?.id ?? '', s.trips, STAGES[CREATURE].places!.map((p) => placeSeen(state, p.id)), energyBudget(state), state.unlocked.length, s.mates.map((m) => m.id), !!s.egg, s.generation, s.discovered, s.levels, visibleUpgrades(state, CREATURE).map((u) => u.id)];
+  return [s.parts, s.equipped, s.autoRoam, JSON.stringify(s.roamOpts), s.walk?.event?.id ?? '', s.trips, STAGES[CREATURE].places!.map((p) => placeSeen(state, p.id)), energyBudget(state), state.unlocked.length, s.mates.map((m) => m.id), !!s.egg, s.generation, s.discovered, s.levels, visibleUpgrades(state, CREATURE).map((u) => u.id)];
 }
 
 /** The Herd tab: how many, how fed, what season, who does what, and the buildings. */
@@ -207,7 +222,7 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
       .map(upgradeCard)
       .join('')}${nextHint(state, (u) => u.branch === 'Wandering')}
     ${partySlots(state) ? '<p class="note" data-t="parties"></p>' : ''}
-    ${curiosity(state) ? `<button class="px-btn small${s.autoRoam ? ' on' : ''}" data-act="autoroam">Exploring on its own: ${s.autoRoam ? 'on' : 'off'}</button>` : ''}
+    ${roamOptions(state)}
     ${
       nestsOpen(state)
         ? `<div class="card px-box nest"><div class="info"><div class="name">A new nest</div>
