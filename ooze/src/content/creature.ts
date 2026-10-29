@@ -156,7 +156,7 @@ const UPGRADES: UpgradeDef[] = [
   { id: 'following', branch: 'Instincts', name: 'Follow the Leader', flavor: 'The young trail after the one who knows the way.', cost: 4e5, levels: 5, costGrowth: 8, effect: { kind: 'instinct', role: 'scout', share: 0.02 }, requires: { reaction: 'forest' } },
   // On the road.
   { id: 'goodPickings', branch: 'Wandering', name: 'Good Pickings', flavor: 'It learns where the best of each place grows.', cost: 2e4, levels: 6, costGrowth: 12, effect: { kind: 'tripMult', mult: 1.5 }, requires: { found: 3 } },
-  { id: 'rounds', branch: 'Wandering', name: 'Foraging Rounds', flavor: 'It knows where everything grows, and when it will be back.', cost: 2e7, effect: { kind: 'rounds' }, requires: { reaction: 'forest' } },
+  { id: 'rounds', branch: 'Wandering', name: 'Foraging Rounds', flavor: 'It knows where everything grows, and tends it.', cost: 2e7, effect: { kind: 'rounds' }, requires: { reaction: 'forest' } },
   { id: 'parties', branch: 'Wandering', name: 'Foraging Parties', flavor: 'The young know the way now. They go without being led.', cost: 1e9, levels: 3, costGrowth: 8, effect: { kind: 'parties', count: 1 }, requires: { reaction: 'highlands', upgrades: ['rounds'] } },
   { id: 'curiosity', branch: 'Wandering', name: 'Curiosity', flavor: 'It can never leave a corner of the map alone.', cost: 3000, levels: 3, costGrowth: 60, effect: { kind: 'curiosity', level: 1 }, requires: { found: 2 } },
   // Herd and seasons.

@@ -560,9 +560,7 @@ function showPlaceCard(id: string, x: number, y: number): void {
     ? short.length
       ? `Too much for it yet: ${short.map(([k, n]) => `${k} ${n}`).join(', ')}`
       : `Finding it: about ${format(tripPay(state, p))} ${def.currency}`
-    : rest > 0
-      ? `Growing back, ${formatTime(rest)}`
-      : `Ready to forage: ${format(tripPay(state, p).mul(FARM_PAY))} ${def.currency}`;
+    : `Settled: gives ${format(tripPay(state, p).mul(FARM_PAY))} ${def.currency} every time it grows back (next in ${formatTime(rest)})`;
   const parts = p.parts.filter((pid) => s.parts.includes(pid)).length;
   placeCard.innerHTML = `<div class="name">${found ? p.name : 'Something out here'}</div>
     <div class="sub">${formatTime(walkSeconds(state, q.x, q.y))} away · parts ${parts}/${p.parts.length}</div>
@@ -877,6 +875,28 @@ async function checkForUpdate(manual = false): Promise<void> {
     /* offline: keep playing this build */
   }
 }
+
+/**
+ * For testing: opening the game with ?start=creature offers a fresh game at the start of the
+ * Creature (the Soup and Cell played through), replacing the current save if you say so.
+ */
+async function startFromLink(): Promise<void> {
+  const params = new URLSearchParams(location.search);
+  if (params.get('start') !== 'creature') return;
+  history.replaceState(null, '', location.pathname);
+  if (!confirm('Start a fresh game at the beginning of the Creature stage? This replaces your current save (export it from the Menu first if you want to keep it).')) return;
+  try {
+    const code = (await (await fetch('./creature-start.txt', { cache: 'no-store' })).text()).trim();
+    state = importSave(code);
+    state.lastSeen = Date.now();
+    scene.reload();
+    save();
+    render();
+  } catch {
+    alert('That start could not be loaded.');
+  }
+}
+void startFromLink();
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') save();

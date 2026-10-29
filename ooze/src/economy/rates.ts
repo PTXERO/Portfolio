@@ -1,6 +1,6 @@
 import { STAGES, STAGE_ORDER } from '../content/stages';
 import { D, Decimal, ZERO } from './num';
-import { statsOf } from './creature';
+import { settledNests, statsOf } from './creature';
 import type { DialId, Diet, Effect, GameState, GeneratorDef, HabitatDef, MilestoneDef, StageId, UpgradeDef } from './types';
 
 /** Owning this many of a generator doubles its output, each. Past 100, every further 100 counts too. */
@@ -98,7 +98,8 @@ export function stageEffects(state: GameState, stage: StageId): Effect[] {
   // Each generation bred makes the whole line stronger (Creature stage).
   if (st.generation > 0) out.push({ kind: 'stageMult', mult: Math.pow(1.25, st.generation) });
   // Each nest founded away from home: another colony feeding the line.
-  if (st.nests?.length) out.push({ kind: 'stageMult', mult: Math.pow(1.5, st.nests.length) });
+  const settled = stage === 'creature' ? settledNests(state).length : 0;
+  if (settled) out.push({ kind: 'stageMult', mult: Math.pow(1.5, settled) });
   return out;
 }
 

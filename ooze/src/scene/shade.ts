@@ -77,7 +77,7 @@ uniform sampler2D uOver;
 uniform sampler2D uLight;
 uniform sampler2D uTrail; // paths worn into the ground (alpha)
 uniform vec4 uWeather; // storm, morning mist, winter ice, wet ground (each 0 to 1)
-uniform vec4 uBow; // the rainbow after rain: its centre (art px), radius (art px), strength
+uniform vec4 uBow; // after rain, the sun breaking through: strength in w
 uniform float uBlend;
 uniform vec2 uArt;
 uniform vec4 uCam; // camera centre x, y (tiles), zoom (art px per tile), screen row of the centre
@@ -242,14 +242,14 @@ void main() {
 
   // Grade: highlights roll off instead of burning out (snow in the sun keeps its shape),
   // a touch more colour and contrast, and a soft vignette.
-  // After rain, a rainbow: a great soft arc of light across the whole view, like the god
-  // rays in the water, so faint you half see it. Violet inside, red outside.
+  // After rain, the sun breaks through: broad soft rays slanting across the view (like the
+  // god rays in the water), and the whole day a touch brighter and fresher.
   if (uBow.w > 0.002) {
-    float k = (length(art - uBow.xy) / uBow.z - 0.6) / 0.55;
-    float band = smoothstep(0.0, 0.35, k) * (1.0 - smoothstep(0.65, 1.0, k));
-    vec3 hue = clamp(abs(fract(vec3((1.0 - k) * 0.78) + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
-    float shimmer = 0.85 + 0.15 * sin(uTime * 0.6 + vUv.x * 4.0);
-    lit += mix(vec3(1.0), hue, 0.8) * band * uBow.w * 0.2 * shimmer * step(art.y, uBow.y);
+    float d = vUv.x * 0.85 + vUv.y * 0.5;
+    float rays = smoothstep(0.45, 1.0, sin(d * 7.0 + uTime * 0.04) * 0.5 + 0.5) + 0.7 * smoothstep(0.55, 1.0, sin(d * 13.0 - uTime * 0.03 + 1.7) * 0.5 + 0.5);
+    float fall = 1.0 - vUv.y * 0.65;
+    lit += vec3(1.0, 0.95, 0.8) * rays * fall * uBow.w * 0.08;
+    lit *= 1.0 + uBow.w * 0.07;
   }
   lit *= uGrade;
   // The low sun's glow hangs in the air, strongest toward the far (top) side of the view.
@@ -278,7 +278,7 @@ export interface ShadeParams {
   trail: HTMLCanvasElement;
   trailVersion: number;
   weather: [number, number, number, number];
-  /** The rainbow after rain: centre and radius on screen (art px), and strength. */
+  /** After rain, the sun breaking through (strength in the last of the four). */
   bow: [number, number, number, number];
 }
 

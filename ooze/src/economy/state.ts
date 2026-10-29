@@ -8,11 +8,11 @@ export const BASE_OFFLINE_CAP_SEC = 8 * 3600;
 /** The Creature stage starts with the free parts (no price) worn, one per slot. */
 /** A fresh island for a new Creature: just its seed. The island itself is rolled the
  * first time it's needed (see islandFor), which also puts the creature at home. */
-export function newIsland(def: StageDef, seed = Math.floor(Math.random() * 2 ** 31)): Pick<StageState, 'seed' | 'pos' | 'seen' | 'walk' | 'autoRoam' | 'nextFind' | 'parties' | 'partyReady' | 'sightings' | 'nests'> {
-  return { seed: def.places ? seed : 0, pos: { x: -1, y: -1 }, seen: new Uint8Array(CELLS * CELLS), walk: null, autoRoam: true, nextFind: 0, parties: [], partyReady: {}, sightings: {}, nests: [] };
+export function newIsland(def: StageDef, seed = Math.floor(Math.random() * 2 ** 31)): Pick<StageState, 'seed' | 'pos' | 'seen' | 'walk' | 'autoRoam' | 'nextFind' | 'parties' | 'partyReady' | 'sightings' | 'nests' | 'nestSettle'> {
+  return { seed: def.places ? seed : 0, pos: { x: -1, y: -1 }, seen: new Uint8Array(CELLS * CELLS), walk: null, autoRoam: true, nextFind: 0, parties: [], partyReady: {}, sightings: {}, nests: [], nestSettle: {} };
 }
 
-function creatureStart(def: StageDef): Pick<StageState, 'parts' | 'equipped' | 'seed' | 'pos' | 'seen' | 'walk' | 'autoRoam' | 'nextFind' | 'parties' | 'partyReady' | 'sightings' | 'nests' | 'trips' | 'mates' | 'egg' | 'generation' | 'pop' | 'roles' | 'year'> {
+function creatureStart(def: StageDef): Pick<StageState, 'parts' | 'equipped' | 'seed' | 'pos' | 'seen' | 'walk' | 'autoRoam' | 'nextFind' | 'parties' | 'partyReady' | 'sightings' | 'nests' | 'nestSettle' | 'trips' | 'mates' | 'egg' | 'generation' | 'pop' | 'roles' | 'year'> {
   const starters = (def.parts ?? []).filter((p) => p.cost === 0);
   const equipped: StageState['equipped'] = {};
   for (const p of starters) equipped[p.slot] ??= p.id;
@@ -94,6 +94,7 @@ export function cloneState(s: GameState): GameState {
       partyReady: { ...st.partyReady },
       sightings: { ...st.sightings },
       nests: [...st.nests],
+      nestSettle: { ...st.nestSettle },
       trips: { ...st.trips },
       mates: st.mates.map((m) => ({ ...m, parts: { ...m.parts } })),
       egg: st.egg && { ...st.egg, mate: { ...st.egg.mate, parts: { ...st.egg.mate.parts } } },

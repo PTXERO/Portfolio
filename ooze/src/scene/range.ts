@@ -9,7 +9,7 @@
 
 import { PAL } from '../art/sprites';
 import { STAGES } from '../content/stages';
-import { islandFor, nearestNest, nestPoints, partyLeg, spot, statsOf, walkTo } from '../economy/creature';
+import { islandFor, nearestNest, nestPoints, nestProgress, partyLeg, spot, statsOf, walkTo } from '../economy/creature';
 import { Biome, CELL, CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
 import { SEASON_SEC, seasonOf } from '../economy/rates';
 import { H_LO, H_SPAN, LIFT, TILT } from './shade';
@@ -37,6 +37,9 @@ interface Member {
   base: number;
   /** Waypoints over land when it's moving to live at another nest. */
   path?: Pt[];
+  /** Which member this is (decides its nest), and whether it's been given its nest yet. */
+  id: number;
+  placed?: boolean;
 }
 
 /** Herd life: little things members do now and then, on their own or in twos. */
@@ -118,12 +121,9 @@ export class RangeScene {
   /** Where the camera was last frame (the air layer slides a little as it moves). */
   private airCam = { x: 0, y: 0 };
   private flies: { x: number; y: number; ph: number }[] = [];
-  /** Where the rainbow stands (its foot's centre on the land, and its size in tiles). */
-  private bowAt: { x: number; y: number; r: number } | null = null;
   private bowView: [number, number, number, number] = [0, 0, 1, 0];
   private momentTimer = 6;
-  private moveTimer = 30;
-  private based = new WeakSet<Member>();
+  private memberId = 0;
   private events: PondEvent[] = [];
   private members: Member[] = [];
   private beast: Beast | null = null;
@@ -524,7 +524,7 @@ export class RangeScene {
           y = home.y + Math.sin(a) * d;
           if (isLand(this.island!, x, y)) break;
         }
-        this.members.push({ x, y, vx: 0, vy: 0, role: r, phase: Math.random() * 10, flee: 0, base: 0 });
+        this.members.push({ x, y, vx: 0, vy: 0, role: r, phase: Math.random() * 10, flee: 0, base: 0, id: this.memberId++ });
       }
       let extra = have - want[r]!;
       if (extra > 0) this.members = this.members.filter((m) => m.role !== r || extra-- <= 0);
@@ -804,7 +804,7 @@ export class RangeScene {
       tile(n.x - 0.25 + wob, n.y - 0.8, 0.5, 0.6, PAL.w);
     }
     // Nests founded away from home: a few mounds each.
-    const bases = nestPoints(state);
+    const bases = nestPoints(state, true);
     for (const p of bases.slice(1)) {
       for (const n of this.nestSpots(p, 4)) {
         tile(n.x - 0.5, n.y - 0.3, 1, 0.5, PAL.S);
@@ -876,10 +876,6 @@ export class RangeScene {
       this.stormLeft = 35 + Math.random() * 25;
       this.stormTimer = 200 + Math.random() * 220;
     }
-    // As a storm clears: now and then (not every time) a rainbow, set over the land in view.
-    if (this.stormLeft > 0 && this.stormLeft - dt <= 0) {
-      this.bowAt = Math.random() < 0.3 ? { ...this.toWorld(W / 2, H * 0.78), r: (W * 0.6) / this.zoom } : null;
-    }
     this.stormLeft = Math.max(0, this.stormLeft - dt);
     this.storm += ((this.stormLeft > 0 ? 1 : 0) - this.storm) * Math.min(1, dt / 5);
     this.wet = this.stormLeft > 0 ? Math.min(1, this.wet + dt / 8) : Math.max(0, this.wet - dt / 70);
@@ -894,24 +890,36 @@ export class RangeScene {
     const bt = this.beast && !this.beast.fleeing ? this.beast : null;
     // With nests away from home, the herd spreads between them (foragers only; the rest keep
     // to home), and now and then one sets off to live at another, walking the trail between.
+    // With nests away from home, the herd is shared out between them (foragers only; the rest
+    // keep to home), each member for good. Moving to a new nest, they walk there over land
+    // (that walk is the settling); at a settled nest they simply live there, even seen afresh.
     if (bases.length > 1) {
-      const setOff = (m: Member, base: number) => {
-        m.base = base;
-        // The long way round over land if it must (never straight into the sea).
-        if (Math.hypot(m.x - bases[base].x, m.y - bases[base].y) > 8) m.path = this.landPath(is, m, bases[base]);
-      };
-      this.members.forEach((m, i) => {
-        if (m.base >= bases.length) m.base = 0;
-        if (m.role === 'forager' && m.base === 0 && i % bases.length !== 0 && !this.based.has(m)) setOff(m, i % bases.length);
-        this.based.add(m);
+      this.members.forEach((m) => {
+        const want = m.role === 'forager' ? m.id % bases.length : 0;
+        if (m.base === want && m.placed) return;
+        const to = bases[want];
+        const nest = want > 0 ? st.nests[want - 1] : null;
+        const progress = nest ? nestProgress(state, nest) : 1;
+        if (!m.placed && progress >= 1) {
+          m.x = to.x + (hash(m.id, 3) - 0.5) * 6;
+          m.y = to.y + (hash(m.id, 5) - 0.5) * 4;
+          m.path = undefined;
+        } else if (Math.hypot(m.x - to.x, m.y - to.y) > 8) {
+          const path = this.landPath(is, m, to);
+          // Seen partway through a move (after a reload): already partway along.
+          if (!m.placed && progress > 0) {
+            const k = Math.min(path.length - 1, Math.floor(path.length * progress));
+            if (k > 0) {
+              m.x = path[k - 1].x;
+              m.y = path[k - 1].y;
+              path.splice(0, k);
+            }
+          }
+          m.path = path;
+        }
+        m.base = want;
+        m.placed = true;
       });
-      this.moveTimer -= dt;
-      if (this.moveTimer <= 0 && this.members.length > 2) {
-        this.moveTimer = 30 + Math.random() * 30;
-        const free = this.members.filter((x) => x.role === 'forager' && !x.act && !x.path?.length);
-        const m = free[Math.floor(Math.random() * free.length)];
-        if (m) setOff(m, (m.base + 1 + Math.floor(Math.random() * (bases.length - 1))) % bases.length);
-      }
     }
     // Herd life: every so often one or two of them break off to do something of their own.
     this.momentTimer -= dt;
@@ -1184,13 +1192,16 @@ export class RangeScene {
         });
       }
     }
-    // Your creature forages a place that's grown back: a little puff where it stands, and
-    // what it brought in.
-    if ((st.foraged ?? 0) > this.foragedSeen) {
-      const X = Math.round(this.sx(me.x));
-      const Y = Math.round(this.py(me.x, me.y)) - 4;
-      this.fx.pulse(X, Y, PAL.y);
-      this.events.push({ type: 'forage', party: false, x: X, y: Y - 8 });
+    // A settled place has grown back and given: a little puff over its flag, and what it gave
+    // (when it's in view).
+    if ((st.foraged ?? 0) > this.foragedSeen && st.lastForagePlace && is.places[st.lastForagePlace]) {
+      const p = is.places[st.lastForagePlace];
+      const X = Math.round(this.sx(p.x));
+      const Y = Math.round(this.py(p.x, p.y)) - 6;
+      if (X > 0 && X < W && Y > 0 && Y < H) {
+        this.fx.pulse(X, Y, PAL.y);
+        this.events.push({ type: 'forage', party: false, x: X, y: Y - 6 });
+      }
     }
     this.foragedSeen = st.foraged ?? 0;
     if ((st.partiesHome ?? 0) > this.partiesSeen) {
@@ -1372,13 +1383,12 @@ export class RangeScene {
       b.fillRect(0, 0, W, H);
       this.flash -= dt;
     }
-    // The rainbow (drawn by the shader as soft light in the air) eases in after the rain
-    // and fades as the ground dries or the day ends.
-    const bowWant = this.bowAt && this.stormLeft <= 0 && this.wet > 0.2 && night < 0.2 ? Math.min(1, (this.wet - 0.2) * 3) * Math.max(0, Math.min(1, (0.75 - dayT) * 8)) : 0;
-    this.bow += (bowWant - this.bow) * Math.min(1, dt / 6);
-    // It stands over the land, so it scrolls and zooms with the map.
-    const at = this.bowAt;
-    this.bowView = at && this.bow > 0.002 ? [this.sx(at.x), this.py(at.x, at.y), at.r * this.zoom, this.bow] : [0, 0, 1, 0];
+    // After rain by day, the sun breaks through: soft rays of light across the view and a
+    // fresher, brighter day (the shader draws it), easing in as the rain stops and out as the
+    // ground dries or evening comes.
+    const bowWant = this.stormLeft <= 0 && this.wet > 0.2 && night < 0.2 ? Math.min(1, (this.wet - 0.2) * 3) * Math.max(0, Math.min(1, (0.75 - dayT) * 8)) : 0;
+    this.bow += (bowWant - this.bow) * Math.min(1, dt / (bowWant > this.bow ? 8 : 14));
+    this.bowView = [0, 0, 0, this.bow];
 
     // Night falls over everything; in summer, fireflies around home.
     if (night > 0) {

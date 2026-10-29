@@ -340,12 +340,15 @@ export interface StageState {
   partyReady: Record<string, number>;
   /** Nests founded away from home, at these found places (once the island is all explored). */
   nests: string[];
+  /** When (seasons' clock) each new nest is settled: the herd's had time to walk there. */
+  nestSettle: Record<string, number>;
   /** Rare sightings tapped, by kind. */
   sightings: Record<string, number>;
   /** Times a found place has been foraged again (the scene puffs when it ticks up; not saved). */
   foraged?: number;
   /** What the last forage and the last party home brought in (for the scene to show; not saved). */
   lastForage?: string;
+  lastForagePlace?: string;
   partiesHome?: number;
   lastParty?: string;
   /** The herd: how many, and what they're set to do (the rest forage). */

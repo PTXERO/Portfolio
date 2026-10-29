@@ -25,7 +25,7 @@ import { softCap, defenseOf, dialMax, guardLevel, dietOf, forageMult, habitatMul
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
-import { breed, buyPart, partEnergy, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, EGG_BASE_SEC, FARM_PAY, foundNest, islandFor, nestSites, nestsOpen, partyLeg, spot, placeSeen, tripPay, statsOf, tripEventDue, upkeep, walkTo } from '../src/economy/creature';
+import { breed, buyPart, partEnergy, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, EGG_BASE_SEC, FARM_PAY, PLACE_REST, placeRest, foundNest, islandFor, nestSites, nestsOpen, partyLeg, spot, placeSeen, tripPay, statsOf, tripEventDue, upkeep, walkTo } from '../src/economy/creature';
 import { islandOf, ISLAND, isLand, seenShare } from '../src/economy/island';
 import { foragers, herdMult, SEASON_SEC } from '../src/economy/rates';
 
@@ -786,43 +786,32 @@ describe('creature stage', () => {
     expect(tripEventDue(s)).toBe(false);
   });
 
-  it('a found place can be foraged again once it has grown back', () => {
+  it('a settled place gives on its own each time it grows back', () => {
     const s = creatureGame();
     const c = s.stages.creature;
     c.seed = 4242;
     c.pop = 10;
-    const is = islandFor(s);
+    islandFor(s);
     c.trips.tidePools = 1;
     c.partyReady.tidePools = c.year + 100;
-    const q = is.places.tidePools;
-    // Still growing back: walking there pays nothing.
-    c.pos = { x: q.x + 1, y: q.y };
-    walkTo(s, q.x, q.y);
+    c.partyReady.shore = c.year + 1e6;
     const pay = tripPay(s, STAGES.creature.places!.find((p) => p.id === 'tidePools')!).mul(FARM_PAY);
-    let before = c.totalEarned;
-    tick(s, 5);
-    expect(c.totalEarned.sub(before).lt(pay.div(2))).toBe(true);
-    // Grown back: it pays, and rests again.
-    c.year += 200;
-    c.pos = { x: q.x + 1, y: q.y };
-    walkTo(s, q.x, q.y);
-    before = c.totalEarned;
-    tick(s, 5);
-    expect(c.totalEarned.sub(before).gte(pay.mul(0.99))).toBe(true);
+    // Still growing back: nothing from it yet.
+    tick(s, 50);
+    expect(c.foraged ?? 0).toBe(0);
+    // Grown back: it gives, and starts growing back again.
+    tick(s, 60);
+    expect(c.foraged).toBe(1);
+    expect(c.lastForagePlace).toBe('tidePools');
+    expect(Number(c.lastForage)).toBeGreaterThan(pay.toNumber() * 0.5);
     expect(c.partyReady.tidePools).toBeGreaterThan(c.year);
   });
 
-  it('with Foraging Rounds, it heads for a place that has grown back on its own', () => {
+  it('Foraging Rounds makes settled places grow back sooner', () => {
     const s = creatureGame();
-    const c = s.stages.creature;
-    c.seed = 4242;
-    const is = islandFor(s);
-    for (let i = 0; i < c.seen.length; i++) c.seen[i] = 1;
-    c.trips.tidePools = 1;
-    c.upgrades.push('curiosity', 'rounds');
-    c.levels.curiosity = 1;
-    tick(s, 0.1);
-    expect(c.walk && Math.hypot(c.walk.tx - is.places.tidePools.x, c.walk.ty - is.places.tidePools.y)).toBeLessThan(2);
+    expect(placeRest(s)).toBe(PLACE_REST);
+    s.stages.creature.upgrades.push('rounds');
+    expect(placeRest(s)).toBeLessThan(PLACE_REST);
   });
 
   it('once the island is all explored, a new nest can be founded at a found place', () => {
@@ -841,6 +830,9 @@ describe('creature stage', () => {
     const rate = stageRate(s, 'creature');
     expect(foundNest(s, site.id)).toBe(true);
     expect(c.nests).toEqual([site.id]);
+    // It counts once the herd has walked there and settled.
+    expect(housing(s)).toBe(houses);
+    c.year = c.nestSettle[site.id] + 1;
     expect(housing(s)).toBeGreaterThan(houses);
     expect(stageRate(s, 'creature').gt(rate)).toBe(true);
     // Not twice at the same place; it survives a save.

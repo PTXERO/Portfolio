@@ -201,7 +201,7 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
     : '';
   const walk = `<div class="card px-box trip"><div class="info"><div class="name" data-t="walk-title"></div><div class="sub" data-t="walk-sub"></div>${choice}</div>
     <button class="px-btn home-btn" data-act="walkhome" data-t="home-btn">Home</button></div>
-    <p class="note">Tap anywhere on the map to send your creature there. It clears the fog as it walks: Senses lets it see further, Speed gets it there sooner. Places it has found grow back after a while: go back to forage them again.</p>
+    <p class="note">Tap anywhere on the map to send your creature there. It clears the fog as it walks: Senses lets it see further, Speed gets it there sooner. Places it finds are settled: each gives on its own every time it grows back.</p>
     ${visibleUpgrades(state, CREATURE)
       .filter((u) => u.branch === 'Wandering')
       .map(upgradeCard)
@@ -217,7 +217,8 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
           .map((p) => `<button class="px-btn small" data-nest="${p.id}">${esc(p.name)}</button>`)
           .join('')}</div></div></div>`
         : ''
-    }`;
+    }
+    ${s.nests.length ? '<p class="note" data-t="nests"></p>' : ''}`;
   const places = def
     .places!.map((p) => {
       const found = (s.trips[p.id] ?? 0) > 0;
@@ -234,7 +235,7 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
       }
       return `<div class="card px-box place${found ? ' owned' : ''}">
         <div class="info">
-          <div class="name">${esc(p.name)} ${found ? '<span class="tag">Found</span>' : ''}</div>
+          <div class="name">${esc(p.name)} ${found ? '<span class="tag">Settled</span>' : ''}</div>
           <div class="flavor">${esc(p.flavor)}</div>
           ${!found && needs ? `<ul class="checks">${needs}</ul>` : ''}
           <div class="sub" data-t="place-${p.id}"></div>
@@ -399,6 +400,19 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
     const home = root.querySelector<HTMLButtonElement>('[data-act="walkhome"]');
     if (home) home.hidden = atHome || !!s.walk?.event;
     setText(root, 'seen', `${Math.floor(seenShare(is, s.seen) * 100)}% seen`);
+    if (s.nests.length) {
+      setText(
+        root,
+        'nests',
+        s.nests
+          .map((id) => {
+            const name = def.places!.find((p) => p.id === id)?.name ?? id;
+            const left = (s.nestSettle[id] ?? 0) - s.year;
+            return left > 0 ? `The herd is moving to the ${name}: settled in ${formatTime(left)} (its bonus counts from then)` : `Nest at the ${name}: settled`;
+          })
+          .join(' · '),
+      );
+    }
     for (const b of root.querySelectorAll<HTMLButtonElement>('[data-nest]')) {
       const ok = s.currency.gte(nestCost(state));
       b.disabled = !ok;
@@ -421,7 +435,7 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
       const ready = !placeShort(state, p).length;
       const known = (s.trips[p.id] ?? 0) > 0;
       const rest = placeRestLeft(state, p.id);
-      const farm = !known ? ` · finding it brings about ${format(tripPay(state, p))} ${def.currency}` : rest > 0 ? ` · growing back, ${formatTime(rest)}` : ` · ready to forage: ${format(tripPay(state, p).mul(FARM_PAY))} ${def.currency}`;
+      const farm = !known ? ` · finding it brings about ${format(tripPay(state, p))} ${def.currency}` : ` · gives ${format(tripPay(state, p).mul(FARM_PAY))} in ${formatTime(rest)}`;
       setText(root, `place-${p.id}`, `${formatTime(walkSeconds(state, q.x, q.y))} away${farm}`);
       const go = root.querySelector<HTMLButtonElement>(`[data-goto="${p.id}"]`);
       if (go) {

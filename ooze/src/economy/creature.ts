@@ -44,7 +44,7 @@ function effectProduct(state: GameState, kind: 'upkeepMult' | 'winterMult'): num
 export function housing(state: GameState): number {
   const s = st(state);
   const g = s.generators;
-  return Math.floor((BASE_HOUSING + 3 * g.burrow + 15 * g.den + 50 * g.territory + 0.5 * s.roles.digger) * (1 + 0.5 * s.nests.length));
+  return Math.floor((BASE_HOUSING + 3 * g.burrow + 15 * g.den + 50 * g.territory + 0.5 * s.roles.digger) * (1 + 0.5 * settledNests(state).length));
 }
 
 /** Births per second: a trickle, more with nests and nesters, a boom in spring. */
@@ -262,7 +262,7 @@ function arrive(state: GameState, p: PlaceDef, rand: () => number): void {
   const pay = tripPay(state, p);
   earn(state, pay);
   s.trips[p.id] = (s.trips[p.id] ?? 0) + 1;
-  s.partyReady[p.id] = s.year + PLACE_REST;
+  s.partyReady[p.id] = s.year + placeRest(state);
   // It stops to take the place in.
   s.walk = null;
   const report: GameState['reports'][number] = { kind: 'trip', place: p.id, success: true, earned: pay.toString(), parts: [] };
@@ -309,14 +309,6 @@ function rummage(state: GameState, fresh: number, rand: () => number): void {
 function revisit(state: GameState, p: PlaceDef, rand: () => number): void {
   const s = st(state);
   s.trips[p.id] = (s.trips[p.id] ?? 0) + 1;
-  // Grown back since it was last foraged: it gives again.
-  if (placeRested(state, p.id)) {
-    const got = tripPay(state, p).mul(FARM_PAY);
-    earn(state, got);
-    s.partyReady[p.id] = s.year + PLACE_REST;
-    s.foraged = (s.foraged ?? 0) + 1;
-    s.lastForage = got.toString();
-  }
   const report: GameState['reports'][number] = { kind: 'trip', place: p.id, success: true, earned: '0', parts: [] };
   const missing = p.parts.filter((id) => !s.parts.includes(id));
   if (missing.length && s.year >= s.nextFind && rand() < 0.25) {
@@ -539,10 +531,29 @@ export function partySlots(state: GameState): number {
   for (const e of stageEffects(state, CREATURE)) if (e.kind === 'parties') n += e.count;
   return n;
 }
-/** Seconds a place rests after it's foraged (by your creature or a party) before it gives again. */
+/** Seconds a settled place takes to grow back before it gives again. */
 export const PLACE_REST = 240;
-/** Foraging a found place again pays this share of a first trip there. */
-export const FARM_PAY = 0.6;
+/** Each time a settled place grows back, it gives this share of what finding it brought. */
+export const FARM_PAY = 0.05;
+
+/** Seconds a settled place takes to grow back (quicker with Foraging Rounds). */
+export function placeRest(state: GameState): number {
+  return PLACE_REST * (foragesOnItsOwn(state) ? 0.6 : 1);
+}
+
+/** Settled places give, each time they've grown back, without anyone needing to go there. */
+function placeTick(state: GameState): void {
+  const s = st(state);
+  for (const p of def().places!) {
+    if (!(s.trips[p.id] > 0) || !placeRested(state, p.id)) continue;
+    const got = tripPay(state, p).mul(FARM_PAY);
+    earn(state, got);
+    s.partyReady[p.id] = s.year + placeRest(state);
+    s.foraged = (s.foraged ?? 0) + 1;
+    s.lastForage = got.toString();
+    s.lastForagePlace = p.id;
+  }
+}
 
 /** Whether a found place has grown back enough to forage again. */
 export function placeRested(state: GameState, id: string): boolean {
@@ -554,7 +565,7 @@ export function placeRestLeft(state: GameState, id: string): number {
   return Math.max(0, (st(state).partyReady[id] ?? 0) - st(state).year);
 }
 
-/** Whether your creature forages found places on its own (a late Wandering upgrade). */
+/** Whether the settled places grow back quicker (Foraging Rounds, a late Wandering upgrade). */
 export function foragesOnItsOwn(state: GameState): boolean {
   return stageEffects(state, CREATURE).some((e) => e.kind === 'rounds');
 }
@@ -563,10 +574,36 @@ export const PARTY_PAY = 0.5;
 /** Parties walk a little quicker than the leader (they know the way). */
 const PARTY_SPEED = 1.2;
 
-/** Where the herd lives: home, and any nests founded since. */
-export function nestPoints(state: GameState): Pt[] {
+/** New nests the herd has finished moving into (their bonuses count from then). */
+export function settledNests(state: GameState): string[] {
+  const s = st(state);
+  return (s.nests ?? []).filter((id) => (s.nestSettle?.[id] ?? 0) <= s.year);
+}
+
+/** How far a new nest's settling has got, 0 to 1 (1 once settled). */
+export function nestProgress(state: GameState, id: string): number {
+  const s = st(state);
+  const at = s.nestSettle?.[id] ?? 0;
+  if (at <= s.year) return 1;
+  const dur = nestTrek(state, id);
+  return Math.max(0, Math.min(1, 1 - (at - s.year) / dur));
+}
+
+/** Seconds for the herd to walk from the nearest settled nest to a new one (the long way round). */
+export function nestTrek(state: GameState, id: string): number {
   const is = islandFor(state);
-  return [is.home, ...st(state).nests.map((id) => is.places[id]).filter(Boolean)];
+  const p = is.places[id];
+  const from = [is.home, ...settledNests(state).filter((n) => n !== id).map((n) => is.places[n])].reduce((a, n) => (Math.hypot(n.x - p.x, n.y - p.y) < Math.hypot(a.x - p.x, a.y - p.y) ? n : a));
+  return Math.max(30, (Math.hypot(p.x - from.x, p.y - from.y) * 1.4) / NEST_WALK);
+}
+/** Tiles a second the herd covers moving house. */
+const NEST_WALK = 0.9;
+
+/** Where the herd lives: home, and the nests founded since (only those settled, unless asked). */
+export function nestPoints(state: GameState, settling = false): Pt[] {
+  const is = islandFor(state);
+  const ids = settling ? st(state).nests : settledNests(state);
+  return [is.home, ...ids.map((id) => is.places[id]).filter(Boolean)];
 }
 
 /** The nest nearest a place (parties set out from it and bring the food back to it). */
@@ -602,7 +639,7 @@ export function nestsOpen(state: GameState): boolean {
 export function nestSites(state: GameState): PlaceDef[] {
   const s = st(state);
   const is = islandFor(state);
-  return def().places!.filter((p) => s.trips[p.id] > 0 && !s.nests.includes(p.id) && nestPoints(state).every((n) => Math.hypot(is.places[p.id].x - n.x, is.places[p.id].y - n.y) > 25));
+  return def().places!.filter((p) => s.trips[p.id] > 0 && !s.nests.includes(p.id) && nestPoints(state, true).every((n) => Math.hypot(is.places[p.id].x - n.x, is.places[p.id].y - n.y) > 25));
 }
 
 export function foundNest(state: GameState, id: string): boolean {
@@ -611,6 +648,8 @@ export function foundNest(state: GameState, id: string): boolean {
   if (!nestsOpen(state) || !nestSites(state).some((p) => p.id === id) || s.currency.lt(cost)) return false;
   s.currency = s.currency.sub(cost);
   s.nests.push(id);
+  // The herd sets off; it's settled (and counts) once it's had time to get there.
+  s.nestSettle[id] = s.year + nestTrek(state, id);
   return true;
 }
 
@@ -632,11 +671,12 @@ function partyTick(state: GameState, dt: number): void {
   // and nobody's bound for.
   while (s.parties.length < slots) {
     const next = def()
-      .places!.filter((p) => s.trips[p.id] > 0 && partyLeg(state, p.id) * walkSpeed(state) > 12 && (s.partyReady[p.id] ?? 0) <= s.year && !s.parties.some((q) => q.place === p.id))
+      .places!.filter((p) => s.trips[p.id] > 0 && partyLeg(state, p.id) * walkSpeed(state) > 12 && (s.partyReady[`party:${p.id}`] ?? 0) <= s.year && !s.parties.some((q) => q.place === p.id))
       .sort((a, b) => partyLeg(state, a.id) - partyLeg(state, b.id))[0];
     if (!next) break;
     s.parties.push({ place: next.id, t: 0 });
-    s.partyReady[next.id] = s.year + 2 * partyLeg(state, next.id) + PLACE_REST;
+    // Each place is worth a party's while again only after a rest of its own.
+    s.partyReady[`party:${next.id}`] = s.year + 2 * partyLeg(state, next.id) + PLACE_REST;
   }
 }
 
@@ -663,19 +703,6 @@ function autoRoam(state: GameState): void {
     const ready = def().places!.find((p) => !(s.trips[p.id] > 0) && placeSeen(state, p.id) && !placeShort(state, p).length);
     if (ready) {
       walkTo(state, is.places[ready.id].x, is.places[ready.id].y);
-      return;
-    }
-  }
-  // Later: it makes rounds of the places it knows, foraging whichever has grown back
-  // (the nearest; not the beach at home, and not one a party's bound for).
-  if (foragesOnItsOwn(state)) {
-    const far = (id: string) => Math.hypot(is.places[id].x - is.home.x, is.places[id].y - is.home.y) > 12;
-    const near = (id: string) => Math.hypot(is.places[id].x - s.pos.x, is.places[id].y - s.pos.y);
-    const farm = def()
-      .places!.filter((p) => s.trips[p.id] > 0 && far(p.id) && placeRested(state, p.id) && !s.parties.some((q) => q.place === p.id))
-      .sort((a, b) => near(a.id) - near(b.id))[0];
-    if (farm) {
-      walkTo(state, is.places[farm.id].x, is.places[farm.id].y);
       return;
     }
   }
@@ -716,6 +743,7 @@ export function creatureTick(state: GameState, dt: number, rand: () => number = 
   walkTick(state, dt, rand);
   autoRoam(state);
   partyTick(state, dt);
+  placeTick(state);
   if (s.egg) {
     s.egg.left -= dt;
     if (s.egg.left <= 0) hatch(state);
