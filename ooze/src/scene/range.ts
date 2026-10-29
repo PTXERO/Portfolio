@@ -48,6 +48,8 @@ const SEASON_LAND = [
   { grass: '#d3dde4', dark: '#b6c4cf', forest: '#5d7a6a', marsh: '#a8c0cd', high: '#cad4dc', sand: '#d0d4d2', water: '#b2cad6' },
 ];
 const FOG = ['#d4dbe0', '#bfc8cf'];
+/** Things that shine in the dark (fireflies, a beast's eye): alpha 254 tells the shader to make them glow. */
+const GLOW_Y = 'rgba(245, 196, 94, 0.996)';
 const DEEP = '#24506e';
 const DIET_DOT: Record<string, string> = { grazer: '#86dcd8', hunter: '#f2906c', omnivore: '#f5c45e', none: PAL.g };
 
@@ -200,6 +202,9 @@ export class RangeScene {
   }
 
   /** The camera, for the shader: centre (tiles), zoom, and the screen row of the centre. */
+  /** Your creature's little pool of light at night: where it is on screen and how wide (art px). */
+  lamp: [number, number, number] = [0, 0, 0];
+
   get camParams(): [number, number, number, number] {
     return [this.camX, this.camY, this.zoom, this.midY()];
   }
@@ -732,7 +737,7 @@ export class RangeScene {
           const dir = beast.left ? -1 : 1;
           const wob = beast.flinch > 0 ? 1.3 : 1;
           drawBlob(b, [{ x: X, y: Y - 5 * z, r: 4.5 * z * wob, nucleus: false }, { x: X + dir * 5 * z, y: Y - 7 * z, r: 2.8 * z, nucleus: false }], beast.flinch > 0 ? BEAST_FLINCH : BEAST_STYLE);
-          b.fillStyle = PAL.y;
+          b.fillStyle = GLOW_Y;
           b.fillRect(Math.round(X + dir * 6 * z), Math.round(Y - 8 * z), 1, 1);
           if (!beast.fleeing && beast.hits > 0) {
             b.fillStyle = PAL.w;
@@ -793,6 +798,7 @@ export class RangeScene {
 
     // Your creature, wherever it is on the island, with its mates trailing behind.
     const walking = !!st.walk && !st.walk.event;
+    this.lamp = [this.sx(me.x), this.py(me.x, me.y) - Math.min(6, 2 * this.zoom), Math.max(9, 4.5 * this.zoom)];
     const left = st.walk ? st.walk.tx < me.x : false;
     sprites.push({
       y: me.y,
@@ -850,7 +856,7 @@ export class RangeScene {
       if (season.name === 'Summer' && this.zoom >= 1.6) {
         for (let i = 0; i < 10; i++) {
           if (Math.sin(t * 2 + i * 1.7) < 0.2) continue;
-          b.fillStyle = PAL.y;
+          b.fillStyle = GLOW_Y;
           const fx = home.x + Math.sin(t * 0.3 + i) * 6 + (hash(i, 71) - 0.5) * 8;
           const fy = home.y + Math.cos(t * 0.4 + i * 2) * 4;
           b.fillRect(Math.round(this.sx(fx)), Math.round(this.py(fx, fy)) - 3, 1, 1);

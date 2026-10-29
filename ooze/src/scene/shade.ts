@@ -83,6 +83,7 @@ uniform float uNight;
 uniform vec3 uSun;
 uniform vec3 uSunCol;
 uniform vec3 uAmb;
+uniform vec3 uLamp; // your creature's light at night: art x, y, radius
 varying vec2 vUv;
 
 const float N = ${ISLAND.toFixed(1)};
@@ -191,20 +192,31 @@ void main() {
   vec3 fogCol = mix(vec3(0.70, 0.74, 0.79), vec3(0.95, 0.96, 0.97), smoothstep(0.3, 0.75, fn * 0.7 + fn2 * 0.3)) * (0.3 + bright * 0.72);
   lit = mix(lit, fogCol, fog);
 
+  // At night your creature carries a small pool of light, stepped in rings like a pixel
+  // lantern (as in the Depths), flattened onto the ground; the fog still hides what's in it.
+  vec2 ld = (floor(art) + 0.5 - uLamp.xy) * vec2(1.0, 1.0 / TY);
+  float lr = length(ld);
+  float flick = 1.0 + sin(uTime * 2.0) * 0.03;
+  float lamp = uNight * (lr < uLamp.z * flick ? 1.0 : lr < uLamp.z * flick + 3.0 ? 0.6 : lr < uLamp.z * flick + 6.0 ? 0.3 : 0.0);
+  vec3 lampCol = vec3(0.5, 0.44, 0.34) * lamp;
+  lit = mix(lit, max(lit, col * lampCol), 1.0 - fog);
+
   // Creatures, markers and weather, drawn by the scene at their lifted spots: lit as
   // figures standing up in the light.
   vec2 ouv = (floor(art) + 0.5) / uArt;
   vec4 o = texture2D(uOver, ouv);
-  if (o.a > 0.01) lit = mix(lit, o.rgb * (uAmb * 1.1 + uSunCol * 0.95), o.a);
+  if (o.a > 0.01) lit = mix(lit, o.rgb * (uAmb * 1.1 + uSunCol * 0.95 + lampCol), o.a);
 
-  // Glow: bright little things (fireflies, eyes, snow catching the light) bloom.
+  // Glow: only things marked as shining (fireflies, a beast's eye, drawn at alpha 254) bloom,
+  // so creatures and snow stay dark at night.
   vec3 glow = vec3(0.0);
   for (int i = 0; i < 8; i++) {
     float a = float(i) * 0.785;
     vec4 c = texture2D(uOver, vUv + vec2(cos(a), sin(a)) * 0.9 / uArt);
-    glow += c.rgb * c.a * smoothstep(0.75, 1.0, lum(c.rgb));
+    glow += c.rgb * (1.0 - step(0.0016, abs(c.a - 254.0 / 255.0)));
   }
-  lit += glow / 8.0 * (0.12 + uNight * 0.9);
+  lit += glow / 8.0 * (0.15 + uNight * 0.85);
+  if (abs(o.a - 254.0 / 255.0) < 0.0016) lit = mix(lit, o.rgb, uNight);
 
   // Grade: highlights roll off instead of burning out (snow in the sun keeps its shape),
   // a touch more colour and contrast, and a soft vignette.
@@ -220,6 +232,8 @@ void main() {
 export interface ShadeParams {
   /** Camera centre in tiles, zoom (art px per tile), and the screen row of the centre. */
   cam: [number, number, number, number];
+  /** Your creature's light: art x, y and radius. */
+  lamp: [number, number, number];
   time: number;
   /** 0 at sunrise, 0.75 at sunset, 1 at the next sunrise. */
   day: number;
@@ -407,6 +421,7 @@ export class MapShader {
     gl.uniform3fv(this.u('uSun'), sky.sun);
     gl.uniform3fv(this.u('uSunCol'), sky.sunCol);
     gl.uniform3fv(this.u('uAmb'), sky.amb);
+    gl.uniform3fv(this.u('uLamp'), p.lamp);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 }
