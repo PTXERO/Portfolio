@@ -805,7 +805,9 @@ export class RangeScene {
     this.weather = [this.storm, mistW, weight3(si, next, turn), this.wet];
     const huddle = asleep || winter || this.storm > 0.4;
     const center = huddle ? home : this.graze;
-    const spread = (huddle ? 1.2 : 2.5) + Math.sqrt(this.members.length) * (huddle ? 0.5 : 0.8);
+    // Room enough that, zoomed right in, you can pick out each one and see what it's up to.
+    const spread = (huddle ? 1.5 : 3) + Math.sqrt(this.members.length) * (huddle ? 0.9 : 1.8);
+    const gap = huddle ? 1.6 : 2.4;
     const bt = this.beast && !this.beast.fleeing ? this.beast : null;
     // With nests away from home, the herd spreads between them (foragers only; the rest keep
     // to home), and now and then one sets off to live at another, walking the trail between.
@@ -872,19 +874,25 @@ export class RangeScene {
         } else if (act.kind === 'chase') {
           fast = true;
           if (act.lead) {
-            gx = act.x + Math.cos(t * 2.2 + m.phase) * 2;
-            gy = act.y + Math.sin(t * 2.2 + m.phase) * 1.3;
+            gx = act.x + Math.cos(t * 1.8 + m.phase) * 3.5;
+            gy = act.y + Math.sin(t * 1.8 + m.phase) * 2.4;
           } else if (act.mate) {
             gx = act.mate.x;
             gy = act.mate.y;
           }
         } else if (act.kind === 'nuzzle') {
-          gx = act.x + (act.lead ? -0.5 : 0.5);
+          gx = act.x + (act.lead ? -1.1 : 1.1);
           gy = act.y;
         } else {
           gx = act.x;
           gy = act.y;
         }
+      }
+      // Never aim for the sea: a spot out over the water is pulled back toward its nest, so
+      // nobody piles up at the shore.
+      for (let k = 0; k < 6 && !isLand(is, gx, gy); k++) {
+        gx = (gx + c.x) / 2;
+        gy = (gy + c.y) / 2;
       }
       // A beast close by: run from it (sentries excepted).
       if (bt && m.role !== 'guard' && Math.hypot(bt.x - m.x, bt.y - m.y) < 6) m.flee = 2;
@@ -900,9 +908,9 @@ export class RangeScene {
         const ox = m.x - o.x;
         const oy = m.y - o.y;
         const od = Math.hypot(ox, oy);
-        if (od > 0 && od < 1.4) {
-          gx += (ox / od) * (1.4 - od) * 3;
-          gy += (oy / od) * (1.4 - od) * 3;
+        if (od > 0 && od < gap) {
+          gx += (ox / od) * (gap - od) * 3;
+          gy += (oy / od) * (gap - od) * 3;
         }
       }
       const dx = gx - m.x;
