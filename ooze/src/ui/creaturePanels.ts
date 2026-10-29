@@ -111,14 +111,14 @@ const statText = (p: PartDef) =>
 
 const ROLE_INFO: Record<Role, { name: string; text: string }> = {
   forager: { name: 'Foragers', text: 'Gather food: everyone whose instincts don\'t send them elsewhere.' },
-  carer: { name: 'Nesters', text: 'Births +8% each; eggs hatch a little sooner.' },
+  carer: { name: 'Nesters', text: 'More births the bigger a share of the herd they are; eggs hatch a little sooner.' },
   digger: { name: 'Burrowers', text: 'Dig out room for half a member each.' },
   guard: { name: 'Sentries', text: 'Fewer lost to winter; they mob beasts.' },
   scout: { name: 'Followers', text: 'Roams 3% quicker each, and turn up more parts.' },
 };
 
 const PLACE_TEXT: Record<string, string> = {
-  nest: 'Births +0.04/s each',
+  nest: 'More births (each new nest adds a little less)',
   burrow: 'Room for 3 more',
   waterhole: 'The herd eats 4% less each (down to half)',
   den: 'Room for 15 more, and shelter from winter',

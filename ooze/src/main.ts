@@ -44,9 +44,10 @@ import { Scene } from './scene/scene';
 import { choiceButton } from './ui/creaturePanels';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
-// Pixelify Sans draws 5 like S, 2 like Z and 8 like B. Every digit in the game comes
-// from Jersey 10 instead (letters stay Pixelify), through a font that covers only 0-9.
-const digitsFont = new FontFace('Ooze Digits', `url(${jerseyDigits})`, { unicodeRange: 'U+0030-0039', sizeAdjust: '118%' } as FontFaceDescriptors);
+// Pixelify Sans draws 5 like S, 2 like Z and 8 like B, and its capital B like a G ("Giomass").
+// Every digit, and B, comes from Jersey 10 instead (the other letters stay Pixelify), through
+// a font that covers only those.
+const digitsFont = new FontFace('Ooze Digits', `url(${jerseyDigits})`, { unicodeRange: 'U+0030-0039, U+0042', sizeAdjust: '118%' } as FontFaceDescriptors);
 document.fonts.add(digitsFont);
 void digitsFont.load().then(() => render());
 
