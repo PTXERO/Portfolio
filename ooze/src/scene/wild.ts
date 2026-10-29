@@ -213,7 +213,8 @@ export class Wild {
       const X = v.sx(f.x);
       const Y = v.py(f.x, f.y);
       const lift = Math.max(0, f.up);
-      if (on(X, Y) || lift > 0) sprites.push({ y: f.y + (lift > 0 ? 50 : 0), draw: () => drawFlock(o.b, X, Y, z, t, lift, f.dir) });
+      // Insects are only seen close up (from far out they would be giants over the land).
+      if (z >= 2.5 && (on(X, Y) || lift > 0)) sprites.push({ y: f.y + (lift > 0 ? 50 : 0), draw: () => drawFlock(o.b, X, Y, z, t, lift, f.dir) });
     }
     this.flocks = this.flocks.filter((f) => f.up < 3);
 
