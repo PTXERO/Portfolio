@@ -84,6 +84,12 @@ export class RangeScene {
   private flakes: { x: number; y: number; v: number }[] = [];
   private terrain: HTMLCanvasElement | null = null;
   private terrainKey = '';
+  /** The ground's colours (painted once a season) and which fog shade covers each pixel. */
+  private base: Uint8ClampedArray | null = null;
+  private fogShade: Uint8Array | null = null;
+  private baseKey = '';
+  /** Each season's ground, kept once painted, so the seasons turning never stalls either. */
+  private bases = new Map<string, { data: Uint8ClampedArray; shade: Uint8Array; biomes: Biome[] }>();
   private biomes: Biome[] = [];
   private W = 0;
   private places: Record<string, Pt> = {};
@@ -100,6 +106,7 @@ export class RangeScene {
     this.graze = null;
     this.me.placed = false;
     this.terrainKey = '';
+    this.baseKey = '';
   }
 
   drain(): PondEvent[] {
@@ -226,21 +233,71 @@ export class RangeScene {
     return Math.max(0, Math.min(1, 0.5 - clear));
   }
 
-  /** Paints the ground and the fog once, until the season or what's known changes. */
+  /**
+   * The ground is painted once a season (the slow part: noise for every pixel). The fog
+   * over it is laid on separately, and cheaply, whenever what's known changes, so a
+   * purchase that widens the land never stalls a tap.
+   */
   private paintTerrain(f: Frame, state: GameState): void {
     const c = state.stages.creature;
     const { season } = seasonOf(state);
     const si = ['Spring', 'Summer', 'Autumn', 'Winter'].indexOf(season.name);
-    const key = [f.W, f.H, f.top, f.bottom, si, c.generation, c.generators.territory, c.generators.burrow, Object.keys(c.trips).join()].join('|');
+    const baseKey = [f.W, f.H, f.top, si].join('|');
+    if (baseKey !== this.baseKey || !this.base) {
+      this.baseKey = baseKey;
+      this.terrainKey = '';
+      if (!this.bases.has(baseKey)) {
+        this.paintBase(f, si);
+        this.bases.set(baseKey, { data: this.base!, shade: this.fogShade!, biomes: this.biomes });
+      }
+      const got = this.bases.get(baseKey)!;
+      this.base = got.data;
+      this.fogShade = got.shade;
+      this.biomes = got.biomes;
+    }
+    const key = [baseKey, this.knownRadius(state), Object.keys(c.trips).join()].join('|');
     if (key === this.terrainKey && this.terrain) return;
     this.terrainKey = key;
     const { W, H } = f;
     const cv = this.terrain ?? document.createElement('canvas');
-    cv.width = W;
-    cv.height = H;
+    if (cv.width !== W || cv.height !== H) {
+      cv.width = W;
+      cv.height = H;
+    }
     this.terrain = cv;
     const b = cv.getContext('2d')!;
     const img = b.createImageData(W, H);
+    img.data.set(this.base!);
+    const fogs = [[0xd4, 0xdb, 0xe0], [0xb9, 0xc3, 0xcb]];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        // Fog over what hasn't been found: dithered at its edge.
+        const fg = this.fog(state, x, y);
+        if (fg <= 0) continue;
+        if (fg < 1 && hash(x * 3 + y * 17, 29) >= fg * 1.6 - 0.3) continue;
+        const p = fogs[this.fogShade![y * W + x]];
+        const i = (y * W + x) * 4;
+        img.data[i] = p[0];
+        img.data[i + 1] = p[1];
+        img.data[i + 2] = p[2];
+      }
+    }
+    b.putImageData(img, 0, 0);
+    // Cave mouths in the rock, once they're found.
+    if ((c.trips.caves ?? 0) > 0) {
+      const p = this.places.caves;
+      for (const [dx, dy] of [[-4, 2], [3, -1]]) {
+        b.fillStyle = PAL.k;
+        b.fillRect(p.x + dx - 2, p.y + dy - 1, 4, 3);
+        b.fillRect(p.x + dx - 1, p.y + dy - 2, 2, 1);
+      }
+    }
+  }
+
+  private paintBase(f: Frame, si: number): void {
+    const { W, H } = f;
+    const data = new Uint8ClampedArray(W * H * 4);
+    this.fogShade = new Uint8Array(W * H);
     const L = SEASON_LAND[si];
     const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
     const col = {
@@ -260,8 +317,6 @@ export class RangeScene {
       reed: rgb(si === 2 ? '#a0884a' : '#3e6e3a'),
       high: rgb(L.high),
       highDark: rgb(mixColor(L.high, '#000000', 0.18)),
-      fog: rgb('#d4dbe0'),
-      fogDark: rgb('#b9c3cb'),
       flower: rgb(PAL.y),
       flower2: rgb(PAL.w),
       snow: rgb('#f6f9fa'),
@@ -306,29 +361,15 @@ export class RangeScene {
             p = n > 0.62 ? col.grassDark : col.grass;
             if (si === 0 && n2 < 0.02) p = n2 < 0.008 ? col.flower : col.flower2;
         }
-        // Fog over what hasn't been found: dithered at its edge.
-        const fg = this.fog(state, x, y);
-        if (fg > 0) {
-          const solid = fg >= 1 || hash(x * 3 + y * 17, 29) < fg * 1.6 - 0.3;
-          if (solid) p = this.noise(x, y, 7, 31) > 0.55 ? col.fogDark : col.fog;
-        }
+        this.fogShade[y * W + x] = this.noise(x, y, 7, 31) > 0.55 ? 1 : 0;
         const i = (y * W + x) * 4;
-        img.data[i] = p[0];
-        img.data[i + 1] = p[1];
-        img.data[i + 2] = p[2];
-        img.data[i + 3] = 255;
+        data[i] = p[0];
+        data[i + 1] = p[1];
+        data[i + 2] = p[2];
+        data[i + 3] = 255;
       }
     }
-    b.putImageData(img, 0, 0);
-    // Cave mouths in the rock, once they're found.
-    if ((c.trips.caves ?? 0) > 0) {
-      const p = this.places.caves;
-      for (const [dx, dy] of [[-4, 2], [3, -1]]) {
-        b.fillStyle = PAL.k;
-        b.fillRect(p.x + dx - 2, p.y + dy - 1, 4, 3);
-        b.fillRect(p.x + dx - 1, p.y + dy - 2, 2, 1);
-      }
-    }
+    this.base = data;
   }
 
   // ---- The herd ----

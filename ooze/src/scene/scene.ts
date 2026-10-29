@@ -51,6 +51,10 @@ export class Scene {
   private topCss = 0;
   /** CSS pixels the open tab sheet covers at the bottom of the scene. */
   private bottomCss = 0;
+  /** The Creature's map can be zoomed and panned: how far in, and the view's top-left in art pixels. */
+  private zoom = 1;
+  private camX = 0;
+  private camY = 0;
 
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -74,7 +78,34 @@ export class Scene {
   }
 
   private toArt(x: number, y: number): [number, number] {
-    return [x / this.px, y / this.px];
+    return [this.camX + x / this.px / this.zoom, this.camY + y / this.px / this.zoom];
+  }
+
+  private clampCam(): void {
+    this.camX = Math.max(0, Math.min(this.W - this.W / this.zoom, this.camX));
+    this.camY = Math.max(0, Math.min(this.H - this.H / this.zoom, this.camY));
+  }
+
+  /** Pinch or wheel on the map: zooms by `factor`, keeping the point under the fingers still. */
+  zoomAt(cssX: number, cssY: number, factor: number): void {
+    if (this.stage !== 'creature') return;
+    const [wx, wy] = this.toArt(cssX, cssY);
+    this.zoom = Math.max(1, Math.min(4, this.zoom * factor));
+    this.camX = wx - cssX / this.px / this.zoom;
+    this.camY = wy - cssY / this.px / this.zoom;
+    this.clampCam();
+  }
+
+  /** Dragging the zoomed map. */
+  panBy(dxCss: number, dyCss: number): void {
+    if (this.stage !== 'creature') return;
+    this.camX -= dxCss / this.px / this.zoom;
+    this.camY -= dyCss / this.px / this.zoom;
+    this.clampCam();
+  }
+
+  get zoomed(): boolean {
+    return this.zoom > 1.01;
   }
 
   ripple(cssX: number, cssY: number): void {
@@ -107,7 +138,8 @@ export class Scene {
   /** What happened in the pond since last asked, with positions in CSS pixels. */
   pondEvents(): PondEvent[] {
     if (this.stage !== 'cell' && this.stage !== 'creature') return [];
-    return (this.stage === 'cell' ? this.cell.pond.drain() : this.shore.drain()).map((e) => ({ ...e, x: e.x * this.px, y: e.y * this.px }));
+    const k = this.px * this.zoom;
+    return (this.stage === 'cell' ? this.cell.pond.drain() : this.shore.drain()).map((e) => ({ ...e, x: (e.x - this.camX) * k, y: (e.y - this.camY) * k }));
   }
 
   /** Plays a purchase out in the scene. Call after the purchase went through. */
@@ -172,6 +204,9 @@ export class Scene {
       this.soup.reset();
       this.cell.reset();
       this.shore.reset();
+      this.zoom = 1;
+      this.camX = 0;
+      this.camY = 0;
     }
     const frame: Frame = { b: this.b, W: this.W, H: this.H, t: this.time, dt, top: Math.ceil(this.topCss / this.px), bottom: Math.ceil(this.bottomCss / this.px) };
     if (state.current === 'soup') this.soup.draw(frame, state, this.displace);
@@ -186,7 +221,7 @@ export class Scene {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(this.buffer, 0, 0, this.W * this.px * this.dpr, this.H * this.px * this.dpr);
+    ctx.drawImage(this.buffer, this.camX, this.camY, this.W / this.zoom, this.H / this.zoom, 0, 0, this.W * this.px * this.dpr, this.H * this.px * this.dpr);
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.font = '700 18px "Ooze Digits", "Pixelify Sans", monospace';

@@ -201,34 +201,46 @@ export function creatureIcon(look: CreatureLook, scale = 3): string {
 }
 
 /**
- * A herd member, small enough to see dozens at once: a crisp 9-pixel body in the
- * line's colours with a hint of its back part, rather than a shrunken portrait.
+ * A herd member, small enough to see dozens at once: a hand-drawn 9-pixel animal in
+ * the line's colours with a hint of its back part, rather than a shrunken portrait.
+ * E edge (light), F body, D underside, k ink. Facing right; legs step between frames.
  */
+const MINI = ['...EEE...', '..EFFFE.E', '.DFFFFFEF', 'DFFFFFFFk', '.DFFFFFFF', '..DDDDDD.'];
+const MINI_LEGS = ['..k..k.k.', '...k..k.k'];
+const MINI_SLEEP = ['.........', '...EEE...', '.EFFFFFE.', 'DFFFFFFFE', '.DDDDDDD.', '.........'];
+
 export function drawMini(b: CanvasRenderingContext2D, look: CreatureLook, x: number, groundY: number, opts: { left?: boolean; frame?: number; sleeping?: boolean } = {}): void {
   const [fill, edge] = DIET_COLORS[look.diet] ?? DIET_COLORS.none;
-  const d = opts.left ? -1 : 1;
-  const X = Math.round(x);
+  const dark = mix(fill, '#10141f', 0.45);
+  const X = Math.round(x) - 4;
   const Y = Math.round(groundY);
-  const at = (dx: number, dy: number, w: number, h: number, c: string) => {
+  const put = (dx: number, dy: number, c: string) => {
     b.fillStyle = c;
-    b.fillRect(d > 0 ? X + dx : X - dx - w + 1, Y + dy, w, h);
+    b.fillRect(opts.left ? X + 8 - dx : X + dx, Y + dy, 1, 1);
   };
-  // Shadow, legs (stepping), body, head, eye.
-  at(-4, 0, 9, 1, 'rgba(16,20,31,0.25)');
-  if (!opts.sleeping) {
-    const step = opts.frame ? 1 : 0;
-    at(-2 - step, -1, 1, 1, PAL.k);
-    at(2 + step, -1, 1, 1, PAL.k);
-  }
-  const lift = opts.sleeping ? 1 : 0;
-  at(-3, -4 + lift, 7, 3 - lift, fill);
-  at(-2, -5 + lift, 5, 1, edge);
-  at(3, -5 + lift, 2, 2, fill);
-  at(4, -5 + lift, 1, 1, opts.sleeping ? fill : PAL.k);
-  at(-4, -3 + lift, 1, 1, edge);
+  b.fillStyle = 'rgba(16,20,31,0.25)';
+  b.fillRect(X, Y, 9, 1);
+  const rows = opts.sleeping ? MINI_SLEEP : MINI;
+  const legs = opts.sleeping ? '.........' : MINI_LEGS[opts.frame ? 1 : 0];
+  const all = [...rows, legs];
+  all.forEach((row, j) => {
+    const dy = j - all.length;
+    for (let i = 0; i < 9; i++) {
+      const ch = row[i];
+      if (ch === '.') continue;
+      put(i, dy, ch === 'E' ? edge : ch === 'F' ? fill : ch === 'D' ? dark : PAL.k);
+    }
+  });
   // What it wears on its back shows.
+  const top = -all.length;
   const back = look.parts.back;
-  if (back === 'shell') at(-2, -6 + lift, 4, 2, '#8a6a3a');
-  else if (back === 'spines') for (let i = 0; i < 3; i++) at(-2 + i * 2, -6 + lift, 1, 1, PAL.w);
-  else if (back === 'sail') at(-1, -7 + lift, 3, 2, PAL.p);
+  if (back === 'shell') for (let i = 2; i < 6; i++) put(i, top, i % 2 ? '#8a6a3a' : '#b08850');
+  else if (back === 'spines') for (let i = 2; i < 7; i += 2) put(i, top - 1, PAL.w);
+  else if (back === 'sail') for (let i = 3; i < 6; i++) put(i, top - 1, PAL.p);
+}
+
+function mix(a: string, b: string, t: number): string {
+  const p = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('');
 }

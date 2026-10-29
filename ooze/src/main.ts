@@ -357,7 +357,7 @@ function renderHint(): void {
     if (state.taps < 3) text = 'Tap the soup to stir it';
     else if (st.discovered.includes('phosphorylation') && !st.discovered.includes('polymerization') && state.swirl < 0.05) text = 'Draw circles to spin a whirlpool';
   } else if (state.current === 'creature') {
-    if (!pokedThisStage) text = 'Tap to walk your creature';
+    if (!pokedThisStage) text = 'Tap to walk · pinch to zoom';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
   hint.hidden = !text || !modal.hidden;
@@ -449,12 +449,23 @@ let swirlPath: { x: number; y: number }[] = [];
 let swirlAngle: number | null = null;
 let swirlSpin = 0;
 
+/** Fingers on the Creature's map: one taps (or drags, when zoomed in), two pinch to zoom. */
+const fingers = new Map<number, { x: number; y: number; sx: number; sy: number }>();
+let mapDragged = false;
+
 stageEl.addEventListener('pointerdown', (e) => {
   if (!modal.hidden || (e.target as HTMLElement).closest('#evolve, button')) return;
   stageEl.setPointerCapture(e.pointerId);
   const r = stageEl.getBoundingClientRect();
   const x = e.clientX - r.left;
   const y = e.clientY - r.top;
+  if (state.current === 'creature') {
+    // The tap itself happens on release, so a drag or a pinch doesn't send the creature off.
+    fingers.set(e.pointerId, { x, y, sx: x, sy: y });
+    if (fingers.size === 1) mapDragged = false;
+    else mapDragged = true;
+    return;
+  }
   swirlPath = [{ x, y }];
   swirlAngle = null;
   swirlSpin = 0;
@@ -462,9 +473,6 @@ stageEl.addEventListener('pointerdown', (e) => {
   if (state.current === 'soup') {
     const v = tap(state);
     if (v.gt(0)) scene.float(x, y - 10, `+${format(v)}`, '#f5c45e');
-  } else if (state.current === 'creature') {
-    scene.shoreTap(state, x, y);
-    pokedThisStage = true;
   } else {
     const { quip } = scene.cellTap(state, x, y);
     pokedThisStage = true;
@@ -474,6 +482,31 @@ stageEl.addEventListener('pointerdown', (e) => {
 });
 
 stageEl.addEventListener('pointermove', (e) => {
+  if (state.current === 'creature') {
+    const f = fingers.get(e.pointerId);
+    if (!f) return;
+    const r = stageEl.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    if (fingers.size >= 2) {
+      // Pinch: zoom by the change in spread, about the middle, and pan with the middle.
+      const [a, b] = [...fingers.values()];
+      const before = Math.hypot(a.x - b.x, a.y - b.y);
+      const midX = (a.x + b.x) / 2;
+      const midY = (a.y + b.y) / 2;
+      f.x = x;
+      f.y = y;
+      const after = Math.hypot(a.x - b.x, a.y - b.y);
+      if (before > 10) scene.zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, after / before);
+      scene.panBy((a.x + b.x) / 2 - midX, (a.y + b.y) / 2 - midY);
+      return;
+    }
+    if (Math.hypot(x - f.sx, y - f.sy) > 8) mapDragged = true;
+    if (mapDragged && scene.zoomed) scene.panBy(x - f.x, y - f.y);
+    f.x = x;
+    f.y = y;
+    return;
+  }
   if (!swirlPath.length || state.current !== 'soup') return;
   const r = stageEl.getBoundingClientRect();
   const p = { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -496,6 +529,30 @@ stageEl.addEventListener('pointermove', (e) => {
   }
   swirlAngle = a;
 });
+
+const endFinger = (e: PointerEvent) => {
+  const f = fingers.get(e.pointerId);
+  if (!f) return;
+  fingers.delete(e.pointerId);
+  if (e.type === 'pointerup' && !mapDragged && fingers.size === 0 && state.current === 'creature') {
+    scene.ripple(f.x, f.y);
+    scene.shoreTap(state, f.x, f.y);
+    pokedThisStage = true;
+    render();
+  }
+};
+stageEl.addEventListener('pointerup', endFinger);
+stageEl.addEventListener('pointercancel', endFinger);
+stageEl.addEventListener(
+  'wheel',
+  (e) => {
+    if (state.current !== 'creature') return;
+    e.preventDefault();
+    const r = stageEl.getBoundingClientRect();
+    scene.zoomAt(e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.15 : 1 / 1.15);
+  },
+  { passive: false },
+);
 
 const endSwirl = () => {
   swirlPath = [];
