@@ -475,7 +475,10 @@ function renderCrisis(): void {
   const show = !!c && !cine() && !casting;
   crisisBar.hidden = !show;
   // (With the menu up, it sits at the top instead, over the bar, so it's never missed.)
-  crisisBar.classList.toggle('top', ui.open);
+  // (On a phone with the menu up, it sits just under the top bars; otherwise at the map's foot.)
+  const top = ui.open && !isWide();
+  crisisBar.classList.toggle('top', top);
+  if (top) crisisBar.style.setProperty('--below-bars', `${Math.round(overlayTop.getBoundingClientRect().bottom - stageEl.getBoundingClientRect().top + 8)}px`);
   if (!show || !c || !ex) return;
   const who = c.who !== undefined ? ex.people.find((p) => p.id === c.who)?.name : '';
   const left = Math.max(0, Math.ceil(c.until - ex.clock));
