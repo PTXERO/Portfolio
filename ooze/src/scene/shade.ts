@@ -28,8 +28,8 @@ void main() {
 
 /**
  * The light, worked out once per tile of the island (not per screen pixel), so shadows stay
- * fixed to the land however the view pans or zooms: r = direct sun (slope and shadow),
- * g = ambient occlusion, b = shadow alone.
+ * fixed to the land however the view pans or zooms: r = direct sun on the slope,
+ * g = ambient occlusion, b = how much of the sun reaches it past the heights (1 = all).
  */
 const LIGHT = `
 precision highp float;
@@ -64,7 +64,7 @@ void main() {
     around += hTop(w + vec2(cos(a), sin(a)) * 2.5);
   }
   float ao = clamp(1.0 - max(around / 8.0 - h, 0.0) * K * 0.08, 0.6, 1.0);
-  gl_FragColor = vec4(diff * sh, ao, sh, 1.0);
+  gl_FragColor = vec4(diff, ao, sh, 1.0);
 }`;
 
 const FRAG = `
@@ -83,7 +83,10 @@ uniform float uNight;
 uniform vec3 uSun;
 uniform vec3 uSunCol;
 uniform vec3 uAmb;
-uniform vec3 uLamp; // your creature's light at night: art x, y, radius
+uniform vec3 uShadeCol; // the colour shadows take on (cool by day, violet at dawn and dusk)
+uniform float uShadowK; // how deep shadows are: faint with the sun high, long and deep low down
+uniform vec3 uGrade; // the time of day's and the season's colour cast
+uniform vec3 uHaze; // light the low sun scatters through the air (rosy at dawn, orange at dusk)
 varying vec2 vUv;
 
 const float N = ${ISLAND.toFixed(1)};
@@ -151,9 +154,12 @@ void main() {
 
   // Light, from the island's light map (fixed to the land).
   vec3 L = inside ? texture2D(uLight, w / N).rgb : vec3(0.8, 1.0, 1.0);
-  float sunLit = L.r;
+  float diff = L.r;
   float ao = L.g;
-  float sh = L.b;
+  // Shadow: deep and coloured when the sun is low, barely there at noon.
+  float shade = (1.0 - L.b) * uShadowK;
+  vec3 sunLight = uAmb + uSunCol * diff * (1.0 - shade);
+  sunLight = mix(sunLight, sunLight * uShadeCol, shade);
 
   vec3 lit;
   bool water = biome < 1.5 && raw <= 0.0;
@@ -169,12 +175,13 @@ void main() {
     float spec = pow(max(dot(reflect(-uSun, wn), normalize(vec3(0.0, 0.6, 1.0))), 0.0), 60.0) * (1.0 - uNight);
     float shallow = biome > 0.5 ? 1.0 : 0.0;
     float ca = pow(1.0 - abs(noise(w * 1.1 + t * 0.4) - noise(w * 1.3 - t * 0.3)), 6.0) * shallow;
-    lit = col * (uAmb + uSunCol * 0.85 * (0.5 + 0.5 * sh)) * (0.9 + r0 * 0.25) + uSunCol * spec * 1.4 * sh + vec3(0.6, 0.85, 0.9) * ca * 0.12 * (1.0 - uNight);
+    vec3 wl = mix(uAmb + uSunCol * 0.85, (uAmb + uSunCol * 0.4) * uShadeCol, shade);
+    lit = col * wl * (0.9 + r0 * 0.25) + uSunCol * spec * 1.4 * (1.0 - shade) + vec3(0.6, 0.85, 0.9) * ca * 0.12 * (1.0 - uNight);
   } else {
     // Faces: the earth and rock under the top, darker the steeper.
     vec3 earth = mix(vec3(0.42, 0.32, 0.22), vec3(0.45, 0.47, 0.5), smoothstep(0.45, 0.65, h));
     col = mix(col, earth * (0.75 + 0.25 * fract(w.y * 0.5)), face * 0.85);
-    lit = col * (uAmb + uSunCol * sunLit) * ao * (1.0 - face * 0.25);
+    lit = col * sunLight * ao * (1.0 - face * 0.25);
   }
 
   // Clouds drift over, their shadows darkening the land below.
@@ -192,20 +199,11 @@ void main() {
   vec3 fogCol = mix(vec3(0.70, 0.74, 0.79), vec3(0.95, 0.96, 0.97), smoothstep(0.3, 0.75, fn * 0.7 + fn2 * 0.3)) * (0.3 + bright * 0.72);
   lit = mix(lit, fogCol, fog);
 
-  // At night your creature carries a small pool of light, stepped in rings like a pixel
-  // lantern (as in the Depths), flattened onto the ground; the fog still hides what's in it.
-  vec2 ld = (floor(art) + 0.5 - uLamp.xy) * vec2(1.0, 1.0 / TY);
-  float lr = length(ld);
-  float flick = 1.0 + sin(uTime * 2.0) * 0.03;
-  float lamp = uNight * (lr < uLamp.z * flick ? 1.0 : lr < uLamp.z * flick + 3.0 ? 0.6 : lr < uLamp.z * flick + 6.0 ? 0.3 : 0.0);
-  vec3 lampCol = vec3(0.5, 0.44, 0.34) * lamp;
-  lit = mix(lit, max(lit, col * lampCol), 1.0 - fog);
-
   // Creatures, markers and weather, drawn by the scene at their lifted spots: lit as
   // figures standing up in the light.
   vec2 ouv = (floor(art) + 0.5) / uArt;
   vec4 o = texture2D(uOver, ouv);
-  if (o.a > 0.01) lit = mix(lit, o.rgb * (uAmb * 1.1 + uSunCol * 0.95 + lampCol), o.a);
+  if (o.a > 0.01) lit = mix(lit, o.rgb * (uAmb * 1.1 + uSunCol * 0.95), o.a);
 
   // Glow: only things marked as shining (fireflies, a beast's eye, drawn at alpha 254) bloom,
   // so creatures and snow stay dark at night.
@@ -220,6 +218,9 @@ void main() {
 
   // Grade: highlights roll off instead of burning out (snow in the sun keeps its shape),
   // a touch more colour and contrast, and a soft vignette.
+  lit *= uGrade;
+  // The low sun's glow hangs in the air, strongest toward the far (top) side of the view.
+  lit += uHaze * (1.0 - vUv.y * 0.6);
   lit -= max(lit - 0.72, 0.0) * 0.55;
   float l = lum(lit);
   lit = mix(vec3(l), lit, 1.12);
@@ -232,8 +233,8 @@ void main() {
 export interface ShadeParams {
   /** Camera centre in tiles, zoom (art px per tile), and the screen row of the centre. */
   cam: [number, number, number, number];
-  /** Your creature's light: art x, y and radius. */
-  lamp: [number, number, number];
+  /** The season's colour cast. */
+  tint: [number, number, number];
   time: number;
   /** 0 at sunrise, 0.75 at sunset, 1 at the next sunrise. */
   day: number;
@@ -368,7 +369,7 @@ export class MapShader {
   }
 
   /** The sun's direction and the light's colours for a point in the day. */
-  private sky(day: number): { sun: number[]; sunCol: number[]; amb: number[]; night: number } {
+  private sky(day: number): { sun: number[]; sunCol: number[]; amb: number[]; night: number; shadeCol: number[]; shadowK: number; grade: number[]; haze: number[] } {
     const dayLen = 0.75;
     const t = Math.min(day, dayLen) / dayLen;
     const a = t * Math.PI;
@@ -380,9 +381,23 @@ export class MapShader {
     const dusk = Math.max(0, 1 - Math.sin(a) * 2.2);
     // Night fades in after sunset and out before sunrise.
     const nightW = day >= dayLen ? Math.min(1, (day - dayLen) * 40, (1 - day) * 40) : 0;
-    const sunCol = blend([1.0, 0.95, 0.86], [1.0, 0.62, 0.38], [0.32, 0.4, 0.62], (1 - dusk) * (1 - nightW), dusk * (1 - nightW), nightW).map((v) => v * (0.62 - nightW * 0.4));
-    const amb = blend([0.46, 0.5, 0.58], [0.46, 0.4, 0.5], [0.13, 0.17, 0.32], (1 - dusk) * (1 - nightW), dusk * (1 - nightW), nightW);
-    return { sun: nightW > 0.5 ? [0.3, -0.5, 0.8] : dir, sunCol, amb, night: nightW };
+    // Dawn is rosy gold, dusk deep orange; their shadows go violet and plum. By day shadows are
+    // a cool, faint blue (the sky lighting them), and they deepen as the sun gets low.
+    const morning = t < 0.5;
+    const lowSun = morning ? [1.0, 0.7, 0.6] : [1.0, 0.56, 0.3];
+    const lowShade = morning ? [0.86, 0.7, 1.05] : [0.82, 0.58, 0.82];
+    const lowGrade = morning ? [1.04, 0.97, 1.0] : [1.06, 0.96, 0.9];
+    const lowHaze = morning ? [0.16, 0.07, 0.12] : [0.2, 0.08, 0.02];
+    const dayW = (1 - dusk) * (1 - nightW);
+    const duskW = dusk * (1 - nightW);
+    const sunCol = blend([1.0, 0.96, 0.88], lowSun, [0.32, 0.4, 0.62], dayW, duskW, nightW).map((v) => v * (0.66 - nightW * 0.44));
+    const amb = blend([0.5, 0.54, 0.6], [0.46, 0.4, 0.5], [0.13, 0.17, 0.32], dayW, duskW, nightW);
+    const shadeCol = blend([0.8, 0.88, 1.1], lowShade, [0.75, 0.82, 1.1], dayW, duskW, nightW);
+    const grade = blend([1.0, 1.0, 0.99], lowGrade, [0.88, 0.94, 1.12], dayW, duskW, nightW);
+    // Faint at noon, deep with the sun low.
+    const shadowK = (0.3 + 0.62 * (1 - Math.sin(a))) * (1 - nightW) + 0.45 * nightW;
+    const haze = lowHaze.map((v) => v * duskW);
+    return { sun: nightW > 0.5 ? [0.3, -0.5, 0.8] : dir, sunCol, amb, night: nightW, shadeCol, shadowK, grade, haze };
   }
 
   render(over: HTMLCanvasElement, artW: number, artH: number, p: ShadeParams): void {
@@ -421,7 +436,10 @@ export class MapShader {
     gl.uniform3fv(this.u('uSun'), sky.sun);
     gl.uniform3fv(this.u('uSunCol'), sky.sunCol);
     gl.uniform3fv(this.u('uAmb'), sky.amb);
-    gl.uniform3fv(this.u('uLamp'), p.lamp);
+    gl.uniform3fv(this.u('uShadeCol'), sky.shadeCol);
+    gl.uniform3fv(this.u('uHaze'), sky.haze);
+    gl.uniform1f(this.u('uShadowK'), sky.shadowK);
+    gl.uniform3fv(this.u('uGrade'), sky.grade.map((v, i) => v * p.tint[i]));
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 }

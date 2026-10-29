@@ -78,7 +78,9 @@ export type Effect =
    * get into, 3 also settles run-ins on the road itself. */
   | { kind: 'curiosity'; level: number }
   /** Parties of the herd head out to found places on their own and carry food home. */
-  | { kind: 'parties'; count: number };
+  | { kind: 'parties'; count: number }
+  /** Your creature makes rounds of the places it knows, foraging those that have grown back. */
+  | { kind: 'rounds' };
 
 /** What members of the herd do, by instinct (nobody is told to: these are animals). */
 export type Role = 'forager' | 'carer' | 'digger' | 'guard' | 'scout';
@@ -330,6 +332,8 @@ export interface StageState {
   parties: { place: string; t: number }[];
   /** When (seasons' clock) each place is ready to be foraged by a party again. */
   partyReady: Record<string, number>;
+  /** Times a found place has been foraged again (the scene puffs when it ticks up; not saved). */
+  foraged?: number;
   /** The herd: how many, and what they're set to do (the rest forage). */
   pop: number;
   roles: Record<Role, number>;

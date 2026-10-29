@@ -155,7 +155,8 @@ const UPGRADES: UpgradeDef[] = [
   { id: 'sentries', branch: 'Instincts', name: 'Sentries', flavor: 'Someone always has its head up.', cost: 5e4, levels: 5, costGrowth: 8, effect: { kind: 'instinct', role: 'guard', share: 0.02 }, requires: { reaction: 'marsh' } },
   { id: 'following', branch: 'Instincts', name: 'Follow the Leader', flavor: 'The young trail after the one who knows the way.', cost: 4e5, levels: 5, costGrowth: 8, effect: { kind: 'instinct', role: 'scout', share: 0.02 }, requires: { reaction: 'forest' } },
   // On the road.
-  { id: 'parties', branch: 'Wandering', name: 'Foraging Parties', flavor: 'The young know the way now. They go without being led.', cost: 2e8, levels: 3, costGrowth: 25, effect: { kind: 'parties', count: 1 }, requires: { reaction: 'caves' } },
+  { id: 'rounds', branch: 'Wandering', name: 'Foraging Rounds', flavor: 'It knows where everything grows, and when it will be back.', cost: 2e7, effect: { kind: 'rounds' }, requires: { reaction: 'forest' } },
+  { id: 'parties', branch: 'Wandering', name: 'Foraging Parties', flavor: 'The young know the way now. They go without being led.', cost: 1e9, levels: 3, costGrowth: 8, effect: { kind: 'parties', count: 1 }, requires: { reaction: 'highlands', upgrades: ['rounds'] } },
   { id: 'curiosity', branch: 'Wandering', name: 'Curiosity', flavor: 'It can never leave a corner of the map alone.', cost: 3000, levels: 3, costGrowth: 60, effect: { kind: 'curiosity', level: 1 } },
   // Herd and seasons.
   { id: 'fatStores', name: 'Fat Stores', flavor: 'Eat in summer, live on it in winter.', cost: 400, levels: 5, costGrowth: 6, effect: { kind: 'upkeepMult', mult: 0.85 } },

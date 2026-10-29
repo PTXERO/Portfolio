@@ -25,7 +25,7 @@ import { softCap, defenseOf, dialMax, guardLevel, dietOf, forageMult, habitatMul
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
-import { breed, buyPart, partEnergy, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, islandFor, partyLeg, placeSeen, statsOf, tripEventDue, upkeep, walkTo } from '../src/economy/creature';
+import { breed, buyPart, partEnergy, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, FARM_PAY, islandFor, partyLeg, placeSeen, tripPay, statsOf, tripEventDue, upkeep, walkTo } from '../src/economy/creature';
 import { islandOf, ISLAND, isLand, seenShare } from '../src/economy/island';
 import { foragers, herdMult, SEASON_SEC } from '../src/economy/rates';
 
@@ -784,6 +784,45 @@ describe('creature stage', () => {
     c.walk!.event = { id: 'storm', choice: null, left: 30 };
     tick(s, 0.1);
     expect(tripEventDue(s)).toBe(false);
+  });
+
+  it('a found place can be foraged again once it has grown back', () => {
+    const s = creatureGame();
+    const c = s.stages.creature;
+    c.seed = 4242;
+    c.pop = 10;
+    const is = islandFor(s);
+    c.trips.tidePools = 1;
+    c.partyReady.tidePools = c.year + 100;
+    const q = is.places.tidePools;
+    // Still growing back: walking there pays nothing.
+    c.pos = { x: q.x + 1, y: q.y };
+    walkTo(s, q.x, q.y);
+    const pay = tripPay(s, STAGES.creature.places!.find((p) => p.id === 'tidePools')!).mul(FARM_PAY);
+    let before = c.totalEarned;
+    tick(s, 5);
+    expect(c.totalEarned.sub(before).lt(pay.div(2))).toBe(true);
+    // Grown back: it pays, and rests again.
+    c.year += 200;
+    c.pos = { x: q.x + 1, y: q.y };
+    walkTo(s, q.x, q.y);
+    before = c.totalEarned;
+    tick(s, 5);
+    expect(c.totalEarned.sub(before).gte(pay.mul(0.99))).toBe(true);
+    expect(c.partyReady.tidePools).toBeGreaterThan(c.year);
+  });
+
+  it('with Foraging Rounds, it heads for a place that has grown back on its own', () => {
+    const s = creatureGame();
+    const c = s.stages.creature;
+    c.seed = 4242;
+    const is = islandFor(s);
+    for (let i = 0; i < c.seen.length; i++) c.seen[i] = 1;
+    c.trips.tidePools = 1;
+    c.upgrades.push('curiosity', 'rounds');
+    c.levels.curiosity = 1;
+    tick(s, 0.1);
+    expect(c.walk && Math.hypot(c.walk.tx - is.places.tidePools.x, c.walk.ty - is.places.tidePools.y)).toBeLessThan(2);
   });
 
   it('foraging parties walk to found places, bring food home, and let each place rest', () => {

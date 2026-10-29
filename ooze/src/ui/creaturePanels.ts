@@ -18,6 +18,8 @@ import {
   partEnergy,
   curiosity,
   partySlots,
+  placeRestLeft,
+  FARM_PAY,
   partyLeg,
   EVENT_WAIT,
   islandFor,
@@ -175,7 +177,7 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
     : '';
   const walk = `<div class="card px-box trip"><div class="info"><div class="name" data-t="walk-title"></div><div class="sub" data-t="walk-sub"></div>${choice}</div>
     <button class="px-btn home-btn" data-act="walkhome" data-t="home-btn">Home</button></div>
-    <p class="note">Tap anywhere on the map to send your creature there. It clears the fog as it walks: Senses lets it see further, Speed gets it there sooner.</p>
+    <p class="note">Tap anywhere on the map to send your creature there. It clears the fog as it walks: Senses lets it see further, Speed gets it there sooner. Places it has found grow back after a while: go back to forage them again.</p>
     ${visibleUpgrades(state, CREATURE)
       .filter((u) => u.branch === 'Wandering')
       .map(upgradeCard)
@@ -373,7 +375,10 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
       }
       const q = is.places[p.id];
       const ready = !placeShort(state, p).length;
-      setText(root, `place-${p.id}`, `${formatTime(walkSeconds(state, q.x, q.y))} away${(s.trips[p.id] ?? 0) > 0 ? '' : ` · finding it brings about ${format(tripPay(state, p))} ${def.currency}`}`);
+      const known = (s.trips[p.id] ?? 0) > 0;
+      const rest = placeRestLeft(state, p.id);
+      const farm = !known ? ` · finding it brings about ${format(tripPay(state, p))} ${def.currency}` : rest > 0 ? ` · growing back, ${formatTime(rest)}` : ` · ready to forage: ${format(tripPay(state, p).mul(FARM_PAY))} ${def.currency}`;
+      setText(root, `place-${p.id}`, `${formatTime(walkSeconds(state, q.x, q.y))} away${farm}`);
       const go = root.querySelector<HTMLButtonElement>(`[data-goto="${p.id}"]`);
       if (go) {
         go.disabled = !!s.walk?.event;

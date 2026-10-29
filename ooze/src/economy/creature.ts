@@ -262,6 +262,7 @@ function arrive(state: GameState, p: PlaceDef, rand: () => number): void {
   const pay = tripPay(state, p);
   earn(state, pay);
   s.trips[p.id] = (s.trips[p.id] ?? 0) + 1;
+  s.partyReady[p.id] = s.year + PLACE_REST;
   // It stops to take the place in.
   s.walk = null;
   const report: GameState['reports'][number] = { kind: 'trip', place: p.id, success: true, earned: pay.toString(), parts: [] };
@@ -308,6 +309,12 @@ function rummage(state: GameState, fresh: number, rand: () => number): void {
 function revisit(state: GameState, p: PlaceDef, rand: () => number): void {
   const s = st(state);
   s.trips[p.id] = (s.trips[p.id] ?? 0) + 1;
+  // Grown back since it was last foraged: it gives again.
+  if (placeRested(state, p.id)) {
+    earn(state, tripPay(state, p).mul(FARM_PAY));
+    s.partyReady[p.id] = s.year + PLACE_REST;
+    s.foraged = (s.foraged ?? 0) + 1;
+  }
   const report: GameState['reports'][number] = { kind: 'trip', place: p.id, success: true, earned: '0', parts: [] };
   const missing = p.parts.filter((id) => !s.parts.includes(id));
   if (missing.length && s.year >= s.nextFind && rand() < 0.25) {
@@ -510,8 +517,25 @@ export function partySlots(state: GameState): number {
   for (const e of stageEffects(state, CREATURE)) if (e.kind === 'parties') n += e.count;
   return n;
 }
-/** Seconds a place rests after a party forages it. */
-export const PARTY_REST = 240;
+/** Seconds a place rests after it's foraged (by your creature or a party) before it gives again. */
+export const PLACE_REST = 240;
+/** Foraging a found place again pays this share of a first trip there. */
+export const FARM_PAY = 0.6;
+
+/** Whether a found place has grown back enough to forage again. */
+export function placeRested(state: GameState, id: string): boolean {
+  return (st(state).partyReady[id] ?? 0) <= st(state).year;
+}
+
+/** Seconds till a found place can be foraged again (0 when it's ready). */
+export function placeRestLeft(state: GameState, id: string): number {
+  return Math.max(0, (st(state).partyReady[id] ?? 0) - st(state).year);
+}
+
+/** Whether your creature forages found places on its own (a late Wandering upgrade). */
+export function foragesOnItsOwn(state: GameState): boolean {
+  return stageEffects(state, CREATURE).some((e) => e.kind === 'rounds');
+}
 /** A party brings home this share of what your creature's own trip there pays. */
 export const PARTY_PAY = 0.5;
 /** Parties walk a little quicker than the leader (they know the way). */
@@ -543,7 +567,7 @@ function partyTick(state: GameState, dt: number): void {
       .sort((a, b) => partyLeg(state, a.id) - partyLeg(state, b.id))[0];
     if (!next) break;
     s.parties.push({ place: next.id, t: 0 });
-    s.partyReady[next.id] = s.year + 2 * partyLeg(state, next.id) + PARTY_REST;
+    s.partyReady[next.id] = s.year + 2 * partyLeg(state, next.id) + PLACE_REST;
   }
 }
 
@@ -570,6 +594,19 @@ function autoRoam(state: GameState): void {
     const ready = def().places!.find((p) => !(s.trips[p.id] > 0) && placeSeen(state, p.id) && !placeShort(state, p).length);
     if (ready) {
       walkTo(state, is.places[ready.id].x, is.places[ready.id].y);
+      return;
+    }
+  }
+  // Later: it makes rounds of the places it knows, foraging whichever has grown back
+  // (the nearest; not the beach at home, and not one a party's bound for).
+  if (foragesOnItsOwn(state)) {
+    const far = (id: string) => Math.hypot(is.places[id].x - is.home.x, is.places[id].y - is.home.y) > 12;
+    const near = (id: string) => Math.hypot(is.places[id].x - s.pos.x, is.places[id].y - s.pos.y);
+    const farm = def()
+      .places!.filter((p) => s.trips[p.id] > 0 && far(p.id) && placeRested(state, p.id) && !s.parties.some((q) => q.place === p.id))
+      .sort((a, b) => near(a.id) - near(b.id))[0];
+    if (farm) {
+      walkTo(state, is.places[farm.id].x, is.places[farm.id].y);
       return;
     }
   }

@@ -62,6 +62,15 @@ const HERD_WALK = 0.7;
 const ZOOM_MIN = 0.3;
 const ZOOM_MAX = 8;
 
+type Mote = 'snow' | 'leaf' | 'petal' | 'pollen';
+/** Each season's colour cast over the whole picture (spring fresh, summer warm, autumn gold, winter cold). */
+const SEASON_TINT = [
+  [0.98, 1.05, 1.0],
+  [1.06, 1.02, 0.92],
+  [1.1, 0.96, 0.84],
+  [0.9, 0.97, 1.1],
+];
+
 const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const mixRgb = (a: number[], b: number[], t: number) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 
@@ -75,7 +84,8 @@ export class RangeScene {
   private visitorTimer = 40;
   private graze: Pt | null = null;
   private grazeTimer = 0;
-  private flakes: { x: number; y: number; v: number; snow: boolean }[] = [];
+  /** Seasonal bits in the air: snow, falling leaves, blossom petals, summer pollen. */
+  private flakes: { x: number; y: number; v: number; kind: Mote; ph: number }[] = [];
   /** Each season's painted ground, for the island it was painted for. */
   private ground = new Map<number, HTMLCanvasElement>();
   private groundSeed = -1;
@@ -103,6 +113,7 @@ export class RangeScene {
   /** This season's ground and the next one's, and how far the change has got (0 to 1). */
   private groundPair: [HTMLCanvasElement, HTMLCanvasElement] | null = null;
   private seasonBlend = 0;
+  private seasonPair: [number, number] = [0, 1];
 
   reset(): void {
     this.fx.clear();
@@ -202,17 +213,16 @@ export class RangeScene {
   }
 
   /** The camera, for the shader: centre (tiles), zoom, and the screen row of the centre. */
-  /** Your creature's little pool of light at night: where it is on screen and how wide (art px). */
-  lamp: [number, number, number] = [0, 0, 0];
   /** Places parties were bound for last frame (to puff when one gets home). */
   private partiesOut = new Set<string>();
+  private foragedSeen = 0;
 
   get camParams(): [number, number, number, number] {
     return [this.camX, this.camY, this.zoom, this.midY()];
   }
 
   /** What the shader needs: the island's heights and kinds, the fog, and the seasons' ground. */
-  shadeInputs(): { seed: number; heights: Uint8Array; fog: HTMLCanvasElement; fogVersion: number; ground: [HTMLCanvasElement, HTMLCanvasElement]; blend: number } | null {
+  shadeInputs(): { seed: number; heights: Uint8Array; fog: HTMLCanvasElement; fogVersion: number; ground: [HTMLCanvasElement, HTMLCanvasElement]; blend: number; tint: [number, number, number] } | null {
     const is = this.island;
     if (!is || !this.fog || !this.groundPair) return null;
     if (!this.heightData || this.heightDataSeed !== is.seed) {
@@ -227,7 +237,9 @@ export class RangeScene {
       this.heightData = d;
       this.heightDataSeed = is.seed;
     }
-    return { seed: is.seed, heights: this.heightData, fog: this.fog, fogVersion: this.fogVersion, ground: this.groundPair, blend: this.seasonBlend };
+    const [a, c] = this.seasonPair;
+    const tint = SEASON_TINT[a].map((v, i) => v + (SEASON_TINT[c][i] - v) * this.seasonBlend) as [number, number, number];
+    return { seed: is.seed, heights: this.heightData, fog: this.fog, fogVersion: this.fogVersion, ground: this.groundPair, blend: this.seasonBlend, tint };
   }
 
   // ---- Input ----
@@ -506,6 +518,7 @@ export class RangeScene {
     const turn = blend * blend * (3 - 2 * blend);
     const next = (si + 1) % 4;
     this.seasonBlend = turn;
+    this.seasonPair = [si, next];
     const dayT = (t % DAY_SEC) / DAY_SEC;
     const night = Math.max(0, Math.min(1, (0.125 - Math.abs(dayT - 0.875)) * 40));
     const asleep = night > 0.5;
@@ -828,12 +841,14 @@ export class RangeScene {
         });
       }
     }
+    // Your creature forages a place that's grown back: a little puff where it stands.
+    if ((st.foraged ?? 0) > this.foragedSeen) this.fx.pulse(Math.round(this.sx(me.x)), Math.round(this.py(me.x, me.y)) - 4, PAL.y);
+    this.foragedSeen = st.foraged ?? 0;
     const nowOut = new Set(st.parties.map((p) => p.place));
     for (const was of this.partiesOut) if (!nowOut.has(was)) this.fx.pulse(Math.round(this.sx(home.x)), Math.round(this.py(home.x, home.y)), PAL.g);
     this.partiesOut = nowOut;
 
     const walking = !!st.walk && !st.walk.event;
-    this.lamp = [this.sx(me.x), this.py(me.x, me.y) - Math.min(6, 2 * this.zoom), Math.max(9, 4.5 * this.zoom)];
     const left = st.walk ? st.walk.tx < me.x : false;
     sprites.push({
       y: me.y,
@@ -862,24 +877,58 @@ export class RangeScene {
     // The fog, over everything on the ground (the shader draws its own, softer).
     if (!this.shaded) this.blitWorld(b, this.fog!);
 
-    // Falling leaves in autumn, snow in winter (screen space), easing in and out with the seasons.
+    // The air through the year (screen space), easing from one season's to the next: blossom
+    // petals in spring, slow pollen motes in summer, falling leaves in autumn, snow in winter.
     const weight = (n: number) => (si === n ? 1 - turn : 0) + (next === n ? turn : 0);
-    const snow = weight(3);
-    const leaves = weight(2);
-    const want = Math.round(45 * snow + 12 * leaves);
-    while (this.flakes.length < want) this.flakes.push({ x: Math.random() * W, y: Math.random() * H, v: 4 + Math.random() * 6, snow: Math.random() < snow / Math.max(0.01, snow + leaves) });
+    const mix: [Mote, number][] = [
+      ['petal', 16 * weight(0)],
+      ['pollen', 18 * weight(1)],
+      ['leaf', 16 * weight(2)],
+      ['snow', 45 * weight(3)],
+    ];
+    const want = Math.round(mix.reduce((a, [, n]) => a + n, 0));
+    const pick = (): Mote => {
+      let r = Math.random() * Math.max(0.01, want);
+      for (const [k, n] of mix) if ((r -= n) < 0) return k;
+      return mix[0][0];
+    };
+    while (this.flakes.length < want) this.flakes.push({ x: Math.random() * W, y: Math.random() * H, v: 4 + Math.random() * 6, kind: pick(), ph: Math.random() * 10 });
     this.flakes.length = want;
     for (const q of this.flakes) {
-      q.y += q.v * dt;
-      q.x += Math.sin(t + q.v) * 3 * dt + (q.snow ? 0 : 6 * dt);
-      if (q.y > H) {
-        q.y = 0;
+      if (q.kind === 'pollen') {
+        // Pollen hangs in the warm air, drifting and slowly rising, and glints now and then.
+        q.y -= q.v * 0.15 * dt;
+        q.x += (Math.sin(t * 0.7 + q.ph) * 2 + 1.5) * dt;
+      } else {
+        q.y += q.v * (q.kind === 'snow' ? 1 : 0.7) * dt;
+        q.x += Math.sin(t * (q.kind === 'snow' ? 1 : 2) + q.ph) * (q.kind === 'snow' ? 3 : 6) * dt + (q.kind === 'snow' ? 0 : 5 * dt);
+      }
+      if (q.y > H || q.y < 0) {
+        q.y = q.y < 0 ? H : 0;
         q.x = Math.random() * W;
-        q.snow = Math.random() < snow / Math.max(0.01, snow + leaves);
+        q.kind = pick();
       }
       if (q.x > W) q.x -= W;
-      b.fillStyle = q.snow ? PAL.w : q.v > 7 ? PAL.o : PAL.O;
-      b.fillRect(Math.round(q.x), Math.round(q.y), 1, 1);
+      const flip = Math.sin(t * 3 + q.ph) > 0;
+      switch (q.kind) {
+        case 'snow':
+          b.fillStyle = PAL.w;
+          b.fillRect(Math.round(q.x), Math.round(q.y), 1, 1);
+          break;
+        case 'leaf':
+          // Leaves tumble: two pixels that turn as they fall.
+          b.fillStyle = q.v > 7 ? PAL.o : q.v > 5.5 ? '#c8702e' : PAL.O;
+          b.fillRect(Math.round(q.x), Math.round(q.y), flip ? 2 : 1, flip ? 1 : 2);
+          break;
+        case 'petal':
+          b.fillStyle = q.v > 7 ? '#fbe4ee' : '#f2a7c3';
+          b.fillRect(Math.round(q.x), Math.round(q.y), flip ? 2 : 1, 1);
+          break;
+        case 'pollen':
+          b.fillStyle = Math.sin(t * 2 + q.ph * 3) > 0.85 ? GLOW_Y : '#f6eaa0';
+          b.fillRect(Math.round(q.x), Math.round(q.y), 1, 1);
+          break;
+      }
     }
 
     // Night falls over everything; in summer, fireflies around home.
