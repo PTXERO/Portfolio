@@ -46,6 +46,7 @@ import { breed, buyPart, chooseEvent, EVENT_DC, court, equipPart, FARM_PAY, foun
 import { Scene } from './scene/scene';
 import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
+import { creatureIcon } from './scene/creatureLook';
 import { pickIdea } from './ui/tribePanels';
 import { choiceButton } from './ui/creaturePanels';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
@@ -458,11 +459,12 @@ function renderHud(): void {
     ageNav.innerHTML = `${prev ? btn(prev, 'prev') : '<span></span>'}${next ? btn(next, 'next') : '<span></span>'}`;
   }
   const iconEl = $('currency-icon');
-  // The Extinction counts people, so its number gets the people icon, not food's.
-  const iconKey = state.current + (ex ? ':people' : '');
+    const look = ex ? st.tribe!.look : null;
+  const iconKey = state.current + (look ? JSON.stringify(look) : '');
   if (iconEl.dataset.stage !== iconKey) {
     iconEl.dataset.stage = iconKey;
-    iconEl.innerHTML = icon(ex ? 'family' : CURRENCY_ICON[state.current], 4);
+    // The Extinction counts people: its number wears one of them (their own look).
+    iconEl.innerHTML = look ? creatureIcon(look, 2) : icon(CURRENCY_ICON[state.current], 4);
   }
 }
 
