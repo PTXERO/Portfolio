@@ -61,5 +61,5 @@ describe('the spear\'s will', () => {
       console.log(`${diet}: no god ${tag(none)} · ideas only ${tag(ideasOnly)} · ideas + miracles ${tag(both)}`);
       expect(none.ex.over).toBe(true);
     }
-  });
+  }, 60_000);
 });

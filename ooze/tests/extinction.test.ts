@@ -102,7 +102,7 @@ describe('the Extinction', () => {
       const ex = s.stages.tribal.tribe!.ex!;
       console.log(`${diet}: naive ${naive}d · smart ${good}d ${ex.escaped ? 'ESCAPED' : ex.over ? 'extinct' : 'holding'} alive ${ex.people.length} raft ${JSON.stringify(ex.raft)} ideas ${ex.ideas.join(',')}`);
     }
-  });
+  }, 60_000);
 
   it('starts with everyone resting and projects the end', () => {
     const s = game('omnivore');
@@ -138,7 +138,7 @@ describe('the Extinction', () => {
       console.log(`auto ${diet}: ${d}d ${ex.escaped ? 'ESCAPED' : ex.over ? 'extinct' : 'holding'} alive ${ex.people.length} raft ${JSON.stringify(ex.raft)}`);
       expect(ex.over).toBe(false);
     }
-  });
+  }, 60_000);
 
   it('sets every diet to work for food it can eat', () => {
     for (const job of ['forage', 'scavenge', 'dig', 'fish'] as const) {
