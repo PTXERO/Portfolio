@@ -436,6 +436,32 @@ export class TribeScene extends RangeScene {
     // them, and they'd tower over the island.
     const close = this.zoom >= 1.6;
     const plantEaters = ex.diet === 'herbivore';
+    // Flags, as the Creature's places had (a pole and a pennant, the same size at any zoom):
+    // the camp in gold, always; and zoomed out, one at each kind of work they're at today,
+    // coloured by the work.
+    const flag = (x: number, y: number, col: string) => {
+      const X = Math.round(this.sx(x));
+      const Y = Math.round(this.py(x, y));
+      if (X < -6 || X > this.W + 6 || Y < -10 || Y > this.H + 10) return;
+      sprites.push({
+        y,
+        draw: () => {
+          b.fillStyle = PAL.k;
+          b.fillRect(X, Y - 7, 1, 7);
+          b.fillStyle = col;
+          b.fillRect(X + 1, Y - 7, 3, 2);
+        },
+      });
+    };
+    flag(camp.x, camp.y, PAL.y);
+    if (!close) {
+      const FLAG: Partial<Record<JobId, string>> = { wood: '#a07850', scavenge: plantEaters ? '#e8a040' : '#d0584a', fish: '#7fc3d8', forage: '#8acf6a', dig: '#4f9a5a', build: '#e0a060' };
+      for (const job of Object.keys(FLAG) as JobId[]) {
+        if (!ex.people.some((p) => p.job === job) && job !== 'build') continue;
+        const at = job === 'build' ? (raftPart(ex) || (ex.raft?.frame ?? 0) > 0 ? this.raftAt : null) : this.spots.find((q) => q.job === job && this.spotShown(ex, q));
+        if (at) flag(at.x, at.y, FLAG[job]!);
+      }
+    }
     for (const s of this.spots) {
       if (!close || !this.spotShown(ex, s)) continue;
       const X = Math.round(this.sx(s.x));

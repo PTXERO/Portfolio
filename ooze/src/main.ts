@@ -49,7 +49,7 @@ import { Scene } from './scene/scene';
 import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
 import { miniIcon } from './scene/creatureLook';
-import { glyph, pickIdea } from './ui/tribePanels';
+import { glyph, panWeb, pickIdea, webTransform, webView, zoomWeb } from './ui/tribePanels';
 import { record } from './economy/chronicle';
 import { PARTS } from './content/creature';
 import { choiceButton } from './ui/creaturePanels';
@@ -292,6 +292,8 @@ function step(): void {
 
 let alone = false;
 let guessSig = '';
+/** Whether the menu was pulled full height for the web of ideas (and so goes back after). */
+let ideasFull = false;
 let guess: number | null = null;
 const extinctEl = document.createElement('div');
 extinctEl.id = 'extinct';
@@ -1087,6 +1089,38 @@ let swirlSpin = 0;
 const fingers = new Map<number, { x: number; y: number; sx: number; sy: number }>();
 let mapDragged = false;
 
+// The web of ideas: one finger drags it about, two pinch to zoom (the window's in the menu).
+const webFingers = new Map<number, { x: number; y: number }>();
+panel.addEventListener('pointerdown', (e) => {
+  const box = (e.target as HTMLElement).closest<HTMLElement>('.mind-tree');
+  if (!box || (e.target as HTMLElement).closest('.mind-zoom')) return;
+  webFingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+});
+panel.addEventListener('pointermove', (e) => {
+  const f = webFingers.get(e.pointerId);
+  const box = document.querySelector<HTMLElement>('.mind-tree');
+  const pan = document.querySelector<HTMLElement>('.mind-pan');
+  if (!f || !box || !pan) return;
+  const size = box.clientWidth;
+  if (webFingers.size >= 2) {
+    const [a, b] = [...webFingers.values()];
+    const before = Math.hypot(a.x - b.x, a.y - b.y);
+    f.x = e.clientX;
+    f.y = e.clientY;
+    const after = Math.hypot(a.x - b.x, a.y - b.y);
+    const r = box.getBoundingClientRect();
+    if (before > 10) zoomWeb(after / before, (a.x + b.x) / 2 - r.left - r.width / 2, (a.y + b.y) / 2 - r.top - r.height / 2, size);
+  } else {
+    panWeb(e.clientX - f.x, e.clientY - f.y, size);
+    f.x = e.clientX;
+    f.y = e.clientY;
+  }
+  pan.setAttribute('style', webTransform());
+});
+const webUp = (e: PointerEvent) => webFingers.delete(e.pointerId);
+panel.addEventListener('pointerup', webUp);
+panel.addEventListener('pointercancel', webUp);
+
 // Casting: while a miracle is picked, a finger on the map draws it (no panning, no taps).
 stageEl.addEventListener(
   'pointerdown',
@@ -1239,6 +1273,14 @@ function act(el: HTMLElement): void {
   else if (el.dataset.warp) state.warp = Number(el.dataset.warp);
   else if (el.dataset.policy) state.stages.creature.roamOpts.policy = el.dataset.policy as RunInPolicy;
   else if (el.dataset.node) pickIdea(el.dataset.node);
+  else if (el.dataset.webzoom) {
+    const box = document.querySelector<HTMLElement>('.mind-tree');
+    const size = box?.clientWidth ?? 360;
+    if (el.dataset.webzoom === 'fit') Object.assign(webView, { s: 1, x: 0, y: 0 });
+    else zoomWeb(el.dataset.webzoom === 'in' ? 1.5 : 1 / 1.5, 0, 0, size);
+    const pan = document.querySelector<HTMLElement>('.mind-pan');
+    if (pan) pan.setAttribute('style', webTransform());
+  }
   else if (el.dataset.cast) startCast(el.dataset.cast as SpellId);
   else if (el.dataset.ordain) {
     const ex = state.stages.tribal.tribe?.ex;
@@ -1291,6 +1333,14 @@ function act(el: HTMLElement): void {
     if (!ui.open) panelEnter = 'from-below';
     else if (t !== ui.tab) panelEnter = order.indexOf(t) > order.indexOf(ui.tab) ? 'from-right' : 'from-left';
     ui.open = ui.tab === t ? !ui.open : true;
+    // The web of ideas wants the whole screen; leaving it, the menu goes back as it was.
+    if (t === 'ideas' && ui.open && !ui.full) {
+      ui.full = true;
+      ideasFull = true;
+    } else if (t !== 'ideas' && ideasFull) {
+      ui.full = false;
+      ideasFull = false;
+    }
     ui.tab = t;
     saveUi();
     if (panelEnter) panelKey = '';
@@ -1342,6 +1392,7 @@ function act(el: HTMLElement): void {
         syncCine();
         break;
       case 'expand':
+        ideasFull = false;
         ui.full = !ui.full;
         saveUi();
         break;

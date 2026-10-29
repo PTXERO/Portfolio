@@ -122,6 +122,33 @@ function peopleCard(ex: ExtinctionState): string {
   return `<div class="card px-box ex-people"><div class="info"><div class="name">Who's left</div><div class="sub">Hungriest first. They eat in that order too.</div></div>${rows}</div>`;
 }
 
+/** How the web is zoomed and moved (kept between redraws). Scale 1 fits it all. */
+export const webView = { s: 1, x: 0, y: 0 };
+export function webTransform(): string {
+  return `transform: translate(${webView.x}px, ${webView.y}px) scale(${webView.s})`;
+}
+/** Zooms the web about a point (px from its middle), keeping that point where it is. */
+export function zoomWeb(factor: number, mx = 0, my = 0, size = 360): void {
+  const s = Math.max(1, Math.min(4, webView.s * factor));
+  const k = s / webView.s;
+  webView.x = mx - (mx - webView.x) * k;
+  webView.y = my - (my - webView.y) * k;
+  webView.s = s;
+  clampWeb(size);
+}
+export function panWeb(dx: number, dy: number, size = 360): void {
+  webView.x += dx;
+  webView.y += dy;
+  clampWeb(size);
+}
+function clampWeb(size: number): void {
+  // Never so far that the web leaves the window altogether.
+  const lim = ((webView.s - 1) * size) / 2 + size * 0.2;
+  webView.x = Math.max(-lim, Math.min(lim, webView.x));
+  webView.y = Math.max(-lim, Math.min(lim, webView.y));
+  if (webView.s === 1 && Math.abs(webView.x) < 2 && Math.abs(webView.y) < 2) webView.x = webView.y = 0;
+}
+
 /** The idea picked in the web (shown in the card under it). */
 let picked = '';
 export function pickIdea(id: string): void {
@@ -223,7 +250,8 @@ export function ideasLayout(state: GameState): string {
     return `<span class="tb" style="left:${at(x)};top:${at(y)}">${b.name}</span>`;
   }).join('');
   return `<div class="panel-head"><h2>Ideas</h2><span class="dim">${n0(ex.insight)} insight</span></div>
-    <div class="mind-tree"><svg viewBox="0 0 ${G} ${G}" shape-rendering="crispEdges" aria-hidden="true">${paths}</svg>${names}${buttons.join('')}</div>
+    <div class="mind-tree"><div class="mind-pan" style="${webTransform()}"><svg viewBox="0 0 ${G} ${G}" shape-rendering="crispEdges" aria-hidden="true">${paths}</svg>${names}${buttons.join('')}</div>
+    <div class="mind-zoom"><button class="px-btn" data-webzoom="in" aria-label="Zoom in">+</button><button class="px-btn" data-webzoom="out" aria-label="Zoom out">−</button><button class="px-btn" data-webzoom="fit">Fit</button></div></div>
     ${pickedCard(state, ex)}`;
 }
 
