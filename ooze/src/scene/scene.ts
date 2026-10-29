@@ -196,7 +196,7 @@ export class Scene {
   purchase(state: GameState, id: string): void {
     if (state.current === 'soup') this.soup.purchase(state, id, this.displace);
     else if (state.current === 'creature') this.shore.purchase(state, id);
-    else this.cell.purchase(state, id);
+    else if (state.current !== 'tribal') this.cell.purchase(state, id);
   }
 
   /** Tells the scene how much of its bottom the open sheet covers, so the floor stays in view. */

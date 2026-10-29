@@ -58,7 +58,7 @@ export function tribeOf(state: GameState): TribeState | undefined {
 /** Food a second. */
 export function tribalRate(state: GameState): Decimal {
   const t = tribeOf(state);
-  if (!t) return D(0);
+  if (!t || t.ex) return D(0);
   return D(t.pop * (t.awake ? FORAGE_AWAKE : FORAGE_ASLEEP) * t.heritage);
 }
 

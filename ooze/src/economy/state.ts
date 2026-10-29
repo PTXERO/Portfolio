@@ -94,7 +94,7 @@ export function cloneState(s: GameState): GameState {
       parties: st.parties.map((p) => ({ ...p })),
       partyReady: { ...st.partyReady },
       sightings: { ...st.sightings },
-      tribe: st.tribe && { ...st.tribe, look: { ...st.tribe.look, parts: { ...st.tribe.look.parts } }, stats: { ...st.tribe.stats } },
+      tribe: st.tribe && { ...st.tribe, look: { ...st.tribe.look, parts: { ...st.tribe.look.parts } }, stats: { ...st.tribe.stats }, ex: st.tribe.ex && JSON.parse(JSON.stringify(st.tribe.ex)) },
       nests: [...st.nests],
       nestSettle: { ...st.nestSettle },
       trips: { ...st.trips },

@@ -13,6 +13,7 @@ import { STAGES } from './content/stages';
 import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed } from './economy/tribal';
+import { assign, daysLeft, decideFallen, DAY_SEC, eatsPlants, extinctionTick, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, type IdeaId, type JobId } from './economy/extinction';
 import {
   addSwirl,
   buyCount,
@@ -268,8 +269,100 @@ function step(): void {
   else {
     liveTick(state, gap);
     state.lastSeen = now;
+    extinctionStep(gap);
   }
   collectNews();
+}
+
+// ---- The Extinction's days ----
+// Its clock runs only while it's being played: never offline, never under a cutscene, and not
+// while a choice waits.
+
+let alone = false;
+const extinctEl = document.createElement('div');
+extinctEl.id = 'extinct';
+extinctEl.hidden = true;
+document.body.appendChild(extinctEl);
+
+function extinctionStep(sec: number): void {
+  if (state.current !== 'tribal' || cine()) return;
+  const t = state.stages.tribal.tribe;
+  if (t?.awake && !t.ex) {
+    startExtinction(state);
+    panelKey = '';
+    tabsKey = '';
+    save();
+  }
+  const ex = t?.ex;
+  if (!ex) return;
+  if (ex.over) {
+    showAlone();
+    return;
+  }
+  if (waitingOnChoice(ex)) {
+    askFallen();
+    return;
+  }
+  if (extinctionTick(state, sec)) {
+    save();
+    if (ex.over) showAlone();
+    else nightReport();
+  }
+}
+
+/** The morning after: who starved, and how much there was. */
+function nightReport(): void {
+  const r = state.stages.tribal.tribe?.ex?.last;
+  if (!r) return;
+  const names = r.starved.map((p) => p.name);
+  const who = names.length === 0 ? 'No one starved in the night.' : names.length === 1 ? `${names[0]} starved in the night.` : names.length <= 4 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} starved in the night.` : `${names.length} starved in the night: ${names.slice(0, 3).join(', ')} and ${names.length - 3} more.`;
+  const one = r.starved.length === 1 ? r.starved[0] : null;
+  showModal(
+    `<p class="label dim">Night ${r.day}</p>
+    <h3 class="${names.length ? 'grim' : ''}">${who}</h3>
+    ${one ? `<p class="dim">${TRAITS[one.trait].name}: ${TRAITS[one.trait].does}.</p>` : ''}
+    <p>They ate ${Math.floor(r.ate)} of the ${Math.ceil(r.wanted)} meals they needed.${r.spoiled >= 1 ? ` ${Math.floor(r.spoiled)} food spoiled.` : ''}</p>`,
+    6,
+  );
+}
+
+/** The first dead: what's to be done with them. Eating them changes the tribe for good. */
+function askFallen(): void {
+  const ex = state.stages.tribal.tribe?.ex;
+  if (!ex || !modal.hidden) return;
+  const loses = eatsPlants(ex.diet) ? ' They will never eat plants again.' : '';
+  showModal(`<p class="label dim">Day ${ex.day + 1} · The dead</p>
+    <h3>${ex.corpses === 1 ? 'One of them' : `${ex.corpses} of them`} didn't wake this morning.</h3>
+    <p>The others sit by the bodies. There is so little to eat.</p>
+    <div class="choices"><button class="px-btn" data-act="fallen-leave">Leave them to the ash</button>
+    <button class="px-btn grim" data-act="fallen-eat">Eat them</button></div>
+    <p class="small dim">Eating the dead makes your kind cannibals, for good: from now on, and in every age to come.${loses}</p>`);
+  modal.dataset.kind = 'fallen';
+}
+
+/** No one left: the last of them looks round, alone. Then how long they lasted, and again. */
+function showAlone(): void {
+  if (alone) return;
+  alone = true;
+  const t = state.stages.tribal.tribe!;
+  const ex = t.ex!;
+  modal.hidden = true;
+  syncCine();
+  storyLine(STORY.alone);
+  window.setTimeout(() => {
+    storyLine('');
+    const best = Math.max(t.best ?? 0, ex.day);
+    extinctEl.innerHTML = `<div class="ending-inner">
+      <p class="label dim">Extinction</p>
+      <p>Time survived in the Extinction</p>
+      <h1>${ex.day} day${ex.day === 1 ? '' : 's'}</h1>
+      <dl><dt>Best</dt><dd>${best} day${best === 1 ? '' : 's'}</dd><dt>Tries</dt><dd>${(t.attempts ?? 0) + 1}</dd><dt>Ideas learned</dt><dd>${ex.ideas.length}</dd></dl>
+      <p class="dim">The spear remembers what it taught them.</p>
+      <button class="px-btn gold" data-act="retry">Try again</button>
+    </div>`;
+    extinctEl.hidden = false;
+    requestAnimationFrame(() => extinctEl.classList.add('in'));
+  }, 7000);
 }
 
 const save = () => saveToStorage(state);
@@ -295,8 +388,15 @@ function renderHud(): void {
     const el = $(id);
     if (el.textContent !== text) el.textContent = text;
   };
-  set('currency', format(st.currency));
-  if (def.places) {
+  const ex = def.tribal ? st.tribe?.ex : undefined;
+  if (ex) {
+    // The Extinction counts people, not currency.
+    set('currency', String(ex.people.length));
+    set('rate', `alive\n${ex.deaths} dead`);
+  } else set('currency', format(st.currency));
+  if (ex) {
+    /* set above */
+  } else if (def.places) {
     // The herd eats: show what's left after that.
     const net = netRate(state);
     set('rate', `${net.lt(0) ? '−' : '+'}${format(net.abs())} ${def.currency}\nper second`);
@@ -329,6 +429,21 @@ function renderGoal(): void {
   const def = STAGES[state.current];
   // The Tribal era: for now, just what's asked before they wake.
   if (def.tribal) {
+    const ex = state.stages.tribal.tribe?.ex;
+    if (ex) {
+      // The countdown: how long they've got, if things go on as they are.
+      const d = daysLeft(ex);
+      const night = Math.max(0, Math.ceil(DAY_SEC - ex.clock));
+      const key = `ex:${ex.day}:${night}:${d}:${ex.over}`;
+      if (key !== goalKey) {
+        goalKey = key;
+        evolveEl.hidden = false;
+        const cls = d === null ? 'safe' : d <= 2 ? 'dire' : d <= 5 ? 'warn' : '';
+        evolveEl.innerHTML = `<div class="evolve-row"><span class="label">Day ${ex.day + 1}</span><span class="label dim">Night in ${night}s</span></div>
+          <div class="ex-count ${cls}">${d === null ? 'Holding on' : `Extinction in ${d} day${d === 1 ? '' : 's'}`}</div>`;
+      }
+      return;
+    }
     const awake = !!state.stages.tribal.tribe?.awake;
     const key = `tribal:${awake}`;
     if (key !== goalKey) {
@@ -495,7 +610,7 @@ function renderHint(): void {
     if (!pokedThisStage) text = 'Tap to walk · pinch to zoom';
   } else if (state.current === 'tribal') {
     if (!state.stages.tribal.tribe?.awake) text = 'Tap the spear';
-    else if (!pokedThisStage) text = 'Drag to look around · pinch to zoom';
+    else if (state.stages.tribal.tribe?.ex && state.stages.tribal.tribe.ex.day === 0 && state.stages.tribal.tribe.ex.people.every((p) => p.job === 'rest')) text = 'Set them to work, or they starve';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
   hint.hidden = !text || !modal.hidden;
@@ -606,7 +721,7 @@ const heldModals: [string, number][] = [];
 /** Before they wake: the walk to the spear, then the wait to touch it. */
 const beforeWaking = () => state.current === 'tribal' && !state.stages.tribal.tribe?.awake;
 function cine(): boolean {
-  return striking || waking || beforeWaking();
+  return striking || waking || alone || beforeWaking();
 }
 function syncCine(): void {
   const on = cine();
@@ -831,6 +946,15 @@ function act(el: HTMLElement): void {
   else if (el.dataset.amount) state.buyAmount = el.dataset.amount === 'max' ? 'max' : (Number(el.dataset.amount) as BuyAmount);
   else if (el.dataset.warp) state.warp = Number(el.dataset.warp);
   else if (el.dataset.policy) state.stages.creature.roamOpts.policy = el.dataset.policy as RunInPolicy;
+  else if (el.dataset.job) {
+    const ex = state.stages.tribal.tribe?.ex;
+    if (ex) assign(ex, el.dataset.job as JobId, Number(el.dataset.d));
+  } else if (el.dataset.ration) {
+    const ex = state.stages.tribal.tribe?.ex;
+    if (ex) ex.ration = Number(el.dataset.ration);
+  } else if (el.dataset.idea) {
+    if (learnIdea(state, el.dataset.idea as IdeaId)) scene.purchase(state, 'idea');
+  }
   else if (el.dataset.roamopt) {
     const c = state.stages.creature;
     const k = el.dataset.roamopt;
@@ -894,6 +1018,24 @@ function act(el: HTMLElement): void {
         break;
       case 'dismiss':
         modal.hidden = true;
+        break;
+      case 'fallen-leave':
+      case 'fallen-eat':
+        decideFallen(state, el.dataset.act === 'fallen-eat');
+        modal.hidden = true;
+        panelKey = '';
+        save();
+        break;
+      case 'retry':
+        tryAgain(state);
+        alone = false;
+        extinctEl.classList.remove('in');
+        window.setTimeout(() => (extinctEl.hidden = true), 600);
+        scene.reload();
+        panelKey = '';
+        goalKey = '';
+        save();
+        syncCine();
         break;
       case 'expand':
         ui.full = !ui.full;

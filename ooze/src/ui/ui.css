@@ -431,7 +431,7 @@ textarea {
 
 /* ---- The ending: a full stop, then a reveal ---- */
 
-#ending {
+#ending, #extinct {
   position: fixed;
   inset: 0;
   z-index: 10;
@@ -442,9 +442,10 @@ textarea {
   transition: background 2.4s ease;
   text-align: center;
 }
-#ending.in { background: rgba(16, 20, 31, 0.94); }
+#ending.in, #extinct.in { background: rgba(16, 20, 31, 0.94); }
+#extinct { z-index: 70; }
 .ending-inner { max-width: 340px; opacity: 0; transform: translateY(12px); transition: opacity 1.6s 1.2s, transform 1.6s 1.2s; }
-#ending.in .ending-inner { opacity: 1; transform: none; }
+#ending.in .ending-inner, #extinct.in .ending-inner { opacity: 1; transform: none; }
 .ending-inner h1 { font-family: var(--digits); font-weight: 400; font-size: 72px; line-height: 1; margin: 6px 0 14px; color: var(--cream); }
 .ending-inner dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; margin: 22px 0; text-align: left; }
 .ending-inner dt { color: var(--dim); }
@@ -575,3 +576,34 @@ textarea {
 .quake { animation: quake 110ms steps(2) infinite; }
 .quake-hard { animation: quake-hard 90ms steps(2) infinite; }
 .quake-soft { animation: quake-soft 160ms steps(2) infinite; }
+
+/* ---- The Extinction ---- */
+.ex-count { font-family: var(--digits); font-size: 26px; line-height: 1; margin-top: 6px; color: var(--cream); }
+.ex-count.safe { color: var(--mint); }
+.ex-count.warn { color: var(--gold); }
+.ex-count.dire { color: #ff6a5a; animation: pulse 1s steps(2) infinite; }
+.ex-stores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; }
+.ex-stores .store { display: flex; flex-direction: column; gap: 1px; font-size: 12px; }
+.ex-stores .store b { font-size: 26px; color: var(--gold); line-height: 1; }
+.ex-stores .store.off { opacity: 0.45; }
+.ex-stores .diet { grid-column: 1 / -1; }
+.tiny { font-size: 11px; }
+.gold { color: var(--gold); }
+.ex-jobs { flex-direction: column; align-items: stretch; }
+.ex-jobs .job { display: flex; align-items: center; gap: 8px; padding-top: 8px; margin-top: 8px; border-top: 2px solid rgba(255, 255, 255, 0.06); }
+.ex-jobs .job .info { flex: 1; min-width: 0; }
+.ex-jobs .job .name { font-size: 14px; }
+.ex-jobs .job .gain { color: var(--mint); }
+.ex-jobs .seg { align-items: center; flex: none; }
+.ex-jobs .seg b { min-width: 28px; text-align: center; font-size: 20px; color: var(--gold); }
+.ex-jobs .seg .px-btn { padding-left: 7px; padding-right: 7px; }
+.ex-people { flex-direction: column; align-items: stretch; }
+.ex-people .person { display: grid; grid-template-columns: 1.2fr 1fr 1fr auto; gap: 6px; font-size: 12px; padding: 3px 0; border-top: 1px solid rgba(255, 255, 255, 0.05); }
+.person .hunger { text-align: right; font-weight: 700; }
+.person.fed .hunger { color: var(--mint); }
+.person.hungry .hunger { color: var(--gold); }
+.person.starving .hunger { color: #ff9a5a; }
+.person.dying .hunger { color: #ff5a5a; animation: pulse 1s steps(2) infinite; }
+.idea.known { opacity: 0.6; }
+#modal h3.grim { color: #ff8a7a; }
+.px-btn.grim { --face: #7a2a2a; --hi: #a04040; --lo: #4a1414; color: var(--cream); }

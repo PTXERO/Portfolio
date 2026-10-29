@@ -1,3 +1,4 @@
+import type { ExtinctionState, IdeaId } from './extinction';
 import type { Decimal } from './num';
 
 export type StageId = 'soup' | 'cell' | 'creature' | 'tribal';
@@ -322,6 +323,13 @@ export interface TribeState {
   seed: number;
   /** Seconds on the tribe's own clock (days and seasons). */
   year: number;
+  /** The Extinction under way (once they've woken), how it began (to try again from), how
+   * many tries it's taken, the most days survived, and ideas the spear has taught before. */
+  ex?: ExtinctionState;
+  start?: string;
+  attempts?: number;
+  best?: number;
+  remembered?: IdeaId[];
 }
 
 export interface StageState {
