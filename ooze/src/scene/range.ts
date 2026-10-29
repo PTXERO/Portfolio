@@ -1263,15 +1263,6 @@ export class RangeScene {
       for (const [k, n] of mix) if ((r -= n) < 0) return k;
       return mix[0][0];
     };
-    // They're out in the world (not stuck to the screen): each drifts down from a height over
-    // a bit of ground in view and lands; scroll, and they stay where they are over the land.
-    const respawn = <Q extends { x: number; y: number; z: number }>(q: Q, z: number): Q => {
-      const w = this.toWorld(Math.random() * W, Math.random() * H);
-      q.x = w.x;
-      q.y = w.y;
-      q.z = z;
-      return q;
-    };
     const lift = (q: { x: number; y: number; z: number }) => this.py(q.x, q.y) - q.z * this.zoom;
     // Seasonal bits in the air are a layer over the view (not on the map, so they never look
     // like something to tap), drifting on the wind and sliding a little as the view moves, as
@@ -1353,21 +1344,27 @@ export class RangeScene {
     }
 
     // Rain, lightning, and the rainbow after.
-    const want2 = Math.round(this.storm * 90);
-    while (this.rain.length < want2) this.rain.push(respawn({ x: 0, y: 0, z: 0, v: 20 + Math.random() * 10 }, Math.random() * 14));
+    // Rain falls over the land around the view (twice its size each way), not just what's on
+    // screen, so scrolling or zooming out never shows an empty patch of sky.
+    const hw = W / this.zoom;
+    const hh = H / (this.zoom * (this.shaded ? TILT : 1));
+    const drop = <Q extends { x: number; y: number; z: number }>(q: Q, z: number): Q => {
+      q.x = this.camX + (Math.random() * 2 - 1) * hw;
+      q.y = this.camY + (Math.random() * 2 - 1) * hh;
+      q.z = z;
+      return q;
+    };
+    const want2 = Math.min(600, Math.round(this.storm * 90 * 4));
+    while (this.rain.length < want2) this.rain.push(drop({ x: 0, y: 0, z: 0, v: 20 + Math.random() * 10 }, Math.random() * 14));
     this.rain.length = want2;
     b.fillStyle = 'rgba(190, 210, 230, 0.75)';
     for (const r of this.rain) {
       r.z -= r.v * dt;
       r.x -= r.v * 0.08 * dt;
-      let Y = lift(r);
-      let X = this.sx(r.x);
-      if (r.z <= 0 || X < -4 || X > W + 4 || Y < -6 || Y > H + 4) {
-        respawn(r, 8 + Math.random() * 6);
-        X = this.sx(r.x);
-        Y = lift(r);
-      }
-      b.fillRect(Math.round(X), Math.round(Y), 1, 2);
+      if (r.z <= 0 || Math.abs(r.x - this.camX) > hw * 1.2 || Math.abs(r.y - this.camY) > hh * 1.2) drop(r, 8 + Math.random() * 6);
+      const X = this.sx(r.x);
+      const Y = lift(r);
+      if (X > -2 && X < W + 2 && Y > -3 && Y < H + 2) b.fillRect(Math.round(X), Math.round(Y), 1, 2);
     }
     if (this.storm > 0.7 && Math.random() < dt * 0.12) this.flash = 0.25;
     if (this.flash > 0) {
