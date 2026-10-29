@@ -1,6 +1,6 @@
 // The Extinction: the first part of the Tribal era. A spear falls from the sky and burns the
 // island to ash; a quarter of the herd lives through it. One walks out to the spear, standing
-// in a small lake at the island's heart, and touches it, and they wake: they know they are.
+// at the island's heart, and touches it, and they wake: they know they are.
 // Then they have to live, on almost nothing, long enough to build a raft; most won't. Only a
 // few (a family) cross to the next island, where the rivals already are.
 //

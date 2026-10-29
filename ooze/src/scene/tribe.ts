@@ -1,13 +1,13 @@
 // The Extinction's map: the island after the strike. The same 2.5D, lit land as the
 // Creature's (this builds on its scene), all of it burnt grey and black and still smouldering,
-// fissures torn out from the spear, which stands in a small lake at the island's heart. The
+// fissures torn out from the spear, which stands at the island's heart. The
 // survivors huddle at the old home; one of them (the one you were) walks out to the spear, and
 // when you touch it they wake. After that they go about the ash on their own.
 
 import { PAL } from '../art/sprites';
 import { SEASON_SEC } from '../economy/rates';
 import { CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
-import { BURNT, LAKE, ashenFor, tribeOf } from '../economy/tribal';
+import { BURNT, FOOT, ashenFor, tribeOf } from '../economy/tribal';
 import type { GameState } from '../economy/types';
 import { creatureLookOf } from './creatureLook';
 import { hash, type Frame } from './paint';
@@ -271,13 +271,13 @@ export class TribeScene extends RangeScene {
           p.goal = { x: frag.camp.x + Math.cos(a) * r, y: frag.camp.y + Math.sin(a) * r * 0.7 };
         } else if (i % 5 === 0) {
           const a = hash(i, Math.floor(t / 11)) * Math.PI * 2;
-          p.goal = { x: frag.spear.x + Math.cos(a) * (LAKE + 2), y: frag.spear.y + Math.sin(a) * (LAKE + 2) };
+          p.goal = { x: frag.spear.x + Math.cos(a) * (FOOT + 4), y: frag.spear.y + Math.sin(a) * (FOOT + 4) };
         } else {
           for (let k = 0; k < 8; k++) {
             const a = hash(i * 13 + k, Math.floor(t / 13)) * Math.PI * 2;
             const r = 4 + hash(i * 7 + k, 17) * 24;
             const g = { x: frag.camp.x + Math.cos(a) * r, y: frag.camp.y + Math.sin(a) * r };
-            if (isLand(is, g.x, g.y) && Math.hypot(g.x - frag.spear.x, g.y - frag.spear.y) > LAKE + 3) {
+            if (isLand(is, g.x, g.y) && Math.hypot(g.x - frag.spear.x, g.y - frag.spear.y) > FOOT + 5) {
               p.goal = g;
               break;
             }
@@ -317,14 +317,14 @@ export class TribeScene extends RangeScene {
     });
 
     // The walk: before they wake, the one you were walks alone from the camp out over the ash
-    // to the lake's edge, the camera with it.
+    // to the spear's foot, the camera with it.
     if (!tribe.awake) {
       if (!this.walker) this.walker = { ...frag.camp };
       const w = this.walker;
       const dx = frag.spear.x - w.x;
       const dy = frag.spear.y - w.y;
       const d = Math.hypot(dx, dy);
-      const stop = LAKE + 1.2;
+      const stop = FOOT + 1.5;
       // After the strike, a beat while the camera finds them, then the walk.
       if (!this.hold && this.released < 0) this.released = t;
       const finding = this.hold || t - this.released < 3;
@@ -347,7 +347,7 @@ export class TribeScene extends RangeScene {
       sprites.push({ y: wy, draw: () => this.drawBeing(b, look, wx, wy, { left: dx < 0, frame: moving ? Math.floor(t * 8) % 2 : 0, sleeping: false, hop }) });
     }
 
-    // The spear, standing in its lake.
+    // The spear, standing at the heart of it all.
     const sx = this.sx(frag.spear.x);
     const sy = this.py(frag.spear.x, frag.spear.y);
     sprites.push({ y: frag.spear.y, draw: () => this.drawSpear(b, sx, sy, t, tribe.awake) });
