@@ -1,21 +1,22 @@
 // Sound: the Soup's underwater hum (a seamless loop), a water drop for every tap in the Soup
 // and the Cell (one of many, never the same twice running), and the rush of the whirlpool,
-// as loud as it's strong (silent when there isn't one). Each has its own volume in the Menu.
+// as loud as it's strong (silent when there isn't one). The drops and the rush are heard as
+// if from under the water: muffled, and ringing on in a long reverb. The Menu has a volume
+// for the ambience and one for the effects.
 //
 // Browsers only let sound start from a tap, so nothing plays (or loads) until the first one.
 
 import type { GameState } from '../economy/types';
 
-export type Channel = 'master' | 'ambience' | 'clicks' | 'whirlpool';
+export type Channel = 'master' | 'ambience' | 'effects';
 export const CHANNELS: { id: Channel; label: string }[] = [
   { id: 'master', label: 'All sound' },
   { id: 'ambience', label: 'Ambience' },
-  { id: 'clicks', label: 'Taps' },
-  { id: 'whirlpool', label: 'Whirlpool' },
+  { id: 'effects', label: 'Effects' },
 ];
 
 const KEY = 'ooze-to-orbit/sound';
-const DEFAULTS: Record<Channel, number> = { master: 0.8, ambience: 0.6, clicks: 0.7, whirlpool: 0.7 };
+const DEFAULTS: Record<Channel, number> = { master: 0.8, ambience: 0.6, effects: 0.7 };
 
 /** The loops are padded either side (so the mp3's own gaps fall outside them): where each
  * loop starts in its file, and how long it runs. */
@@ -33,7 +34,10 @@ const DROPS: [number, number][] = [
 
 export const volumes: Record<Channel, number> = (() => {
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') };
+    const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}');
+    // (Taps and the whirlpool had a slider each before they were one.)
+    if (saved.effects === undefined && saved.clicks !== undefined) saved.effects = saved.clicks;
+    return { master: saved.master ?? DEFAULTS.master, ambience: saved.ambience ?? DEFAULTS.ambience, effects: saved.effects ?? DEFAULTS.effects };
   } catch {
     return { ...DEFAULTS };
   }
@@ -79,10 +83,10 @@ export function unlockSound(): void {
   void ctx.resume();
   master = ctx.createGain();
   master.connect(ctx.destination);
-  for (const k of ['ambience', 'clicks', 'whirlpool'] as const) {
-    bus[k] = ctx.createGain();
-    bus[k].connect(master);
-  }
+  bus.ambience = ctx.createGain();
+  bus.ambience.connect(master);
+  bus.effects = ctx.createGain();
+  underwater(ctx, bus.effects, master);
   applyVolumes();
   for (const name of ['drops', 'underwater', 'river'] as const) {
     fetch(`${import.meta.env.BASE_URL}sfx/${name}.mp3`)
@@ -93,6 +97,43 @@ export function unlockSound(): void {
         /* no sound for this one */
       });
   }
+}
+
+/** Under the water: the high end gone, and a long murky reverb behind what's left. */
+function underwater(ac: AudioContext, input: AudioNode, out: AudioNode): void {
+  const muffle = ac.createBiquadFilter();
+  muffle.type = 'lowpass';
+  muffle.frequency.value = 900;
+  muffle.Q.value = 0.9;
+  input.connect(muffle);
+  const dry = ac.createGain();
+  dry.gain.value = 0.55;
+  muffle.connect(dry).connect(out);
+  const verb = ac.createConvolver();
+  verb.buffer = murk(ac, 2.6);
+  const wet = ac.createGain();
+  wet.gain.value = 0.9;
+  muffle.connect(verb).connect(wet).connect(out);
+}
+
+/** A reverb's echo: noise dying away, darker as it goes (smoothed a little more each moment),
+ * different in each ear. */
+function murk(ac: AudioContext, sec: number): AudioBuffer {
+  const n = Math.floor(ac.sampleRate * sec);
+  const buf = ac.createBuffer(2, n, ac.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    let lp = 0;
+    for (let i = 0; i < n; i++) {
+      const k = i / n;
+      const smooth = 0.25 + 0.7 * k;
+      lp += (Math.random() * 2 - 1 - lp) * (1 - smooth);
+      // A short swell in before it dies, so it blooms rather than clicks.
+      const swell = Math.min(1, i / (ac.sampleRate * 0.03));
+      d[i] = lp * swell * Math.pow(1 - k, 2.4);
+    }
+  }
+  return buf;
 }
 
 /** A water drop: a different one each time, a little higher or lower. */
@@ -108,7 +149,7 @@ export function tapSound(): void {
   src.playbackRate.value = 0.85 + Math.random() * 0.35;
   const g = ctx.createGain();
   g.gain.value = 0.55 + Math.random() * 0.45;
-  src.connect(g).connect(bus.clicks);
+  src.connect(g).connect(bus.effects);
   src.start(0, at, len);
 }
 
@@ -141,7 +182,7 @@ export function soundFrame(state: GameState): void {
   const soup = state.current === 'soup';
   loopTo('underwater', soup ? 1 : 0, bus.ambience, 0.6);
   const swirl = soup && state.swirl > 0.02 ? Math.min(1, state.swirl) : 0;
-  loopTo('river', swirl, bus.whirlpool, swirl > 0 ? 0.15 : 0.3);
+  loopTo('river', swirl * 0.8, bus.effects, swirl > 0 ? 0.15 : 0.3);
 }
 
 /** Quiet while the game's hidden (phone locked, another tab). */
