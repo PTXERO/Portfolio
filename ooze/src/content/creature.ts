@@ -34,13 +34,13 @@ export const PARTS: PartDef[] = [
 ];
 
 export const PLACES: PlaceDef[] = [
-  { id: 'shore', name: 'Shoreline', flavor: 'Wet sand and things the tide forgot.', minutes: 1, needs: {}, parts: ['shell'], mateChance: 0.5, bonus: { kind: 'stageMult', mult: 1.3 } },
-  { id: 'tidePools', name: 'Tide Pools', flavor: 'Little worlds in every hollow.', minutes: 3, needs: { senses: 4 }, parts: ['stalkEyes'], mateChance: 0.35, unlocks: 'nest', after: ['shore'] },
-  { id: 'marsh', name: 'Marsh', flavor: 'Soft ground, tall reeds, and a lot of noise.', minutes: 6, needs: { speed: 6 }, parts: ['runner', 'sail'], mateChance: 0.4, unlocks: 'waterhole', after: ['shore'] },
-  { id: 'forest', name: 'Forest Edge', flavor: 'Shade, seeds and something watching.', minutes: 10, needs: { senses: 9, speed: 9 }, parts: ['beak', 'crestTail'], mateChance: 0.4, bonus: { kind: 'stageMult', mult: 1.6 }, after: ['tidePools', 'marsh'] },
-  { id: 'cliffs', name: 'Cliffs', flavor: 'Wind, gulls and a long way down.', minutes: 15, needs: { strength: 12, toughness: 8 }, parts: ['climber', 'clubTail'], mateChance: 0.3, bonus: { kind: 'forageMult', mult: 2 }, after: ['marsh'] },
-  { id: 'caves', name: 'Caves', flavor: 'Cool, dark and full of echoes.', minutes: 20, needs: { senses: 16, toughness: 14 }, parts: ['nightEyes'], mateChance: 0.3, unlocks: 'den', after: ['forest', 'cliffs'] },
-  { id: 'highlands', name: 'Highlands', flavor: 'Open sky, far horizons, and room for everyone.', minutes: 30, needs: { speed: 18, strength: 20 }, parts: ['tusks'], mateChance: 0.35, unlocks: 'territory', after: ['caves'] },
+  { id: 'shore', name: 'Shoreline', flavor: 'Wet sand and things the tide forgot.', minutes: 2, needs: {}, parts: ['shell'], mateChance: 0.6, bonus: { kind: 'stageMult', mult: 1.3 } },
+  { id: 'tidePools', name: 'Tide Pools', flavor: 'Little worlds in every hollow.', minutes: 5, needs: { senses: 4 }, parts: ['stalkEyes'], mateChance: 0.6, unlocks: 'nest', after: ['shore'] },
+  { id: 'marsh', name: 'Marsh', flavor: 'Soft ground, tall reeds, and a lot of noise.', minutes: 8, needs: { speed: 6 }, parts: ['runner', 'sail'], mateChance: 0.6, unlocks: 'waterhole', after: ['shore'] },
+  { id: 'forest', name: 'Forest Edge', flavor: 'Shade, seeds and something watching.', minutes: 12, needs: { senses: 9, speed: 9 }, parts: ['beak', 'crestTail'], mateChance: 0.6, bonus: { kind: 'stageMult', mult: 1.6 }, after: ['tidePools', 'marsh'] },
+  { id: 'cliffs', name: 'Cliffs', flavor: 'Wind, gulls and a long way down.', minutes: 18, needs: { strength: 12, toughness: 8 }, parts: ['climber', 'clubTail'], mateChance: 0.6, bonus: { kind: 'forageMult', mult: 2 }, after: ['marsh'] },
+  { id: 'caves', name: 'Caves', flavor: 'Cool, dark and full of echoes.', minutes: 25, needs: { senses: 16, toughness: 14 }, parts: ['nightEyes'], mateChance: 0.6, unlocks: 'den', after: ['forest', 'cliffs'] },
+  { id: 'highlands', name: 'Highlands', flavor: 'Open sky, far horizons, and room for everyone.', minutes: 40, needs: { speed: 18, strength: 20 }, parts: ['tusks'], mateChance: 0.6, unlocks: 'territory', after: ['caves'] },
 ];
 
 /** The Field Guide: one page per place, plus the ending. */
@@ -83,9 +83,9 @@ const UPGRADES: UpgradeDef[] = [
   { id: 'packMemory', name: 'Trail Memory', flavor: 'The way home, remembered.', cost: 5000, effect: { kind: 'tripMult', mult: 2 }, requires: { reaction: 'shore' } },
   { id: 'cellFeeding', name: 'Old Cell Lines', flavor: 'Every cell in it remembers the pond.', cost: 2e4, effect: { kind: 'feedMult', mult: 2 } },
   // Heirlooms, paid for in the Cell's DNA.
-  { id: 'denseCells', name: 'Dense Tissue', flavor: 'Packed tighter than any cell before.', cost: 1e18, levels: 10, costGrowth: 4, pay: 'cell', effect: { kind: 'stageMult', mult: 1.15 } },
-  { id: 'oldSenses', name: 'Old Senses', flavor: 'The eyespot was only the beginning.', cost: 3e18, levels: 5, costGrowth: 5, pay: 'cell', effect: { kind: 'stat', stat: 'senses', amount: 2 } },
-  { id: 'oldLegs', name: 'Old Flagella', flavor: 'Tails became legs. They still remember how to push.', cost: 3e18, levels: 5, costGrowth: 5, pay: 'cell', effect: { kind: 'stat', stat: 'speed', amount: 2 } },
+  { id: 'denseCells', name: 'Dense Tissue', flavor: 'Packed tighter than any cell before.', cost: 1e27, levels: 10, costGrowth: 5, pay: 'cell', effect: { kind: 'stageMult', mult: 1.15 } },
+  { id: 'oldSenses', name: 'Old Senses', flavor: 'The eyespot was only the beginning.', cost: 3e27, levels: 5, costGrowth: 8, pay: 'cell', effect: { kind: 'stat', stat: 'senses', amount: 2 } },
+  { id: 'oldLegs', name: 'Old Flagella', flavor: 'Tails became legs. They still remember how to push.', cost: 3e27, levels: 5, costGrowth: 8, pay: 'cell', effect: { kind: 'stat', stat: 'speed', amount: 2 } },
 ];
 
 const MILESTONES: MilestoneDef[] = [

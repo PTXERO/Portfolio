@@ -3,6 +3,7 @@
 
 import { icon, type SpriteName } from '../art/sprites';
 import { lifeIcon } from '../scene/icons';
+import { bodyLayout, creatureKey, creatureUpdate, exploreLayout, familyLayout } from './creaturePanels';
 import { STAGES } from '../content/stages';
 import {
   buyCount,
@@ -25,7 +26,7 @@ import { timeBankCap } from '../economy/offline';
 import { dialMax, dietOf, feedMult, generatorRate, habitatMult, maxLevel, milestoneMet, MILESTONES, nextMilestone, stageRate, upgradeLevel } from '../economy/rates';
 import { DIALS, type BuyAmount, type DialId, type Effect, type GameState, type ReactionDef, type StageId, type UpgradeDef } from '../economy/types';
 
-export type Tab = 'grow' | 'boosts' | 'lab' | 'mutate' | 'pond' | 'roots' | 'time' | 'menu';
+export type Tab = 'grow' | 'boosts' | 'lab' | 'mutate' | 'pond' | 'body' | 'explore' | 'family' | 'roots' | 'menu';
 
 export const TABS: { id: Tab; label: string; sprite: SpriteName }[] = [
   { id: 'grow', label: 'Grow', sprite: 'sprout' },
@@ -33,22 +34,28 @@ export const TABS: { id: Tab; label: string; sprite: SpriteName }[] = [
   { id: 'lab', label: 'Lab', sprite: 'flask' },
   { id: 'mutate', label: 'Mutate', sprite: 'helix' },
   { id: 'pond', label: 'Pond', sprite: 'pond' },
+  { id: 'body', label: 'Body', sprite: 'body' },
+  { id: 'explore', label: 'Explore', sprite: 'explore' },
+  { id: 'family', label: 'Family', sprite: 'family' },
   { id: 'roots', label: 'Roots', sprite: 'roots' },
-  { id: 'time', label: 'Time', sprite: 'hourglass' },
   { id: 'menu', label: 'Menu', sprite: 'menu' },
 ];
 
 /** Tabs that exist on the current stage: the Soup has Boosts and a Lab, the Cell a Mutation Tree and a Pond. */
 export function tabsFor(state: GameState): Tab[] {
-  const habitats = !!STAGES[state.current].habitats;
+  const def = STAGES[state.current];
+  const habitats = !!def.habitats;
+  const creature = !!def.places;
   const has: Record<Tab, boolean> = {
     grow: true,
-    boosts: !habitats,
-    lab: !habitats && reactions(state.current).length > 0,
+    boosts: !habitats && !creature,
+    lab: !habitats && !creature && reactions(state.current).length > 0,
     mutate: habitats,
     pond: habitats,
+    body: creature,
+    explore: creature,
+    family: creature,
     roots: hasRoots(state),
-    time: true,
     menu: true,
   };
   return TABS.map((t) => t.id).filter((t) => has[t]);
@@ -202,6 +209,7 @@ export function layoutKey(state: GameState, tab: Tab): string {
       ? [visibleUpgrades(state, state.current).map((u) => u.id), state.stages[state.current].upgrades, state.stages[state.current].levels]
       : 0,
     tab === 'roots' ? (STAGES[state.current].milestones ?? []).map((m) => milestoneMet(state, m)) : 0,
+    tab === 'body' || tab === 'explore' || tab === 'family' ? creatureKey(state) : 0,
     tab === 'lab' || tab === 'pond' ? [visibleDials(state), state.stages[state.current].discovered, reactions(state.current).map((r) => hintLevel(state, r))] : 0,
     tab === 'pond' ? [state.stages[state.current].habitat, (STAGES[state.current].habitats ?? []).map((h) => habitatUnlocked(state, state.current, h))] : 0,
   ]);
@@ -340,15 +348,17 @@ export function layout(state: GameState, tab: Tab): string {
     return `<div class="panel-head"><h2>Habitats</h2></div>${places}${bookLayout(state)}`;
   }
 
-  if (tab === 'time') {
-    return `<div class="panel-head"><h2>Time bank</h2></div>
+  if (tab === 'body') return bodyLayout(state, (u) => upgradeCard(state, id, u, 'spark'));
+  if (tab === 'explore') return exploreLayout(state);
+  if (tab === 'family') return familyLayout(state);
+
+  // The menu holds the time bank first, then saves.
+  return `<div class="panel-head"><h2>Time bank</h2></div>
       <div class="bank"><span class="num big" data-t="bank"></span><span class="dim" data-t="bank-cap"></span></div>
       <div class="warp">${WARPS.map((w) => `<button class="px-btn" data-warp="${w}">${w}×</button>`).join('')}</div>
       <p class="note">While you're away, most of the time is played out for you. The rest is saved here. Spend it to run the game faster while you watch.</p>
-      <p class="note" data-t="offline"></p>`;
-  }
-
-  return `<div class="panel-head"><h2>Menu</h2></div>
+      <p class="note" data-t="offline"></p>
+    <div class="panel-head"><h2>Menu</h2></div>
     <div class="tools">
       <button class="px-btn" data-act="export">Export save</button>
       <button class="px-btn" data-act="import">Import</button>
@@ -518,7 +528,9 @@ export function update(root: HTMLElement, state: GameState, tab: Tab): void {
       setText(root, `dialfx-${d}`, fx || 'Nothing you have cares about this yet');
     }
     bookUpdate(root, state);
-  } else if (tab === 'time') {
+  } else if (tab === 'body' || tab === 'explore' || tab === 'family') {
+    creatureUpdate(root, state, tab);
+  } else {
     setText(root, 'bank', formatTime(state.timeBank));
     setText(root, 'bank-cap', `of ${formatTime(timeBankCap(state))}`);
     setText(root, 'offline', `Time away counts for up to ${formatTime(state.offlineCapSec)}.`);
@@ -527,7 +539,6 @@ export function update(root: HTMLElement, state: GameState, tab: Tab): void {
       b.classList.toggle('on', state.warp === w);
       b.disabled = w > 1 && state.timeBank <= 0;
     }
-  } else {
     setText(root, 'stats', `Played ${formatTime(state.playTime)} · ${state.taps} stirs`);
   }
 }

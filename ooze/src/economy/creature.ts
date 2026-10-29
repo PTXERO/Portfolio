@@ -12,8 +12,8 @@ export const CREATURE: StageId = 'creature';
 /** Share of an expedition's time paid out as output, before Trail Memory. */
 export const TRIP_PAYOUT = 0.6;
 /** Seconds the first egg takes; each generation after takes longer. */
-export const EGG_BASE_SEC = 120;
-export const EGG_GROWTH = 1.7;
+export const EGG_BASE_SEC = 480;
+export const EGG_GROWTH = 1.45;
 /** Output multiplier per generation bred. */
 export const GENERATION_MULT = 1.25;
 export const MAX_MATES = 3;
@@ -125,6 +125,20 @@ function finishTrip(state: GameState, rand: () => number): void {
     }
   }
   state.reports.push(report);
+}
+
+/** Chance a visitor on the shore agrees to join the line: better with Charm. */
+export function courtChance(state: GameState): number {
+  return Math.min(1, 0.35 + 0.04 * statsOf(state).charm);
+}
+
+/** A tap on a visiting creature on the shore: it may join as a mate. Returns its name, or null. */
+export function court(state: GameState, rand: () => number = Math.random): string | null {
+  const s = st(state);
+  if (s.mates.length >= MAX_MATES || rand() >= courtChance(state)) return null;
+  const m = randomMate(state, placeDef('shore'));
+  s.mates.push(m);
+  return m.name;
 }
 
 /** Seconds the next egg will take: longer each generation, shorter with Charm. */

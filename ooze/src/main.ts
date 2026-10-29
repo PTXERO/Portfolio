@@ -38,6 +38,7 @@ import { clearStorage, exportSave, importSave, loadFromStorage, saveToStorage } 
 import { createState } from './economy/state';
 import { liveTick, TICK_SEC } from './economy/tick';
 import type { BuyAmount, DialId, GameState, StageId } from './economy/types';
+import { breed, buyPart, court, equipPart, releaseMate, startTrip } from './economy/creature';
 import { Scene } from './scene/scene';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
@@ -110,8 +111,37 @@ function showReport(r: OfflineReport): void {
     <button class="px-btn gold" data-act="dismiss">Nice</button>`);
 }
 
+/** Shows what came back from an expedition or out of an egg. */
+function showTripReport(): boolean {
+  if (!modal.hidden || !state.reports.length) return false;
+  const r = state.reports.shift()!;
+  const def = STAGES.creature;
+  const parts = r.parts.map((id) => def.parts!.find((p) => p.id === id)!.name);
+  if (r.kind === 'hatch') {
+    scene.discovery();
+    showModal(`<p class="label dim">Generation ${r.generation}</p>
+      <h3>An egg hatched!</h3>
+      <p>The young one is yours and ${r.mate}'s. The whole line grows stronger.</p>
+      ${parts.length ? `<p class="fx">Inherited: ${parts.join(', ')}</p>` : ''}
+      <button class="px-btn gold" data-act="dismiss">Welcome</button>`);
+    return true;
+  }
+  const place = def.places!.find((p) => p.id === r.place)!;
+  const page = r.found ? def.reactions!.find((x) => x.id === r.found) : undefined;
+  showModal(`<p class="label dim">${r.success ? 'Back from' : 'Turned back at'} the ${place.name}</p>
+    <h3>${r.success ? (page ? `New in the ${def.bookName}: ${page.name}` : 'A good trip') : 'Too much for it, this time'}</h3>
+    <p>+${format(D(r.earned))} ${def.currency}</p>
+    ${page ? `<p class="fx">${rewardText('creature', page)}</p>` : ''}
+    ${parts.length ? `<p class="fx">Found: ${parts.join(', ')} (in the Body tab)</p>` : ''}
+    ${r.mate ? `<p class="fx">Met ${r.mate}, who followed it home (Family tab)</p>` : ''}
+    ${r.success ? '' : '<p class="dim">Stronger stats make trips safer.</p>'}
+    <button class="px-btn gold" data-act="dismiss">Nice</button>`);
+  return true;
+}
+
 /** Shows the next discovered reaction, if nothing else is on screen. */
 function showDiscovery(): void {
+  if (showTripReport()) return;
   if (!modal.hidden || !discoveryQueue.length) return;
   const id = discoveryQueue.shift()!;
   const r = reactions(state.current).find((x) => x.id === id);
@@ -247,7 +277,13 @@ function renderGoal(): void {
   if (nextEl) {
     const n = nextReaction(state, state.current);
     let text = '';
-    if (engulfable(state, state.current).length) text = 'A rare microbe is about. Catch it before it gets away!';
+    const cr = state.stages[state.current];
+    if (def.places && cr.trip) {
+      // Creature: the expedition under way is the thing to watch.
+      text = `Exploring the ${def.places.find((p) => p.id === cr.trip!.place)!.name} · back in ${formatTime(cr.trip.left)}`;
+    } else if (def.places && n && !n.r.final) {
+      text = `Next: explore the ${n.r.name} (Explore tab)`;
+    } else if (engulfable(state, state.current).length) text = 'A rare microbe is about. Catch it before it gets away!';
     else if (n && !finaleReady(state)) {
       const name = n.r.final ? n.r.name : '???';
       const missing = n.check.parts.filter((p) => !p.ok);
@@ -309,6 +345,8 @@ function renderHint(): void {
     const st = state.stages.soup;
     if (state.taps < 3) text = 'Tap the soup to stir it';
     else if (st.discovered.includes('phosphorylation') && !st.discovered.includes('polymerization') && state.swirl < 0.05) text = 'Draw circles to spin a whirlpool';
+  } else if (state.current === 'creature') {
+    if (!pokedThisStage) text = 'Tap to walk your creature';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
   hint.hidden = !text || !modal.hidden;
@@ -385,7 +423,10 @@ function pondEvents(): void {
       else if (got === 'caught') scene.float(e.x, e.y - 10, `caught ${state.stages[state.current].captured[e.id]} of ${r?.captures ?? 1}`, '#f5c45e');
     } else if (e.type === 'rare') scene.float(e.x, e.y - 10, 'a rare microbe!', '#f5c45e');
     else if (e.type === 'hit') scene.float(e.x, e.y - 10, ['thwack', 'ow!', 'scram!'][Math.floor(Math.random() * 3)], '#f2ead7');
-    else if (e.type === 'fend') scene.float(e.x, e.y - 10, `driven off! +${format(fendOff(state))}`, '#f5c45e');
+    else if (e.type === 'court') {
+      const name = court(state);
+      scene.float(e.x, e.y, name ? `${name} joins you!` : 'not interested…', name ? '#e68ab8' : '#f2ead7');
+    } else if (e.type === 'fend') scene.float(e.x, e.y - 10, `driven off! +${format(fendOff(state))}`, '#f5c45e');
   }
   collectNews();
 }
@@ -410,6 +451,9 @@ stageEl.addEventListener('pointerdown', (e) => {
   if (state.current === 'soup') {
     const v = tap(state);
     if (v.gt(0)) scene.float(x, y - 10, `+${format(v)}`, '#f5c45e');
+  } else if (state.current === 'creature') {
+    scene.shoreTap(state, x, y);
+    pokedThisStage = true;
   } else {
     const { quip } = scene.cellTap(state, x, y);
     pokedThisStage = true;
@@ -459,6 +503,13 @@ function act(el: HTMLElement): void {
   else if (el.dataset.amount) state.buyAmount = el.dataset.amount === 'max' ? 'max' : (Number(el.dataset.amount) as BuyAmount);
   else if (el.dataset.warp) state.warp = Number(el.dataset.warp);
   else if (el.dataset.habitat) moveHabitat(state, id, el.dataset.habitat);
+  else if (el.dataset.equip) equipPart(state, el.dataset.equip);
+  else if (el.dataset.buypart) {
+    if (buyPart(state, el.dataset.buypart)) scene.purchase(state, el.dataset.buypart);
+  } else if (el.dataset.trip) {
+    if (startTrip(state, el.dataset.trip)) scene.purchase(state, 'trip');
+  } else if (el.dataset.breed) breed(state, Number(el.dataset.breed));
+  else if (el.dataset.release) releaseMate(state, Number(el.dataset.release));
   else if (el.dataset.stage) {
     if (visitStage(state, el.dataset.stage as StageId)) {
       scene.evolveFlash();

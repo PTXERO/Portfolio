@@ -17,7 +17,9 @@ export type PondEvent =
   | { type: 'engulf'; id: string; x: number; y: number }
   | { type: 'rare'; x: number; y: number }
   | { type: 'fend'; x: number; y: number }
-  | { type: 'hit'; x: number; y: number };
+  | { type: 'hit'; x: number; y: number }
+  /** A visiting creature on the shore was courted (Creature stage). */
+  | { type: 'court'; x: number; y: number };
 
 interface Hero {
   x: number;

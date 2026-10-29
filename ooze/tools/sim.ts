@@ -28,8 +28,9 @@ import {
 import { formatTime } from '../src/economy/num';
 import { dialMax, spawnMult, stageRate, tapValue } from '../src/economy/rates';
 import { cloneState, createState } from '../src/economy/state';
+import { breed, buyPart, equipPart, partDef, placeOpen, startTrip, statsOf, tripChance } from '../src/economy/creature';
 import { tick } from '../src/economy/tick';
-import { DIALS, type DialId, type GameState, type ReactionDef, type StageId } from '../src/economy/types';
+import { DIALS, SLOTS, type DialId, type GameState, type ReactionDef, type StageId } from '../src/economy/types';
 
 interface Strategy {
   name: string;
@@ -142,7 +143,8 @@ function visit(s: GameState, tapsPerSec: number, now = 0): void {
     const st = s.stages[s.current];
     const money = st.currency.toNumber();
     // Unlocks (dials, the whirlpool, mutations) have no simple payback; players buy them when they can.
-    const own = visibleUpgrades(s, s.current).filter((u) => payStage(s.current, u) === s.current);
+    // (Endless upgrades aren't unlocks: the Creature's training is bought separately.)
+    const own = visibleUpgrades(s, s.current).filter((u) => payStage(s.current, u) === s.current && u.levels !== Infinity);
     const price = (u: (typeof own)[number]) => upgradeCost(s, s.current, u).toNumber();
     const unlock = own.find((u) => (u.effect.kind === 'dialMax' || u.effect.kind === 'swirlMult' || !!u.branch) && price(u) <= money);
     if (unlock) {
@@ -175,6 +177,7 @@ function visit(s: GameState, tapsPerSec: number, now = 0): void {
     if (!best || best.cost / best.gain > toGoal) break;
     best.apply(s);
   }
+  if (s.current === stage && STAGES[stage].places) creatureVisit(s);
   if (s.current === stage && STAGES[stage].habitats) cellVisit(s, now);
   else if (s.current === stage && fin) chaseReaction(s);
   spendPast(s);
@@ -212,6 +215,49 @@ function spendPast(s: GameState): void {
       if (!bought) break;
     }
   }
+}
+
+/**
+ * Creature stage: wear the best parts for the next place, train what's short,
+ * breed whenever there's a mate, and keep the creature out exploring: the next
+ * new place once it's safe enough, otherwise the best-paying safe one.
+ */
+function creatureVisit(s: GameState): void {
+  const st = s.stages.creature;
+  const def = STAGES.creature;
+  const next = def.places!.find((p) => !(st.trips[p.id] > 0) && placeOpen(s, p));
+  const want = (k: string) => 1 + (next?.needs[k as keyof typeof next.needs] ? 3 : 0);
+  // Buy shop parts as they become affordable (cheapest first), then wear the best in each slot.
+  for (const p of def.parts!.filter((x) => x.cost && !st.parts.includes(x.id)).sort((a, b) => a.cost! - b.cost!)) {
+    if (st.currency.toNumber() >= p.cost! * 2) buyPart(s, p.id);
+  }
+  for (const slot of SLOTS) {
+    const score = (id: string) => Object.entries(partDef(id).stats).reduce((n, [k, v]) => n + (v ?? 0) * want(k), 0);
+    const best = st.parts.filter((id) => partDef(id).slot === slot).sort((a, b) => score(b) - score(a))[0];
+    if (best) equipPart(s, best);
+  }
+  // Train the stats the next place needs, while it costs under a few minutes of output.
+  const rate = stageRate(s, 'creature').toNumber();
+  for (let i = 0; i < 50 && next; i++) {
+    const stats = statsOf(s);
+    const short = Object.entries(next.needs).find(([k, n]) => stats[k as keyof typeof stats] < (n ?? 0));
+    if (!short) break;
+    const u = def.upgrades.find((x) => x.effect.kind === 'stat' && x.effect.stat === short[0] && x.levels === Infinity)!;
+    const cost = upgradeCost(s, 'creature', u).toNumber();
+    if (cost > rate * 300 || !buyUpgrade(s, 'creature', u.id)) break;
+  }
+  if (!st.egg && st.mates.length) breed(s, st.mates[0].id);
+  if (!st.trip) {
+    if (next && tripChance(s, next) >= 0.75) startTrip(s, next.id);
+    else {
+      // Short trips while a mate is wanted (more chances to meet one), long ones otherwise.
+      const wantMate = !st.egg && !st.mates.length;
+      const safe = def.places!.filter((p) => placeOpen(s, p) && tripChance(s, p) >= 0.9);
+      const best = safe.sort((a, b) => (wantMate ? a.minutes - b.minutes : b.minutes - a.minutes))[0];
+      if (best) startTrip(s, best.id);
+    }
+  }
+  s.reports = [];
 }
 
 /** When each simulated game last caught a rare microbe. */
@@ -265,12 +311,13 @@ function cellVisit(s: GameState, t: number): void {
 }
 
 /** Plays one strategy. `events` gets the time each upgrade, discovery and first generator happened. */
-export function run(strategy: Strategy, events?: Map<string, number>, hook?: (s: GameState, t: number) => void) {
-  const s = createState(0);
-  tap(s); // every player's first action; nothing runs before it
+export function run(strategy: Strategy, events?: Map<string, number>, hook?: (s: GameState, t: number) => void, from?: { state: GameState; t: number }) {
+  // Either a fresh game, or a saved point in one (the tuner replays a stage from its start).
+  const s = from ? cloneState(from.state) : createState(0);
+  if (!from) tap(s); // every player's first action; nothing runs before it
   const done: Partial<Record<StageId, number>> = {};
-  let t = 0;
-  let nextVisit = 0;
+  let t = from?.t ?? 0;
+  let nextVisit = t;
   const last = STAGE_ORDER[STAGE_ORDER.length - 1];
   const seen = new Set<string>();
   const seenUp = new Set<string>();
@@ -314,6 +361,7 @@ export function run(strategy: Strategy, events?: Map<string, number>, hook?: (s:
       for (const id of st.discovered) tag(id);
       for (const id of st.upgrades) tag(id);
       for (const [id, n] of Object.entries(st.levels)) tag(`${id}@${n}`);
+      if (st.generation > 0) tag(`gen-${st.generation}`);
       for (const [id, n] of Object.entries(st.generators)) if (n > 0) tag(`gen:${id}`);
     }
     if (t >= nextVisit) {

@@ -8,6 +8,7 @@
 import { PAL } from '../art/sprites';
 import type { GameState, StageId } from '../economy/types';
 import { CellScene } from './cell';
+import { ShoreScene } from './shore';
 import type { PondEvent } from './pond';
 import { ring, type Frame } from './paint';
 import { SoupScene } from './soup';
@@ -44,6 +45,7 @@ export class Scene {
   private stage: StageId | '' = '';
   private soup = new SoupScene();
   private cell = new CellScene();
+  private shore = new ShoreScene();
   private displace = (x: number, y: number) => this.push(x, y);
   /** CSS pixels covered by the overlays at the top of the scene. */
   private topCss = 0;
@@ -96,15 +98,22 @@ export class Scene {
     return { hit: r.hit, quip: r.poked && Math.random() < 0.3 ? QUIPS[Math.floor(Math.random() * QUIPS.length)] : null };
   }
 
+  /** A tap on the shore: walks your creature there, or hits a beast under the finger. */
+  shoreTap(state: GameState, cssX: number, cssY: number): void {
+    const [x, y] = this.toArt(cssX, cssY);
+    this.shore.tap(state, x, y);
+  }
+
   /** What happened in the pond since last asked, with positions in CSS pixels. */
   pondEvents(): PondEvent[] {
-    if (this.stage !== 'cell') return [];
-    return this.cell.pond.drain().map((e) => ({ ...e, x: e.x * this.px, y: e.y * this.px }));
+    if (this.stage !== 'cell' && this.stage !== 'creature') return [];
+    return (this.stage === 'cell' ? this.cell.pond.drain() : this.shore.drain()).map((e) => ({ ...e, x: e.x * this.px, y: e.y * this.px }));
   }
 
   /** Plays a purchase out in the scene. Call after the purchase went through. */
   purchase(state: GameState, id: string): void {
     if (state.current === 'soup') this.soup.purchase(state, id, this.displace);
+    else if (state.current === 'creature') this.shore.purchase(state, id);
     else this.cell.purchase(state, id);
   }
 
@@ -162,9 +171,11 @@ export class Scene {
       this.stage = state.current;
       this.soup.reset();
       this.cell.reset();
+      this.shore.reset();
     }
     const frame: Frame = { b: this.b, W: this.W, H: this.H, t: this.time, dt, top: Math.ceil(this.topCss / this.px), bottom: Math.ceil(this.bottomCss / this.px) };
     if (state.current === 'soup') this.soup.draw(frame, state, this.displace);
+    else if (state.current === 'creature') this.shore.draw(frame, state);
     else this.cell.draw(frame, state);
     for (const r of this.ripples) {
       this.b.globalAlpha = 1 - r.age;

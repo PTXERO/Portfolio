@@ -25,7 +25,7 @@ import { defenseOf, dialMax, guardLevel, dietOf, forageMult, habitatMult, heroSp
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
-import { breed, buyPart, equipPart, startTrip, statsOf, tripChance } from '../src/economy/creature';
+import { breed, buyPart, court, courtChance, equipPart, startTrip, statsOf, tripChance } from '../src/economy/creature';
 
 /** A game where the player has already made their first move. */
 function fresh() {
@@ -592,7 +592,7 @@ describe('creature stage', () => {
     const before = s.stages.creature.currency;
     tick(s, 30);
     expect(s.stages.creature.trip).not.toBeNull();
-    tick(s, 60);
+    tick(s, 120);
     expect(s.stages.creature.trip).toBeNull();
     expect(s.stages.creature.discovered).toContain('shore');
     expect(s.stages.creature.parts).toContain('shell');
@@ -619,11 +619,24 @@ describe('creature stage', () => {
     const before = rate();
     expect(breed(s, 1)).toBe(true);
     expect(s.stages.creature.mates.length).toBe(0);
-    tick(s, 200);
+    tick(s, 500);
     expect(s.stages.creature.generation).toBe(1);
     expect(s.stages.creature.parts).toContain('runner');
     expect(rate()).toBeGreaterThan(before * 1.2);
     expect(statsOf(s).charm).toBe(2);
+  });
+
+  it('a visitor on the shore can be courted, more easily with Charm, up to three mates', () => {
+    const s = creatureGame();
+    expect(court(s, () => 0.99)).toBe(null);
+    expect(court(s, () => 0)).not.toBe(null);
+    s.stages.creature.upgrades.push('trainCharm');
+    s.stages.creature.levels.trainCharm = 20;
+    expect(courtChance(s)).toBe(1);
+    court(s);
+    court(s);
+    expect(court(s)).toBe(null);
+    expect(s.stages.creature.mates.length).toBe(3);
   });
 
   it('inherits the Cell diet for what it can eat', () => {
