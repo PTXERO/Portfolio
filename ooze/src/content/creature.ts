@@ -105,9 +105,9 @@ const final: ReactionDef = {
   name: 'Many',
   flavor: 'A line long enough to fill the land.',
   hints: ['One is not enough.', 'Every place roamed, a line six generations long, and a great herd across the land.'],
-  needs: { found: 7, generation: 6, pop: 200, gens: { territory: 5 } },
+  needs: { found: 7, generation: 6, pop: 400, gens: { territory: 8 } },
   final: true,
-  cost: 2.9e9,
+  cost: 2e10,
 };
 
 /** Things it runs into partway through a roam. Left alone, instinct plays safe (the last option). */
@@ -202,7 +202,7 @@ export const creature: StageDef = {
     { id: 'burrow', name: 'Burrows', flavor: 'Holes dug into the bank: room for three more.', baseCost: 5.7e5, growth: 1.15, baseRate: 0 },
     { id: 'waterhole', name: 'Marsh Grazing', flavor: 'The herd spreads into the reeds: the same food goes further.', baseCost: 1e6, growth: 1.3, baseRate: 0, unlockedBy: 'marsh' },
     { id: 'den', name: 'Caves', flavor: 'Out of the wind: room for fifteen, and shelter from winter.', baseCost: 1.5e7, growth: 1.2, baseRate: 0, unlockedBy: 'caves' },
-    { id: 'territory', name: 'Home Range', flavor: 'More land roamed and grazed: room for fifty, and richer foraging.', baseCost: 3.1e9, growth: 1.25, baseRate: 0, unlockedBy: 'highlands' },
+    { id: 'territory', name: 'Home Range', flavor: 'More land roamed and grazed: room for fifty, and richer foraging.', baseCost: 8e8, growth: 1.35, baseRate: 0, unlockedBy: 'highlands' },
   ],
   upgrades: UPGRADES,
   reactions: [...pages, final],

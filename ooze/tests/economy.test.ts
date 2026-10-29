@@ -25,7 +25,7 @@ import { softCap, defenseOf, dialMax, guardLevel, dietOf, forageMult, habitatMul
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
-import { breed, buyPart, partEnergy, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, FARM_PAY, foundNest, islandFor, nestSites, nestsOpen, partyLeg, spot, placeSeen, tripPay, statsOf, tripEventDue, upkeep, walkTo } from '../src/economy/creature';
+import { breed, buyPart, partEnergy, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, EGG_BASE_SEC, FARM_PAY, foundNest, islandFor, nestSites, nestsOpen, partyLeg, spot, placeSeen, tripPay, statsOf, tripEventDue, upkeep, walkTo } from '../src/economy/creature';
 import { islandOf, ISLAND, isLand, seenShare } from '../src/economy/island';
 import { foragers, herdMult, SEASON_SEC } from '../src/economy/rates';
 
@@ -682,7 +682,7 @@ describe('creature stage', () => {
     const before = rate();
     expect(breed(s, 1)).toBe(true);
     expect(s.stages.creature.mates.length).toBe(0);
-    tick(s, 620);
+    tick(s, EGG_BASE_SEC + 20);
     expect(s.stages.creature.generation).toBe(1);
     expect(s.stages.creature.parts).toContain('runner');
     expect(rate()).toBeGreaterThan(before * 1.2);
@@ -741,13 +741,13 @@ describe('creature stage', () => {
     expect(c.pop).toBeLessThan(9);
   });
 
-  it('winter forages far less than summer', () => {
+  it('winter forages much less than summer', () => {
     const s = creatureGame();
     s.stages.creature.pop = 10;
     s.stages.creature.year = SEASON_SEC * 1.5;
     const summer = stageRate(s, 'creature').toNumber();
     s.stages.creature.year = SEASON_SEC * 3.5;
-    expect(stageRate(s, 'creature').toNumber()).toBeLessThan(summer / 4);
+    expect(stageRate(s, 'creature').toNumber()).toBeLessThan(summer / 2);
   });
 
   it('a body can only wear what its energy budget feeds', () => {

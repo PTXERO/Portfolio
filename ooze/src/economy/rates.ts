@@ -1,5 +1,6 @@
 import { STAGES, STAGE_ORDER } from '../content/stages';
 import { D, Decimal, ZERO } from './num';
+import { statsOf } from './creature';
 import type { DialId, Diet, Effect, GameState, GeneratorDef, HabitatDef, MilestoneDef, StageId, UpgradeDef } from './types';
 
 /** Owning this many of a generator doubles its output, each. Past 100, every further 100 counts too. */
@@ -266,7 +267,7 @@ export const SEASONS: Season[] = [
   { name: 'Spring', forage: 1.2, births: 2, upkeep: 1, winter: false },
   { name: 'Summer', forage: 1.6, births: 1, upkeep: 1, winter: false },
   { name: 'Autumn', forage: 1, births: 0.7, upkeep: 1, winter: false },
-  { name: 'Winter', forage: 0.3, births: 0.25, upkeep: 1.4, winter: true },
+  { name: 'Winter', forage: 0.6, births: 0.25, upkeep: 1.2, winter: true },
 ];
 /** Seconds per season; a year is four of them. */
 export const SEASON_SEC = 150;
@@ -287,10 +288,21 @@ export function foragers(state: GameState): number {
 
 /** What one member's day of foraging is worth, before the season: every boost to the stage.
  * Eating scales with it too, so the balance of foragers to mouths matters all game. */
+/** Each Home Range makes the land this much richer. */
+export const TERRITORY_RICH = 0.03;
+/** Each point of the creature's stats (all five together) adds this to what the herd forages. */
+export const BODY_FORAGE = 0.004;
+
+/** What the line's body adds to foraging: better legs, mouths and eyes find and carry more. */
+export function bodyMult(state: GameState): number {
+  const total = Object.values(statsOf(state)).reduce((a, b) => a + b, 0);
+  return 1 + BODY_FORAGE * total;
+}
+
 export function herdMult(state: GameState): number {
   const effects = stageEffects(state, 'creature');
-  // Territory makes the land richer: +2% each.
-  return stageMult(effects) * feedMult(state, 'creature') * (1 + 0.02 * (state.stages.creature.generators.territory ?? 0));
+  // Territory makes the land richer: +3% each. A better body forages better: +0.4% a stat point.
+  return stageMult(effects) * feedMult(state, 'creature') * (1 + TERRITORY_RICH * (state.stages.creature.generators.territory ?? 0)) * bodyMult(state);
 }
 
 /** Biomass the herd gathers per second, before it eats. */

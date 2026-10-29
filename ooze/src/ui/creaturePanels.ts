@@ -38,7 +38,7 @@ import {
 import { EVENTS } from '../content/creature';
 import { seenShare } from '../economy/island';
 import { buyCount, generatorCost, generatorVisible } from '../economy/actions';
-import { foragers, SEASON_SEC, seasonOf, stageRate } from '../economy/rates';
+import { BODY_FORAGE, bodyMult, foragers, SEASON_SEC, seasonOf, stageRate } from '../economy/rates';
 import { D, format, formatTime } from '../economy/num';
 import { checkReaction, payStage, reactionReady, upgradeCost, visibleUpgrades } from '../economy/actions';
 import type { GameState, PartDef, Role, Stat } from '../economy/types';
@@ -66,7 +66,7 @@ const PLACE_TEXT: Record<string, string> = {
   burrow: 'Room for 3 more',
   waterhole: 'The herd eats 4% less each (down to half)',
   den: 'Room for 15 more, and shelter from winter',
-  territory: 'Room for 50 more, and food +2% each',
+  territory: 'Room for 50 more, and food +3% each',
 };
 
 /** What changes the creature tabs' layout. */
@@ -149,6 +149,7 @@ export function bodyLayout(state: GameState, upgradeCard: (u: (typeof STAGES)['c
     .join('');
   return `<div class="portrait">${creatureIcon(creatureLookOf(state), 4)}<div class="stats">${stats}</div></div>
     <div class="energy-bar"><span class="label">Energy</span><span class="pips" data-pips></span><span class="num" data-t="energy"></span></div>
+    <p class="note" data-t="body-forage"></p>
     <p class="note">Tap a part to wear it. Each costs energy (⚡); your creature can only wear what its body can power. Generations and a Bigger Heart give it more.</p>${slots}
     <div class="panel-head"><h2>Training</h2></div>${training}
     ${boosts ? `<div class="panel-head"><h2>Boosts</h2></div>${boosts}` : ''}`;
@@ -317,6 +318,7 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
     const used = energyUsed(state);
     const budget = energyBudget(state);
     setText(root, 'energy', `${used} / ${budget}`);
+    setText(root, 'body-forage', `Its body helps the whole herd forage: +${Math.round((bodyMult(state) - 1) * 100)}% (every stat point +${Math.round(BODY_FORAGE * 1000) / 10}%).`);
     const pips = root.querySelector<HTMLElement>('[data-pips]');
     const pipKey = `${used}/${budget}`;
     if (pips && pips.dataset.k !== pipKey) {
