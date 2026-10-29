@@ -22,6 +22,8 @@ interface Person {
   /** Where it's headed next, and seconds before it picks somewhere else. */
   goal: Pt | null;
   wait: number;
+  /** When the waking reached it (scene seconds; -1 not yet). */
+  lit: number;
 }
 
 /** Every cell seen: there is no fog on what's left (they know every step of it). */
@@ -29,6 +31,10 @@ const ALL_SEEN = new Uint8Array(CELLS * CELLS).fill(1);
 const DAY_SEC = 120;
 /** How long the fire takes to run over the island after the strike (seconds). */
 const BURN_SEC = 9;
+/** How fast the waking spreads back over the ash to the others (tiles a second, at the least),
+ * and how long it takes to reach the camp however far it is. */
+const SPREAD_SPEED = 9;
+const SPREAD_SEC = 4;
 
 export class TribeScene extends RangeScene {
   private people: Person[] = [];
@@ -51,6 +57,12 @@ export class TribeScene extends RangeScene {
   private burn: { cv: HTMLCanvasElement; img: ImageData; green: Uint8ClampedArray; ash: Uint8ClampedArray; order: Float32Array; v: number; season: number } | null = null;
   /** When the strike let go of the walk (scene seconds). */
   private released = -1;
+  /** The waking spreading to the others: when it set out (scene seconds), or asked for. */
+  private spreadAt = -1;
+  private spreadPending = false;
+  /** Woken before this scene was opened (a reload): everyone's already lit. */
+  private allLit = false;
+  private firstLook = true;
   private seedSeen = -1;
 
   reset(): void {
@@ -63,6 +75,10 @@ export class TribeScene extends RangeScene {
     this.burnDone = false;
     this.burn = null;
     this.released = -1;
+    this.spreadAt = -1;
+    this.spreadPending = false;
+    this.allLit = false;
+    this.firstLook = true;
     this.placed = false;
     this.auto = false;
   }
@@ -79,6 +95,26 @@ export class TribeScene extends RangeScene {
       this.events.push({ type: 'spear', x: X, y: Y - tall });
       this.wave = 0;
     }
+  }
+
+  /** Sends the waking out from the one at the spear to the others. */
+  spreadWake(): void {
+    this.spreadPending = true;
+  }
+
+  /** A point of light over a head (`age` seconds old): flaring, then fading upward. */
+  private spark(b: CanvasRenderingContext2D, x: number, y: number, age: number): void {
+    const a = age < 0.3 ? age / 0.3 : Math.max(0, 1 - (age - 0.3) / 2.7);
+    if (a <= 0) return;
+    const X = Math.round(this.sx(x));
+    const Y = Math.round(this.py(x, y) - Math.max(6, 2.2 * this.zoom) - age * 2);
+    b.globalAlpha = a;
+    b.fillStyle = 'rgba(255, 236, 170, 0.996)';
+    b.fillRect(X - 1, Y, 3, 1);
+    b.fillRect(X, Y - 1, 1, 3);
+    b.fillStyle = 'rgba(255, 255, 250, 0.996)';
+    b.fillRect(X, Y, 1, 1);
+    b.globalAlpha = 1;
   }
 
   /** Takes the camera as the Creature's map left it (so the strike lands where it looked). */
@@ -155,6 +191,14 @@ export class TribeScene extends RangeScene {
     const frag = ashenFor(state);
     const is = frag.island;
     this.island = is;
+    if (this.firstLook) {
+      this.firstLook = false;
+      this.allLit = tribe.awake;
+    }
+    if (this.spreadPending) {
+      this.spreadPending = false;
+      this.spreadAt = t;
+    }
     // First look: the camera where the Creature's left it (at the strike), or on the camp.
     if (!this.placed || this.seedSeen !== is.seed) {
       const h = this.handed;
@@ -255,17 +299,31 @@ export class TribeScene extends RangeScene {
       const k = this.people.length;
       const a = hash(k, 3) * Math.PI * 2;
       const d = 1 + hash(k, 5) * 4;
-      this.people.push({ x: frag.camp.x + Math.cos(a) * d, y: frag.camp.y + Math.sin(a) * d * 0.7, vx: 0, vy: 0, ph: hash(k, 7) * 10, goal: null, wait: hash(k, 9) * 4 });
+      this.people.push({ x: frag.camp.x + Math.cos(a) * d, y: frag.camp.y + Math.sin(a) * d * 0.7, vx: 0, vy: 0, ph: hash(k, 7) * 10, goal: null, wait: hash(k, 9) * 4, lit: this.allLit ? -100 : -1 });
     }
     this.people.length = shown;
     const sleeping = night > 0.5;
+    // The waking spreading out from the one at the spear, back over the ash to the others.
+    const from = this.walker ?? frag.spear;
+    const spreadSpeed = Math.max(SPREAD_SPEED, Math.hypot(frag.camp.x - from.x, frag.camp.y - from.y) / SPREAD_SEC);
+    const spread = this.spreadAt >= 0 ? (t - this.spreadAt) * spreadSpeed : -1;
     this.people.forEach((p, i) => {
+      if (p.lit < 0 && spread >= 0 && Math.hypot(p.x - from.x, p.y - from.y) < spread) {
+        p.lit = t;
+        p.goal = null;
+        p.vx = 0;
+        p.vy = 0;
+      }
+      // A while after it reaches them they're still, looking toward the spear.
+      const struck = p.lit >= 0 && t - p.lit < 4;
+      const woke = tribe.awake && p.lit !== -1 && !struck;
       // Before waking they keep close to the camp, away from the spear; after, they range
       // over what's left, and some stand looking up at it.
       p.wait -= dt;
-      if (!p.goal || p.wait <= 0) {
+      if (struck) p.goal = { x: p.x, y: p.y };
+      else if (!p.goal || p.wait <= 0) {
         p.wait = 4 + hash(i, Math.floor(t / 7)) * 8;
-        if (!tribe.awake || sleeping) {
+        if (!woke || sleeping) {
           const a = hash(i, Math.floor(t / 9) + 1) * Math.PI * 2;
           const r = sleeping ? 2 + hash(i, 13) * 3 : 3 + hash(i, 11) * 7;
           p.goal = { x: frag.camp.x + Math.cos(a) * r, y: frag.camp.y + Math.sin(a) * r * 0.7 };
@@ -313,11 +371,70 @@ export class TribeScene extends RangeScene {
       const x = p.x;
       const yy = p.y;
       const hop = moving ? Math.abs(Math.sin(t * 7 + p.ph * 3)) * 2 : 0;
-      sprites.push({ y: yy, draw: () => this.drawBeing(b, look, x, yy, { left, frame: moving ? Math.floor(t * 8 + p.ph) % 2 : 0, sleeping, hop }) });
+      const lit = p.lit >= 0 ? t - p.lit : -1;
+      sprites.push({
+        y: yy,
+        draw: () => {
+          this.drawBeing(b, look, x, yy, { left, frame: moving ? Math.floor(t * 8 + p.ph) % 2 : 0, sleeping: sleeping && !struck, hop });
+          // The spark as it reaches them: a point of light over each head, fading.
+          if (lit >= 0 && lit < 3) this.spark(b, x, yy, lit);
+        },
+      });
     });
+    if (spread >= 0) {
+      // The wave itself: a soft ring of gold going out over the ground.
+      const reach = Math.max(...this.people.map((p) => Math.hypot(p.x - from.x, p.y - from.y)), 10);
+      if (spread < reach + 6) {
+        const X = this.sx(from.x);
+        const Y = this.py(from.x, from.y);
+        const rr = spread * this.zoom;
+        const steps = Math.ceil(rr * 3) + 8;
+        b.fillStyle = `rgba(255, 220, 140, ${0.996})`;
+        b.globalAlpha = Math.max(0, 0.8 - spread / (reach + 6) * 0.5);
+        for (let i = 0; i < steps; i++) {
+          const a = (i / steps) * Math.PI * 2;
+          const x = Math.round(X + Math.cos(a) * rr);
+          const y = Math.round(Y + Math.sin(a) * rr * (this.shaded ? 0.6 : 1));
+          if (x < -2 || x > W + 2 || y < -2 || y > H + 2) continue;
+          b.fillRect(x, y, 1, 1);
+        }
+        b.globalAlpha = 1;
+        // The camera goes with it, out to the others.
+        const front = Math.min(1, spread / reach);
+        const k = Math.min(1, dt * 2.5);
+        this.camX += (from.x + (frag.camp.x - from.x) * front - this.camX) * k;
+        this.camY += (from.y + (frag.camp.y - from.y) * front - 3 - this.camY) * k;
+      }
+    }
 
     // The walk: before they wake, the one you were walks alone from the camp out over the ash
-    // to the spear's foot, the camera with it.
+    // to the spear's foot, the camera with it. Once the waking has reached the others, it
+    // walks back to them.
+    if (tribe.awake && this.walker) {
+      const w = this.walker;
+      const back = this.spreadAt >= 0 && t - this.spreadAt > 5;
+      const dx = frag.camp.x - w.x;
+      const dy = frag.camp.y - w.y;
+      const d = Math.hypot(dx, dy);
+      if (back && d < 2) this.walker = null;
+      else {
+        if (back) {
+          const step = Math.min(d, 2.2 * dt);
+          w.x += (dx / d) * step;
+          w.y += (dy / d) * step;
+        }
+        const wx = w.x;
+        const wy = w.y;
+        const sinceTouch = this.wave >= 0 ? this.wave : 99;
+        sprites.push({
+          y: wy,
+          draw: () => {
+            this.drawBeing(b, look, wx, wy, { left: back ? dx < 0 : frag.spear.x < wx, frame: back ? Math.floor(t * 6) % 2 : 0, sleeping: false, hop: back ? Math.abs(Math.sin(t * 6)) * 2 : 0 });
+            if (sinceTouch < 4) this.spark(b, wx, wy, sinceTouch * 0.75);
+          },
+        });
+      }
+    }
     if (!tribe.awake) {
       if (!this.walker) this.walker = { ...frag.camp };
       const w = this.walker;

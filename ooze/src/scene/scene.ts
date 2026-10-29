@@ -69,6 +69,11 @@ export class Scene {
     return { x: r.left + p.x * this.px, y: r.top + p.y * this.px };
   }
 
+  /** After the waking's vision: it spreads from the one at the spear to the others. */
+  spreadWake(): void {
+    this.tribe.spreadWake();
+  }
+
   /** Holds the walk to the spear (while the strike plays over it). */
   set holdWalk(on: boolean) {
     this.tribe.hold = on;

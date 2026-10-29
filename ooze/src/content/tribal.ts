@@ -22,7 +22,9 @@ export const STORY = {
   touch: 'Touch the spear.',
   /** The waking. */
   wake: '[STORY] It touched the spear, and for the first time, it knew that it was.',
-  /** Shown under the waking. */
+  /** Inside its mind, as it sees things for what they are. */
+  mind: '[STORY] The sun. The stars. Fire. Stone. The others. It saw them, and knew them.',
+  /** As the waking spreads to the others. */
   wakeSub: '[STORY] The others felt it too. They looked at each other differently now.',
 };
 

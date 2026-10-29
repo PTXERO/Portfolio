@@ -44,6 +44,7 @@ import type { BuyAmount, DialId, GameState, RunInPolicy, StageId } from './econo
 import { breed, buyPart, chooseEvent, EVENT_DC, court, equipPart, FARM_PAY, foundNest, islandFor, netRate, SIGHTINGS, placeRestLeft, placeSeen, placeShort, releaseMate, tripEventDue, tripPay, walkHome, walkSeconds, walkTo } from './economy/creature';
 import { Scene } from './scene/scene';
 import { playStrike, storyLine } from './ui/strike';
+import { playWaking } from './ui/waking';
 import { choiceButton } from './ui/creaturePanels';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
@@ -640,18 +641,25 @@ function pondEvents(): void {
     else if (e.type === 'spear' && awaken(state)) {
       // The waking: it touches the spear, and they know that they are. A flash, the
       // shockwave rolling out across the world, then the words; then the Extinction begins.
+      // Inside its mind: the vision. Then out again, and the waking spreads to the others.
       waking = true;
       storyLine('');
       panelKey = '';
       save();
-      window.setTimeout(() => storyLine(STORY.wake), 1600);
-      window.setTimeout(() => storyLine(STORY.wakeSub), 6000);
-      window.setTimeout(() => storyLine(''), 10500);
-      window.setTimeout(() => {
-        waking = false;
-        syncCine();
-        render();
-      }, 11500);
+      window.setTimeout(
+        () =>
+          playWaking(() => {
+            scene.spreadWake();
+            storyLine(STORY.wakeSub);
+            window.setTimeout(() => storyLine(''), 7000);
+            window.setTimeout(() => {
+              waking = false;
+              syncCine();
+              render();
+            }, 8000);
+          }),
+        2400,
+      );
     }
   }
   collectNews();
