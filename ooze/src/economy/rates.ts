@@ -96,6 +96,8 @@ export function stageEffects(state: GameState, stage: StageId): Effect[] {
   for (const m of def.milestones ?? []) if (milestoneMet(state, m)) out.push(m.bonus);
   // Each generation bred makes the whole line stronger (Creature stage).
   if (st.generation > 0) out.push({ kind: 'stageMult', mult: Math.pow(1.25, st.generation) });
+  // Each nest founded away from home: another colony feeding the line.
+  if (st.nests?.length) out.push({ kind: 'stageMult', mult: Math.pow(1.5, st.nests.length) });
   return out;
 }
 

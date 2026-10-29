@@ -158,6 +158,8 @@ export interface Report {
   event?: string;
   /** Turned back from a place: the stats it was short of. */
   short?: string[];
+    /** A rare sighting tapped (its kind). */
+    sighting?: string;
   generation?: number;
 }
 
@@ -332,6 +334,10 @@ export interface StageState {
   parties: { place: string; t: number }[];
   /** When (seasons' clock) each place is ready to be foraged by a party again. */
   partyReady: Record<string, number>;
+  /** Nests founded away from home, at these found places (once the island is all explored). */
+  nests: string[];
+  /** Rare sightings tapped, by kind. */
+  sightings: Record<string, number>;
   /** Times a found place has been foraged again (the scene puffs when it ticks up; not saved). */
   foraged?: number;
   /** The herd: how many, and what they're set to do (the rest forage). */

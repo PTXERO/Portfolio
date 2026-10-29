@@ -56,6 +56,8 @@ export function deserialize(text: string): GameState {
           nextFind: s.nextFind ?? 0,
           parties: s.seed !== undefined ? (s.parties ?? []) : [],
           partyReady: s.seed !== undefined ? { ...(s.partyReady ?? {}) } : {},
+          sightings: { ...(s.sightings ?? {}) },
+          nests: s.seed !== undefined ? [...(s.nests ?? [])] : [],
           trips: s.seed !== undefined ? { ...(s.trips ?? {}) } : {},
           mates: s.mates ?? [],
           egg: s.egg ?? null,

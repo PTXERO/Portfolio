@@ -18,6 +18,9 @@ import {
   partEnergy,
   curiosity,
   partySlots,
+  nestsOpen,
+  nestCost,
+  nestSites,
   placeRestLeft,
   FARM_PAY,
   partyLeg,
@@ -183,7 +186,17 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
       .map(upgradeCard)
       .join('')}
     ${partySlots(state) ? '<p class="note" data-t="parties"></p>' : ''}
-    ${curiosity(state) ? `<button class="px-btn small${s.autoRoam ? ' on' : ''}" data-act="autoroam">Exploring on its own: ${s.autoRoam ? 'on' : 'off'}</button>` : ''}`;
+    ${curiosity(state) ? `<button class="px-btn small${s.autoRoam ? ' on' : ''}" data-act="autoroam">Exploring on its own: ${s.autoRoam ? 'on' : 'off'}</button>` : ''}
+    ${
+      nestsOpen(state)
+        ? `<div class="card px-box nest"><div class="info"><div class="name">A new nest</div>
+        <div class="flavor">The whole island is known. Lead part of the herd somewhere new.</div>
+        <div class="fx">All output ×1.5, room for half as many again · costs ${format(nestCost(state))} ${def.currency}</div>
+        <div class="row">${nestSites(state)
+          .map((p) => `<button class="px-btn small" data-nest="${p.id}">${esc(p.name)}</button>`)
+          .join('')}</div></div></div>`
+        : ''
+    }`;
   const places = def
     .places!.map((p) => {
       const found = (s.trips[p.id] ?? 0) > 0;
@@ -360,6 +373,11 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
     const home = root.querySelector<HTMLButtonElement>('[data-act="walkhome"]');
     if (home) home.hidden = atHome || !!s.walk?.event;
     setText(root, 'seen', `${Math.floor(seenShare(is, s.seen) * 100)}% seen`);
+    for (const b of root.querySelectorAll<HTMLButtonElement>('[data-nest]')) {
+      const ok = s.currency.gte(nestCost(state));
+      b.disabled = !ok;
+      b.classList.toggle('gold', ok);
+    }
     if (partySlots(state)) {
       const out = s.parties.map((p) => `${p.t > partyLeg(state, p.place) ? 'home from' : 'to'} the ${def.places!.find((q) => q.id === p.place)?.name ?? p.place}`);
       const resting = def.places!.filter((p) => s.trips[p.id] > 0 && (s.partyReady[p.id] ?? 0) > s.year && !s.parties.some((q) => q.place === p.id)).length;

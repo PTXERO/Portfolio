@@ -25,7 +25,7 @@ import { softCap, defenseOf, dialMax, guardLevel, dietOf, forageMult, habitatMul
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
-import { breed, buyPart, partEnergy, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, FARM_PAY, islandFor, partyLeg, placeSeen, tripPay, statsOf, tripEventDue, upkeep, walkTo } from '../src/economy/creature';
+import { breed, buyPart, partEnergy, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, FARM_PAY, foundNest, islandFor, nestSites, nestsOpen, partyLeg, spot, placeSeen, tripPay, statsOf, tripEventDue, upkeep, walkTo } from '../src/economy/creature';
 import { islandOf, ISLAND, isLand, seenShare } from '../src/economy/island';
 import { foragers, herdMult, SEASON_SEC } from '../src/economy/rates';
 
@@ -823,6 +823,38 @@ describe('creature stage', () => {
     c.levels.curiosity = 1;
     tick(s, 0.1);
     expect(c.walk && Math.hypot(c.walk.tx - is.places.tidePools.x, c.walk.ty - is.places.tidePools.y)).toBeLessThan(2);
+  });
+
+  it('once the island is all explored, a new nest can be founded at a found place', () => {
+    const s = creatureGame();
+    const c = s.stages.creature;
+    c.seed = 4242;
+    const is = islandFor(s);
+    for (const p of STAGES.creature.places!) c.trips[p.id] = 1;
+    c.currency = c.currency.add(1e12);
+    const site = nestSites(s).find((p) => Math.hypot(is.places[p.id].x - is.home.x, is.places[p.id].y - is.home.y) > 25)!;
+    expect(nestsOpen(s)).toBe(false);
+    expect(foundNest(s, site.id)).toBe(false);
+    for (let i = 0; i < c.seen.length; i++) c.seen[i] = 1;
+    expect(nestsOpen(s)).toBe(true);
+    const houses = housing(s);
+    const rate = stageRate(s, 'creature');
+    expect(foundNest(s, site.id)).toBe(true);
+    expect(c.nests).toEqual([site.id]);
+    expect(housing(s)).toBeGreaterThan(houses);
+    expect(stageRate(s, 'creature').gt(rate)).toBe(true);
+    // Not twice at the same place; it survives a save.
+    expect(foundNest(s, site.id)).toBe(false);
+    expect(importSave(exportSave(s)).stages.creature.nests).toEqual([site.id]);
+  });
+
+  it('a rare sighting, spotted, pays and is counted', () => {
+    const s = creatureGame();
+    const before = s.stages.creature.totalEarned;
+    expect(spot(s, 'whale')).toBe(true);
+    expect(s.stages.creature.totalEarned.gt(before)).toBe(true);
+    expect(s.stages.creature.sightings.whale).toBe(1);
+    expect(spot(s, 'dragon')).toBe(false);
   });
 
   it('foraging parties walk to found places, bring food home, and let each place rest', () => {

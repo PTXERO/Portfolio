@@ -75,6 +75,8 @@ uniform sampler2D uHeight;
 uniform sampler2D uFog;
 uniform sampler2D uOver;
 uniform sampler2D uLight;
+uniform sampler2D uTrail; // paths worn into the ground (alpha)
+uniform vec4 uWeather; // storm, morning mist, winter ice, wet ground (each 0 to 1)
 uniform float uBlend;
 uniform vec2 uArt;
 uniform vec4 uCam; // camera centre x, y (tiles), zoom (art px per tile), screen row of the centre
@@ -177,16 +179,34 @@ void main() {
     float ca = pow(1.0 - abs(noise(w * 1.1 + t * 0.4) - noise(w * 1.3 - t * 0.3)), 6.0) * shallow;
     vec3 wl = mix(uAmb + uSunCol * 0.85, (uAmb + uSunCol * 0.4) * uShadeCol, shade);
     lit = col * wl * (0.9 + r0 * 0.25) + uSunCol * spec * 1.4 * (1.0 - shade) + vec3(0.6, 0.85, 0.9) * ca * 0.12 * (1.0 - uNight);
+    // Winter: the shallows freeze out from the shore, crazed with cracks.
+    float ice = shallow * step(-0.075 * uWeather.z, raw) * step(0.05, uWeather.z);
+    if (ice > 0.5) {
+      float crack = 1.0 - smoothstep(0.0, 0.035, abs(noise(floor(w * 2.0) * 0.4) - 0.5)) * 0.18;
+      vec3 iceCol = vec3(0.8, 0.88, 0.95) * (0.94 + 0.06 * hash(floor(w * 2.0))) * crack;
+      lit = iceCol * mix(uAmb + uSunCol * 0.85, (uAmb + uSunCol * 0.4) * uShadeCol, shade) + uSunCol * spec * 0.5;
+    }
   } else {
+    // Paths worn by the herd's feet: grass gives way to trodden earth.
+    float worn = smoothstep(0.12, 0.7, inside ? texture2D(uTrail, w / N).a : 0.0) * (biome > 2.5 && biome < 6.5 ? 0.7 : 0.0);
+    col = mix(col, vec3(0.52, 0.42, 0.3) * (0.88 + 0.24 * hash(floor(w * 2.0))), worn);
     // Faces: the earth and rock under the top, darker the steeper.
     vec3 earth = mix(vec3(0.42, 0.32, 0.22), vec3(0.45, 0.47, 0.5), smoothstep(0.45, 0.65, h));
     col = mix(col, earth * (0.75 + 0.25 * fract(w.y * 0.5)), face * 0.85);
     lit = col * sunLight * ao * (1.0 - face * 0.25);
   }
 
-  // Clouds drift over, their shadows darkening the land below.
-  float cloud = smoothstep(0.52, 0.78, fbm(w * 0.018 + vec2(uTime * 0.012, uTime * 0.005)));
-  lit *= 1.0 - cloud * 0.22 * (1.0 - uNight);
+  // After rain: the ground darkens and puddles hold the sky.
+  if (!water) {
+    lit *= 1.0 - uWeather.w * 0.16;
+    float puddle = step(0.8, noise(floor(w * 2.0) * 0.35)) * uWeather.w * (biome > 2.5 && biome < 6.5 ? 1.0 : 0.0);
+    lit = mix(lit, vec3(0.55, 0.64, 0.74) * clamp(lum(uAmb + uSunCol), 0.2, 1.1), puddle * 0.6);
+  }
+
+  // Clouds drift over, their shadows darkening the land below (heavy and grey in a storm).
+  float cloud = smoothstep(0.52 - uWeather.x * 0.4, 0.78, fbm(w * 0.018 + vec2(uTime * 0.012, uTime * 0.005) * (1.0 + uWeather.x * 2.0)));
+  lit *= 1.0 - cloud * (0.22 + uWeather.x * 0.2) * (1.0 - uNight);
+  lit = mix(lit, vec3(lum(lit)) * vec3(0.86, 0.9, 1.0), uWeather.x * 0.45) * (1.0 - uWeather.x * 0.3);
 
   // Fog of war: soft, rolling cloud, with wisps at its edge.
   // Past what's been seen, and thickening toward the map's edge (and beyond it), all is cloud.
@@ -198,6 +218,9 @@ void main() {
   float bright = clamp(lum(uAmb + uSunCol), 0.15, 1.2);
   vec3 fogCol = mix(vec3(0.70, 0.74, 0.79), vec3(0.95, 0.96, 0.97), smoothstep(0.3, 0.75, fn * 0.7 + fn2 * 0.3)) * (0.3 + bright * 0.72);
   lit = mix(lit, fogCol, fog);
+  // Morning mist lies in the low ground and burns off as the sun climbs.
+  float mist = uWeather.y * (1.0 - smoothstep(0.02, 0.3, h)) * smoothstep(0.35, 0.7, fbm(w * 0.05 + vec2(uTime * 0.01, 0.0)));
+  lit = mix(lit, vec3(0.86, 0.88, 0.92) * (0.35 + bright * 0.7), mist * 0.75);
 
   // Creatures, markers and weather, drawn by the scene at their lifted spots: lit as
   // figures standing up in the light.
@@ -241,6 +264,10 @@ export interface ShadeParams {
   /** The season's ground and the next one's, and how far into the change it is (0 to 1). */
   ground: [HTMLCanvasElement, HTMLCanvasElement];
   blend: number;
+  /** Worn paths (alpha) and their version; storm, mist, ice and wet ground, 0 to 1. */
+  trail: HTMLCanvasElement;
+  trailVersion: number;
+  weather: [number, number, number, number];
 }
 
 function compile(gl: WebGLRenderingContext, vs: string, fs: string): WebGLProgram {
@@ -290,6 +317,8 @@ export class MapShader {
   private grounds = new Map<HTMLCanvasElement, WebGLTexture>();
   private heightSeed = -1;
   private fogVersion = -1;
+  private trailTex: WebGLTexture;
+  private trailVersion = -1;
   private uni = new Map<string, WebGLUniformLocation | null>();
 
   /** Throws if WebGL isn't available (the scene then draws without it). */
@@ -307,6 +336,7 @@ export class MapShader {
     this.heightTex = texture(gl, gl.LINEAR);
     this.fogTex = texture(gl, gl.LINEAR);
     this.overTex = texture(gl, gl.NEAREST);
+    this.trailTex = texture(gl, gl.LINEAR);
     this.lightTex = texture(gl, gl.LINEAR);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, ISLAND, ISLAND, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     this.lightFbo = gl.createFramebuffer()!;
@@ -428,6 +458,14 @@ export class MapShader {
     gl.uniform1i(this.u('uFog'), 3);
     gl.uniform1i(this.u('uOver'), 4);
     gl.uniform1i(this.u('uLight'), 5);
+    gl.activeTexture(gl.TEXTURE6);
+    gl.bindTexture(gl.TEXTURE_2D, this.trailTex);
+    if (p.trailVersion !== this.trailVersion) {
+      this.trailVersion = p.trailVersion;
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, p.trail);
+    }
+    gl.uniform1i(this.u('uTrail'), 6);
+    gl.uniform4fv(this.u('uWeather'), p.weather);
     gl.uniform1f(this.u('uBlend'), p.blend);
     gl.uniform2f(this.u('uArt'), artW, artH);
     gl.uniform4f(this.u('uCam'), p.cam[0], p.cam[1], p.cam[2], p.cam[3]);

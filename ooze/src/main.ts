@@ -38,7 +38,7 @@ import { clearStorage, exportSave, importSave, loadFromStorage, saveToStorage } 
 import { createState } from './economy/state';
 import { liveTick, TICK_SEC } from './economy/tick';
 import type { BuyAmount, DialId, GameState, StageId } from './economy/types';
-import { breed, buyPart, chooseEvent, court, equipPart, islandFor, netRate, placeSeen, releaseMate, tripEventDue, walkHome, walkTo } from './economy/creature';
+import { breed, buyPart, chooseEvent, court, equipPart, foundNest, islandFor, netRate, SIGHTINGS, placeSeen, releaseMate, tripEventDue, walkHome, walkTo } from './economy/creature';
 import { Scene } from './scene/scene';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
@@ -139,6 +139,15 @@ function showTripReport(): boolean {
       <p>The young one is yours and ${r.mate}'s. The whole line grows stronger.</p>
       ${parts.length ? `<p class="fx">Inherited: ${parts.join(', ')}</p>` : ''}
       <button class="px-btn gold" data-act="dismiss">Welcome</button>`);
+    return true;
+  }
+  if (r.sighting) {
+    const d = SIGHTINGS[r.sighting];
+    showModal(`<p class="label dim">A sighting · seen ${state.stages.creature.sightings[r.sighting] ?? 1}×</p>
+      <h3>${d.name}</h3>
+      <p>${r.event}</p>
+      <p>+${format(D(r.earned))} ${def.currency}</p>
+      <button class="px-btn gold" data-act="dismiss">Wonderful</button>`);
     return true;
   }
   if (r.kind === 'event') {
@@ -650,6 +659,8 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.goto) {
     const p = islandFor(state).places[el.dataset.goto];
     if (p && walkTo(state, p.x, p.y)) scene.purchase(state, 'trip');
+  } else if (el.dataset.nest) {
+    if (foundNest(state, el.dataset.nest)) scene.purchase(state, 'nest');
   } else if (el.dataset.breed) breed(state, Number(el.dataset.breed));
   else if (el.dataset.release) releaseMate(state, Number(el.dataset.release));
   else if (el.dataset.choice) {

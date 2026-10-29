@@ -8,7 +8,7 @@ import { herdMult, seasonOf, stageEffects, stageRate } from './rates';
 import type { GameState, Mate, PartDef, PlaceDef, Role, Slot, Stat, StageId, StageState } from './types';
 import { ROLES, SLOTS, STATS } from './types';
 import { EVENTS } from '../content/creature';
-import { CELL, CELLS, cellOf, ISLAND, islandOf, isLand, reveal, type Island } from './island';
+import { CELL, CELLS, cellOf, ISLAND, islandOf, isLand, reveal, seenShare, type Island, type Pt } from './island';
 
 export const CREATURE: StageId = 'creature';
 /** Share of a roam's time paid out as output, before Trail Memory. */
@@ -44,7 +44,7 @@ function effectProduct(state: GameState, kind: 'upkeepMult' | 'winterMult'): num
 export function housing(state: GameState): number {
   const s = st(state);
   const g = s.generators;
-  return Math.floor(BASE_HOUSING + 3 * g.burrow + 15 * g.den + 50 * g.territory + 0.5 * s.roles.digger);
+  return Math.floor((BASE_HOUSING + 3 * g.burrow + 15 * g.den + 50 * g.territory + 0.5 * s.roles.digger) * (1 + 0.5 * s.nests.length));
 }
 
 /** Births per second: a trickle, more with nests and nesters, a boom in spring. */
@@ -511,6 +511,27 @@ export function curiosity(state: GameState): number {
   return n;
 }
 
+/** Rare things that cross the island now and then; tapped in time, a reward and a note. */
+export const SIGHTINGS: Record<string, { name: string; text: string; seconds: number }> = {
+  whale: { name: 'Whale', text: 'Something vast rolled up out of the sea, blew, and was gone. The herd stood and stared.', seconds: 120 },
+  tortoise: { name: 'Old Tortoise', text: 'An ancient tortoise trudged along the beach, older than anything on the island. It did not hurry.', seconds: 150 },
+  comet: { name: 'Comet', text: 'A light with a long tail crept across the night. Nobody slept much.', seconds: 180 },
+  aurora: { name: 'Sky Fire', text: 'Green and violet curtains rippled over the winter dark.', seconds: 200 },
+  flock: { name: 'Great Flock', text: 'Thousands of birds poured over the island, so many the ground went dark.', seconds: 120 },
+};
+
+/** You noticed it: a share of output as a reward, and it goes in the tally. */
+export function spot(state: GameState, kind: string): boolean {
+  const d = SIGHTINGS[kind];
+  if (!d) return false;
+  const s = st(state);
+  const pay = Decimal.max(stageRate(state, CREATURE).mul(d.seconds), 50);
+  earn(state, pay);
+  s.sightings[kind] = (s.sightings[kind] ?? 0) + 1;
+  state.reports.push({ kind: 'event', success: true, earned: pay.toString(), parts: [], event: d.text, sighting: kind });
+  return true;
+}
+
 /** How many foraging parties the herd can have out at once. */
 export function partySlots(state: GameState): number {
   let n = 0;
@@ -541,11 +562,55 @@ export const PARTY_PAY = 0.5;
 /** Parties walk a little quicker than the leader (they know the way). */
 const PARTY_SPEED = 1.2;
 
-/** Seconds a party takes to walk from home to a place (and the same back). */
-export function partyLeg(state: GameState, place: string): number {
+/** Where the herd lives: home, and any nests founded since. */
+export function nestPoints(state: GameState): Pt[] {
   const is = islandFor(state);
-  const p = is.places[place];
-  return Math.hypot(p.x - is.home.x, p.y - is.home.y) / (walkSpeed(state) * PARTY_SPEED);
+  return [is.home, ...st(state).nests.map((id) => is.places[id]).filter(Boolean)];
+}
+
+/** The nest nearest a place (parties set out from it and bring the food back to it). */
+export function nearestNest(state: GameState, place: string): Pt {
+  const p = islandFor(state).places[place];
+  return nestPoints(state).reduce((a, n) => (Math.hypot(n.x - p.x, n.y - p.y) < Math.hypot(a.x - p.x, a.y - p.y) ? n : a));
+}
+
+/** Seconds a party takes to walk from its nest to a place (and the same back). */
+export function partyLeg(state: GameState, place: string): number {
+  const p = islandFor(state).places[place];
+  const n = nearestNest(state, place);
+  return Math.max(4, Math.hypot(p.x - n.x, p.y - n.y)) / (walkSpeed(state) * PARTY_SPEED);
+}
+
+/** Share of the island's land that must be seen before a new nest can be founded. */
+export const NEST_SEEN = 0.97;
+/** The most nests away from home. */
+export const MAX_NESTS = 3;
+
+/** A new nest costs a fortune, and ten times more each time. */
+export function nestCost(state: GameState): Decimal {
+  return D(5e9).mul(Decimal.pow(10, st(state).nests.length));
+}
+
+/** Once the whole island is known, the herd can found a new nest at a found place. */
+export function nestsOpen(state: GameState): boolean {
+  const s = st(state);
+  return s.nests.length < MAX_NESTS && seenShare(islandFor(state), s.seen) >= NEST_SEEN;
+}
+
+/** Found places a nest could go: far from home and from the other nests. */
+export function nestSites(state: GameState): PlaceDef[] {
+  const s = st(state);
+  const is = islandFor(state);
+  return def().places!.filter((p) => s.trips[p.id] > 0 && !s.nests.includes(p.id) && nestPoints(state).every((n) => Math.hypot(is.places[p.id].x - n.x, is.places[p.id].y - n.y) > 25));
+}
+
+export function foundNest(state: GameState, id: string): boolean {
+  const s = st(state);
+  const cost = nestCost(state);
+  if (!nestsOpen(state) || !nestSites(state).some((p) => p.id === id) || s.currency.lt(cost)) return false;
+  s.currency = s.currency.sub(cost);
+  s.nests.push(id);
+  return true;
 }
 
 /** Parties walk out, forage, walk home and drop off what they carry; then the next sets off. */

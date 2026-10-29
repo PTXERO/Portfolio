@@ -9,7 +9,7 @@
 
 import { PAL } from '../art/sprites';
 import { STAGES } from '../content/stages';
-import { islandFor, partyLeg, statsOf, walkTo } from '../economy/creature';
+import { islandFor, nearestNest, nestPoints, partyLeg, spot, statsOf, walkTo } from '../economy/creature';
 import { Biome, CELL, CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
 import { SEASON_SEC, seasonOf } from '../economy/rates';
 import { H_LO, H_SPAN, LIFT, TILT } from './shade';
@@ -17,6 +17,8 @@ import type { GameState, Role } from '../economy/types';
 import { drawBlob, type BlobStyle } from './blob';
 import { creatureLookOf, drawMini, type CreatureLook } from './creatureLook';
 import { Effects, hash, mixColor, visibleCount, type Frame } from './paint';
+import { Sightings } from './sightings';
+import { Trails } from './trails';
 import { Wild, type Bush, type WildView } from './wild';
 import type { PondEvent } from './pond';
 
@@ -31,6 +33,8 @@ interface Member {
   flee: number;
   /** A moment of its own it's in the middle of (see startMoment). */
   act?: Act;
+  /** Which nest it lives at (0 home, then the nests founded since). */
+  base: number;
 }
 
 /** Herd life: little things members do now and then, on their own or in twos. */
@@ -88,13 +92,28 @@ const SEASON_TINT = [
   [0.9, 0.97, 1.1],
 ];
 
+/** How far into winter the seasons are (0 to 1), easing in and out with the change. */
+const weight3 = (si: number, next: number, turn: number) => (si === 3 ? 1 - turn : 0) + (next === 3 ? turn : 0);
+
 const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const mixRgb = (a: number[], b: number[], t: number) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 
 export class RangeScene {
   private fx = new Effects();
   private wild = new Wild();
+  private trails = new Trails();
+  private sightings = new Sightings();
+  /** Weather: a storm building and passing (0 to 1), the ground still wet after, mist, ice. */
+  private storm = 0;
+  private stormLeft = 0;
+  private stormTimer = 90;
+  private wet = 0;
+  private weather: [number, number, number, number] = [0, 0, 0, 0];
+  private rain: { x: number; y: number; v: number }[] = [];
+  private flash = 0;
   private momentTimer = 6;
+  private moveTimer = 30;
+  private based = new WeakSet<Member>();
   private events: PondEvent[] = [];
   private members: Member[] = [];
   private beast: Beast | null = null;
@@ -241,7 +260,7 @@ export class RangeScene {
   }
 
   /** What the shader needs: the island's heights and kinds, the fog, and the seasons' ground. */
-  shadeInputs(): { seed: number; heights: Uint8Array; fog: HTMLCanvasElement; fogVersion: number; ground: [HTMLCanvasElement, HTMLCanvasElement]; blend: number; tint: [number, number, number] } | null {
+  shadeInputs(): { seed: number; heights: Uint8Array; fog: HTMLCanvasElement; fogVersion: number; ground: [HTMLCanvasElement, HTMLCanvasElement]; blend: number; tint: [number, number, number]; trail: HTMLCanvasElement; trailVersion: number; weather: [number, number, number, number] } | null {
     const is = this.island;
     if (!is || !this.fog || !this.groundPair) return null;
     if (!this.heightData || this.heightDataSeed !== is.seed) {
@@ -258,7 +277,7 @@ export class RangeScene {
     }
     const [a, c] = this.seasonPair;
     const tint = SEASON_TINT[a].map((v, i) => v + (SEASON_TINT[c][i] - v) * this.seasonBlend) as [number, number, number];
-    return { seed: is.seed, heights: this.heightData, fog: this.fog, fogVersion: this.fogVersion, ground: this.groundPair, blend: this.seasonBlend, tint };
+    return { seed: is.seed, heights: this.heightData, fog: this.fog, fogVersion: this.fogVersion, ground: this.groundPair, blend: this.seasonBlend, tint, trail: this.trails.canvas, trailVersion: this.trails.version, weather: this.weather };
   }
 
   // ---- Input ----
@@ -279,6 +298,14 @@ export class RangeScene {
   }
 
   tap(state: GameState, ax: number, ay: number): void {
+    // A rare sighting, caught in time.
+    const seen = this.sightings.hit(this.wildView, ax, ay);
+    if (seen) {
+      spot(state, seen);
+      this.fx.sparkle(ax - 3, ay - 3);
+      this.fx.pulse(ax, ay, PAL.y);
+      return;
+    }
     const near = (x: number, y: number) => Math.hypot(this.sx(x) - ax, this.py(x, y) - 3 - ay) < Math.max(9, this.zoom * 2);
     const b = this.beast;
     if (b && !b.fleeing && near(b.x, b.y)) {
@@ -468,7 +495,7 @@ export class RangeScene {
           y = home.y + Math.sin(a) * d;
           if (isLand(this.island!, x, y)) break;
         }
-        this.members.push({ x, y, vx: 0, vy: 0, role: r, phase: Math.random() * 10, flee: 0 });
+        this.members.push({ x, y, vx: 0, vy: 0, role: r, phase: Math.random() * 10, flee: 0, base: 0 });
       }
       let extra = have - want[r]!;
       if (extra > 0) this.members = this.members.filter((m) => m.role !== r || extra-- <= 0);
@@ -698,6 +725,14 @@ export class RangeScene {
       const wob = st.egg.left < 30 ? Math.sin(t * 12) * 0.1 : 0;
       tile(n.x - 0.25 + wob, n.y - 0.8, 0.5, 0.6, PAL.w);
     }
+    // Nests founded away from home: a few mounds each.
+    const bases = nestPoints(state);
+    for (const p of bases.slice(1)) {
+      for (const n of this.nestSpots(p, 4)) {
+        tile(n.x - 0.5, n.y - 0.3, 1, 0.5, PAL.S);
+        tile(n.x - 0.3, n.y - 0.3, 0.6, 0.2, PAL.Y);
+      }
+    }
     const burrows = this.burrowSpots(home, Math.min(10, gens.burrow));
     for (const p of burrows) {
       tile(p.x - 0.7, p.y, 1.4, 0.5, '#7a5a3a');
@@ -754,20 +789,52 @@ export class RangeScene {
       this.graze = this.pickGraze(is, state);
       this.grazeTimer = 20 + Math.random() * 15;
     }
-    const center = asleep || winter ? home : this.graze;
-    const spread = (asleep || winter ? 1.2 : 2.5) + Math.sqrt(this.members.length) * (asleep || winter ? 0.5 : 0.8);
+    // Weather. Now and then (never in winter) a storm rolls in: the sky greys, rain lashes
+    // down, lightning flickers, and the herd huddles at home. After, the ground stays wet a
+    // while, with puddles, and if the sun's up, a rainbow. Mist lies in the hollows at dawn;
+    // in winter the shallows freeze.
+    this.stormTimer -= dt;
+    if (this.stormTimer <= 0 && !this.stormLeft && si !== 3) {
+      this.stormLeft = 35 + Math.random() * 25;
+      this.stormTimer = 200 + Math.random() * 220;
+    }
+    this.stormLeft = Math.max(0, this.stormLeft - dt);
+    this.storm += ((this.stormLeft > 0 ? 1 : 0) - this.storm) * Math.min(1, dt / 5);
+    this.wet = this.stormLeft > 0 ? Math.min(1, this.wet + dt / 8) : Math.max(0, this.wet - dt / 70);
+    const mistW = (si === 0 || si === 2 ? 1 : 0.5) * Math.max(0, 1 - Math.abs(dayT - 0.05) / 0.12);
+    this.weather = [this.storm, mistW, weight3(si, next, turn), this.wet];
+    const huddle = asleep || winter || this.storm > 0.4;
+    const center = huddle ? home : this.graze;
+    const spread = (huddle ? 1.2 : 2.5) + Math.sqrt(this.members.length) * (huddle ? 0.5 : 0.8);
     const bt = this.beast && !this.beast.fleeing ? this.beast : null;
+    // With nests away from home, the herd spreads between them (foragers only; the rest keep
+    // to home), and now and then one sets off to live at another, walking the trail between.
+    if (bases.length > 1) {
+      this.members.forEach((m, i) => {
+        if (m.base >= bases.length) m.base = 0;
+        if (m.role === 'forager' && m.base === 0 && i % bases.length !== 0 && !this.based.has(m)) m.base = i % bases.length;
+        this.based.add(m);
+      });
+      this.moveTimer -= dt;
+      if (this.moveTimer <= 0 && this.members.length > 2) {
+        this.moveTimer = 30 + Math.random() * 30;
+        const m = this.members.filter((x) => x.role === 'forager' && !x.act)[Math.floor(Math.random() * this.members.length)];
+        if (m) m.base = (m.base + 1 + Math.floor(Math.random() * (bases.length - 1))) % bases.length;
+      }
+    }
     // Herd life: every so often one or two of them break off to do something of their own.
     this.momentTimer -= dt;
-    if (asleep || bt) for (const m of this.members) m.act = undefined;
+    if (asleep || bt || this.storm > 0.4) for (const m of this.members) m.act = undefined;
     else if (this.momentTimer <= 0) {
       this.momentTimer = 4 + Math.random() * 6;
       this.startMoment(is, home, dayT, winter, si);
     }
     this.members.forEach((m, i) => {
-      // Where instinct takes each one.
-      let gx = center.x + Math.cos(i * 2.4 + m.phase) * spread * (0.4 + hash(i, 61) * 0.6);
-      let gy = center.y + Math.sin(i * 2.4 + m.phase) * spread * (0.4 + hash(i, 61) * 0.6);
+      // Where instinct takes each one (around its own nest, if it lives away from home).
+      const c = m.base > 0 && bases[m.base] ? bases[m.base] : center;
+      const far = c !== center;
+      let gx = c.x + Math.cos(i * 2.4 + m.phase) * spread * (far ? 0.7 : 1) * (0.4 + hash(i, 61) * 0.6);
+      let gy = c.y + Math.sin(i * 2.4 + m.phase) * spread * (far ? 0.7 : 1) * (0.4 + hash(i, 61) * 0.6);
       if (!asleep) {
         if (m.role === 'carer') {
           const n = nests[i % nests.length];
@@ -979,13 +1046,14 @@ export class RangeScene {
       const leg = partyLeg(state, party.place);
       const q = is.places[party.place];
       if (!q) continue;
+      const nest = nearestNest(state, party.place);
       const back = party.t > leg;
       const k = Math.min(1, back ? 2 - party.t / leg : party.t / leg);
-      const px = home.x + (q.x - home.x) * k;
-      const py = home.y + (q.y - home.y) * k;
-      const pleft = (q.x < home.x) !== back;
-      const ux = (q.x - home.x) / (Math.hypot(q.x - home.x, q.y - home.y) || 1);
-      const uy = (q.y - home.y) / (Math.hypot(q.x - home.x, q.y - home.y) || 1);
+      const px = nest.x + (q.x - nest.x) * k;
+      const py = nest.y + (q.y - nest.y) * k;
+      const pleft = (q.x < nest.x) !== back;
+      const ux = (q.x - nest.x) / (Math.hypot(q.x - nest.x, q.y - nest.y) || 1);
+      const uy = (q.y - nest.y) / (Math.hypot(q.x - nest.x, q.y - nest.y) || 1);
       for (let j = 0; j < 2; j++) {
         const lag = (back ? 1.4 : -1.4) * j;
         const x = px - ux * lag + (j ? 0.5 : 0);
@@ -1032,8 +1100,14 @@ export class RangeScene {
       },
     });
 
+    // Paths wear in where feet go (your creature, the herd on the move, parties).
+    const walkers: Pt[] = this.members.filter((m) => Math.hypot(m.vx, m.vy) > 0.15);
+    if (st.walk && !st.walk.event) walkers.push(me);
+    this.trails.update(is.seed, walkers, dt);
+
     // The island's own life: bushes, crabs, birds, fish, the wild grazers.
     this.wild.update(this.wildView, is, sprites, { b, t, dt, season: si, night, feet: [me, ...this.members], me });
+    this.sightings.update(this.wildView, is, sprites, { b, t, dt, night, winter });
 
     sprites.sort((a, c) => a.y - c.y);
     for (const s of sprites) s.draw();
@@ -1093,6 +1167,41 @@ export class RangeScene {
           b.fillRect(Math.round(q.x), Math.round(q.y), 1, 1);
           break;
       }
+    }
+
+    // Rain, lightning, and the rainbow after.
+    const want2 = Math.round(this.storm * 90);
+    while (this.rain.length < want2) this.rain.push({ x: Math.random() * W, y: Math.random() * H, v: 60 + Math.random() * 40 });
+    this.rain.length = want2;
+    b.fillStyle = 'rgba(190, 210, 230, 0.75)';
+    for (const r of this.rain) {
+      r.y += r.v * dt;
+      r.x -= r.v * 0.25 * dt;
+      if (r.y > H) {
+        r.y = -3;
+        r.x = Math.random() * (W + 20);
+      }
+      if (r.x < 0) r.x += W;
+      b.fillRect(Math.round(r.x), Math.round(r.y), 1, 2);
+    }
+    if (this.storm > 0.7 && Math.random() < dt * 0.12) this.flash = 0.25;
+    if (this.flash > 0) {
+      b.fillStyle = `rgba(240, 244, 255, ${Math.min(0.5, this.flash * 2.4)})`;
+      b.fillRect(0, 0, W, H);
+      this.flash -= dt;
+    }
+    const bow = this.stormLeft <= 0 && this.wet > 0.2 && night < 0.2 ? Math.min(1, (this.wet - 0.2) * 3) * Math.min(1, (0.75 - dayT) * 8) : 0;
+    if (bow > 0) {
+      const cx = W * 0.5;
+      const cy = H * 0.95;
+      const R = W * 0.75;
+      ['#e8615a', '#f2906c', '#f5c45e', '#7fe0b0', '#8fd3f0', '#a28ad8'].forEach((c, i) => {
+        b.globalAlpha = 0.28 * bow;
+        b.fillStyle = c;
+        const r = R - i;
+        for (let a = Math.PI * 1.08; a < Math.PI * 1.92; a += 0.6 / r) b.fillRect(Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r * 0.75), 1, 1);
+      });
+      b.globalAlpha = 1;
     }
 
     // Night falls over everything; in summer, fireflies around home.
