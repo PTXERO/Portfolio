@@ -178,7 +178,7 @@ export class Scene {
     ctx.drawImage(this.buffer, 0, 0, this.W * this.px * this.dpr, this.H * this.px * this.dpr);
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.font = '700 18px "Pixelify Sans", monospace';
+    ctx.font = '700 18px "Ooze Digits", "Pixelify Sans", monospace';
     ctx.textAlign = 'center';
     ctx.lineJoin = 'round';
     for (const f of this.floaters) {

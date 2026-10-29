@@ -6,6 +6,7 @@ import '@fontsource/pixelify-sans/latin-600.css';
 import '@fontsource/pixelify-sans/latin-700.css';
 import '@fontsource/jersey-10/latin-400.css';
 import './ui/ui.css';
+import jerseyDigits from '@fontsource/jersey-10/files/jersey-10-latin-400-normal.woff2?url';
 
 import { icon } from './art/sprites';
 import { STAGES } from './content/stages';
@@ -39,6 +40,12 @@ import { liveTick, TICK_SEC } from './economy/tick';
 import type { BuyAmount, DialId, GameState, StageId } from './economy/types';
 import { Scene } from './scene/scene';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
+
+// Pixelify Sans draws 5 like S, 2 like Z and 8 like B. Every digit in the game comes
+// from Jersey 10 instead (letters stay Pixelify), through a font that covers only 0-9.
+const digitsFont = new FontFace('Ooze Digits', `url(${jerseyDigits})`, { unicodeRange: 'U+0030-0039', sizeAdjust: '118%' } as FontFaceDescriptors);
+document.fonts.add(digitsFont);
+void digitsFont.load().then(() => render());
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const stageEl = $('stage');
