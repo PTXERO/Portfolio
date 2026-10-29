@@ -38,9 +38,10 @@ import { dietOf, stageRate } from './economy/rates';
 import { clearStorage, exportSave, importSave, loadFromStorage, saveToStorage } from './economy/save';
 import { createState } from './economy/state';
 import { liveTick, TICK_SEC } from './economy/tick';
-import type { BuyAmount, DialId, GameState, StageId } from './economy/types';
-import { breed, buyPart, chooseEvent, statsOf, court, equipPart, FARM_PAY, foundNest, islandFor, netRate, SIGHTINGS, placeRestLeft, placeSeen, placeShort, releaseMate, tripEventDue, tripPay, walkHome, walkSeconds, walkTo } from './economy/creature';
+import type { BuyAmount, DialId, GameState, RunInPolicy, StageId } from './economy/types';
+import { breed, buyPart, chooseEvent, EVENT_DC, court, equipPart, FARM_PAY, foundNest, islandFor, netRate, SIGHTINGS, placeRestLeft, placeSeen, placeShort, releaseMate, tripEventDue, tripPay, walkHome, walkSeconds, walkTo } from './economy/creature';
 import { Scene } from './scene/scene';
+import { choiceButton } from './ui/creaturePanels';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
 // Pixelify Sans draws 5 like S, 2 like Z and 8 like B. Every digit in the game comes
@@ -205,18 +206,12 @@ function showRunIn(): boolean {
   shownRunIns.add(ev);
   const d = EVENTS.find((e) => e.id === ev.id);
   if (!d) return false;
-  const stats = statsOf(state);
-  const cap = (x: string) => x[0].toUpperCase() + x.slice(1);
   showModal(
     `<p class="label dim">On the road</p>
     <h3>A run-in!</h3>
     <p>${d.text}</p>
-    <div class="choices">${d.options
-      .map(
-        (o, i) =>
-          `<button class="px-btn choice${!o.stat || stats[o.stat] >= (o.need ?? 0) ? ' gold' : ''}" data-choice="${i}"><b>${o.label}</b>${o.stat ? `<span>${cap(o.stat)} ${o.need} (yours ${stats[o.stat]})</span>` : '<span>Safe</span>'}</button>`,
-      )
-      .join('')}</div>`,
+    <div class="choices">${d.options.map((o, i) => choiceButton(state, o, i)).join('')}</div>
+    <p class="dim small">With the stat it asks for, it rolls two d20s and keeps the better (advantage); without, one. ${EVENT_DC} or more succeeds.</p>`,
     c.roamOpts.mandatory ? 0 : Math.max(1, ev.left),
   );
   modal.dataset.kind = 'runin';
@@ -739,6 +734,7 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.dial) setDial(state, id, el.dataset.dial as DialId, Number(el.dataset.level));
   else if (el.dataset.amount) state.buyAmount = el.dataset.amount === 'max' ? 'max' : (Number(el.dataset.amount) as BuyAmount);
   else if (el.dataset.warp) state.warp = Number(el.dataset.warp);
+  else if (el.dataset.policy) state.stages.creature.roamOpts.policy = el.dataset.policy as RunInPolicy;
   else if (el.dataset.roamopt) {
     const c = state.stages.creature;
     const k = el.dataset.roamopt;

@@ -329,13 +329,67 @@ function revisit(state: GameState, p: PlaceDef, rand: () => number): void {
 }
 
 /** Settles the run-in on the road, with the choice made (or the safe one). */
+/** A risky choice is a roll of a d20 against this; the safe one always works. */
+export const EVENT_DC = 10;
+
+type RunInOption = (typeof EVENTS)[number]['options'][number];
+
+/** With the stat a choice asks for, it rolls with advantage (two dice, the better kept). */
+export function hasAdvantage(state: GameState, opt: RunInOption): boolean {
+  return !!opt.stat && statsOf(state)[opt.stat] >= (opt.need ?? 0);
+}
+
+/** Chance a choice comes off: certain if safe, else one d20 (or the better of two) at EVENT_DC or more. */
+export function choiceOdds(state: GameState, opt: RunInOption): number {
+  if (!opt.stat) return 1;
+  const miss = (EVENT_DC - 1) / 20;
+  return hasAdvantage(state, opt) ? 1 - miss * miss : 1 - miss;
+}
+
+/**
+ * What it does when the choice is left to it. Without Instinct (the third level of Curiosity)
+ * it just runs; with it, as set: always run, take on only what it has the stat for, or (smart)
+ * also chance one it's nearly up to.
+ */
+export function instinctChoice(state: GameState, id: string): number {
+  const d = EVENTS.find((e) => e.id === id)!;
+  const safe = d.options.length - 1;
+  const policy = curiosity(state) >= 3 ? (st(state).roamOpts?.policy ?? 'ready') : 'run';
+  if (policy === 'run') return safe;
+  const adv = d.options.findIndex((o) => hasAdvantage(state, o));
+  if (adv >= 0) return adv;
+  if (policy === 'ready') return safe;
+  const stats = statsOf(state);
+  let best = safe;
+  let ratio = 0;
+  d.options.forEach((o, i) => {
+    if (!o.stat) return;
+    const r = stats[o.stat] / (o.need ?? 1);
+    if (r > ratio) {
+      ratio = r;
+      best = i;
+    }
+  });
+  return ratio >= 0.66 ? best : safe;
+}
+
 function resolveEvent(state: GameState, rand: () => number): void {
   const s = st(state);
   const ev = s.walk!.event!;
   const evDef = EVENTS.find((e) => e.id === ev.id)!;
-  const opt = evDef.options[ev.choice ?? evDef.options.length - 1];
-  const ok = !opt.stat || statsOf(state)[opt.stat] >= (opt.need ?? 0);
-  const report: GameState['reports'][number] = { kind: 'event', success: ok, earned: '0', parts: [], event: `${evDef.text} ${opt.label}: ${ok ? opt.good : opt.bad ?? opt.good}` };
+  const opt = evDef.options[ev.choice ?? instinctChoice(state, ev.id)];
+  // The roll: one d20, or two with advantage (the better kept).
+  let ok = true;
+  let roll = '';
+  if (opt.stat) {
+    const a = 1 + Math.floor(rand() * 20);
+    const adv = hasAdvantage(state, opt);
+    const b = adv ? 1 + Math.floor(rand() * 20) : 0;
+    const got = Math.max(a, b);
+    ok = got >= EVENT_DC;
+    roll = adv ? ` (rolled ${a} and ${b} with advantage, kept ${got}: needed ${EVENT_DC})` : ` (rolled ${got}: needed ${EVENT_DC})`;
+  }
+  const report: GameState['reports'][number] = { kind: 'event', success: ok, earned: '0', parts: [], event: `${evDef.text} ${opt.label}${roll}: ${ok ? opt.good : opt.bad ?? opt.good}` };
   let mult = ok ? (opt.stat ? 1.8 : 1) : 0.3;
   // A part only if one's due (finds are spaced out, on the road or off it).
   if (ok && opt.reward === 'part' && s.year >= s.nextFind) {
@@ -694,11 +748,8 @@ function autoRoam(state: GameState): void {
   const opts = s.roamOpts ?? { places: true, settle: true, mandatory: false };
   const ev = s.walk?.event;
   if (ev && level >= 3 && opts.settle) {
-    // It knows what it's good at: the first choice its stats can carry, else the safe one.
-    const stats = statsOf(state);
-    const d = EVENTS.find((e) => e.id === ev.id)!;
-    const i = d.options.findIndex((o) => o.stat && stats[o.stat] >= (o.need ?? 0));
-    chooseEvent(state, i >= 0 ? i : d.options.length - 1);
+    // It answers at once, the way it's been set to.
+    chooseEvent(state, instinctChoice(state, ev.id));
     return;
   }
   if (s.walk) return;

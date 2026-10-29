@@ -9,7 +9,7 @@ export const BASE_OFFLINE_CAP_SEC = 8 * 3600;
 /** A fresh island for a new Creature: just its seed. The island itself is rolled the
  * first time it's needed (see islandFor), which also puts the creature at home. */
 export function newIsland(def: StageDef, seed = Math.floor(Math.random() * 2 ** 31)): Pick<StageState, 'seed' | 'pos' | 'seen' | 'walk' | 'autoRoam' | 'nextFind' | 'parties' | 'partyReady' | 'sightings' | 'nests' | 'nestSettle' | 'roamOpts'> {
-  return { seed: def.places ? seed : 0, pos: { x: -1, y: -1 }, seen: new Uint8Array(CELLS * CELLS), walk: null, autoRoam: true, roamOpts: { places: true, settle: true, mandatory: false }, nextFind: 0, parties: [], partyReady: {}, sightings: {}, nests: [], nestSettle: {} };
+  return { seed: def.places ? seed : 0, pos: { x: -1, y: -1 }, seen: new Uint8Array(CELLS * CELLS), walk: null, autoRoam: true, roamOpts: { places: true, settle: true, mandatory: false, policy: 'ready' }, nextFind: 0, parties: [], partyReady: {}, sightings: {}, nests: [], nestSettle: {} };
 }
 
 function creatureStart(def: StageDef): Pick<StageState, 'parts' | 'equipped' | 'seed' | 'pos' | 'seen' | 'walk' | 'autoRoam' | 'nextFind' | 'parties' | 'partyReady' | 'sightings' | 'nests' | 'nestSettle' | 'roamOpts' | 'trips' | 'mates' | 'egg' | 'generation' | 'pop' | 'roles' | 'year'> {

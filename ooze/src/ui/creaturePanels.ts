@@ -18,6 +18,8 @@ import {
   partEnergy,
   curiosity,
   partySlots,
+  hasAdvantage,
+  choiceOdds,
   nestsOpen,
   nestCost,
   nestSites,
@@ -43,6 +45,14 @@ import { D, format, formatTime } from '../economy/num';
 import { checkReaction, lockHint, payStage, reactionReady, upgradeCost, upgradeUnlocked, visibleUpgrades } from '../economy/actions';
 import type { UpgradeDef } from '../economy/types';
 
+/** A run-in choice: what it asks, whether you have it (advantage), and the odds of a roll. */
+export function choiceButton(state: GameState, o: (typeof EVENTS)[number]['options'][number], i: number): string {
+  const stats = statsOf(state);
+  const pct = Math.round(choiceOdds(state, o) * 100);
+  const sub = o.stat ? `${cap(o.stat)} ${o.need} (yours ${stats[o.stat]}) · ${hasAdvantage(state, o) ? 'advantage' : 'no advantage'} · ${pct}%` : 'Safe: runs, nothing ventured';
+  return `<button class="px-btn choice${hasAdvantage(state, o) || !o.stat ? ' gold' : ''}" data-choice="${i}"><b>${esc(o.label)}</b><span>${sub}</span></button>`;
+}
+
 /** All the choices about how much it does on its own, in one place. */
 function roamOptions(state: GameState): string {
   const s = state.stages[CREATURE];
@@ -52,10 +62,27 @@ function roamOptions(state: GameState): string {
   const rows = [
     level >= 1 ? row('explore', s.autoRoam, 'Curiosity: explore the fog', 'With nothing to do, it wanders into the unknown') : '',
     level >= 2 ? row('places', s.roamOpts.places, 'Curiosity: head for new places', 'It goes to places it can get into') : '',
-    level >= 3 ? row('settle', s.roamOpts.settle, 'Instinct: settle run-ins', 'It answers run-ins itself, by what it\'s good at') : '',
-    row('mandatory', s.roamOpts.mandatory, 'Run-ins wait for me', 'Off: if you don\'t choose in time, instinct plays safe'),
+    level >= 3 ? row('settle', s.roamOpts.settle, 'Instinct: answer run-ins at once', 'It doesn\'t wait for you; it does as set below') : '',
+    row('mandatory', s.roamOpts.mandatory, 'Run-ins wait for me', 'Off: if you don\'t choose in time, it does as set below'),
   ].join('');
-  return `<div class="card px-box opts"><div class="info"><div class="name">On its own</div>${rows}</div></div>`;
+  const policies: [string, string][] = [
+    ['run', 'Always run'],
+    ['ready', 'Only with advantage'],
+    ['smart', 'Smart'],
+  ];
+  const policy =
+    level >= 3
+      ? `<div class="sub">When I don't choose:</div><div class="policy">${policies
+          .map(([k, label]) => `<button class="px-btn small${s.roamOpts.policy === k ? ' on' : ''}" data-policy="${k}">${label}</button>`)
+          .join('')}</div><div class="sub dim">${
+          s.roamOpts.policy === 'run'
+            ? 'It always takes the safe way out.'
+            : s.roamOpts.policy === 'ready'
+              ? 'It takes on a choice it has the stat for (rolling with advantage), else runs.'
+              : 'Like "only with advantage", but it also chances a choice it\'s nearly up to.'
+        }</div>`
+      : `<div class="sub dim">Left alone, it runs (the third level of Curiosity lets it decide for itself).</div>`;
+  return `<div class="card px-box opts"><div class="info"><div class="name">On its own</div>${rows}${policy}</div></div>`;
 }
 
 /**
@@ -205,13 +232,9 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
   const s = state.stages[CREATURE];
   const def = STAGES[CREATURE];
   const ev = s.walk?.event ? EVENTS.find((e) => e.id === s.walk!.event!.id)! : null;
-  const stats = statsOf(state);
   const choice = ev
     ? `<div class="event"><div class="flavor">${esc(ev.text)}</div><div class="making-bar on" data-bar="event"><i></i></div><div class="choices">${ev.options
-        .map(
-          (o, i) =>
-            `<button class="px-btn choice${!o.stat || stats[o.stat] >= (o.need ?? 0) ? ' gold' : ''}" data-choice="${i}"><b>${esc(o.label)}</b>${o.stat ? `<span>${cap(o.stat)} ${o.need} (yours ${stats[o.stat]})</span>` : '<span>Safe</span>'}</button>`,
-        )
+        .map((o, i) => choiceButton(state, o, i))
         .join('')}</div></div>`
     : '';
   const walk = `<div class="card px-box trip"><div class="info"><div class="name" data-t="walk-title"></div><div class="sub" data-t="walk-sub"></div>${choice}</div>

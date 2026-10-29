@@ -84,6 +84,10 @@ export type Effect =
   /** Your creature makes rounds of the places it knows, foraging those that have grown back. */
   | { kind: 'rounds' };
 
+/** What instinct does with a run-in you leave to it: always run, take it on only with the
+ * stat for it (advantage), or weigh it up (also chance a near miss). */
+export type RunInPolicy = 'run' | 'ready' | 'smart';
+
 /** What members of the herd do, by instinct (nobody is told to: these are animals). */
 export type Role = 'forager' | 'carer' | 'digger' | 'guard' | 'scout';
 export const ROLES: Role[] = ['forager', 'carer', 'digger', 'guard', 'scout'];
@@ -338,7 +342,7 @@ export interface StageState {
   autoRoam: boolean;
   /** What Curiosity is allowed to do on its own (each can be switched off), and whether
    * run-ins wait for your choice instead of instinct deciding when time runs out. */
-  roamOpts: { places: boolean; settle: boolean; mandatory: boolean };
+  roamOpts: { places: boolean; settle: boolean; mandatory: boolean; policy: RunInPolicy };
   /** Herd parties out on the road: the place they're bound for and seconds since they left. */
   parties: { place: string; t: number }[];
   /** When (seasons' clock) each place is ready to be foraged by a party again. */

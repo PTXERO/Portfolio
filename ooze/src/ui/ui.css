@@ -554,3 +554,7 @@ textarea {
 .px-btn.opt .dim { display: block; font-size: 11px; line-height: 1.3; margin-top: 2px; }
 .px-btn.opt.on { --face: #2f5a4e; --hi: #3f7a68; --lo: #1f3c34; }
 #modal .choices .px-btn { margin-top: 0; }
+.opts .policy { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.opts .policy .px-btn.on { --face: var(--mint); --hi: #c4f7dd; --lo: var(--mint-lo); color: var(--ink); }
+.opts > .info > .sub { margin-top: 8px; }
+#modal p.small { font-size: 11px; margin-top: 8px; }

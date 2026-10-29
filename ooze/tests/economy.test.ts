@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { EVENTS } from '../src/content/creature';
 import { STAGES } from '../src/content/stages';
 import {
   addSwirl,
@@ -25,7 +26,7 @@ import { softCap, defenseOf, dialMax, guardLevel, dietOf, forageMult, habitatMul
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
-import { breed, buyPart, partEnergy, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, EGG_BASE_SEC, FARM_PAY, PLACE_REST, placeRest, foundNest, islandFor, nestSites, nestsOpen, partyLeg, spot, placeSeen, tripPay, statsOf, tripEventDue, upkeep, walkTo } from '../src/economy/creature';
+import { breed, buyPart, partEnergy, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, EGG_BASE_SEC, FARM_PAY, choiceOdds, hasAdvantage, instinctChoice, PLACE_REST, placeRest, foundNest, islandFor, nestSites, nestsOpen, partyLeg, spot, placeSeen, tripPay, statsOf, tripEventDue, upkeep, walkTo } from '../src/economy/creature';
 import { islandOf, ISLAND, isLand, seenShare } from '../src/economy/island';
 import { foragers, herdMult, SEASON_SEC } from '../src/economy/rates';
 
@@ -894,6 +895,36 @@ describe('creature stage', () => {
     expect(chooseEvent(s, 0)).toBe(true);
     expect(tripEventDue(s)).toBe(false);
     expect(s.reports.find((x) => x.kind === 'event')?.event).toBeTruthy();
+  });
+
+  it('run-ins roll a d20, with advantage when it has the stat; left alone, instinct decides as set', () => {
+    const s = creatureGame();
+    const c = s.stages.creature;
+    islandFor(s);
+    const storm = EVENTS.find((e) => e.id === 'storm')!;
+    const press = storm.options[0];
+    expect(hasAdvantage(s, press)).toBe(false);
+    expect(choiceOdds(s, press)).toBeCloseTo(0.55, 2);
+    c.upgrades.push('trainSpeed');
+    c.levels.trainSpeed = press.need! + 5;
+    expect(hasAdvantage(s, press)).toBe(true);
+    expect(choiceOdds(s, press)).toBeCloseTo(1 - 0.45 * 0.45, 2);
+    // Without Instinct it runs; with it, it takes the choice it has advantage on.
+    expect(instinctChoice(s, 'storm')).toBe(storm.options.length - 1);
+    c.upgrades.push('curiosity');
+    c.levels.curiosity = 3;
+    expect(instinctChoice(s, 'storm')).toBe(0);
+    c.roamOpts.policy = 'run';
+    expect(instinctChoice(s, 'storm')).toBe(storm.options.length - 1);
+    // A low roll fails even with advantage; a high one comes off.
+    walkTo(s, c.pos.x + 30, c.pos.y);
+    c.walk!.event = { id: 'storm', choice: null, left: 30 };
+    chooseEvent(s, 0, () => 0);
+    expect(s.reports.at(-1)!.success).toBe(false);
+    walkTo(s, c.pos.x + 30, c.pos.y);
+    c.walk!.event = { id: 'storm', choice: null, left: 30 };
+    chooseEvent(s, 0, () => 0.99);
+    expect(s.reports.at(-1)!.success).toBe(true);
   });
 
   it('left alone, a run-in settles itself the safe way', () => {
