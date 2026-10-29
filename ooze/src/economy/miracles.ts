@@ -16,6 +16,7 @@ import {
   launch,
   provisions,
   raftDone,
+  raftPart,
   VOYAGE_FOOD,
   type Diet,
   type ExtinctionState,
@@ -252,6 +253,8 @@ export function tribeThinks(ex: ExtinctionState): void {
 function aiFocus(ex: ExtinctionState): Focus {
   const fed = (ex.last?.starved.length ?? 1) === 0;
   if (ex.ideas.length < 4 || (!fed && ex.day < 20)) return 'ideas';
+  // The raft can't go on without an idea they haven't got: back to the spear for it.
+  if (!raftDone(ex) && !raftPart(ex)) return 'ideas';
   return 'raft';
 }
 

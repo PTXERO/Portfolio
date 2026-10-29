@@ -3,7 +3,7 @@
 
 import { STORY } from '../content/tribal';
 import { count, dayYield, eatsMeat, eatsPlants, FAMILY, hungerWord, ideaCost, jobFood, jobInfo, JOBS, jobOpen, launchBlockers, RAFT, raftDone, raftPart, seasonOf, TRAITS, VOYAGE_FOOD, WINTER, type Diet, type ExtinctionState } from '../economy/extinction';
-import { BRANCHES, MIND_NODE, MIND_TREE, nodeFor, RAFT_IDEAS, reachable } from '../economy/mindTree';
+import { BRANCHES, COST_STEP, MIND_NODE, MIND_TREE, NODE_COST, nodeFor, pathTo, RAFT_IDEAS, reachable } from '../economy/mindTree';
 import { hopeOf, moodWord, QUIRKS } from '../economy/society';
 import { DREAD_COWER, DREAD_FLEE, ORDAIN_AFTER, PRAYER_MAX, spellsFor, type Gesture } from '../economy/miracles';
 import { tribeOf } from '../economy/tribal';
@@ -89,12 +89,19 @@ function hopeCard(ex: ExtinctionState): string {
     <div class="sub">Their mood all together: hunger, grief, the spear's dread, the fire, friends. Above 55, fed, they have children; below 30, people break.</div></div></div>`;
 }
 
+/** What a raft part waits on: the idea, how many ideas away it is, and roughly the insight. */
+function needsText(ex: ExtinctionState, id: string): string {
+  const path = pathTo(ex.ideas, id);
+  const cost = path.reduce((a, n, k) => a + NODE_COST[MIND_NODE[n].kind] + COST_STEP * (ex.ideas.length + k), 0);
+  return `needs ${MIND_NODE[id]?.name ?? 'an idea'}: ${path.length === 1 ? 'next in reach' : `${path.length} ideas away`}, ~${Math.ceil(cost)} insight`;
+}
+
 /** The raft: each part's progress, then (once it's done) the four who go, and the food. */
 function raftCard(ex: ExtinctionState): string {
   const parts = RAFT.map((p) => {
     const done = Math.min(p.work, ex.raft?.[p.id] ?? 0);
     const blocked = p.needs && !ex.ideas.includes(p.needs) && done < p.work;
-    return `<div class="raft-part"><span>${p.name}</span><div class="meter"><i style="width:${(done / p.work) * 100}%"></i></div><span class="dim tiny">${done >= p.work ? 'done' : blocked ? `needs ${MIND_NODE[p.needs!]?.name ?? 'an idea'} (an idea)` : `${n0(done)}/${p.work} · ${p.wood} wood`}</span></div>`;
+    return `<div class="raft-part"><span>${p.name}</span><div class="meter"><i style="width:${(done / p.work) * 100}%"></i></div><span class="dim tiny">${done >= p.work ? 'done' : blocked ? needsText(ex, p.needs!) : `${n0(done)}/${p.work} · ${p.wood} wood`}</span></div>`;
   }).join('');
   const ready = raftDone(ex);
   const blockers = launchBlockers(ex);

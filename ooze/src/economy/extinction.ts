@@ -523,7 +523,9 @@ export function autoAssign(ex: ExtinctionState): void {
     }
   };
   // A few always listen (the spear is the only way to more food); a fire needs wood.
-  put('listen', Math.max(1, Math.round(n * (ex.focus === 'ideas' ? 0.12 : 0.06))));
+  // (More when the raft waits on an idea: up to a third of a small tribe.)
+  const blocked = !raftDone(ex) && !raftPart(ex) && (ex.raft?.frame ?? 0) > 0;
+  put('listen', blocked ? Math.min(n - 1, Math.max(2, Math.round(n * 0.33))) : Math.max(1, Math.round(n * (ex.focus === 'ideas' ? 0.12 : 0.06))));
   if (ex.ideas.includes('fire') && (ex.wood ?? 0) < 6 && (ex.trees ?? 0) > 0) put('wood', 2);
   // Once they've set their minds on leaving, a raft crew is kept to it, fed or not.
   if (ex.focus === 'raft' && jobOpen(ex, 'build')) {

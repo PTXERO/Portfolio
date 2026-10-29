@@ -308,3 +308,25 @@ export function modsOf(known: string[], diet: Diet = 'omnivore'): Mods {
   }
   return m;
 }
+
+/** The ideas still to learn on the shortest way to one (nearest known idea outward), in
+ * order; empty if it's known. */
+export function pathTo(known: string[], id: string): string[] {
+  if (known.includes(id)) return [];
+  const have = new Set(['mind0', ...known]);
+  const prev = new Map<string, string | null>();
+  const queue = [...have];
+  for (const k of have) prev.set(k, null);
+  while (queue.length) {
+    const cur = queue.shift()!;
+    if (cur === id) break;
+    for (const next of MIND_NODE[cur]?.links ?? []) {
+      if (prev.has(next)) continue;
+      prev.set(next, cur);
+      queue.push(next);
+    }
+  }
+  const out: string[] = [];
+  for (let c: string | null | undefined = id; c && !have.has(c); c = prev.get(c)) out.unshift(c);
+  return out;
+}
