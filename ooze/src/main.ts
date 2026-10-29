@@ -472,7 +472,12 @@ function playEnding(): void {
   const book = def.bookName ?? 'Discoveries';
   const stats = [
     ['Time', formatTime(st.time || state.playTime)],
-    def.habitats ? ['Food eaten', String(st.eaten)] : ['Stirs', String(state.taps)],
+    ...(def.places
+      ? [
+          ['Generations', String(st.generation)],
+          ['The herd', String(Math.floor(st.pop))],
+        ]
+      : [def.habitats ? ['Food eaten', String(st.eaten)] : ['Stirs', String(state.taps)]]),
     [book, `${st.discovered.length} / ${reactions(state.current).length}`],
     [`${def.currency[0].toUpperCase()}${def.currency.slice(1)} made`, format(st.totalEarned)],
   ];
