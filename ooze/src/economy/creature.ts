@@ -12,8 +12,8 @@ export const CREATURE: StageId = 'creature';
 /** Share of an expedition's time paid out as output, before Trail Memory. */
 export const TRIP_PAYOUT = 0.6;
 /** Seconds the first egg takes; each generation after takes longer. */
-export const EGG_BASE_SEC = 480;
-export const EGG_GROWTH = 1.45;
+export const EGG_BASE_SEC = 600;
+export const EGG_GROWTH = 1.6;
 /** Output multiplier per generation bred. */
 export const GENERATION_MULT = 1.25;
 export const MAX_MATES = 3;

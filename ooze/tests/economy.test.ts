@@ -633,7 +633,7 @@ describe('creature stage', () => {
     const before = rate();
     expect(breed(s, 1)).toBe(true);
     expect(s.stages.creature.mates.length).toBe(0);
-    tick(s, 500);
+    tick(s, 620);
     expect(s.stages.creature.generation).toBe(1);
     expect(s.stages.creature.parts).toContain('runner');
     expect(rate()).toBeGreaterThan(before * 1.2);
