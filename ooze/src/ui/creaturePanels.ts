@@ -16,6 +16,7 @@ import {
   MAX_MATES,
   partDef,
   partEnergy,
+  curiosity,
   islandFor,
   placeSeen,
   placeShort,
@@ -63,7 +64,7 @@ const PLACE_TEXT: Record<string, string> = {
 /** What changes the creature tabs' layout. */
 export function creatureKey(state: GameState): unknown {
   const s = state.stages[CREATURE];
-  return [s.parts, s.equipped, s.walk?.event?.id ?? '', s.trips, STAGES[CREATURE].places!.map((p) => placeSeen(state, p.id)), energyBudget(state), state.unlocked.length, s.mates.map((m) => m.id), !!s.egg, s.generation, s.discovered, s.levels, visibleUpgrades(state, CREATURE).map((u) => u.id)];
+  return [s.parts, s.equipped, s.autoRoam, s.walk?.event?.id ?? '', s.trips, STAGES[CREATURE].places!.map((p) => placeSeen(state, p.id)), energyBudget(state), state.unlocked.length, s.mates.map((m) => m.id), !!s.egg, s.generation, s.discovered, s.levels, visibleUpgrades(state, CREATURE).map((u) => u.id)];
 }
 
 /** The Herd tab: how many, how fed, what season, who does what, and the buildings. */
@@ -143,7 +144,7 @@ const WHERE: Record<string, string> = {
   high: 'Up on the high plateau',
 };
 
-export function exploreLayout(state: GameState): string {
+export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)['creature']['upgrades'][number]) => string): string {
   const s = state.stages[CREATURE];
   const def = STAGES[CREATURE];
   const ev = s.walk?.event ? EVENTS.find((e) => e.id === s.walk!.event!.id)! : null;
@@ -158,7 +159,12 @@ export function exploreLayout(state: GameState): string {
     : '';
   const walk = `<div class="card px-box trip"><div class="info"><div class="name" data-t="walk-title"></div><div class="sub" data-t="walk-sub"></div>${choice}</div>
     <button class="px-btn small" data-act="walkhome" data-t="home-btn">Home</button></div>
-    <p class="note">Tap anywhere on the map to send your creature there. It clears the fog as it walks: Senses lets it see further, Speed gets it there sooner. <span data-t="seen"></span></p>`;
+    <p class="note">Tap anywhere on the map to send your creature there. It clears the fog as it walks: Senses lets it see further, Speed gets it there sooner. <span data-t="seen"></span></p>
+    ${visibleUpgrades(state, CREATURE)
+      .filter((u) => u.branch === 'Wandering')
+      .map(upgradeCard)
+      .join('')}
+    ${curiosity(state) ? `<button class="px-btn small${s.autoRoam ? ' on' : ''}" data-act="autoroam">Exploring on its own: ${s.autoRoam ? 'on' : 'off'}</button>` : ''}`;
   const places = def
     .places!.map((p) => {
       const found = (s.trips[p.id] ?? 0) > 0;
@@ -294,6 +300,12 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
       btn.classList.toggle('gold', !btn.disabled);
     }
   } else if (tab === 'explore') {
+    for (const u of visibleUpgrades(state, CREATURE).filter((x) => x.branch === 'Wandering')) {
+      const btn = root.querySelector<HTMLButtonElement>(`[data-up="${u.id}"]`);
+      if (!btn) continue;
+      btn.disabled = s.currency.lt(upgradeCost(state, CREATURE, u));
+      btn.classList.toggle('gold', !btn.disabled);
+    }
     const is = islandFor(state);
     const atHome = Math.hypot(s.pos.x - is.home.x, s.pos.y - is.home.y) < 3;
     if (s.walk?.event) {

@@ -8,7 +8,7 @@ import { herdMult, seasonOf, stageEffects, stageRate } from './rates';
 import type { GameState, Mate, PartDef, PlaceDef, Role, Slot, Stat, StageId, StageState } from './types';
 import { ROLES, SLOTS, STATS } from './types';
 import { EVENTS } from '../content/creature';
-import { cellOf, ISLAND, islandOf, reveal, type Island } from './island';
+import { CELL, CELLS, cellOf, ISLAND, islandOf, isLand, reveal, type Island } from './island';
 
 export const CREATURE: StageId = 'creature';
 /** Share of a roam's time paid out as output, before Trail Memory. */
@@ -468,6 +468,58 @@ export function equipPart(state: GameState, id: string): boolean {
   return true;
 }
 
+/** How curious the line is (0 = only goes where it's sent). */
+export function curiosity(state: GameState): number {
+  let n = 0;
+  for (const e of stageEffects(state, CREATURE)) if (e.kind === 'curiosity') n += e.level;
+  return n;
+}
+
+/** Fog maps with no land left under them (not saved: found again after a load). */
+const fullySeen = new WeakSet<Uint8Array>();
+
+/** Curiosity at work: with nothing to do, it picks its own way. */
+function autoRoam(state: GameState): void {
+  const s = st(state);
+  const level = curiosity(state);
+  if (!level || !s.autoRoam) return;
+  const ev = s.walk?.event;
+  if (ev && level >= 3) {
+    // It knows what it's good at: the first choice its stats can carry, else the safe one.
+    const stats = statsOf(state);
+    const d = EVENTS.find((e) => e.id === ev.id)!;
+    const i = d.options.findIndex((o) => o.stat && stats[o.stat] >= (o.need ?? 0));
+    chooseEvent(state, i >= 0 ? i : d.options.length - 1);
+    return;
+  }
+  if (s.walk) return;
+  const is = islandFor(state);
+  if (level >= 2) {
+    const ready = def().places!.find((p) => !(s.trips[p.id] > 0) && placeSeen(state, p.id) && !placeShort(state, p).length);
+    if (ready) {
+      walkTo(state, is.places[ready.id].x, is.places[ready.id].y);
+      return;
+    }
+  }
+  // The nearest fog over land.
+  if (fullySeen.has(s.seen)) return;
+  let best = -1;
+  let bd = Infinity;
+  for (let i = 0; i < CELLS * CELLS; i++) {
+    if (s.seen[i]) continue;
+    const x = (i % CELLS) * CELL + CELL / 2;
+    const y = Math.floor(i / CELLS) * CELL + CELL / 2;
+    if (!isLand(is, x, y)) continue;
+    const d = Math.hypot(x - s.pos.x, y - s.pos.y);
+    if (d < bd) {
+      bd = d;
+      best = i;
+    }
+  }
+  if (best < 0) fullySeen.add(s.seen);
+  else walkTo(state, (best % CELLS) * CELL + CELL / 2, Math.floor(best / CELLS) * CELL + CELL / 2);
+}
+
 /** Counts down the roam and the egg. Called every tick, live or offline. */
 export function creatureTick(state: GameState, dt: number, rand: () => number = Math.random): void {
   if (!state.unlocked.includes(CREATURE)) return;
@@ -484,6 +536,7 @@ export function creatureTick(state: GameState, dt: number, rand: () => number = 
   settleRoles(state);
   fitRoles(s);
   walkTick(state, dt, rand);
+  autoRoam(state);
   if (s.egg) {
     s.egg.left -= dt;
     if (s.egg.left <= 0) hatch(state);

@@ -759,6 +759,30 @@ describe('creature stage', () => {
     expect(STAGES.creature.parts!.some((p) => !canWear(s, p.id))).toBe(true);
   });
 
+  it('Curiosity sends it exploring on its own, and can be switched off', () => {
+    const s = creatureGame();
+    const c = s.stages.creature;
+    c.seed = 4242;
+    islandFor(s);
+    tick(s, 1);
+    expect(c.walk).toBeNull();
+    c.upgrades.push('curiosity');
+    c.levels.curiosity = 1;
+    tick(s, 0.1);
+    expect(c.walk).not.toBeNull();
+    c.walk = null;
+    c.autoRoam = false;
+    tick(s, 1);
+    expect(c.walk).toBeNull();
+    // At level 3 it settles run-ins itself.
+    c.autoRoam = true;
+    c.levels.curiosity = 3;
+    walkTo(s, c.pos.x + 30, c.pos.y);
+    c.walk!.event = { id: 'storm', choice: null, left: 30 };
+    tick(s, 0.1);
+    expect(tripEventDue(s)).toBe(false);
+  });
+
   it('a walk runs into things on the road, and the choice counts', () => {
     const s = creatureGame();
     const c = s.stages.creature;

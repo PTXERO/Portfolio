@@ -113,6 +113,8 @@ const UPGRADES: UpgradeDef[] = [
   { id: 'burrowing', branch: 'Instincts', name: 'Burrowing', flavor: 'Claws that itch to dig.', cost: 6000, levels: 5, costGrowth: 8, effect: { kind: 'instinct', role: 'digger', share: 0.03 }, requires: { reaction: 'tidePools' } },
   { id: 'sentries', branch: 'Instincts', name: 'Sentries', flavor: 'Someone always has its head up.', cost: 5e4, levels: 5, costGrowth: 8, effect: { kind: 'instinct', role: 'guard', share: 0.02 }, requires: { reaction: 'marsh' } },
   { id: 'following', branch: 'Instincts', name: 'Follow the Leader', flavor: 'The young trail after the one who knows the way.', cost: 4e5, levels: 5, costGrowth: 8, effect: { kind: 'instinct', role: 'scout', share: 0.02 }, requires: { reaction: 'forest' } },
+  // On the road.
+  { id: 'curiosity', branch: 'Wandering', name: 'Curiosity', flavor: 'It can never leave a corner of the map alone.', cost: 3000, levels: 3, costGrowth: 60, effect: { kind: 'curiosity', level: 1 } },
   // Herd and seasons.
   { id: 'fatStores', name: 'Fat Stores', flavor: 'Eat in summer, live on it in winter.', cost: 400, levels: 5, costGrowth: 6, effect: { kind: 'upkeepMult', mult: 0.85 } },
   { id: 'thickCoats', name: 'Thick Coats', flavor: 'Fur, feathers or blubber: whatever keeps the cold out.', cost: 2000, levels: 5, costGrowth: 6, effect: { kind: 'winterMult', mult: 0.7 } },

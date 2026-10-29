@@ -161,6 +161,8 @@ export function describeEffect(stage: StageId, e: Effect): string {
       return `Winter takes ×${e.mult}`;
     case 'instinct':
       return `${Math.round(e.share * 100)}% of the herd ${INSTINCT_VERB[e.role]}`;
+    case 'curiosity':
+      return 'Level 1: wanders into the fog on its own · 2: heads for places it can get into · 3: settles run-ins on the road itself';
   }
 }
 
@@ -168,7 +170,7 @@ function upgradeText(stage: StageId, u: UpgradeDef): string {
   const on = u.target ?? stage;
   const text = [u.effect, ...(u.extra ?? [])].map((e) => describeEffect(on, e)).join(' · ');
   const where = u.target && u.target !== stage ? `In the ${STAGES[u.target].name}: ` : '';
-  return `${maxLevel(u) > 1 ? 'Each level: ' : ''}${where}${text}`;
+  return `${maxLevel(u) > 1 && u.effect.kind !== 'curiosity' ? 'Each level: ' : ''}${where}${text}`;
 }
 
 /** A card for an upgrade (mutation, boost or heirloom), with its level and its next price. */
@@ -377,7 +379,7 @@ export function layout(state: GameState, tab: Tab): string {
 
   if (tab === 'body') return bodyLayout(state, (u) => upgradeCard(state, id, u, 'spark'));
   // (Body lists Training and the plain boosts; Roots lists heirlooms and giving back.)
-  if (tab === 'explore') return exploreLayout(state);
+  if (tab === 'explore') return exploreLayout(state, (u) => upgradeCard(state, id, u, 'spark'));
   if (tab === 'family') return familyLayout(state);
 
   // The menu holds the time bank first, then saves.

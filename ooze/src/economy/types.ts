@@ -73,7 +73,10 @@ export type Effect =
   /** Winter takes less of the herd (losses ×mult). */
   | { kind: 'winterMult'; mult: number }
   /** An instinct bred into the line: this share of the herd does it, on its own. */
-  | { kind: 'instinct'; role: Role; share: number };
+  | { kind: 'instinct'; role: Role; share: number }
+  /** Your creature explores on its own: 1 wanders into the fog, 2 heads for places it can
+   * get into, 3 also settles run-ins on the road itself. */
+  | { kind: 'curiosity'; level: number };
 
 /** What members of the herd do, by instinct (nobody is told to: these are animals). */
 export type Role = 'forager' | 'carer' | 'digger' | 'guard' | 'scout';
@@ -314,6 +317,8 @@ export interface StageState {
   seen: Uint8Array;
   /** Where it's walking, seconds of walking till its next run-in, and the run-in it's stopped at. */
   walk: { tx: number; ty: number; next: number; event?: { id: string; choice: number | null; left: number } } | null;
+  /** Whether Curiosity sends it exploring on its own (the player can switch it off). */
+  autoRoam: boolean;
   /** The herd: how many, and what they're set to do (the rest forage). */
   pop: number;
   roles: Record<Role, number>;

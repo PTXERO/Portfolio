@@ -674,6 +674,9 @@ function act(el: HTMLElement): void {
       case 'walkhome':
         walkHome(state);
         break;
+      case 'autoroam':
+        state.stages.creature.autoRoam = !state.stages.creature.autoRoam;
+        break;
       case 'export':
         if (ta) {
           ta.value = exportSave(state);

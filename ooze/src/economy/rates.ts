@@ -49,6 +49,8 @@ export function scaleEffect(e: Effect, n: number): Effect {
       return { ...e, amount: e.amount * n };
     case 'instinct':
       return { ...e, share: e.share * n };
+    case 'curiosity':
+      return { ...e, level: e.level * n };
     case 'defense':
       return { ...e, amount: e.amount * n };
     case 'offlineHours':
