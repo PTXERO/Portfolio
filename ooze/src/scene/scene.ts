@@ -84,8 +84,9 @@ export class Scene {
     this.buffer.width = this.W;
     this.buffer.height = this.H;
     if (this.shader) {
-      // Full detail costs too much on 3x screens; 2x looks the same through the soft light.
-      const k = Math.min(2, this.dpr);
+      // The land is marched pixel by pixel; at the screen's CSS resolution that's plenty
+      // (the art is far coarser), and phones keep their frame rate.
+      const k = Math.min(1.5, this.dpr);
       this.shader.canvas.width = Math.round(w * k);
       this.shader.canvas.height = Math.round(h * k);
     }
@@ -232,7 +233,12 @@ export class Scene {
     if (this.shader) this.shader.canvas.style.display = shaded ? 'block' : 'none';
     if (shaded) {
       // The island is drawn lit by the shader underneath; this canvas keeps only what's on top.
-      this.shader!.render(this.buffer, this.shore.info(), this.W, this.H, { cam: this.shore.camParams, time: this.time, day: (this.time % 120) / 120 });
+      const inp = this.shore.shadeInputs();
+      if (inp) {
+        this.shader!.setIsland(inp.seed, inp.heights);
+        this.shader!.setFog(inp.fog, inp.fogVersion);
+        this.shader!.render(this.buffer, this.W, this.H, { cam: this.shore.camParams, time: this.time, day: (this.time % 120) / 120, ground: inp.ground, blend: inp.blend });
+      }
       ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     } else ctx.drawImage(this.buffer, 0, 0, this.W * this.px * this.dpr, this.H * this.px * this.dpr);
 

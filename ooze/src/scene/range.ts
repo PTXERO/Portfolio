@@ -11,7 +11,8 @@ import { PAL } from '../art/sprites';
 import { STAGES } from '../content/stages';
 import { islandFor, statsOf, walkTo } from '../economy/creature';
 import { Biome, CELL, CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
-import { seasonOf } from '../economy/rates';
+import { SEASON_SEC, seasonOf } from '../economy/rates';
+import { H_LO, H_SPAN, LIFT, TILT } from './shade';
 import type { GameState, Role } from '../economy/types';
 import { drawBlob, type BlobStyle } from './blob';
 import { creatureLookOf, drawMini, type CreatureLook } from './creatureLook';
@@ -72,7 +73,7 @@ export class RangeScene {
   private visitorTimer = 40;
   private graze: Pt | null = null;
   private grazeTimer = 0;
-  private flakes: { x: number; y: number; v: number }[] = [];
+  private flakes: { x: number; y: number; v: number; snow: boolean }[] = [];
   /** Each season's painted ground, for the island it was painted for. */
   private ground = new Map<number, HTMLCanvasElement>();
   private groundSeed = -1;
@@ -93,11 +94,13 @@ export class RangeScene {
   private lastPos: Pt | null = null;
   /** True while the lighting shader draws night and fog (see shade.ts), so they're left out here. */
   shaded = false;
-  private infoBuf: Uint8Array | null = null;
-  private seenRef: Uint8Array | null = null;
-  /** Where creatures were drawn this frame, so the shader can light them as standing figures. */
-  private mask = document.createElement('canvas');
-  private maskCtx = this.mask.getContext('2d', { willReadFrequently: true })!;
+  private heightData: Uint8Array | null = null;
+  private heightDataSeed = -1;
+  /** Bumped whenever the fog changes, so the shader re-sends it only then. */
+  private fogVersion = 0;
+  /** This season's ground and the next one's, and how far the change has got (0 to 1). */
+  private groundPair: [HTMLCanvasElement, HTMLCanvasElement] | null = null;
+  private seasonBlend = 0;
 
   reset(): void {
     this.fx.clear();
@@ -133,12 +136,42 @@ export class RangeScene {
     return (x - this.camX) * this.zoom + this.W / 2;
   }
 
+  /** The ground's height at a point, smooth between tiles; water lies flat at 0. */
+  heightAt(x: number, y: number): number {
+    const is = this.island;
+    if (!is) return 0;
+    const fx = x - 0.5 - Math.floor(x - 0.5);
+    const fy = y - 0.5 - Math.floor(y - 0.5);
+    const x0 = Math.max(0, Math.min(ISLAND - 2, Math.floor(x - 0.5)));
+    const y0 = Math.max(0, Math.min(ISLAND - 2, Math.floor(y - 0.5)));
+    const h = is.height;
+    const k = y0 * ISLAND + x0;
+    const v = (h[k] * (1 - fx) + h[k + 1] * fx) * (1 - fy) + (h[k + ISLAND] * (1 - fx) + h[k + ISLAND + 1] * fx) * fy;
+    return Math.max(0, Math.min(H_LO + H_SPAN, v));
+  }
+
+  /** Screen row of a point on the ground: in 2.5D, raised by the land's height and seen at a slant. */
+  private py(x: number, y: number): number {
+    if (!this.shaded) return this.sy(y);
+    return (y - this.camY) * this.zoom * TILT + this.midY() - this.heightAt(x, y) * LIFT * this.zoom;
+  }
+
   private sy(y: number): number {
     return (y - this.camY) * this.zoom + this.midY();
   }
 
   private toWorld(ax: number, ay: number): Pt {
-    return { x: this.camX + (ax - this.W / 2) / this.zoom, y: this.camY + (ay - this.midY()) / this.zoom };
+    const x = this.camX + (ax - this.W / 2) / this.zoom;
+    if (!this.shaded) return { x, y: this.camY + (ay - this.midY()) / this.zoom };
+    // In 2.5D, the ground under a pixel may have risen into it from nearer the viewer:
+    // march back from the furthest that could, the same way the shader does.
+    const base = this.camY + (ay - this.midY()) / (this.zoom * TILT);
+    const span = (LIFT * 1.05) / TILT;
+    for (let i = 0; i <= 60; i++) {
+      const y = base + span - (i * span) / 60;
+      if (this.py(x, y) <= ay) return { x, y };
+    }
+    return { x, y: base };
   }
 
   zoomAt(ax: number, ay: number, factor: number): void {
@@ -168,60 +201,23 @@ export class RangeScene {
     return [this.camX, this.camY, this.zoom, this.midY()];
   }
 
-  /**
-   * What the shader needs to know about each art pixel on screen: the ground's height (r and
-   * a, high and low bytes), its kind (g: off the island counts as deep sea), and fog over it (b).
-   */
-  info(): Uint8Array {
-    const W = this.W;
-    const H = this.H;
+  /** What the shader needs: the island's heights and kinds, the fog, and the seasons' ground. */
+  shadeInputs(): { seed: number; heights: Uint8Array; fog: HTMLCanvasElement; fogVersion: number; ground: [HTMLCanvasElement, HTMLCanvasElement]; blend: number } | null {
     const is = this.island;
-    if (!this.infoBuf || this.infoBuf.length !== W * H * 4) this.infoBuf = new Uint8Array(W * H * 4);
-    const out = this.infoBuf;
-    const seen = this.seenRef;
-    const sprite = this.maskCtx.getImageData(0, 0, W, H).data;
-    // Seen-ness blended between cells, so the fog's edge is a soft slope, not steps.
-    const seenAt = (cx: number, cy: number) => (cx < 0 || cy < 0 || cx >= CELLS || cy >= CELLS || !seen ? 0 : seen[cy * CELLS + cx]);
-    for (let y = 0; y < H; y++) {
-      const wy = this.camY + (y + 0.5 - this.midY()) / this.zoom;
-      for (let x = 0; x < W; x++) {
-        const wx = this.camX + (x + 0.5 - W / 2) / this.zoom;
-        const o = (y * W + x) * 4;
-        const xi = Math.floor(wx);
-        const yi = Math.floor(wy);
-        if (!is || xi < 0 || yi < 0 || xi >= ISLAND || yi >= ISLAND) {
-          out[o] = 0;
-          out[o + 1] = 0;
-          out[o + 2] = 0;
-          out[o + 3] = 0;
-          continue;
-        }
-        const i = yi * ISLAND + xi;
-        // Height blended between the four nearest tiles, so slopes are smooth up close.
-        const fx = wx - 0.5 - Math.floor(wx - 0.5);
-        const fy = wy - 0.5 - Math.floor(wy - 0.5);
-        const x0 = Math.max(0, Math.min(ISLAND - 2, Math.floor(wx - 0.5)));
-        const y0 = Math.max(0, Math.min(ISLAND - 2, Math.floor(wy - 0.5)));
-        const hh = is.height;
-        const k = y0 * ISLAND + x0;
-        const h = (hh[k] * (1 - fx) + hh[k + 1] * fx) * (1 - fy) + (hh[k + ISLAND] * (1 - fx) + hh[k + ISLAND + 1] * fx) * fy;
-        // 16 bits of height (high byte in r, low in a), so gentle slopes don't band.
-        const h16 = Math.round(Math.max(0, Math.min(1, (h + 0.2) / 1.2)) * 65535);
-        out[o] = h16 >> 8;
-        // Creatures are flagged as kind 9: lit as figures standing up, not as ground.
-        out[o + 1] = sprite[(y * W + x) * 4 + 3] > 140 ? 252 : is.biome[i] * 28;
-        const gx = wx / CELL - 0.5;
-        const gy = wy / CELL - 0.5;
-        const cx0 = Math.floor(gx);
-        const cy0 = Math.floor(gy);
-        const tx = gx - cx0;
-        const ty = gy - cy0;
-        const sv = (seenAt(cx0, cy0) * (1 - tx) + seenAt(cx0 + 1, cy0) * tx) * (1 - ty) + (seenAt(cx0, cy0 + 1) * (1 - tx) + seenAt(cx0 + 1, cy0 + 1) * tx) * ty;
-        out[o + 2] = Math.round((1 - sv) * 255);
-        out[o + 3] = h16 & 255;
+    if (!is || !this.fog || !this.groundPair) return null;
+    if (!this.heightData || this.heightDataSeed !== is.seed) {
+      // 16 bits of height (high byte in r, low in a), and the kind of ground in g.
+      const d = new Uint8Array(ISLAND * ISLAND * 4);
+      for (let i = 0; i < ISLAND * ISLAND; i++) {
+        const h16 = Math.round(Math.max(0, Math.min(1, (is.height[i] - H_LO) / H_SPAN)) * 65535);
+        d[i * 4] = h16 >> 8;
+        d[i * 4 + 1] = is.biome[i] * 28;
+        d[i * 4 + 3] = h16 & 255;
       }
+      this.heightData = d;
+      this.heightDataSeed = is.seed;
     }
-    return out;
+    return { seed: is.seed, heights: this.heightData, fog: this.fog, fogVersion: this.fogVersion, ground: this.groundPair, blend: this.seasonBlend };
   }
 
   // ---- Input ----
@@ -237,12 +233,12 @@ export class RangeScene {
     b.flinch = 0.4;
     if (b.hits >= this.hitsNeeded(state)) {
       b.fleeing = true;
-      this.events.push({ type: 'fend', x: this.sx(b.x), y: this.sy(b.y) - 8 });
-    } else this.events.push({ type: 'hit', x: this.sx(b.x), y: this.sy(b.y) - 8 });
+      this.events.push({ type: 'fend', x: this.sx(b.x), y: this.py(b.x, b.y) - 8 });
+    } else this.events.push({ type: 'hit', x: this.sx(b.x), y: this.py(b.x, b.y) - 8 });
   }
 
   tap(state: GameState, ax: number, ay: number): void {
-    const near = (x: number, y: number) => Math.hypot(this.sx(x) - ax, this.sy(y) - 3 - ay) < Math.max(9, this.zoom * 2);
+    const near = (x: number, y: number) => Math.hypot(this.sx(x) - ax, this.py(x, y) - 3 - ay) < Math.max(9, this.zoom * 2);
     const b = this.beast;
     if (b && !b.fleeing && near(b.x, b.y)) {
       this.hitBeast(state, b);
@@ -250,7 +246,7 @@ export class RangeScene {
     }
     const v = this.visitor;
     if (v && near(v.x, v.y)) {
-      this.events.push({ type: 'court', x: this.sx(v.x), y: this.sy(v.y) - 12 });
+      this.events.push({ type: 'court', x: this.sx(v.x), y: this.py(v.x, v.y) - 12 });
       this.visitor = null;
       return;
     }
@@ -270,8 +266,8 @@ export class RangeScene {
     }
     const at = this.lastPos ?? this.island?.home;
     if (!at) return;
-    this.fx.sparkle(this.sx(at.x), this.sy(at.y) - 8);
-    this.fx.pulse(this.sx(at.x), this.sy(at.y) - 4, PAL.y);
+    this.fx.sparkle(this.sx(at.x), this.py(at.x, at.y) - 8);
+    this.fx.pulse(this.sx(at.x), this.py(at.x, at.y) - 4, PAL.y);
   }
 
   // ---- The ground and the fog ----
@@ -387,6 +383,7 @@ export class RangeScene {
       if (!seen[i] || known[i]) continue;
       known[i] = 1;
       b.clearRect((i % CELLS) * CELL, Math.floor(i / CELLS) * CELL, CELL, CELL);
+      this.fogVersion++;
     }
   }
 
@@ -465,7 +462,7 @@ export class RangeScene {
   private drawBeing(b: CanvasRenderingContext2D, look: CreatureLook, x: number, y: number, o: { left?: boolean; frame?: number; sleeping?: boolean; hero?: boolean; hop?: number }): void {
     const z = this.zoom;
     const X = this.sx(x);
-    const Y = this.sy(y);
+    const Y = this.py(x, y);
     if (X < -40 || X > this.W + 40 || Y < -40 || Y > this.H + 40) return;
     if (z < 1.6) {
       b.fillStyle = o.hero ? PAL.y : DIET_DOT[look.diet] ?? PAL.g;
@@ -477,7 +474,6 @@ export class RangeScene {
     // A cute little hop while it moves: up to a couple of pixels, the shadow staying put.
     const opts = { left: o.left, frame: o.frame, sleeping: o.sleeping, scale: k, hop: (o.hop ?? 0) * k };
     drawMini(b, look, X, Y, opts);
-    if (this.shaded) drawMini(this.maskCtx, look, X, Y, opts);
   }
 
   draw(f: Frame, state: GameState): void {
@@ -493,6 +489,13 @@ export class RangeScene {
     const { season } = seasonOf(state);
     const si = ['Spring', 'Summer', 'Autumn', 'Winter'].indexOf(season.name);
     const winter = season.name === 'Winter';
+    // Seasons turn gradually: over the last part of each, it blends into the next.
+    const { left: seasonLeft } = seasonOf(state);
+    const into = 1 - seasonLeft / SEASON_SEC;
+    const blend = Math.max(0, Math.min(1, (into - 0.45) / 0.55));
+    const turn = blend * blend * (3 - 2 * blend);
+    const next = (si + 1) % 4;
+    this.seasonBlend = turn;
     const dayT = (t % DAY_SEC) / DAY_SEC;
     const night = Math.max(0, Math.min(1, (0.125 - Math.abs(dayT - 0.875)) * 40));
     const asleep = night > 0.5;
@@ -503,8 +506,10 @@ export class RangeScene {
     // The camera follows your creature until you take it.
     if (this.auto) {
       const k = this.snap ? 1 : Math.min(1, dt * 3);
+      // In 2.5D the creature stands raised by the land; aim so it's raised into the middle.
+      const ty = this.shaded ? me.y - (this.heightAt(me.x, me.y) * LIFT) / TILT : me.y;
       this.camX += (me.x - this.camX) * k;
-      this.camY += (me.y - this.camY) * k;
+      this.camY += (ty - this.camY) * k;
       this.snap = false;
     }
 
@@ -516,24 +521,36 @@ export class RangeScene {
       this.groundSeed = is.seed;
     }
     if (!this.ground.has(si)) this.ground.set(si, this.paintGround(is, si));
+    if (!this.ground.has(next)) this.ground.set(next, this.paintGround(is, next));
+    this.groundPair = [this.ground.get(si)!, this.ground.get(next)!];
     this.paintFog(st.seen);
-    b.fillStyle = DEEP;
-    b.fillRect(0, 0, W, H);
     b.imageSmoothingEnabled = false;
-    this.blitWorld(b, this.ground.get(si)!);
-    // Waves glint on the open sea.
-    b.fillStyle = '#4c7f9c';
-    for (let i = 0; i < 18; i++) {
-      const x = Math.round(((hash(i, 81) * W + t * 3 * (1 + (i % 3))) % (W + 10)) - 5);
-      const y = Math.round(hash(i, 83) * H);
-      const w = this.toWorld(x, y);
-      if (!isLand(is, w.x, w.y)) b.fillRect(x, y, 2, 1);
+    if (this.shaded) {
+      // The shader draws the land (in 2.5D); this canvas carries only what stands on it.
+      b.clearRect(0, 0, W, H);
+    } else {
+      b.fillStyle = DEEP;
+      b.fillRect(0, 0, W, H);
+      this.blitWorld(b, this.ground.get(si)!);
+      if (turn > 0) {
+        b.globalAlpha = turn;
+        this.blitWorld(b, this.ground.get(next)!);
+        b.globalAlpha = 1;
+      }
+      // Waves glint on the open sea.
+      b.fillStyle = '#4c7f9c';
+      for (let i = 0; i < 18; i++) {
+        const x = Math.round(((hash(i, 81) * W + t * 3 * (1 + (i % 3))) % (W + 10)) - 5);
+        const y = Math.round(hash(i, 83) * H);
+        const w = this.toWorld(x, y);
+        if (!isLand(is, w.x, w.y)) b.fillRect(x, y, 2, 1);
+      }
     }
 
     // Home: nests (with the egg) and burrow mounds, in tile units.
     const tile = (x: number, y: number, w: number, h: number, col: string) => {
       b.fillStyle = col;
-      b.fillRect(Math.round(this.sx(x)), Math.round(this.sy(y)), Math.max(1, Math.round(w * this.zoom)), Math.max(1, Math.round(h * this.zoom)));
+      b.fillRect(Math.round(this.sx(x)), Math.round(this.py(x + w / 2, y)), Math.max(1, Math.round(w * this.zoom)), Math.max(1, Math.round(h * this.zoom * (this.shaded ? TILT : 1))));
     };
     const nests = this.nestSpots(home, Math.min(9, Math.max(1, gens.nest)));
     for (const n of nests) {
@@ -557,7 +574,7 @@ export class RangeScene {
       const found = (st.trips[pl.id] ?? 0) > 0;
       if (!found && !st.seen[Math.floor(p.y / CELL) * CELLS + Math.floor(p.x / CELL)]) continue;
       const X = Math.round(this.sx(p.x));
-      const Y = Math.round(this.sy(p.y));
+      const Y = Math.round(this.py(p.x, p.y));
       if (X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;
       if (found) {
         b.fillStyle = PAL.k;
@@ -580,10 +597,12 @@ export class RangeScene {
       const step = 3 / this.zoom;
       b.fillStyle = PAL.w;
       for (let k = step * 2; k < d; k += step * 2) {
-        b.fillRect(Math.round(this.sx(me.x + ((st.walk.tx - me.x) * k) / d)), Math.round(this.sy(me.y + ((st.walk.ty - me.y) * k) / d)), 1, 1);
+        const fx = me.x + ((st.walk.tx - me.x) * k) / d;
+        const fy = me.y + ((st.walk.ty - me.y) * k) / d;
+        b.fillRect(Math.round(this.sx(fx)), Math.round(this.py(fx, fy)), 1, 1);
       }
       const X = Math.round(this.sx(st.walk.tx));
-      const Y = Math.round(this.sy(st.walk.ty));
+      const Y = Math.round(this.py(st.walk.tx, st.walk.ty));
       b.fillStyle = PAL.o;
       for (let k = -2; k <= 2; k++) {
         b.fillRect(X + k, Y + k, 1, 1);
@@ -592,13 +611,6 @@ export class RangeScene {
     }
 
     // ---- Everyone who moves, sorted by depth. ----
-    if (this.shaded) {
-      if (this.mask.width !== W || this.mask.height !== H) {
-        this.mask.width = W;
-        this.mask.height = H;
-      }
-      this.maskCtx.clearRect(0, 0, W, H);
-    }
     const sprites: { y: number; draw: () => void }[] = [];
     this.syncHerd(state, home);
     this.grazeTimer -= dt;
@@ -712,7 +724,7 @@ export class RangeScene {
         y: by,
         draw: () => {
           const X = this.sx(bx);
-          const Y = this.sy(by);
+          const Y = this.py(bx, by);
           const z = Math.max(0.5, this.zoom / 3);
           const dir = beast.left ? -1 : 1;
           const wob = beast.flinch > 0 ? 1.3 : 1;
@@ -764,7 +776,7 @@ export class RangeScene {
           if (Math.floor(t * 2) % 2 && this.zoom >= 1.6) {
             b.fillStyle = PAL.p;
             const hx = Math.round(this.sx(vx));
-            const hy = Math.round(this.sy(vy) - 14 * (this.zoom >= 6 ? 2 : 1));
+            const hy = Math.round(this.py(vx, vy) - 14 * (this.zoom >= 6 ? 2 : 1));
             b.fillRect(hx - 2, hy, 2, 1);
             b.fillRect(hx + 1, hy, 2, 1);
             b.fillRect(hx - 2, hy + 1, 5, 1);
@@ -789,7 +801,7 @@ export class RangeScene {
         this.drawBeing(b, look, me.x, me.y, { left, frame: walking ? Math.floor(t * 8) % 2 : 0, hero: true, hop: walking ? Math.abs(Math.sin(t * 7)) * 2 : 0 });
         // A blinking "!" when something's stopped it on the road.
         const X = Math.round(this.sx(me.x));
-        const Y = Math.round(this.sy(me.y)) - (this.zoom >= 6 ? 26 : this.zoom >= 1.6 ? 14 : 5);
+        const Y = Math.round(this.py(me.x, me.y)) - (this.zoom >= 6 ? 26 : this.zoom >= 1.6 ? 14 : 5);
         if (st.walk?.event) {
           if (Math.floor(t * 3) % 2) {
             b.fillStyle = PAL.o;
@@ -805,25 +817,26 @@ export class RangeScene {
 
     // The fog, over everything on the ground (the shader draws its own, softer).
     if (!this.shaded) this.blitWorld(b, this.fog!);
-    this.seenRef = st.seen;
 
-    // Falling leaves in autumn, snow in winter (screen space).
-    if (season.name === 'Autumn' || winter) {
-      const want = winter ? 45 : 12;
-      while (this.flakes.length < want) this.flakes.push({ x: Math.random() * W, y: Math.random() * H, v: 4 + Math.random() * 6 });
-      this.flakes.length = want;
-      for (const q of this.flakes) {
-        q.y += q.v * dt;
-        q.x += Math.sin(t + q.v) * 3 * dt + (winter ? 0 : 6 * dt);
-        if (q.y > H) {
-          q.y = 0;
-          q.x = Math.random() * W;
-        }
-        if (q.x > W) q.x -= W;
-        b.fillStyle = winter ? PAL.w : q.v > 7 ? PAL.o : PAL.O;
-        b.fillRect(Math.round(q.x), Math.round(q.y), 1, 1);
+    // Falling leaves in autumn, snow in winter (screen space), easing in and out with the seasons.
+    const weight = (n: number) => (si === n ? 1 - turn : 0) + (next === n ? turn : 0);
+    const snow = weight(3);
+    const leaves = weight(2);
+    const want = Math.round(45 * snow + 12 * leaves);
+    while (this.flakes.length < want) this.flakes.push({ x: Math.random() * W, y: Math.random() * H, v: 4 + Math.random() * 6, snow: Math.random() < snow / Math.max(0.01, snow + leaves) });
+    this.flakes.length = want;
+    for (const q of this.flakes) {
+      q.y += q.v * dt;
+      q.x += Math.sin(t + q.v) * 3 * dt + (q.snow ? 0 : 6 * dt);
+      if (q.y > H) {
+        q.y = 0;
+        q.x = Math.random() * W;
+        q.snow = Math.random() < snow / Math.max(0.01, snow + leaves);
       }
-    } else this.flakes.length = 0;
+      if (q.x > W) q.x -= W;
+      b.fillStyle = q.snow ? PAL.w : q.v > 7 ? PAL.o : PAL.O;
+      b.fillRect(Math.round(q.x), Math.round(q.y), 1, 1);
+    }
 
     // Night falls over everything; in summer, fireflies around home.
     if (night > 0) {
@@ -835,7 +848,9 @@ export class RangeScene {
         for (let i = 0; i < 10; i++) {
           if (Math.sin(t * 2 + i * 1.7) < 0.2) continue;
           b.fillStyle = PAL.y;
-          b.fillRect(Math.round(this.sx(home.x + Math.sin(t * 0.3 + i) * 6 + (hash(i, 71) - 0.5) * 8)), Math.round(this.sy(home.y + Math.cos(t * 0.4 + i * 2) * 4)), 1, 1);
+          const fx = home.x + Math.sin(t * 0.3 + i) * 6 + (hash(i, 71) - 0.5) * 8;
+          const fy = home.y + Math.cos(t * 0.4 + i * 2) * 4;
+          b.fillRect(Math.round(this.sx(fx)), Math.round(this.py(fx, fy)) - 3, 1, 1);
         }
       }
     }

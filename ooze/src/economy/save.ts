@@ -53,6 +53,7 @@ export function deserialize(text: string): GameState {
           seen: s.seed !== undefined ? unpackSeen(s.seen) : fresh.seen,
           walk: s.seed !== undefined ? (s.walk ?? null) : null,
           autoRoam: s.autoRoam ?? true,
+          nextFind: s.nextFind ?? 0,
           trips: s.seed !== undefined ? { ...(s.trips ?? {}) } : {},
           mates: s.mates ?? [],
           egg: s.egg ?? null,

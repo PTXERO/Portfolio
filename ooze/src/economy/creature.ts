@@ -284,7 +284,9 @@ function arrive(state: GameState, p: PlaceDef, rand: () => number): void {
 }
 
 /** Chance, per bit of new ground, of turning up a part from a found place close by. */
-export const RUMMAGE_CHANCE = 0.015;
+export const RUMMAGE_CHANCE = 0.004;
+/** After a part turns up (rummaging or going back), seconds before another can. */
+export const FIND_GAP = 480;
 /** How close to a place counts as "around" it, in tiles. */
 const AROUND = 30;
 
@@ -295,9 +297,10 @@ function rummage(state: GameState, fresh: number, rand: () => number): void {
   const near = def().places!.find((p) => s.trips[p.id] > 0 && Math.hypot(is.places[p.id].x - s.pos.x, is.places[p.id].y - s.pos.y) < AROUND);
   if (!near) return;
   const missing = near.parts.filter((id) => !s.parts.includes(id));
-  if (!missing.length || rand() >= 1 - (1 - RUMMAGE_CHANCE) ** fresh) return;
+  if (!missing.length || s.year < s.nextFind || rand() >= 1 - (1 - RUMMAGE_CHANCE) ** fresh) return;
   const id = missing[Math.floor(rand() * missing.length)];
   s.parts.push(id);
+  s.nextFind = s.year + FIND_GAP;
   state.reports.push({ kind: 'event', success: true, earned: '0', parts: [id], event: `Rooting about near the ${near.name}, it turned something up.` });
 }
 
@@ -307,10 +310,11 @@ function revisit(state: GameState, p: PlaceDef, rand: () => number): void {
   s.trips[p.id] = (s.trips[p.id] ?? 0) + 1;
   const report: GameState['reports'][number] = { kind: 'trip', place: p.id, success: true, earned: '0', parts: [] };
   const missing = p.parts.filter((id) => !s.parts.includes(id));
-  if (missing.length && rand() < 0.35) {
+  if (missing.length && s.year >= s.nextFind && rand() < 0.25) {
     const id = missing[Math.floor(rand() * missing.length)];
     s.parts.push(id);
     report.parts.push(id);
+    s.nextFind = s.year + FIND_GAP;
   }
   if (s.mates.length < MAX_MATES && rand() < p.mateChance * 0.6) {
     const m = randomMate(state, p);

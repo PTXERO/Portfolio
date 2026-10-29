@@ -320,6 +320,8 @@ export interface StageState {
   seen: Uint8Array;
   /** Where it's walking, seconds of walking till its next run-in, and the run-in it's stopped at. */
   walk: { tx: number; ty: number; next: number; event?: { id: string; choice: number | null; left: number } } | null;
+  /** Seconds (on the seasons' clock) before another part can turn up rummaging or revisiting. */
+  nextFind: number;
   /** Whether Curiosity sends it exploring on its own (the player can switch it off). */
   autoRoam: boolean;
   /** The herd: how many, and what they're set to do (the rest forage). */
