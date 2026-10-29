@@ -503,14 +503,28 @@ export class RangeScene {
   }
 
   /** A grassy spot near home for the herd to wander to next (further with a bigger range). */
+  /**
+   * How far from its nest the herd grazes: close to start with, each Home Range widening it
+   * (it takes a herd that can look after itself to range further).
+   */
+  private grazeRadius(state: GameState): number {
+    return 12 + 2.5 * Math.min(12, state.stages.creature.generators.territory);
+  }
+
   private pickGraze(is: Island, state: GameState): Pt {
-    const range = 4 + Math.min(12, state.stages.creature.generators.territory) * 1.5;
+    const range = Math.max(1, this.grazeRadius(state) - 3);
     for (let i = 0; i < 20; i++) {
       const a = Math.random() * Math.PI * 2;
       const d = Math.random() * range;
       const p = { x: is.home.x + Math.cos(a) * d, y: is.home.y + Math.sin(a) * d };
       const b = is.biome[Math.round(p.y) * ISLAND + Math.round(p.x)];
       if (b === Biome.Grass || b === Biome.High) return p;
+    }
+    // No grass in reach yet: anywhere dry near home.
+    for (let i = 0; i < 20; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const p = { x: is.home.x + Math.cos(a) * range * Math.random(), y: is.home.y + Math.sin(a) * range * Math.random() };
+      if (isLand(is, p.x, p.y)) return p;
     }
     return { ...is.home };
   }
@@ -555,7 +569,7 @@ export class RangeScene {
    * down to the water to drink; one strips a ripe bush; and at dusk a sentry climbs to the
    * highest ground near home and stands looking out.
    */
-  private startMoment(is: Island, home: Pt, dayT: number, winter: boolean, season: number): void {
+  private startMoment(is: Island, home: Pt, bases: Pt[], R: number, dayT: number, winter: boolean, season: number): void {
     const free = this.members.filter((m) => !m.act && m.flee <= 0 && m.role !== 'carer' && m.role !== 'digger');
     if (!free.length) return;
     const take = (pref?: Role) => {
@@ -564,7 +578,7 @@ export class RangeScene {
     };
     const dusk = dayT > 0.6 && dayT < 0.74;
     const land = (x: number, y: number) => isLand(is, x, y);
-    const bush = this.wild.ripeNear(home, 26);
+    const bush = this.wild.ripeNear(home, R + 2);
     const choices: [Act['kind'], number][] = [
       ['chase', winter || free.length < 2 ? 0 : 3],
       ['nuzzle', free.length < 2 ? 0 : season === 0 ? 4 : 2],
@@ -587,18 +601,22 @@ export class RangeScene {
       return;
     }
     const m = take(kind === 'lookout' ? 'guard' : undefined);
+    // Never beyond the grazing range of its own nest.
+    const nest = bases[m.base] ?? home;
+    const inR = (x: number, y: number) => land(x, y) && Math.hypot(x - nest.x, y - nest.y) <= R + 1.5;
+    const near = kind === 'eat' ? this.wild.ripeNear(nest, R + 2) : null;
     let spot: Pt | null = null;
     if (kind === 'rest') {
       // Shade: at the edge of the trees, else anywhere grassy.
-      spot = this.findSpot(m, 14, (x, y) => land(x, y) && is.biome[Math.round(y) * ISLAND + Math.round(x)] === Biome.Forest) ?? this.findSpot(m, 6, land);
+      spot = this.findSpot(m, 14, (x, y) => inR(x, y) && is.biome[Math.round(y) * ISLAND + Math.round(x)] === Biome.Forest) ?? this.findSpot(m, 6, inR);
     } else if (kind === 'drink') {
-      spot = this.findSpot(m, 14, (x, y) => land(x, y) && (!land(x + 1.2, y) || !land(x - 1.2, y) || !land(x, y + 1.2) || !land(x, y - 1.2)));
-    } else if (kind === 'eat' && bush) {
-      spot = { x: bush.x + 0.6, y: bush.y + 0.2 };
+      spot = this.findSpot(m, 14, (x, y) => inR(x, y) && (!land(x + 1.2, y) || !land(x - 1.2, y) || !land(x, y + 1.2) || !land(x, y - 1.2)));
+    } else if (kind === 'eat' && near) {
+      spot = { x: near.x + 0.6, y: near.y + 0.2 };
     } else if (kind === 'lookout') {
       let best = -Infinity;
       for (let i = 0; i < 50; i++) {
-        const p = this.findSpot(home, 12, land);
+        const p = this.findSpot(nest, Math.min(12, R), land);
         if (p && is.height[Math.round(p.y) * ISLAND + Math.round(p.x)] > best) {
           best = is.height[Math.round(p.y) * ISLAND + Math.round(p.x)];
           spot = p;
@@ -606,7 +624,7 @@ export class RangeScene {
       }
     }
     if (!spot) return;
-    m.act = { kind, t: kind === 'rest' ? 25 : kind === 'lookout' ? 22 : kind === 'eat' ? 3 : 12, x: spot.x, y: spot.y, bush: kind === 'eat' ? bush ?? undefined : undefined };
+    m.act = { kind, t: kind === 'rest' ? 25 : kind === 'lookout' ? 22 : kind === 'eat' ? 3 : 12, x: spot.x, y: spot.y, bush: kind === 'eat' ? near ?? undefined : undefined };
   }
 
   private nestSpots(home: Pt, n: number): Pt[] {
@@ -806,7 +824,8 @@ export class RangeScene {
     const huddle = asleep || winter || this.storm > 0.4;
     const center = huddle ? home : this.graze;
     // Room enough that, zoomed right in, you can pick out each one and see what it's up to.
-    const spread = (huddle ? 1.5 : 3) + Math.sqrt(this.members.length) * (huddle ? 0.9 : 1.8);
+    const grazeR = this.grazeRadius(state);
+    const spread = Math.min(grazeR, (huddle ? 1.5 : 3) + Math.sqrt(this.members.length) * (huddle ? 0.9 : 1.8));
     const gap = huddle ? 1.6 : 2.4;
     const bt = this.beast && !this.beast.fleeing ? this.beast : null;
     // With nests away from home, the herd spreads between them (foragers only; the rest keep
@@ -829,7 +848,7 @@ export class RangeScene {
     if (asleep || bt || this.storm > 0.4) for (const m of this.members) m.act = undefined;
     else if (this.momentTimer <= 0) {
       this.momentTimer = 4 + Math.random() * 6;
-      this.startMoment(is, home, dayT, winter, si);
+      this.startMoment(is, home, bases, grazeR, dayT, winter, si);
     }
     this.members.forEach((m, i) => {
       // Where instinct takes each one (around its own nest, if it lives away from home).
@@ -887,6 +906,13 @@ export class RangeScene {
           gx = act.x;
           gy = act.y;
         }
+      }
+      // Within the grazing range of its nest (unless running for its life).
+      const own = bases[m.base] ?? home;
+      const out = Math.hypot(gx - own.x, gy - own.y);
+      if (out > grazeR + 1 && !(m.act?.kind === 'chase')) {
+        gx = own.x + ((gx - own.x) / out) * grazeR;
+        gy = own.y + ((gy - own.y) / out) * grazeR;
       }
       // Never aim for the sea: a spot out over the water is pulled back toward its nest, so
       // nobody piles up at the shore.

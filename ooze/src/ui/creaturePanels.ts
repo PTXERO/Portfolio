@@ -66,7 +66,7 @@ const PLACE_TEXT: Record<string, string> = {
   burrow: 'Room for 3 more',
   waterhole: 'The herd eats 4% less each (down to half)',
   den: 'Room for 15 more, and shelter from winter',
-  territory: 'Room for 50 more, and food +3% each',
+  territory: 'Room for 50 more, food +3%, and the herd grazes further from its nest',
 };
 
 /** What changes the creature tabs' layout. */

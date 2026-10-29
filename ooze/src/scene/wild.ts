@@ -82,14 +82,23 @@ export class Wild {
   private setup(is: Island): void {
     this.seed = is.seed;
     const h = is.home;
-    const spots = (n: number, salt: number, r0: number, r1: number, ok: (x: number, y: number) => boolean): Pt[] => {
+    // Spots anywhere on the island where `ok` holds (each kind in its own ground), or,
+    // with a radius, between r0 and r1 tiles from home.
+    const spots = (n: number, salt: number, ok: (x: number, y: number) => boolean, ring?: [number, number]): Pt[] => {
       const out: Pt[] = [];
-      for (let i = 0; i < n * 40 && out.length < n; i++) {
-        const a = hash(i, salt + is.seed % 997) * Math.PI * 2;
-        const d = r0 + hash(i, salt + 7) * (r1 - r0);
-        const x = h.x + Math.cos(a) * d;
-        const y = h.y + Math.sin(a) * d;
-        if (x > 2 && y > 2 && x < ISLAND - 2 && y < ISLAND - 2 && ok(x, y) && out.every((p) => Math.hypot(p.x - x, p.y - y) > 2.5)) out.push({ x, y });
+      for (let i = 0; i < n * 80 && out.length < n; i++) {
+        let x: number;
+        let y: number;
+        if (ring) {
+          const a = hash(i, salt + (is.seed % 997)) * Math.PI * 2;
+          const d = ring[0] + hash(i, salt + 7) * (ring[1] - ring[0]);
+          x = h.x + Math.cos(a) * d;
+          y = h.y + Math.sin(a) * d;
+        } else {
+          x = 2 + hash(i, salt + (is.seed % 997)) * (ISLAND - 4);
+          y = 2 + hash(i, salt + 7 + (is.seed % 991)) * (ISLAND - 4);
+        }
+        if (x > 2 && y > 2 && x < ISLAND - 2 && y < ISLAND - 2 && ok(x, y) && out.every((p) => Math.hypot(p.x - x, p.y - y) > 3)) out.push({ x, y });
       }
       return out;
     };
@@ -98,11 +107,11 @@ export class Wild {
     // Forest edge: forest with open ground beside it.
     const edge = (x: number, y: number) => biomeAt(is, x, y) === Biome.Forest && [grass(x + 1.5, y), grass(x - 1.5, y), grass(x, y + 1.5), grass(x, y - 1.5)].some(Boolean);
     this.bushes = [
-      ...spots(14, 11, 3, 22, grass).map((p) => ({ ...p, ripe: 0.5, tree: false })),
-      ...spots(10, 23, 4, 40, edge).map((p) => ({ ...p, ripe: 0.3, tree: true })),
+      ...spots(80, 11, grass).map((p) => ({ ...p, ripe: 0.5, tree: false })),
+      ...spots(50, 23, edge).map((p) => ({ ...p, ripe: 0.3, tree: true })),
     ];
-    this.crabs = spots(7, 37, 1, 45, sand).map((p, i) => ({ ...p, ph: i * 1.7, hide: 0 }));
-    const far = spots(1, 53, 30, 70, (x, y) => grass(x, y) || biomeAt(is, x, y) === Biome.High)[0];
+    this.crabs = spots(26, 37, sand).map((p, i) => ({ ...p, ph: i * 1.7, hide: 0 }));
+    const far = spots(1, 53, (x, y) => grass(x, y) || biomeAt(is, x, y) === Biome.High, [30, 70])[0];
     this.grazers = far ? Array.from({ length: 5 }, (_, i) => ({ x: far.x + (hash(i, 59) - 0.5) * 4, y: far.y + (hash(i, 61) - 0.5) * 3, vx: 0, vy: 0, ph: i * 2.1 })) : [];
   }
 
@@ -145,7 +154,8 @@ export class Wild {
 
     // Bushes and fruit trees: ripen, and show what's on them.
     for (const b of this.bushes) {
-      b.ripe = Math.min(1, b.ripe + (b.tree ? TREE_GROW : BUSH_GROW)[o.season] * dt);
+      // Winter strips them (the fruit drops and is gone till spring); otherwise they ripen.
+      b.ripe = o.season === 3 ? Math.max(0, b.ripe - 0.03 * dt) : Math.min(1, b.ripe + (b.tree ? TREE_GROW : BUSH_GROW)[o.season] * dt);
       if (z < 1.6) continue;
       const X = Math.round(v.sx(b.x));
       const Y = Math.round(v.py(b.x, b.y));
@@ -156,7 +166,8 @@ export class Wild {
     }
 
     // Crabs on the sand: sideways in little bursts; feet nearby send them under.
-    if (z >= 1.6) {
+    // Crabs keep to their burrows through the winter.
+    if (z >= 1.6 && o.season !== 3) {
       for (const c of this.crabs) {
         if (near(c.x, c.y, 2.2)) c.hide = 6;
         c.hide = Math.max(0, c.hide - dt);
@@ -176,7 +187,7 @@ export class Wild {
     // come back.
     if (!this.flock) {
       this.flockTimer -= dt;
-      if (this.flockTimer <= 0 && o.night < 0.5 && o.nests.length) {
+      if (this.flockTimer <= 0 && o.night < 0.5 && o.season !== 3 && o.nests.length) {
         this.flockTimer = 180 + Math.random() * 240;
         const n = o.nests[Math.floor(Math.random() * o.nests.length)];
         for (let i = 0; i < 20; i++) {
@@ -209,7 +220,7 @@ export class Wild {
 
     // Fish jump now and then, just off the shore in view.
     this.fishTimer -= dt;
-    if (this.fishTimer <= 0 && o.night < 0.5) {
+    if (this.fishTimer <= 0 && o.night < 0.5 && o.season !== 3) {
       this.fishTimer = 2 + Math.random() * 5;
       for (let i = 0; i < 8; i++) {
         const X = Math.random() * v.W;
@@ -288,11 +299,12 @@ function drawBush(b: CanvasRenderingContext2D, X: number, Y: number, k: number, 
     for (let i = 0; i < fruit; i++) b.fillRect(X + spots[i][0] * k, Y + spots[i][1] * k, k, k);
     return;
   }
-  b.fillStyle = season === 3 ? '#6c7a72' : '#2f6a3c';
+  // Leaves by the season: fresh, deep green, rust in autumn, bare and snow-capped in winter.
+  b.fillStyle = ['#3a7a40', '#2f6a3c', '#8a5a2a', '#5a5048'][season];
   b.fillRect(X - 2 * k, Y - 2 * k, 5 * k, 2 * k);
   b.fillRect(X - k, Y - 3 * k, 3 * k, k);
-  b.fillStyle = season === 3 ? '#8d9a92' : '#4e8f4a';
-  b.fillRect(X - k, Y - 3 * k, 2 * k, k);
+  b.fillStyle = ['#6aa85a', '#4e8f4a', '#b07a36', '#f2ead7'][season];
+  b.fillRect(X - k, Y - 3 * k, season === 3 ? 3 * k : 2 * k, k);
   b.fillStyle = season === 2 ? '#7a3a6a' : '#d0466a';
   const spots = [
     [-2, -2],

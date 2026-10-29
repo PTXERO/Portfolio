@@ -24,7 +24,7 @@ export class Sightings {
 
   /** Something new, if one's due and there's a place in view for it. */
   private start(v: WildView, is: Island, night: number, winter: boolean): void {
-    const kinds = night > 0.5 ? (winter ? ['aurora', 'comet'] : ['comet']) : ['whale', 'tortoise'];
+    const kinds = night > 0.5 ? (winter ? ['aurora', 'comet'] : ['comet']) : winter ? ['whale'] : ['whale', 'tortoise'];
     const kind = kinds[Math.floor(Math.random() * kinds.length)];
     const dir = Math.random() < 0.5 ? -1 : 1;
     if (kind === 'comet' || kind === 'aurora') {
