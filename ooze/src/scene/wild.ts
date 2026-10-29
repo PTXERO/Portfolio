@@ -22,6 +22,8 @@ export interface WildView {
   fx: Effects;
   /** The ground under a screen point. */
   toWorld(x: number, y: number): Pt;
+  /** Whether a spot is still under the fog (nothing there is shown). */
+  fogged?(x: number, y: number): boolean;
 }
 
 export interface Sprite {
@@ -161,7 +163,7 @@ export class Wild {
       if (z < 3) continue;
       const X = Math.round(v.sx(b.x));
       const Y = Math.round(v.py(b.x, b.y));
-      if (!on(X, Y)) continue;
+      if (!on(X, Y) || v.fogged?.(b.x, b.y)) continue;
       const k = z >= 6 ? 2 : 1;
       const n = Math.floor(b.ripe * 4);
       sprites.push({ y: b.y, draw: () => drawBush(o.b, X, Y, k, b.tree, n, o.season) });
@@ -178,7 +180,7 @@ export class Wild {
         if (biomeAt(is, c.x + dx, c.y) === Biome.Sand) c.x += dx;
         const X = Math.round(v.sx(c.x));
         const Y = Math.round(v.py(c.x, c.y));
-        if (!on(X, Y)) continue;
+        if (!on(X, Y) || v.fogged?.(c.x, c.y)) continue;
         const legs = Math.floor(t * 10 + c.ph) % 2;
         sprites.push({ y: c.y, draw: () => drawCrab(o.b, X, Y, z >= 6 ? 2 : 1, dx !== 0 && legs === 1) });
       }
@@ -214,7 +216,7 @@ export class Wild {
       const Y = v.py(f.x, f.y);
       const lift = Math.max(0, f.up);
       // Insects are only seen close up (from far out they would be giants over the land).
-      if (z >= 2.5 && (on(X, Y) || lift > 0)) sprites.push({ y: f.y + (lift > 0 ? 50 : 0), draw: () => drawFlock(o.b, X, Y, z, t, lift, f.dir) });
+      if (z >= 2.5 && (on(X, Y) || lift > 0) && !v.fogged?.(f.x, f.y)) sprites.push({ y: f.y + (lift > 0 ? 50 : 0), draw: () => drawFlock(o.b, X, Y, z, t, lift, f.dir) });
     }
     this.flocks = this.flocks.filter((f) => f.up < 3);
 
@@ -274,7 +276,7 @@ export class Wild {
         }
         const X = Math.round(v.sx(g.x));
         const Y = Math.round(v.py(g.x, g.y));
-        if (!on(X, Y)) continue;
+        if (!on(X, Y) || v.fogged?.(g.x, g.y)) continue;
         const moving = Math.hypot(g.vx, g.vy) > 0.1;
         const left = moving ? g.vx < 0 : Math.sin(g.ph) < 0;
         const step = moving ? Math.floor(t * (scared ? 14 : 6) + g.ph) % 2 : 0;

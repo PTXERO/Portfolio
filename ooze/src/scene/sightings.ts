@@ -66,6 +66,7 @@ export class Sightings {
       case 'whale': {
         // Surfaces, rolls along, blows, and sinks again.
         s.x += s.dir * 0.15 * dt;
+        if (v.fogged?.(s.x, s.y)) break;
         const X = v.sx(s.x);
         const Y = v.py(s.x, s.y);
         const up = Math.sin((s.age / s.life) * Math.PI);
@@ -92,6 +93,7 @@ export class Sightings {
       case 'tortoise': {
         if (!isLand(is, s.x + s.dir * 0.6, s.y)) s.dir = -s.dir;
         s.x += s.dir * 0.08 * dt;
+        if (v.fogged?.(s.x, s.y)) break;
         const x = s.x;
         const X = Math.round(v.sx(x));
         const Y = Math.round(v.py(x, s.y));

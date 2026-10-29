@@ -657,8 +657,12 @@ export class RangeScene {
   }
 
   /** The camera and effects, for the island's wild life. */
+  /** The cells seen so far (for keeping what's under the fog hidden). */
+  protected seenNow: Uint8Array | null = null;
+
   protected get wildView(): WildView {
-    return { zoom: this.zoom, W: this.W, H: this.H, sx: (x) => this.sx(x), py: (x, y) => this.py(x, y), fx: this.fx, toWorld: (x, y) => this.toWorld(x, y) };
+    const seen = this.seenNow;
+    return { zoom: this.zoom, W: this.W, H: this.H, sx: (x) => this.sx(x), py: (x, y) => this.py(x, y), fx: this.fx, toWorld: (x, y) => this.toWorld(x, y), fogged: seen ? (x, y) => !seen[Math.floor(y / CELL) * CELLS + Math.floor(x / CELL)] : undefined };
   }
 
   /** A little pink heart rising over a spot (age 0 to about 1). */
@@ -833,6 +837,7 @@ export class RangeScene {
     if (!this.ground.has(next)) this.ground.set(next, this.paintGround(is, next));
     this.groundPair = [this.ground.get(si)!, this.ground.get(next)!];
     this.paintFog(st.seen);
+    this.seenNow = st.seen;
     b.imageSmoothingEnabled = false;
     if (this.shaded) {
       // The shader draws the land (in 2.5D); this canvas carries only what stands on it.
