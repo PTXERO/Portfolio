@@ -210,12 +210,12 @@ const cell: StageDef = {
     {
       id: 'golgi',
       name: 'Golgi Body',
-      flavor: 'Packages and ships. The colony runs like clockwork.',
+      flavor: 'Packages and ships. Life around the Vents runs like clockwork.',
       hints: ['Something busy darts around the Vents.', 'Only a cell with cilia is nimble enough, at the Vents.'],
       needs: { habitat: 'vents', upgrades: ['cilia'], settled: 0.3 },
       manual: true,
       captures: 3,
-      bonus: { kind: 'genMult', target: 'colony', mult: 3 },
+      bonus: { kind: 'habitatMult', habitat: 'vents', mult: 1.5 },
     },
     {
       id: 'lysosome',
@@ -244,7 +244,7 @@ const cell: StageDef = {
       hints: ['What if they didn\'t let go?', 'Every organelle, a giant cell, and life thriving in all three habitats.'],
       needs: { found: 7, gens: { colony: 40, pack: 10, reef: 10 }, upgrades: ['giant'] },
       final: true,
-      cost: 2.4e25,
+      cost: 9.6e25,
     },
   ],
   upgrades: [

@@ -439,7 +439,7 @@ describe('cell stage', () => {
     for (const r of STAGES.cell.reactions!.filter((x) => x.bonus)) {
       const s = cell();
       s.current = 'cell';
-      Object.assign(s.stages.cell.generators, { fission: 50, colony: 20 });
+      Object.assign(s.stages.cell.generators, { fission: 50, colony: 20, thermophile: 5 });
       const measure = () => {
         const b = r.bonus!;
         if (b.kind === 'defense') return defenseOf(s, 'cell');
