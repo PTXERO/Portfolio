@@ -34,6 +34,9 @@ export const SPLIT_AT = 0.65;
 export class Swarm {
   cells: Swimmer[] = [];
   target = 0;
+  /** How the local kind of cell moves: speed multiplier, and how twitchy it is. */
+  speed = 1;
+  jitter = 0;
   private spawnTimer = 0;
   private burst = 0;
   private burstTimer = 0;
@@ -107,9 +110,10 @@ export class Swarm {
     }
     const born: Swimmer[] = [];
     for (const c of this.cells) {
-      c.heading += Math.sin(t * 0.7 + c.phase * 3) * 1.4 * dt;
-      let ax = Math.cos(c.heading) * SPEED - c.vx;
-      let ay = Math.sin(c.heading) * SPEED - c.vy;
+      c.heading += Math.sin(t * 0.7 + c.phase * 3) * 1.4 * dt + (Math.random() - 0.5) * this.jitter * dt;
+      const speed = SPEED * this.speed;
+      let ax = Math.cos(c.heading) * speed - c.vx;
+      let ay = Math.sin(c.heading) * speed - c.vy;
       const gx = Math.floor(c.x / R);
       const gy = Math.floor(c.y / R);
       for (let i = -1; i <= 1; i++) {
@@ -137,7 +141,7 @@ export class Swarm {
       c.vy += ay * dt * 1.5;
       const sp = Math.hypot(c.vx, c.vy);
       // A dividing cell slows almost to a stop.
-      const max = c.split >= 0 ? SPEED * 0.2 : c.poked > 0 ? SPEED * 4 : SPEED * 1.6;
+      const max = c.split >= 0 ? speed * 0.2 : c.poked > 0 ? SPEED * 4 : speed * 1.6;
       if (sp > max) {
         c.vx *= max / sp;
         c.vy *= max / sp;

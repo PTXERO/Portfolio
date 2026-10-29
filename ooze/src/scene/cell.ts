@@ -257,7 +257,11 @@ export class CellScene {
     const look = (this.look = lookOf(state, 'cell'));
     // The swarm wears a lighter version of the look, so a crowd stays readable;
     // your own cell shows every mutation.
-    const crowd: Look = { ...look, flagella: Math.min(1, look.flagella), cilia: false, thick: false, eyespot: false, spikes: false, toxin: false };
+    const species = (st.habitat || 'shallows') as Look['species'];
+    const crowd: Look = { ...look, flagella: Math.min(1, look.flagella), cilia: false, thick: false, eyespot: false, spikes: false, toxin: false, species };
+    // Each place's cells move their own way: Depths ambushers drift slowly, Vents rods twitch in the heat.
+    this.swarm.speed = species === 'depths' ? 0.45 : species === 'vents' ? 1.3 : 1;
+    this.swarm.jitter = species === 'vents' ? 14 : 0;
     const hab = HABITATS[habitatOf(state, 'cell')?.id ?? 'shallows'] ?? HABITATS.shallows;
     if (this.habitat !== st.habitat) {
       // Another habitat: a quick dark wipe, then its own life.
@@ -410,8 +414,9 @@ export class CellScene {
       }
       blobs.push(cores);
     }
+    // Colonies: the lineage's colours in the Shallows; hunting packs in the Depths glow like their members.
     const [fill, edge] = DIET_COLORS[look.diet ?? 'none'];
-    const style: BlobStyle = { edge, body: fill, nucleus: PAL.n };
+    const style: BlobStyle = species === 'depths' ? { edge: '#7fd3f0', body: '#1c3550', nucleus: '#b8f0ff' } : { edge, body: fill, nucleus: PAL.n };
     for (const cores of blobs) drawBlob(b, cores, style);
     for (const cores of blobs) drawBlob(b, cores, style, true);
 

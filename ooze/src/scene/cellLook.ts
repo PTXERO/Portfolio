@@ -18,7 +18,19 @@ export interface Look {
   size: number;
   /** Organelle ids found, drawn inside the hero. */
   organelles: string[];
+  /** Which habitat's kind of cell this is: each place grows its own. Unset for your own cell. */
+  species?: 'shallows' | 'depths' | 'vents';
 }
+
+/**
+ * Each habitat's own kind of cell. Shallows cells wear the lineage's diet colours;
+ * Depths cells are dark, slim and glow at the edge, with a little lure out front;
+ * Vents cells are hot red rods bristling with hairs.
+ */
+const SPECIES = {
+  depths: { fill: '#1c3550', edge: '#7fd3f0', nucleus: '#b8f0ff', squash: 0.55 },
+  vents: { fill: '#c4452f', edge: '#f5c45e', nucleus: '#5a1a10', squash: 0.5 },
+} as const;
 
 export function lookOf(state: GameState, stage: StageId): Look {
   const st = state.stages[stage];
@@ -69,7 +81,7 @@ const cache = new Map<string, Baked>();
  * `frame` (0 or 1) animates the tail and cilia; `squash` makes it bulge.
  */
 function bake(look: Look, rx: number, frame: number, squash: boolean, inner: boolean): Baked {
-  const ry = Math.max(2, Math.round(rx * 0.75));
+  const ry = Math.max(2, Math.round(rx * (look.species === 'depths' ? SPECIES.depths.squash : look.species === 'vents' ? SPECIES.vents.squash : 0.75)));
   const pad = 7;
   const w = rx * 2 + pad * 2 + 1;
   const h = ry * 2 + pad * 2 + 1;
@@ -79,7 +91,9 @@ function bake(look: Look, rx: number, frame: number, squash: boolean, inner: boo
   const b = c.getContext('2d')!;
   const cx = pad + rx;
   const cy = pad + ry;
-  const [fill, edge] = DIET_COLORS[look.diet ?? 'none'];
+  const sp = look.species && look.species !== 'shallows' ? SPECIES[look.species] : null;
+  const [fill, edge] = sp ? [sp.fill, sp.edge] : DIET_COLORS[look.diet ?? 'none'];
+  const nucleus = sp ? sp.nucleus : PAL.n;
   const px = (x: number, y: number, col: string) => {
     b.fillStyle = col;
     b.fillRect(Math.round(x), Math.round(y), 1, 1);
@@ -88,7 +102,14 @@ function bake(look: Look, rx: number, frame: number, squash: boolean, inner: boo
   const sy = squash ? 0.85 : 1;
   // Small cells get a looser edge test, so they come out round rather than diamond.
   const edgeIn = 1 + 0.9 / rx;
-  const inside = (x: number, y: number) => ((x - cx) / (rx * sx)) ** 2 + ((y - cy) / (ry * sy)) ** 2 <= edgeIn;
+  const ellipse = (x: number, y: number) => ((x - cx) / (rx * sx)) ** 2 + ((y - cy) / (ry * sy)) ** 2 <= edgeIn;
+  // Vents cells are capsules: a straight middle with round ends.
+  const capsule = (x: number, y: number) => {
+    const half = rx * sx - ry * sy;
+    const dx = Math.max(0, Math.abs(x - cx) - half);
+    return dx * dx + (y - cy) ** 2 <= (ry * sy) ** 2 + 0.6;
+  };
+  const inside = look.species === 'vents' ? capsule : ellipse;
 
   // Flagella trail behind (to the left), whipping between two frames.
   for (let f = 0; f < look.flagella; f++) {
@@ -125,10 +146,25 @@ function bake(look: Look, rx: number, frame: number, squash: boolean, inner: boo
       for (let k = 1; k <= 2; k++) px(cx + Math.cos(a) * (rx * sx + k), cy + Math.sin(a) * (ry * sy + k), look.toxin ? PAL.p : PAL.w);
     }
   }
+  // Vents cells bristle with short hairs that flicker in the heat.
+  if (look.species === 'vents') {
+    for (let x = Math.round(cx - rx + 1); x <= cx + rx - 1; x += 2) {
+      px(x + frame, cy - ry - 1, edge);
+      px(x + 1 - frame, cy + ry + 1, edge);
+    }
+  }
+  // Depths cells dangle a glowing lure in front, to draw prey in the dark.
+  if (look.species === 'depths') {
+    px(cx + rx, cy - ry, edge);
+    px(cx + rx + 1, cy - ry - 1, edge);
+    px(cx + rx + 2, cy - ry - 1 + frame, '#fff6a0');
+  }
+  // Shallows cells carry a speck of green from all that sunlight.
+  if (look.species === 'shallows') px(cx - 2, cy + 1, PAL.l);
   // Inside: a nucleus, organelles (hero only), and an eyespot at the front.
-  px(cx, cy, PAL.n);
-  px(cx + 1, cy, PAL.n);
-  if (rx >= 4) px(cx, cy - 1, PAL.n);
+  px(cx, cy, nucleus);
+  px(cx + 1, cy, nucleus);
+  if (rx >= 4 && look.species !== 'vents') px(cx, cy - 1, nucleus);
   if (inner) {
     look.organelles.forEach((o, i) => {
       const a = (i / Math.max(1, look.organelles.length)) * Math.PI * 2;
@@ -142,7 +178,7 @@ function bake(look: Look, rx: number, frame: number, squash: boolean, inner: boo
 }
 
 function key(look: Look, rx: number, frame: number, squash: boolean, inner: boolean): string {
-  return [look.diet, look.flagella, look.cilia, look.spikes, look.toxin, look.thick, look.eyespot, inner ? look.organelles.join('.') : '', rx, frame, squash].join('|');
+  return [look.species ?? '', look.diet, look.flagella, look.cilia, look.spikes, look.toxin, look.thick, look.eyespot, inner ? look.organelles.join('.') : '', rx, frame, squash].join('|');
 }
 
 const flipped = new Map<string, HTMLCanvasElement>();
