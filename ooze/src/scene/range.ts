@@ -114,6 +114,8 @@ export class RangeScene {
   private rain: { x: number; y: number; z: number; v: number }[] = [];
   private flash = 0;
   private bow = 0;
+  /** Where the camera was last frame (the air layer slides a little as it moves). */
+  private airCam = { x: 0, y: 0 };
   /** Where the rainbow stands (its foot's centre on the land, and its size in tiles). */
   private bowAt: { x: number; y: number; r: number } | null = null;
   private bowView: [number, number, number, number] = [0, 0, 1, 0];
@@ -1249,7 +1251,7 @@ export class RangeScene {
     const near = Math.max(0.15, Math.min(1, (this.zoom - 0.6) / 2));
     const mix: [Mote, number][] = [
       ['petal', 16 * weight(0) * near],
-      ['pollen', 14 * weight(1) * near],
+      ['pollen', 10 * weight(1)],
       ['leaf', 16 * weight(2) * near],
       ['snow', 45 * weight(3)],
     ];
@@ -1269,50 +1271,81 @@ export class RangeScene {
       return q;
     };
     const lift = (q: { x: number; y: number; z: number }) => this.py(q.x, q.y) - q.z * this.zoom;
-    while (this.flakes.length < want) {
-      const kind = pick();
-      this.flakes.push(respawn({ x: 0, y: 0, z: 0, v: 4 + Math.random() * 6, kind, ph: Math.random() * 10 }, kind === 'pollen' ? Math.random() * 3 : Math.random() * 10));
-    }
+    // Seasonal bits in the air are a layer over the view (not on the map, so they never look
+    // like something to tap), drifting on the wind and sliding a little as the view moves, as
+    // the air between you and the land would. Each is drawn as what it is: a tumbling petal,
+    // a seed on its fluff, a leaf with its stalk, a snowflake.
+    const camDX = (this.camX - this.airCam.x) * this.zoom;
+    const camDY = (this.camY - this.airCam.y) * this.zoom * (this.shaded ? TILT : 1);
+    this.airCam = { x: this.camX, y: this.camY };
+    while (this.flakes.length < want) this.flakes.push({ x: Math.random() * W, y: Math.random() * H, z: 0, v: 4 + Math.random() * 6, kind: pick(), ph: Math.random() * 10 });
     this.flakes.length = want;
     for (const q of this.flakes) {
+      if (Math.abs(camDX) < W && Math.abs(camDY) < H) {
+        q.x -= camDX * 0.3;
+        q.y -= camDY * 0.3;
+      }
       if (q.kind === 'pollen') {
-        // Pollen hangs in the warm air near the ground, drifting and slowly rising.
-        q.z += 0.12 * dt;
-        q.x += (Math.sin(t * 0.7 + q.ph) * 0.3 + 0.15) * dt;
+        // Seed fluff floats on the breeze, bobbing, hardly falling.
+        q.x += (3 + Math.sin(t * 0.5 + q.ph) * 2) * dt;
+        q.y += Math.sin(t * 1.3 + q.ph) * 2 * dt + 0.6 * dt;
       } else {
-        q.z -= q.v * (q.kind === 'snow' ? 0.25 : 0.15) * dt;
-        q.x += Math.sin(t * (q.kind === 'snow' ? 1 : 2) + q.ph) * (q.kind === 'snow' ? 0.3 : 0.6) * dt + (q.kind === 'snow' ? 0 : 0.5 * dt);
+        q.y += q.v * (q.kind === 'snow' ? 1 : 0.7) * dt;
+        q.x += Math.sin(t * (q.kind === 'snow' ? 1 : 2) + q.ph) * (q.kind === 'snow' ? 3 : 6) * dt + (q.kind === 'snow' ? 0 : 5 * dt);
       }
-      let X = this.sx(q.x);
-      let Y = lift(q);
-      if (q.z <= 0 || q.z > 4.5 && q.kind === 'pollen' || X < -4 || X > W + 4 || Y < -4 || Y > H + 4) {
+      if (q.y > H + 4 || q.y < -4 || q.x > W + 4 || q.x < -4) {
         q.kind = pick();
-        respawn(q, q.kind === 'pollen' ? Math.random() * 1.5 : 6 + Math.random() * 6);
-        X = this.sx(q.x);
-        Y = lift(q);
+        if (q.x > W + 4) {
+          q.x = -3;
+          q.y = Math.random() * H;
+        } else if (q.x < -4) {
+          q.x = W + 3;
+          q.y = Math.random() * H;
+        } else {
+          q.y = q.y < -4 ? H + 3 : -3;
+          q.x = Math.random() * W;
+        }
       }
-      // Pollen is a thing of warm days, not nights.
+      // Fluff is a thing of warm days, not nights.
       if (q.kind === 'pollen' && night > 0.5) continue;
-      const flip = Math.sin(t * 3 + q.ph) > 0;
-      const px = Math.round(X);
-      const py = Math.round(Y);
+      const turn = Math.floor(t * 3 + q.ph) % 4;
+      const px = Math.round(q.x);
+      const py = Math.round(q.y);
       switch (q.kind) {
         case 'snow':
+          // A little six-armed flake, or a single bright speck far off.
           b.fillStyle = PAL.w;
-          b.fillRect(px, py, 1, 1);
+          if (q.v > 7.5) {
+            b.fillRect(px, py - 1, 1, 3);
+            b.fillRect(px - 1, py, 3, 1);
+          } else b.fillRect(px, py, 1, 1);
           break;
-        case 'leaf':
-          // Leaves tumble: two pixels that turn as they fall.
+        case 'leaf': {
+          // A leaf with its stalk, turning over as it falls.
           b.fillStyle = q.v > 7 ? PAL.o : q.v > 5.5 ? '#c8702e' : PAL.O;
-          b.fillRect(px, py, flip ? 2 : 1, flip ? 1 : 2);
+          if (turn % 2) b.fillRect(px, py, 3, 2);
+          else b.fillRect(px, py, 2, 3);
+          b.fillStyle = '#6a3a1a';
+          b.fillRect(turn % 2 ? px + 3 : px + 1, turn % 2 ? py + 1 : py + 3, 1, 1);
           break;
+        }
         case 'petal':
-          b.fillStyle = q.v > 7 ? '#f6b8cf' : '#e98bb0';
-          b.fillRect(px, py, flip ? 2 : 1, 1);
+          // A petal: a pale tip and a deeper base, flipping.
+          b.fillStyle = '#f6c6d8';
+          b.fillRect(px, py, turn % 2 ? 2 : 1, 1);
+          b.fillStyle = '#e07aa6';
+          b.fillRect(turn % 2 ? px + 2 : px, turn % 2 ? py : py + 1, 1, 1);
           break;
         case 'pollen':
-          b.fillStyle = Math.sin(t * 2 + q.ph * 3) > 0.85 ? '#fff0b0' : '#e2c860';
-          b.fillRect(px, py, 1, 1);
+          // A seed on its fluff: a soft white puff with a dark seed hanging under it.
+          b.fillStyle = 'rgba(250, 248, 236, 0.9)';
+          b.fillRect(px - 1, py, 3, 1);
+          b.fillRect(px, py - 1, 1, 3);
+          b.fillStyle = 'rgba(250, 248, 236, 0.5)';
+          b.fillRect(px - 1, py - 1, 1, 1);
+          b.fillRect(px + 1, py - 1, 1, 1);
+          b.fillStyle = '#5a4a30';
+          b.fillRect(px, py + 2, 1, 1);
           break;
       }
     }
