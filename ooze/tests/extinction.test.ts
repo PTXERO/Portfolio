@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assign, count, daysLeft, decideFallen, DAY_SEC, extinctionTick, ideaCost, learnIdea, startExtinction, tryAgain, type ExtinctionState } from '../src/economy/extinction';
+import { assign, count, jobFood, daysLeft, decideFallen, DAY_SEC, extinctionTick, ideaCost, learnIdea, startExtinction, tryAgain, type ExtinctionState } from '../src/economy/extinction';
 import { MIND_TREE, NODE_COST, reachable } from '../src/economy/mindTree';
 import { createState as newGame } from '../src/economy/state';
 import type { GameState } from '../src/economy/types';
@@ -99,6 +99,20 @@ describe('the Extinction', () => {
     extinctionTick(s, DAY_SEC);
     expect(ex.meat).toBeGreaterThan(500);
     expect(ex.people.every((p) => p.hunger >= 1.75)).toBe(true);
+  });
+
+  it('sets every diet to work for food it can eat', () => {
+    for (const job of ['forage', 'scavenge', 'dig', 'fish'] as const) {
+      expect(jobFood('herbivore', job)).toBe('plants');
+      expect(jobFood('carnivore', job)).toBe('meat');
+      expect(jobFood('cannibal', job)).toBe('meat');
+    }
+    const s = game('grazer', 20);
+    const ex = s.stages.tribal.tribe!.ex!;
+    assign(ex, 'scavenge', 10);
+    extinctionTick(s, DAY_SEC / 2);
+    expect(ex.plants).toBeGreaterThan(0);
+    expect(ex.meat).toBe(0);
   });
 
   it('eating the dead makes them cannibals for good', () => {

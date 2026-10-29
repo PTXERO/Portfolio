@@ -77,6 +77,31 @@ export const JOBS: { id: JobId; name: string; does: string }[] = [
   { id: 'rest', name: 'Rest', does: 'No work. Hunger comes on a little slower.' },
 ];
 
+/** The same work, for a line that eats only the other food. */
+const OTHER_FOOD: Partial<Record<JobId, { name: string; does: string }>> = {
+  forage: { name: 'Grub in the ash', does: 'Meat: grubs and beetles in the ash. They run out.' },
+  scavenge: { name: 'Gather fallen fruit', does: 'Plants: fruit and seed the strike shook down. It rots away.' },
+  dig: { name: 'Set snares', does: 'Meat: small things that hid underground. There are only so many.' },
+  fish: { name: 'Gather kelp', does: 'Plants: kelp from the shallows. The shallows hold only so many.' },
+};
+
+/** What a job brings in for a diet: each line works for the food it can eat. */
+export function jobFood(diet: Diet, job: JobId): 'plants' | 'meat' | null {
+  if (job === 'listen' || job === 'rest') return null;
+  const plain = job === 'forage' || job === 'dig' ? 'plants' : 'meat';
+  if (diet === 'omnivore') return plain;
+  const want = diet === 'herbivore' ? 'plants' : 'meat';
+  return want;
+}
+
+/** A job as a diet knows it. */
+export function jobInfo(diet: Diet, job: JobId): { id: JobId; name: string; does: string } {
+  const j = JOBS.find((x) => x.id === job)!;
+  const plain = job === 'forage' || job === 'dig' ? 'plants' : job === 'listen' || job === 'rest' ? null : 'meat';
+  const food = jobFood(diet, job);
+  return plain && food !== plain ? { id: job, ...OTHER_FOOD[job]! } : j;
+}
+
 
 export const TRAITS: Record<TraitId, { name: string; does: string }> = {
   strong: { name: 'Strong', does: 'scavenges and digs well' },
@@ -141,11 +166,8 @@ export function eatsMeat(d: Diet): boolean {
 
 /** How a diet does at a food job: specialists are better at their own food. */
 function dietSkill(d: Diet, job: JobId): number {
-  const plant = job === 'forage' || job === 'dig';
-  const meat = job === 'scavenge' || job === 'fish';
-  if (d === 'omnivore') return plant || meat ? 0.85 : 1;
-  if (d === 'herbivore') return plant ? 1.25 : 1;
-  return meat ? 1.25 : 1;
+  if (job === 'listen' || job === 'rest') return 1;
+  return d === 'omnivore' ? 0.85 : 1.1;
 }
 
 /** The Extinction as it begins, just after the waking. */
@@ -251,11 +273,11 @@ export function learnIdea(state: GameState, id: string): boolean {
 }
 
 export function jobOpen(ex: ExtinctionState, job: JobId): boolean {
-  return (job !== 'dig' && job !== 'fish') || modsOf(ex.ideas).unlock.has(job);
+  return (job !== 'dig' && job !== 'fish') || modsOf(ex.ideas, ex.diet).unlock.has(job);
 }
 
 /** How well one survivor works at a job today. */
-function workOf(ex: ExtinctionState, p: Survivor, job: JobId, m = modsOf(ex.ideas)): number {
+function workOf(ex: ExtinctionState, p: Survivor, job: JobId, m = modsOf(ex.ideas, ex.diet)): number {
   const sk = SKILL[p.trait];
   const weak = Math.max(0.3, 1 - 0.18 * p.hunger);
   const ideas = Math.max(0.1, 1 + m.gather[job] + m.gather.all);
@@ -273,7 +295,7 @@ function limitOf(p: Survivor, m: Mods): number {
 /** What each job brings in over a whole day, as things stand. */
 export function dayYield(ex: ExtinctionState): Record<JobId, number> {
   const out: Record<JobId, number> = { forage: 0, scavenge: 0, dig: 0, fish: 0, listen: 0, rest: 0 };
-  const m = modsOf(ex.ideas);
+  const m = modsOf(ex.ideas, ex.diet);
   for (const p of ex.people) out[p.job] += YIELD[p.job] * workOf(ex, p, p.job, m);
   const start = ex.people.length + ex.deaths;
   out.forage *= Math.sqrt(Math.max(0, ex.ash / ex.ashMax));
@@ -323,8 +345,12 @@ export function decideFallen(state: GameState, eat: boolean): void {
 function work(ex: ExtinctionState, sec: number): void {
   const y = dayYield(ex);
   const k = sec / DAY_SEC;
-  const plants = (y.forage + y.dig) * k;
-  const meat = (y.scavenge + y.fish) * k;
+  let plants = 0;
+  let meat = 0;
+  for (const j of ['forage', 'scavenge', 'dig', 'fish'] as const) {
+    if (jobFood(ex.diet, j) === 'plants') plants += y[j] * k;
+    else meat += y[j] * k;
+  }
   ex.ash = Math.max(0, ex.ash - y.forage * k);
   ex.carrion = Math.max(0, ex.carrion - y.scavenge * k);
   ex.plants += plants;
@@ -338,7 +364,7 @@ function work(ex: ExtinctionState, sec: number): void {
 /** Night: everyone eats what there is (the hungriest first), the hungry get hungrier, and some
  * don't see the morning. Then food spoils, and a new day starts. */
 function night(ex: ExtinctionState): void {
-  const m = modsOf(ex.ideas);
+  const m = modsOf(ex.ideas, ex.diet);
   const value = (1 + m.meal) * (ex.ration < 1 ? 1 + m.ration : 1);
   // The hungriest eat first (or, if the strong eat first, the workers do).
   const order = [...ex.people].sort((a, b) => (m.strongFirst ? Number(a.job === 'rest') - Number(b.job === 'rest') : 0) || b.hunger - a.hunger);
@@ -371,7 +397,7 @@ function night(ex: ExtinctionState): void {
   else if (ex.fallen === 'undecided') ex.corpses += starved.length;
   const before = ex.meat + ex.plants;
   ex.meat *= Math.min(0.95, MEAT_KEEP + m.meatKeep);
-  ex.plants *= PLANT_KEEP;
+  ex.plants *= Math.min(0.995, PLANT_KEEP + m.plantKeep);
   ex.carrion *= CARRION_KEEP;
   ex.ash = Math.min(ex.ashMax, ex.ash + ex.ashMax * m.ashRegrow);
   ex.day += 1;
@@ -420,6 +446,6 @@ export function daysLeft(ex: ExtinctionState): number | null {
 
 /** How hungry someone is, in words. */
 export function hungerWord(ex: ExtinctionState, p: Survivor): string {
-  const near = limitOf(p, modsOf(ex.ideas)) - p.hunger;
+  const near = limitOf(p, modsOf(ex.ideas, ex.diet)) - p.hunger;
   return near <= 1 ? 'Dying' : p.hunger >= 2 ? 'Starving' : p.hunger >= 1 ? 'Hungry' : 'Fed';
 }

@@ -4,7 +4,7 @@
 // next to one already known, for insight; the outer ring links the branches, so paths can cross
 // over. There's far more than one run can afford: the path taken is how that run is played.
 
-import type { JobId } from './extinction';
+import type { Diet, JobId } from './extinction';
 
 export type NodeKind = 'start' | 'minor' | 'notable' | 'keystone';
 export type BranchId = 'fire' | 'stone' | 'sea' | 'earth' | 'kin' | 'mind';
@@ -14,8 +14,9 @@ export interface Fx {
   gather?: Partial<Record<JobId | 'all', number>>;
   /** Meals count for this much more (fire, cooking). */
   meal?: number;
-  /** Meat kept overnight: added to the share that doesn't rot. */
+  /** Meat kept overnight: added to the share that doesn't rot (and the same for plants). */
   meatKeep?: number;
+  plantKeep?: number;
   /** Hunger off each night: for everyone, and more for those resting. */
   night?: number;
   rest?: number;
@@ -153,6 +154,43 @@ function build(): MindNode[] {
 export const MIND_TREE: MindNode[] = build();
 export const MIND_NODE: Record<string, MindNode> = Object.fromEntries(MIND_TREE.map((n) => [n.id, n]));
 
+/**
+ * The web as each diet hears it: the same shape, but ideas for food a line can't eat become
+ * ideas for food it can. Plant-eaters gather kelp where others fish, and pick fallen fruit where
+ * others butcher; meat-eaters set snares where others dig roots, and grub in the ash.
+ */
+const PLANT_EATERS: Record<string, Partial<Leaf>> = {
+  smoke: { name: 'Roast roots', does: 'Roasted, roots and seeds go further: meals +10%.', fx: { meal: 0.1 } },
+  racks: { name: 'Seed cakes', does: 'Pressed and dried, plants keep almost for good, and meals go 10% further.', fx: { plantKeep: 0.04, meal: 0.1 } },
+  edges: { name: 'Fruit sense', does: 'Gathering fallen fruit +10%.' },
+  tools: { name: 'Stone tools', does: 'Foraging, fruit gathering and digging +40%.' },
+  heavy: { name: 'Climbers', does: 'Gathering fallen fruit +15%.' },
+  butcher: { name: 'Pick clean', does: 'Nothing on a branch wasted: fruit gathering +30%.' },
+  watch: { name: 'Kelp lore', does: 'Kelp gathering +10%.' },
+  line: { name: 'Kelp knife', does: 'Gather kelp from the shallows: plants that keep coming.' },
+  bait: { name: 'Tide flats', does: 'Kelp gathering +15%.' },
+  deeper: { name: 'Deeper beds', does: 'The shallows hold 20% more gatherers.' },
+  nets: { name: 'Kelp baskets', does: 'Kelp gathering +20%, and the shallows hold 40% more.' },
+  tides: { name: 'Read the tides', does: 'Kelp gathering half again as good; foraging and digging 30% worse.' },
+};
+const MEAT_EATERS: Record<string, Partial<Leaf>> = {
+  green: { name: 'Tracks in the ash', does: 'Grubbing in the ash +10%.' },
+  tools: { name: 'Stone tools', does: 'Grubbing, scavenging and trapping +40%.' },
+  stick: { name: 'Snares', does: 'Set snares for what hid underground: meat that keeps coming.' },
+  rootlore: { name: 'Trap lore', does: 'Trapping +15%.' },
+  seeds: { name: 'Let some go', does: 'A few grubs are left to breed: a little of the ash comes back each day.' },
+  deeproots: { name: 'Wide trapline', does: 'Snares reach 40% further.' },
+  tides: { name: 'Read the tides', does: 'Fishing half again as good; grubbing and trapping 30% worse.' },
+  tend: { name: 'Breed the grubs', does: 'The ash comes back four times as fast; scavenging 30% worse.' },
+};
+
+/** An idea as a diet knows it (its name, what it says and does). */
+export function nodeFor(id: string, diet: Diet): MindNode {
+  const n = MIND_NODE[id];
+  const o = diet === 'herbivore' ? PLANT_EATERS[id] : diet === 'carnivore' || diet === 'cannibal' ? MEAT_EATERS[id] : undefined;
+  return o ? { ...n, ...o, fx: o.fx ?? n.fx } : n;
+}
+
 /** Whether an idea can be learned next: not known, and next to one that is. */
 export function reachable(known: string[], id: string): boolean {
   if (known.includes(id)) return false;
@@ -165,6 +203,7 @@ export interface Mods {
   gather: Record<JobId | 'all', number>;
   meal: number;
   meatKeep: number;
+  plantKeep: number;
   night: number;
   rest: number;
   limit: number;
@@ -181,14 +220,15 @@ export interface Mods {
   strongFirst: boolean;
 }
 
-export function modsOf(known: string[]): Mods {
-  const m: Mods = { gather: { forage: 0, scavenge: 0, dig: 0, fish: 0, listen: 0, rest: 0, all: 0 }, meal: 0, meatKeep: 0, night: 0, rest: 0, limit: 0, weak: 0, digCap: 0, fishCap: 0, ashRegrow: 0, unlock: new Set(), keen: 0, strong: 0, others: 0, listenHunger: 0, ration: 0, strongFirst: false };
+export function modsOf(known: string[], diet: Diet = 'omnivore'): Mods {
+  const m: Mods = { gather: { forage: 0, scavenge: 0, dig: 0, fish: 0, listen: 0, rest: 0, all: 0 }, meal: 0, meatKeep: 0, plantKeep: 0, night: 0, rest: 0, limit: 0, weak: 0, digCap: 0, fishCap: 0, ashRegrow: 0, unlock: new Set(), keen: 0, strong: 0, others: 0, listenHunger: 0, ration: 0, strongFirst: false };
   for (const id of known) {
-    const f = MIND_NODE[id]?.fx;
+    const f = MIND_NODE[id] && nodeFor(id, diet).fx;
     if (!f) continue;
     for (const [k, v] of Object.entries(f.gather ?? {})) m.gather[k as JobId | 'all'] += v ?? 0;
     m.meal += f.meal ?? 0;
     m.meatKeep += f.meatKeep ?? 0;
+    m.plantKeep += f.plantKeep ?? 0;
     m.night += f.night ?? 0;
     m.rest += f.rest ?? 0;
     m.limit += f.limit ?? 0;

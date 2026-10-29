@@ -2,8 +2,8 @@
 // the Ideas the spear can teach.
 
 import { STORY } from '../content/tribal';
-import { count, dayYield, eatsMeat, eatsPlants, hungerWord, ideaCost, JOBS, jobOpen, TRAITS, type Diet, type ExtinctionState } from '../economy/extinction';
-import { BRANCHES, MIND_NODE, MIND_TREE, reachable } from '../economy/mindTree';
+import { count, dayYield, eatsMeat, eatsPlants, hungerWord, ideaCost, jobFood, jobInfo, JOBS, jobOpen, TRAITS, type Diet, type ExtinctionState } from '../economy/extinction';
+import { BRANCHES, MIND_NODE, MIND_TREE, nodeFor, reachable } from '../economy/mindTree';
 import { tribeOf } from '../economy/tribal';
 import type { GameState } from '../economy/types';
 
@@ -40,12 +40,13 @@ function storesCard(ex: ExtinctionState): string {
   const plants = eatsPlants(ex.diet);
   const meat = eatsMeat(ex.diet);
   const y = dayYield(ex);
+  const gain = (f: 'plants' | 'meat') => (['forage', 'scavenge', 'dig', 'fish'] as const).reduce((a, j) => a + (jobFood(ex.diet, j) === f ? y[j] : 0), 0);
   const cell = (name: string, have: number, gain: number, eats: boolean, note: string) =>
     `<div class="store${eats ? '' : ' off'}"><span class="label dim">${name}</span><b class="num">${n0(have)}</b><span class="dim">+${n0(gain)} today${eats ? '' : ' · inedible'}</span><span class="tiny dim">${note}</span></div>`;
   return `<div class="panel-head"><h2>Survivors</h2><span class="dim">${ex.people.length} alive · ${ex.deaths} dead</span></div>
     <div class="card px-box ex-stores">
-      ${cell('Plants', ex.plants, y.forage + y.dig, plants, 'keeps')}
-      ${cell('Meat', ex.meat, y.scavenge + y.fish, meat, ex.ideas.includes('racks') ? 'dried, keeps' : 'rots overnight')}
+      ${cell('Plants', ex.plants, gain('plants'), plants, 'keeps')}
+      ${cell('Meat', ex.meat, gain('meat'), meat, ex.ideas.includes('racks') && meat ? 'dried, keeps' : 'rots overnight')}
       ${cell('Insight', ex.insight, y.listen, true, 'for ideas')}
       <div class="sub diet">${DIET_LINE[ex.diet]} Each eats ${ex.ration === 1 ? 'a full meal' : ex.ration === 0.5 ? 'half a meal' : 'a quarter meal'} at night: ${n0(ex.people.length * ex.ration)} wanted.</div>
     </div>`;
@@ -60,13 +61,14 @@ function rationCard(ex: ExtinctionState): string {
 
 function jobsCard(ex: ExtinctionState): string {
   const y = dayYield(ex);
-  const unit: Record<string, string> = { forage: 'plants', dig: 'plants', scavenge: 'meat', fish: 'meat', listen: 'insight' };
+  const unit = (id: (typeof JOBS)[number]['id']) => jobFood(ex.diet, id) ?? 'insight';
   const rows = JOBS.filter((j) => j.id !== 'rest' && jobOpen(ex, j.id))
-    .map((j) => {
+    .map((plain) => {
+      const j = jobInfo(ex.diet, plain.id);
       const c = count(ex, j.id);
       const left = j.id === 'forage' ? ` · ${n0(ex.ash)} left` : j.id === 'scavenge' ? ` · ${n0(ex.carrion)} left` : '';
       return `<div class="job"><div class="info"><div class="name">${j.name}</div><div class="sub">${j.does}</div>
-        <div class="sub gain">${c ? `+${n0(y[j.id])} ${unit[j.id]} a day` : unit[j.id]}${left}</div></div>
+        <div class="sub gain">${c ? `+${n0(y[j.id])} ${unit(j.id)} a day` : unit(j.id)}${left}</div></div>
         <div class="seg"><button class="px-btn" data-job="${j.id}" data-d="-5">−5</button><button class="px-btn" data-job="${j.id}" data-d="-1">−</button><b class="num">${c}</b><button class="px-btn" data-job="${j.id}" data-d="1">+</button><button class="px-btn" data-job="${j.id}" data-d="5">+5</button></div></div>`;
     })
     .join('');
@@ -79,7 +81,7 @@ function peopleCard(ex: ExtinctionState): string {
     .sort((a, b) => b.hunger - a.hunger)
     .map((p) => {
       const w = hungerWord(ex, p);
-      return `<div class="person ${w.toLowerCase()}"><b>${p.name}</b><span class="dim">${TRAITS[p.trait].name}</span><span class="dim">${JOBS.find((j) => j.id === p.job)!.name.split(' ')[0]}</span><span class="hunger">${w}</span></div>`;
+      return `<div class="person ${w.toLowerCase()}"><b>${p.name}</b><span class="dim">${TRAITS[p.trait].name}</span><span class="dim">${jobInfo(ex.diet, p.job).name.split(' ')[0]}</span><span class="hunger">${w}</span></div>`;
     })
     .join('');
   return `<div class="card px-box ex-people"><div class="info"><div class="name">Who's left</div><div class="sub">Hungriest first. They eat in that order too.</div></div>${rows}</div>`;
@@ -137,7 +139,8 @@ export function ideasLayout(state: GameState): string {
   }
   // The ideas, drawn over their links.
   const buttons: string[] = [];
-  for (const n of MIND_TREE) {
+  for (const plain of MIND_TREE) {
+    const n = nodeFor(plain.id, ex.diet);
     const k = known(n.id);
     const open = !k && reachable(ex.ideas, n.id);
     const afford = open && ex.insight >= ideaCost(state, n.id);
@@ -186,7 +189,7 @@ export function ideasLayout(state: GameState): string {
 }
 
 function pickedCard(state: GameState, ex: ExtinctionState): string {
-  const n = MIND_NODE[picked];
+  const n = MIND_NODE[picked] && nodeFor(picked, ex.diet);
   if (!n) return '<p class="note">Tap an idea in the web. Ideas are learned outward from the middle, each next to one already known. There are far more than one life can learn.</p>';
   const known = n.id === 'mind0' || ex.ideas.includes(n.id);
   const open = reachable(ex.ideas, n.id);
