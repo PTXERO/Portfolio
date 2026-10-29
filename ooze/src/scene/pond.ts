@@ -25,7 +25,9 @@ export type PondEvent =
   /** Creature stage: a place's flag was tapped. */
   | { type: 'place'; id: string; x: number; y: number }
   /** Tribal era: the spear was touched. */
-  | { type: 'spear'; x: number; y: number };
+  | { type: 'spear'; x: number; y: number }
+  /** Extinction: the leader gathered by hand at a work place (or listened at the spear). */
+  | { type: 'hand'; job: import('../economy/extinction').JobId; x: number; y: number };
 
 interface Hero {
   x: number;

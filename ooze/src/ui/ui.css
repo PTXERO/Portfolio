@@ -633,3 +633,6 @@ b.green { color: var(--mint); }
 #modal p.shake { color: #c08aff; }
 #modal p.winter { color: #a8c8ff; }
 #modal p.green { color: var(--mint); }
+.ex-jobs .job.auto { padding-top: 5px; margin-top: 5px; }
+.ex-jobs .job.auto .num { font-size: 20px; color: var(--gold); min-width: 28px; text-align: right; }
+.ex-jobs .small-toggle { margin-top: 8px; font-size: 12px; align-self: flex-start; }

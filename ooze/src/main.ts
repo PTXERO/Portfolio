@@ -13,7 +13,7 @@ import { STAGES } from './content/stages';
 import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed } from './economy/tribal';
-import { assign, daysLeft, decideFallen, DAY_SEC, eatsPlants, extinctionTick, launch, learnIdea, startExtinction, toggleFamily, TRAITS, tryAgain, waitingOnChoice, WINTER, type JobId } from './economy/extinction';
+import { assign, autoAssign, daysLeft, handGather, HAND_PER_DAY, type Focus, decideFallen, DAY_SEC, eatsPlants, extinctionTick, launch, learnIdea, startExtinction, toggleFamily, TRAITS, tryAgain, waitingOnChoice, WINTER, type JobId } from './economy/extinction';
 import {
   addSwirl,
   buyCount,
@@ -282,6 +282,8 @@ function step(): void {
 // while a choice waits.
 
 let alone = false;
+let guessSig = '';
+let guess: number | null = null;
 const extinctEl = document.createElement('div');
 extinctEl.id = 'extinct';
 extinctEl.hidden = true;
@@ -476,7 +478,13 @@ function renderGoal(): void {
     const ex = state.stages.tribal.tribe?.ex;
     if (ex) {
       // The countdown: how long they've got, if things go on as they are.
-      const d = daysLeft(ex);
+      // (The guess re-runs whenever the plan changes, and every few seconds.)
+      const sig = JSON.stringify([ex.day, Math.floor(ex.clock / 4), ex.people.length, ex.people.map((p) => p.job), ex.ideas, ex.ration, ex.lead, ex.fallen]);
+      if (sig !== guessSig) {
+        guessSig = sig;
+        guess = daysLeft(ex);
+      }
+      const d = guess;
       const night = Math.max(0, Math.ceil(DAY_SEC - ex.clock));
       const key = `ex:${ex.day}:${night}:${d}:${ex.over}`;
       if (key !== goalKey) {
@@ -655,6 +663,7 @@ function renderHint(): void {
   } else if (state.current === 'tribal') {
     if (!state.stages.tribal.tribe?.awake) text = 'Tap the spear';
     else if (state.stages.tribal.tribe?.ex && state.stages.tribal.tribe.ex.day === 0 && state.stages.tribal.tribe.ex.people.every((p) => p.job === 'rest')) text = 'Set them to work, or they starve';
+    else if (state.stages.tribal.tribe?.ex && (state.stages.tribal.tribe.ex.day < 2 && (state.stages.tribal.tribe.ex.hand ?? 0) === 0)) text = 'Tap to lead · tap work beside you to help';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
   hint.hidden = !text || !modal.hidden || (ui.open && ui.full);
@@ -797,7 +806,11 @@ function pondEvents(): void {
       const got = e.party ? state.stages.creature.lastParty : state.stages.creature.lastForage;
       if (got) scene.float(e.x, e.y, `${e.party ? 'party home ' : ''}+${format(D(got))}`, '#f5c45e');
     } else if (e.type === 'place') showPlaceCard(e.id, e.x, e.y);
-    else if (e.type === 'spear' && awaken(state)) {
+    else if (e.type === 'hand') {
+      const got = handGather(state, e.job);
+      if (got.amount > 0) scene.float(e.x, e.y, `+${got.amount < 1 ? got.amount.toFixed(1) : Math.round(got.amount * 10) / 10} ${got.what}`, got.what === 'insight' ? '#c4f7dd' : got.what === 'wood' ? '#c8a070' : '#f5c45e');
+      else scene.float(e.x, e.y, (state.stages.tribal.tribe?.ex?.hand ?? 0) >= HAND_PER_DAY ? 'too tired: tomorrow' : 'nothing left here', '#f2ead7');
+    } else if (e.type === 'spear' && awaken(state)) {
       // The waking: it touches the spear, and they know that they are. A flash, the
       // shockwave rolling out across the world, then the words; then the Extinction begins.
       // Inside its mind: the vision. Then out again, and the waking spreads to the others.
@@ -993,6 +1006,12 @@ function act(el: HTMLElement): void {
   else if (el.dataset.family) {
     const ex = state.stages.tribal.tribe?.ex;
     if (ex) toggleFamily(ex, Number(el.dataset.family));
+  } else if (el.dataset.focus) {
+    const ex = state.stages.tribal.tribe?.ex;
+    if (ex) {
+      ex.focus = el.dataset.focus as Focus;
+      autoAssign(ex);
+    }
   } else if (el.dataset.job) {
     const ex = state.stages.tribal.tribe?.ex;
     if (ex) assign(ex, el.dataset.job as JobId, Number(el.dataset.d));
@@ -1001,7 +1020,12 @@ function act(el: HTMLElement): void {
     if (ex) ex.ration = Number(el.dataset.ration);
   } else if (el.dataset.node) pickIdea(el.dataset.node);
   else if (el.dataset.learn) {
-    if (learnIdea(state, el.dataset.learn)) scene.purchase(state, 'idea');
+    if (learnIdea(state, el.dataset.learn)) {
+      scene.purchase(state, 'idea');
+      // A new job may have opened: the tribe takes it into account straight away.
+      const ex = state.stages.tribal.tribe?.ex;
+      if (ex?.auto) autoAssign(ex);
+    }
   }
   else if (el.dataset.roamopt) {
     const c = state.stages.creature;
@@ -1074,6 +1098,15 @@ function act(el: HTMLElement): void {
         panelKey = '';
         save();
         break;
+      case 'ex-auto': {
+        const ex = state.stages.tribal.tribe?.ex;
+        if (ex) {
+          ex.auto = !ex.auto;
+          ex.focus ??= 'ideas';
+          if (ex.auto) autoAssign(ex);
+        }
+        break;
+      }
       case 'launch':
         if (launch(state)) {
           save();
@@ -1274,6 +1307,9 @@ function frame(now: number): void {
   scene.draw(state, dt);
   pondEvents();
   syncCine();
+  // Lead by example: the work the leader stands by goes better.
+  const ex = state.stages.tribal.tribe?.ex;
+  if (ex && state.current === 'tribal' && ex.lead !== scene.leadJob) ex.lead = scene.leadJob;
 }
 
 // A save made mid-ending (closed during the credits) picks up at the reveal. This also

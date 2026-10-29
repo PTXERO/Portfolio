@@ -6,11 +6,14 @@
 
 import { PAL } from '../art/sprites';
 import { SEASON_SEC } from '../economy/rates';
-import { CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
+import { Biome, CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
 import { BURNT, LAKE, ashenFor, tribeOf } from '../economy/tribal';
+import { DAY_SEC as EX_DAY, HAND_PER_DAY, RAFT, raftPart, type ExtinctionState, type JobId } from '../economy/extinction';
 import type { GameState } from '../economy/types';
 import { hash, type Frame } from './paint';
 import { RangeScene } from './range';
+
+type TribeLook = { parts: Partial<Record<string, string>>; diet: string };
 
 interface Person {
   x: number;
@@ -37,7 +40,64 @@ const SPREAD_SEC = 4;
 /** How fast the spear turns in its pool. */
 const SPIN = 1.2;
 
+/** Where each kind of work is done on the island (tiles), found once per island. */
+interface Spot {
+  job: JobId;
+  x: number;
+  y: number;
+}
+
+/** Work places round the camp: carcasses (or fallen fruit) and patches of ash to forage or dig
+ * near by, charred trees, the shore for fishing (or kelp), and the beach the raft is built on. */
+function spotsFor(is: Island, camp: Pt, spear: Pt): { spots: Spot[]; raft: Pt } {
+  const out: Spot[] = [];
+  const shore: Pt[] = [];
+  const trees: Pt[] = [];
+  const ground: Pt[] = [];
+  const R = 34;
+  for (let y = Math.max(1, Math.floor(camp.y - R)); y < Math.min(ISLAND - 1, camp.y + R); y++) {
+    for (let x = Math.max(1, Math.floor(camp.x - R)); x < Math.min(ISLAND - 1, camp.x + R); x++) {
+      const d = Math.hypot(x - camp.x, y - camp.y);
+      if (d > R || d < 5 || !isLand(is, x, y) || Math.hypot(x - spear.x, y - spear.y) < LAKE + 4) continue;
+      const wet = !isLand(is, x + 1, y) || !isLand(is, x - 1, y) || !isLand(is, x, y + 1) || !isLand(is, x, y - 1);
+      if (wet) shore.push({ x: x + 0.5, y: y + 0.5 });
+      else if (is.biome[y * ISLAND + x] === Biome.Forest) trees.push({ x: x + 0.5, y: y + 0.5 });
+      else ground.push({ x: x + 0.5, y: y + 0.5 });
+    }
+  }
+  /** A few of them, spread apart, picked the same way every time. */
+  const pick = (from: Pt[], n: number, gap: number, salt: number): Pt[] => {
+    const got: Pt[] = [];
+    const sorted = [...from].sort((a, b) => hash(Math.floor(a.x) * 7 + Math.floor(a.y) * 131, salt) - hash(Math.floor(b.x) * 7 + Math.floor(b.y) * 131, salt));
+    for (const p of sorted) {
+      if (got.length >= n) break;
+      if (got.every((g) => Math.hypot(g.x - p.x, g.y - p.y) > gap)) got.push(p);
+    }
+    return got;
+  };
+  const near = (p: Pt) => Math.hypot(p.x - camp.x, p.y - camp.y);
+  const beach = [...shore].sort((a, b) => near(a) - near(b));
+  const raft = beach[0] ?? { x: camp.x + 3, y: camp.y + 3 };
+  for (const p of pick(shore.filter((q) => Math.hypot(q.x - raft.x, q.y - raft.y) > 5), 6, 5, 21)) out.push({ job: 'fish', ...p });
+  for (const p of pick(trees.length > 6 ? trees : ground, 8, 4, 23)) out.push({ job: 'wood', ...p });
+  for (const p of pick(ground, 8, 4, 25)) out.push({ job: 'scavenge', ...p });
+  for (const p of pick(ground, 6, 5, 27)) out.push({ job: 'forage', ...p });
+  for (const p of pick(ground, 5, 5, 29)) out.push({ job: 'dig', ...p });
+  out.push({ job: 'build', ...raft });
+  out.push({ job: 'listen', x: spear.x, y: spear.y + LAKE + 1.5 });
+  return { spots: out, raft };
+}
+
 export class TribeScene extends RangeScene {
+  /** Work places on the island, and where the raft is built. */
+  private spots: Spot[] = [];
+  private raftAt: Pt | null = null;
+  private spotSeed = -1;
+  /** The leader (the one who touched the spear): yours to walk about, after the waking. */
+  private leader: Pt | null = null;
+  private leaderGoal: Pt | null = null;
+  /** The job the leader is working beside (those at it work harder), for the economy. */
+  leadJob: JobId | null = null;
   private people: Person[] = [];
   /** The one that walks to the spear: where it is, and whether it's got there. */
   private walker: Pt | null = null;
@@ -71,6 +131,8 @@ export class TribeScene extends RangeScene {
     this.people = [];
     this.walker = null;
     this.arrived = false;
+    this.leader = null;
+    this.leaderGoal = null;
     this.handed = null;
     this.burnAt = -1;
     this.burnDone = false;
@@ -95,6 +157,186 @@ export class TribeScene extends RangeScene {
     if (!t.awake && this.arrived && Math.abs(ax - X) < Math.max(8, tall * 0.25) && ay > Y - tall - 4 && ay < Y + 4) {
       this.events.push({ type: 'spear', x: X, y: Y - tall });
       this.wave = 0;
+      return;
+    }
+    // After the waking: you lead. A tap on a work place beside the leader is a hand at it;
+    // further off, the leader walks there. A tap anywhere else on land walks there too.
+    if (!t.ex || !this.leader) return;
+    const w = this.toWorld(ax, ay);
+    const tapR = Math.max(2.5, 10 / this.zoom);
+    let spot: Spot | null = null;
+    let best = tapR;
+    for (const s of this.spots) {
+      const d = Math.hypot(s.x - w.x, s.y - w.y);
+      if (d < best && this.spotShown(t.ex, s)) {
+        best = d;
+        spot = s;
+      }
+    }
+    // The spear itself counts as the listening place.
+    if (!spot && Math.abs(ax - X) < Math.max(8, tall * 0.25) && ay > Y - tall - 4 && ay < Y + 4) spot = this.spots.find((s) => s.job === 'listen') ?? null;
+    if (spot) {
+      if (Math.hypot(spot.x - this.leader.x, spot.y - this.leader.y) < 4.5) this.events.push({ type: 'hand', job: spot.job, x: this.sx(spot.x), y: this.py(spot.x, spot.y) - 6 });
+      else this.leaderGoal = { x: spot.x + 1.2, y: spot.y + 0.6 };
+    } else if (isLand(this.island, w.x, w.y)) this.leaderGoal = { x: w.x, y: w.y };
+  }
+
+  /** Whether a work place is there to see (carcasses rot away and trees get cut down). */
+  private spotShown(ex: ExtinctionState, s: Spot): boolean {
+    const of = this.spots.filter((o) => o.job === s.job);
+    const k = of.indexOf(s);
+    if (s.job === 'scavenge') return k < Math.ceil((of.length * ex.carrion) / Math.max(1, (ex.people.length + ex.deaths) * 6));
+    if (s.job === 'wood') return k < Math.ceil((of.length * (ex.trees ?? 0)) / Math.max(1, (ex.people.length + ex.deaths) * 4));
+    return true;
+  }
+
+  /** The leader: walks where you tap, works (and leads) at the place it stands by. */
+  private drawLeader(sprites: { y: number; draw: () => void }[], b: CanvasRenderingContext2D, look: TribeLook, frag: { camp: Pt; spear: Pt }, ex: ExtinctionState, t: number, dt: number): void {
+    const L = this.leader!;
+    let moving = false;
+    let left = false;
+    if (this.leaderGoal) {
+      const dx = this.leaderGoal.x - L.x;
+      const dy = this.leaderGoal.y - L.y;
+      const d = Math.hypot(dx, dy);
+      if (d < 0.3) this.leaderGoal = null;
+      else {
+        const step = Math.min(d, 7 * dt);
+        const nx = L.x + (dx / d) * step;
+        const ny = L.y + (dy / d) * step;
+        if (isLand(this.island!, nx, ny) || Math.hypot(frag.spear.x - nx, frag.spear.y - ny) < LAKE + 3) {
+          L.x = nx;
+          L.y = ny;
+          moving = true;
+          left = dx < 0;
+        } else this.leaderGoal = null;
+      }
+    }
+    // Leading: the work place it's beside (the camp doesn't count).
+    let lead: JobId | null = null;
+    let best = 5;
+    for (const s of this.spots) {
+      const d = Math.hypot(s.x - L.x, s.y - L.y);
+      if (d < best && this.spotShown(ex, s)) {
+        best = d;
+        lead = s.job;
+      }
+    }
+    this.leadJob = moving ? null : lead;
+    const x = L.x;
+    const y = L.y;
+    const spent = (ex.hand ?? 0) >= HAND_PER_DAY;
+    sprites.push({
+      y,
+      draw: () => {
+        this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 10) % 2 : 0, sleeping: false, hop: moving ? Math.abs(Math.sin(t * 10)) * 2 : 0 });
+        // Marked as yours: a little gold mark over its head (dim once spent for the day).
+        const X = Math.round(this.sx(x));
+        const Y = Math.round(this.py(x, y) - Math.max(7, 2.4 * this.zoom) - (Math.floor(t * 2) % 2));
+        b.fillStyle = spent ? '#8a7a5a' : 'rgba(245, 196, 94, 0.996)';
+        b.fillRect(X - 1, Y, 3, 1);
+        b.fillRect(X, Y + 1, 1, 1);
+      },
+    });
+  }
+
+  /** The work places: carcasses (or fallen fruit), charred trees, the fire at the camp, and the
+   * raft on its beach, growing part by part. */
+  private drawWork(sprites: { y: number; draw: () => void }[], b: CanvasRenderingContext2D, ex: ExtinctionState, camp: Pt, t: number): void {
+    const z = Math.max(1, Math.round(this.zoom / 3));
+    const plantEaters = ex.diet === 'herbivore';
+    for (const s of this.spots) {
+      if (!this.spotShown(ex, s)) continue;
+      const X = Math.round(this.sx(s.x));
+      const Y = Math.round(this.py(s.x, s.y));
+      if (X < -10 || X > this.W + 10 || Y < -20 || Y > this.H + 10) continue;
+      if (s.job === 'scavenge') {
+        sprites.push({
+          y: s.y - 0.2,
+          draw: () => {
+            if (plantEaters) {
+              // Fallen fruit: a little heap of red and gold.
+              b.fillStyle = '#c0402a';
+              b.fillRect(X - 2 * z, Y - z, 2 * z, z);
+              b.fillStyle = '#e8a040';
+              b.fillRect(X, Y - z, 2 * z, z);
+              b.fillRect(X - z, Y - 2 * z, 2 * z, z);
+            } else {
+              // A carcass: pale ribs on the ash.
+              b.fillStyle = '#d8d0c0';
+              b.fillRect(X - 3 * z, Y - z, 6 * z, z);
+              for (let k = 0; k < 3; k++) b.fillRect(X - 2 * z + k * 2 * z, Y - 3 * z, z, 2 * z);
+              b.fillStyle = '#7a3a30';
+              b.fillRect(X + 3 * z, Y - 2 * z, 2 * z, 2 * z);
+            }
+          },
+        });
+      } else if (s.job === 'wood') {
+        sprites.push({
+          y: s.y,
+          draw: () => {
+            // A charred tree: a black trunk and a few bare branches.
+            b.fillStyle = '#1e1816';
+            b.fillRect(X, Y - 7 * z, z, 7 * z);
+            b.fillRect(X - 2 * z, Y - 6 * z, 2 * z, z);
+            b.fillRect(X + z, Y - 5 * z, 2 * z, z);
+            b.fillRect(X - z, Y - 8 * z, z, z);
+          },
+        });
+      } else if (s.job === 'dig' && ex.ideas.includes('stick')) {
+        b.fillStyle = '#2a1e18';
+        b.fillRect(X - z, Y - z, 2 * z, z);
+      }
+    }
+    // The fire at the camp, once they have it and the wood to keep it.
+    if (ex.ideas.includes('fire') && (ex.wood ?? 0) >= 1) {
+      const X = Math.round(this.sx(camp.x));
+      const Y = Math.round(this.py(camp.x, camp.y));
+      sprites.push({
+        y: camp.y,
+        draw: () => {
+          const f = Math.floor(t * 8) % 3;
+          b.fillStyle = '#3a2a20';
+          b.fillRect(X - 2 * z, Y - z, 4 * z, z);
+          b.fillStyle = 'rgba(255, 150, 60, 0.996)';
+          b.fillRect(X - z, Y - (3 + (f % 2)) * z, 2 * z, (2 + (f % 2)) * z);
+          b.fillStyle = 'rgba(255, 230, 150, 0.996)';
+          b.fillRect(X - (f === 1 ? z : 0), Y - 2 * z, z, z);
+        },
+      });
+    }
+    // The raft on its beach: logs for the frame, ties for the lashing, a deck for the hull.
+    if (this.raftAt) {
+      const r = this.raftAt;
+      const prog = (id: string) => {
+        const part = RAFT.find((p) => p.id === id)!;
+        return Math.min(1, (ex.raft?.[part.id] ?? 0) / part.work);
+      };
+      const frame = prog('frame');
+      if (frame > 0 || raftPart(ex)) {
+        const X = Math.round(this.sx(r.x));
+        const Y = Math.round(this.py(r.x, r.y));
+        const lash = prog('lashing');
+        const hull = prog('hull');
+        sprites.push({
+          y: r.y - 0.5,
+          draw: () => {
+            const w = 10 * z;
+            const logs = Math.round(frame * 5);
+            b.fillStyle = '#6a4a30';
+            for (let k = 0; k < logs; k++) b.fillRect(X - w / 2, Y - 5 * z + k * z, w, Math.max(1, z - (z > 1 ? 1 : 0)));
+            if (lash > 0) {
+              b.fillStyle = '#c8b080';
+              for (let k = 0; k < Math.round(lash * 3); k++) b.fillRect(X - w / 2 + (2 + k * 3) * z, Y - 5 * z, z, 5 * z);
+            }
+            if (hull > 0) {
+              b.fillStyle = '#8a6a44';
+              b.fillRect(X - w / 2, Y - 5 * z, Math.round(w * hull), z);
+              b.fillRect(X - w / 2, Y - z, Math.round(w * hull), z);
+            }
+          },
+        });
+      }
     }
   }
 
@@ -193,6 +435,12 @@ export class TribeScene extends RangeScene {
     const frag = ashenFor(state);
     const is = frag.island;
     this.island = is;
+    if (this.spotSeed !== is.seed) {
+      const f = spotsFor(is, frag.camp, frag.spear);
+      this.spots = f.spots;
+      this.raftAt = f.raft;
+      this.spotSeed = is.seed;
+    }
     if (this.firstLook) {
       this.firstLook = false;
       this.allLit = tribe.awake;
@@ -328,7 +576,20 @@ export class TribeScene extends RangeScene {
       if (struck) p.goal = { x: p.x, y: p.y };
       else if (!p.goal || p.wait <= 0) {
         p.wait = 4 + hash(i, Math.floor(t / 7)) * 8;
-        if (!woke || sleeping) {
+        const ex = tribe.ex;
+        const job = ex?.people[i]?.job;
+        const evening = ex ? ex.clock > EX_DAY * 0.82 : false;
+        if (woke && ex && job && job !== 'rest' && !evening) {
+          // To work: their own spot of their job, a little apart from the others there.
+          const of = this.spots.filter((s) => s.job === job && this.spotShown(ex, s));
+          const s = of.length ? of[Math.floor(hash(ex.people[i].id, 31) * of.length)] : null;
+          if (s) {
+            const a = hash(ex.people[i].id, 33) * Math.PI * 2;
+            const r = 0.8 + hash(ex.people[i].id, 35) * 1.8;
+            p.goal = { x: s.x + Math.cos(a) * r, y: s.y + Math.sin(a) * r * 0.7 };
+            p.wait = 3;
+          }
+        } else if (!woke || sleeping || (ex && (evening || job === 'rest'))) {
           const a = hash(i, Math.floor(t / 9) + 1) * Math.PI * 2;
           const r = sleeping ? 2 + hash(i, 13) * 3 : 3 + hash(i, 11) * 7;
           p.goal = { x: frag.camp.x + Math.cos(a) * r, y: frag.camp.y + Math.sin(a) * r * 0.7 };
@@ -362,7 +623,7 @@ export class TribeScene extends RangeScene {
       const dx = gx - p.x;
       const dy = gy - p.y;
       const d = Math.hypot(dx, dy);
-      const sp = d > 0.3 ? 0.8 : 0;
+      const sp = d > 0.3 ? (tribe.ex ? 2.6 : 0.8) : 0;
       p.vx += ((d ? (dx / d) * Math.min(sp, d) : 0) - p.vx) * Math.min(1, dt * 3);
       p.vy += ((d ? (dy / d) * Math.min(sp, d) : 0) - p.vy) * Math.min(1, dt * 3);
       const nx = p.x + p.vx * dt;
@@ -422,8 +683,11 @@ export class TribeScene extends RangeScene {
       const dx = frag.camp.x - w.x;
       const dy = frag.camp.y - w.y;
       const d = Math.hypot(dx, dy);
-      if (back && d < 2) this.walker = null;
-      else {
+      if (back && d < 2) {
+        // Home: from here on, the one who touched the spear is yours to lead.
+        this.leader = { x: w.x, y: w.y };
+        this.walker = null;
+      } else {
         if (back) {
           const step = Math.min(d, Math.max(6, Math.hypot(frag.camp.x - frag.spear.x, frag.camp.y - frag.spear.y) / 7) * dt);
           w.x += (dx / d) * step;
@@ -440,6 +704,10 @@ export class TribeScene extends RangeScene {
           },
         });
       }
+    }
+    if (tribe.ex && !this.walker) {
+      if (!this.leader) this.leader = { x: frag.camp.x + 1, y: frag.camp.y + 1 };
+      this.drawLeader(sprites, b, look, frag, tribe.ex, t, dt);
     }
     if (!tribe.awake) {
       if (!this.walker) this.walker = { ...frag.camp };
@@ -490,6 +758,8 @@ export class TribeScene extends RangeScene {
         b.fillRect(bx + 1, by - 1, 1, 1);
       }
     }
+
+    if (tribe.ex) this.drawWork(sprites, b, tribe.ex, frag.camp, t);
 
     // The spear, standing in its lake.
     const sx = this.sx(frag.spear.x);

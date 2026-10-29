@@ -87,7 +87,23 @@ export interface ExtinctionState {
   escaped?: boolean;
   /** For chance (the shaking, killings): seeded, so the countdown guesses true. */
   luck?: number;
+  /** The tribe assigns itself each dawn (food first, then the focus), unless managed by hand. */
+  auto?: boolean;
+  focus?: Focus;
+  /** The job the leader (the one who touched the spear) is working beside, if any: those at
+   * it work harder. And how many times today the leader has gathered by hand. */
+  lead?: JobId | null;
+  hand?: number;
 }
+
+export type Focus = 'wood' | 'raft' | 'ideas';
+/** Lead by example: the job the leader stands by works this much harder. */
+export const LEAD_BONUS = 0.25;
+/** Gathering by hand: so many times a day, this much each. */
+export const HAND_PER_DAY = 15;
+const HAND_FOOD = 1.2;
+const HAND_WOOD = 1;
+const HAND_INSIGHT = 0.35;
 
 export type RaftPart = 'frame' | 'lashing' | 'hull';
 /** The raft's parts, in order: work and wood for each (lashing needs rope). */
@@ -278,6 +294,10 @@ export function newExtinction(tribe: TribeState): ExtinctionState {
     family: [],
     escaped: false,
     luck: (tribe.seed * 7 + 3) >>> 0,
+    auto: true,
+    focus: 'ideas',
+    lead: null,
+    hand: 0,
   };
 }
 
@@ -302,6 +322,7 @@ export function startExtinction(state: GameState): ExtinctionState | undefined {
   if (!t || !t.awake) return undefined;
   if (!t.ex) {
     t.ex = newExtinction(t);
+    autoAssign(t.ex);
     t.start = JSON.stringify(t.ex);
   }
   return t.ex;
@@ -353,7 +374,8 @@ function workOf(ex: ExtinctionState, p: Survivor, job: JobId, m = modsOf(ex.idea
   const trait = (p.trait === 'keen' ? 1 + m.keen : 1) * (p.trait === 'strong' ? 1 + m.strong : 1 + m.others);
   const shaking = p.sick !== undefined ? 0.5 : 1;
   const cold = seasonOf(ex) === 'winter' && (job === 'forage' || job === 'scavenge' || job === 'dig') ? WINTER_GATHER : 1;
-  return (sk[job] ?? 1) * (sk.all ?? 1) * weak * dietSkill(ex.diet, job) * ideas * trait * shaking * cold;
+  const lead = ex.lead === job && job !== 'rest' ? 1 + LEAD_BONUS : 1;
+  return (sk[job] ?? 1) * (sk.all ?? 1) * weak * dietSkill(ex.diet, job) * ideas * trait * shaking * cold * lead;
 }
 
 /** Hunger now (for sorting who's weakest). */
@@ -381,6 +403,121 @@ export function dayYield(ex: ExtinctionState): Record<JobId, number> {
   // The spear only says so much a day: more listening helps less and less.
   out.listen = LISTEN * Math.sqrt(out.listen);
   return out;
+}
+
+/**
+ * The tribe sets itself to work: enough on food to feed everyone (best jobs first, as far as
+ * the land allows), a fire kept going, then the rest to the focus (wood, the raft, or ideas),
+ * with a few listening to the spear whatever the focus.
+ */
+export function autoAssign(ex: ExtinctionState): void {
+  for (const p of ex.people) p.job = 'rest';
+  const n = ex.people.length;
+  if (!n) return;
+  const m = modsOf(ex.ideas, ex.diet);
+  const need = ((n * ex.ration) / (1 + m.meal)) * 1.15;
+  const start = n + ex.deaths;
+  const food = (['forage', 'scavenge', 'dig', 'fish'] as const).filter((j) => jobOpen(ex, j) && edible(ex.diet, jobFood(ex.diet, j)));
+  // What a job's raw work turns into, as far as the land allows (as in dayYield).
+  const yieldOf = (j: JobId, raw: number): number => {
+    if (j === 'forage') return Math.min(raw * Math.sqrt(Math.max(0, ex.ash / ex.ashMax)), ex.ash);
+    if (j === 'scavenge') return Math.min(raw, ex.carrion);
+    if (j === 'dig') return Math.min(raw, start * DIG_CAP * (1 + m.digCap));
+    if (j === 'fish') return Math.min(raw, start * FISH_CAP * (1 + m.fishCap));
+    return raw;
+  };
+  const free = new Set(ex.people);
+  /** The best still free for a job (and how much they'd do there). */
+  const bestFor = (j: JobId): [Survivor | null, number] => {
+    let who: Survivor | null = null;
+    let w = 0;
+    for (const p of free) {
+      const v = YIELD[j] * workOf(ex, p, j, m);
+      if (v > w) {
+        w = v;
+        who = p;
+      }
+    }
+    return [who, w];
+  };
+  const put = (j: JobId, k: number) => {
+    for (let i = 0; i < k && free.size; i++) {
+      const [who] = bestFor(j);
+      if (!who) return;
+      who.job = j;
+      free.delete(who);
+    }
+  };
+  // A few always listen (the spear is the only way to more food); a fire needs wood.
+  put('listen', Math.max(1, Math.round(n * (ex.focus === 'ideas' ? 0.12 : 0.06))));
+  if (ex.ideas.includes('fire') && (ex.wood ?? 0) < 6 && (ex.trees ?? 0) > 0) put('wood', 2);
+  // Food: one at a time to whichever food job adds most, until there's enough (or more
+  // workers would add next to nothing).
+  const raw: Record<string, number> = {};
+  let total = 0;
+  for (const j of food) raw[j] = 0;
+  while (free.size && total < need) {
+    let pick: JobId | null = null;
+    let who: Survivor | null = null;
+    let add = 0;
+    let gain = 0.15;
+    for (const j of food) {
+      const [p, w] = bestFor(j);
+      if (!p) continue;
+      const g = yieldOf(j, raw[j] + w) - yieldOf(j, raw[j]);
+      if (g > gain) {
+        gain = g;
+        pick = j;
+        who = p;
+        add = w;
+      }
+    }
+    if (!pick || !who) break;
+    who.job = pick;
+    free.delete(who);
+    raw[pick] += add;
+    total += gain;
+  }
+  // The rest: most to the focus, some to wood (the fire and the raft run on it).
+  const rest = free.size;
+  const focusJob: JobId = ex.focus === 'wood' ? 'wood' : ex.focus === 'raft' && jobOpen(ex, 'build') ? ((ex.wood ?? 0) > 8 ? 'build' : 'wood') : 'listen';
+  put(focusJob, Math.round(rest * 0.6));
+  if ((ex.trees ?? 0) > 0) put('wood', Math.round(free.size * 0.4));
+}
+
+function edible(d: Diet, f: 'plants' | 'meat' | null): boolean {
+  return f === 'plants' ? eatsPlants(d) : f === 'meat' ? eatsMeat(d) : false;
+}
+
+/** The leader gathers by hand at a job's ground (or listens at the spear): a little, a few
+ * times a day. Returns what was got (0 when spent, or nothing there). */
+export function handGather(state: GameState, job: JobId): { amount: number; what: string } {
+  const ex = exOf(state);
+  if (!ex || ex.over || ex.escaped || (ex.hand ?? 0) >= HAND_PER_DAY) return { amount: 0, what: '' };
+  let amount = 0;
+  let what = '';
+  if (job === 'listen') {
+    amount = HAND_INSIGHT;
+    ex.insight += amount;
+    what = 'insight';
+  } else if (job === 'wood') {
+    amount = Math.min(HAND_WOOD, ex.trees ?? 0);
+    ex.trees = (ex.trees ?? 0) - amount;
+    ex.wood = (ex.wood ?? 0) + amount;
+    what = 'wood';
+  } else if (job === 'forage' || job === 'scavenge' || job === 'dig' || job === 'fish') {
+    if (!jobOpen(ex, job)) return { amount: 0, what: '' };
+    const pool = job === 'forage' ? ex.ash : job === 'scavenge' ? ex.carrion : Infinity;
+    amount = Math.min(HAND_FOOD, pool);
+    if (job === 'forage') ex.ash -= amount;
+    if (job === 'scavenge') ex.carrion -= amount;
+    const f = jobFood(ex.diet, job)!;
+    if (f === 'plants') ex.plants += amount;
+    else ex.meat += amount;
+    what = f;
+  }
+  if (amount > 0) ex.hand = (ex.hand ?? 0) + 1;
+  return { amount, what };
 }
 
 /** Moves `n` survivors onto a job (from resting), or off it (back to resting), best-suited
@@ -579,10 +716,13 @@ function night(ex: ExtinctionState): void {
   ex.ash = Math.min(ex.ashMax, ex.ash + ex.ashMax * (m.ashRegrow + (season === 'green' ? GREEN_REGROW : 0)));
   ex.family = (ex.family ?? []).filter((id) => ex.people.some((p) => p.id === id));
   ex.day += 1;
+  ex.hand = 0;
   ex.clock = 0;
   ex.today = { plants: 0, meat: 0, insight: 0 };
   ex.last = { day: ex.day, ate, wanted: (ex.people.length + starved.length) * ex.ration, starved: starved.map((p) => ({ name: p.name, trait: p.trait })), spoiled: before - ex.meat - ex.plants, shook, killed, caught, fire, season: ex.day === WINTER[0] ? 'winter' : ex.day === WINTER[1] ? 'green' : null };
   if (ex.people.length < 2) ex.over = true;
+  // A new day: the tribe sets itself to work (unless managed by hand).
+  else if (ex.auto) autoAssign(ex);
 }
 
 /** Runs the Extinction on (only ever while being played). Returns true when a night passed. */

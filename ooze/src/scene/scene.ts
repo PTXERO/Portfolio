@@ -69,6 +69,11 @@ export class Scene {
     return { x: r.left + p.x * this.px, y: r.top + p.y * this.px };
   }
 
+  /** The job the leader is working beside in the Extinction (it works harder). */
+  get leadJob(): import('../economy/extinction').JobId | null {
+    return this.stage === 'tribal' ? this.tribe.leadJob : null;
+  }
+
   /** After the waking's vision: it spreads from the one at the spear to the others. */
   spreadWake(): void {
     this.tribe.spreadWake();

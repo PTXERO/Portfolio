@@ -2,7 +2,7 @@
 // the Ideas the spear can teach.
 
 import { STORY } from '../content/tribal';
-import { count, dayYield, eatsMeat, eatsPlants, FAMILY, hungerWord, ideaCost, jobFood, jobInfo, JOBS, jobOpen, launchBlockers, provisions, RAFT, raftDone, raftPart, seasonOf, TRAITS, VOYAGE_FOOD, WINTER, type Diet, type ExtinctionState } from '../economy/extinction';
+import { count, dayYield, type Focus, eatsMeat, eatsPlants, FAMILY, hungerWord, ideaCost, jobFood, jobInfo, JOBS, jobOpen, launchBlockers, provisions, RAFT, raftDone, raftPart, seasonOf, TRAITS, VOYAGE_FOOD, WINTER, type Diet, type ExtinctionState } from '../economy/extinction';
 import { BRANCHES, MIND_NODE, MIND_TREE, nodeFor, reachable } from '../economy/mindTree';
 import { tribeOf } from '../economy/tribal';
 import type { GameState } from '../economy/types';
@@ -21,7 +21,7 @@ export function tribeKey(state: GameState): string {
   const t = tribeOf(state);
   const ex = t?.ex;
   if (!ex) return JSON.stringify([t?.awake]);
-  return JSON.stringify([ex.day, ex.people.map((p) => [p.id, p.job, Math.round(p.hunger * 4)]), Math.floor(ex.plants), Math.floor(ex.meat), Math.floor(ex.insight), ex.ration, ex.ideas, ex.diet, ex.over, picked, Math.floor(ex.wood ?? 0), ex.raft, ex.family, ex.escaped, ex.people.map((p) => p.sick)]);
+  return JSON.stringify([ex.day, ex.people.map((p) => [p.id, p.job, Math.round(p.hunger * 4)]), Math.floor(ex.plants), Math.floor(ex.meat), Math.floor(ex.insight), ex.ration, ex.ideas, ex.diet, ex.over, picked, Math.floor(ex.wood ?? 0), ex.raft, ex.family, ex.escaped, ex.people.map((p) => p.sick), ex.auto, ex.focus, ex.lead]);
 }
 
 export function tribeLayout(state: GameState): string {
@@ -75,13 +75,21 @@ function jobsCard(ex: ExtinctionState): string {
       const j = jobInfo(ex.diet, plain.id);
       const c = count(ex, j.id);
       const left = j.id === 'forage' ? ` · ${n0(ex.ash)} left` : j.id === 'scavenge' ? ` · ${n0(ex.carrion)} left` : j.id === 'wood' ? ` · ${n0(ex.trees ?? 0)} left` : j.id === 'build' ? ` · ${raftPart(ex)?.name ?? ''}` : '';
+      const lead = ex.lead === j.id ? ' <span class="gold">· you lead here (+25%)</span>' : '';
+      // Left to the tribe, just who's doing what; by hand, the buttons too.
+      if (ex.auto) return c ? `<div class="job auto"><div class="info"><div class="name">${j.name}</div><div class="sub gain">+${n0(y[j.id])} ${unit(j.id)} a day${left}${lead}</div></div><b class="num">${c}</b></div>` : '';
       return `<div class="job"><div class="info"><div class="name">${j.name}</div><div class="sub">${j.does}</div>
-        <div class="sub gain">${c ? `+${n0(y[j.id])} ${unit(j.id)} a day` : unit(j.id)}${left}</div></div>
+        <div class="sub gain">${c ? `+${n0(y[j.id])} ${unit(j.id)} a day` : unit(j.id)}${left}${lead}</div></div>
         <div class="seg"><button class="px-btn" data-job="${j.id}" data-d="-5">−5</button><button class="px-btn" data-job="${j.id}" data-d="-1">−</button><b class="num">${c}</b><button class="px-btn" data-job="${j.id}" data-d="1">+</button><button class="px-btn" data-job="${j.id}" data-d="5">+5</button></div></div>`;
     })
     .join('');
-  return `<div class="card px-box ex-jobs"><div class="info"><div class="name">Work</div>
-    <div class="sub">${count(ex, 'rest')} resting (hunger comes on a little slower).</div></div>${rows}</div>`;
+  const focus = (f: Focus, label: string) => `<button class="px-btn${ex.focus === f ? ' on' : ''}" data-focus="${f}">${label}</button>`;
+  const head = ex.auto
+    ? `<div class="sub">The tribe sets itself to work each dawn: enough on food first, then the rest to what you set them on.</div>
+       <div class="policy">${focus('ideas', 'Ideas')}${focus('wood', 'Wood')}${focus('raft', 'The raft')}</div>`
+    : `<div class="sub">${count(ex, 'rest')} resting (hunger comes on a little slower).</div>`;
+  return `<div class="card px-box ex-jobs opts"><div class="info"><div class="name">Work</div>${head}</div>${rows}
+    <button class="px-btn small-toggle" data-act="ex-auto">${ex.auto ? 'Manage by hand' : 'Let the tribe decide'}</button></div>`;
 }
 
 /** The raft: each part's progress, then (once it's done) the four who go, and the food. */

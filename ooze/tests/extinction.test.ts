@@ -10,6 +10,10 @@ function game(diet: string, survivors = 100): GameState {
   s.current = 'tribal';
   s.stages.tribal.tribe = { awake: true, pop: survivors, survivors, look: { parts: {}, diet }, stats: { speed: 10, strength: 10, senses: 10, toughness: 10, charm: 10 }, generations: 6, heritage: 1.5, seed: 1234, year: 0 };
   startExtinction(s);
+  // Managed by hand unless a test says otherwise.
+  const ex = s.stages.tribal.tribe!.ex!;
+  ex.auto = false;
+  for (const p of ex.people) p.job = 'rest';
   return s;
 }
 
@@ -115,6 +119,25 @@ describe('the Extinction', () => {
     extinctionTick(s, DAY_SEC);
     expect(ex.meat).toBeGreaterThan(500);
     expect(ex.people.every((p) => p.hunger > before[ex.people.indexOf(p)])).toBe(true);
+  });
+
+  it('left to itself (only a focus and ideas picked), the tribe gets by', () => {
+    for (const [diet, food] of [['omnivore', 'both'], ['grazer', 'plants'], ['hunter', 'meat']] as const) {
+      const s = game(diet);
+      const ex = s.stages.tribal.tribe!.ex!;
+      ex.auto = true;
+      const d = play(s, (e) => {
+        for (const id of PATHS[food]) {
+          if (e.ideas.includes(id)) continue;
+          if (!learnIdea(s, id)) break;
+        }
+        e.focus = e.ideas.includes('rope') || PATHS[food].every((id) => e.ideas.includes(id)) ? 'raft' : 'ideas';
+        e.ration = e.people.length > 30 ? 0.5 : 1;
+        if (raftDone(e) && e.people.length >= 4) { e.family = e.people.slice(0, 4).map((p) => p.id); launch(s); }
+      });
+      console.log(`auto ${diet}: ${d}d ${ex.escaped ? 'ESCAPED' : ex.over ? 'extinct' : 'holding'} alive ${ex.people.length} raft ${JSON.stringify(ex.raft)}`);
+      expect(ex.over).toBe(false);
+    }
   });
 
   it('sets every diet to work for food it can eat', () => {
