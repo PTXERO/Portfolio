@@ -51,6 +51,7 @@ import { breed, buyPart, chooseEvent, EVENT_DC, court, equipPart, FARM_PAY, foun
 import { Scene } from './scene/scene';
 import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
+import { playCrossing } from './ui/crossing';
 import { miniIcon } from './scene/creatureLook';
 import { glyph, panWeb, pickIdea, webTransform, webView, zoomWeb } from './ui/tribePanels';
 import { record } from './economy/chronicle';
@@ -696,15 +697,34 @@ function showEscape(fresh = false): void {
     requestAnimationFrame(() => extinctEl.classList.add('in'));
   };
   if (!fresh) return screen();
-  // The raft goes; forty days adrift; then the new island, and smoke on a hill.
+  // The four walk down and board; the raft goes out with the others shouting after it; forty
+  // days adrift; then the new island, and smoke on a hill.
+  const ids = ex.family ?? [];
+  const four = (t.family ?? []).map((p) => p.name);
+  const crowd = ex.people.filter((p) => !ids.includes(p.id)).map((p) => p.name);
+  const pick = (k: number) => crowd[k % Math.max(1, crowd.length)] ?? 'Someone';
   scene.tribeScene.holdOld = true;
-  storyLine(STORY.launch);
-  window.setTimeout(() => storyLine(STORY.crossing), 6000);
+  scene.tribeScene.depart(ids);
+  const lines: [number, string][] = [
+    [0, ex.sendRule
+      ? `It had been settled: ${ex.sendRule === 'family' ? 'a family would go' : ex.sendRule === 'young' ? 'the youngest would go' : 'the strongest would go'}.`
+      : 'They argued through the night over who should go. By morning, four were chosen.'],
+    [4000, `${four.slice(0, -1).join(', ')} and ${four[four.length - 1] ?? ''} walked down to the raft.`],
+    [8500, STORY.launch],
+    [13000, `“Don't forget us!” ${pick(0)} shouted from the shore.`],
+    [15500, `“Tell them who we were!” called ${pick(1)}.`],
+    [18000, `“We will,” ${four[0] ?? 'they'} called back, and then they were too far to hear.`],
+  ];
+  for (const [at, line] of lines) window.setTimeout(() => storyLine(line), at);
   window.setTimeout(() => {
-    scene.tribeScene.holdOld = false;
-    storyLine(STORY.landing);
-  }, 12500);
-  window.setTimeout(screen, 19000);
+    storyLine('');
+    playCrossing({ body: '#4aa7b0', belly: '#9ad8d4' }, () => {
+      scene.tribeScene.holdOld = false;
+      scene.tribeScene.arrive();
+      window.setTimeout(() => storyLine(STORY.landing), 7500);
+      window.setTimeout(screen, 14000);
+    });
+  }, 21000);
 }
 
 /** No one left: the last of them looks round, alone. Then how long they lasted, and again. */

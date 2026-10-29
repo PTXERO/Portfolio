@@ -6,7 +6,7 @@
 
 import { PAL } from '../art/sprites';
 import { SEASON_SEC } from '../economy/rates';
-import { Biome, CELLS, ISLAND, isLand, islandOf, type Island, type Pt } from '../economy/island';
+import { Biome, CELLS, ISLAND, isLand, islandOf, reveal, CELL, type Island, type Pt } from '../economy/island';
 import { BURNT, LAKE, ashenFor, tribeOf } from '../economy/tribal';
 import { DAY_SEC as EX_DAY, RAFT, raftPart, WINTER, type ExtinctionState, type JobId } from '../economy/extinction';
 import type { SpellId } from '../economy/miracles';
@@ -145,6 +145,8 @@ export class TribeScene extends RangeScene {
     this.arrived = false;
     this.piles = [];
     this.landSeed = -1;
+    this.departT = -2;
+    this.arriveT = -2;
     this.wonders = [];
     this.stroke = [];
     this.handed = null;
@@ -726,7 +728,7 @@ export class TribeScene extends RangeScene {
     }
     // The raft on its beach: logs for the frame, ties for the lashing, a deck for the hull.
     if (this.raftAt) {
-      const r = this.raftAt;
+      const r = this.raftWhileLeaving(this.departT >= 0 ? t - this.departT : -1) ?? this.raftAt;
       const prog = (id: string) => {
         const part = RAFT.find((p) => p.id === id)!;
         return Math.min(1, (ex.raft?.[part.id] ?? 0) / part.work);
@@ -777,6 +779,46 @@ export class TribeScene extends RangeScene {
   private family: Person[] = [];
   private locals: Person[] = [];
   private localCamp: Pt = { x: 0, y: 0 };
+  /** What's been seen of the new island (fog of war again), and when the arrival began
+   * (scene seconds; -1 waiting to start, -2 none). */
+  private landSeen: Uint8Array | null = null;
+  private arriveT = -2;
+
+  /** Starts the arrival on the new island (after the crossing). */
+  arrive(): void {
+    this.arriveT = -1;
+  }
+
+  // ---- Leaving the spear's island: the four walk down, board, and the raft goes out. ----
+  /** When the leaving began (scene seconds; -1 waiting to start, -2 none), and the four. */
+  private departT = -2;
+  private leaving: Person[] = [];
+  private leavingIds: number[] = [];
+
+  depart(ids: number[]): void {
+    this.departT = -1;
+    this.leavingIds = ids;
+    this.leaving = [];
+  }
+
+  /** Seconds into the leaving (or -1 when there isn't one). */
+  private departAge(t: number): number {
+    if (this.departT === -2) return -1;
+    if (this.departT === -1) this.departT = t;
+    return t - this.departT;
+  }
+
+  /** Where the raft is while leaving (at the beach, then out to sea). */
+  private raftWhileLeaving(age: number): Pt | null {
+    if (age < 0 || !this.raftAt) return null;
+    const c = { x: ISLAND / 2, y: ISLAND / 2 };
+    const dx = this.raftAt.x - c.x;
+    const dy = this.raftAt.y - c.y;
+    const l = Math.hypot(dx, dy) || 1;
+    const k = Math.max(0, Math.min(1, (age - 9) / 11));
+    const e = k * k;
+    return { x: this.raftAt.x + (dx / l) * 30 * e, y: this.raftAt.y + (dy / l) * 30 * e };
+  }
 
   /** The new island: green, unburnt, the four come ashore on its beach, and on a rise inland
    * the smoke of someone else's fire, and them. */
@@ -804,6 +846,9 @@ export class TribeScene extends RangeScene {
       }
       const at = (c: Pt, k: number, r: number): Person => ({ x: c.x + (hash(k, 95) - 0.5) * r, y: c.y + (hash(k, 97) - 0.5) * r * 0.7, vx: 0, vy: 0, ph: hash(k, 99) * 9, goal: null, wait: hash(k, 101) * 3, lit: -100 });
       this.family = Array.from({ length: 4 }, (_, k) => at(is.home, k, 3));
+      // The fog of a new place: only the beach they come ashore on is known.
+      this.landSeen = new Uint8Array(CELLS * CELLS);
+      reveal(is, this.landSeen, is.home.x, is.home.y, 12);
       this.locals = Array.from({ length: 14 }, (_, k) => at(this.localCamp, k + 10, 7));
       this.camX = (is.home.x * 2 + this.localCamp.x) / 3;
       this.camY = (is.home.y * 2 + this.localCamp.y) / 3;
@@ -814,7 +859,33 @@ export class TribeScene extends RangeScene {
     this.seasonPair = [0, 0];
     if (!this.ground.has(0)) this.ground.set(0, this.paintGround(is, 0));
     this.groundPair = [this.ground.get(0)!, this.ground.get(0)!];
-    this.paintFog(ALL_SEEN);
+    // Arriving: the raft comes in off the sea to the beach, they step off, and the camera
+    // turns inland to the smoke.
+    if (this.arriveT === -1) this.arriveT = t;
+    const ta = this.arriveT >= 0 ? t - this.arriveT : 99;
+    const out = { x: is.home.x - ISLAND / 2, y: is.home.y - ISLAND / 2 };
+    const ol = Math.hypot(out.x, out.y) || 1;
+    const shore = { x: is.home.x - 2, y: is.home.y + 1 };
+    const sea = { x: shore.x + (out.x / ol) * 24, y: shore.y + (out.y / ol) * 24 };
+    const rk = Math.min(1, ta / 7);
+    const re = 1 - (1 - rk) * (1 - rk);
+    const raft = { x: sea.x + (shore.x - sea.x) * re, y: sea.y + (shore.y - sea.y) * re };
+    if (ta < 15) {
+      const smokeLook = Math.max(0, Math.min(1, (ta - 8) / 4));
+      const tx = raft.x + (this.localCamp.x - raft.x) * smokeLook * 0.6;
+      const ty = raft.y + (this.localCamp.y - raft.y) * smokeLook * 0.6;
+      const k = Math.min(1, dt * 2.5);
+      this.camX += (tx - this.camX) * k;
+      this.camY += (ty - 3 - this.camY) * k;
+      this.zoom += (3.4 - this.zoom) * Math.min(1, dt * 1.5);
+      if (ta < 7.5) this.family.forEach((q, i) => {
+        q.x = raft.x - 1.5 + i;
+        q.y = raft.y - 0.2;
+        q.goal = { x: is.home.x + (i - 1.5) * 1.2, y: is.home.y + 0.5 };
+      });
+    }
+    for (const q of this.family) if (this.landSeen) reveal(is, this.landSeen, q.x, q.y, 8);
+    this.paintFog(this.landSeen ?? ALL_SEEN);
     b.imageSmoothingEnabled = false;
     if (this.shaded) b.clearRect(0, 0, W, H);
     else {
@@ -824,6 +895,7 @@ export class TribeScene extends RangeScene {
     }
     const sprites: { y: number; draw: () => void }[] = [];
     const ours = tribe.look as never;
+    const fogged = (x: number, y: number) => !!this.landSeen && !this.landSeen[Math.floor(y / CELL) * CELLS + Math.floor(x / CELL)];
     // The locals: another kind altogether (other legs, other jaws, the other diet).
     const p = tribe.look.parts;
     const theirs = { parts: { legs: p.legs === 'hooves' ? 'runner' : 'hooves', mouth: p.mouth === 'tusks' ? 'fangs' : 'tusks', back: p.back === 'spines' ? 'sail' : 'spines', eyes: 'periscope' }, diet: tribe.look.diet === 'hunter' ? 'grazer' : 'hunter' } as never;
@@ -846,6 +918,8 @@ export class TribeScene extends RangeScene {
         }
         const x = q.x;
         const y = q.y;
+        // (Whoever's out in the fog isn't seen.)
+        if (fogged(x, y)) return;
         // The family keeps looking toward the smoke; the locals, at first, toward the beach.
         const left = moving ? dx < 0 : wary ? this.localCamp.x < x : is.home.x < x;
         sprites.push({ y, draw: () => this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 7 + q.ph) % 2 : 0, sleeping: false, hop: moving ? Math.abs(Math.sin(t * 7 + q.ph)) * 1.5 : 0 }) });
@@ -859,22 +933,24 @@ export class TribeScene extends RangeScene {
       y: this.localCamp.y,
       draw: () => {
         const fl = Math.floor(t * 8) % 3;
-        b.fillStyle = '#3a2a20';
-        b.fillRect(FX - 2, FY - 1, 4, 1);
-        b.fillStyle = 'rgba(255, 150, 60, 0.996)';
-        b.fillRect(FX - 1, FY - 3 - (fl % 2), 2, 2 + (fl % 2));
-        for (let k = 0; k < 8; k++) {
-          const h = ((t * 4 + k * 5) % 40);
-          b.fillStyle = `rgba(200, 200, 205, ${0.35 * (1 - h / 40)})`;
-          b.fillRect(FX + Math.round(Math.sin(h * 0.15 + k) * 2 + h * 0.2), FY - 6 - Math.round(h), 2, 2);
+        // (Their fire is under the fog; its smoke rises out of it, a column you can't miss.)
+        if (!fogged(this.localCamp.x, this.localCamp.y)) {
+          b.fillStyle = 'rgba(255, 150, 60, 0.996)';
+          b.fillRect(FX - 1, FY - 3 - (fl % 2), 2, 2 + (fl % 2));
+        }
+        const sz = Math.max(2, Math.round(this.zoom * 0.8));
+        for (let k = 0; k < 16; k++) {
+          const h = (t * 5 + k * 6) % 90;
+          b.fillStyle = `rgba(215, 215, 220, ${0.5 * (1 - h / 90)})`;
+          b.fillRect(FX + Math.round(Math.sin(h * 0.08 + k) * 3 + h * 0.25), FY - 8 - Math.round(h), sz + Math.round(h / 20), sz + Math.round(h / 20));
         }
       },
     });
-    // The raft, pulled up on the sand.
-    const RX = Math.round(this.sx(is.home.x - 2));
-    const RY = Math.round(this.py(is.home.x - 2, is.home.y + 1));
+    // The raft: coming in, then pulled up on the sand.
+    const RX = Math.round(this.sx(raft.x));
+    const RY = Math.round(this.py(raft.x, raft.y)) + (rk < 1 ? Math.round(Math.sin(t * 3)) : 0);
     sprites.push({
-      y: is.home.y + 1,
+      y: raft.y - 0.5,
       draw: () => {
         b.fillStyle = '#6a4a30';
         for (let k = 0; k < 4; k++) b.fillRect(RX - 5, RY - 4 + k, 10, 1);
@@ -1142,6 +1218,18 @@ export class TribeScene extends RangeScene {
       // Before waking they keep close to the camp, away from the spear; after, they range
       // over what's left, and some stand looking up at it.
       p.wait -= dt;
+      // Leaving: everyone comes down to the beach to see the four off.
+      if (this.departT !== -2 && this.raftAt && frag) {
+        // Up the beach from the raft (toward the camp), spread along the shore, leaving it clear.
+        const toCamp = Math.atan2(frag.camp.y - this.raftAt.y, frag.camp.x - this.raftAt.x);
+        const back = 3.5 + hash(i, 193) * 6;
+        const side = (hash(i, 191) - 0.5) * 18;
+        p.goal = {
+          x: this.raftAt.x + Math.cos(toCamp) * back + Math.cos(toCamp + Math.PI / 2) * side,
+          y: this.raftAt.y + Math.sin(toCamp) * back + Math.sin(toCamp + Math.PI / 2) * side,
+        };
+        p.wait = 5;
+      }
       const trapped = tribe.ex?.crisis?.kind === 'trapped' && tribe.ex.people[i]?.id === tribe.ex.crisis.who;
       if (struck || trapped) {
         p.goal = { x: p.x, y: p.y };
@@ -1217,6 +1305,8 @@ export class TribeScene extends RangeScene {
       sprites.push({
         y: yy,
         draw: () => {
+          // (The four who are leaving are drawn walking down and on the raft instead.)
+          if (this.departT !== -2 && this.leavingIds.includes(tribe.ex?.people[i]?.id ?? -1)) return;
           this.drawBeing(b, look, x, yy, { left, frame: moving ? Math.floor(t * 8 + p.ph) % 2 : 0, sleeping: sleeping && !struck, hop });
           // The spark as it reaches them: a point of light over each head, fading.
           if (lit >= 0 && lit < 3) this.spark(b, x, yy, lit);
@@ -1338,6 +1428,26 @@ export class TribeScene extends RangeScene {
       }
     }
 
+    // Leaving: the camera to the beach, the four walking down to the raft and onto it.
+    const age = this.departAge(t);
+    if (age >= 0 && this.raftAt) {
+      const raft = this.raftWhileLeaving(age)!;
+      if (!this.leaving.length) this.leaving = this.leavingIds.map((_, k) => ({ x: frag.camp.x + k - 1.5, y: frag.camp.y + 1, vx: 0, vy: 0, ph: k * 2, goal: null, wait: 0, lit: -100 }));
+      const kc = Math.min(1, dt * 1.8);
+      this.camX += (raft.x - this.camX) * kc;
+      this.camY += (raft.y - 3 - this.camY) * kc;
+      this.zoom += (3.6 - this.zoom) * Math.min(1, dt * 1.2);
+      this.leaving.forEach((q, k) => {
+        const walk = Math.min(1, age / 7);
+        const from = { x: frag.camp.x + k - 1.5, y: frag.camp.y + 1 };
+        const onRaft = { x: raft.x - 1.5 + k, y: raft.y - 0.3 };
+        const p = age < 7 ? { x: from.x + (this.raftAt!.x - 1.5 + k - from.x) * walk, y: from.y + (this.raftAt!.y - 0.3 - from.y) * walk } : onRaft;
+        q.x = p.x;
+        q.y = p.y;
+        const moving = age < 7;
+        sprites.push({ y: q.y + 0.6, draw: () => this.drawBeing(b, look, q.x, q.y, { left: moving ? from.x > this.raftAt!.x : raft.x < frag.camp.x, frame: moving ? Math.floor(t * 8 + k) % 2 : 0, sleeping: false, hop: moving ? Math.abs(Math.sin(t * 8 + k)) * 1.5 : Math.abs(Math.sin(t * 2.5 + k)) }) });
+      });
+    }
     if (tribe.ex) {
       this.drawWork(sprites, b, tribe.ex, frag.camp, t);
       this.drawPiles(sprites, b, dt);
