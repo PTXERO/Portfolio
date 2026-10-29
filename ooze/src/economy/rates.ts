@@ -127,7 +127,15 @@ export function feedMult(state: GameState, stage: StageId): number {
   let strength = FEED_EXP;
   for (const e of stageEffects(state, stage)) if (e.kind === 'feedMult') strength *= e.mult;
   // Every 10x more output in the old stage is worth about 12% more here (26% with Soup Feeding).
-  return Math.pow(Math.max(1, stageRate(state, prev).toNumber()), strength);
+  const raw = Math.pow(Math.max(1, stageRate(state, prev).toNumber()), strength);
+  return softCap(raw);
+}
+
+/** Up to ×10 an earlier era's boost counts in full; beyond that only its square root does,
+ * so growing old eras always helps but can never carry the next one. */
+export const FEED_SOFT_CAP = 10;
+export function softCap(m: number): number {
+  return m <= FEED_SOFT_CAP ? m : FEED_SOFT_CAP * Math.sqrt(m / FEED_SOFT_CAP);
 }
 
 // ---- Cell stage: diet, defense and the habitat ----

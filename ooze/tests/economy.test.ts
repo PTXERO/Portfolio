@@ -21,7 +21,7 @@ import {
 } from '../src/economy/actions';
 import { D } from '../src/economy/num';
 import { applyOffline, timeBankCap } from '../src/economy/offline';
-import { defenseOf, dialMax, guardLevel, dietOf, forageMult, habitatMult, heroSpeed, milestonesReached, offlineBonusSec, spawnMult, stageRate, upgradeLevel } from '../src/economy/rates';
+import { softCap, defenseOf, dialMax, guardLevel, dietOf, forageMult, habitatMult, heroSpeed, milestonesReached, offlineBonusSec, spawnMult, stageRate, upgradeLevel } from '../src/economy/rates';
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
@@ -668,5 +668,14 @@ describe('creature stage', () => {
     const back = deserialize(serialize(s));
     expect(back.stages.creature.trip?.place).toBe('shore');
     expect(back.stages.creature.egg?.mate.name).toBe('Silt');
+  });
+});
+
+describe('feeding between eras', () => {
+  it('counts in full up to ×10, then only by the square root', () => {
+    expect(softCap(4)).toBe(4);
+    expect(softCap(10)).toBe(10);
+    expect(softCap(1000)).toBeCloseTo(100, 6);
+    expect(softCap(1e6)).toBeLessThan(3200);
   });
 });
