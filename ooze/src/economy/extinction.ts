@@ -13,6 +13,7 @@
 // spear remembers what it taught, so those ideas come cheaper).
 
 import { discover, ordainedNeeds, say, tribeLaunches, tribeThinks, type SpellId } from './miracles';
+import { ensureSociety, flushNotes, mourn, nightTheft, sharing, socialNight, spirit, type Bond, type Quirk } from './society';
 import { COST_STEP, MIND_NODE, modsOf, NODE_COST, reachable, type Mods } from './mindTree';
 import type { GameState, TribeState } from './types';
 
@@ -31,6 +32,13 @@ export interface Survivor {
   grit?: number;
   /** Days left to live with the shaking (from eating their own); unset if well. */
   sick?: number;
+  /** Their nature, who they are to the others, and what's on them (days of grief or of a
+   * hurt; broken for a day when pushed too far). */
+  quirk?: Quirk;
+  bonds?: Bond[];
+  grief?: number;
+  hurt?: number;
+  broken?: boolean;
 }
 
 export interface NightReport {
@@ -108,6 +116,14 @@ export interface ExtinctionState {
   boost?: { day: number; fish: number };
   fireTonight?: boolean;
   warmTonight?: boolean;
+  /** Among them: tonight's notable moments (the Chronicle keeps the few most telling), the
+   * one they follow, and the last birth. */
+  notes?: { weight: number; text: string }[];
+  leader?: number;
+  lastBirth?: number;
+  births?: number;
+  /** When each kind of moment was last told (so the Chronicle doesn't repeat itself). */
+  told?: Record<string, number>;
   /** Food set aside for the crossing (wrapped and smoked: it keeps). */
   voyage?: number;
   /** Miracles the spear worked unasked last night (for the scene to show). */
@@ -289,7 +305,7 @@ export function newExtinction(tribe: TribeState): ExtinctionState {
     const hunger = Math.max(0, 0.3 + rand() * 1.4 + (trait === 'frail' ? 0.3 : trait === 'hardy' ? -0.2 : 0));
     people.push({ id: i, name, trait, hunger, job: 'rest', grit: (rand() - 0.5) * 0.6 });
   }
-  return {
+  const ex: ExtinctionState = {
     day: 0,
     clock: 0,
     diet: dietFrom(tribe.look.diet),
@@ -327,6 +343,8 @@ export function newExtinction(tribe: TribeState): ExtinctionState {
     lead: null,
     hand: 0,
   };
+  ensureSociety(ex);
+  return ex;
 }
 
 /** A roll of the Extinction's own dice. */
@@ -359,6 +377,7 @@ export function startExtinction(state: GameState): ExtinctionState | undefined {
       ex.log = [];
     }
     ex.auto = true;
+    ensureSociety(ex);
     ex.powers = (ex.powers as string[]).map((p) => (p === 'shake' ? 'quicken' : p)) as SpellId[];
   } else {
     t.ex = newExtinction(t);
@@ -416,7 +435,7 @@ function workOf(ex: ExtinctionState, p: Survivor, job: JobId, m = modsOf(ex.idea
   const cold = seasonOf(ex) === 'winter' && (job === 'forage' || job === 'scavenge' || job === 'dig') ? WINTER_GATHER : 1;
   const lead = ex.lead === job && job !== 'rest' ? 1 + LEAD_BONUS : 1;
   const cower = (ex.dread ?? 0) >= 60 ? 0.85 : 1;
-  return (sk[job] ?? 1) * (sk.all ?? 1) * weak * dietSkill(ex.diet, job) * ideas * trait * shaking * cold * lead * cower;
+  return (sk[job] ?? 1) * (sk.all ?? 1) * weak * dietSkill(ex.diet, job) * ideas * trait * shaking * cold * lead * cower * spirit(ex, p);
 }
 
 /** Hunger now (for sorting who's weakest). */
@@ -711,6 +730,8 @@ function night(ex: ExtinctionState): void {
   ex.fireTonight = false;
   ex.warmTonight = false;
   const value = (1 + cooking) * (ex.ration < 1 ? 1 + m.ration : 1);
+  // In the dark, before the meal, the greedy may help themselves.
+  nightTheft(ex);
   // The hungriest eat first (or, if the strong eat first, the workers do).
   const order = [...ex.people].sort((a, b) => (m.strongFirst ? Number(a.job === 'rest') - Number(b.job === 'rest') : 0) || b.hunger - a.hunger);
   let ate = 0;
@@ -735,16 +756,20 @@ function night(ex: ExtinctionState): void {
     const listen = p.job === 'listen' ? m.listenHunger : 0;
     p.hunger = Math.max(0, p.hunger + 1 - 1.5 * meal - rest - m.night + listen + cold);
   }
+  // The kind give from their share to the starving they love.
+  sharing(ex);
   // The shaking runs its course.
-  const shook: string[] = [];
+  const shookDead: Survivor[] = [];
   for (const p of ex.people) {
     if (p.sick === undefined) continue;
     p.sick -= 1;
-    if (p.sick <= 0) shook.push(p.name);
+    if (p.sick <= 0) shookDead.push(p);
   }
+  const shook = shookDead.map((p) => p.name);
   if (shook.length) {
     ex.people = ex.people.filter((p) => p.sick === undefined || p.sick > 0);
     ex.deaths += shook.length;
+    mourn(ex, shookDead, 'died of the shaking');
   }
   // Cannibals with starving among them: some nights, the strong take one of the weak.
   const caught: string[] = [];
@@ -756,12 +781,16 @@ function night(ex: ExtinctionState): void {
       ex.people = ex.people.filter((p) => p !== weak);
       ex.deaths += 1;
       killed = { name: weak.name, by: killer.name };
+      mourn(ex, [weak], `was killed in the night, and eaten`);
       eatDead(ex, 1, caught);
     }
   }
   const starved = ex.people.filter((p) => p.hunger >= limitOf(p, m));
   ex.people = ex.people.filter((p) => p.hunger < limitOf(p, m));
   ex.deaths += starved.length;
+  mourn(ex, starved, 'starved in the night');
+  // The rest of the night among them (and the prayer the devout stir up).
+  ex.prayer = Math.max(0, (ex.prayer ?? 0) + socialNight(ex, fire));
   if (ex.fallen === 'eat') eatDead(ex, starved.length, caught);
   else if (ex.fallen === 'undecided') ex.corpses += starved.length;
   // Once the raft's built, a share of what's left each night is wrapped and smoked for the
@@ -790,6 +819,7 @@ function night(ex: ExtinctionState): void {
   else {
     // A new day: the tribe thinks (rations, what to work toward), the spear finds new powers
     // and works the ordained ones where they're needed, and everyone goes to work.
+    flushNotes(ex);
     tribeThinks(ex);
     discover(ex);
     autoAssign(ex);

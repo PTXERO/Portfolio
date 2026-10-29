@@ -4,6 +4,7 @@
 import { STORY } from '../content/tribal';
 import { count, dayYield, eatsMeat, eatsPlants, FAMILY, hungerWord, ideaCost, jobFood, jobInfo, JOBS, jobOpen, launchBlockers, RAFT, raftDone, raftPart, seasonOf, TRAITS, VOYAGE_FOOD, WINTER, type Diet, type ExtinctionState } from '../economy/extinction';
 import { BRANCHES, MIND_NODE, MIND_TREE, nodeFor, reachable } from '../economy/mindTree';
+import { moodWord, QUIRKS } from '../economy/society';
 import { DREAD_COWER, DREAD_FLEE, ORDAIN_AFTER, PRAYER_MAX, spellsFor, type Gesture } from '../economy/miracles';
 import { tribeOf } from '../economy/tribal';
 import type { GameState } from '../economy/types';
@@ -108,7 +109,13 @@ function peopleCard(ex: ExtinctionState): string {
     .map((p) => {
       const w = hungerWord(ex, p);
       const chosen = fam.includes(p.id);
-      const inner = `<b>${chosen ? '» ' : ''}${p.name}</b><span class="dim">${TRAITS[p.trait].name}</span><span class="dim">${jobInfo(ex.diet, p.job).name.split(' ')[0]}</span><span class="hunger">${w}</span>`;
+      // Who they are to the others (the closest bond), and how they're bearing it.
+      const close = (p.bonds ?? []).find((b) => b.kind === 'mate') ?? (p.bonds ?? []).find((b) => b.kind === 'child' || b.kind === 'parent') ?? (p.bonds ?? [])[0];
+      const other = close && ex.people.find((q) => q.id === close.id);
+      const rel = other ? `${close!.kind === 'parent' ? 'parent of' : close!.kind === 'child' ? 'child of' : `${close!.kind} of`} ${other.name}` : 'alone';
+      const lead = p.id === ex.leader ? ' <span class="gold">· leads</span>' : '';
+      const inner = `<b>${chosen ? '» ' : ''}${p.name}</b><span class="dim">${TRAITS[p.trait].name}${p.quirk ? ` · ${QUIRKS[p.quirk]}` : ''}</span><span class="dim">${jobInfo(ex.diet, p.job).name.split(' ')[0]}</span><span class="hunger">${w}</span>
+        <span class="bond">${rel} · ${moodWord(ex, p)}${lead}</span>`;
       return `<div class="person ${w.toLowerCase()}">${inner}</div>`;
     })
     .join('');

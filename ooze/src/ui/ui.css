@@ -662,3 +662,4 @@ b.green { color: var(--mint); }
 .chronicle p { margin: 4px 0 0; font-size: 13px; color: var(--dim); }
 .chronicle p.now { color: var(--cream); }
 #modal .glyph-big { display: flex; justify-content: center; color: #e8b0ff; margin: 8px 0; }
+.ex-people .person .bond { grid-column: 1 / -1; font-size: 11px; color: var(--dim); margin-top: -2px; }

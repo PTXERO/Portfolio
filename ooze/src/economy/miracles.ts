@@ -71,10 +71,10 @@ export const DREAD_FLEE = 85;
 export const ORDAIN_AFTER = 4;
 export const ORDAIN_COST = 1.5;
 
-/** The Chronicle: what happened, day by day (newest last, the last forty kept). */
+/** The Chronicle: what happened, day by day (newest last, the last 150 kept). */
 export function say(ex: ExtinctionState, text: string): void {
   (ex.log ??= []).push({ day: ex.day + 1, text });
-  if (ex.log.length > 40) ex.log.splice(0, ex.log.length - 40);
+  if (ex.log.length > 150) ex.log.splice(0, ex.log.length - 150);
 }
 
 /** Miracles found but not yet shown to the player (the discovery cards). */
@@ -226,11 +226,17 @@ export function tribeThinks(ex: ExtinctionState): void {
   const have = provisions(ex) + coming;
   const was = ex.ration;
   ex.ration = have >= n * 1.1 ? 1 : have >= n * 0.5 ? 0.5 : 0.25;
-  if (ex.ration !== was) say(ex, ex.ration > was ? `There was enough again. They ate ${ex.ration === 1 ? 'full meals' : 'half meals'}.` : ex.ration === 0.5 ? 'They halved the rations. The old ate last.' : 'They cut the rations to scraps. Some stopped eating so the young could.');
+  const lead = ex.people.find((p) => p.id === ex.leader)?.name;
+  const word = lead ? `On ${lead}'s word, they` : 'They';
+  if (ex.ration !== was) say(ex, ex.ration > was ? `There was enough again. They ate ${ex.ration === 1 ? 'full meals' : 'half meals'}.` : ex.ration === 0.5 ? `${word} halved the rations. The old ate last.` : `${word} cut the rations to scraps. Some stopped eating so the young could.`);
   // What to put spare hands to: ideas first, then the raft (wood for it before building).
   const was2 = ex.focus;
   ex.focus = aiFocus(ex);
-  if (ex.focus !== was2 && ex.focus === 'raft') say(ex, '“If we stay any longer we\'ll go mad. We need to get off this island.” Some started on a raft.');
+  if (ex.focus !== was2 && ex.focus === 'raft' && !ex.told?.raft) {
+    (ex.told ??= {}).raft = ex.day;
+    const lead = ex.people.find((p) => p.id === ex.leader)?.name;
+    say(ex, `“If we stay any longer we'll go mad. We need to get off this island.”${lead ? ` ${lead} said it, and no one argued.` : ''} Some started on a raft.`);
+  }
 }
 
 function aiFocus(ex: ExtinctionState): Focus {
