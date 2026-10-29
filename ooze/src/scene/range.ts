@@ -112,6 +112,9 @@ export class RangeScene {
   private rain: { x: number; y: number; z: number; v: number }[] = [];
   private flash = 0;
   private bow = 0;
+  /** Where the rainbow stands (its foot's centre on the land, and its size in tiles). */
+  private bowAt: { x: number; y: number; r: number } | null = null;
+  private bowView: [number, number, number, number] = [0, 0, 1, 0];
   private momentTimer = 6;
   private moveTimer = 30;
   private based = new WeakSet<Member>();
@@ -261,7 +264,7 @@ export class RangeScene {
   }
 
   /** What the shader needs: the island's heights and kinds, the fog, and the seasons' ground. */
-  shadeInputs(): { seed: number; heights: Uint8Array; fog: HTMLCanvasElement; fogVersion: number; ground: [HTMLCanvasElement, HTMLCanvasElement]; blend: number; tint: [number, number, number]; trail: HTMLCanvasElement; trailVersion: number; weather: [number, number, number, number]; bow: number } | null {
+  shadeInputs(): { seed: number; heights: Uint8Array; fog: HTMLCanvasElement; fogVersion: number; ground: [HTMLCanvasElement, HTMLCanvasElement]; blend: number; tint: [number, number, number]; trail: HTMLCanvasElement; trailVersion: number; weather: [number, number, number, number]; bow: [number, number, number, number] } | null {
     const is = this.island;
     if (!is || !this.fog || !this.groundPair) return null;
     if (!this.heightData || this.heightDataSeed !== is.seed) {
@@ -278,7 +281,7 @@ export class RangeScene {
     }
     const [a, c] = this.seasonPair;
     const tint = SEASON_TINT[a].map((v, i) => v + (SEASON_TINT[c][i] - v) * this.seasonBlend) as [number, number, number];
-    return { seed: is.seed, heights: this.heightData, fog: this.fog, fogVersion: this.fogVersion, ground: this.groundPair, blend: this.seasonBlend, tint, trail: this.trails.canvas, trailVersion: this.trails.version, weather: this.weather, bow: this.bow };
+    return { seed: is.seed, heights: this.heightData, fog: this.fog, fogVersion: this.fogVersion, ground: this.groundPair, blend: this.seasonBlend, tint, trail: this.trails.canvas, trailVersion: this.trails.version, weather: this.weather, bow: this.bowView };
   }
 
   // ---- Input ----
@@ -817,6 +820,10 @@ export class RangeScene {
       this.stormLeft = 35 + Math.random() * 25;
       this.stormTimer = 200 + Math.random() * 220;
     }
+    // As a storm clears: now and then (not every time) a rainbow, set over the land in view.
+    if (this.stormLeft > 0 && this.stormLeft - dt <= 0) {
+      this.bowAt = Math.random() < 0.3 ? { ...this.toWorld(W / 2, H * 0.78), r: (W * 0.6) / this.zoom } : null;
+    }
     this.stormLeft = Math.max(0, this.stormLeft - dt);
     this.storm += ((this.stormLeft > 0 ? 1 : 0) - this.storm) * Math.min(1, dt / 5);
     this.wet = this.stormLeft > 0 ? Math.min(1, this.wet + dt / 8) : Math.max(0, this.wet - dt / 70);
@@ -1251,8 +1258,11 @@ export class RangeScene {
     }
     // The rainbow (drawn by the shader as soft light in the air) eases in after the rain
     // and fades as the ground dries or the day ends.
-    const bowWant = this.stormLeft <= 0 && this.wet > 0.2 && night < 0.2 ? Math.min(1, (this.wet - 0.2) * 3) * Math.max(0, Math.min(1, (0.75 - dayT) * 8)) : 0;
+    const bowWant = this.bowAt && this.stormLeft <= 0 && this.wet > 0.2 && night < 0.2 ? Math.min(1, (this.wet - 0.2) * 3) * Math.max(0, Math.min(1, (0.75 - dayT) * 8)) : 0;
     this.bow += (bowWant - this.bow) * Math.min(1, dt / 6);
+    // It stands over the land, so it scrolls and zooms with the map.
+    const at = this.bowAt;
+    this.bowView = at && this.bow > 0.002 ? [this.sx(at.x), this.py(at.x, at.y), at.r * this.zoom, this.bow] : [0, 0, 1, 0];
 
     // Night falls over everything; in summer, fireflies around home.
     if (night > 0) {
