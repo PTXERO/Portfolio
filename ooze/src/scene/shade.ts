@@ -77,6 +77,7 @@ uniform sampler2D uOver;
 uniform sampler2D uLight;
 uniform sampler2D uTrail; // paths worn into the ground (alpha)
 uniform vec4 uWeather; // storm, morning mist, winter ice, wet ground (each 0 to 1)
+uniform float uBow; // the rainbow after rain (0 to 1)
 uniform float uBlend;
 uniform vec2 uArt;
 uniform vec4 uCam; // camera centre x, y (tiles), zoom (art px per tile), screen row of the centre
@@ -241,6 +242,16 @@ void main() {
 
   // Grade: highlights roll off instead of burning out (snow in the sun keeps its shape),
   // a touch more colour and contrast, and a soft vignette.
+  // After rain, a rainbow: a great soft arc of light across the whole view, like the god
+  // rays in the water, so faint you half see it. Violet inside, red outside.
+  if (uBow > 0.002) {
+    vec2 p = (vUv - vec2(0.5, 1.4)) * vec2(uArt.x / uArt.y, 1.0);
+    float k = (length(p) - 0.52) / 0.5;
+    float band = smoothstep(0.0, 0.35, k) * (1.0 - smoothstep(0.65, 1.0, k));
+    vec3 hue = clamp(abs(fract(vec3((1.0 - k) * 0.78) + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+    float shimmer = 0.85 + 0.15 * sin(uTime * 0.6 + vUv.x * 4.0);
+    lit += mix(vec3(1.0), hue, 0.8) * band * uBow * 0.2 * shimmer;
+  }
   lit *= uGrade;
   // The low sun's glow hangs in the air, strongest toward the far (top) side of the view.
   lit += uHaze * (1.0 - vUv.y * 0.6);
@@ -268,6 +279,8 @@ export interface ShadeParams {
   trail: HTMLCanvasElement;
   trailVersion: number;
   weather: [number, number, number, number];
+  /** The rainbow after rain, 0 to 1. */
+  bow: number;
 }
 
 function compile(gl: WebGLRenderingContext, vs: string, fs: string): WebGLProgram {
@@ -466,6 +479,7 @@ export class MapShader {
     }
     gl.uniform1i(this.u('uTrail'), 6);
     gl.uniform4fv(this.u('uWeather'), p.weather);
+    gl.uniform1f(this.u('uBow'), p.bow);
     gl.uniform1f(this.u('uBlend'), p.blend);
     gl.uniform2f(this.u('uArt'), artW, artH);
     gl.uniform4f(this.u('uCam'), p.cam[0], p.cam[1], p.cam[2], p.cam[3]);
