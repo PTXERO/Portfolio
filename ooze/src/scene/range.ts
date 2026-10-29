@@ -17,6 +17,7 @@ import type { GameState, Role } from '../economy/types';
 import { drawBlob, type BlobStyle } from './blob';
 import { creatureLookOf, drawMini, type CreatureLook } from './creatureLook';
 import { Effects, hash, mixColor, visibleCount, type Frame } from './paint';
+import { Wild, type Bush, type WildView } from './wild';
 import type { PondEvent } from './pond';
 
 interface Member {
@@ -28,6 +29,22 @@ interface Member {
   phase: number;
   /** Seconds left running from a beast. */
   flee: number;
+  /** A moment of its own it's in the middle of (see startMoment). */
+  act?: Act;
+}
+
+/** Herd life: little things members do now and then, on their own or in twos. */
+interface Act {
+  kind: 'chase' | 'nuzzle' | 'rest' | 'drink' | 'lookout' | 'eat';
+  /** Seconds left. */
+  t: number;
+  /** Where it's happening. */
+  x: number;
+  y: number;
+  /** In a pair: the one leading (the chased, the left of two nuzzling), and the other. */
+  lead?: boolean;
+  mate?: Member;
+  bush?: Bush;
 }
 
 interface Beast {
@@ -76,6 +93,8 @@ const mixRgb = (a: number[], b: number[], t: number) => a.map((v, i) => Math.rou
 
 export class RangeScene {
   private fx = new Effects();
+  private wild = new Wild();
+  private momentTimer = 6;
   private events: PondEvent[] = [];
   private members: Member[] = [];
   private beast: Beast | null = null;
@@ -469,6 +488,100 @@ export class RangeScene {
     return { ...is.home };
   }
 
+  /** The camera and effects, for the island's wild life. */
+  private get wildView(): WildView {
+    return { zoom: this.zoom, W: this.W, H: this.H, sx: (x) => this.sx(x), py: (x, y) => this.py(x, y), fx: this.fx, toWorld: (x, y) => this.toWorld(x, y) };
+  }
+
+  /** A little pink heart rising over a spot (age 0 to about 1). */
+  private heart(b: CanvasRenderingContext2D, x: number, y: number, age: number): void {
+    const hx = Math.round(this.sx(x));
+    const hy = Math.round(this.py(x, y) - (12 + age * 4) * (this.zoom >= 6 ? 2 : 1));
+    b.fillStyle = PAL.p;
+    b.fillRect(hx - 1, hy, 1, 1);
+    b.fillRect(hx + 1, hy, 1, 1);
+    b.fillRect(hx - 1, hy + 1, 3, 1);
+    b.fillRect(hx, hy + 2, 1, 1);
+  }
+
+  /** The nearest spot within `r` tiles of a point that passes `ok` (sampled, so roughly). */
+  private findSpot(from: Pt, r: number, ok: (x: number, y: number) => boolean): Pt | null {
+    let best: Pt | null = null;
+    let bd = Infinity;
+    for (let i = 0; i < 70; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.sqrt(Math.random()) * r;
+      const x = from.x + Math.cos(a) * d;
+      const y = from.y + Math.sin(a) * d;
+      if (x < 1 || y < 1 || x > ISLAND - 2 || y > ISLAND - 2 || !ok(x, y)) continue;
+      if (d < bd) {
+        bd = d;
+        best = { x, y };
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Herd life: one or two members break off for a moment of their own. The young chase each
+   * other round in circles; pairs nuzzle; one lies down in the shade of the trees; one goes
+   * down to the water to drink; one strips a ripe bush; and at dusk a sentry climbs to the
+   * highest ground near home and stands looking out.
+   */
+  private startMoment(is: Island, home: Pt, dayT: number, winter: boolean, season: number): void {
+    const free = this.members.filter((m) => !m.act && m.flee <= 0 && m.role !== 'carer' && m.role !== 'digger');
+    if (!free.length) return;
+    const take = (pref?: Role) => {
+      const i = pref ? free.findIndex((m) => m.role === pref) : -1;
+      return free.splice(i >= 0 ? i : Math.floor(Math.random() * free.length), 1)[0];
+    };
+    const dusk = dayT > 0.6 && dayT < 0.74;
+    const land = (x: number, y: number) => isLand(is, x, y);
+    const bush = this.wild.ripeNear(home, 26);
+    const choices: [Act['kind'], number][] = [
+      ['chase', winter || free.length < 2 ? 0 : 3],
+      ['nuzzle', free.length < 2 ? 0 : season === 0 ? 4 : 2],
+      ['rest', winter ? 0.5 : 2],
+      ['drink', 2],
+      ['eat', bush ? 4 : 0],
+      ['lookout', dusk ? 6 : 0],
+    ];
+    let r = Math.random() * choices.reduce((a, [, w]) => a + w, 0);
+    const kind = choices.find(([, w]) => (r -= w) < 0)?.[0];
+    if (!kind) return;
+    if (kind === 'chase' || kind === 'nuzzle') {
+      const a = take();
+      const c = take();
+      const x = (a.x + c.x) / 2;
+      const y = (a.y + c.y) / 2;
+      const t = kind === 'chase' ? 6 + Math.random() * 3 : 7;
+      a.act = { kind, t, x, y, lead: true, mate: c };
+      c.act = { kind, t, x, y, lead: false, mate: a };
+      return;
+    }
+    const m = take(kind === 'lookout' ? 'guard' : undefined);
+    let spot: Pt | null = null;
+    if (kind === 'rest') {
+      // Shade: at the edge of the trees, else anywhere grassy.
+      spot = this.findSpot(m, 14, (x, y) => land(x, y) && is.biome[Math.round(y) * ISLAND + Math.round(x)] === Biome.Forest) ?? this.findSpot(m, 6, land);
+    } else if (kind === 'drink') {
+      spot = this.findSpot(m, 14, (x, y) => land(x, y) && (!land(x + 1.2, y) || !land(x - 1.2, y) || !land(x, y + 1.2) || !land(x, y - 1.2)));
+    } else if (kind === 'eat' && bush) {
+      spot = { x: bush.x + 0.6, y: bush.y + 0.2 };
+    } else if (kind === 'lookout') {
+      let best = -Infinity;
+      for (let i = 0; i < 50; i++) {
+        const p = this.findSpot(home, 12, land);
+        if (p && is.height[Math.round(p.y) * ISLAND + Math.round(p.x)] > best) {
+          best = is.height[Math.round(p.y) * ISLAND + Math.round(p.x)];
+          spot = p;
+        }
+      }
+    }
+    if (!spot) return;
+    m.act = { kind, t: kind === 'rest' ? 25 : kind === 'lookout' ? 22 : kind === 'eat' ? 3 : 12, x: spot.x, y: spot.y, bush: kind === 'eat' ? bush ?? undefined : undefined };
+  }
+
   private nestSpots(home: Pt, n: number): Pt[] {
     return Array.from({ length: n }, (_, i) => ({ x: home.x - 1.5 + (i % 3) * 1.5, y: home.y + 0.5 + Math.floor(i / 3) * 1.2 }));
   }
@@ -644,6 +757,13 @@ export class RangeScene {
     const center = asleep || winter ? home : this.graze;
     const spread = (asleep || winter ? 1.2 : 2.5) + Math.sqrt(this.members.length) * (asleep || winter ? 0.5 : 0.8);
     const bt = this.beast && !this.beast.fleeing ? this.beast : null;
+    // Herd life: every so often one or two of them break off to do something of their own.
+    this.momentTimer -= dt;
+    if (asleep || bt) for (const m of this.members) m.act = undefined;
+    else if (this.momentTimer <= 0) {
+      this.momentTimer = 4 + Math.random() * 6;
+      this.startMoment(is, home, dayT, winter, si);
+    }
     this.members.forEach((m, i) => {
       // Where instinct takes each one.
       let gx = center.x + Math.cos(i * 2.4 + m.phase) * spread * (0.4 + hash(i, 61) * 0.6);
@@ -671,6 +791,34 @@ export class RangeScene {
           gy += Math.cos(t * 0.13 + m.phase * 2) * 0.6;
         }
       }
+      // Its own moment, if it's in one.
+      const act = m.act;
+      let fast = false;
+      if (act) {
+        act.t -= dt;
+        const there = Math.hypot(act.x - m.x, act.y - m.y) < 0.4;
+        // Eating starts the clock only once it's at the bush.
+        if (act.kind === 'eat' && !there && Math.hypot(m.vx, m.vy) > 0.05) act.t = Math.max(act.t, 3);
+        if (act.t <= 0) {
+          if (act.kind === 'eat' && act.bush) this.wild.eat(this.wildView, act.bush);
+          m.act = undefined;
+        } else if (act.kind === 'chase') {
+          fast = true;
+          if (act.lead) {
+            gx = act.x + Math.cos(t * 2.2 + m.phase) * 2;
+            gy = act.y + Math.sin(t * 2.2 + m.phase) * 1.3;
+          } else if (act.mate) {
+            gx = act.mate.x;
+            gy = act.mate.y;
+          }
+        } else if (act.kind === 'nuzzle') {
+          gx = act.x + (act.lead ? -0.5 : 0.5);
+          gy = act.y;
+        } else {
+          gx = act.x;
+          gy = act.y;
+        }
+      }
       // A beast close by: run from it (sentries excepted).
       if (bt && m.role !== 'guard' && Math.hypot(bt.x - m.x, bt.y - m.y) < 6) m.flee = 2;
       m.flee = Math.max(0, m.flee - dt);
@@ -679,9 +827,9 @@ export class RangeScene {
         gx = m.x + ((m.x - bt.x) / d) * 6;
         gy = m.y + ((m.y - bt.y) / d) * 6;
       }
-      // Keep a body's width apart.
+      // Keep a body's width apart (unless busy with another).
       for (const o of this.members) {
-        if (o === m) continue;
+        if (o === m || m.act) continue;
         const ox = m.x - o.x;
         const oy = m.y - o.y;
         const od = Math.hypot(ox, oy);
@@ -693,7 +841,7 @@ export class RangeScene {
       const dx = gx - m.x;
       const dy = gy - m.y;
       const d = Math.hypot(dx, dy);
-      const sp = (m.flee > 0 || (m.role === 'guard' && bt) ? 3 : HERD_WALK) * (d > 0.2 ? 1 : 0);
+      const sp = (m.flee > 0 || (m.role === 'guard' && bt) ? 3 : fast ? 2.2 : HERD_WALK) * (d > 0.2 ? 1 : 0);
       m.vx += ((d ? (dx / d) * Math.min(sp, d * 2) : 0) - m.vx) * Math.min(1, dt * 3);
       m.vy += ((d ? (dy / d) * Math.min(sp, d * 2) : 0) - m.vy) * Math.min(1, dt * 3);
       const nx = m.x + m.vx * dt;
@@ -705,11 +853,24 @@ export class RangeScene {
       }
       if (m.role === 'guard' && bt && bt.flinch <= 0 && Math.hypot(bt.x - m.x, bt.y - m.y) < 1.5 && Math.random() < dt * 1.2) this.hitBeast(state, bt);
       const moving = Math.hypot(m.vx, m.vy) > 0.15;
-      const left = moving ? m.vx < 0 : m.role === 'guard' ? m.x < center.x : Math.sin(m.phase * 3) < 0;
+      const a = m.act;
+      const settled = !!a && !moving && Math.hypot(a.x - m.x, a.y - m.y) < 0.8;
+      // Facing: each other when nuzzling, out from home on lookout, else the way it goes.
+      const left = a?.kind === 'nuzzle' && settled ? !a.lead : a?.kind === 'lookout' && settled ? a.x < home.x : moving ? m.vx < 0 : m.role === 'guard' ? m.x < center.x : Math.sin(m.phase * 3) < 0;
       const x = m.x;
       const y = m.y;
-      const hop = moving ? Math.abs(Math.sin(t * 7 + m.phase * 3)) * 2 : 0;
-      sprites.push({ y, draw: () => this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 8 + m.phase) % 2 : 0, sleeping: asleep, hop }) });
+      // Playing, it bounds; heads go down and up drinking or eating; resting, it lies down.
+      const hop = moving ? Math.abs(Math.sin(t * (a?.kind === 'chase' ? 11 : 7) + m.phase * 3)) * (a?.kind === 'chase' ? 3 : 2) : 0;
+      const bob = settled && (a.kind === 'drink' || a.kind === 'eat') ? Math.floor(t * 2.5 + m.phase) % 2 : 0;
+      const lying = asleep || (settled && a.kind === 'rest');
+      const hearts = settled && a.kind === 'nuzzle' && a.lead && this.zoom >= 1.6;
+      sprites.push({
+        y,
+        draw: () => {
+          this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 8 + m.phase) % 2 : bob, sleeping: lying, hop });
+          if (hearts && (t + m.phase) % 2 < 1.2) this.heart(b, x + 0.5, y, (t + m.phase) % 2);
+        },
+      });
     });
 
     // A beast slinks in now and then and stalks the nearest of the herd.
@@ -870,6 +1031,9 @@ export class RangeScene {
         }
       },
     });
+
+    // The island's own life: bushes, crabs, birds, fish, the wild grazers.
+    this.wild.update(this.wildView, is, sprites, { b, t, dt, season: si, night, feet: [me, ...this.members], me });
 
     sprites.sort((a, c) => a.y - c.y);
     for (const s of sprites) s.draw();
