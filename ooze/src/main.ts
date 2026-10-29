@@ -46,7 +46,7 @@ import { breed, buyPart, chooseEvent, EVENT_DC, court, equipPart, FARM_PAY, foun
 import { Scene } from './scene/scene';
 import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
-import { creatureIcon } from './scene/creatureLook';
+import { miniIcon } from './scene/creatureLook';
 import { pickIdea } from './ui/tribePanels';
 import { choiceButton } from './ui/creaturePanels';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
@@ -464,7 +464,7 @@ function renderHud(): void {
   if (iconEl.dataset.stage !== iconKey) {
     iconEl.dataset.stage = iconKey;
     // The Extinction counts people: its number wears one of them (their own look).
-    iconEl.innerHTML = look ? creatureIcon(look, 2) : icon(CURRENCY_ICON[state.current], 4);
+    iconEl.innerHTML = look ? miniIcon(look, 4) : icon(CURRENCY_ICON[state.current], 4);
   }
 }
 

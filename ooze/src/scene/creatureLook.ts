@@ -393,3 +393,13 @@ function mix(a: string, b: string, t: number): string {
   const [x, y] = [p(a), p(b)];
   return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('');
 }
+
+/** An <img> of the herd-size creature (as it's drawn on the map), for the interface. */
+export function miniIcon(look: CreatureLook, scale = 3): string {
+  const m = bakeMini(look, 0, false);
+  const c = document.createElement('canvas');
+  c.width = m.c.width;
+  c.height = m.foot + 1;
+  c.getContext('2d')!.drawImage(m.c, 0, 0);
+  return `<img class="px-icon" src="${c.toDataURL()}" width="${c.width * scale}" height="${c.height * scale}" alt="" draggable="false">`;
+}

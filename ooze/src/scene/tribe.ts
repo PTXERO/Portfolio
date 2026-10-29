@@ -9,7 +9,6 @@ import { SEASON_SEC } from '../economy/rates';
 import { CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
 import { BURNT, LAKE, ashenFor, tribeOf } from '../economy/tribal';
 import type { GameState } from '../economy/types';
-import { creatureLookOf } from './creatureLook';
 import { hash, type Frame } from './paint';
 import { RangeScene } from './range';
 
@@ -260,7 +259,8 @@ export class TribeScene extends RangeScene {
     const dayT = (t % DAY_SEC) / DAY_SEC;
     const night = Math.max(0, Math.min(1, (0.125 - Math.abs(dayT - 0.875)) * 40));
     const sprites: { y: number; draw: () => void }[] = [];
-    const look = creatureLookOf(state);
+    // They look as they did when the strike came (their look is kept with the tribe).
+    const look = tribe.look;
 
     // The world still smoulders: smoke curling up off the ash and embers glowing in it,
     // dying down over the first days (never quite out). A red haze over all of it at first.
