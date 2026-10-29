@@ -76,8 +76,8 @@ export function tribeTick(state: GameState, dt: number): void {
   t.year += dt;
 }
 
-/** The island after the strike: all of it still there, all of it burnt, the spear standing at
- * its heart, fissures torn out from it. */
+/** The island after the strike: all of it still there, all of it burnt, the spear standing in
+ * a small lake at its heart, fissures torn out from it. */
 export interface Ashen {
   island: Island;
   spear: Pt;
@@ -86,14 +86,15 @@ export interface Ashen {
 }
 
 const ashen = new Map<number, Ashen>();
-/** The bare ground round the spear's foot (where the fissures start), in tiles. */
-export const FOOT = 2;
-/** How far out the blow flattened the land, beyond its foot. */
+/** The lake round the spear's foot, in tiles. */
+export const LAKE = 4.5;
+/** How far out the blow flattened the land, beyond the lake. */
 const BASIN = 34;
 
 /** Scar marks on the burnt island: burnt ground, and the fissures. */
 export const BURNT = 1;
 export const FISSURE = 2;
+export const LAKE_WATER = 3;
 
 export function ashenFor(state: GameState): Ashen {
   const base = islandFor(state);
@@ -125,9 +126,9 @@ export function ashenFor(state: GameState): Ashen {
       const i = y * N + x;
       if (height[i] <= 0) continue;
       const d = Math.hypot(x - spear.x, y - spear.y);
-      const k = Math.min(1, Math.max(0, (d - FOOT) / BASIN));
+      const k = Math.min(1, Math.max(0, (d - LAKE) / BASIN));
       const ease = k * k * (3 - 2 * k);
-      const low = 0.012 + 0.0012 * (d - FOOT);
+      const low = 0.012 + 0.0012 * (d - LAKE);
       height[i] = low + (height[i] - low) * ease;
       if (ease < 0.6 && biome[i] !== Biome.Sea && biome[i] !== Biome.Deep) biome[i] = Biome.Rock;
     }
@@ -161,14 +162,19 @@ export function ashenFor(state: GameState): Ashen {
   const arms = 12;
   for (let k = 0; k < arms; k++) {
     const a = (k / arms) * Math.PI * 2 + rand() * 0.4;
-    carve(spear.x + Math.cos(a) * FOOT, spear.y + Math.sin(a) * FOOT, a, 40 + rand() * 80, 0);
+    carve(spear.x + Math.cos(a) * LAKE, spear.y + Math.sin(a) * LAKE, a, 40 + rand() * 80, 0);
   }
-  // Bare, scorched rock right round its foot.
+  // The lake round its foot, and a low burnt shore.
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
       const i = y * N + x;
-      if (Math.hypot(x - spear.x, y - spear.y) < FOOT + 2 && height[i] > 0) {
-        height[i] = 0.012;
+      const d = Math.hypot(x - spear.x, y - spear.y);
+      if (d < LAKE) {
+        height[i] = -0.04;
+        biome[i] = Biome.Sea;
+        scar[i] = LAKE_WATER;
+      } else if (d < LAKE + 3) {
+        height[i] = Math.min(Math.max(height[i], 0.01), 0.01 + (d - LAKE) * 0.012);
         biome[i] = Biome.Rock;
         scar[i] = BURNT;
       }

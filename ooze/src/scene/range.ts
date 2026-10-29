@@ -105,8 +105,10 @@ const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16))
 const mixRgb = (a: number[], b: number[], t: number) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 
 /** Ground after the strike: grass and forest burnt to grey and black, rock scorched, the
- * fissures dark with a little heat still in them */
+ * fissures dark with a little heat still in them, the spear's lake dark red. */
 function charred(p: number[], bi: number, scar: number, n: number, x: number, y: number): number[] {
+  // The spear's lake: dark, wine-red water.
+  if (scar === 3) return n > 0.9 ? [120, 60, 90] : n < 0.3 ? [44, 18, 34] : [62, 26, 46];
   if (scar === 2) return n > 0.82 ? [150, 42, 26] : n > 0.6 ? [46, 22, 20] : [22, 14, 14];
   switch (bi) {
     case Biome.Forest:
