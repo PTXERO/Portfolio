@@ -134,8 +134,10 @@ export class Scene {
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
     if (!w || !h) return;
-    // Aim for about 130 art pixels across, whatever the screen.
-    this.px = Math.max(2, Math.round(w / 130));
+    // The art's pixel size, from the screen's area (not just its width): a phone gets the
+    // chunky pixels it always had (about 130 across), a laptop or desktop a wider view of the
+    // world at a pixel size that still reads as pixel art (never bigger than 6).
+    this.px = Math.max(2, Math.min(6, Math.round(Math.sqrt((w * h) / 34000))));
     this.canvas.width = Math.round(w * this.dpr);
     this.canvas.height = Math.round(h * this.dpr);
     this.W = Math.ceil(w / this.px);

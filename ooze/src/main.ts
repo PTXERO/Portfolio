@@ -101,9 +101,25 @@ const saveUi = () => {
 const scene = new Scene($<HTMLCanvasElement>('scene'));
 const expandBtn = $('expand');
 
+/** A wide screen (a laptop or desktop): the menu is a sidebar beside the world, always open. */
+const wideQuery = window.matchMedia('(min-width: 900px) and (min-aspect-ratio: 5/4)');
+const isWide = () => wideQuery.matches;
+wideQuery.addEventListener('change', () => {
+  panelKey = '';
+  render();
+});
+
 /** Interface size, and the menu pulled up full height (just under the top bar). */
 function applyUiPrefs(): void {
-  const k = String(ui.scale);
+  // (Side by side, the menu is always open, and never pulled up: it's already full height.)
+  document.body.classList.toggle('wide', isWide());
+  document.body.classList.toggle('tab-ideas', ui.open && ui.tab === 'ideas');
+  if (isWide()) {
+    ui.open = true;
+    ui.full = false;
+  }
+  // On a big monitor the interface steps up a size (on top of the player's own choice).
+  const k = String(Math.round(ui.scale * (isWide() && window.innerWidth >= 1600 ? (window.innerWidth >= 2200 ? 1.35 : 1.15) : 1) * 100) / 100);
   for (const el of [sheet, overlayTop, modal]) if (el.style.getPropertyValue('zoom') !== k) el.style.setProperty('zoom', k);
   const full = ui.full && ui.open;
   sheet.classList.toggle('full', full);
@@ -982,10 +998,10 @@ function render(): void {
   renderGoal();
   scene.setTopInset(overlayTop.getBoundingClientRect().bottom - stageEl.getBoundingClientRect().top);
   // The sheet's height when open (the same clamp as the stylesheet), open or not, so the floor never moves.
-  scene.setBottomInset(Math.min(250, Math.max(215, window.innerHeight * 0.27)));
+  scene.setBottomInset(isWide() ? 0 : Math.min(250, Math.max(215, window.innerHeight * 0.27)));
   // Where the open (or closed) sheet starts: the map centres its known land above it.
   // (The panel sits above the tab bar, so it's the panel's top when open, the bar's when closed.)
-  scene.setVisibleBottom((ui.open ? panel : sheet).getBoundingClientRect().top - stageEl.getBoundingClientRect().top);
+  scene.setVisibleBottom(isWide() ? stageEl.clientHeight : (ui.open ? panel : sheet).getBoundingClientRect().top - stageEl.getBoundingClientRect().top);
   renderPanel();
   for (const b of document.querySelectorAll<HTMLElement>('[data-uiscale]')) b.classList.toggle('on', Number(b.dataset.uiscale) === ui.scale);
   renderHint();
@@ -1188,6 +1204,14 @@ let swirlSpin = 0;
 const fingers = new Map<number, { x: number; y: number; sx: number; sy: number }>();
 let mapDragged = false;
 
+// Keys, on a computer: Esc lets go of a miracle being drawn, or closes a card.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (casting) endCast();
+  else if (!placeCard.hidden) placeCard.hidden = true;
+  else if (!modal.hidden && modal.dataset.kind === 'night') modal.hidden = true;
+});
+
 // A report that closes itself (the night's news) also closes at a tap.
 modal.addEventListener('click', (e) => {
   if (modal.dataset.kind === 'night' && !(e.target as HTMLElement).closest('button')) modal.hidden = true;
@@ -1352,7 +1376,7 @@ stageEl.addEventListener('pointercancel', endFinger);
 stageEl.addEventListener(
   'wheel',
   (e) => {
-    if (state.current !== 'creature') return;
+    if (!onMap()) return;
     e.preventDefault();
     const r = stageEl.getBoundingClientRect();
     scene.zoomAt(e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.15 : 1 / 1.15);
@@ -1437,9 +1461,9 @@ function act(el: HTMLElement): void {
     const order = tabsFor(state);
     if (!ui.open) panelEnter = 'from-below';
     else if (t !== ui.tab) panelEnter = order.indexOf(t) > order.indexOf(ui.tab) ? 'from-right' : 'from-left';
-    ui.open = ui.tab === t ? !ui.open : true;
+    ui.open = ui.tab === t && !isWide() ? !ui.open : true;
     // The web of ideas wants the whole screen; leaving it, the menu goes back as it was.
-    if (t === 'ideas' && ui.open && !ui.full) {
+    if (t === 'ideas' && ui.open && !ui.full && !isWide()) {
       ui.full = true;
       ideasFull = true;
     } else if (t !== 'ideas' && ideasFull) {

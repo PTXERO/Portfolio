@@ -700,3 +700,27 @@ p.chron .when { display: block; }
 #crisisbar .answer { display: flex; align-items: center; gap: 6px; padding: 6px 10px calc(6px + var(--depth)); font-size: 13px; white-space: nowrap; color: var(--ink); }
 #crisisbar .answer .glyph { color: var(--ink); }
 #crisisbar i { font-style: normal; color: #f0a0d8; }
+
+/* ---- Wide screens (laptops, desktops): the world on the left, the menu a sidebar on the right,
+   always open. The top bar and strips keep a readable width instead of spanning the screen. ---- */
+body.wide #app { max-width: none; flex-direction: row; }
+body.wide #stage { flex: 1; min-width: 0; min-height: 0; }
+body.wide #sheet { width: clamp(360px, 28vw, 460px); flex: none; display: flex; flex-direction: column; box-shadow: calc(var(--u) * -1) 0 0 0 var(--ink), calc(var(--u) * -2) 0 0 0 var(--panel-hi); }
+body.wide #panel { position: relative; bottom: auto; left: auto; right: auto; height: auto; flex: 1; box-shadow: none; background: var(--night); }
+body.wide #sheet.closed #panel { height: auto; padding: 10px 12px 6px; }
+body.wide #sheet.closed .panel-inner { opacity: 1; transform: none; }
+body.wide #expand { display: none; }
+body.wide #tabs { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; }
+body.wide #overlay-top { right: auto; width: min(560px, calc(100% - 24px)); }
+body.wide #spellbar { right: auto; }
+body.wide #crisisbar, body.wide #castbar { right: auto; width: min(560px, calc(100% - 24px)); }
+body.wide .mind-tree { max-width: 100%; }
+/* A mouse can hover: show what's pressable. */
+@media (hover: hover) {
+  .px-btn:not([disabled]):hover { filter: brightness(1.12); }
+  .tn:hover { outline: 1px dashed rgba(242, 234, 215, 0.6); outline-offset: 2px; }
+}
+/* Tablets standing up: a little wider than a phone's column. */
+@media (min-width: 700px) { #app { max-width: 760px; } }
+/* The web of ideas wants room: the sidebar widens while it's open. */
+body.wide.tab-ideas #sheet { width: clamp(420px, 42vw, 820px); }
