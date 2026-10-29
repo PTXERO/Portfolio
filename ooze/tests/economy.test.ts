@@ -794,6 +794,7 @@ describe('creature stage', () => {
     islandFor(s);
     c.trips.shore = 1;
     c.trips.tidePools = 1;
+    c.trips.marsh = 1;
     c.upgrades.push('parties');
     c.levels.parties = 1;
     c.currency = c.currency.add(1e9);
