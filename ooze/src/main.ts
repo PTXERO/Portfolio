@@ -128,9 +128,9 @@ function showTripReport(): boolean {
   }
   if (r.kind === 'event') {
     showModal(`<p class="label dim">On the road</p>
-      <h3>${r.success ? 'It went well' : 'That went badly'}</h3>
+      <h3>${r.parts.length && D(r.earned).lte(0) ? 'A find!' : r.success ? 'It went well' : 'That went badly'}</h3>
       <p>${r.event}</p>
-      <p>+${format(D(r.earned))} ${def.currency}</p>
+      ${D(r.earned).gt(0) ? `<p>+${format(D(r.earned))} ${def.currency}</p>` : ''}
       ${parts.length ? `<p class="fx">Found: ${parts.join(', ')} (in the Body tab)</p>` : ''}
       ${r.mate ? `<p class="fx">Met ${r.mate}, who follows it now (Family tab)</p>` : ''}
       <button class="px-btn gold" data-act="dismiss">On we go</button>`);
@@ -303,7 +303,7 @@ function renderGoal(): void {
     else if (def.places && netRate(state).lt(0) && cr.currency.lt(netRate(state).abs().mul(60))) text = 'The herd is going hungry! Stores run out, and the weakest go first (Herd tab).';
     else if (def.places && n && !n.r.final) {
       // Creature: the next place, in sight or still somewhere in the fog.
-      text = placeSeen(state, n.r.id) ? `The ${n.r.name} is in sight. Send your creature there (Roam tab).` : `Next: find the ${n.r.name}. Explore the island!`;
+      text = placeSeen(state, n.r.id) ? `The ${n.r.name} is in sight. Send your creature there (Roam tab).` : 'Something new is out in the fog. Explore! (Riddles in the Roam tab)';
     } else if (engulfable(state, state.current).length) text = 'A rare microbe is about. Catch it before it gets away!';
     else if (n && !finaleReady(state)) {
       const name = n.r.final ? n.r.name : '???';

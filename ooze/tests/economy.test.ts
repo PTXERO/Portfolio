@@ -25,7 +25,7 @@ import { softCap, defenseOf, dialMax, guardLevel, dietOf, forageMult, habitatMul
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
-import { breed, buyPart, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, islandFor, placeSeen, statsOf, tripEventDue, upkeep, walkTo } from '../src/economy/creature';
+import { breed, buyPart, partEnergy, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, islandFor, placeSeen, statsOf, tripEventDue, upkeep, walkTo } from '../src/economy/creature';
 import { islandOf, ISLAND, isLand, seenShare } from '../src/economy/island';
 import { foragers, herdMult, SEASON_SEC } from '../src/economy/rates';
 
@@ -592,14 +592,17 @@ describe('creature stage', () => {
     expect(s.stages.creature.equipped.legs).toBe('nubs');
     expect(statsOf(s).speed).toBe(2);
     s.stages.creature.currency = D(1e6);
+    // The starting parts cost no energy; the body has 3 to spend.
+    expect(energyBudget(s)).toBe(3);
     expect(buyPart(s, 'stubby')).toBe(true);
-    // The starting body's 3 energy is all spent: bigger legs need a bigger heart.
-    expect(s.stages.creature.equipped.legs).toBe('nubs');
-    expect(equipPart(s, 'stubby')).toBe(false);
+    expect(s.stages.creature.equipped.legs).toBe('stubby');
+    expect(statsOf(s).speed).toBe(4);
+    // Jaws (2 energy) don't fit beside them (2), until the heart grows.
+    expect(buyPart(s, 'jaws')).toBe(true);
+    expect(s.stages.creature.equipped.mouth).toBe('gums');
     s.stages.creature.upgrades.push('bigHeart');
     s.stages.creature.levels.bigHeart = 1;
-    expect(equipPart(s, 'stubby')).toBe(true);
-    expect(statsOf(s).speed).toBe(4);
+    expect(equipPart(s, 'jaws')).toBe(true);
     expect(equipPart(s, 'nubs')).toBe(true);
     expect(statsOf(s).speed).toBe(2);
   });
@@ -640,7 +643,7 @@ describe('creature stage', () => {
     expect(c.walk).toBeNull();
     expect(c.discovered).toContain('tidePools');
     expect(placeSeen(s, 'tidePools')).toBe(true);
-    expect(c.parts).toContain('stalkEyes');
+    expect(c.parts.some((id) => STAGES.creature.places!.find((p) => p.id === 'tidePools')!.parts.includes(id))).toBe(true);
     expect(c.mates.length).toBe(1);
     expect(c.currency.gt(before)).toBe(true);
     expect(s.reports.find((r) => r.kind === 'trip')?.success).toBe(true);
@@ -754,7 +757,7 @@ describe('creature stage', () => {
     for (const p of big) equipPart(s, p.id);
     for (const p of STAGES.creature.parts!) equipPart(s, p.id);
     let used = 0;
-    for (const id of Object.values(s.stages.creature.equipped)) if (id) used += Math.ceil(Object.values(STAGES.creature.parts!.find((p) => p.id === id)!.stats).reduce((n, v) => n + (v ?? 0), 0) / 2);
+    for (const id of Object.values(s.stages.creature.equipped)) if (id) used += partEnergy(STAGES.creature.parts!.find((p) => p.id === id)!);
     expect(used).toBeLessThanOrEqual(energyBudget(s));
     expect(STAGES.creature.parts!.some((p) => !canWear(s, p.id))).toBe(true);
   });

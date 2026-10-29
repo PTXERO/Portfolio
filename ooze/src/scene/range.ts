@@ -91,6 +91,13 @@ export class RangeScene {
   private H = 0;
   private island: Island | null = null;
   private lastPos: Pt | null = null;
+  /** True while the lighting shader draws night and fog (see shade.ts), so they're left out here. */
+  shaded = false;
+  private infoBuf: Uint8Array | null = null;
+  private seenRef: Uint8Array | null = null;
+  /** Where creatures were drawn this frame, so the shader can light them as standing figures. */
+  private mask = document.createElement('canvas');
+  private maskCtx = this.mask.getContext('2d', { willReadFrequently: true })!;
 
   reset(): void {
     this.fx.clear();
@@ -154,6 +161,67 @@ export class RangeScene {
   private clamp(): void {
     this.camX = Math.max(0, Math.min(ISLAND, this.camX));
     this.camY = Math.max(0, Math.min(ISLAND, this.camY));
+  }
+
+  /** The camera, for the shader: centre (tiles), zoom, and the screen row of the centre. */
+  get camParams(): [number, number, number, number] {
+    return [this.camX, this.camY, this.zoom, this.midY()];
+  }
+
+  /**
+   * What the shader needs to know about each art pixel on screen: the ground's height (r and
+   * a, high and low bytes), its kind (g: off the island counts as deep sea), and fog over it (b).
+   */
+  info(): Uint8Array {
+    const W = this.W;
+    const H = this.H;
+    const is = this.island;
+    if (!this.infoBuf || this.infoBuf.length !== W * H * 4) this.infoBuf = new Uint8Array(W * H * 4);
+    const out = this.infoBuf;
+    const seen = this.seenRef;
+    const sprite = this.maskCtx.getImageData(0, 0, W, H).data;
+    // Seen-ness blended between cells, so the fog's edge is a soft slope, not steps.
+    const seenAt = (cx: number, cy: number) => (cx < 0 || cy < 0 || cx >= CELLS || cy >= CELLS || !seen ? 0 : seen[cy * CELLS + cx]);
+    for (let y = 0; y < H; y++) {
+      const wy = this.camY + (y + 0.5 - this.midY()) / this.zoom;
+      for (let x = 0; x < W; x++) {
+        const wx = this.camX + (x + 0.5 - W / 2) / this.zoom;
+        const o = (y * W + x) * 4;
+        const xi = Math.floor(wx);
+        const yi = Math.floor(wy);
+        if (!is || xi < 0 || yi < 0 || xi >= ISLAND || yi >= ISLAND) {
+          out[o] = 0;
+          out[o + 1] = 0;
+          out[o + 2] = 0;
+          out[o + 3] = 0;
+          continue;
+        }
+        const i = yi * ISLAND + xi;
+        // Height blended between the four nearest tiles, so slopes are smooth up close.
+        const fx = wx - 0.5 - Math.floor(wx - 0.5);
+        const fy = wy - 0.5 - Math.floor(wy - 0.5);
+        const x0 = Math.max(0, Math.min(ISLAND - 2, Math.floor(wx - 0.5)));
+        const y0 = Math.max(0, Math.min(ISLAND - 2, Math.floor(wy - 0.5)));
+        const hh = is.height;
+        const k = y0 * ISLAND + x0;
+        const h = (hh[k] * (1 - fx) + hh[k + 1] * fx) * (1 - fy) + (hh[k + ISLAND] * (1 - fx) + hh[k + ISLAND + 1] * fx) * fy;
+        // 16 bits of height (high byte in r, low in a), so gentle slopes don't band.
+        const h16 = Math.round(Math.max(0, Math.min(1, (h + 0.2) / 1.2)) * 65535);
+        out[o] = h16 >> 8;
+        // Creatures are flagged as kind 9: lit as figures standing up, not as ground.
+        out[o + 1] = sprite[(y * W + x) * 4 + 3] > 140 ? 252 : is.biome[i] * 28;
+        const gx = wx / CELL - 0.5;
+        const gy = wy / CELL - 0.5;
+        const cx0 = Math.floor(gx);
+        const cy0 = Math.floor(gy);
+        const tx = gx - cx0;
+        const ty = gy - cy0;
+        const sv = (seenAt(cx0, cy0) * (1 - tx) + seenAt(cx0 + 1, cy0) * tx) * (1 - ty) + (seenAt(cx0, cy0 + 1) * (1 - tx) + seenAt(cx0 + 1, cy0 + 1) * tx) * ty;
+        out[o + 2] = Math.round((1 - sv) * 255);
+        out[o + 3] = h16 & 255;
+      }
+    }
+    return out;
   }
 
   // ---- Input ----
@@ -394,7 +462,7 @@ export class RangeScene {
   }
 
   /** A creature at the right size for the zoom: a dot from far away, a full sprite up close. */
-  private drawBeing(b: CanvasRenderingContext2D, look: CreatureLook, x: number, y: number, o: { left?: boolean; frame?: number; sleeping?: boolean; hero?: boolean }): void {
+  private drawBeing(b: CanvasRenderingContext2D, look: CreatureLook, x: number, y: number, o: { left?: boolean; frame?: number; sleeping?: boolean; hero?: boolean; hop?: number }): void {
     const z = this.zoom;
     const X = this.sx(x);
     const Y = this.sy(y);
@@ -405,7 +473,11 @@ export class RangeScene {
       b.fillRect(Math.round(X), Math.round(Y) - s, s, s);
       return;
     }
-    drawMini(b, look, X, Y, { left: o.left, frame: o.frame, sleeping: o.sleeping, scale: z >= 6 ? 2 : 1 });
+    const k = z >= 6 ? 2 : 1;
+    // A cute little hop while it moves: up to a couple of pixels, the shadow staying put.
+    const opts = { left: o.left, frame: o.frame, sleeping: o.sleeping, scale: k, hop: (o.hop ?? 0) * k };
+    drawMini(b, look, X, Y, opts);
+    if (this.shaded) drawMini(this.maskCtx, look, X, Y, opts);
   }
 
   draw(f: Frame, state: GameState): void {
@@ -520,6 +592,13 @@ export class RangeScene {
     }
 
     // ---- Everyone who moves, sorted by depth. ----
+    if (this.shaded) {
+      if (this.mask.width !== W || this.mask.height !== H) {
+        this.mask.width = W;
+        this.mask.height = H;
+      }
+      this.maskCtx.clearRect(0, 0, W, H);
+    }
     const sprites: { y: number; draw: () => void }[] = [];
     this.syncHerd(state, home);
     this.grazeTimer -= dt;
@@ -594,7 +673,8 @@ export class RangeScene {
       const left = moving ? m.vx < 0 : m.role === 'guard' ? m.x < center.x : Math.sin(m.phase * 3) < 0;
       const x = m.x;
       const y = m.y;
-      sprites.push({ y, draw: () => this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 8 + m.phase) % 2 : 0, sleeping: asleep }) });
+      const hop = moving ? Math.abs(Math.sin(t * 7 + m.phase * 3)) * 2 : 0;
+      sprites.push({ y, draw: () => this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 8 + m.phase) % 2 : 0, sleeping: asleep, hop }) });
     });
 
     // A beast slinks in now and then and stalks the nearest of the herd.
@@ -679,7 +759,7 @@ export class RangeScene {
       sprites.push({
         y: vy,
         draw: () => {
-          this.drawBeing(b, v.look, vx, vy, { left, frame: d > 0.2 ? Math.floor(t * 7) % 2 : 0 });
+          this.drawBeing(b, v.look, vx, vy, { left, frame: d > 0.2 ? Math.floor(t * 7) % 2 : 0, hop: d > 0.2 ? Math.abs(Math.sin(t * 6)) * 2 : 0 });
           // A little heart over it, so it reads as "come say hello".
           if (Math.floor(t * 2) % 2 && this.zoom >= 1.6) {
             b.fillStyle = PAL.p;
@@ -704,9 +784,9 @@ export class RangeScene {
       draw: () => {
         st.mates.forEach((mate, k) => {
           const ox = me.x + (left ? 1.6 : -1.6) * (k + 1);
-          this.drawBeing(b, { ...look, parts: { ...look.parts, ...mate.parts } }, ox, me.y + 0.3 * (k + 1), { left, frame: walking ? Math.floor(t * 8 + k) % 2 : 0 });
+          this.drawBeing(b, { ...look, parts: { ...look.parts, ...mate.parts } }, ox, me.y + 0.3 * (k + 1), { left, frame: walking ? Math.floor(t * 8 + k) % 2 : 0, hop: walking ? Math.abs(Math.sin(t * 7 + k * 1.3)) * 2 : 0 });
         });
-        this.drawBeing(b, look, me.x, me.y, { left, frame: walking ? Math.floor(t * 8) % 2 : 0, hero: true });
+        this.drawBeing(b, look, me.x, me.y, { left, frame: walking ? Math.floor(t * 8) % 2 : 0, hero: true, hop: walking ? Math.abs(Math.sin(t * 7)) * 2 : 0 });
         // A blinking "!" when something's stopped it on the road.
         const X = Math.round(this.sx(me.x));
         const Y = Math.round(this.sy(me.y)) - (this.zoom >= 6 ? 26 : this.zoom >= 1.6 ? 14 : 5);
@@ -723,8 +803,9 @@ export class RangeScene {
     sprites.sort((a, c) => a.y - c.y);
     for (const s of sprites) s.draw();
 
-    // The fog, over everything on the ground.
-    this.blitWorld(b, this.fog!);
+    // The fog, over everything on the ground (the shader draws its own, softer).
+    if (!this.shaded) this.blitWorld(b, this.fog!);
+    this.seenRef = st.seen;
 
     // Falling leaves in autumn, snow in winter (screen space).
     if (season.name === 'Autumn' || winter) {
@@ -746,8 +827,10 @@ export class RangeScene {
 
     // Night falls over everything; in summer, fireflies around home.
     if (night > 0) {
-      b.fillStyle = `rgba(16, 24, 56, ${0.5 * night})`;
-      b.fillRect(0, 0, W, H);
+      if (!this.shaded) {
+        b.fillStyle = `rgba(16, 24, 56, ${0.5 * night})`;
+        b.fillRect(0, 0, W, H);
+      }
       if (season.name === 'Summer' && this.zoom >= 1.6) {
         for (let i = 0; i < 10; i++) {
           if (Math.sin(t * 2 + i * 1.7) < 0.2) continue;

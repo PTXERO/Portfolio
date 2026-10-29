@@ -283,6 +283,24 @@ function arrive(state: GameState, p: PlaceDef, rand: () => number): void {
   state.reports.push(report);
 }
 
+/** Chance, per bit of new ground, of turning up a part from a found place close by. */
+export const RUMMAGE_CHANCE = 0.015;
+/** How close to a place counts as "around" it, in tiles. */
+const AROUND = 30;
+
+/** Poking about new ground near a place it has found: now and then, one of that place's parts. */
+function rummage(state: GameState, fresh: number, rand: () => number): void {
+  const s = st(state);
+  const is = islandFor(state);
+  const near = def().places!.find((p) => s.trips[p.id] > 0 && Math.hypot(is.places[p.id].x - s.pos.x, is.places[p.id].y - s.pos.y) < AROUND);
+  if (!near) return;
+  const missing = near.parts.filter((id) => !s.parts.includes(id));
+  if (!missing.length || rand() >= 1 - (1 - RUMMAGE_CHANCE) ** fresh) return;
+  const id = missing[Math.floor(rand() * missing.length)];
+  s.parts.push(id);
+  state.reports.push({ kind: 'event', success: true, earned: '0', parts: [id], event: `Rooting about near the ${near.name}, it turned something up.` });
+}
+
 /** Back at a place it already knows: maybe a mate there, maybe a part it missed. */
 function revisit(state: GameState, p: PlaceDef, rand: () => number): void {
   const s = st(state);
@@ -386,7 +404,10 @@ function walkTick(state: GameState, dt: number, rand: () => number): void {
       s.walk.event = { id: EVENTS[Math.floor(rand() * EVENTS.length)].id, choice: null, left: EVENT_WAIT };
     }
   }
-  if (fresh) earn(state, stageRate(state, CREATURE).mul(fresh * EXPLORE_PAY_SEC * tripMult(state)));
+  if (fresh) {
+    earn(state, stageRate(state, CREATURE).mul(fresh * EXPLORE_PAY_SEC * tripMult(state)));
+    rummage(state, fresh, rand);
+  }
 }
 
 /** Chance a visitor on the shore agrees to join the line: better with Charm. */

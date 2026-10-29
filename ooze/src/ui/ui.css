@@ -479,3 +479,23 @@ textarea {
    re-wraps text and moves a button under a finger. */
 .trip .info, .place .info, .herd .info { min-width: 0; }
 .trip [data-t], .place [data-t], .herd [data-t] { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* The Body tab: an energy meter, then one card per slot. */
+.energy-bar { display: flex; align-items: center; gap: 8px; margin: 0 4px 6px; }
+.energy-bar .pips { flex: 1; display: flex; flex-wrap: wrap; gap: 3px; }
+.energy-bar .pips i { width: 10px; height: 12px; background: var(--slot); box-shadow: inset 0 0 0 1px #0b0f1a; }
+.energy-bar .pips i.on { background: var(--gold); }
+.energy-bar .num { color: var(--gold); font-size: 16px; }
+.slot-card { display: block; padding: 8px 10px; }
+.slot-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; min-width: 0; }
+.slot-head .worn { color: var(--mint); font-size: 14px; white-space: nowrap; }
+.slot-head .small { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot-card .parts { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; }
+.slot-card .part { flex: none; min-width: 110px; }
+.slot-card .part .fit { font-size: 11px; color: var(--dim); }
+.slot-card .part.on .fit { color: var(--mint); }
+.slot-card .part.heavy .fit { color: #e8615a; }
+.slot-card .hint { font-size: 12px; margin-top: 2px; }
+
+/* The island's lighting canvas sits under the scene canvas (which keeps only floating text on top). */
+#stage canvas.shade { position: absolute; inset: 0; width: 100%; height: 100%; display: none; image-rendering: auto; }

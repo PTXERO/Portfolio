@@ -107,6 +107,9 @@ export interface PartDef {
   cost?: number;
   /** Energy it takes to wear (defaults to half its stats, rounded up). */
   energy?: number;
+  /** Drawn with another part's shape (and its own colour), for parts that share a look. */
+  look?: string;
+  tint?: string;
 }
 
 /** A place the creature can explore. Each is also a page in the stage's book. */

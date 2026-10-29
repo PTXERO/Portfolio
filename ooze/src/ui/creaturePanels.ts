@@ -29,7 +29,7 @@ import {
   winterLoss,
 } from '../economy/creature';
 import { EVENTS } from '../content/creature';
-import { PLACE_SPOTS, seenShare } from '../economy/island';
+import { seenShare } from '../economy/island';
 import { buyCount, generatorCost, generatorVisible } from '../economy/actions';
 import { foragers, SEASON_SEC, seasonOf, stageRate } from '../economy/rates';
 import { D, format, formatTime } from '../economy/num';
@@ -44,7 +44,7 @@ const SLOT_NAMES = { legs: 'Legs', mouth: 'Mouth', eyes: 'Eyes', back: 'Back', t
 const statText = (p: PartDef) =>
   (Object.entries(p.stats)
     .map(([k, v]) => `${cap(k)} +${v}`)
-    .join(' · ') || 'No stats') + (partEnergy(p) ? ` · ⚡${partEnergy(p)}` : '');
+    .join(' · ') || 'No stats');
 
 const ROLE_INFO: Record<Role, { name: string; text: string }> = {
   forager: { name: 'Foragers', text: 'Gather food: everyone whose instincts don\'t send them elsewhere.' },
@@ -110,18 +110,30 @@ export function bodyLayout(state: GameState, upgradeCard: (u: (typeof STAGES)['c
   const s = state.stages[CREATURE];
   const def = STAGES[CREATURE];
   const stats = STATS.map((k) => `<div class="stat"><span class="dim">${cap(k)}</span><span class="num" data-t="stat-${k}"></span></div>`).join('');
+  // One card per slot: what it wears now, then everything it could wear instead.
+  const foundPlaces = def.places!.filter((p) => (s.trips[p.id] ?? 0) > 0);
   const slots = SLOTS.map((slot) => {
     const all = def.parts!.filter((p) => p.slot === slot);
+    // Parts show once they're owned or for sale; the rest only as a count, by known place.
     const shown = all.filter((p) => s.parts.includes(p.id) || p.cost);
-    const hidden = all.length - shown.length;
+    const worn = s.equipped[slot] ? partDef(s.equipped[slot]!) : null;
+    const leftIn = foundPlaces
+      .map((pl) => ({ name: pl.name, n: pl.parts.filter((id) => partDef(id).slot === slot && !s.parts.includes(id)).length }))
+      .filter((x) => x.n > 0);
+    const unknown = def.places!.filter((pl) => !((s.trips[pl.id] ?? 0) > 0)).some((pl) => pl.parts.some((id) => partDef(id).slot === slot));
+    const hint = [leftIn.map((x) => `${x.n} more around the ${x.name}`).join(' · '), unknown ? 'more in places not yet found' : ''].filter(Boolean).join(' · ');
     const chips = shown
       .map((p) =>
         s.parts.includes(p.id)
-          ? `<button class="px-btn part${s.equipped[slot] === p.id ? ' on' : ''}" data-equip="${p.id}"><b>${esc(p.name)}</b><span>${statText(p)}</span></button>`
+          ? `<button class="px-btn part${s.equipped[slot] === p.id ? ' on' : ''}" data-equip="${p.id}"><b>${esc(p.name)}</b><span>${statText(p)}</span><span class="fit" data-fit="${p.id}"></span></button>`
           : `<button class="px-btn part shop" data-buypart="${p.id}"><b>${esc(p.name)}</b><span>${statText(p)}</span><span class="cost">${icon('biomass', 2)}${format(D(p.cost!))}</span></button>`,
       )
       .join('');
-    return `<div class="slot-row"><div class="label dim">${SLOT_NAMES[slot]}${hidden ? ` <span class="tag">+${hidden} out there</span>` : ''}</div><div class="parts">${chips}</div></div>`;
+    return `<div class="card px-box slot-card">
+      <div class="slot-head"><span class="label dim">${SLOT_NAMES[slot]}</span><span class="worn">${worn ? esc(worn.name) : 'None'}</span><span class="dim small">${worn ? statText(worn) : ''}</span></div>
+      <div class="parts">${chips}</div>
+      ${hint ? `<div class="hint dim">${esc(hint)}</div>` : ''}
+    </div>`;
   }).join('');
   const training = def.upgrades.filter((u) => u.branch === 'Training').map(upgradeCard).join('');
   const boosts = visibleUpgrades(state, CREATURE)
@@ -129,20 +141,21 @@ export function bodyLayout(state: GameState, upgradeCard: (u: (typeof STAGES)['c
     .map(upgradeCard)
     .join('');
   return `<div class="portrait">${creatureIcon(creatureLookOf(state), 4)}<div class="stats">${stats}</div></div>
-    <div class="panel-head"><h2>Body</h2><span class="label dim" data-t="energy"></span></div><p class="note">Every part costs energy (⚡). Wear what the body can feed; generations and a Bigger Heart give it more.</p>${slots}
+    <div class="energy-bar"><span class="label">Energy</span><span class="pips" data-pips></span><span class="num" data-t="energy"></span></div>
+    <p class="note">Tap a part to wear it. Each costs energy (⚡); your creature can only wear what its body can power. Generations and a Bigger Heart give it more.</p>${slots}
     <div class="panel-head"><h2>Training</h2></div>${training}
     ${boosts ? `<div class="panel-head"><h2>Boosts</h2></div>${boosts}` : ''}`;
 }
 
-/** Where each kind of place is, as a hint while it's still in the fog. */
-const WHERE: Record<string, string> = {
-  coast: 'Somewhere along the coast',
-  pools: 'Where rocks meet the sea',
-  marsh: 'In wet, low ground',
-  forest: 'Deep in the trees',
-  cliff: 'Where the hills turn to rock',
-  cave: 'In the mountains',
-  high: 'Up on the high plateau',
+/** While a place is still in the fog, all there is to go on is a riddle (the old ones about
+ * that kind of place), with where it might be. */
+const RIDDLES: Record<string, string> = {
+  tidePools: 'What comes in twice a day and goes out twice, yet never moves? Look for the puddles it leaves behind, where rocks meet the sea.',
+  marsh: 'Not quite land and not quite lake; step on me and I keep your feet. Low and wet, where the reeds talk.',
+  forest: 'What has bark but never bites, and leaves but never goes? Many of them, standing close.',
+  cliffs: 'I have an edge but cut nothing; the higher I stand, the further you fall. Where the hills turn to rock.',
+  caves: 'What speaks without a mouth and answers every call? Find where the mountain has a mouth of its own.',
+  highlands: 'What has roots as nobody sees, is taller than trees, up, up it goes, and yet never grows? Climb to the top of it.',
 };
 
 export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)['creature']['upgrades'][number]) => string): string {
@@ -178,8 +191,7 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
       const parts = p.parts.filter((id) => s.parts.includes(id)).length;
       if (!found && !seen) {
         return `<div class="card px-box place"><div class="info"><div class="name">???</div>
-          <div class="flavor">${esc(WHERE[PLACE_SPOTS[p.id]?.where ?? ''] ?? 'Somewhere out there')}, still in the fog.</div>
-          ${needs ? `<ul class="checks">${needs}</ul>` : ''}</div></div>`;
+          <div class="flavor">${esc(RIDDLES[p.id] ?? 'Somewhere out there, still in the fog.')}</div></div></div>`;
       }
       return `<div class="card px-box place${found ? ' owned' : ''}">
         <div class="info">
@@ -284,10 +296,27 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
     for (const b of root.querySelectorAll<HTMLButtonElement>('[data-amount]')) b.classList.toggle('on', String(state.buyAmount) === b.dataset.amount);
   } else if (tab === 'body') {
     for (const k of STATS) setText(root, `stat-${k}`, String(stats[k]));
-    setText(root, 'energy', `Energy ⚡${energyUsed(state)} / ${energyBudget(state)}`);
+    const used = energyUsed(state);
+    const budget = energyBudget(state);
+    setText(root, 'energy', `${used} / ${budget}`);
+    const pips = root.querySelector<HTMLElement>('[data-pips]');
+    const pipKey = `${used}/${budget}`;
+    if (pips && pips.dataset.k !== pipKey) {
+      pips.dataset.k = pipKey;
+      pips.innerHTML = Array.from({ length: Math.min(budget, 40) }, (_, i) => `<i class="${i < used ? 'on' : ''}"></i>`).join('');
+    }
     for (const b of root.querySelectorAll<HTMLButtonElement>('[data-equip]')) {
       const id = b.dataset.equip!;
-      b.classList.toggle('heavy', s.equipped[partDef(id).slot] !== id && !canWear(state, id));
+      const p = partDef(id);
+      const worn = s.equipped[p.slot] === id;
+      const fits = worn || canWear(state, id);
+      b.classList.toggle('heavy', !fits);
+      // What wearing it would cost, or how far short the body is.
+      const cur = s.equipped[p.slot] ? partEnergy(partDef(s.equipped[p.slot]!)) : 0;
+      const short = used - cur + partEnergy(p) - budget;
+      const fit = b.querySelector<HTMLElement>('[data-fit]');
+      const text = worn ? 'Worn' : fits ? `⚡${partEnergy(p)}` : `Needs ⚡${short} more`;
+      if (fit && fit.textContent !== text) fit.textContent = text;
     }
     for (const b of root.querySelectorAll<HTMLButtonElement>('[data-buypart]')) {
       const p = partDef(b.dataset.buypart!);

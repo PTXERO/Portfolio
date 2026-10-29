@@ -9,6 +9,7 @@ import { PAL } from '../art/sprites';
 import type { GameState, StageId } from '../economy/types';
 import { CellScene } from './cell';
 import { RangeScene } from './range';
+import { MapShader } from './shade';
 import type { PondEvent } from './pond';
 import { ring, type Frame } from './paint';
 import { SoupScene } from './soup';
@@ -53,9 +54,20 @@ export class Scene {
   private bottomCss = 0;
 
 
+  /** The island's lighting, on a canvas under the main one (null where WebGL isn't there). */
+  private shader: MapShader | null = null;
+
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
     this.b = this.buffer.getContext('2d')!;
+    try {
+      const gl = document.createElement('canvas');
+      gl.className = 'shade';
+      canvas.parentElement!.insertBefore(gl, canvas);
+      this.shader = new MapShader(gl);
+    } catch {
+      this.shader = null;
+    }
     this.fit();
   }
 
@@ -71,6 +83,12 @@ export class Scene {
     this.H = Math.ceil(h / this.px);
     this.buffer.width = this.W;
     this.buffer.height = this.H;
+    if (this.shader) {
+      // Full detail costs too much on 3x screens; 2x looks the same through the soft light.
+      const k = Math.min(2, this.dpr);
+      this.shader.canvas.width = Math.round(w * k);
+      this.shader.canvas.height = Math.round(h * k);
+    }
   }
 
   private toArt(x: number, y: number): [number, number] {
@@ -198,6 +216,7 @@ export class Scene {
     const frame: Frame = { b: this.b, W: this.W, H: this.H, t: this.time, dt, top: Math.ceil(this.topCss / this.px), bottom: Math.ceil(this.bottomCss / this.px) };
     if (state.current === 'soup') this.soup.draw(frame, state, this.displace);
     else if (state.current === 'creature') {
+      this.shore.shaded = !!this.shader;
       this.shore.draw(frame, state);
     } else this.cell.draw(frame, state);
     for (const r of this.ripples) {
@@ -209,7 +228,13 @@ export class Scene {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(this.buffer, 0, 0, this.W * this.px * this.dpr, this.H * this.px * this.dpr);
+    const shaded = !!this.shader && this.stage === 'creature';
+    if (this.shader) this.shader.canvas.style.display = shaded ? 'block' : 'none';
+    if (shaded) {
+      // The island is drawn lit by the shader underneath; this canvas keeps only what's on top.
+      this.shader!.render(this.buffer, this.shore.info(), this.W, this.H, { cam: this.shore.camParams, time: this.time, day: (this.time % 120) / 120 });
+      ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    } else ctx.drawImage(this.buffer, 0, 0, this.W * this.px * this.dpr, this.H * this.px * this.dpr);
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.font = '700 18px "Ooze Digits", "Pixelify Sans", monospace';
