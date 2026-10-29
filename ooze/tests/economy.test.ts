@@ -482,6 +482,15 @@ describe('cell stage', () => {
     expect(guardLevel(s, 'cell')).toBe(2);
   });
 
+  it('each stage keeps its own clock for its finish screen', () => {
+    const s = fresh();
+    tick(s, 100);
+    finishSoup(s);
+    tick(s, 50);
+    expect(s.stages.soup.time).toBeCloseTo(100, 6);
+    expect(s.stages.cell.time).toBeCloseTo(50, 6);
+  });
+
   it('endless upgrades never run out, each level a little dearer', () => {
     const s = cell();
     const u = STAGES.cell.upgrades.find((x) => x.id === 'adaptation')!;

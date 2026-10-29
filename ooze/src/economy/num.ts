@@ -18,8 +18,9 @@ export function format(n: Decimal, digits = 2): string {
   const tier = Math.floor(exp / 3);
   if (tier < SUFFIXES.length) {
     const scaled = n.mantissa * Math.pow(10, exp - tier * 3);
-    // A thin space keeps the suffix from reading as a digit (B as 8, S as 5).
-    return scaled.toFixed(scaled < 100 ? digits : 1) + '\u2009' + SUFFIXES[tier];
+    // A hair space keeps the suffix from reading as a digit (B as 8, S as 5). It's
+    // narrow in every font, unlike a thin space, which some fall back to full width.
+    return scaled.toFixed(scaled < 100 ? digits : 1) + '\u200A' + SUFFIXES[tier];
   }
   return n.mantissa.toFixed(digits) + 'e' + exp;
 }

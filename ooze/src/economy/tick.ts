@@ -38,6 +38,9 @@ export function tick(state: GameState, dt: number): void {
   }
   state.swirl = Math.max(0, state.swirl - SWIRL_FADE_PER_SEC * dt);
   state.playTime += dt;
+  // The newest stage's own clock, for its finish screen (visits to old stages count toward it).
+  const newest = state.stages[state.unlocked[state.unlocked.length - 1]];
+  if (!newest.complete) newest.time += dt;
 }
 
 /**

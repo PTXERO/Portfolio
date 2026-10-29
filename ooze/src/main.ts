@@ -334,7 +334,7 @@ function playEnding(): void {
   const st = state.stages[state.current];
   const book = def.bookName ?? 'Discoveries';
   const stats = [
-    ['Time', formatTime(state.playTime)],
+    ['Time', formatTime(st.time || state.playTime)],
     def.habitats ? ['Food eaten', String(st.eaten)] : ['Stirs', String(state.taps)],
     [book, `${st.discovered.length} / ${reactions(state.current).length}`],
     [`${def.currency[0].toUpperCase()}${def.currency.slice(1)} made`, format(st.totalEarned)],

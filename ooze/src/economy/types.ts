@@ -203,6 +203,8 @@ export interface StageState {
   acclim: Record<string, number>;
   /** Rare microbes caught toward each organelle not yet found. */
   captured: Record<string, number>;
+  /** Game seconds spent with this as the newest stage, for its finish screen. */
+  time: number;
 }
 
 export type BuyAmount = 1 | 10 | 'max';
