@@ -607,22 +607,14 @@ textarea {
 #modal h3.grim { color: #ff8a7a; }
 .px-btn.grim { --face: #7a2a2a; --hi: #a04040; --lo: #4a1414; color: var(--cream); }
 
-/* The spear's web of ideas. */
-.mind-tree { position: relative; width: 100%; max-width: 420px; aspect-ratio: 1; margin: 0 auto 8px; }
+/* The spear's web of ideas: pixel art on its own grid, with invisible buttons over the ideas. */
+.mind-tree { position: relative; width: 100%; max-width: 440px; aspect-ratio: 1; margin: 0 auto 8px; }
 .mind-tree svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.mind-tree line { stroke: rgba(255, 255, 255, 0.12); stroke-width: 1.4; }
-.mind-tree line.near { stroke: rgba(127, 224, 176, 0.45); stroke-dasharray: 2 2; }
-.mind-tree line.lit { stroke: var(--gold); stroke-width: 2.2; }
-.tn { position: absolute; transform: translate(-50%, -50%); width: 14px; height: 14px; padding: 0; border: 2px solid #3a4460; background: #1c2233; border-radius: 50%; }
-.tn.notable { width: 22px; height: 22px; border-width: 3px; }
-.tn.keystone { width: 28px; height: 28px; border-width: 3px; border-radius: 6px; transform: translate(-50%, -50%) rotate(45deg); }
-.tn.start { width: 26px; height: 26px; background: #f5c45e; border-color: #fff2c8; box-shadow: 0 0 14px #f5c45e; }
-.tn.known { background: var(--gold); border-color: #fff2c8; box-shadow: 0 0 8px rgba(245, 196, 94, 0.7); }
-.tn.open { border-color: var(--mint); }
-.tn.afford { background: #1f3a30; animation: pulse 1.2s steps(2) infinite; }
-.tn.locked { opacity: 0.55; }
-.tn.picked { outline: 2px solid var(--cream); outline-offset: 3px; }
-.tl { position: absolute; transform: translate(-50%, 13px); font-size: 9px; line-height: 1; white-space: nowrap; color: var(--dim); pointer-events: none; text-shadow: 0 1px 0 var(--ink); }
-.tb { position: absolute; transform: translate(-50%, -50%); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mint); pointer-events: none; opacity: 0.8; }
+.mind-tree .blink { animation: pulse 1.2s steps(2) infinite; }
+.tn { position: absolute; transform: translate(-50%, -50%); padding: 0; border: 0; background: transparent; }
+.tl { position: absolute; transform: translate(-50%, 2px); font-size: 9px; line-height: 1; white-space: nowrap; color: var(--dim); pointer-events: none; text-shadow: 1px 1px 0 var(--ink); }
+.tl.up { transform: translate(-50%, calc(-100% - 2px)); }
+.tl.known { color: var(--gold); }
+.tb { position: absolute; transform: translate(-50%, -50%); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mint); pointer-events: none; }
 .idea-card.keystone .name { color: #ff9a7a; }
 .idea-card.notable .name { color: var(--gold); }

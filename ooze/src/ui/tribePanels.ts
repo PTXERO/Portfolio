@@ -3,7 +3,7 @@
 
 import { STORY } from '../content/tribal';
 import { count, dayYield, eatsMeat, eatsPlants, hungerWord, ideaCost, JOBS, jobOpen, TRAITS, type Diet, type ExtinctionState } from '../economy/extinction';
-import { BRANCHES, MIND_NODE, MIND_TREE, NODE_COST, reachable } from '../economy/mindTree';
+import { BRANCHES, MIND_NODE, MIND_TREE, reachable } from '../economy/mindTree';
 import { tribeOf } from '../economy/tribal';
 import type { GameState } from '../economy/types';
 
@@ -92,38 +92,96 @@ export function pickIdea(id: string): void {
 }
 
 const KIND_NAME = { start: 'Where it began', minor: 'Idea', notable: 'Great idea', keystone: 'Keystone' };
-const pct = (v: number) => `${((v + 112) / 224) * 100}%`;
+
+/** The web's art grid: G pixels across, drawn as crisp squares (the game's pixel look). */
+const G = 128;
+const gx = (x: number) => Math.round(((x + 112) / 224) * (G - 1));
+const at = (v: number) => `${((v + 0.5) / G) * 100}%`;
+
+/** Node sprites, '#' border, 'o' fill (lit when known), centred on the node. */
+const SPRITE: Record<string, string[]> = {
+  minor: ['.###.', '#ooo#', '#ooo#', '#ooo#', '.###.'],
+  notable: ['..###..', '.##o##.', '##ooo##', '#ooooo#', '##ooo##', '.##o##.', '..###..'],
+  keystone: ['....#....', '...#o#...', '..#ooo#..', '.#ooooo#.', '#ooooooo#', '.#ooooo#.', '..#ooo#..', '...#o#...', '....#....'],
+  start: ['#...#...#', '.#..#..#.', '..#ooo#..', '..ooooo..', '##ooooo##', '..ooooo..', '..#ooo#..', '.#..#..#.', '#...#...#'],
+};
+const COL = { dim: '#3a4460', near: '#7fe0b0', lit: '#f5c45e', litHi: '#ffe39a', hole: '#141a28', open: '#7fe0b0', afford: '#c4f7dd', locked: '#4a5470', picked: '#f2ead7' };
 
 export function ideasLayout(state: GameState): string {
   const ex = tribeOf(state)?.ex;
   if (!ex) return '';
   const known = (id: string) => id === 'mind0' || ex.ideas.includes(id);
-  // The links: lit between known ideas, faint toward ones within reach.
+  // Pixels by colour, each colour one path (a pixel is "M x y h1v1h-1z").
+  const px = new Map<string, Map<number, true>>();
+  const put = (col: string, x: number, y: number, cls = '') => {
+    if (x < 0 || y < 0 || x >= G || y >= G) return;
+    const k = `${col}|${cls}`;
+    if (!px.has(k)) px.set(k, new Map());
+    px.get(k)!.set(y * G + x, true);
+  };
+  // The links: stepped pixel lines, lit between known ideas, broken toward ones in reach.
   const seen = new Set<string>();
-  const lines = MIND_TREE.flatMap((n) =>
-    n.links
-      .filter((l) => !seen.has(`${l}|${n.id}`) && seen.add(`${n.id}|${l}`))
-      .map((l) => {
-        const o = MIND_NODE[l];
-        const cls = known(n.id) && known(o.id) ? 'lit' : known(n.id) || known(o.id) ? 'near' : '';
-        return `<line class="${cls}" x1="${n.x}" y1="${n.y}" x2="${o.x}" y2="${o.y}"/>`;
-      }),
-  ).join('');
-  const nodes = MIND_TREE.map((n) => {
+  for (const n of MIND_TREE) {
+    for (const l of n.links) {
+      if (seen.has(`${l}|${n.id}`)) continue;
+      seen.add(`${n.id}|${l}`);
+      const o = MIND_NODE[l];
+      const kind = known(n.id) && known(o.id) ? 'lit' : known(n.id) || known(o.id) ? 'near' : 'dim';
+      const x0 = gx(n.x), y0 = gx(n.y), x1 = gx(o.x), y1 = gx(o.y);
+      const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+      for (let i = 0; i <= steps; i++) {
+        if (kind === 'near' && i % 3 === 2) continue;
+        put(COL[kind], Math.round(x0 + ((x1 - x0) * i) / steps), Math.round(y0 + ((y1 - y0) * i) / steps));
+      }
+    }
+  }
+  // The ideas, drawn over their links.
+  const buttons: string[] = [];
+  for (const n of MIND_TREE) {
     const k = known(n.id);
     const open = !k && reachable(ex.ideas, n.id);
     const afford = open && ex.insight >= ideaCost(state, n.id);
-    const cls = [n.kind, k ? 'known' : open ? 'open' : 'locked', afford ? 'afford' : '', picked === n.id ? 'picked' : ''].join(' ');
-    const label = n.kind === 'notable' || n.kind === 'keystone' ? `<span class="tl" style="left:${pct(n.x)};top:${pct(n.y)}">${n.name}</span>` : '';
-    return `<button class="tn ${cls}" style="left:${pct(n.x)};top:${pct(n.y)}" data-node="${n.id}" aria-label="${n.name}"></button>${label}`;
-  }).join('');
+    const sp = SPRITE[n.kind];
+    const h = Math.floor(sp.length / 2);
+    const cx = gx(n.x), cy = gx(n.y);
+    const edge = k ? COL.litHi : afford ? COL.afford : open ? COL.open : COL.locked;
+    const fill = k ? COL.lit : COL.hole;
+    sp.forEach((row, ry) => {
+      for (let rx = 0; rx < row.length; rx++) {
+        const c = row[rx];
+        if (c === '.') continue;
+        put(c === '#' ? edge : fill, cx - h + rx, cy - h + ry, c === '#' && afford ? 'blink' : '');
+      }
+    });
+    // The picked idea: four pixel corners round it.
+    if (picked === n.id) {
+      const r = h + 2;
+      for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        put(COL.picked, cx + sx * r, cy + sy * r);
+        put(COL.picked, cx + sx * (r - 1), cy + sy * r);
+        put(COL.picked, cx + sx * r, cy + sy * (r - 1));
+      }
+    }
+    const size = ((sp.length + 4) / G) * 100;
+    buttons.push(`<button class="tn" style="left:${at(cx)};top:${at(cy)};width:${size}%;height:${size}%" data-node="${n.id}" aria-label="${n.name}"></button>`);
+    // Great ideas named below, keystones above (so neighbours' names don't run together).
+    if (n.kind === 'notable') buttons.push(`<span class="tl${k ? ' known' : ''}" style="left:${at(cx)};top:${at(cy + h + 1)}">${n.name}</span>`);
+    if (n.kind === 'keystone') buttons.push(`<span class="tl up${k ? ' known' : ''}" style="left:${at(cx)};top:${at(cy - h - 1)}">${n.name}</span>`);
+  }
+  const paths = [...px.entries()]
+    .map(([key, cells]) => {
+      const [col, cls] = key.split('|');
+      const d = [...cells.keys()].map((i) => `M${i % G} ${Math.floor(i / G)}h1v1h-1z`).join('');
+      return `<path fill="${col}"${cls ? ` class="${cls}"` : ''} d="${d}"/>`;
+    })
+    .join('');
   const names = BRANCHES.map((b) => {
-    const x = Math.cos((b.angle * Math.PI) / 180) * 106;
-    const y = Math.sin((b.angle * Math.PI) / 180) * 106;
-    return `<span class="tb" style="left:${pct(x)};top:${pct(y)}">${b.name}</span>`;
+    const x = gx(Math.cos((b.angle * Math.PI) / 180) * 106);
+    const y = gx(Math.sin((b.angle * Math.PI) / 180) * 106);
+    return `<span class="tb" style="left:${at(x)};top:${at(y)}">${b.name}</span>`;
   }).join('');
   return `<div class="panel-head"><h2>Ideas</h2><span class="dim">${n0(ex.insight)} insight</span></div>
-    <div class="mind-tree"><svg viewBox="-112 -112 224 224" aria-hidden="true">${lines}</svg>${names}${nodes}</div>
+    <div class="mind-tree"><svg viewBox="0 0 ${G} ${G}" shape-rendering="crispEdges" aria-hidden="true">${paths}</svg>${names}${buttons.join('')}</div>
     ${pickedCard(state, ex)}`;
 }
 
@@ -133,7 +191,7 @@ function pickedCard(state: GameState, ex: ExtinctionState): string {
   const known = n.id === 'mind0' || ex.ideas.includes(n.id);
   const open = reachable(ex.ideas, n.id);
   const cost = ideaCost(state, n.id);
-  const remembered = cost < NODE_COST[n.kind];
+  const remembered = (tribeOf(state)?.remembered ?? []).includes(n.id);
   const btn = known
     ? '<span class="label dim">Known</span>'
     : open
