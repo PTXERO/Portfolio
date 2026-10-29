@@ -9,6 +9,7 @@ import { PAL } from '../art/sprites';
 import type { GameState, StageId } from '../economy/types';
 import { CellScene } from './cell';
 import { RangeScene } from './range';
+import { TribeScene } from './tribe';
 import { MapShader } from './shade';
 import type { PondEvent } from './pond';
 import { ring, type Frame } from './paint';
@@ -47,6 +48,17 @@ export class Scene {
   private soup = new SoupScene();
   private cell = new CellScene();
   private shore = new RangeScene();
+  /** The Tribal era's map: the same island, broken (it builds on the Creature's). */
+  private tribe = new TribeScene();
+
+  /** The map on show: the Creature's island or the Tribal era's fragment. */
+  private get map(): RangeScene {
+    return this.stage === 'tribal' ? this.tribe : this.shore;
+  }
+
+  private get isMap(): boolean {
+    return this.stage === 'creature' || this.stage === 'tribal';
+  }
   private displace = (x: number, y: number) => this.push(x, y);
   /** CSS pixels covered by the overlays at the top of the scene. */
   private topCss = 0;
@@ -98,24 +110,25 @@ export class Scene {
 
   /** Pinch or wheel on the Creature's map: zooms by `factor` about the point under the fingers. */
   zoomAt(cssX: number, cssY: number, factor: number): void {
-    if (this.stage !== 'creature') return;
+    if (!this.isMap) return;
     const [x, y] = this.toArt(cssX, cssY);
-    this.shore.zoomAt(x, y, factor);
+    this.map.zoomAt(x, y, factor);
   }
 
   /** Dragging the Creature's map. */
   panBy(dxCss: number, dyCss: number): void {
-    if (this.stage !== 'creature') return;
-    this.shore.pan(dxCss / this.px, dyCss / this.px);
+    if (!this.isMap) return;
+    this.map.pan(dxCss / this.px, dyCss / this.px);
   }
 
   /** Where the tab sheet starts (CSS pixels from the top), so the map centres above it. */
   setVisibleBottom(cssPx: number): void {
     this.shore.setView(this.topCss / this.px, cssPx / this.px);
+    this.tribe.setView(this.topCss / this.px, cssPx / this.px);
   }
 
   get zoomed(): boolean {
-    return this.stage === 'creature';
+    return this.isMap;
   }
 
   ripple(cssX: number, cssY: number): void {
@@ -142,13 +155,13 @@ export class Scene {
   /** A tap on the shore: walks your creature there, or hits a beast under the finger. */
   shoreTap(state: GameState, cssX: number, cssY: number): void {
     const [x, y] = this.toArt(cssX, cssY);
-    this.shore.tap(state, x, y);
+    this.map.tap(state, x, y);
   }
 
   /** What happened in the pond since last asked, with positions in CSS pixels. */
   pondEvents(): PondEvent[] {
-    if (this.stage !== 'cell' && this.stage !== 'creature') return [];
-    return (this.stage === 'cell' ? this.cell.pond.drain() : this.shore.drain()).map((e) => ({ ...e, x: e.x * this.px, y: e.y * this.px }));
+    if (this.stage !== 'cell' && !this.isMap) return [];
+    return (this.stage === 'cell' ? this.cell.pond.drain() : this.map.drain()).map((e) => ({ ...e, x: e.x * this.px, y: e.y * this.px }));
   }
 
   /** Plays a purchase out in the scene. Call after the purchase went through. */
@@ -213,12 +226,13 @@ export class Scene {
       this.soup.reset();
       this.cell.reset();
       this.shore.reset();
+      this.tribe.reset();
     }
     const frame: Frame = { b: this.b, W: this.W, H: this.H, t: this.time, dt, top: Math.ceil(this.topCss / this.px), bottom: Math.ceil(this.bottomCss / this.px) };
     if (state.current === 'soup') this.soup.draw(frame, state, this.displace);
-    else if (state.current === 'creature') {
-      this.shore.shaded = !!this.shader;
-      this.shore.draw(frame, state);
+    else if (state.current === 'creature' || state.current === 'tribal') {
+      this.map.shaded = !!this.shader;
+      this.map.draw(frame, state);
     } else this.cell.draw(frame, state);
     for (const r of this.ripples) {
       this.b.globalAlpha = 1 - r.age;
@@ -229,15 +243,15 @@ export class Scene {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    const shaded = !!this.shader && this.stage === 'creature';
+    const shaded = !!this.shader && this.isMap;
     if (this.shader) this.shader.canvas.style.display = shaded ? 'block' : 'none';
     if (shaded) {
       // The island is drawn lit by the shader underneath; this canvas keeps only what's on top.
-      const inp = this.shore.shadeInputs();
+      const inp = this.map.shadeInputs();
       if (inp) {
         this.shader!.setIsland(inp.seed, inp.heights);
         this.shader!.setFog(inp.fog, inp.fogVersion);
-        this.shader!.render(this.buffer, this.W, this.H, { cam: this.shore.camParams, tint: inp.tint, time: this.time, day: (this.time % 120) / 120, ground: inp.ground, blend: inp.blend, trail: inp.trail, trailVersion: inp.trailVersion, weather: inp.weather, bow: inp.bow });
+        this.shader!.render(this.buffer, this.W, this.H, { cam: this.map.camParams, tint: inp.tint, time: this.time, day: (this.time % 120) / 120, ground: inp.ground, blend: inp.blend, trail: inp.trail, trailVersion: inp.trailVersion, weather: inp.weather, bow: inp.bow });
       }
       ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     } else ctx.drawImage(this.buffer, 0, 0, this.W * this.px * this.dpr, this.H * this.px * this.dpr);

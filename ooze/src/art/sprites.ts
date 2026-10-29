@@ -53,6 +53,8 @@ export const SPRITES = {
   chimney: ['..r.......', '.rr...r...', '..r..rr...', '.RRR..r...', '.RoR.RRR..', '.RRR.RoR..', 'RRRRRRRRR.', 'RrRRrRRrR.', 'rrrrrrrrrr', 'rrrrrrrrrr'],
 
   // Creature life
+  // A haunch of food on the bone (the Tribal era's currency).
+  food: ['......ww..', '.....wkw..', '....kwk...', '...oOk....', '..oooO....', '.ooywoO...', '.oooooO...', '.OoooOO...', '..OOOO....', '..........'],
   biomass: ['....ll....', '...lLLl...', '..lLwLLl..', '..lLLLLl..', '...lLLl...', '....Ll....', '..ooooOO..', '.oOwoooOO.', '.oOoooOOO.', '..OOOOOO..'],
   hatchling: ['..........', '....www...', '...wwwww..', '...wwswww.', '...wwwwww.', '....wwww..', '...sggg...', '..gGgGkg..', '.gGGGGGg..', '..g...g...'],
   burrow: ['..........', '..........', 'llll..llll', 'LsssssssL.', 'sssSSSsss.', 'ssSkkkSss.', 'sSkkkkkSs.', 'sSkkgkkSs.', 'ssSSSSSss.', 'ssssssssss'],

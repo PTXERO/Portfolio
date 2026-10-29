@@ -34,7 +34,7 @@ export function createStageState(id: StageId, opened: boolean): StageState {
   const def = STAGES[id];
   const generators: Record<string, number> = {};
   for (const g of def.generators) generators[g.id] = 0;
-  if (opened) generators[def.generators[0].id] = def.startingGenerators;
+  if (opened && def.generators[0]) generators[def.generators[0].id] = def.startingGenerators;
   return { currency: ZERO, totalEarned: ZERO, generators, upgrades: [], levels: {}, complete: false, dials: { heat: 0, light: 0, charge: 0 }, discovered: [], free: {}, catalysis: {}, habitat: def.habitats?.[0].id ?? '', eaten: 0, acclim: {}, captured: {}, time: 0, ...creatureStart(def) };
 }
 
@@ -94,6 +94,7 @@ export function cloneState(s: GameState): GameState {
       parties: st.parties.map((p) => ({ ...p })),
       partyReady: { ...st.partyReady },
       sightings: { ...st.sightings },
+      tribe: st.tribe && { ...st.tribe, look: { ...st.tribe.look, parts: { ...st.tribe.look.parts } }, stats: { ...st.tribe.stats } },
       nests: [...st.nests],
       nestSettle: { ...st.nestSettle },
       trips: { ...st.trips },

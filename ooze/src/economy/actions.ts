@@ -1,3 +1,4 @@
+import { sealed, startTribe } from './tribal';
 import { STAGES } from '../content/stages';
 import { createStageState } from './state';
 import { D, Decimal } from './num';
@@ -418,7 +419,7 @@ export function buyUpgrade(state: GameState, stage: StageId, id: string): boolea
 
 /** Switches the screen to an earlier (or the latest) stage. Everything keeps producing. */
 export function visitStage(state: GameState, id: StageId): boolean {
-  if (!state.unlocked.includes(id) || state.current === id) return false;
+  if (!state.unlocked.includes(id) || state.current === id || sealed(state, id)) return false;
   state.current = id;
   return true;
 }
@@ -467,6 +468,8 @@ export function evolve(state: GameState): boolean {
   st.complete = true;
   const next = def.next!;
   state.stages[next] = createStageState(next, true);
+  // The tribe is what lived through the strike: made from the herd before it's sealed away.
+  if (STAGES[next].tribal) state.stages[next].tribe = startTribe(state);
   state.unlocked.push(next);
   state.current = next;
   return true;

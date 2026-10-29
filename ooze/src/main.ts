@@ -11,6 +11,8 @@ import jerseyDigits from '@fontsource/jersey-10/files/jersey-10-latin-400-normal
 import { icon } from './art/sprites';
 import { STAGES } from './content/stages';
 import { EVENTS } from './content/creature';
+import { STORY } from './content/tribal';
+import { awaken, sealed } from './economy/tribal';
 import {
   addSwirl,
   buyCount,
@@ -41,6 +43,7 @@ import { liveTick, TICK_SEC } from './economy/tick';
 import type { BuyAmount, DialId, GameState, RunInPolicy, StageId } from './economy/types';
 import { breed, buyPart, chooseEvent, EVENT_DC, court, equipPart, FARM_PAY, foundNest, islandFor, netRate, SIGHTINGS, placeRestLeft, placeSeen, placeShort, releaseMate, tripEventDue, tripPay, walkHome, walkSeconds, walkTo } from './economy/creature';
 import { Scene } from './scene/scene';
+import { playStrike } from './ui/strike';
 import { choiceButton } from './ui/creaturePanels';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
@@ -274,7 +277,7 @@ function renderTabs(): void {
   if (!ids.includes(ui.tab)) ui.tab = 'grow';
   tabsEl.style.gridTemplateColumns = `repeat(${ids.length}, 1fr)`;
   tabsEl.innerHTML = TABS.filter((t) => ids.includes(t.id))
-    .map((t) => `<button class="px-btn tab" data-tab="${t.id}">${icon(t.sprite, 3)}<span>${t.id === 'grow' && STAGES[state.current].places ? 'Herd' : t.label}</span><i class="dot" hidden></i></button>`)
+    .map((t) => `<button class="px-btn tab" data-tab="${t.id}">${icon(t.sprite, 3)}<span>${t.id === 'grow' && STAGES[state.current].places ? 'Herd' : t.id === 'grow' && STAGES[state.current].tribal ? 'Tribe' : t.label}</span><i class="dot" hidden></i></button>`)
     .join('');
 }
 
@@ -295,9 +298,11 @@ function renderHud(): void {
   set('stage-name', def.name);
   // Small buttons under the banner hop to the previous age (left) or the next one (right).
   const ageNav = $('age-nav');
-  const i = state.unlocked.indexOf(state.current);
-  const prev = state.unlocked[i - 1];
-  const next = state.unlocked[i + 1];
+  // Sealed eras (before the Tribal) can't be gone back to, so they get no button.
+  const open = state.unlocked.filter((id) => !sealed(state, id));
+  const i = open.indexOf(state.current);
+  const prev = open[i - 1];
+  const next = open[i + 1];
   const navKey = `${prev ?? ''}|${next ?? ''}`;
   if (ageNav.dataset.key !== navKey) {
     ageNav.dataset.key = navKey;
@@ -315,6 +320,17 @@ function renderHud(): void {
 /** The strip under the top bar: this stage's own goal. It never names what comes next. */
 function renderGoal(): void {
   const def = STAGES[state.current];
+  // The Tribal era: for now, just what's asked before they wake.
+  if (def.tribal) {
+    const awake = !!state.stages.tribal.tribe?.awake;
+    const key = `tribal:${awake}`;
+    if (key !== goalKey) {
+      goalKey = key;
+      evolveEl.hidden = awake;
+      evolveEl.innerHTML = `<div class="evolve-row"><span class="label">The spear</span></div><div class="goal-next">${STORY.approach}</div>`;
+    }
+    return;
+  }
   const rs = reactions(state.current);
   // Once every page of the book is found, the strip has nothing left to say.
   const shown = goalShown(state) && !(rs.length > 0 && rs.every((r) => state.stages[state.current].discovered.includes(r.id)));
@@ -470,6 +486,9 @@ function renderHint(): void {
     else if (st.discovered.includes('phosphorylation') && !st.discovered.includes('polymerization') && state.swirl < 0.05) text = 'Draw circles to spin a whirlpool';
   } else if (state.current === 'creature') {
     if (!pokedThisStage) text = 'Tap to walk · pinch to zoom';
+  } else if (state.current === 'tribal') {
+    if (!state.stages.tribal.tribe?.awake) text = 'Tap the spear';
+    else if (!pokedThisStage) text = 'Drag to look around · pinch to zoom';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
   hint.hidden = !text || !modal.hidden;
@@ -539,13 +558,27 @@ function playEnding(): void {
 function closeEnding(): void {
   ending.classList.remove('in');
   setTimeout(() => (ending.hidden = true), 600);
+  // Into the Tribal era there's no evolving: the spear falls.
+  if (STAGES[state.current].next === 'tribal') {
+    playStrike(() => moveOn());
+    return;
+  }
+  moveOn();
+}
+
+function moveOn(): void {
   if (evolve(state)) {
     scene.evolveFlash();
     pokedThisStage = false;
     ui.tab = 'grow';
     panelKey = '';
+    save();
+    render();
   }
 }
+
+/** Whether the screen shows a map (the Creature's island or what's left of it). */
+const onMap = () => state.current === 'creature' || state.current === 'tribal';
 
 /** Applies what happened in the pond: food eaten, organelles engulfed, predators driven off. */
 function pondEvents(): void {
@@ -566,6 +599,16 @@ function pondEvents(): void {
       const got = e.party ? state.stages.creature.lastParty : state.stages.creature.lastForage;
       if (got) scene.float(e.x, e.y, `${e.party ? 'party home ' : ''}+${format(D(got))}`, '#f5c45e');
     } else if (e.type === 'place') showPlaceCard(e.id, e.x, e.y);
+    else if (e.type === 'spear' && awaken(state)) {
+      // The waking: one touches the spear, and they know that they are.
+      scene.evolveFlash();
+      showModal(`<p class="label dim">The spear</p>
+        <h3>${STORY.wake}</h3>
+        <p>${STORY.wakeSub}</p>
+        <button class="px-btn gold" data-act="dismiss">…</button>`);
+      panelKey = '';
+      save();
+    }
   }
   collectNews();
 }
@@ -624,7 +667,7 @@ stageEl.addEventListener('pointerdown', (e) => {
   const r = stageEl.getBoundingClientRect();
   const x = e.clientX - r.left;
   const y = e.clientY - r.top;
-  if (state.current === 'creature') {
+  if (onMap()) {
     // The tap itself happens on release, so a drag or a pinch doesn't send the creature off.
     fingers.set(e.pointerId, { x, y, sx: x, sy: y });
     if (fingers.size === 1) mapDragged = false;
@@ -647,7 +690,7 @@ stageEl.addEventListener('pointerdown', (e) => {
 });
 
 stageEl.addEventListener('pointermove', (e) => {
-  if (state.current === 'creature') {
+  if (onMap()) {
     const f = fingers.get(e.pointerId);
     if (!f) return;
     const r = stageEl.getBoundingClientRect();
@@ -699,7 +742,7 @@ const endFinger = (e: PointerEvent) => {
   const f = fingers.get(e.pointerId);
   if (!f) return;
   fingers.delete(e.pointerId);
-  if (e.type === 'pointerup' && !mapDragged && fingers.size === 0 && state.current === 'creature') {
+  if (e.type === 'pointerup' && !mapDragged && fingers.size === 0 && onMap()) {
     scene.ripple(f.x, f.y);
     scene.shoreTap(state, f.x, f.y);
     pokedThisStage = true;

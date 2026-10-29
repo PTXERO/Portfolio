@@ -105,63 +105,63 @@ const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16))
 const mixRgb = (a: number[], b: number[], t: number) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 
 export class RangeScene {
-  private fx = new Effects();
-  private wild = new Wild();
-  private trails = new Trails();
-  private sightings = new Sightings();
+  protected fx = new Effects();
+  protected wild = new Wild();
+  protected trails = new Trails();
+  protected sightings = new Sightings();
   /** Weather: a storm building and passing (0 to 1), the ground still wet after, mist, ice. */
-  private storm = 0;
-  private stormLeft = 0;
-  private stormTimer = 90;
-  private wet = 0;
-  private weather: [number, number, number, number] = [0, 0, 0, 0];
-  private rain: { x: number; y: number; z: number; v: number }[] = [];
-  private flash = 0;
-  private bow = 0;
+  protected storm = 0;
+  protected stormLeft = 0;
+  protected stormTimer = 90;
+  protected wet = 0;
+  protected weather: [number, number, number, number] = [0, 0, 0, 0];
+  protected rain: { x: number; y: number; z: number; v: number }[] = [];
+  protected flash = 0;
+  protected bow = 0;
   /** Where the camera was last frame (the air layer slides a little as it moves). */
-  private airCam = { x: 0, y: 0 };
-  private flies: { x: number; y: number; ph: number }[] = [];
-  private bowView: [number, number, number, number] = [0, 0, 1, 0];
-  private momentTimer = 6;
-  private memberId = 0;
-  private events: PondEvent[] = [];
-  private members: Member[] = [];
-  private beast: Beast | null = null;
-  private beastTimer = 50;
-  private visitor: { x: number; y: number; tx: number; ty: number; life: number; look: CreatureLook } | null = null;
-  private visitorTimer = 40;
-  private graze: Pt | null = null;
-  private grazeTimer = 0;
+  protected airCam = { x: 0, y: 0 };
+  protected flies: { x: number; y: number; ph: number }[] = [];
+  protected bowView: [number, number, number, number] = [0, 0, 1, 0];
+  protected momentTimer = 6;
+  protected memberId = 0;
+  protected events: PondEvent[] = [];
+  protected members: Member[] = [];
+  protected beast: Beast | null = null;
+  protected beastTimer = 50;
+  protected visitor: { x: number; y: number; tx: number; ty: number; life: number; look: CreatureLook } | null = null;
+  protected visitorTimer = 40;
+  protected graze: Pt | null = null;
+  protected grazeTimer = 0;
   /** Seasonal bits in the air: snow, falling leaves, blossom petals, summer pollen. */
-  private flakes: { x: number; y: number; z: number; v: number; kind: Mote; ph: number }[] = [];
+  protected flakes: { x: number; y: number; z: number; v: number; kind: Mote; ph: number }[] = [];
   /** Each season's painted ground, for the island it was painted for. */
-  private ground = new Map<number, HTMLCanvasElement>();
-  private groundSeed = -1;
+  protected ground = new Map<number, HTMLCanvasElement>();
+  protected groundSeed = -1;
   /** Fog over the island, and which cells it was last painted for. */
-  private fog: HTMLCanvasElement | null = null;
-  private fogKnown: Uint8Array | null = null;
+  protected fog: HTMLCanvasElement | null = null;
+  protected fogKnown: Uint8Array | null = null;
   // The camera: what's in the middle (in tiles), and how many art pixels a tile is.
-  private camX = 0;
-  private camY = 0;
-  private zoom = 3;
-  private auto = true;
-  private snap = true;
-  private viewTop = 0;
-  private viewBottom = 0;
-  private W = 0;
-  private H = 0;
-  private island: Island | null = null;
-  private lastPos: Pt | null = null;
+  protected camX = 0;
+  protected camY = 0;
+  protected zoom = 3;
+  protected auto = true;
+  protected snap = true;
+  protected viewTop = 0;
+  protected viewBottom = 0;
+  protected W = 0;
+  protected H = 0;
+  protected island: Island | null = null;
+  protected lastPos: Pt | null = null;
   /** True while the lighting shader draws night and fog (see shade.ts), so they're left out here. */
   shaded = false;
-  private heightData: Uint8Array | null = null;
-  private heightDataSeed = -1;
+  protected heightData: Uint8Array | null = null;
+  protected heightDataSeed = -1;
   /** Bumped whenever the fog changes, so the shader re-sends it only then. */
-  private fogVersion = 0;
+  protected fogVersion = 0;
   /** This season's ground and the next one's, and how far the change has got (0 to 1). */
-  private groundPair: [HTMLCanvasElement, HTMLCanvasElement] | null = null;
-  private seasonBlend = 0;
-  private seasonPair: [number, number] = [0, 1];
+  protected groundPair: [HTMLCanvasElement, HTMLCanvasElement] | null = null;
+  protected seasonBlend = 0;
+  protected seasonPair: [number, number] = [0, 1];
 
   reset(): void {
     this.fx.clear();
@@ -188,12 +188,12 @@ export class RangeScene {
     this.viewBottom = bottom;
   }
 
-  private midY(): number {
+  protected midY(): number {
     return (this.viewTop + (this.viewBottom || this.H)) / 2;
   }
 
   /** Screen position (art pixels) of a point on the island. */
-  private sx(x: number): number {
+  protected sx(x: number): number {
     return (x - this.camX) * this.zoom + this.W / 2;
   }
 
@@ -212,16 +212,16 @@ export class RangeScene {
   }
 
   /** Screen row of a point on the ground: in 2.5D, raised by the land's height and seen at a slant. */
-  private py(x: number, y: number): number {
+  protected py(x: number, y: number): number {
     if (!this.shaded) return this.sy(y);
     return (y - this.camY) * this.zoom * TILT + this.midY() - this.heightAt(x, y) * LIFT * this.zoom;
   }
 
-  private sy(y: number): number {
+  protected sy(y: number): number {
     return (y - this.camY) * this.zoom + this.midY();
   }
 
-  private toWorld(ax: number, ay: number): Pt {
+  protected toWorld(ax: number, ay: number): Pt {
     const x = this.camX + (ax - this.W / 2) / this.zoom;
     if (!this.shaded) return { x, y: this.camY + (ay - this.midY()) / this.zoom };
     // In 2.5D, the ground under a pixel may have risen into it from nearer the viewer:
@@ -255,17 +255,17 @@ export class RangeScene {
     this.clamp();
   }
 
-  private clamp(): void {
+  protected clamp(): void {
     this.camX = Math.max(0, Math.min(ISLAND, this.camX));
     this.camY = Math.max(0, Math.min(ISLAND, this.camY));
   }
 
   /** The camera, for the shader: centre (tiles), zoom, and the screen row of the centre. */
   /** Places parties were bound for last frame (to puff when one gets home). */
-  private partiesOut = new Set<string>();
-  private foragedSeen = 0;
-  private partiesSeen = 0;
-  private lastPartyNest: Pt | null = null;
+  protected partiesOut = new Set<string>();
+  protected foragedSeen = 0;
+  protected partiesSeen = 0;
+  protected lastPartyNest: Pt | null = null;
 
   get camParams(): [number, number, number, number] {
     return [this.camX, this.camY, this.zoom, this.midY()];
@@ -295,12 +295,12 @@ export class RangeScene {
   // ---- Input ----
 
   /** Hits needed to drive a beast off: fewer with Strength. */
-  private hitsNeeded(state: GameState): number {
+  protected hitsNeeded(state: GameState): number {
     const s = statsOf(state).strength;
     return s >= 15 ? 1 : s >= 6 ? 2 : 3;
   }
 
-  private hitBeast(state: GameState, b: Beast): void {
+  protected hitBeast(state: GameState, b: Beast): void {
     b.hits++;
     b.flinch = 0.4;
     if (b.hits >= this.hitsNeeded(state)) {
@@ -369,7 +369,7 @@ export class RangeScene {
 
   // ---- The ground and the fog ----
 
-  private paintGround(is: Island, si: number): HTMLCanvasElement {
+  protected paintGround(is: Island, si: number): HTMLCanvasElement {
     const N = ISLAND;
     const cv = document.createElement('canvas');
     cv.width = N;
@@ -451,7 +451,7 @@ export class RangeScene {
   }
 
   /** Clears the fog wherever new cells have been seen since last time. */
-  private paintFog(seen: Uint8Array): void {
+  protected paintFog(seen: Uint8Array): void {
     const N = ISLAND;
     if (!this.fog || !this.fogKnown) {
       this.fog = document.createElement('canvas');
@@ -485,7 +485,7 @@ export class RangeScene {
   }
 
   /** Copies the part of a world-sized layer that's on screen, scaled to the zoom. */
-  private blitWorld(b: CanvasRenderingContext2D, layer: HTMLCanvasElement): void {
+  protected blitWorld(b: CanvasRenderingContext2D, layer: HTMLCanvasElement): void {
     const tl = this.toWorld(0, 0);
     const br = this.toWorld(this.W, this.H);
     const x0 = Math.max(0, Math.floor(tl.x));
@@ -499,7 +499,7 @@ export class RangeScene {
 
   // ---- The herd ----
 
-  private syncHerd(state: GameState, home: Pt): void {
+  protected syncHerd(state: GameState, home: Pt): void {
     const st = state.stages.creature;
     const pop = Math.max(1, Math.floor(st.pop));
     const n = visibleCount(pop - 1, 40);
@@ -536,11 +536,11 @@ export class RangeScene {
    * How far from its nest the herd grazes: close to start with, each Home Range widening it
    * (it takes a herd that can look after itself to range further).
    */
-  private grazeRadius(state: GameState): number {
+  protected grazeRadius(state: GameState): number {
     return 12 + 2.5 * Math.min(12, state.stages.creature.generators.territory);
   }
 
-  private pickGraze(is: Island, state: GameState): Pt {
+  protected pickGraze(is: Island, state: GameState): Pt {
     const range = Math.max(1, this.grazeRadius(state) - 3);
     for (let i = 0; i < 20; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -559,8 +559,8 @@ export class RangeScene {
   }
 
   /** Paths over land between two spots, found once and kept (a breadth-first walk over the map's cells). */
-  private paths = new Map<string, Pt[]>();
-  private landPath(is: Island, from: Pt, to: Pt): Pt[] {
+  protected paths = new Map<string, Pt[]>();
+  protected landPath(is: Island, from: Pt, to: Pt): Pt[] {
     const cell = (p: Pt) => Math.min(CELLS - 1, Math.max(0, Math.floor(p.y / CELL))) * CELLS + Math.min(CELLS - 1, Math.max(0, Math.floor(p.x / CELL)));
     const a = cell(from);
     const b = cell(to);
@@ -590,12 +590,12 @@ export class RangeScene {
   }
 
   /** The camera and effects, for the island's wild life. */
-  private get wildView(): WildView {
+  protected get wildView(): WildView {
     return { zoom: this.zoom, W: this.W, H: this.H, sx: (x) => this.sx(x), py: (x, y) => this.py(x, y), fx: this.fx, toWorld: (x, y) => this.toWorld(x, y) };
   }
 
   /** A little pink heart rising over a spot (age 0 to about 1). */
-  private heart(b: CanvasRenderingContext2D, x: number, y: number, age: number): void {
+  protected heart(b: CanvasRenderingContext2D, x: number, y: number, age: number): void {
     const hx = Math.round(this.sx(x));
     const hy = Math.round(this.py(x, y) - (12 + age * 4) * (this.zoom >= 6 ? 2 : 1));
     b.fillStyle = PAL.p;
@@ -606,7 +606,7 @@ export class RangeScene {
   }
 
   /** The nearest spot within `r` tiles of a point that passes `ok` (sampled, so roughly). */
-  private findSpot(from: Pt, r: number, ok: (x: number, y: number) => boolean): Pt | null {
+  protected findSpot(from: Pt, r: number, ok: (x: number, y: number) => boolean): Pt | null {
     let best: Pt | null = null;
     let bd = Infinity;
     for (let i = 0; i < 70; i++) {
@@ -629,7 +629,7 @@ export class RangeScene {
    * down to the water to drink; one strips a ripe bush; and at dusk a sentry climbs to the
    * highest ground near home and stands looking out.
    */
-  private startMoment(is: Island, home: Pt, bases: Pt[], R: number, dayT: number, winter: boolean, season: number): void {
+  protected startMoment(is: Island, home: Pt, bases: Pt[], R: number, dayT: number, winter: boolean, season: number): void {
     const free = this.members.filter((m) => !m.act && m.flee <= 0 && m.role !== 'carer' && m.role !== 'digger');
     if (!free.length) return;
     const take = (pref?: Role) => {
@@ -687,11 +687,11 @@ export class RangeScene {
     m.act = { kind, t: kind === 'rest' ? 25 : kind === 'lookout' ? 22 : kind === 'eat' ? 3 : 12, x: spot.x, y: spot.y, bush: kind === 'eat' ? near ?? undefined : undefined };
   }
 
-  private nestSpots(home: Pt, n: number): Pt[] {
+  protected nestSpots(home: Pt, n: number): Pt[] {
     return Array.from({ length: n }, (_, i) => ({ x: home.x - 1.5 + (i % 3) * 1.5, y: home.y + 0.5 + Math.floor(i / 3) * 1.2 }));
   }
 
-  private burrowSpots(home: Pt, n: number): Pt[] {
+  protected burrowSpots(home: Pt, n: number): Pt[] {
     return Array.from({ length: n }, (_, i) => {
       const a = -0.6 + i * 0.55;
       return { x: home.x + Math.cos(a) * 4, y: home.y - 1 + Math.sin(a) * 3 };
@@ -699,7 +699,7 @@ export class RangeScene {
   }
 
   /** A creature at the right size for the zoom: a dot from far away, a full sprite up close. */
-  private drawBeing(b: CanvasRenderingContext2D, look: CreatureLook, x: number, y: number, o: { left?: boolean; frame?: number; sleeping?: boolean; hero?: boolean; hop?: number }): void {
+  protected drawBeing(b: CanvasRenderingContext2D, look: CreatureLook, x: number, y: number, o: { left?: boolean; frame?: number; sleeping?: boolean; hero?: boolean; hop?: number }): void {
     const z = this.zoom;
     const X = this.sx(x);
     const Y = this.py(x, y);

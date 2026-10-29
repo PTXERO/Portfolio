@@ -1,3 +1,4 @@
+import { sealed, tribeTick } from './tribal';
 import { STAGES } from '../content/stages';
 import { affordableCount, buyGenerator, buyUpgrade, catalyze, discoverReactions, SWIRL_FADE_PER_SEC, visibleUpgrades } from './actions';
 import { creatureTick } from './creature';
@@ -20,7 +21,8 @@ export function autobuy(state: GameState, stage: StageId): void {
 export function tick(state: GameState, dt: number): void {
   if (!state.started) return;
   // Rates are read before any currency moves so the order of stages doesn't matter.
-  const rates = state.unlocked.map((id) => [id, stageRate(state, id)] as const);
+  // Sealed eras (everything before the Tribal) are gone: they neither earn nor change.
+  const rates = state.unlocked.filter((id) => !sealed(state, id)).map((id) => [id, stageRate(state, id)] as const);
   for (const [id, rate] of rates) {
     const st = state.stages[id];
     const gain = rate.mul(dt);
@@ -32,7 +34,8 @@ export function tick(state: GameState, dt: number): void {
     catalyze(state, state.current, dt);
     discoverReactions(state, state.current);
   }
-  creatureTick(state, dt);
+  if (!sealed(state, 'creature')) creatureTick(state, dt);
+  tribeTick(state, dt);
   // Your cell settles into whichever habitat it's living in (Cell stage).
   for (const id of state.unlocked) {
     const st = state.stages[id];

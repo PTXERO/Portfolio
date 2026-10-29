@@ -558,3 +558,10 @@ textarea {
 .opts .policy .px-btn.on { --face: var(--mint); --hi: #c4f7dd; --lo: var(--mint-lo); color: var(--ink); }
 .opts > .info > .sub { margin-top: 8px; }
 #modal p.small { font-size: 11px; margin-top: 8px; }
+
+/* ---- The strike (Creature to Tribal) ---- */
+#strike { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 60; image-rendering: pixelated; pointer-events: all; }
+#strike-words { position: fixed; left: 24px; right: 24px; bottom: 22%; z-index: 61; text-align: center; font-size: 18px; color: var(--cream); text-shadow: 0 2px 0 var(--ink), 0 -2px 0 var(--ink), 2px 0 0 var(--ink), -2px 0 0 var(--ink); opacity: 0; transition: opacity 700ms; pointer-events: none; }
+#strike-words.in { opacity: 1; }
+@keyframes quake { 0% { transform: translate(0, 0); } 20% { transform: translate(-6px, 3px); } 40% { transform: translate(5px, -4px); } 60% { transform: translate(-4px, -2px); } 80% { transform: translate(3px, 4px); } 100% { transform: translate(0, 0); } }
+.quake { animation: quake 120ms steps(2) infinite; }

@@ -1,6 +1,7 @@
 // The tab panels under the scene. Each panel is laid out once (when its rows
 // change) and then patched in place, so a button never vanishes under a finger.
 
+import { tribeLayout } from './tribePanels';
 import { icon, type SpriteName } from '../art/sprites';
 import { lifeIcon } from '../scene/icons';
 import { bodyLayout, creatureKey, creatureUpdate, exploreLayout, familyLayout, herdLayout } from './creaturePanels';
@@ -49,7 +50,7 @@ export function tabsFor(state: GameState): Tab[] {
   const cst = state.stages[state.current];
   const has: Record<Tab, boolean> = {
     grow: true,
-    boosts: !habitats && !creature,
+    boosts: !habitats && !creature && !def.tribal,
     lab: !habitats && !creature && reactions(state.current).length > 0,
     mutate: habitats,
     pond: habitats,
@@ -81,7 +82,7 @@ export const DIAL_INFO: Record<DialId, { name: string; sprite: SpriteName }> = {
   charge: { name: 'Charge', sprite: 'bolt' },
 };
 
-export const CURRENCY_ICON: Record<StageId, SpriteName> = { soup: 'nutrient', cell: 'dna', creature: 'biomass' };
+export const CURRENCY_ICON: Record<StageId, SpriteName> = { soup: 'nutrient', cell: 'dna', creature: 'biomass', tribal: 'food' };
 export const WARPS = [1, 2, 5, 10];
 const AMOUNTS: BuyAmount[] = [1, 10, 'max'];
 
@@ -249,6 +250,7 @@ export function layout(state: GameState, tab: Tab): string {
   const def = STAGES[id];
   const cur = icon(CURRENCY_ICON[id], 2);
 
+  if (def.tribal && tab === 'grow') return tribeLayout(state);
   if (tab === 'grow' && def.places) {
     return herdLayout(
       state,

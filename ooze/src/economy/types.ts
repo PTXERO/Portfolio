@@ -1,6 +1,6 @@
 import type { Decimal } from './num';
 
-export type StageId = 'soup' | 'cell' | 'creature';
+export type StageId = 'soup' | 'cell' | 'creature' | 'tribal';
 
 /** The Soup's environment controls. Each runs from 0 to 3. */
 export type DialId = 'heat' | 'light' | 'charge';
@@ -298,9 +298,35 @@ export interface StageDef {
   /** Text for the stage's finish screen. */
   ending?: { title: string; line: string };
   next?: StageId;
+  /** The Tribal era: people, jobs and building (see economy/tribal.ts). */
+  tribal?: true;
+}
+
+/** The tribe: who lived through the strike, and what they've become since. */
+export interface TribeState {
+  /** Whether they've touched the spear (woken up). */
+  awake: boolean;
+  /** How many there are. */
+  pop: number;
+  /** How many lived through the strike. */
+  survivors: number;
+  /** The look they carry from the Creature (parts worn and diet), for drawing them. */
+  look: { parts: Partial<Record<Slot, string>>; diet: string };
+  /** Their body's stats, carried from the Creature. */
+  stats: Record<Stat, number>;
+  /** Generations bred before the strike (they become the line's traits later). */
+  generations: number;
+  /** What the eras before leave them: a lasting boost to everything they do. */
+  heritage: number;
+  /** The island's seed (the same island, broken). */
+  seed: number;
+  /** Seconds on the tribe's own clock (days and seasons). */
+  year: number;
 }
 
 export interface StageState {
+  /** Tribal era only. */
+  tribe?: TribeState;
   currency: Decimal;
   totalEarned: Decimal;
   generators: Record<string, number>;

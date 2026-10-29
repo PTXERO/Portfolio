@@ -197,6 +197,7 @@ export const creature: StageDef = {
   startingGenerators: 1,
   bookName: 'Field Guide',
   ending: { title: 'Many.', line: 'There were more of them now, and they were not all the same.' },
+  next: 'tribal',
   // Not producers: the herd forages (see economy/creature.ts). These are where it
   // lives and feeds, dug or found or spread into: births, room, food and shelter.
   generators: [

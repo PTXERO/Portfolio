@@ -23,7 +23,9 @@ export type PondEvent =
   /** Creature stage: a found place was foraged again (by your creature, or a party home). */
   | { type: 'forage'; party: boolean; x: number; y: number }
   /** Creature stage: a place's flag was tapped. */
-  | { type: 'place'; id: string; x: number; y: number };
+  | { type: 'place'; id: string; x: number; y: number }
+  /** Tribal era: the spear was touched. */
+  | { type: 'spear'; x: number; y: number };
 
 interface Hero {
   x: number;
