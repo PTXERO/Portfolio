@@ -8,7 +8,7 @@
 // When fewer than two are left, it's over: back to just after the waking, to try again (the
 // spear remembers what it taught, so those ideas come cheaper).
 
-import { MIND_NODE, modsOf, NODE_COST, reachable, type Mods } from './mindTree';
+import { COST_STEP, MIND_NODE, modsOf, NODE_COST, reachable, type Mods } from './mindTree';
 import type { GameState, TribeState } from './types';
 
 export type Diet = 'herbivore' | 'carnivore' | 'omnivore' | 'cannibal';
@@ -106,6 +106,8 @@ const LIMIT: Record<TraitId, number> = { strong: 3, swift: 3, keen: 3, hardy: 3.
 const YIELD: Record<JobId, number> = { forage: 1.3, scavenge: 1.9, dig: 1.1, fish: 1.3, listen: 1, rest: 0 };
 /** Roots and fish keep coming, but only so much a day (a share of how many lived through the
  * strike). */
+/** Insight a day from the square root of the listening done. */
+const LISTEN = 1.4;
 const DIG_CAP = 0.32;
 const FISH_CAP = 0.36;
 /** Overnight: meat rots (much slower once dried), plants a little; carrion on the ground too. */
@@ -230,8 +232,9 @@ export function tryAgain(state: GameState): void {
 export function ideaCost(state: GameState, id: string): number {
   const n = MIND_NODE[id];
   if (!n) return Infinity;
-  const c = NODE_COST[n.kind];
-  return (state.stages.tribal.tribe?.remembered ?? []).includes(id) ? Math.ceil(c / 2) : c;
+  const known = state.stages.tribal.tribe?.ex?.ideas.length ?? 0;
+  const c = NODE_COST[n.kind] + COST_STEP * known;
+  return Math.ceil((state.stages.tribal.tribe?.remembered ?? []).includes(id) ? c / 2 : c);
 }
 
 /** Learns an idea: it must be next to one already known, and paid for in insight. */
@@ -278,6 +281,8 @@ export function dayYield(ex: ExtinctionState): Record<JobId, number> {
   out.scavenge = Math.min(out.scavenge, ex.carrion);
   out.dig = Math.min(out.dig, start * DIG_CAP * (1 + m.digCap));
   out.fish = Math.min(out.fish, start * FISH_CAP * (1 + m.fishCap));
+  // The spear only says so much a day: more listening helps less and less.
+  out.listen = LISTEN * Math.sqrt(out.listen);
   return out;
 }
 

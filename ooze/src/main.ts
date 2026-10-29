@@ -259,7 +259,8 @@ function collectNews(): void {
 
 function catchUp(): void {
   const r = applyOffline(state);
-  if (r.awaySec >= 60) showReport(r);
+  // (Not in the Extinction: its clock doesn't run while away.)
+  if (r.awaySec >= 60 && !state.stages.tribal.tribe?.ex) showReport(r);
   collectNews();
 }
 
@@ -402,7 +403,7 @@ function renderHud(): void {
     const net = netRate(state);
     set('rate', `${net.lt(0) ? '−' : '+'}${format(net.abs())} ${def.currency}\nper second`);
   } else set('rate', `${format(stageRate(state, state.current))} ${def.currency}\nper second`);
-  set('bank-chip', state.timeBank > 0 ? `⧗ ${formatTime(state.timeBank)}${state.warp > 1 ? ` · ${state.warp}×` : ''}` : '');
+  set('bank-chip', state.timeBank > 0 && !ex ? `⧗ ${formatTime(state.timeBank)}${state.warp > 1 ? ` · ${state.warp}×` : ''}` : '');
   set('stage-name', def.name);
   // Small buttons under the banner hop to the previous age (left) or the next one (right).
   const ageNav = $('age-nav');

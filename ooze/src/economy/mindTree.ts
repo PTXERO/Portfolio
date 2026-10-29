@@ -53,7 +53,9 @@ export interface MindNode {
   links: string[];
 }
 
-export const NODE_COST: Record<NodeKind, number> = { start: 0, minor: 3, notable: 8, keystone: 12 };
+export const NODE_COST: Record<NodeKind, number> = { start: 0, minor: 4, notable: 10, keystone: 16 };
+/** Each idea known makes the next cost this much more (the further in, the harder). */
+export const COST_STEP = 1.5;
 
 export const BRANCHES: { id: BranchId; name: string; angle: number }[] = [
   { id: 'fire', name: 'Fire', angle: -90 },
