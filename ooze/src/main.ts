@@ -458,9 +458,11 @@ function renderHud(): void {
     ageNav.innerHTML = `${prev ? btn(prev, 'prev') : '<span></span>'}${next ? btn(next, 'next') : '<span></span>'}`;
   }
   const iconEl = $('currency-icon');
-  if (iconEl.dataset.stage !== state.current) {
-    iconEl.dataset.stage = state.current;
-    iconEl.innerHTML = icon(CURRENCY_ICON[state.current], 4);
+  // The Extinction counts people, so its number gets the people icon, not food's.
+  const iconKey = state.current + (ex ? ':people' : '');
+  if (iconEl.dataset.stage !== iconKey) {
+    iconEl.dataset.stage = iconKey;
+    iconEl.innerHTML = icon(ex ? 'family' : CURRENCY_ICON[state.current], 4);
   }
 }
 
