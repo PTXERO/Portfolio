@@ -221,6 +221,8 @@ html, body {
   place-items: center;
   background: rgba(16, 20, 31, 0.6);
   padding: 24px;
+  /* Above the tab sheet, which slides up over the scene. */
+  z-index: 20;
 }
 #modal .px-box { padding: 16px; max-width: 340px; width: 100%; }
 #modal h3 { margin: 0 0 10px; font-size: 18px; color: var(--gold); }
@@ -472,3 +474,8 @@ textarea {
 .role-row { display: flex; flex-direction: column; }
 .role-row .name { font-size: 14px; }
 .role-row .sub { font-size: 12px; color: var(--dim); }
+
+/* Lines that tick (distances, rates, clocks) stay on one line, so a changing number never
+   re-wraps text and moves a button under a finger. */
+.trip .info, .place .info, .herd .info { min-width: 0; }
+.trip [data-t], .place [data-t], .herd [data-t] { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

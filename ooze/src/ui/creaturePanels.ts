@@ -17,6 +17,7 @@ import {
   partDef,
   partEnergy,
   curiosity,
+  EVENT_WAIT,
   islandFor,
   placeSeen,
   placeShort,
@@ -150,7 +151,7 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
   const ev = s.walk?.event ? EVENTS.find((e) => e.id === s.walk!.event!.id)! : null;
   const stats = statsOf(state);
   const choice = ev
-    ? `<div class="event"><div class="flavor">${esc(ev.text)}</div><div class="choices">${ev.options
+    ? `<div class="event"><div class="flavor">${esc(ev.text)}</div><div class="making-bar on" data-bar="event"><i></i></div><div class="choices">${ev.options
         .map(
           (o, i) =>
             `<button class="px-btn choice${!o.stat || stats[o.stat] >= (o.need ?? 0) ? ' gold' : ''}" data-choice="${i}"><b>${esc(o.label)}</b>${o.stat ? `<span>${cap(o.stat)} ${o.need} (yours ${stats[o.stat]})</span>` : '<span>Safe</span>'}</button>`,
@@ -159,7 +160,7 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
     : '';
   const walk = `<div class="card px-box trip"><div class="info"><div class="name" data-t="walk-title"></div><div class="sub" data-t="walk-sub"></div>${choice}</div>
     <button class="px-btn small" data-act="walkhome" data-t="home-btn">Home</button></div>
-    <p class="note">Tap anywhere on the map to send your creature there. It clears the fog as it walks: Senses lets it see further, Speed gets it there sooner. <span data-t="seen"></span></p>
+    <p class="note">Tap anywhere on the map to send your creature there. It clears the fog as it walks: Senses lets it see further, Speed gets it there sooner.</p>
     ${visibleUpgrades(state, CREATURE)
       .filter((u) => u.branch === 'Wandering')
       .map(upgradeCard)
@@ -201,7 +202,7 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
           .parts.map((p, i) => `<li data-check="${fin.id}-${i}">${esc(p.label)}</li>`)
           .join('')}<li data-check="${fin.id}-cost" data-t="cost-${fin.id}"></li></ul>
         <button class="px-btn gold pulse finale" data-act="finale" hidden>${esc(fin.name)}</button></div></div>`;
-  return `<div class="panel-head"><h2>Roaming</h2></div>${walk}
+  return `<div class="panel-head"><h2>Roaming</h2><span class="label dim" data-t="seen"></span></div>${walk}
     <div class="panel-head"><h2>${def.bookName}</h2><span class="label dim">${s.discovered.filter((id) => id !== fin.id).length} / ${def.places!.length}</span></div>${places}${finale}`;
 }
 
@@ -253,7 +254,7 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
     const loss = winterLoss(state);
     const tip =
       season.name === 'Winter'
-        ? `food is scarce${loss ? `, ${(loss * 100 * 60).toFixed(1)}% of the herd lost a minute` : ''}`
+        ? `lean${loss ? `, ${(loss * 100 * 60).toFixed(1)}% lost a minute` : ''}`
         : season.name === 'Spring'
           ? 'twice the births'
           : season.name === 'Summer'
@@ -310,7 +311,10 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
     const atHome = Math.hypot(s.pos.x - is.home.x, s.pos.y - is.home.y) < 3;
     if (s.walk?.event) {
       setText(root, 'walk-title', 'Something on the road!');
-      setText(root, 'walk-sub', `Choose, or instinct plays safe in ${Math.ceil(s.walk.event.left)}s.`);
+      // A draining bar for the time left, not a ticking number: changing text can re-wrap
+      // and shift the buttons just as a finger lands on them.
+      setText(root, 'walk-sub', 'Choose, or instinct plays it safe when the bar runs out.');
+      bar(root, 'event', s.walk.event.left / EVENT_WAIT);
     } else if (s.walk) {
       const d = Math.hypot(s.walk.tx - s.pos.x, s.walk.ty - s.pos.y);
       setText(root, 'walk-title', `Walking · ${Math.ceil(d)} steps to go`);
@@ -321,7 +325,7 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
     }
     const home = root.querySelector<HTMLButtonElement>('[data-act="walkhome"]');
     if (home) home.hidden = atHome || !!s.walk?.event;
-    setText(root, 'seen', `${Math.floor(seenShare(is, s.seen) * 100)}% of the island seen.`);
+    setText(root, 'seen', `${Math.floor(seenShare(is, s.seen) * 100)}% seen`);
     for (const p of def.places!) {
       for (const [k, need] of Object.entries(p.needs)) {
         const li = root.querySelector<HTMLElement>(`[data-need="${p.id}-${k}"]`);
