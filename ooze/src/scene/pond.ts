@@ -546,6 +546,11 @@ export class Pond {
         for (let i = 0; i < p.hits; i++) b.fillRect(Math.round(p.x - 2 + i * 2), Math.round(p.y - 10), 1, 1);
       }
     }
+  }
+
+  /** Your own cell, drawn last so it sits on top of everything, darkness and glows included. */
+  drawHero(f: Frame): void {
+    const { b, t } = f;
     const h = this.hero;
     if (h && this.look) {
       const rx = HERO_RX[Math.min(3, this.look.size)];

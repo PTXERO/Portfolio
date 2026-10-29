@@ -8,7 +8,7 @@ import { habitatOf } from '../economy/rates';
 import type { GameState } from '../economy/types';
 import { Effects, ease, floorY, glints, hash, ring, strata, visibleCount, water, type Frame } from './paint';
 import { drawBlob, type BlobStyle, type Core } from './blob';
-import { DIET_COLORS, drawCellLook, lookOf, type Look } from './cellLook';
+import { DIET_COLORS, drawCellLook, lookOf, lureTip, type Look } from './cellLook';
 import { Pond, SHAFT_SLANT } from './pond';
 import { SPLIT_AT, Swarm } from './swarm';
 
@@ -523,9 +523,15 @@ export class CellScene {
       b.drawImage(this.dark, 0, 0);
       // Lures on the ambushers, the glow swarm's lights, rare microbes and predators' eyes.
       b.fillStyle = '#fff6a0';
-      for (const c of this.swarm.cells) b.fillRect(Math.round(c.x + (c.vx < 0 ? -6 : 6)), Math.round(c.y) - 3, 1, 1);
+      for (const c of this.swarm.cells) {
+        if (c.split >= 0 || (c.fade > 0 && Math.floor(t * 14) % 2)) continue;
+        const [lx, ly] = lureTip(c.x, c.y, 4, c.vx < 0);
+        b.fillRect(lx, ly, 1, 1);
+      }
       this.pond.drawGlows(f);
     }
+
+    this.pond.drawHero(f);
 
     if (this.wipe > 0) {
       this.wipe = Math.max(0, this.wipe - dt);

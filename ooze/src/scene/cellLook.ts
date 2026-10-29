@@ -173,7 +173,8 @@ function bake(look: Look, rx: number, frame: number, squash: boolean, inner: boo
   if (look.species === 'depths' || (settle?.habitat === 'depths' && settle.step >= 3)) {
     px(cx + rx, cy - ry, edge);
     px(cx + rx + 1, cy - ry - 1, edge);
-    px(cx + rx + 2, cy - ry - 1 + frame, '#fff6a0');
+    // The light itself holds still (a steady glow), at the spot lureTip() reports.
+    px(cx + rx + 2, cy - ry - 1, '#fff6a0');
   }
   // Shallows cells carry a speck of green from all that sunlight.
   if (look.species === 'shallows' || (settle?.habitat === 'shallows' && settle.step >= 2)) px(cx - 2, cy + 1, PAL.l);
@@ -196,6 +197,12 @@ function bake(look: Look, rx: number, frame: number, squash: boolean, inner: boo
 
 function key(look: Look, rx: number, frame: number, squash: boolean, inner: boolean): string {
   return [look.species ?? '', look.diet, look.flagella, look.cilia, look.spikes, look.toxin, look.thick, look.eyespot, inner ? look.organelles.join('.') : '', inner && look.settled ? `${look.settled.habitat}${look.settled.step}` : '', rx, frame, squash].join('|');
+}
+
+/** Where a Depths cell's lure light sits when drawn at (x, y) with radius rx, so glows can line up. */
+export function lureTip(x: number, y: number, rx: number, left: boolean): [number, number] {
+  const ry = Math.max(2, Math.round(rx * SPECIES.depths.squash));
+  return [Math.round(x) + (left ? -(rx + 2) : rx + 2), Math.round(y) - ry - 1];
 }
 
 const flipped = new Map<string, HTMLCanvasElement>();
