@@ -457,12 +457,25 @@ export class TribeScene extends RangeScene {
         sprites.push({
           y: s.y,
           draw: () => {
-            // A charred tree: a black trunk and a few bare branches.
-            b.fillStyle = '#1e1816';
-            b.fillRect(X, Y - 7 * z, z, 7 * z);
-            b.fillRect(X - 2 * z, Y - 6 * z, 2 * z, z);
-            b.fillRect(X + z, Y - 5 * z, 2 * z, z);
-            b.fillRect(X - z, Y - 8 * z, z, z);
+            // A charred tree, standing out against the ash: a pale scorch-ring at its foot, a
+            // black trunk with the sun-side still ash-grey, bare forked branches, and a coal
+            // or two glowing at the broken tips.
+            const k = Math.max(1, Math.round(this.zoom / 2));
+            b.fillStyle = 'rgba(200, 190, 175, 0.35)';
+            b.fillRect(X - 3 * k, Y - k, 7 * k, k);
+            b.fillStyle = '#120c0a';
+            b.fillRect(X - k, Y - 10 * k, 2 * k, 10 * k);
+            b.fillRect(X - 4 * k, Y - 8 * k, 3 * k, k);
+            b.fillRect(X - 4 * k, Y - 10 * k, k, 2 * k);
+            b.fillRect(X + k, Y - 7 * k, 3 * k, k);
+            b.fillRect(X + 3 * k, Y - 9 * k, k, 2 * k);
+            b.fillRect(X - k, Y - 12 * k, k, 2 * k);
+            b.fillStyle = '#7a6e66';
+            b.fillRect(X, Y - 10 * k, k, 9 * k);
+            const glow = Math.sin(t * 2 + s.x) > 0.3;
+            b.fillStyle = glow ? 'rgba(255, 120, 50, 0.996)' : '#8a3a1e';
+            b.fillRect(X - 4 * k, Y - 10 * k, k, k);
+            b.fillRect(X + 3 * k, Y - 9 * k, k, k);
           },
         });
       } else if (s.job === 'dig' && ex.ideas.includes('stick')) {
