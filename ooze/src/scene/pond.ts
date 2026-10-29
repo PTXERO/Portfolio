@@ -282,6 +282,11 @@ export class Pond {
       q.x += (q.vx + (q.kind === 'bacteria' ? Math.sin(f.t * 5 + q.phase) * 2 : 0)) * dt;
       q.y += q.vy * dt - (inPlume(q.x) ? PLUME_LIFT * 0.6 * dt : 0);
       if (q.x < 4 || q.x > W - 4) q.vx = (q.x < 4 ? 1 : -1) * Math.abs(q.vx || 2);
+      // Food carried up a Vents plume to the top is swept away (a fresh piece drifts in later).
+      if (q.y < top + 6 && inPlume(q.x)) {
+        q.age = -1;
+        continue;
+      }
       if (q.y < top + 4 || q.y > floor - 4) q.vy = (q.y < top + 4 ? 1 : -1) * Math.abs(q.vy || 2);
       // When the floor rises (the sheet opening), food is lifted with it, never buried.
       q.y = Math.min(q.y, floor - 3);
