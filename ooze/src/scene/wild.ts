@@ -108,8 +108,8 @@ export class Wild {
     // Forest edge: forest with open ground beside it.
     const edge = (x: number, y: number) => biomeAt(is, x, y) === Biome.Forest && [grass(x + 1.5, y), grass(x - 1.5, y), grass(x, y + 1.5), grass(x, y - 1.5)].some(Boolean);
     this.bushes = [
-      ...spots(80, 11, grass).map((p) => ({ ...p, ripe: 0.5, tree: false })),
-      ...spots(50, 23, edge).map((p) => ({ ...p, ripe: 0.3, tree: true })),
+      ...spots(45, 11, grass).map((p) => ({ ...p, ripe: 0.5, tree: false })),
+      ...spots(30, 23, edge).map((p) => ({ ...p, ripe: 0.3, tree: true })),
     ];
     this.crabs = spots(26, 37, sand).map((p, i) => ({ ...p, ph: i * 1.7, hide: 0 }));
     const far = spots(1, 53, (x, y) => grass(x, y) || biomeAt(is, x, y) === Biome.High, [30, 70])[0];
@@ -157,7 +157,8 @@ export class Wild {
     for (const b of this.bushes) {
       // Winter strips them (the fruit drops and is gone till spring); otherwise they ripen.
       b.ripe = o.season === 3 ? Math.max(0, b.ripe - 0.03 * dt) : Math.min(1, b.ripe + (b.tree ? TREE_GROW : BUSH_GROW)[o.season] * dt);
-      if (z < 1.6) continue;
+      // Only close up: from further out a bush is a speck that just clutters the land.
+      if (z < 3) continue;
       const X = Math.round(v.sx(b.x));
       const Y = Math.round(v.py(b.x, b.y));
       if (!on(X, Y)) continue;
