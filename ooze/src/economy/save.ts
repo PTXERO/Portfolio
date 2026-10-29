@@ -44,6 +44,13 @@ export function deserialize(text: string): GameState {
           acclim: { ...(s.acclim ?? {}) },
           captured: { ...(s.captured ?? {}) },
           time: s.time ?? 0,
+          parts: s.parts ?? fresh.parts,
+          equipped: s.equipped ?? fresh.equipped,
+          trip: s.trip ?? null,
+          trips: { ...(s.trips ?? {}) },
+          mates: s.mates ?? [],
+          egg: s.egg ?? null,
+          generation: s.generation ?? 0,
         }
       : base.stages[id];
     // Saves from before reactions existed: anything owned counts as discovered.
@@ -64,7 +71,7 @@ export function deserialize(text: string): GameState {
       if (st.upgrades.includes(u.id)) st.upgrades = st.upgrades.filter((x) => !(u.excludes ?? []).includes(x));
     }
   }
-  const state: GameState = { ...base, ...saved, stages, started, swirl: 0, news: [], made: [] };
+  const state: GameState = { ...base, ...saved, stages, started, swirl: 0, news: [], made: [], reports: saved.reports ?? [] };
   settleHabitat(state);
   return state;
 }

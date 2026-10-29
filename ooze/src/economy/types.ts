@@ -1,6 +1,6 @@
 import type { Decimal } from './num';
 
-export type StageId = 'soup' | 'cell';
+export type StageId = 'soup' | 'cell' | 'creature';
 
 /** The Soup's environment controls. Each runs from 0 to 3. */
 export type DialId = 'heat' | 'light' | 'charge';
@@ -60,7 +60,71 @@ export type Effect =
   /** Your cell drives off predators on its own; each level rams harder. */
   | { kind: 'guard'; level: number }
   /** One habitat's life produces more. */
-  | { kind: 'habitatMult'; habitat: string; mult: number };
+  | { kind: 'habitatMult'; habitat: string; mult: number }
+  // ---- Creature stage ----
+  /** Raises one of the creature's stats. */
+  | { kind: 'stat'; stat: Stat; amount: number }
+  /** Expeditions bring back more (and take less time with Speed). */
+  | { kind: 'tripMult'; mult: number };
+
+/** The Creature stage's five stats. */
+export type Stat = 'speed' | 'strength' | 'senses' | 'toughness' | 'charm';
+export const STATS: Stat[] = ['speed', 'strength', 'senses', 'toughness', 'charm'];
+
+/** Where a body part goes. One part per slot is worn at a time. */
+export type Slot = 'legs' | 'mouth' | 'eyes' | 'back' | 'tail';
+export const SLOTS: Slot[] = ['legs', 'mouth', 'eyes', 'back', 'tail'];
+
+export interface PartDef {
+  id: string;
+  slot: Slot;
+  name: string;
+  flavor: string;
+  stats: Partial<Record<Stat, number>>;
+  /** Price in the stage's currency; parts without one are only found on expeditions. */
+  cost?: number;
+}
+
+/** A place the creature can explore. Each is also a page in the stage's book. */
+export interface PlaceDef {
+  id: string;
+  name: string;
+  flavor: string;
+  /** Minutes away, before Speed shortens it. */
+  minutes: number;
+  /** Stats it takes to explore safely; below these, trips can fail. */
+  needs: Partial<Record<Stat, number>>;
+  /** Parts that can be found here. */
+  parts: string[];
+  /** Chance per successful trip of meeting a mate. */
+  mateChance: number;
+  /** What the place's book page gives once it has been explored. */
+  bonus?: Effect;
+  unlocks?: string;
+  /** Places that must be explored first. */
+  after?: string[];
+}
+
+/** A mate met on an expedition. */
+export interface Mate {
+  id: number;
+  name: string;
+  parts: Partial<Record<Slot, string>>;
+}
+
+/** What came back from an expedition or a hatching, for the interface to show. */
+export interface Report {
+  kind: 'trip' | 'hatch';
+  place?: string;
+  success: boolean;
+  /** Currency earned, as a string (Decimal). */
+  earned: string;
+  parts: string[];
+  mate?: string;
+  /** Book page found on this trip. */
+  found?: string;
+  generation?: number;
+}
 
 export interface UpgradeDef {
   id: string;
@@ -139,6 +203,8 @@ export interface ReactionDef {
     settled?: number;
     /** How many other entries must already be found. */
     found?: number;
+    /** Generations the line must have bred (Creature stage). */
+    generation?: number;
   };
   /** Found by the player steering into it (engulfing), not automatically. */
   manual?: boolean;
@@ -175,6 +241,9 @@ export interface StageDef {
   habitats?: HabitatDef[];
   /** Goals in earlier stages that boost this one. */
   milestones?: MilestoneDef[];
+  /** Creature stage: body parts and places to explore. */
+  parts?: PartDef[];
+  places?: PlaceDef[];
   /** Text for the stage's finish screen. */
   ending?: { title: string; line: string };
   next?: StageId;
@@ -205,6 +274,19 @@ export interface StageState {
   captured: Record<string, number>;
   /** Game seconds spent with this as the newest stage, for its finish screen. */
   time: number;
+  // ---- Creature stage ----
+  /** Body parts owned, and the one worn in each slot. */
+  parts: string[];
+  equipped: Partial<Record<Slot, string>>;
+  /** The expedition under way, if any. */
+  trip: { place: string; left: number; total: number } | null;
+  /** Successful trips to each place. */
+  trips: Record<string, number>;
+  mates: Mate[];
+  /** The egg incubating, if any. */
+  egg: { mate: Mate; left: number; total: number } | null;
+  /** How many generations the line has bred. */
+  generation: number;
 }
 
 export type BuyAmount = 1 | 10 | 'max';
@@ -233,4 +315,6 @@ export interface GameState {
   news: string[];
   /** Reaction ids that just made a free product, for the scene to show. */
   made: string[];
+  /** Expeditions and hatchings finished since the interface last looked. */
+  reports: Report[];
 }

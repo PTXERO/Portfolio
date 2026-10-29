@@ -41,6 +41,7 @@ export function scaleEffect(e: Effect, n: number): Effect {
     case 'forageMult':
     case 'spawnMult':
     case 'habitatMult':
+    case 'tripMult':
       return { ...e, mult: Math.pow(e.mult, n) };
     case 'defense':
       return { ...e, amount: e.amount * n };
@@ -48,6 +49,8 @@ export function scaleEffect(e: Effect, n: number): Effect {
       return { ...e, hours: e.hours * n };
     case 'guard':
       return { ...e, level: e.level * n };
+    case 'stat':
+      return { ...e, amount: e.amount * n };
     case 'tapFromRate':
       return { ...e, seconds: e.seconds * n };
     default:
@@ -71,6 +74,8 @@ export function stageEffects(state: GameState, stage: StageId): Effect[] {
   }
   for (const r of def.reactions ?? []) if (r.bonus && st.discovered.includes(r.id)) out.push(r.bonus);
   for (const m of def.milestones ?? []) if (milestoneMet(state, m)) out.push(m.bonus);
+  // Each generation bred makes the whole line stronger (Creature stage).
+  if (st.generation > 0) out.push({ kind: 'stageMult', mult: Math.pow(1.25, st.generation) });
   return out;
 }
 
@@ -117,10 +122,12 @@ export function feedMult(state: GameState, stage: StageId): number {
 
 // ---- Cell stage: diet, defense and the habitat ----
 
-/** The lineage's diet, or null before one is chosen (eats a bit of everything). */
+/** The lineage's diet, or null before one is chosen. A stage without diets keeps the one before. */
 export function dietOf(state: GameState, stage: StageId): Diet | null {
   let diet: Diet | null = null;
   for (const e of stageEffects(state, stage)) if (e.kind === 'diet') diet = e.diet;
+  const i = STAGE_ORDER.indexOf(stage);
+  if (!diet && !STAGES[stage].upgrades.some((u) => u.effect.kind === 'diet') && i > 0) return dietOf(state, STAGE_ORDER[i - 1]);
   return diet;
 }
 

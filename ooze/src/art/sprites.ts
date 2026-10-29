@@ -52,6 +52,19 @@ export const SPRITES = {
   reef: ['...o..o...', '..oOooOo..', '..rOrrOr..', '.orRrrRro.', '.rrRrrRrr.', 'orRrrrrRro', 'rrRrrrrRrr', 'rRrrrrrrRr', 'rrrrrrrrrr', 'rrrrrrrrrr'],
   chimney: ['..r.......', '.rr...r...', '..r..rr...', '.RRR..r...', '.RoR.RRR..', '.RRR.RoR..', 'RRRRRRRRR.', 'RrRRrRRrR.', 'rrrrrrrrrr', 'rrrrrrrrrr'],
 
+  // Creature life
+  biomass: ['....ll....', '...lLLl...', '..lLwLLl..', '..lLLLLl..', '...lLLl...', '....Ll....', '..ooooOO..', '.oOwoooOO.', '.oOoooOOO.', '..OOOOOO..'],
+  hatchling: ['..........', '....www...', '...wwwww..', '...wwswww.', '...wwwwww.', '....wwww..', '...sggg...', '..gGgGkg..', '.gGGGGGg..', '..g...g...'],
+  burrow: ['..........', '..........', 'llll..llll', 'LsssssssL.', 'sssSSSsss.', 'ssSkkkSss.', 'sSkkkkkSs.', 'sSkkgkkSs.', 'ssSSSSSss.', 'ssssssssss'],
+  herd: ['..........', '.gg....gg.', 'gGGgg.gGGg', 'gGkGGggkGG', '.gGGGGGGG.', '.g.g..g.g.', '.g.g..g.g.', 'llllllllll', 'LLLLLLLLLL', '..........'],
+  nest: ['..........', '..........', '..ww.ww...', '.wwwwwwww.', '.wwswwsww.', 'SsSsSsSsS.', 'sSsSsSsSs.', '.sSsSsSs..', '..........', '..........'],
+  waterhole: ['..........', '..g.......', '.gGg......', '..g.......', '.llllllll.', 'lbbbbbbbbl', 'bBbbwbbBbl', '.bBBBBBb..', '..........', '..........'],
+  den: ['..........', '...RRRR...', '..RrrrrR..', '.RrrrrrrR.', 'RrrkkkkrrR', 'RrkkkkkkrR', 'RrkkggkkrR', 'rrkkkkkkrr', 'rrrrrrrrrr', '..........'],
+  territory: ['....o.....', '....oo....', '....ooo...', '....o.....', '....o.....', '...rRr....', '..rRRRr...', 'llllllllll', 'LLLlLLLlLL', '..........'],
+  body: ['..gggg..', '.gGGGGg.', 'gGkGGGGg', 'gGGGGGGg', '.gGGGGg.', '.g....g.', '.g....g.', 'gg....gg'],
+  explore: ['.ssssss.', 'sSsbbsSs', 'sbbbsssS', 'ssbsso.s', 'sSssooss', 'ssssosSs', 'sbSssssS', '.ssssss.'],
+  family: ['..wwww..', '.wwwwww.', 'wwswwwww', 'wwwwwsww', 'wwwwwwww', 'wswwwwww', '.wwwwww.', '..wwww..'],
+
   // Interface
   roots: ['...ll...', '..lLLl..', '...LL...', 'sssLLsss', 'S.SLLS.S', '..S..S..', '.S.SS.S.', 'S..S..S.'],
   spark: ['...y....', '...y....', '..yyy...', 'yyywyyy.', '..yyy...', '...y....', '...y....', '........'],

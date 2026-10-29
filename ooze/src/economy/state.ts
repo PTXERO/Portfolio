@@ -1,15 +1,23 @@
 import { STAGES, STAGE_ORDER } from '../content/stages';
 import { ZERO, D } from './num';
-import type { GameState, StageId, StageState } from './types';
+import type { GameState, StageDef, StageId, StageState } from './types';
 
 export const BASE_OFFLINE_CAP_SEC = 8 * 3600;
+
+/** The Creature stage starts with the free parts (no price) worn, one per slot. */
+function creatureStart(def: StageDef): Pick<StageState, 'parts' | 'equipped' | 'trip' | 'trips' | 'mates' | 'egg' | 'generation'> {
+  const starters = (def.parts ?? []).filter((p) => p.cost === 0);
+  const equipped: StageState['equipped'] = {};
+  for (const p of starters) equipped[p.slot] ??= p.id;
+  return { parts: starters.map((p) => p.id), equipped, trip: null, trips: {}, mates: [], egg: null, generation: 0 };
+}
 
 export function createStageState(id: StageId, opened: boolean): StageState {
   const def = STAGES[id];
   const generators: Record<string, number> = {};
   for (const g of def.generators) generators[g.id] = 0;
   if (opened) generators[def.generators[0].id] = def.startingGenerators;
-  return { currency: ZERO, totalEarned: ZERO, generators, upgrades: [], levels: {}, complete: false, dials: { heat: 0, light: 0, charge: 0 }, discovered: [], free: {}, catalysis: {}, habitat: def.habitats?.[0].id ?? '', eaten: 0, acclim: {}, captured: {}, time: 0 };
+  return { currency: ZERO, totalEarned: ZERO, generators, upgrades: [], levels: {}, complete: false, dials: { heat: 0, light: 0, charge: 0 }, discovered: [], free: {}, catalysis: {}, habitat: def.habitats?.[0].id ?? '', eaten: 0, acclim: {}, captured: {}, time: 0, ...creatureStart(def) };
 }
 
 export function createState(now = Date.now()): GameState {
@@ -31,6 +39,7 @@ export function createState(now = Date.now()): GameState {
     swirl: 0,
     news: [],
     made: [],
+    reports: [],
   };
 }
 
@@ -55,7 +64,14 @@ export function cloneState(s: GameState): GameState {
       acclim: { ...st.acclim },
       captured: { ...st.captured },
       time: st.time,
+      parts: [...st.parts],
+      equipped: { ...st.equipped },
+      trip: st.trip && { ...st.trip },
+      trips: { ...st.trips },
+      mates: st.mates.map((m) => ({ ...m, parts: { ...m.parts } })),
+      egg: st.egg && { ...st.egg, mate: { ...st.egg.mate, parts: { ...st.egg.mate.parts } } },
+      generation: st.generation,
     };
   }
-  return { ...s, unlocked: [...s.unlocked], stages, news: [...s.news], made: [...s.made] };
+  return { ...s, unlocked: [...s.unlocked], stages, news: [...s.news], made: [...s.made], reports: [...s.reports] };
 }

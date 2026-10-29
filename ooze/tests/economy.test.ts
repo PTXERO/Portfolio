@@ -25,6 +25,7 @@ import { defenseOf, dialMax, guardLevel, dietOf, forageMult, habitatMult, heroSp
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
+import { breed, buyPart, equipPart, startTrip, statsOf, tripChance } from '../src/economy/creature';
 
 /** A game where the player has already made their first move. */
 function fresh() {
@@ -546,7 +547,7 @@ describe('cell stage', () => {
     expect(s.stages.cell.eaten).toBe(1);
   });
 
-  it('multicellularity ends the stage, with nothing to evolve into yet', () => {
+  it('multicellularity ends the stage and opens the next', () => {
     const s = cell();
     s.stages.cell.discovered = STAGES.cell.reactions!.filter((r) => !r.final).map((r) => r.id);
     Object.assign(s.stages.cell.generators, { colony: 40, pack: 10 });
@@ -556,6 +557,89 @@ describe('cell stage', () => {
     expect(triggerFinale(s)).toBe(false); // the Vents still need a reef
     s.stages.cell.generators.reef = 10;
     expect(triggerFinale(s)).toBe(true);
-    expect(canEvolve(s)).toBe(false);
+    expect(canEvolve(s)).toBe(true);
+  });
+});
+
+describe('creature stage', () => {
+  function creatureGame() {
+    const s = fresh();
+    finishSoup(s);
+    s.stages.cell.discovered = STAGES.cell.reactions!.map((r) => r.id);
+    expect(evolve(s)).toBe(true);
+    expect(s.current).toBe('creature');
+    return s;
+  }
+
+  it('starts with a simple body that its parts add up to', () => {
+    const s = creatureGame();
+    expect(s.stages.creature.equipped.legs).toBe('nubs');
+    expect(statsOf(s).speed).toBe(2);
+    s.stages.creature.currency = D(1e6);
+    expect(buyPart(s, 'stubby')).toBe(true);
+    expect(s.stages.creature.equipped.legs).toBe('stubby');
+    expect(statsOf(s).speed).toBe(4);
+    expect(equipPart(s, 'nubs')).toBe(true);
+    expect(statsOf(s).speed).toBe(2);
+  });
+
+  it('expeditions take time, pay out and bring back a page, a part and a first mate', () => {
+    const s = creatureGame();
+    s.stages.creature.generators.hatchling = 10;
+    expect(startTrip(s, 'shore')).toBe(true);
+    expect(startTrip(s, 'shore')).toBe(false); // one at a time
+    expect(startTrip(s, 'tidePools')).toBe(false); // not open yet
+    const before = s.stages.creature.currency;
+    tick(s, 30);
+    expect(s.stages.creature.trip).not.toBeNull();
+    tick(s, 60);
+    expect(s.stages.creature.trip).toBeNull();
+    expect(s.stages.creature.discovered).toContain('shore');
+    expect(s.stages.creature.parts).toContain('shell');
+    expect(s.stages.creature.mates.length).toBe(1);
+    expect(s.stages.creature.currency.gt(before)).toBe(true);
+    expect(s.reports.at(-1)?.kind).toBe('trip');
+  });
+
+  it('a weak creature often fails somewhere hard; a strong one never does', () => {
+    const s = creatureGame();
+    const cliffs = STAGES.creature.places!.find((p) => p.id === 'cliffs')!;
+    expect(tripChance(s, cliffs)).toBeLessThan(0.1);
+    s.stages.creature.upgrades.push('trainStrength', 'trainToughness');
+    s.stages.creature.levels.trainStrength = 20;
+    s.stages.creature.levels.trainToughness = 20;
+    expect(tripChance(s, cliffs)).toBe(1);
+  });
+
+  it('breeding lays an egg that hatches into a stronger generation with the mate\'s parts', () => {
+    const s = creatureGame();
+    s.stages.creature.mates.push({ id: 1, name: 'Fern', parts: { legs: 'runner' } });
+    const rate = () => stageRate(s, 'creature').toNumber();
+    s.stages.creature.generators.hatchling = 10;
+    const before = rate();
+    expect(breed(s, 1)).toBe(true);
+    expect(s.stages.creature.mates.length).toBe(0);
+    tick(s, 200);
+    expect(s.stages.creature.generation).toBe(1);
+    expect(s.stages.creature.parts).toContain('runner');
+    expect(rate()).toBeGreaterThan(before * 1.2);
+    expect(statsOf(s).charm).toBe(2);
+  });
+
+  it('inherits the Cell diet for what it can eat', () => {
+    const s = creatureGame();
+    expect(dietOf(s, 'creature')).toBe(null);
+    s.stages.cell.upgrades.push('hunter');
+    expect(dietOf(s, 'creature')).toBe('hunter');
+  });
+
+  it('a creature save survives a round trip, mid-expedition and mid-egg', () => {
+    const s = creatureGame();
+    startTrip(s, 'shore');
+    s.stages.creature.mates.push({ id: 2, name: 'Silt', parts: {} });
+    breed(s, 2);
+    const back = deserialize(serialize(s));
+    expect(back.stages.creature.trip?.place).toBe('shore');
+    expect(back.stages.creature.egg?.mate.name).toBe('Silt');
   });
 });

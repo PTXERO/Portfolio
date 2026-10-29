@@ -153,6 +153,11 @@ export function checkReaction(state: GameState, stage: StageId, r: ReactionDef):
     gens &&= ok;
     parts.push({ label: `${r.needs.found} ${def.bookName?.toLowerCase() ?? 'discoveries'} found`, ok });
   }
+  if (r.needs.generation) {
+    const ok = st.generation >= r.needs.generation;
+    gens &&= ok;
+    parts.push({ label: `Generation ${r.needs.generation}`, ok });
+  }
   let dials = true;
   if (r.needs.habitat) {
     const ok = st.habitat === r.needs.habitat;

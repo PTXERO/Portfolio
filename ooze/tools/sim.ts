@@ -49,6 +49,7 @@ export const STRATEGIES: Strategy[] = [
 const TARGETS: Record<StageId, [number, number]> = {
   soup: [50 * 60, 70 * 60],
   cell: [120 * 60, 180 * 60],
+  creature: [240 * 60, 360 * 60],
 };
 
 const LIMIT_SEC = 48 * 3600;

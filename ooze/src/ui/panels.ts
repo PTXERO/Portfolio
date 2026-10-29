@@ -71,7 +71,7 @@ export const DIAL_INFO: Record<DialId, { name: string; sprite: SpriteName }> = {
   charge: { name: 'Charge', sprite: 'bolt' },
 };
 
-export const CURRENCY_ICON: Record<StageId, SpriteName> = { soup: 'nutrient', cell: 'dna' };
+export const CURRENCY_ICON: Record<StageId, SpriteName> = { soup: 'nutrient', cell: 'dna', creature: 'biomass' };
 export const WARPS = [1, 2, 5, 10];
 const AMOUNTS: BuyAmount[] = [1, 10, 'max'];
 
@@ -130,6 +130,10 @@ export function describeEffect(stage: StageId, e: Effect): string {
       return `Rare microbes ×${e.mult} as often`;
     case 'offlineHours':
       return `Time away counts ${e.hours}h longer`;
+    case 'stat':
+      return `${e.stat[0].toUpperCase()}${e.stat.slice(1)} +${e.amount}`;
+    case 'tripMult':
+      return `Expeditions bring back ×${e.mult}`;
     case 'guard':
       return 'Your cell rams predators on its own, harder each level';
     case 'habitatMult':

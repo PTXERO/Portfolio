@@ -1,3 +1,4 @@
+import { creature } from './creature';
 import type { StageDef, StageId } from '../economy/types';
 
 // Names and flavor lines are placeholders until the real script is written.
@@ -142,6 +143,7 @@ const cell: StageDef = {
   startingGenerators: 1,
   bookName: 'Organelles',
   ending: { title: 'Together.', line: 'One cell held on to another, and neither let go.' },
+  next: 'creature',
   generators: [
     // Shallows: grazers' country
     { id: 'fission', name: 'Dividing Cell', flavor: 'One becomes two becomes four.', baseCost: 15, growth: 1.15, baseRate: 1, habitat: 'shallows' },
@@ -320,5 +322,5 @@ const cell: StageDef = {
   ],
 };
 
-export const STAGES: Record<StageId, StageDef> = { soup, cell };
-export const STAGE_ORDER: StageId[] = ['soup', 'cell'];
+export const STAGES: Record<StageId, StageDef> = { soup, cell, creature };
+export const STAGE_ORDER: StageId[] = ['soup', 'cell', 'creature'];
