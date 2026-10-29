@@ -56,7 +56,9 @@ export type Effect =
   /** Food and rare microbes turn up more often. */
   | { kind: 'spawnMult'; mult: number }
   /** Adds to how much time away counts. */
-  | { kind: 'offlineHours'; hours: number };
+  | { kind: 'offlineHours'; hours: number }
+  /** One habitat's life produces more. */
+  | { kind: 'habitatMult'; habitat: string; mult: number };
 
 export interface UpgradeDef {
   id: string;

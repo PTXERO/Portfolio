@@ -367,7 +367,14 @@ describe('cell stage', () => {
     const s = cell();
     expect(buyUpgrade(s, 'cell', 'grazer')).toBe(true);
     expect(buyUpgrade(s, 'cell', 'hunter')).toBe(false);
+    expect(buyUpgrade(s, 'cell', 'omnivore')).toBe(false);
     expect(dietOf(s, 'cell')).toBe('grazer');
+    // Each diet grows its own branch.
+    expect(buyUpgrade(s, 'cell', 'lightHarvest')).toBe(true);
+    expect(buyUpgrade(s, 'cell', 'pursuit')).toBe(false);
+    // A save holding two diets (from before) keeps just one.
+    s.stages.cell.upgrades.push('omnivore');
+    expect(deserialize(serialize(s)).stages.cell.upgrades.filter((u) => ['grazer', 'hunter', 'omnivore'].includes(u))).toEqual(['omnivore']);
   });
 
   it('habitats open with mutations, and diet decides how well you do there', () => {

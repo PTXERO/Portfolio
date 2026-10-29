@@ -56,6 +56,13 @@ export function deserialize(text: string): GameState {
   }
   // Saves from before the start flag existed: anyone who had played has started.
   const started = saved.started ?? (saved.playTime > 0 || saved.taps > 0);
+  // Older saves could hold two choices that now exclude each other (two diets): keep the later one.
+  for (const id of STAGE_ORDER) {
+    const st = stages[id];
+    for (const u of [...STAGES[id].upgrades].reverse()) {
+      if (st.upgrades.includes(u.id)) st.upgrades = st.upgrades.filter((x) => !(u.excludes ?? []).includes(x));
+    }
+  }
   const state: GameState = { ...base, ...saved, stages, started, swirl: 0, news: [], made: [] };
   settleHabitat(state);
   return state;

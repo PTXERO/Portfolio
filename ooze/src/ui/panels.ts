@@ -130,6 +130,8 @@ export function describeEffect(stage: StageId, e: Effect): string {
       return `Rare microbes ×${e.mult} as often`;
     case 'offlineHours':
       return `Time away counts ${e.hours}h longer`;
+    case 'habitatMult':
+      return `${STAGES[stage].habitats?.find((h) => h.id === e.habitat)?.name ?? e.habitat} life ×${e.mult}`;
   }
 }
 
@@ -270,7 +272,10 @@ export function layout(state: GameState, tab: Tab): string {
 
   if (tab === 'mutate') {
     const st = state.stages[id];
-    const own = def.upgrades.filter((u) => !u.pay);
+    // A branch hangs off a choice (a diet): until that choice is made, or if another was, it stays hidden.
+    const offPath = (u: UpgradeDef) =>
+      (u.requires?.upgrades ?? []).some((x) => !st.upgrades.includes(x) && def.upgrades.find((y) => y.id === x)?.excludes);
+    const own = def.upgrades.filter((u) => !u.pay && !offPath(u));
     // What's left to evolve comes first, cheapest first, so the next goal is always on top.
     // A choice already made elsewhere (the other diet) drops out of the tree.
     const open = own

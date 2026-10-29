@@ -40,6 +40,7 @@ export function scaleEffect(e: Effect, n: number): Effect {
     case 'heroSpeed':
     case 'forageMult':
     case 'spawnMult':
+    case 'habitatMult':
       return { ...e, mult: Math.pow(e.mult, n) };
     case 'defense':
       return { ...e, amount: e.amount * n };
@@ -117,7 +118,7 @@ export function feedMult(state: GameState, stage: StageId): number {
 /** The lineage's diet, or null before one is chosen (eats a bit of everything). */
 export function dietOf(state: GameState, stage: StageId): Diet | null {
   let diet: Diet | null = null;
-  for (const e of stageEffects(state, stage)) if (e.kind === 'diet' && (diet === null || e.diet === 'omnivore')) diet = e.diet;
+  for (const e of stageEffects(state, stage)) if (e.kind === 'diet') diet = e.diet;
   return diet;
 }
 
@@ -160,7 +161,8 @@ export function genHabitat(stage: StageId, gen: GeneratorDef): HabitatDef | unde
 export function dietFit(diet: Diet | null, food: HabitatDef['food']): number {
   if (diet === 'grazer') return food.algae;
   if (diet === 'hunter') return food.bacteria;
-  if (diet === 'omnivore') return 0.8 * Math.max(food.algae, food.bacteria) + 0.4 * Math.min(food.algae, food.bacteria);
+  // A generalist: never the best anywhere, never starving either.
+  if (diet === 'omnivore') return 0.6 * Math.max(food.algae, food.bacteria) + 0.3 * Math.min(food.algae, food.bacteria);
   return 0.6 * (food.algae + food.bacteria) / 2 + 0.4;
 }
 
@@ -183,7 +185,9 @@ export function acclimOf(state: GameState, stage: StageId, habitat: string): num
 /** Output multiplier from where the lineage lives: food that suits its diet, minus predators. */
 export function habitatMult(state: GameState, stage: StageId, h = habitatOf(state, stage)): number {
   if (!h) return 1;
-  return dietFit(dietOf(state, stage), h.food) * survival(state, stage, h) * (1 + ACCLIM_BONUS * acclimOf(state, stage, h.id));
+  let boost = 1;
+  for (const e of stageEffects(state, stage)) if (e.kind === 'habitatMult' && e.habitat === h.id) boost *= e.mult;
+  return dietFit(dietOf(state, stage), h.food) * survival(state, stage, h) * (1 + ACCLIM_BONUS * acclimOf(state, stage, h.id)) * boost;
 }
 
 /** Extra seconds of time away that count, from effects on the current stage. */
