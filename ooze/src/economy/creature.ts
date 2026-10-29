@@ -535,10 +535,11 @@ function partyTick(state: GameState, dt: number): void {
     earn(state, tripPay(state, def().places!.find((p) => p.id === party.place)!).mul(PARTY_PAY));
     return false;
   });
-  // Send the next party to the nearest found place that's rested and nobody's bound for.
+  // Send the next party to the nearest found place (beyond home's own beach) that's rested
+  // and nobody's bound for.
   while (s.parties.length < slots) {
     const next = def()
-      .places!.filter((p) => s.trips[p.id] > 0 && (s.partyReady[p.id] ?? 0) <= s.year && !s.parties.some((q) => q.place === p.id))
+      .places!.filter((p) => s.trips[p.id] > 0 && partyLeg(state, p.id) * walkSpeed(state) > 12 && (s.partyReady[p.id] ?? 0) <= s.year && !s.parties.some((q) => q.place === p.id))
       .sort((a, b) => partyLeg(state, a.id) - partyLeg(state, b.id))[0];
     if (!next) break;
     s.parties.push({ place: next.id, t: 0 });
