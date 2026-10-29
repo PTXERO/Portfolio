@@ -657,8 +657,9 @@ function frame(now: number): void {
   pondEvents();
 }
 
-// A save made mid-ending (closed during the credits) picks up at the reveal.
-if (state.current === 'soup' && canEvolve(state)) playEnding();
+// A save made mid-ending (closed during the credits) picks up at the reveal. This also
+// carries on a Cell finished before the Creature existed: its ending now leads somewhere.
+if (canEvolve(state)) playEnding();
 catchUp();
 render();
 document.fonts?.ready.then(() => render());
