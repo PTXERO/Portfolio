@@ -405,7 +405,8 @@ export function layout(state: GameState, tab: Tab): string {
     <div class="warp">${[0.9, 1, 1.15, 1.3].map((k, i) => `<button class="px-btn" data-uiscale="${k}">${['Small', 'Normal', 'Large', 'Huge'][i]}</button>`).join('')}</div>
     <textarea id="save-text" placeholder="Export gives you a backup code. To restore, paste one here and tap Import."></textarea>
     <p class="note" data-t="stats"></p>
-    <p class="note">Ooze to Orbit · test build · art and names are placeholders</p>`;
+    <button class="px-btn small" data-act="update">Check for updates</button>
+    <p class="note">Ooze to Orbit · test build <span data-t="build"></span> · art and names are placeholders</p>`;
 }
 
 /** The stage's collection: the Soup's Recipe Book or the Cell's Organelles. */
@@ -574,6 +575,7 @@ export function update(root: HTMLElement, state: GameState, tab: Tab): void {
   } else {
     setText(root, 'bank', formatTime(state.timeBank));
     setText(root, 'bank-cap', `of ${formatTime(timeBankCap(state))}`);
+    setText(root, 'build', document.querySelector<HTMLScriptElement>('script[src*="/assets/index-"]')?.src.match(/index-([^/]+)\.js/)?.[1] ?? 'dev');
     setText(root, 'offline', `Time away counts for up to ${formatTime(state.offlineCapSec)}.`);
     for (const b of root.querySelectorAll<HTMLButtonElement>('[data-warp]')) {
       const w = Number(b.dataset.warp);

@@ -719,6 +719,9 @@ function act(el: HTMLElement): void {
         ui.full = !ui.full;
         saveUi();
         break;
+      case 'update':
+        void checkForUpdate(true);
+        break;
       case 'walkhome':
         walkHome(state);
         break;
@@ -799,22 +802,27 @@ evolveEl.addEventListener('click', (e) => {
 });
 
 /** Reloads onto a newer build when there is one, so a tab left open never runs old rules. */
-async function checkForUpdate(): Promise<void> {
+/** This build's name (from its script file). */
+const BUILD = document.querySelector<HTMLScriptElement>('script[src*="/assets/index-"]')?.src.match(/index-([^/]+)\.js/)?.[1] ?? 'dev';
+
+async function checkForUpdate(manual = false): Promise<void> {
   try {
     const mine = document.querySelector<HTMLScriptElement>('script[src*="/assets/index-"]')?.src.match(/index-[^/]+\.js/)?.[0];
-    const html = await (await fetch('./', { cache: 'no-store' })).text();
+    // Ask for the page by a fresh address too, so no cache along the way can answer.
+    const html = await (await fetch(`./?check=${Date.now()}`, { cache: 'no-store' })).text();
     const live = html.match(/index-[^"/]+\.js/)?.[0];
+    if (manual && live === mine) alert(`You're on the latest build (${BUILD}).`);
     if (mine && live && live !== mine) {
       // A plain reload can come back from the browser's cache (iOS Safari does), so ask
       // for the page by a fresh address; once per build, so a stale server can't loop us.
       try {
-        if (sessionStorage.getItem('oozeTried') === live) return;
+        if (!manual && sessionStorage.getItem('oozeTried') === live) return;
         sessionStorage.setItem('oozeTried', live);
       } catch {
         /* private mode: try anyway */
       }
       save();
-      location.replace(`${location.pathname}?v=${live.slice(6, -3)}`);
+      location.replace(`${location.pathname}?v=${live.slice(6, -3)}&t=${Date.now()}`);
     }
   } catch {
     /* offline: keep playing this build */
