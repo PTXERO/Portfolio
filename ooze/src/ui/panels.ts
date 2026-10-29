@@ -394,6 +394,8 @@ export function layout(state: GameState, tab: Tab): string {
       <button class="px-btn" data-act="import">Import</button>
       <button class="px-btn" data-act="reset">Restart</button>
     </div>
+    <div class="panel-head"><h2>Interface size</h2></div>
+    <div class="warp">${[0.9, 1, 1.15, 1.3].map((k, i) => `<button class="px-btn" data-uiscale="${k}">${['Small', 'Normal', 'Large', 'Huge'][i]}</button>`).join('')}</div>
     <textarea id="save-text" placeholder="Export gives you a backup code. To restore, paste one here and tap Import."></textarea>
     <p class="note" data-t="stats"></p>
     <p class="note">Ooze to Orbit · test build · art and names are placeholders</p>`;

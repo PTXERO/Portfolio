@@ -334,13 +334,15 @@ function resolveEvent(state: GameState, rand: () => number): void {
   const ok = !opt.stat || statsOf(state)[opt.stat] >= (opt.need ?? 0);
   const report: GameState['reports'][number] = { kind: 'event', success: ok, earned: '0', parts: [], event: `${evDef.text} ${opt.label}: ${ok ? opt.good : opt.bad ?? opt.good}` };
   let mult = ok ? (opt.stat ? 1.8 : 1) : 0.3;
-  if (ok && opt.reward === 'part') {
+  // A part only if one's due (finds are spaced out, on the road or off it).
+  if (ok && opt.reward === 'part' && s.year >= s.nextFind) {
     const near = nearestPlace(state);
     const pool = [...new Set([...near.parts, ...def().places!.filter((p) => s.trips[p.id] > 0).flatMap((p) => p.parts)])].filter((id) => !s.parts.includes(id));
     if (pool.length) {
       const id = pool[Math.floor(rand() * pool.length)];
       s.parts.push(id);
       report.parts.push(id);
+      s.nextFind = s.year + FIND_GAP;
       mult = 0.5;
     }
   } else if (ok && opt.reward === 'mate' && s.mates.length < MAX_MATES) {
@@ -465,13 +467,15 @@ export function releaseMate(state: GameState, mateId: number): boolean {
   return true;
 }
 
-/** The egg hatches: a new generation, and the mate's parts join the line. */
+/** The egg hatches: a new generation, and one of the mate's parts (new to the line) joins it. */
 function hatch(state: GameState): void {
   const s = st(state);
   const mate = s.egg!.mate;
   s.egg = null;
   s.generation++;
-  const parts = Object.values(mate.parts).filter((id): id is string => !!id && !s.parts.includes(id));
+  const parts = Object.values(mate.parts)
+    .filter((id): id is string => !!id && !s.parts.includes(id))
+    .slice(0, 1);
   s.parts.push(...parts);
   state.reports.push({ kind: 'hatch', success: true, earned: '0', parts, mate: mate.name, generation: s.generation });
 }

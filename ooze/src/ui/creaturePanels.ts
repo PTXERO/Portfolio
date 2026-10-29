@@ -172,7 +172,7 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
         .join('')}</div></div>`
     : '';
   const walk = `<div class="card px-box trip"><div class="info"><div class="name" data-t="walk-title"></div><div class="sub" data-t="walk-sub"></div>${choice}</div>
-    <button class="px-btn small" data-act="walkhome" data-t="home-btn">Home</button></div>
+    <button class="px-btn home-btn" data-act="walkhome" data-t="home-btn">Home</button></div>
     <p class="note">Tap anywhere on the map to send your creature there. It clears the fog as it walks: Senses lets it see further, Speed gets it there sooner.</p>
     ${visibleUpgrades(state, CREATURE)
       .filter((u) => u.branch === 'Wandering')
@@ -236,7 +236,7 @@ export function familyLayout(state: GameState): string {
     ${egg}
     <div class="panel-head"><h2>Mates</h2><span class="label dim">${s.mates.length} / ${MAX_MATES}</span></div>
     ${mates || '<p class="note">Mates are met while roaming, or courted when one wanders by the herd. The first new place your creature finds always has one.</p>'}
-    <p class="note">Each generation makes the whole line stronger (all output ×${GENERATION_MULT}, every stat +1), and the young inherit the mate's parts. Eggs take longer each generation; Charm hurries them.</p>`;
+    <p class="note">Each generation makes the whole line stronger (all output ×${GENERATION_MULT}, every stat +1), and the young inherit one of the mate's parts that the line doesn't have yet. Eggs take longer each generation; Charm hurries them.</p>`;
 }
 
 function setText(root: HTMLElement, key: string, text: string): void {

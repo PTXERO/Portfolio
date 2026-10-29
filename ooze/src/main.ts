@@ -69,9 +69,9 @@ let state: GameState = loadFromStorage() ?? createState();
 (window as unknown as { ooze: () => GameState }).ooze = () => state;
 const ui = (() => {
   try {
-    return { tab: 'grow' as Tab, open: true, ...JSON.parse(localStorage.getItem(UI_KEY) ?? '{}') };
+    return { tab: 'grow' as Tab, open: true, full: false, scale: 1, ...JSON.parse(localStorage.getItem(UI_KEY) ?? '{}') };
   } catch {
-    return { tab: 'grow' as Tab, open: true };
+    return { tab: 'grow' as Tab, open: true, full: false, scale: 1 };
   }
 })();
 const saveUi = () => {
@@ -83,6 +83,21 @@ const saveUi = () => {
 };
 
 const scene = new Scene($<HTMLCanvasElement>('scene'));
+const expandBtn = $('expand');
+
+/** Interface size, and the menu pulled up full height (just under the top bar). */
+function applyUiPrefs(): void {
+  const k = String(ui.scale);
+  for (const el of [sheet, overlayTop, modal]) if (el.style.getPropertyValue('zoom') !== k) el.style.setProperty('zoom', k);
+  const full = ui.full && ui.open;
+  sheet.classList.toggle('full', full);
+  document.body.classList.toggle('menu-full', full);
+  expandBtn.classList.toggle('on', full);
+  // Room from the top bar's foot to the tab bar, less the knob, in the sheet's own (zoomed) pixels.
+  const hud = $('hud').getBoundingClientRect().bottom;
+  const room = (tabsEl.getBoundingClientRect().top - hud) / ui.scale - 12 - expandBtn.offsetHeight;
+  sheet.style.setProperty('--full-h', `${Math.max(215, Math.round(room))}px`);
+}
 let panelKey = '';
 /** Entrance animation for the next panel page: which side it slides in from. */
 let panelEnter = '';
@@ -204,9 +219,9 @@ const save = () => saveToStorage(state);
 
 function renderTabs(): void {
   const ids = tabsFor(state);
-  const key = ids.join();
-  if (key === tabsKey + state.current) return;
-  tabsKey = key + state.current;
+  const key = ids.join() + state.current;
+  if (key === tabsKey) return;
+  tabsKey = key;
   if (!ids.includes(ui.tab)) ui.tab = 'grow';
   tabsEl.style.gridTemplateColumns = `repeat(${ids.length}, 1fr)`;
   tabsEl.innerHTML = TABS.filter((t) => ids.includes(t.id))
@@ -412,6 +427,9 @@ function renderHint(): void {
 }
 
 function render(): void {
+  // Mid-press, leave the page alone (see the button handling below).
+  if (pressed?.isConnected && performance.now() - pressT < 4000) return;
+  applyUiPrefs();
   renderTabs();
   renderHud();
   renderGoal();
@@ -422,6 +440,7 @@ function render(): void {
   // (The panel sits above the tab bar, so it's the panel's top when open, the bar's when closed.)
   scene.setVisibleBottom((ui.open ? panel : sheet).getBoundingClientRect().top - stageEl.getBoundingClientRect().top);
   renderPanel();
+  for (const b of document.querySelectorAll<HTMLElement>('[data-uiscale]')) b.classList.toggle('on', Number(b.dataset.uiscale) === ui.scale);
   renderHint();
   showDiscovery();
 }
@@ -620,6 +639,10 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.dial) setDial(state, id, el.dataset.dial as DialId, Number(el.dataset.level));
   else if (el.dataset.amount) state.buyAmount = el.dataset.amount === 'max' ? 'max' : (Number(el.dataset.amount) as BuyAmount);
   else if (el.dataset.warp) state.warp = Number(el.dataset.warp);
+  else if (el.dataset.uiscale) {
+    ui.scale = Number(el.dataset.uiscale);
+    saveUi();
+  }
   else if (el.dataset.habitat) moveHabitat(state, id, el.dataset.habitat);
   else if (el.dataset.equip) equipPart(state, el.dataset.equip);
   else if (el.dataset.buypart) {
@@ -671,6 +694,10 @@ function act(el: HTMLElement): void {
       case 'dismiss':
         modal.hidden = true;
         break;
+      case 'expand':
+        ui.full = !ui.full;
+        saveUi();
+        break;
       case 'walkhome':
         walkHome(state);
         break;
@@ -706,8 +733,32 @@ function act(el: HTMLElement): void {
   render();
 }
 
+// Buttons act when the finger lifts off the one it went down on, however long it was held.
+// While a finger is down, the panel isn't redrawn, so the button under it can't be swapped
+// out mid-press (which used to eat the tap). The click that follows is then ignored.
+let pressed: HTMLButtonElement | null = null;
+let pressAt = { x: 0, y: 0 };
+let pressT = 0;
+let actedAt = 0;
+document.addEventListener('pointerdown', (e) => {
+  pressed = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
+  pressAt = { x: e.clientX, y: e.clientY };
+  pressT = performance.now();
+});
+document.addEventListener('pointerup', (e) => {
+  const el = pressed;
+  pressed = null;
+  if (!el || el.disabled || !el.isConnected) return;
+  const under = document.elementFromPoint(e.clientX, e.clientY)?.closest('button');
+  if (under !== el || Math.hypot(e.clientX - pressAt.x, e.clientY - pressAt.y) > 24) return;
+  actedAt = performance.now();
+  act(el);
+});
+document.addEventListener('pointercancel', () => (pressed = null));
 document.addEventListener('click', (e) => {
   const el = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
+  // Already done on release (a click from the keyboard comes without one).
+  if (performance.now() - actedAt < 800) return;
   if (el && !el.disabled) act(el);
 });
 

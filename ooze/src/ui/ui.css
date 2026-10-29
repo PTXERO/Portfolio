@@ -232,6 +232,7 @@ html, body {
 /* ---- The sheet: panel above, tabs below ---- */
 
 #sheet {
+  --ph: clamp(215px, 27dvh, 250px);
   flex: none;
   background: var(--night);
   box-shadow: 0 calc(var(--u) * -1) 0 0 var(--ink), 0 calc(var(--u) * -2) 0 0 var(--panel-hi);
@@ -248,7 +249,7 @@ html, body {
   bottom: 100%;
   background: var(--night);
   box-shadow: 0 calc(var(--u) * -1) 0 0 var(--ink), 0 calc(var(--u) * -2) 0 0 var(--panel-hi);
-  height: clamp(215px, 27dvh, 250px);
+  height: var(--ph);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding: 10px 12px 6px;
@@ -257,6 +258,26 @@ html, body {
 #panel {
   transition: height 300ms cubic-bezier(0.3, 1.35, 0.5, 1), padding 300ms cubic-bezier(0.3, 1.35, 0.5, 1);
 }
+/* Pulled up full height: up to the top bar, see-through enough to keep the world in view. */
+#sheet.full { --ph: var(--full-h, 60dvh); }
+/* The goal strip and age hops step aside, so the menu meets the top bar. */
+#evolve, #age-nav { transition: opacity 200ms; }
+.menu-full #evolve, .menu-full #age-nav { opacity: 0; pointer-events: none !important; }
+#sheet.full #panel { background: rgba(22, 28, 44, 0.8); }
+#sheet.full #panel .px-box { background: rgba(35, 43, 66, 0.86); }
+/* The knob on the menu's top left edge that pulls it up or lets it back down. */
+#expand {
+  position: absolute;
+  left: 10px;
+  bottom: calc(100% + var(--ph) + var(--u) * 2);
+  margin: 0;
+  padding: 4px 10px calc(4px + var(--depth));
+  z-index: 2;
+  transition: bottom 300ms cubic-bezier(0.3, 1.35, 0.5, 1), transform 40ms;
+}
+#expand svg { display: block; transition: transform 200ms; }
+#expand.on svg { transform: scaleY(-1); }
+#sheet.closed #expand { display: none; }
 #sheet.closed #panel {
   height: 0;
   padding-top: 0;
@@ -469,6 +490,8 @@ textarea {
 .place .flavor { white-space: normal; }
 .mate .portrait-sm { flex: none; }
 .mate-btns { display: flex; flex-direction: column; gap: 4px; }
+.trip .home-btn { min-width: 76px; min-height: 48px; font-size: 15px; flex: none; }
+[data-uiscale].on { --face: var(--mint); --hi: #c4f7dd; --lo: var(--mint-lo); color: var(--ink); }
 .px-btn.small { padding: 3px 8px calc(3px + var(--depth)); font-size: 12px; }
 .roles .info { display: flex; flex-direction: column; gap: 6px; }
 .role-row { display: flex; flex-direction: column; }
