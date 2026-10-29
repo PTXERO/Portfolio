@@ -337,7 +337,7 @@ export interface TribeState {
   landed?: { seed: number; day: number };
   /** The spear's island, as they left it (kept: it may matter again): the island's seed, how
    * many were left on the ash, and how many days they'd lasted there. */
-  ashIsland?: { seed: number; left: number; days: number; cannibal: boolean };
+  ashIsland?: { seed: number; left: number; days: number; cannibal: boolean; fate?: 'madness' };
 }
 
 export interface StageState {

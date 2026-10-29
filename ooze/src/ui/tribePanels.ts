@@ -80,13 +80,22 @@ function workCard(ex: ExtinctionState): string {
     <div class="sub">They decide for themselves: food first, then ${ex.focus === 'raft' ? 'the raft' : ex.focus === 'wood' ? 'wood' : 'listening to the spear'}.${rest ? ` ${rest} resting.` : ''}</div></div>${rows}</div>`;
 }
 
+/** The island working on their minds (never a number: what it looks like in the camp). */
+function madLine(ex: ExtinctionState): string {
+  const m = ex.madness ?? 0;
+  if (m < 15) return '';
+  const text = m >= 55 ? 'They are going mad here. Some of them are past saying why they do what they do.' : m >= 35 ? 'They quarrel over nothing. The island is working on their minds.' : 'Some of them say the spear hums at night.';
+  return `<div class="sub mad">${text}</div>`;
+}
+
 /** Hope: how the tribe is bearing it, all together (and what it brings). */
 function hopeCard(ex: ExtinctionState): string {
   const h = hopeOf(ex);
   const word = h >= 70 ? 'Hopeful' : h >= 55 ? 'Holding together' : h >= 30 ? 'Bearing up' : h >= 15 ? 'Despairing' : 'Broken';
   return `<div class="card px-box hope"><div class="info"><div class="name">Hope <span class="num gold">${h}</span> <span class="dim">· ${word}</span></div>
     <div class="meter"><i style="width:${h}%"></i><b style="left:55%"></b><b style="left:30%"></b></div>
-    <div class="sub">Their mood all together: hunger, grief, the spear's dread, the fire, friends. Above 55, fed, they have children; below 30, people break.</div></div></div>`;
+    <div class="sub">Their mood all together: hunger, grief, the spear's dread, the fire, friends. Above 55, fed, they have children; below 30, people break.</div>
+    ${madLine(ex)}</div></div>`;
 }
 
 /** What a raft part waits on: the idea, how many ideas away it is, and roughly the insight. */

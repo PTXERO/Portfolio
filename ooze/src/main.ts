@@ -17,6 +17,7 @@ import { autoAssign, daysLeft, decideFallen, DAY_SEC, eatsPlants, extinctionTick
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
 import { CRISES, crisisAnswered, crisisAt, crisisMissed, startCrisis } from './economy/crises';
+import { answerWhisper, WHISPERS } from './economy/whispers';
 import { readGesture } from './ui/gesture';
 import {
   addSwirl,
@@ -339,7 +340,8 @@ function extinctionStep(sec: number): void {
     return;
   }
   if (waitingOnChoice(ex)) {
-    askFallen();
+    if (ex.whisper) askWhisper();
+    else askFallen();
     return;
   }
   if (extinctionTick(state, sec)) {
@@ -638,6 +640,21 @@ function nightReport(): void {
   modal.dataset.kind = 'night';
 }
 
+/** A question the tribe brings to the spear: the leader asks, the player whispers the answer
+ * (time waits for it). */
+function askWhisper(): void {
+  const ex = state.stages.tribal.tribe?.ex;
+  const w = ex?.whisper;
+  if (!ex || !w || !modal.hidden) return;
+  const def = WHISPERS[w.id];
+  const lead = ex.people.find((p) => p.id === ex.leader)?.name;
+  showModal(`<p class="label dim">Day ${ex.day + 1} · ${lead ? `${lead} comes to the spear` : 'They come to the spear'}</p>
+    <h3>${def.ask(ex, w)}</h3>
+    <p class="dim">What does the spear whisper?</p>
+    <div class="choices">${def.options.map((o, i) => `<button class="px-btn${i === 0 ? '' : ''}" data-whisper="${i}">${o}</button>`).join('')}</div>`);
+  modal.dataset.kind = 'whisper';
+}
+
 /** The first dead: what's to be done with them. Eating them changes the tribe for good. */
 function askFallen(): void {
   const ex = state.stages.tribal.tribe?.ex;
@@ -670,6 +687,7 @@ function showEscape(fresh = false): void {
       <dt>Lost</dt><dd>${ex.deaths}</dd><dt>Born on the ash</dt><dd>${ex.births ?? 0}</dd>
       <dt>Left on the ash</dt><dd>${t.ashIsland?.left ?? ex.people.length - (t.family?.length ?? 0)}</dd><dt>Days adrift</dt><dd>40</dd><dt>Tries</dt><dd>${(t.attempts ?? 0) + 1}</dd></dl>
       ${t.cannibal ? '<p class="dim">They are cannibals now, and always will be.</p>' : ''}
+      <p class="dim">Those left on the ash didn't last. The island did to them what it had begun to.</p>
       <p>Ashore on a new island. Someone was already there.</p>
       <p class="stir">The story continues in a future update.</p>
       <button class="px-btn gold" data-act="look-landed">Look around</button>
@@ -1407,7 +1425,13 @@ function act(el: HTMLElement): void {
   else if (el.dataset.amount) state.buyAmount = el.dataset.amount === 'max' ? 'max' : (Number(el.dataset.amount) as BuyAmount);
   else if (el.dataset.warp) state.warp = Number(el.dataset.warp);
   else if (el.dataset.policy) state.stages.creature.roamOpts.policy = el.dataset.policy as RunInPolicy;
-  else if (el.dataset.node) pickIdea(el.dataset.node);
+  else if (el.dataset.whisper !== undefined) {
+    const ex = state.stages.tribal.tribe?.ex;
+    if (ex) answerWhisper(ex, Number(el.dataset.whisper));
+    modal.hidden = true;
+    panelKey = '';
+    save();
+  } else if (el.dataset.node) pickIdea(el.dataset.node);
   else if (el.dataset.webzoom) {
     const box = document.querySelector<HTMLElement>('.mind-tree');
     const size = box?.clientWidth ?? 360;

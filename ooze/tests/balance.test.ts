@@ -1,3 +1,4 @@
+import { answerWhisper } from '../src/economy/whispers';
 // Balance across every diet: herbivore, carnivore, omnivore, and cannibal (each of the three
 // lines, having eaten its dead). Each is played three ways over several seeds: with no god (no
 // ideas, no miracles), with ideas only, and with a good god (ideas and miracles, played well).
@@ -42,6 +43,7 @@ function play(line: string, way: Way, eatDead: boolean, seed: number) {
       if (e.ash < e.ashMax * 0.4) tryCast('rain');
     }
     if (e.fallen === 'undecided' && e.corpses > 0) decideFallen(s, eatDead);
+    if (e.whisper) answerWhisper(e, 0);
     extinctionTick(s, DAY_SEC / 3);
   }
   const e = ex();

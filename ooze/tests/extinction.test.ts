@@ -1,3 +1,4 @@
+import { answerWhisper } from '../src/economy/whispers';
 import { describe, expect, it } from 'vitest';
 import { assign, count, jobFood, launch, raftDone, daysLeft, decideFallen, DAY_SEC, extinctionTick, ideaCost, learnIdea, startExtinction, tryAgain, type ExtinctionState } from '../src/economy/extinction';
 import { MIND_TREE, NODE_COST, reachable } from '../src/economy/mindTree';
@@ -24,6 +25,7 @@ function play(s: GameState, plan: (ex: ExtinctionState, s: GameState) => void, c
     plan(ex(), s);
     if (process.env.TRACE) { const e = ex(); console.log(`d${e.day} n${e.people.length} jobs ${['forage','scavenge','dig','fish','wood','build','listen','rest'].map((j) => j[0] + count(e, j as never)).join(' ')} meat ${e.meat.toFixed(0)} plants ${e.plants.toFixed(0)} wood ${(e.wood ?? 0).toFixed(0)} ideas ${e.ideas.length} r${e.ration}`); }
     if (ex().fallen === 'undecided' && ex().corpses > 0) decideFallen(s, !!process.env.EAT);
+    if (ex().whisper) answerWhisper(ex(), 0);
     extinctionTick(s, DAY_SEC);
   }
   return ex().day;

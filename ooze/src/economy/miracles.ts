@@ -23,6 +23,7 @@ import {
   type Focus,
 } from './extinction';
 import { remember } from './society';
+import { chooseFour, leftBehind } from './whispers';
 import type { GameState } from './types';
 
 export type SpellId = 'lightning' | 'rain' | 'ward' | 'quicken' | 'kelp' | 'shoals' | 'dying';
@@ -270,11 +271,13 @@ function aiFocus(ex: ExtinctionState): Focus {
 export function tribeLaunches(state: GameState): boolean {
   const ex = state.stages.tribal.tribe?.ex;
   if (!ex || ex.escaped || ex.over || !raftDone(ex) || ex.people.length < FAMILY || (ex.voyage ?? 0) < VOYAGE_FOOD) return false;
-  // The healthiest, favouring the young and the strong.
-  const score = (p: ExtinctionState['people'][number]) => (p.sick !== undefined ? -10 : 0) - p.hunger + (p.trait === 'young' ? 1 : p.trait === 'strong' || p.trait === 'hardy' ? 0.6 : p.trait === 'frail' || p.trait === 'old' ? -1 : 0);
-  ex.family = [...ex.people].sort((a, b) => score(b) - score(a)).slice(0, FAMILY).map((p) => p.id);
+  // The four: as the spear said (strongest, youngest, or a family).
+  ex.family = chooseFour(ex);
   for (const p of ex.people) if (ex.family.includes(p.id)) remember(ex, p, 'was chosen to go on the raft');
   const names = ex.people.filter((p) => ex.family!.includes(p.id)).map((p) => p.name);
   say(ex, `The raft was ready. “We'll go mad if we stay.” ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} pushed it out past the breakers, with forty days of scraps.`);
-  return launch(state);
+  const went = launch(state);
+  // And those left on the ash: the Chronicle tells what became of them.
+  if (went) for (const line of leftBehind(ex, names)) say(ex, line);
+  return went;
 }

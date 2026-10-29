@@ -724,3 +724,4 @@ body.wide .mind-tree { max-width: 100%; }
 @media (min-width: 700px) { #app { max-width: 760px; } }
 /* The web of ideas wants room: the sidebar widens while it's open. */
 body.wide.tab-ideas #sheet { width: clamp(420px, 42vw, 820px); }
+.hope .sub.mad { color: #c08aff; margin-top: 6px; }

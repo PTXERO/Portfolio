@@ -13,8 +13,9 @@
 // spear remembers what it taught, so those ideas come cheaper).
 
 import { planCrisis } from './crises';
+import { madnessNight, planWhisper } from './whispers';
 import { discover, ordainedNeeds, say, tribeLaunches, tribeThinks, type SpellId } from './miracles';
-import { ensureSociety, flushNotes, mourn, nightTheft, remember, sharing, socialNight, spirit, type Bond, type Quirk } from './society';
+import { ensureSociety, flushNotes, hopeOf, mourn, nightTheft, remember, sharing, socialNight, spirit, type Bond, type Quirk } from './society';
 import { COST_STEP, MIND_NODE, modsOf, NODE_COST, reachable, type Mods } from './mindTree';
 import type { GameState, TribeState } from './types';
 
@@ -136,6 +137,12 @@ export interface ExtinctionState {
   crisis?: import('./crises').Crisis;
   crisisPlan?: { kind: import('./crises').CrisisKind; at: number };
   coldTonight?: boolean;
+  /** A question for the spear (waiting on the player), when the last was, what kind of four
+   * the raft takes, and how far the island has worked on their minds (0 to 100). */
+  whisper?: import('./whispers').Whisper;
+  lastWhisper?: number;
+  sendRule?: import('./whispers').SendRule;
+  madness?: number;
   /** When the land can't feed them all: the workers and the strong eat, the weakest don't. */
   triage?: boolean;
   /** Miracles the spear worked unasked last night (for the scene to show). */
@@ -626,7 +633,7 @@ export function count(ex: ExtinctionState, job: JobId): number {
 
 /** Whether play waits on a choice (what to do with the dead). */
 export function waitingOnChoice(ex: ExtinctionState): boolean {
-  return ex.fallen === 'undecided' && ex.corpses > 0 && !ex.over;
+  return ((ex.fallen === 'undecided' && ex.corpses > 0) || !!ex.whisper) && !ex.over;
 }
 
 /** What's done with the dead. Eating them makes the tribe cannibals, for good. */
@@ -703,7 +710,7 @@ export function launch(state: GameState): boolean {
   t.cannibal = ex.diet === 'cannibal';
   // The spear's island is remembered as they left it; forty days adrift, they come ashore on
   // another.
-  t.ashIsland = { seed: t.seed, left: ex.people.length - FAMILY, days: ex.day, cannibal: t.cannibal };
+  t.ashIsland = { seed: t.seed, left: ex.people.length - FAMILY, days: ex.day, cannibal: t.cannibal, fate: 'madness' };
   t.landed = { seed: ((t.seed * 7919 + 104729) >>> 0) % 2 ** 31, day: ex.day + 40 };
   return true;
 }
@@ -728,6 +735,11 @@ function work(ex: ExtinctionState, sec: number): void {
     const perWork = part.wood / part.work;
     const done = Math.min(y.build * k, (ex.wood ?? 0) / perWork, part.work - ex.raft![part.id]);
     ex.raft![part.id] += done;
+    // The frame lashed, they stand on it: it holds four, no more.
+    if (part.id === 'frame' && ex.raft!.frame >= part.work && !ex.told?.four) {
+      (ex.told ??= {}).four = ex.day;
+      say(ex, 'They finished the frame and stood on it in the shallows. It held four. With a fifth, it went under. They looked at each other a long time.');
+    }
     ex.wood! -= done * perWork;
   }
   ex.plants += plants;
@@ -820,8 +832,10 @@ function night(ex: ExtinctionState): void {
   ex.people = ex.people.filter((p) => p.hunger < limitOf(p, m));
   ex.deaths += starved.length;
   mourn(ex, starved, 'starved in the night');
-  // The rest of the night among them (and the prayer the devout stir up).
+  // The rest of the night among them (and the prayer the devout stir up); and the island
+  // working on their minds.
   ex.prayer = Math.max(0, (ex.prayer ?? 0) + socialNight(ex, fire));
+  madnessNight(ex, fire, hopeOf(ex));
   if (ex.fallen === 'eat') eatDead(ex, starved.length, caught);
   else if (ex.fallen === 'undecided') ex.corpses += starved.length;
   // Once the raft's built, a share of what's left each night is wrapped and smoked for the
@@ -857,6 +871,7 @@ function night(ex: ExtinctionState): void {
     tribeThinks(ex);
     discover(ex);
     planCrisis(ex);
+    planWhisper(ex);
     autoAssign(ex);
     ex.worked = ordainedNeeds(ex);
   }

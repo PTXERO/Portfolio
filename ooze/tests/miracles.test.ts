@@ -1,3 +1,4 @@
+import { answerWhisper } from '../src/economy/whispers';
 import { describe, expect, it } from 'vitest';
 import { DAY_SEC, decideFallen, extinctionTick, learnIdea, startExtinction, type ExtinctionState } from '../src/economy/extinction';
 import { canCast, cast, spellsFor, type SpellId } from '../src/economy/miracles';
@@ -42,6 +43,7 @@ function run(diet: string, ideas: boolean, god: boolean, cap = 90): { days: numb
       if (e.ash < e.ashMax * 0.4) tryCast('rain');
     }
     if (e.fallen === 'undecided' && e.corpses > 0) decideFallen(s, false);
+    if (e.whisper) answerWhisper(e, 0);
     extinctionTick(s, DAY_SEC / 3);
   }
   return { days: ex().day, ex: ex(), casts };
@@ -81,5 +83,23 @@ describe('crises', () => {
     toggleOrdain(ex, 'lightning');
     toggleOrdain(ex, 'rain');
     expect(ex.ordained).toEqual(['rain']);
+  });
+});
+
+describe('whispers', () => {
+  it('a family goes when the spear says so, and the question waits for an answer', async () => {
+    const { answerWhisper, chooseFour } = await import('../src/economy/whispers');
+    const { waitingOnChoice } = await import('../src/economy/extinction');
+    const s = game('omnivore');
+    const ex = s.stages.tribal.tribe!.ex!;
+    ex.whisper = { id: 'who', who: [], day: ex.day };
+    expect(waitingOnChoice(ex)).toBe(true);
+    answerWhisper(ex, 2);
+    expect(ex.sendRule).toBe('family');
+    expect(waitingOnChoice(ex)).toBe(false);
+    const four = chooseFour(ex).map((id) => ex.people.find((p) => p.id === id)!);
+    expect(four.length).toBe(4);
+    const [a, b] = four;
+    expect(a.bonds?.some((x) => x.kind === 'mate' && x.id === b.id)).toBe(true);
   });
 });
