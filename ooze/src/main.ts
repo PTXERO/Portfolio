@@ -963,16 +963,28 @@ async function checkForUpdate(manual = false): Promise<void> {
  */
 async function startFromLink(): Promise<void> {
   const params = new URLSearchParams(location.search);
-  if (params.get('start') !== 'creature') return;
+  const where = params.get('start');
+  if (where !== 'creature' && where !== 'tribal') return;
   history.replaceState(null, '', location.pathname);
-  if (!confirm('Start a fresh game at the beginning of the Creature stage? This replaces your current save (export it from the Menu first if you want to keep it).')) return;
+  const what = where === 'tribal' ? 'at the end of the Creature stage (to see the strike and the Tribal era)' : 'at the beginning of the Creature stage';
+  if (!confirm(`Start a fresh game ${what}? This replaces your current save (export it from the Menu first if you want to keep it).`)) return;
   try {
     const code = (await (await fetch('./creature-start.txt', { cache: 'no-store' })).text()).trim();
     state = importSave(code);
     state.lastSeen = Date.now();
+    if (where === 'tribal') {
+      // The Creature played through: every place settled, six generations, a big herd.
+      const c = state.stages.creature;
+      for (const r of STAGES.creature.reactions!) if (!c.discovered.includes(r.id)) c.discovered.push(r.id);
+      for (const p of STAGES.creature.places!) c.trips[p.id] = Math.max(1, c.trips[p.id] ?? 0);
+      c.generation = 6;
+      c.generators.territory = 8;
+      c.pop = 400;
+    }
     scene.reload();
     save();
     render();
+    if (where === 'tribal') playEnding();
   } catch {
     alert('That start could not be loaded.');
   }
