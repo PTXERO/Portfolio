@@ -158,6 +158,11 @@ export function checkReaction(state: GameState, stage: StageId, r: ReactionDef):
     gens &&= ok;
     parts.push({ label: `Generation ${r.needs.generation}`, ok });
   }
+  if (r.needs.pop) {
+    const ok = st.pop >= r.needs.pop;
+    gens &&= ok;
+    parts.push({ label: `Population ${r.needs.pop}`, ok });
+  }
   let dials = true;
   if (r.needs.habitat) {
     const ok = st.habitat === r.needs.habitat;

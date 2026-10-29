@@ -28,7 +28,9 @@ import {
 import { formatTime } from '../src/economy/num';
 import { dialMax, spawnMult, stageRate, tapValue } from '../src/economy/rates';
 import { cloneState, createState } from '../src/economy/state';
-import { breed, buyPart, equipPart, partDef, placeOpen, startTrip, statsOf, tripChance } from '../src/economy/creature';
+import { assign, birthRate, breed, buyPart, canWear, equipPart, housing, partDef, placeOpen, startTrip, statsOf, tripChance, upkeep } from '../src/economy/creature';
+import { EVENTS } from '../src/content/creature';
+import { herdMult } from '../src/economy/rates';
 import { tick } from '../src/economy/tick';
 import { DIALS, SLOTS, type DialId, type GameState, type ReactionDef, type StageId } from '../src/economy/types';
 
@@ -231,11 +233,13 @@ function creatureVisit(s: GameState): void {
   for (const p of def.parts!.filter((x) => x.cost && !st.parts.includes(x.id)).sort((a, b) => a.cost! - b.cost!)) {
     if (st.currency.toNumber() >= p.cost! * 2) buyPart(s, p.id);
   }
+  // Wear the best part per slot that fits the energy budget (big slots first).
   for (const slot of SLOTS) {
     const score = (id: string) => Object.entries(partDef(id).stats).reduce((n, [k, v]) => n + (v ?? 0) * want(k), 0);
-    const best = st.parts.filter((id) => partDef(id).slot === slot).sort((a, b) => score(b) - score(a))[0];
+    const best = st.parts.filter((id) => partDef(id).slot === slot && canWear(s, id)).sort((a, b) => score(b) - score(a))[0];
     if (best) equipPart(s, best);
   }
+  herdVisit(s);
   // Train the stats the next place needs, while it costs under a few minutes of output.
   const rate = stageRate(s, 'creature').toNumber();
   for (let i = 0; i < 50 && next; i++) {
@@ -257,7 +261,51 @@ function creatureVisit(s: GameState): void {
       if (best) startTrip(s, best.id);
     }
   }
+  // Answer the trip's event with the first option whose check passes (the player sees the numbers).
+  const ev = st.trip?.event;
+  if (ev && ev.choice === null) {
+    const stats = statsOf(s);
+    const d = EVENTS.find((e) => e.id === ev.id)!;
+    const i = d.options.findIndex((o) => o.stat && stats[o.stat] >= (o.need ?? 0));
+    ev.choice = i >= 0 ? i : d.options.length - 1;
+  }
   s.reports = [];
+}
+
+/**
+ * The herd: jobs in sensible shares (guards for winter, carers while there's room
+ * to grow, a few diggers and scouts), then shelter by payback, keeping a winter's food in store.
+ */
+function herdVisit(s: GameState): void {
+  const st = s.stages.creature;
+  const pop = Math.floor(st.pop);
+  const room = housing(s);
+  const share = { guard: 0.08, carer: pop < room ? 0.1 : 0.02, digger: 0.05, scout: st.trip ? 0.05 : 0 } as const;
+  for (const [r, f] of Object.entries(share) as [keyof typeof share, number][]) {
+    const want = Math.floor(pop * f);
+    assign(s, r, want - st.roles[r]);
+  }
+  // Each room filled forages about this much, net of eating, over a year.
+  const perHead = herdMult(s) * 0.44;
+  const reserve = () => upkeep(s) * 1.4 * 150;
+  for (let i = 0; i < 200; i++) {
+    const money = st.currency.toNumber() - reserve();
+    const g = st.generators;
+    const cands: { id: string; cost: number; payback: number }[] = [];
+    for (const def of STAGES.creature.generators) {
+      if (!generatorVisible(s, 'creature', def)) continue;
+      const cost = generatorCost(s, 'creature', def.id).toNumber();
+      let gain = 0;
+      const rooms = { burrow: 5, den: 40, territory: 200 }[def.id as 'burrow'];
+      if (rooms) gain = rooms * perHead * (pop >= room - 2 ? 1 : 0.2);
+      else if (def.id === 'nest') gain = pop < room ? ((0.04 * (room - pop)) / Math.max(0.05, birthRate(s))) * 0.02 * perHead : 0;
+      else if (def.id === 'waterhole' && g.waterhole < 12) gain = upkeep(s) * 0.04;
+      if (def.id === 'territory') gain += stageRate(s, 'creature').toNumber() * 0.02;
+      if (gain > 0) cands.push({ id: def.id, cost, payback: cost / gain });
+    }
+    const best = cands.filter((c) => c.cost <= money).sort((a, b) => a.payback - b.payback)[0];
+    if (!best || best.payback > 1200 || !buyGenerator(s, 'creature', best.id, 1)) break;
+  }
 }
 
 /** When each simulated game last caught a rare microbe. */

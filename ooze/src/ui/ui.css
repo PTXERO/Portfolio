@@ -454,6 +454,14 @@ textarea {
 .part.on { --face: var(--panel-hi); color: var(--mint); box-shadow: 0 0 0 var(--u) var(--mint); }
 .part.on span { color: var(--mint); }
 .part .cost { display: flex; align-items: center; gap: 3px; color: inherit; font-size: 13px; }
+.part.heavy { opacity: 0.45; }
+.event { margin-top: 8px; }
+.choices { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.choice { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 5px 8px calc(5px + var(--depth)); text-align: left; }
+.choice b { font-size: 13px; }
+.choice span { font-size: 12px; color: var(--dim); }
+.choice.gold span { color: inherit; }
+.role .seg .px-btn { min-width: 40px; font-size: 16px; }
 .trip .info, .egg .info { min-width: 0; }
 .place .flavor { white-space: normal; }
 .mate .portrait-sm { flex: none; }

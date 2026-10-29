@@ -240,8 +240,55 @@ export function generatorRate(state: GameState, stage: StageId, gen: GeneratorDe
   return D(gen.baseRate * owned * m * feedMult(state, stage));
 }
 
+// ---- Creature stage: the herd forages through the seasons ----
+
+export interface Season {
+  name: string;
+  /** Foraging ×, births ×, upkeep ×, and whether it thins the herd. */
+  forage: number;
+  births: number;
+  upkeep: number;
+  winter: boolean;
+}
+export const SEASONS: Season[] = [
+  { name: 'Spring', forage: 1.2, births: 2, upkeep: 1, winter: false },
+  { name: 'Summer', forage: 1.6, births: 1, upkeep: 1, winter: false },
+  { name: 'Autumn', forage: 1, births: 0.7, upkeep: 1, winter: false },
+  { name: 'Winter', forage: 0.3, births: 0.25, upkeep: 1.4, winter: true },
+];
+/** Seconds per season; a year is four of them. */
+export const SEASON_SEC = 150;
+export const FORAGE_PER_FORAGER = 1;
+
+export function seasonOf(state: GameState): { season: Season; left: number } {
+  const y = state.stages.creature.year % (SEASON_SEC * 4);
+  const i = Math.floor(y / SEASON_SEC);
+  return { season: SEASONS[i], left: SEASON_SEC * (i + 1) - y };
+}
+
+/** Herd members foraging: everyone not set to another role. */
+export function foragers(state: GameState): number {
+  const st = state.stages.creature;
+  const busy = st.roles.carer + st.roles.digger + st.roles.guard + st.roles.scout;
+  return Math.max(0, Math.floor(st.pop) - busy);
+}
+
+/** What one member's day of foraging is worth, before the season: every boost to the stage.
+ * Eating scales with it too, so the balance of foragers to mouths matters all game. */
+export function herdMult(state: GameState): number {
+  const effects = stageEffects(state, 'creature');
+  // Territory makes the land richer: +2% each.
+  return stageMult(effects) * feedMult(state, 'creature') * (1 + 0.02 * (state.stages.creature.generators.territory ?? 0));
+}
+
+/** Biomass the herd gathers per second, before it eats. */
+function creatureRate(state: GameState): Decimal {
+  return D(foragers(state) * FORAGE_PER_FORAGER * herdMult(state) * seasonOf(state).season.forage);
+}
+
 /** Currency per second for a whole stage. */
 export function stageRate(state: GameState, stage: StageId): Decimal {
+  if (STAGES[stage].places) return creatureRate(state);
   let total = ZERO;
   for (const g of STAGES[stage].generators) total = total.add(generatorRate(state, stage, g));
   return total;

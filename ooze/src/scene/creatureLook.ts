@@ -179,6 +179,7 @@ export function drawCreature(b: CanvasRenderingContext2D, look: CreatureLook, x:
   // Feet sit at the bottom of the legs: the body centre is CY, legs reach about CY + 10.
   const top = groundY - (CY + 10) * s;
   b.save();
+  b.imageSmoothingEnabled = false;
   if (opts.left) {
     b.translate(Math.round(x + (W / 2) * s), Math.round(top));
     b.scale(-s, s);

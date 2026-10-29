@@ -65,7 +65,24 @@ export type Effect =
   /** Raises one of the creature's stats. */
   | { kind: 'stat'; stat: Stat; amount: number }
   /** Expeditions bring back more (and take less time with Speed). */
-  | { kind: 'tripMult'; mult: number };
+  | { kind: 'tripMult'; mult: number }
+  /** Raises the body's energy budget for parts. */
+  | { kind: 'energy'; amount: number }
+  /** The herd eats less (upkeep ×mult). */
+  | { kind: 'upkeepMult'; mult: number }
+  /** Winter takes less of the herd (losses ×mult). */
+  | { kind: 'winterMult'; mult: number };
+
+/** What members of the herd can be set to do. */
+export type Role = 'forager' | 'carer' | 'digger' | 'guard' | 'scout';
+export const ROLES: Role[] = ['forager', 'carer', 'digger', 'guard', 'scout'];
+
+/** Something that happens partway through an expedition, with a choice to make. */
+export interface TripEventDef {
+  id: string;
+  text: string;
+  options: { label: string; stat?: Stat; need?: number; good: string; bad?: string; reward: 'pay' | 'part' | 'mate' }[];
+}
 
 /** The Creature stage's five stats. */
 export type Stat = 'speed' | 'strength' | 'senses' | 'toughness' | 'charm';
@@ -83,6 +100,8 @@ export interface PartDef {
   stats: Partial<Record<Stat, number>>;
   /** Price in the stage's currency; parts without one are only found on expeditions. */
   cost?: number;
+  /** Energy it takes to wear (defaults to half its stats, rounded up). */
+  energy?: number;
 }
 
 /** A place the creature can explore. Each is also a page in the stage's book. */
@@ -123,6 +142,8 @@ export interface Report {
   mate?: string;
   /** Book page found on this trip. */
   found?: string;
+  /** What happened on the way, and how the choice turned out. */
+  event?: string;
   generation?: number;
 }
 
@@ -207,6 +228,8 @@ export interface ReactionDef {
     found?: number;
     /** Generations the line must have bred (Creature stage). */
     generation?: number;
+    /** Herd size needed (Creature stage). */
+    pop?: number;
   };
   /** Found by the player steering into it (engulfing), not automatically. */
   manual?: boolean;
@@ -280,8 +303,13 @@ export interface StageState {
   /** Body parts owned, and the one worn in each slot. */
   parts: string[];
   equipped: Partial<Record<Slot, string>>;
-  /** The expedition under way, if any. */
-  trip: { place: string; left: number; total: number } | null;
+  /** The expedition under way, if any, and the choice it ran into on the way. */
+  trip: { place: string; left: number; total: number; event?: { id: string; choice: number | null } } | null;
+  /** The herd: how many, and what they're set to do (the rest forage). */
+  pop: number;
+  roles: Record<Role, number>;
+  /** Seconds into the current year (seasons). */
+  year: number;
   /** Successful trips to each place. */
   trips: Record<string, number>;
   mates: Mate[];

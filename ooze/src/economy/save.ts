@@ -51,6 +51,9 @@ export function deserialize(text: string): GameState {
           mates: s.mates ?? [],
           egg: s.egg ?? null,
           generation: s.generation ?? 0,
+          pop: s.pop ?? fresh.pop,
+          roles: { ...fresh.roles, ...(s.roles ?? {}) },
+          year: s.year ?? 0,
         }
       : base.stages[id];
     // Saves from before reactions existed: anything owned counts as discovered.

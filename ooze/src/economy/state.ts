@@ -5,11 +5,22 @@ import type { GameState, StageDef, StageId, StageState } from './types';
 export const BASE_OFFLINE_CAP_SEC = 8 * 3600;
 
 /** The Creature stage starts with the free parts (no price) worn, one per slot. */
-function creatureStart(def: StageDef): Pick<StageState, 'parts' | 'equipped' | 'trip' | 'trips' | 'mates' | 'egg' | 'generation'> {
+function creatureStart(def: StageDef): Pick<StageState, 'parts' | 'equipped' | 'trip' | 'trips' | 'mates' | 'egg' | 'generation' | 'pop' | 'roles' | 'year'> {
   const starters = (def.parts ?? []).filter((p) => p.cost === 0);
   const equipped: StageState['equipped'] = {};
   for (const p of starters) equipped[p.slot] ??= p.id;
-  return { parts: starters.map((p) => p.id), equipped, trip: null, trips: {}, mates: [], egg: null, generation: 0 };
+  return {
+    parts: starters.map((p) => p.id),
+    equipped,
+    trip: null,
+    trips: {},
+    mates: [],
+    egg: null,
+    generation: 0,
+    pop: def.places ? 3 : 0,
+    roles: { forager: 0, carer: 0, digger: 0, guard: 0, scout: 0 },
+    year: 0,
+  };
 }
 
 export function createStageState(id: StageId, opened: boolean): StageState {
@@ -66,11 +77,14 @@ export function cloneState(s: GameState): GameState {
       time: st.time,
       parts: [...st.parts],
       equipped: { ...st.equipped },
-      trip: st.trip && { ...st.trip },
+      trip: st.trip && { ...st.trip, event: st.trip.event && { ...st.trip.event } },
       trips: { ...st.trips },
       mates: st.mates.map((m) => ({ ...m, parts: { ...m.parts } })),
       egg: st.egg && { ...st.egg, mate: { ...st.egg.mate, parts: { ...st.egg.mate.parts } } },
       generation: st.generation,
+      pop: st.pop,
+      roles: { ...st.roles },
+      year: st.year,
     };
   }
   return { ...s, unlocked: [...s.unlocked], stages, news: [...s.news], made: [...s.made], reports: [...s.reports] };

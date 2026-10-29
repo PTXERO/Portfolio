@@ -38,7 +38,8 @@ import { clearStorage, exportSave, importSave, loadFromStorage, saveToStorage } 
 import { createState } from './economy/state';
 import { liveTick, TICK_SEC } from './economy/tick';
 import type { BuyAmount, DialId, GameState, StageId } from './economy/types';
-import { breed, buyPart, court, equipPart, releaseMate, startTrip } from './economy/creature';
+import { assign, breed, buyPart, chooseEvent, court, equipPart, netRate, releaseMate, startTrip, tripEventDue } from './economy/creature';
+import type { Role } from './economy/types';
 import { Scene } from './scene/scene';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
@@ -133,6 +134,7 @@ function showTripReport(): boolean {
     <p>+${format(D(r.earned))} ${def.currency}</p>
     ${page ? `<p class="fx">${rewardText('creature', page)}</p>` : ''}
     ${parts.length ? `<p class="fx">Found: ${parts.join(', ')} (in the Body tab)</p>` : ''}
+    ${r.event ? `<p>${r.event}</p>` : ''}
     ${r.mate ? `<p class="fx">Met ${r.mate}, who followed it home (Family tab)</p>` : ''}
     ${r.success ? '' : '<p class="dim">Stronger stats make trips safer.</p>'}
     <button class="px-btn gold" data-act="dismiss">Nice</button>`);
@@ -188,12 +190,12 @@ const save = () => saveToStorage(state);
 function renderTabs(): void {
   const ids = tabsFor(state);
   const key = ids.join();
-  if (key === tabsKey) return;
-  tabsKey = key;
+  if (key === tabsKey + state.current) return;
+  tabsKey = key + state.current;
   if (!ids.includes(ui.tab)) ui.tab = 'grow';
   tabsEl.style.gridTemplateColumns = `repeat(${ids.length}, 1fr)`;
   tabsEl.innerHTML = TABS.filter((t) => ids.includes(t.id))
-    .map((t) => `<button class="px-btn tab" data-tab="${t.id}">${icon(t.sprite, 3)}<span>${t.label}</span><i class="dot" hidden></i></button>`)
+    .map((t) => `<button class="px-btn tab" data-tab="${t.id}">${icon(t.sprite, 3)}<span>${t.id === 'grow' && STAGES[state.current].places ? 'Herd' : t.label}</span><i class="dot" hidden></i></button>`)
     .join('');
 }
 
@@ -205,7 +207,11 @@ function renderHud(): void {
     if (el.textContent !== text) el.textContent = text;
   };
   set('currency', format(st.currency));
-  set('rate', `${format(stageRate(state, state.current))} ${def.currency}\nper second`);
+  if (def.places) {
+    // The herd eats: show what's left after that.
+    const net = netRate(state);
+    set('rate', `${net.lt(0) ? '−' : '+'}${format(net.abs())} ${def.currency}\nper second`);
+  } else set('rate', `${format(stageRate(state, state.current))} ${def.currency}\nper second`);
   set('bank-chip', state.timeBank > 0 ? `⧗ ${formatTime(state.timeBank)}${state.warp > 1 ? ` · ${state.warp}×` : ''}` : '');
   set('stage-name', def.name);
   // Small buttons under the banner hop to the previous age (left) or the next one (right).
@@ -278,7 +284,9 @@ function renderGoal(): void {
     const n = nextReaction(state, state.current);
     let text = '';
     const cr = state.stages[state.current];
-    if (def.places && cr.trip) {
+    if (def.places && tripEventDue(state)) text = 'Your creature ran into something on the way. Choose in the Explore tab!';
+    else if (def.places && netRate(state).lt(0) && cr.currency.lt(netRate(state).abs().mul(60))) text = 'The herd is going hungry! More foragers, or fewer mouths (Herd tab).';
+    else if (def.places && cr.trip) {
       // Creature: the expedition under way is the thing to watch.
       text = `Exploring the ${def.places.find((p) => p.id === cr.trip!.place)!.name} · back in ${formatTime(cr.trip.left)}`;
     } else if (def.places && n && !n.r.final) {
@@ -321,7 +329,11 @@ function renderPanel(): void {
             ? organelleNear(state) || finaleReady(state)
             : t === 'roots'
               ? heirloomReady(state)
-              : false;
+              : t === 'explore'
+                ? tripEventDue(state)
+                : t === 'grow' && STAGES[state.current].places
+                  ? netRate(state).lt(0) && state.stages.creature.currency.lt(netRate(state).abs().mul(60))
+                  : false;
     if (dot) dot.hidden = !on;
   }
   if (!ui.open) return;
@@ -510,6 +522,12 @@ function act(el: HTMLElement): void {
     if (startTrip(state, el.dataset.trip)) scene.purchase(state, 'trip');
   } else if (el.dataset.breed) breed(state, Number(el.dataset.breed));
   else if (el.dataset.release) releaseMate(state, Number(el.dataset.release));
+  else if (el.dataset.role) {
+    const step = state.buyAmount === 'max' ? 1e9 : state.buyAmount;
+    assign(state, el.dataset.role as Role, Number(el.dataset.delta) * step);
+  } else if (el.dataset.choice) {
+    if (chooseEvent(state, Number(el.dataset.choice))) panelKey = '';
+  }
   else if (el.dataset.stage) {
     if (visitStage(state, el.dataset.stage as StageId)) {
       scene.evolveFlash();

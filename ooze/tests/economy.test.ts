@@ -25,7 +25,8 @@ import { softCap, defenseOf, dialMax, guardLevel, dietOf, forageMult, habitatMul
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
-import { breed, buyPart, court, courtChance, equipPart, startTrip, statsOf, tripChance } from '../src/economy/creature';
+import { assign, breed, buyPart, canWear, chooseEvent, court, courtChance, energyBudget, equipPart, housing, startTrip, statsOf, tripChance, tripEventDue, upkeep } from '../src/economy/creature';
+import { foragers, herdMult, SEASON_SEC } from '../src/economy/rates';
 
 /** A game where the player has already made their first move. */
 function fresh() {
@@ -599,7 +600,7 @@ describe('creature stage', () => {
 
   it('expeditions take time, pay out and bring back a page, a part and a first mate', () => {
     const s = creatureGame();
-    s.stages.creature.generators.hatchling = 10;
+    s.stages.creature.pop = 10;
     expect(startTrip(s, 'shore')).toBe(true);
     expect(startTrip(s, 'shore')).toBe(false); // one at a time
     expect(startTrip(s, 'tidePools')).toBe(false); // not open yet
@@ -628,8 +629,7 @@ describe('creature stage', () => {
   it('breeding lays an egg that hatches into a stronger generation with the mate\'s parts', () => {
     const s = creatureGame();
     s.stages.creature.mates.push({ id: 1, name: 'Fern', parts: { legs: 'runner' } });
-    const rate = () => stageRate(s, 'creature').toNumber();
-    s.stages.creature.generators.hatchling = 10;
+    const rate = () => herdMult(s);
     const before = rate();
     expect(breed(s, 1)).toBe(true);
     expect(s.stages.creature.mates.length).toBe(0);
@@ -658,6 +658,73 @@ describe('creature stage', () => {
     expect(dietOf(s, 'creature')).toBe(null);
     s.stages.cell.upgrades.push('hunter');
     expect(dietOf(s, 'creature')).toBe('hunter');
+  });
+
+  it('everyone forages unless given a job, and jobs only come out of the herd', () => {
+    const s = creatureGame();
+    const c = s.stages.creature;
+    c.pop = 10;
+    expect(foragers(s)).toBe(10);
+    const full = stageRate(s, 'creature').toNumber();
+    expect(assign(s, 'carer', 3)).toBe(true);
+    expect(assign(s, 'guard', 100)).toBe(true);
+    expect(c.roles.guard).toBe(7);
+    expect(foragers(s)).toBe(0);
+    expect(stageRate(s, 'creature').toNumber()).toBe(0);
+    assign(s, 'guard', -7);
+    expect(stageRate(s, 'creature').toNumber()).toBeCloseTo(full * 0.7, 6);
+  });
+
+  it('a fed herd grows to its housing; a hungry one shrinks', () => {
+    const s = creatureGame();
+    const c = s.stages.creature;
+    c.currency = D(1e9);
+    tick(s, 400);
+    expect(Math.floor(c.pop)).toBe(housing(s));
+    c.generators.burrow = 0;
+    c.pop = 10;
+    assign(s, 'carer', 10);
+    c.currency = D(0);
+    expect(upkeep(s)).toBeGreaterThan(0);
+    tick(s, 30);
+    expect(c.pop).toBeLessThan(9);
+  });
+
+  it('winter forages far less than summer', () => {
+    const s = creatureGame();
+    s.stages.creature.pop = 10;
+    s.stages.creature.year = SEASON_SEC * 1.5;
+    const summer = stageRate(s, 'creature').toNumber();
+    s.stages.creature.year = SEASON_SEC * 3.5;
+    expect(stageRate(s, 'creature').toNumber()).toBeLessThan(summer / 4);
+  });
+
+  it('a body can only wear what its energy budget feeds', () => {
+    const s = creatureGame();
+    const big = STAGES.creature.parts!.filter((p) => p.cost !== undefined && p.cost > 0);
+    s.stages.creature.parts.push(...STAGES.creature.parts!.map((p) => p.id));
+    for (const p of big) equipPart(s, p.id);
+    for (const p of STAGES.creature.parts!) equipPart(s, p.id);
+    let used = 0;
+    for (const id of Object.values(s.stages.creature.equipped)) if (id) used += Math.ceil(Object.values(STAGES.creature.parts!.find((p) => p.id === id)!.stats).reduce((n, v) => n + (v ?? 0), 0) / 2);
+    expect(used).toBeLessThanOrEqual(energyBudget(s));
+    expect(STAGES.creature.parts!.some((p) => !canWear(s, p.id))).toBe(true);
+  });
+
+  it('an expedition can run into something halfway, and the choice counts', () => {
+    const s = creatureGame();
+    s.stages.creature.pop = 10;
+    startTrip(s, 'shore');
+    const t = s.stages.creature.trip!;
+    t.event = { id: 'glut', choice: null };
+    expect(chooseEvent(s, 0)).toBe(false); // not halfway yet
+    t.left = t.total / 2 - 1;
+    expect(tripEventDue(s)).toBe(true);
+    expect(chooseEvent(s, 0)).toBe(true);
+    expect(tripEventDue(s)).toBe(false);
+    tick(s, t.total);
+    const r = s.reports.find((x) => x.kind === 'trip')!;
+    expect(r.event).toBeTruthy();
   });
 
   it('a creature save survives a round trip, mid-expedition and mid-egg', () => {

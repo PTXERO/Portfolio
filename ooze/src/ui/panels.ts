@@ -3,7 +3,7 @@
 
 import { icon, type SpriteName } from '../art/sprites';
 import { lifeIcon } from '../scene/icons';
-import { bodyLayout, creatureKey, creatureUpdate, exploreLayout, familyLayout } from './creaturePanels';
+import { bodyLayout, creatureKey, creatureUpdate, exploreLayout, familyLayout, herdLayout } from './creaturePanels';
 import { STAGES } from '../content/stages';
 import {
   buyCount,
@@ -145,6 +145,12 @@ export function describeEffect(stage: StageId, e: Effect): string {
       return 'Your cell rams predators on its own, harder each level';
     case 'habitatMult':
       return `${STAGES[stage].habitats?.find((h) => h.id === e.habitat)?.name ?? e.habitat} life ×${e.mult}`;
+    case 'energy':
+      return `Energy budget +${e.amount}`;
+    case 'upkeepMult':
+      return `The herd eats ×${e.mult}`;
+    case 'winterMult':
+      return `Winter takes ×${e.mult}`;
   }
 }
 
@@ -211,7 +217,7 @@ export function layoutKey(state: GameState, tab: Tab): string {
       ? [visibleUpgrades(state, state.current).map((u) => u.id), state.stages[state.current].upgrades, state.stages[state.current].levels]
       : 0,
     tab === 'roots' ? (STAGES[state.current].milestones ?? []).map((m) => milestoneMet(state, m)) : 0,
-    tab === 'body' || tab === 'explore' || tab === 'family' ? creatureKey(state) : 0,
+    tab === 'body' || tab === 'explore' || tab === 'family' || (tab === 'grow' && STAGES[state.current].places) ? creatureKey(state) : 0,
     tab === 'lab' || tab === 'pond' ? [visibleDials(state), state.stages[state.current].discovered, reactions(state.current).map((r) => hintLevel(state, r))] : 0,
     tab === 'pond' ? [state.stages[state.current].habitat, (STAGES[state.current].habitats ?? []).map((h) => habitatUnlocked(state, state.current, h))] : 0,
   ]);
@@ -222,6 +228,9 @@ export function layout(state: GameState, tab: Tab): string {
   const def = STAGES[id];
   const cur = icon(CURRENCY_ICON[id], 2);
 
+  if (tab === 'grow' && def.places) {
+    return herdLayout(state, AMOUNTS.map((a) => `<button class="px-btn" data-amount="${a}">${a === 'max' ? 'MAX' : `×${a}`}</button>`).join(''));
+  }
   if (tab === 'grow') {
     const rows = shownGenerators(state)
       .map(
@@ -462,7 +471,9 @@ export function update(root: HTMLElement, state: GameState, tab: Tab): void {
   const id = state.current;
   const st = state.stages[id];
 
-  if (tab === 'grow') {
+  if (tab === 'grow' && STAGES[id].places) {
+    creatureUpdate(root, state, 'grow');
+  } else if (tab === 'grow') {
     for (const g of shownGenerators(state)) {
       const owned = st.generators[g.id];
       const n = buyCount(state, id, g.id, state.buyAmount);

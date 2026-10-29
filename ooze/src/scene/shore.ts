@@ -1,17 +1,19 @@
 // The Creature stage scene: a side-on shoreline. The sea on the left, beach, then
 // grass and hills. Your creature walks the ground (tap to send it somewhere),
 // eats from bushes and catches bugs, and chases off the odd beast. What you own
-// fills the land: hatchlings, burrows, a grazing herd, nests, a watering hole,
-// dens and territory markers. While it's away exploring, it walks off-screen.
+// fills the land: nests, burrows, a watering hole, dens and territory markers,
+// and the herd itself, each member at its job. The seasons turn: green spring,
+// gold summer, red autumn, snow in winter. While it's away exploring, it walks off-screen.
 
 import { PAL } from '../art/sprites';
 import { STAGES } from '../content/stages';
 import { canEat } from '../economy/actions';
 import { statsOf } from '../economy/creature';
-import type { FoodKind, GameState } from '../economy/types';
+import { seasonOf } from '../economy/rates';
+import type { FoodKind, GameState, Role } from '../economy/types';
 import { drawBlob, type BlobStyle } from './blob';
 import { creatureLookOf, drawCreature } from './creatureLook';
-import { Effects, floorY, hash, visibleCount, type Frame } from './paint';
+import { Effects, floorY, hash, mixColor, visibleCount, type Frame } from './paint';
 import type { PondEvent } from './pond';
 
 interface Walker {
@@ -19,6 +21,20 @@ interface Walker {
   vx: number;
   phase: number;
 }
+
+interface Member extends Walker {
+  role: Role;
+  /** Where it likes to be (its nest, its burrow, its post). */
+  home: number;
+}
+
+/** Each season's land: sky top and bottom, slope, grass, grass tufts, hills. */
+const SEASON_LOOK = [
+  { sky: ['#9fd4e8', '#cbe7e6'], slope: '#9cc58a', grass: '#6faa5c', tuft: '#4f8a46', hills: '#7fae7a' },
+  { sky: ['#8fcdf0', '#d8efe0'], slope: '#b4c878', grass: '#86b050', tuft: '#5e8a3a', hills: '#93b06a' },
+  { sky: ['#e2b98a', '#efd9b0'], slope: '#c49a5a', grass: '#b08a4a', tuft: '#c0603a', hills: '#a87850' },
+  { sky: ['#b8c4d0', '#e4e8ec'], slope: '#dfe6ea', grass: '#eef2f4', tuft: '#c8d2d8', hills: '#c8d4dc' },
+];
 
 interface Food {
   x: number;
@@ -46,8 +62,8 @@ export class ShoreScene {
   private fx = new Effects();
   private events: PondEvent[] = [];
   private me = { x: 40, vx: 0, tx: null as number | null, left: false, idle: 0, away: false };
-  private hatchlings: Walker[] = [];
-  private herd: Walker[] = [];
+  private members: Member[] = [];
+  private flakes: { x: number; y: number; v: number }[] = [];
   private food: Food[] = [];
   private foodTimer = 0;
   private beast: Beast | null = null;
@@ -62,8 +78,8 @@ export class ShoreScene {
     this.fx.clear();
     this.food = [];
     this.beast = null;
-    this.hatchlings = [];
-    this.herd = [];
+    this.members = [];
+    this.flakes = [];
   }
 
   drain(): PondEvent[] {
@@ -110,6 +126,42 @@ export class ShoreScene {
     void state;
   }
 
+  /** Keeps the drawn herd in step with the real one: a sample of it, roles in proportion. */
+  private syncHerd(state: GameState, W: number): void {
+    const st = state.stages.creature;
+    const pop = Math.max(1, Math.floor(st.pop));
+    const n = visibleCount(pop - 1, 16);
+    const want: Partial<Record<Role, number>> = {};
+    let given = 0;
+    for (const r of ['carer', 'digger', 'guard'] as Role[]) {
+      want[r] = st.roles[r] > 0 ? Math.max(1, Math.round((n * st.roles[r]) / pop)) : 0;
+      given += want[r]!;
+    }
+    want.forager = Math.max(0, n - given);
+    const gens = st.generators;
+    const fresh = this.members.length === 0;
+    for (const r of ['forager', 'carer', 'digger', 'guard'] as Role[]) {
+      const have = this.members.filter((m) => m.role === r);
+      for (let i = have.length; i < want[r]!; i++) {
+        const k = this.members.length;
+        const home =
+          r === 'carer'
+            ? W * (0.05 + (i % Math.max(1, Math.min(5, gens.nest))) * 0.06)
+            : r === 'digger'
+              ? W * (0.45 + (i % Math.max(1, Math.min(6, gens.burrow))) * 0.08)
+              : r === 'guard'
+                ? i % 2
+                  ? W - 8 - (i >> 1) * 6
+                  : 8 + (i >> 1) * 6
+                : W * (0.42 + hash(k, 7) * 0.5);
+        // Newcomers walk in from the side (on first sight, everyone's already home).
+        this.members.push({ role: r, home, x: fresh ? home : hash(k, 3) < 0.5 ? -6 : W + 6, vx: 0, phase: Math.random() * 10 });
+      }
+      let extra = have.length - want[r]!;
+      if (extra > 0) this.members = this.members.filter((m) => m.role !== r || extra-- <= 0);
+    }
+  }
+
   draw(f: Frame, state: GameState): void {
     const { b, W, H, t, dt, top } = f;
     const floor = floorY(f, 0.82);
@@ -120,7 +172,16 @@ export class ShoreScene {
 
     // Sky and the line of the far hills.
     const horizon = Math.round(top + (floor - top) * 0.5);
-    const sky = ['#9fd4e8', '#b6dfe9', '#cbe7e6', '#dcedde'];
+    // The season's colours, blending into the next over its last 15 seconds.
+    const { season, left } = seasonOf(state);
+    const si = ['Spring', 'Summer', 'Autumn', 'Winter'].indexOf(season.name);
+    const blend = Math.max(0, 1 - left / 15);
+    const now = SEASON_LOOK[si];
+    const nxt = SEASON_LOOK[(si + 1) % 4];
+    const col = (k: 'slope' | 'grass' | 'tuft' | 'hills') => mixColor(now[k], nxt[k], blend);
+    const skyTop = mixColor(now.sky[0], nxt.sky[0], blend);
+    const skyBot = mixColor(now.sky[1], nxt.sky[1], blend);
+    const sky = [0, 1, 2, 3].map((i) => mixColor(skyTop, skyBot, i / 3));
     const band = Math.ceil(horizon / sky.length);
     sky.forEach((c, i) => {
       b.fillStyle = c;
@@ -134,7 +195,7 @@ export class ShoreScene {
       b.fillRect(cx + 3, cy - 2, 8, 2);
     }
     // Hills.
-    b.fillStyle = '#7fae7a';
+    b.fillStyle = col('hills');
     for (let x = Math.floor(W * 0.3); x < W; x++) {
       const h = 6 + Math.round(Math.sin(x * 0.05) * 4 + Math.sin(x * 0.13) * 2);
       b.fillRect(x, horizon - h, 1, h);
@@ -158,7 +219,7 @@ export class ShoreScene {
       b.fillRect(x, horizon + 2 + ((i * 5) % Math.max(1, floor - horizon - 4)), 4, 1);
     }
     // Land between the hills and the ground: a gentle green slope.
-    b.fillStyle = '#9cc58a';
+    b.fillStyle = col('slope');
     b.fillRect(Math.floor(W * 0.32), horizon, W, floor - horizon);
     // Waves lapping the sand.
     const lap = Math.round(Math.sin(t * 1.2) * 2);
@@ -169,12 +230,36 @@ export class ShoreScene {
     const sandTo = Math.floor(W * 0.4);
     b.fillStyle = PAL.s;
     b.fillRect(0, floor, sandTo, H - floor);
-    b.fillStyle = '#6faa5c';
+    b.fillStyle = col('grass');
     b.fillRect(sandTo, floor, W - sandTo, H - floor);
-    b.fillStyle = '#4f8a46';
+    b.fillStyle = col('tuft');
     for (let x = sandTo; x < W; x += 3) b.fillRect(x, floor - (x % 2), 1, 1 + (x % 2));
     b.fillStyle = PAL.S;
     for (let i = 0; i < 12; i++) b.fillRect(Math.floor(hash(i, 4) * sandTo), floor + 3 + ((i * 5) % 9), 2, 1);
+
+    // Spring flowers in the grass; autumn leaves on the wind; snow falling in winter.
+    if (season.name === 'Spring') {
+      for (let i = 0; i < 10; i++) {
+        b.fillStyle = i % 3 ? PAL.w : PAL.y;
+        b.fillRect(Math.floor(sandTo + hash(i, 9) * (W - sandTo)), floor - 1, 1, 1);
+      }
+    }
+    if (season.name === 'Autumn' || season.name === 'Winter') {
+      const want = season.name === 'Winter' ? 40 : 10;
+      while (this.flakes.length < want) this.flakes.push({ x: Math.random() * W, y: top + Math.random() * (floor - top), v: 4 + Math.random() * 6 });
+      this.flakes.length = want;
+      for (const q of this.flakes) {
+        q.y += q.v * dt;
+        q.x += Math.sin(t + q.v) * 3 * dt + (season.name === 'Autumn' ? 6 * dt : 0);
+        if (q.y > floor) {
+          q.y = top;
+          q.x = Math.random() * W;
+        }
+        if (q.x > W) q.x -= W;
+        b.fillStyle = season.name === 'Winter' ? PAL.w : q.v > 7 ? PAL.o : PAL.r;
+        b.fillRect(Math.round(q.x), Math.round(q.y), 1, 1);
+      }
+    } else this.flakes.length = 0;
 
     // Burrows in the bank, nests on the sand, the watering hole and dens.
     for (let i = 0; i < Math.min(6, gens.burrow); i++) {
@@ -207,18 +292,7 @@ export class ShoreScene {
       b.fillRect(x - 1, floor - 3, 3, 3);
     }
 
-    // The herd grazes in the distance, on the slope.
-    const herdN = visibleCount(gens.herd, 10);
-    while (this.herd.length < herdN) this.herd.push({ x: W * (0.5 + Math.random() * 0.45), vx: 0, phase: Math.random() * 10 });
-    this.herd.length = herdN;
     const look = creatureLookOf(state);
-    for (const w of this.herd) {
-      w.x += Math.sin(t * 0.2 + w.phase) * 1.5 * dt;
-      const y = horizon + Math.floor((floor - horizon) * 0.45) + Math.round(hash(w.phase, 2) * 6);
-      b.globalAlpha = 0.85;
-      drawBlob(b, [{ x: w.x, y, r: 2.6, nucleus: false }, { x: w.x + 3, y: y - 1, r: 1.6, nucleus: false }], { edge: '#5a7a4a', body: '#7a9a5a', nucleus: PAL.k });
-      b.globalAlpha = 1;
-    }
 
     // Food: bushes with berries (plant food) and hopping bugs.
     this.foodTimer -= dt;
@@ -258,20 +332,40 @@ export class ShoreScene {
       b.globalAlpha = 1;
     }
 
-    // Hatchlings potter about near the nests and burrows.
-    const hatchN = visibleCount(gens.hatchling, 14);
-    while (this.hatchlings.length < hatchN) this.hatchlings.push({ x: Math.random() * W, vx: 0, phase: Math.random() * 10 });
-    this.hatchlings.length = hatchN;
-    for (const w of this.hatchlings) {
-      const target = Math.sin(t * 0.3 + w.phase) * 4 + 3 * Math.sign(Math.sin(t * 0.15 + w.phase * 2));
-      w.vx += (target - w.vx) * Math.min(1, dt);
-      w.x += w.vx * dt;
-      if (w.x < 6 || w.x > W - 6) w.vx = -w.vx;
-      w.x = Math.max(6, Math.min(W - 6, w.x));
-      const hopY = Math.abs(Math.sin(t * 6 + w.phase)) < 0.2 ? 1 : 0;
-      drawBlob(b, [{ x: w.x, y: floor - 3 - hopY, r: 2.2, nucleus: false }], { edge: look.diet === 'none' ? PAL.g : '#8fe0c0', body: PAL.G, nucleus: PAL.k });
-      b.fillStyle = PAL.k;
-      b.fillRect(Math.round(w.x) + (w.vx < 0 ? -1 : 1), floor - 4 - hopY, 1, 1);
+    // The herd, each at its job: foragers peck about the grass, carers sit by the nests,
+    // diggers work the burrows, guards stand at the edges (and run at beasts). Scouts are out.
+    this.syncHerd(state, W);
+    const beastNow = this.beast && !this.beast.fleeing ? this.beast : null;
+    for (const m of this.members) {
+      let goal = m.home + Math.sin(t * 0.2 + m.phase) * (m.role === 'forager' ? 18 : m.role === 'guard' ? 3 : 5);
+      if (m.role === 'guard' && beastNow) goal = beastNow.x - beastNow.dir * 8;
+      const d = goal - m.x;
+      const sp = m.role === 'guard' && beastNow ? 22 : 6;
+      m.vx += (Math.sign(d) * Math.min(sp, Math.abs(d) * 2) - m.vx) * Math.min(1, dt * 3);
+      m.x = Math.max(4, Math.min(W - 4, m.x + m.vx * dt));
+      const moving = Math.abs(m.vx) > 1;
+      // Guards face out (or at the beast); everyone else faces the way they walk.
+      const left = moving ? m.vx < 0 : m.role === 'guard' ? m.home < W / 2 : Math.sin(m.phase * 3) < 0;
+      // Foragers dip to peck; diggers bob and throw up dirt.
+      const bob = (m.role === 'forager' || m.role === 'digger') && !moving && Math.sin(t * 3 + m.phase * 5) > 0.6 ? 1 : 0;
+      drawCreature(b, look, m.x, floor + bob, { left, frame: moving ? Math.floor(t * 8 + m.phase) % 2 : 0, scale: 0.5 });
+      if (m.role === 'digger' && bob && Math.floor(t * 6 + m.phase) % 3 === 0) {
+        b.fillStyle = '#3a2a1a';
+        b.fillRect(Math.round(m.x + (left ? 3 : -3)), floor - 3, 1, 1);
+      }
+      if (m.role === 'carer' && Math.floor(t + m.phase) % 4 === 0) {
+        b.fillStyle = PAL.p;
+        b.fillRect(Math.round(m.x), floor - 12, 1, 1);
+      }
+      // Guards bump the beast too.
+      if (m.role === 'guard' && beastNow && beastNow.flinch <= 0 && Math.abs(beastNow.x - m.x) < 9 && Math.random() < dt * 0.8) {
+        beastNow.hits++;
+        beastNow.flinch = 0.5;
+        if (beastNow.hits >= this.hitsNeeded(state)) {
+          beastNow.fleeing = true;
+          this.events.push({ type: 'fend', x: beastNow.x, y: floor - 12 });
+        } else this.events.push({ type: 'hit', x: beastNow.x, y: floor - 12 });
+      }
     }
 
     // A beast wanders in now and then and goes for the food and the young.
