@@ -104,6 +104,27 @@ const weight3 = (si: number, next: number, turn: number) => (si === 3 ? 1 - turn
 const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const mixRgb = (a: number[], b: number[], t: number) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 
+/** Ground after the strike: grass and forest burnt to grey and black, rock scorched, the
+ * fissures dark with a little heat still in them, the spear's lake dark red. */
+function charred(p: number[], bi: number, scar: number, n: number, x: number, y: number): number[] {
+  // The spear's lake: dark, wine-red water.
+  if (scar === 3) return n > 0.9 ? [120, 60, 90] : n < 0.3 ? [44, 18, 34] : [62, 26, 46];
+  if (scar === 2) return n > 0.82 ? [150, 42, 26] : n > 0.6 ? [46, 22, 20] : [22, 14, 14];
+  switch (bi) {
+    case Biome.Forest:
+      // Burnt trunks standing in a loose grid, ash between.
+      return (x + (y % 3)) % 3 === 0 && n < 0.7 ? [24, 20, 20] : n > 0.8 ? [70, 64, 60] : [44, 40, 40];
+    case Biome.Rock:
+    case Biome.Peak:
+      return mixRgb(p, [20, 16, 16], 0.45);
+    case Biome.Sand:
+      return n < 0.2 ? [88, 82, 76] : [118, 110, 100];
+    default:
+      // Ash and char, and here and there an ember.
+      return n > 0.985 ? [200, 70, 30] : n < 0.25 ? [40, 37, 37] : n < 0.6 ? [70, 66, 64] : [92, 88, 84];
+  }
+}
+
 export class RangeScene {
   protected fx = new Effects();
   protected wild = new Wild();
@@ -439,7 +460,9 @@ export class RangeScene {
             p = n < 0.18 ? c.grassDark : c.grass;
             if (si === 0 && n > 0.985) p = n > 0.993 ? c.flower : c.flower2;
         }
-        if (si === 3 && (bi === Biome.Grass || bi === Biome.High || bi === Biome.Sand) && n > 0.15) p = c.snow;
+        const sc = is.scar?.[i] ?? 0;
+        if (sc) p = charred(p, bi, sc, n, x, y);
+        else if (si === 3 && (bi === Biome.Grass || bi === Biome.High || bi === Biome.Sand) && n > 0.15) p = c.snow;
         img.data[i * 4] = p[0];
         img.data[i * 4 + 1] = p[1];
         img.data[i * 4 + 2] = p[2];

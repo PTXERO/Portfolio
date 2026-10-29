@@ -29,6 +29,8 @@ export interface Island {
   height: Float32Array;
   home: Pt;
   places: Record<string, Pt>;
+  /** After the strike: burnt ground (1) and fissures (2), cell by cell. */
+  scar?: Uint8Array;
 }
 
 /** Where each kind of place likes to be, and how far from home (in tiles). */

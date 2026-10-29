@@ -50,6 +50,14 @@ export class Scene {
   private shore = new RangeScene();
   /** The Tribal era's map: the same island, broken (it builds on the Creature's). */
   private tribe = new TribeScene();
+  /** Whether the walk to the spear is done (and it's waiting to be touched). */
+  get spearReady(): boolean {
+    return this.tribe.arrived;
+  }
+  /** Holds the walk to the spear (while the strike plays over it). */
+  set holdWalk(on: boolean) {
+    this.tribe.hold = on;
+  }
 
   /** The map on show: the Creature's island or the Tribal era's fragment. */
   private get map(): RangeScene {

@@ -1,4 +1,4 @@
-// The Tribal era's economy. A quarter of the herd lives through the strike (about the share
+// The Extinction (the first part of the Tribal era): its economy. A quarter of the herd lives through the strike (about the share
 // of species that lived through the impact that ended the dinosaurs). They keep the Creature's
 // look and stats; the eras before are sealed (the world they were part of is gone) and leave
 // a lasting heritage instead.
@@ -76,64 +76,111 @@ export function tribeTick(state: GameState, dt: number): void {
   t.year += dt;
 }
 
-/** What's left of the island after the strike, and where the spear stands. */
-export interface Fragment {
+/** The island after the strike: all of it still there, all of it burnt, the spear standing in
+ * a small lake at its heart, fissures torn out from it. */
+export interface Ashen {
   island: Island;
   spear: Pt;
-  /** The camp: where the survivors huddle (the old home). */
+  /** Where the survivors huddle (the old home), and where the walk to the spear starts. */
   camp: Pt;
 }
 
-const fragments = new Map<number, Fragment>();
+const ashen = new Map<number, Ashen>();
+/** The lake round the spear's foot, in tiles. */
+export const LAKE = 4.5;
+/** How far out the blow flattened the land, beyond the lake. */
+const BASIN = 34;
 
-/**
- * The island, broken: one ragged piece of land around the old home, cliffs where it sheared
- * off, deep sea everywhere else, and a scorched crater a little inland where the spear went in.
- */
-export function fragmentFor(state: GameState): Fragment {
+/** Scar marks on the burnt island: burnt ground, and the fissures. */
+export const BURNT = 1;
+export const FISSURE = 2;
+export const LAKE_WATER = 3;
+
+export function ashenFor(state: GameState): Ashen {
   const base = islandFor(state);
-  const hit = fragments.get(base.seed);
+  const hit = ashen.get(base.seed);
   if (hit) return hit;
   const N = ISLAND;
-  const home = base.home;
-  // The spear fell a little inland from home (toward the old island's heart).
-  const ix = N / 2 - home.x;
-  const iy = N / 2 - home.y;
-  const il = Math.hypot(ix, iy) || 1;
-  const spear = { x: home.x + (ix / il) * 15, y: home.y + (iy / il) * 15 };
-  const mid = { x: (home.x + spear.x) / 2, y: (home.y + spear.y) / 2 };
   const height = new Float32Array(base.height);
   const biome = new Uint8Array(base.biome);
-  // A ragged edge: the radius wanders with the angle.
-  const wobble = (a: number) => 36 + Math.sin(a * 3 + base.seed) * 6 + Math.sin(a * 7 + base.seed * 0.3) * 3 + Math.sin(a * 13) * 1.5;
+  const scar = new Uint8Array(N * N);
+  // The spear came down at the island's heart (the middle of its land).
+  let sx = 0;
+  let sy = 0;
+  let n = 0;
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
       const i = y * N + x;
-      const dx = x - mid.x;
-      const dy = y - mid.y;
-      const d = Math.hypot(dx, dy);
-      const edge = wobble(Math.atan2(dy, dx));
-      if (d > edge) {
-        height[i] = -0.28;
-        biome[i] = Biome.Deep;
-        continue;
+      if (height[i] <= 0) continue;
+      scar[i] = BURNT;
+      sx += x;
+      sy += y;
+      n++;
+    }
+  }
+  const spear = { x: n ? sx / n : N / 2, y: n ? sy / n : N / 2 };
+  // The blow flattened the land for a long way round: a wide, shallow bowl, rising gently to
+  // meet what's left standing.
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const i = y * N + x;
+      if (height[i] <= 0) continue;
+      const d = Math.hypot(x - spear.x, y - spear.y);
+      const k = Math.min(1, Math.max(0, (d - LAKE) / BASIN));
+      const ease = k * k * (3 - 2 * k);
+      const low = 0.012 + 0.0012 * (d - LAKE);
+      height[i] = low + (height[i] - low) * ease;
+      if (ease < 0.6 && biome[i] !== Biome.Sea && biome[i] !== Biome.Deep) biome[i] = Biome.Rock;
+    }
+  }
+  // Fissures: jagged grooves torn out from the spear, sunk into the land itself.
+  let r = (base.seed * 9301 + 49297) >>> 0;
+  const rand = () => {
+    r = (r * 1664525 + 1013904223) >>> 0;
+    return r / 2 ** 32;
+  };
+  const carve = (x: number, y: number, a: number, len: number, depth: number) => {
+    for (let d = 0; d < len; d += 0.5) {
+      a += (rand() - 0.5) * 0.5;
+      x += Math.cos(a) * 0.5;
+      y += Math.sin(a) * 0.5;
+      const cx = Math.round(x);
+      const cy = Math.round(y);
+      if (cx < 1 || cy < 1 || cx >= N - 1 || cy >= N - 1) return;
+      if (height[cy * N + cx] <= 0) return;
+      // Wide near the spear, narrowing as it runs out.
+      const cells = d < len * 0.45 ? [0, 1, N, N + 1] : [0];
+      for (const o of cells) {
+        const i = cy * N + cx + o;
+        if (height[i] <= 0) continue;
+        height[i] = Math.max(0.003, height[i] - 0.025);
+        scar[i] = FISSURE;
       }
-      // Sheared cliffs along the break (only where there was land to break).
-      if (d > edge - 3 && height[i] > -0.02) {
-        height[i] = Math.max(height[i], 0.12 + (edge - d) * 0.02);
+      if (depth < 1 && rand() < 0.012) carve(x, y, a + (rand() < 0.5 ? -1 : 1) * (0.6 + rand() * 0.5), len * 0.4, depth + 1);
+    }
+  };
+  const arms = 12;
+  for (let k = 0; k < arms; k++) {
+    const a = (k / arms) * Math.PI * 2 + rand() * 0.4;
+    carve(spear.x + Math.cos(a) * LAKE, spear.y + Math.sin(a) * LAKE, a, 40 + rand() * 80, 0);
+  }
+  // The lake round its foot, and a low burnt shore.
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const i = y * N + x;
+      const d = Math.hypot(x - spear.x, y - spear.y);
+      if (d < LAKE) {
+        height[i] = -0.04;
+        biome[i] = Biome.Sea;
+        scar[i] = LAKE_WATER;
+      } else if (d < LAKE + 3) {
+        height[i] = Math.min(Math.max(height[i], 0.01), 0.01 + (d - LAKE) * 0.012);
         biome[i] = Biome.Rock;
-      }
-      // The crater: a scorched bowl with a raised lip.
-      const cd = Math.hypot(x - spear.x, y - spear.y);
-      if (cd < 9) {
-        // A flat scorched floor, low, inside a ring wall of thrown-up rock.
-        const k = cd / 9;
-        height[i] = k < 0.72 ? 0.015 : Math.max(height[i], 0.16 * (1 - Math.abs(k - 0.86) / 0.14));
-        biome[i] = Biome.Rock;
+        scar[i] = BURNT;
       }
     }
   }
-  const frag: Fragment = { island: { seed: base.seed + 7777, biome, height, home: { ...home }, places: {} }, spear, camp: { ...home } };
-  fragments.set(base.seed, frag);
-  return frag;
+  const out: Ashen = { island: { seed: base.seed + 7777, biome, height, home: { ...base.home }, places: {}, scar }, spear, camp: { ...base.home } };
+  ashen.set(base.seed, out);
+  return out;
 }

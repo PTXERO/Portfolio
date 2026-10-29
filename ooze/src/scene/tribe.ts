@@ -1,12 +1,13 @@
-// The Tribal era's map: what's left of the island after the strike. The same 2.5D, lit land
-// as the Creature's (this builds on its scene), but broken off into one piece, with the
-// spear standing in its crater. The survivors huddle at the old home, scared of it, until one
-// goes and touches it; after that they're awake, and go about the land on their own.
+// The Extinction's map: the island after the strike. The same 2.5D, lit land as the
+// Creature's (this builds on its scene), all of it burnt grey and black and still smouldering,
+// fissures torn out from the spear, which stands in a small lake at the island's heart. The
+// survivors huddle at the old home; one of them (the one you were) walks out to the spear, and
+// when you touch it they wake. After that they go about the ash on their own.
 
 import { PAL } from '../art/sprites';
 import { SEASON_SEC } from '../economy/rates';
-import { CELLS, isLand, type Pt } from '../economy/island';
-import { fragmentFor, tribeOf } from '../economy/tribal';
+import { CELLS, ISLAND, isLand, type Pt } from '../economy/island';
+import { BURNT, LAKE, ashenFor, tribeOf } from '../economy/tribal';
 import type { GameState } from '../economy/types';
 import { creatureLookOf } from './creatureLook';
 import { hash, type Frame } from './paint';
@@ -29,12 +30,22 @@ const DAY_SEC = 120;
 
 export class TribeScene extends RangeScene {
   private people: Person[] = [];
+  /** The one that walks to the spear: where it is, and whether it's got there. */
+  private walker: Pt | null = null;
+  arrived = false;
+  /** Holds the walk (while the strike is still playing over it). */
+  hold = false;
+  /** The shockwave when they wake: seconds since it went out (-1 when there isn't one). */
+  private wave = -1;
+  private smoke: { x: number; y: number; z: number; life: number }[] = [];
   private placed = false;
   private seedSeen = -1;
 
   reset(): void {
     super.reset();
     this.people = [];
+    this.walker = null;
+    this.arrived = false;
     this.placed = false;
     this.auto = false;
   }
@@ -42,14 +53,14 @@ export class TribeScene extends RangeScene {
   tap(state: GameState, ax: number, ay: number): void {
     const t = tribeOf(state);
     if (!t || !this.island) return;
-    const { spear } = fragmentFor(state);
-    // The spear: before they've woken, touching it is how they do.
+    const { spear } = ashenFor(state);
+    // The spear: once the walker has reached it, touching it is how they wake.
     const X = this.sx(spear.x);
     const Y = this.py(spear.x, spear.y);
     const tall = this.spearHeight();
-    if (!t.awake && Math.abs(ax - X) < Math.max(8, tall * 0.25) && ay > Y - tall - 4 && ay < Y + 4) {
+    if (!t.awake && this.arrived && Math.abs(ax - X) < Math.max(8, tall * 0.25) && ay > Y - tall - 4 && ay < Y + 4) {
       this.events.push({ type: 'spear', x: X, y: Y - tall });
-      this.fx.pulse(Math.round(X), Math.round(Y - tall * 0.6), PAL.p);
+      this.wave = 0;
     }
   }
 
@@ -65,13 +76,13 @@ export class TribeScene extends RangeScene {
     if (!this.viewBottom) this.viewTop = f.top;
     const tribe = tribeOf(state);
     if (!tribe) return;
-    const frag = fragmentFor(state);
+    const frag = ashenFor(state);
     const is = frag.island;
     this.island = is;
-    // First look: the camera over the camp and the crater.
+    // First look: the camera on the camp (before waking it follows the walk to the spear).
     if (!this.placed || this.seedSeen !== is.seed) {
-      this.camX = (frag.camp.x + frag.spear.x) / 2;
-      this.camY = (frag.camp.y + frag.spear.y) / 2 - 4;
+      this.camX = tribe.awake ? (frag.camp.x + frag.spear.x) / 2 : frag.camp.x;
+      this.camY = tribe.awake ? (frag.camp.y + frag.spear.y) / 2 : frag.camp.y;
       this.zoom = 3;
       this.auto = false;
       this.placed = true;
@@ -110,6 +121,40 @@ export class TribeScene extends RangeScene {
     const sprites: { y: number; draw: () => void }[] = [];
     const look = creatureLookOf(state);
 
+    // The world still smoulders: smoke curling up off the ash and embers glowing in it,
+    // dying down over the first days (never quite out). A red haze over all of it at first.
+    const heat = Math.max(0.15, 1 - tribe.year / 900);
+    // Embers and smoke come from the burnt cells in view (the same cells every time).
+    const c0 = this.toWorld(0, 0);
+    const c1 = this.toWorld(W, H);
+    const x0 = Math.max(0, Math.floor(Math.min(c0.x, c1.x)) - 2);
+    const x1 = Math.min(ISLAND - 1, Math.ceil(Math.max(c0.x, c1.x)) + 2);
+    const y0 = Math.max(0, Math.floor(Math.min(c0.y, c1.y)) - 2);
+    const y1 = Math.min(ISLAND - 1, Math.ceil(Math.max(c0.y, c1.y)) + 6);
+    const stride = Math.max(1, Math.ceil((x1 - x0) * (y1 - y0) / 6000));
+    const embers: Pt[] = [];
+    for (let y = y0; y <= y1; y += stride) {
+      for (let x = x0; x <= x1; x += stride) {
+        if (is.scar?.[y * ISLAND + x] === BURNT && hash(x * 7 + y * 131, 49) < 0.035) embers.push({ x: x + 0.5, y: y + 0.5 });
+      }
+    }
+    if (embers.length && Math.random() < heat * dt * 12) {
+      const e = embers[Math.floor(Math.random() * embers.length)];
+      this.smoke.push({ x: e.x, y: e.y, z: 0, life: 5 + Math.random() * 3 });
+    }
+    for (const m of this.smoke) {
+      m.life -= dt;
+      m.z += dt * 4;
+      m.x += dt * 0.5;
+    }
+    this.smoke = this.smoke.filter((m) => m.life > 0);
+    embers.forEach((e) => {
+      const glow = Math.sin(t * (0.8 + hash(Math.floor(e.x), Math.floor(e.y))) + e.x) * 0.5 + 0.5;
+      if (glow < 1 - heat * 0.8) return;
+      b.fillStyle = glow > 0.85 ? 'rgba(255, 170, 80, 0.996)' : 'rgba(220, 60, 30, 0.996)';
+      b.fillRect(Math.round(this.sx(e.x)), Math.round(this.py(e.x, e.y)), 1, 1);
+    });
+
     // The survivors (up to 40 drawn; more are about, off where you can't see them).
     const shown = Math.min(40, Math.max(1, Math.round(tribe.pop)));
     while (this.people.length < shown) {
@@ -128,17 +173,17 @@ export class TribeScene extends RangeScene {
         p.wait = 4 + hash(i, Math.floor(t / 7)) * 8;
         if (!tribe.awake || sleeping) {
           const a = hash(i, Math.floor(t / 9) + 1) * Math.PI * 2;
-          const r = sleeping ? 1.5 : 3 + hash(i, 11) * 3;
+          const r = sleeping ? 2 + hash(i, 13) * 3 : 3 + hash(i, 11) * 7;
           p.goal = { x: frag.camp.x + Math.cos(a) * r, y: frag.camp.y + Math.sin(a) * r * 0.7 };
         } else if (i % 5 === 0) {
           const a = hash(i, Math.floor(t / 11)) * Math.PI * 2;
-          p.goal = { x: frag.spear.x + Math.cos(a) * 10, y: frag.spear.y + Math.sin(a) * 7 };
+          p.goal = { x: frag.spear.x + Math.cos(a) * (LAKE + 2), y: frag.spear.y + Math.sin(a) * (LAKE + 2) };
         } else {
           for (let k = 0; k < 8; k++) {
             const a = hash(i * 13 + k, Math.floor(t / 13)) * Math.PI * 2;
             const r = 4 + hash(i * 7 + k, 17) * 24;
             const g = { x: frag.camp.x + Math.cos(a) * r, y: frag.camp.y + Math.sin(a) * r };
-            if (isLand(is, g.x, g.y) && Math.hypot(g.x - frag.spear.x, g.y - frag.spear.y) > 9) {
+            if (isLand(is, g.x, g.y) && Math.hypot(g.x - frag.spear.x, g.y - frag.spear.y) > LAKE + 3) {
               p.goal = g;
               break;
             }
@@ -152,9 +197,9 @@ export class TribeScene extends RangeScene {
         const ox = p.x - o.x;
         const oy = p.y - o.y;
         const od = Math.hypot(ox, oy);
-        if (od > 0 && od < 1.8) {
-          gx += (ox / od) * (1.8 - od) * 2;
-          gy += (oy / od) * (1.8 - od) * 2;
+        if (od > 0 && od < 2.4) {
+          gx += (ox / od) * (2.4 - od) * 2.5;
+          gy += (oy / od) * (2.4 - od) * 2.5;
         }
       }
       const dx = gx - p.x;
@@ -177,16 +222,90 @@ export class TribeScene extends RangeScene {
       sprites.push({ y: yy, draw: () => this.drawBeing(b, look, x, yy, { left, frame: moving ? Math.floor(t * 8 + p.ph) % 2 : 0, sleeping, hop }) });
     });
 
-    // The spear, standing in its crater.
+    // The walk: before they wake, the one you were walks alone from the camp out over the ash
+    // to the lake's edge, the camera with it.
+    if (!tribe.awake) {
+      if (!this.walker) this.walker = { ...frag.camp };
+      const w = this.walker;
+      const dx = frag.spear.x - w.x;
+      const dy = frag.spear.y - w.y;
+      const d = Math.hypot(dx, dy);
+      const stop = LAKE + 1.2;
+      const moving = d > stop && !this.hold;
+      if (moving) {
+        const sp = Math.max(2.5, Math.hypot(frag.spear.x - frag.camp.x, frag.spear.y - frag.camp.y) / 14);
+        const step = Math.min(d - stop, sp * dt);
+        w.x += (dx / d) * step;
+        w.y += (dy / d) * step;
+      } else if (d <= stop) this.arrived = true;
+      this.camX += (w.x - this.camX) * Math.min(1, dt * 2.5);
+      this.camY += (w.y - 3 - this.camY) * Math.min(1, dt * 2.5);
+      this.zoom += (3 - this.zoom) * Math.min(1, dt * 2);
+      const wx = w.x;
+      const wy = w.y;
+      const hop = moving ? Math.abs(Math.sin(t * 7)) * 2 : 0;
+      sprites.push({ y: wy, draw: () => this.drawBeing(b, look, wx, wy, { left: dx < 0, frame: moving ? Math.floor(t * 8) % 2 : 0, sleeping: false, hop }) });
+    }
+
+    // The spear, standing in its lake.
     const sx = this.sx(frag.spear.x);
     const sy = this.py(frag.spear.x, frag.spear.y);
     sprites.push({ y: frag.spear.y, draw: () => this.drawSpear(b, sx, sy, t, tribe.awake) });
 
     sprites.sort((a, c) => a.y - c.y);
     for (const s of sprites) s.draw();
+    for (const m of this.smoke) {
+      const X = Math.round(this.sx(m.x));
+      const Y = Math.round(this.py(m.x, m.y) - m.z * this.zoom * 0.6);
+      const k = Math.min(1, m.life / 2) * Math.min(1, m.z) * 0.3;
+      b.fillStyle = `rgba(110, 104, 100, ${k})`;
+      const sz = Math.max(1, Math.round((0.6 + m.z * 0.12) * this.zoom * 0.35));
+      b.fillRect(X - sz, Y - sz, sz * 2, sz * 2);
+    }
 
-    // Before they wake: a pulse at the spear, so it's plain it's the thing to touch.
-    if (!tribe.awake && Math.floor(t * 1.5) % 2) {
+    // A red haze over the burnt world, thinning as it cools.
+    b.fillStyle = `rgba(150, 30, 20, ${0.16 * heat})`;
+    b.fillRect(0, 0, W, H);
+
+    // The waking: a shockwave of purple and red light rolls out from the spear across the
+    // whole world (it glows: the shader blooms it), the air itself tinted for a moment.
+    if (this.wave >= 0) {
+      this.wave += dt;
+      const w = this.wave;
+      // A flash as it's touched, then the air tinted purple.
+      if (w < 0.25) {
+        b.fillStyle = `rgba(255, 245, 255, ${1 - w / 0.25})`;
+        b.fillRect(0, 0, W, H);
+      }
+      if (w < 2) {
+        b.fillStyle = `rgba(150, 50, 180, ${0.35 * (1 - w / 2)})`;
+        b.fillRect(0, 0, W, H);
+      }
+      const tall = this.spearHeight();
+      const cy = sy - tall * 0.15;
+      for (let k = 0; k < 4; k++) {
+        const r = (w - k * 0.22) * Math.max(W, H) * 0.9;
+        if (r <= 0) continue;
+        const fade = Math.max(0, 1 - r / (Math.max(W, H) * 1.6));
+        if (fade <= 0) continue;
+        const col = k % 2 ? `rgba(230, 60, 90, 0.996)` : `rgba(170, 70, 255, 0.996)`;
+        const steps = Math.ceil(r * 3);
+        b.globalAlpha = fade;
+        b.fillStyle = col;
+        for (let i = 0; i < steps; i++) {
+          const a = (i / steps) * Math.PI * 2;
+          const x = Math.round(sx + Math.cos(a) * r);
+          const y2 = Math.round(cy + Math.sin(a) * r * 0.62);
+          if (x < -2 || x > W + 2 || y2 < -2 || y2 > H + 2) continue;
+          b.fillRect(x, y2, 2, 1);
+        }
+        b.globalAlpha = 1;
+      }
+      if (w > 5) this.wave = -1;
+    }
+
+    // Once there: a pulse at the spear, so it's plain it's the thing to touch.
+    if (!tribe.awake && this.arrived && Math.floor(t * 1.5) % 2) {
       const tall = this.spearHeight();
       b.fillStyle = PAL.y;
       b.fillRect(Math.round(sx) - 1, Math.round(sy - tall - 10), 3, 5);

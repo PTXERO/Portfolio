@@ -43,7 +43,7 @@ import { liveTick, TICK_SEC } from './economy/tick';
 import type { BuyAmount, DialId, GameState, RunInPolicy, StageId } from './economy/types';
 import { breed, buyPart, chooseEvent, EVENT_DC, court, equipPart, FARM_PAY, foundNest, islandFor, netRate, SIGHTINGS, placeRestLeft, placeSeen, placeShort, releaseMate, tripEventDue, tripPay, walkHome, walkSeconds, walkTo } from './economy/creature';
 import { Scene } from './scene/scene';
-import { playStrike } from './ui/strike';
+import { playStrike, storyLine } from './ui/strike';
 import { choiceButton } from './ui/creaturePanels';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
@@ -118,6 +118,11 @@ const discoveryQueue: string[] = [];
 let modalTimer = 0;
 /** Shows a card. With `autoSec`, it clears itself after that long, a bar draining as it waits. */
 function showModal(html: string, autoSec = 0): void {
+  // While the story has the screen, popups wait their turn.
+  if (cine()) {
+    heldModals.push([html, autoSec]);
+    return;
+  }
   clearTimeout(modalTimer);
   modal.dataset.kind = '';
   const bar = autoSec ? `<div class="making-bar on auto-close" style="--dur: ${autoSec}s"><i></i></div>` : '';
@@ -224,6 +229,7 @@ function showRunIn(): boolean {
 
 /** Shows the next discovered reaction, if nothing else is on screen. */
 function showDiscovery(): void {
+  if (cine()) return;
   if (showRunIn()) return;
   if (showTripReport()) return;
   if (!modal.hidden || !discoveryQueue.length) return;
@@ -277,7 +283,7 @@ function renderTabs(): void {
   if (!ids.includes(ui.tab)) ui.tab = 'grow';
   tabsEl.style.gridTemplateColumns = `repeat(${ids.length}, 1fr)`;
   tabsEl.innerHTML = TABS.filter((t) => ids.includes(t.id))
-    .map((t) => `<button class="px-btn tab" data-tab="${t.id}">${icon(t.sprite, 3)}<span>${t.id === 'grow' && STAGES[state.current].places ? 'Herd' : t.id === 'grow' && STAGES[state.current].tribal ? 'Tribe' : t.label}</span><i class="dot" hidden></i></button>`)
+    .map((t) => `<button class="px-btn tab" data-tab="${t.id}">${icon(t.sprite, 3)}<span>${t.id === 'grow' && STAGES[state.current].places ? 'Herd' : t.id === 'grow' && STAGES[state.current].tribal ? 'Survivors' : t.label}</span><i class="dot" hidden></i></button>`)
     .join('');
 }
 
@@ -560,7 +566,15 @@ function closeEnding(): void {
   setTimeout(() => (ending.hidden = true), 600);
   // Into the Tribal era there's no evolving: the spear falls.
   if (STAGES[state.current].next === 'tribal') {
-    playStrike(() => moveOn());
+    striking = true;
+    syncCine();
+    playStrike(
+      () => moveOn(),
+      () => {
+        striking = false;
+        syncCine();
+      },
+    );
     return;
   }
   moveOn();
@@ -579,6 +593,28 @@ function moveOn(): void {
 
 /** Whether the screen shows a map (the Creature's island or what's left of it). */
 const onMap = () => state.current === 'creature' || state.current === 'tribal';
+
+// ---- The story's hold on the screen ----
+// From the strike to the waking, everything but the world and the story's words steps away
+// (the `cinematic` class), and popups wait until it's over.
+let striking = false;
+let waking = false;
+const heldModals: [string, number][] = [];
+/** Before they wake: the walk to the spear, then the wait to touch it. */
+const beforeWaking = () => state.current === 'tribal' && !state.stages.tribal.tribe?.awake;
+function cine(): boolean {
+  return striking || waking || beforeWaking();
+}
+function syncCine(): void {
+  const on = cine();
+  document.body.classList.toggle('cinematic', on);
+  scene.holdWalk = striking;
+  if (!striking && !waking && beforeWaking()) storyLine(scene.spearReady ? STORY.touch : STORY.approach);
+  if (!on && heldModals.length && modal.hidden) {
+    const [html, sec] = heldModals.shift()!;
+    showModal(html, sec);
+  }
+}
 
 /** Applies what happened in the pond: food eaten, organelles engulfed, predators driven off. */
 function pondEvents(): void {
@@ -600,14 +636,20 @@ function pondEvents(): void {
       if (got) scene.float(e.x, e.y, `${e.party ? 'party home ' : ''}+${format(D(got))}`, '#f5c45e');
     } else if (e.type === 'place') showPlaceCard(e.id, e.x, e.y);
     else if (e.type === 'spear' && awaken(state)) {
-      // The waking: one touches the spear, and they know that they are.
-      scene.evolveFlash();
-      showModal(`<p class="label dim">The spear</p>
-        <h3>${STORY.wake}</h3>
-        <p>${STORY.wakeSub}</p>
-        <button class="px-btn gold" data-act="dismiss">…</button>`);
+      // The waking: it touches the spear, and they know that they are. A flash, the
+      // shockwave rolling out across the world, then the words; then the Extinction begins.
+      waking = true;
+      storyLine('');
       panelKey = '';
       save();
+      window.setTimeout(() => storyLine(STORY.wake), 1600);
+      window.setTimeout(() => storyLine(STORY.wakeSub), 6000);
+      window.setTimeout(() => storyLine(''), 10500);
+      window.setTimeout(() => {
+        waking = false;
+        syncCine();
+        render();
+      }, 11500);
     }
   }
   collectNews();
@@ -966,7 +1008,7 @@ async function startFromLink(): Promise<void> {
   const where = params.get('start');
   if (where !== 'creature' && where !== 'tribal') return;
   history.replaceState(null, '', location.pathname);
-  const what = where === 'tribal' ? 'at the end of the Creature stage (to see the strike and the Tribal era)' : 'at the beginning of the Creature stage';
+  const what = where === 'tribal' ? 'at the end of the Creature stage (to see the strike and the Extinction)' : 'at the beginning of the Creature stage';
   if (!confirm(`Start a fresh game ${what}? This replaces your current save (export it from the Menu first if you want to keep it).`)) return;
   try {
     const code = (await (await fetch('./creature-start.txt', { cache: 'no-store' })).text()).trim();
@@ -1024,6 +1066,7 @@ function frame(now: number): void {
   acc %= FRAME_MS;
   scene.draw(state, dt);
   pondEvents();
+  syncCine();
 }
 
 // A save made mid-ending (closed during the credits) picks up at the reveal. This also
