@@ -1,7 +1,7 @@
 import { STAGES } from '../content/stages';
 import { createStageState } from './state';
 import { D, Decimal } from './num';
-import { dialMax, dietOf, forageMult, stageRate, tapValue } from './rates';
+import { dialMax, dietOf, forageMult, maxLevel, stageRate, tapValue, upgradeLevel } from './rates';
 import type { BuyAmount, DialId, FoodKind, GameState, GeneratorDef, HabitatDef, ReactionDef, StageId, UpgradeDef } from './types';
 import { DIALS } from './types';
 
@@ -47,10 +47,20 @@ export function buyGenerator(state: GameState, stage: StageId, id: string, count
   return true;
 }
 
-export function upgradeVisible(state: GameState, stage: StageId, u: UpgradeDef): boolean {
+/** Price of an upgrade's next level. */
+export function upgradeCost(state: GameState, stage: StageId, u: UpgradeDef): Decimal {
+  return D(u.cost).mul(Math.pow(u.costGrowth ?? 3, upgradeLevel(state, stage, u.id)));
+}
+
+/** The stage whose currency pays for an upgrade. */
+export const payStage = (stage: StageId, u: UpgradeDef): StageId => u.pay ?? stage;
+
+/** Whether the requirements to start buying an upgrade hold (ignoring whether it's maxed). */
+export function upgradeUnlocked(state: GameState, stage: StageId, u: UpgradeDef): boolean {
   const st = state.stages[stage];
-  if (st.upgrades.includes(u.id)) return false;
   const r = u.requires;
+  if (u.pay && !state.unlocked.includes(u.pay)) return false;
+  if (r?.levels && !Object.entries(r.levels).every(([id, n]) => upgradeLevel(state, stage, id) >= n)) return false;
   if (r?.generator && (st.generators[r.generator] ?? 0) < (r.owned ?? 1)) return false;
   if (r?.reaction && !st.discovered.includes(r.reaction)) return false;
   if (r?.anyReaction && !r.anyReaction.some((x) => st.discovered.includes(x))) return false;
@@ -60,13 +70,22 @@ export function upgradeVisible(state: GameState, stage: StageId, u: UpgradeDef):
   return true;
 }
 
+/** Buyable now or later: unlocked and not yet at its last level. */
+export function upgradeVisible(state: GameState, stage: StageId, u: UpgradeDef): boolean {
+  return upgradeLevel(state, stage, u.id) < maxLevel(u) && upgradeUnlocked(state, stage, u);
+}
+
 /** Generators the player can see: unlocked by a reaction, or the next tier up from what's owned. */
 export function generatorVisible(state: GameState, stage: StageId, g: GeneratorDef): boolean {
   const def = STAGES[stage];
   const st = state.stages[stage];
+  // Each habitat has its own lineup, opened with the habitat.
+  const h = def.habitats?.find((x) => x.id === g.habitat);
+  if (h && !habitatUnlocked(state, stage, h)) return false;
   if (g.unlockedBy) return st.discovered.includes(g.unlockedBy);
-  const i = def.generators.indexOf(g);
-  return i === 0 || st.generators[g.id] > 0 || st.generators[def.generators[i - 1].id] > 0;
+  const lineup = def.generators.filter((x) => x.habitat === g.habitat && !x.unlockedBy);
+  const i = lineup.indexOf(g);
+  return i <= 0 || st.generators[g.id] > 0 || st.generators[lineup[i - 1].id] > 0;
 }
 
 // ---- Dials and the whirlpool ----
@@ -134,7 +153,7 @@ export function checkReaction(state: GameState, stage: StageId, r: ReactionDef):
   if (r.needs.habitat) {
     const ok = st.habitat === r.needs.habitat;
     dials &&= ok;
-    parts.push({ label: `Living in the ${def.habitats?.find((h) => h.id === r.needs.habitat)?.name ?? r.needs.habitat}`, ok });
+    parts.push({ label: `Your cell in the ${def.habitats?.find((h) => h.id === r.needs.habitat)?.name ?? r.needs.habitat}`, ok });
   }
   for (const d of DIALS) {
     const range = r.needs.dials?.[d];
@@ -234,7 +253,7 @@ export function catalyze(state: GameState, stage: StageId, dt: number): void {
 
 export function habitatUnlocked(state: GameState, stage: StageId, h: HabitatDef): boolean {
   const st = state.stages[stage];
-  if (h.unlock?.upgrade && !st.upgrades.includes(h.unlock.upgrade)) return false;
+  if (h.unlock?.upgrade && upgradeLevel(state, stage, h.unlock.upgrade) < (h.unlock.level ?? 1)) return false;
   if (h.unlock?.reaction && !st.discovered.includes(h.unlock.reaction)) return false;
   return true;
 }
@@ -321,15 +340,30 @@ export function visibleUpgrades(state: GameState, stage: StageId): UpgradeDef[] 
   return STAGES[stage].upgrades.filter((u) => upgradeVisible(state, stage, u));
 }
 
+/** Buys an upgrade's next level. (upgradeVisible also refuses a choice whose alternative is owned.) */
 export function buyUpgrade(state: GameState, stage: StageId, id: string): boolean {
-  // (upgradeVisible also refuses a choice whose alternative is already owned.)
   const u = STAGES[stage].upgrades.find((x) => x.id === id);
+  if (!u || !upgradeVisible(state, stage, u)) return false;
+  const wallet = state.stages[payStage(stage, u)];
+  const cost = upgradeCost(state, stage, u);
+  if (wallet.currency.lt(cost)) return false;
+  wallet.currency = wallet.currency.sub(cost);
   const st = state.stages[stage];
-  if (!u || !upgradeVisible(state, stage, u) || st.currency.lt(u.cost)) return false;
-  st.currency = st.currency.sub(u.cost);
-  st.upgrades.push(u.id);
+  const n = upgradeLevel(state, stage, id) + 1;
+  if (!st.upgrades.includes(id)) st.upgrades.push(id);
+  if (maxLevel(u) > 1) st.levels[id] = n;
   return true;
 }
+
+/** Switches the screen to an earlier (or the latest) stage. Everything keeps producing. */
+export function visitStage(state: GameState, id: StageId): boolean {
+  if (!state.unlocked.includes(id) || state.current === id) return false;
+  state.current = id;
+  return true;
+}
+
+/** The newest stage reached. */
+export const frontier = (state: GameState): StageId => state.unlocked[state.unlocked.length - 1];
 
 export function tap(state: GameState): Decimal {
   const v = tapValue(state);
@@ -358,7 +392,7 @@ export function goalShown(state: GameState): boolean {
 
 export function canEvolve(state: GameState): boolean {
   const def = STAGES[state.current];
-  if (!def.next) return false;
+  if (!def.next || state.stages[state.current].complete) return false;
   const fin = finalReaction(state.current);
   if (fin) return state.stages[state.current].discovered.includes(fin.id);
   return goalProgress(state) >= 1;

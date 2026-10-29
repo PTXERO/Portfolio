@@ -1,11 +1,11 @@
 import { STAGES, STAGE_ORDER } from '../content/stages';
 import { D, Decimal, ZERO } from './num';
-import type { DialId, Diet, Effect, GameState, GeneratorDef, HabitatDef, StageId } from './types';
+import type { DialId, Diet, Effect, GameState, GeneratorDef, HabitatDef, MilestoneDef, StageId, UpgradeDef } from './types';
 
 /** Owning this many of a generator doubles its output, each. Past 100, every further 100 counts too. */
 export const MILESTONES = [10, 25, 50, 100];
-/** How strongly a finished stage boosts the one after it. */
-export const FEED_BASE = 0.15;
+/** A finished stage multiplies the next one's output by its own output to this power. */
+export const FEED_EXP = 0.05;
 /** At full strength the whirlpool multiplies Soup output by 1 + this. */
 export const SWIRL_BONUS = 1;
 
@@ -20,13 +20,54 @@ export function nextMilestone(owned: number): number {
   return m ?? (Math.floor(owned / 100) + 1) * 100;
 }
 
-/** Every effect in force on a stage: bought upgrades plus discovered reactions. */
+/** How many levels of an upgrade are owned (0 if none). */
+export function upgradeLevel(state: GameState, stage: StageId, id: string): number {
+  const st = state.stages[stage];
+  return st.levels[id] ?? (st.upgrades.includes(id) ? 1 : 0);
+}
+
+export const maxLevel = (u: UpgradeDef) => u.levels ?? 1;
+
+/** An effect taken `n` times: multipliers compound, amounts add up, switches stay switched. */
+export function scaleEffect(e: Effect, n: number): Effect {
+  if (n === 1) return e;
+  switch (e.kind) {
+    case 'genMult':
+    case 'stageMult':
+    case 'tapMult':
+    case 'feedMult':
+    case 'swirlMult':
+    case 'heroSpeed':
+    case 'forageMult':
+    case 'spawnMult':
+      return { ...e, mult: Math.pow(e.mult, n) };
+    case 'defense':
+      return { ...e, amount: e.amount * n };
+    case 'offlineHours':
+      return { ...e, hours: e.hours * n };
+    case 'tapFromRate':
+      return { ...e, seconds: e.seconds * n };
+    default:
+      return e;
+  }
+}
+
+/** True when a milestone in an earlier stage has been reached. */
+export function milestoneMet(state: GameState, m: MilestoneDef): boolean {
+  return state.unlocked.includes(m.stage) && (state.stages[m.stage].generators[m.gen] ?? 0) >= m.owned;
+}
+
+/** Every effect in force on a stage: upgrades at their levels, discoveries, and milestones met. */
 export function stageEffects(state: GameState, stage: StageId): Effect[] {
   const st = state.stages[stage];
   const def = STAGES[stage];
   const out: Effect[] = [];
-  for (const u of def.upgrades) if (st.upgrades.includes(u.id)) out.push(u.effect, ...(u.extra ?? []));
+  for (const u of def.upgrades) {
+    const n = upgradeLevel(state, stage, u.id);
+    if (n > 0) for (const e of [u.effect, ...(u.extra ?? [])]) out.push(scaleEffect(e, n));
+  }
   for (const r of def.reactions ?? []) if (r.bonus && st.discovered.includes(r.id)) out.push(r.bonus);
+  for (const m of def.milestones ?? []) if (milestoneMet(state, m)) out.push(m.bonus);
   return out;
 }
 
@@ -65,9 +106,10 @@ export function feedMult(state: GameState, stage: StageId): number {
   if (i <= 0) return 1;
   const prev = STAGE_ORDER[i - 1];
   if (!state.stages[prev].complete) return 1;
-  let strength = FEED_BASE;
+  let strength = FEED_EXP;
   for (const e of stageEffects(state, stage)) if (e.kind === 'feedMult') strength *= e.mult;
-  return 1 + strength * Math.log10(1 + stageRate(state, prev).toNumber());
+  // Every 10x more output in the old stage is worth about 12% more here (26% with Soup Feeding).
+  return Math.pow(Math.max(1, stageRate(state, prev).toNumber()), strength);
 }
 
 // ---- Cell stage: diet, defense and the habitat ----
@@ -102,9 +144,16 @@ export const forageMult = (state: GameState, stage: StageId) => product(state, s
 export const spawnMult = (state: GameState, stage: StageId) => product(state, stage, 'spawnMult');
 export const autopilot = (state: GameState, stage: StageId) => stageEffects(state, stage).some((e) => e.kind === 'autopilot');
 
+/** The habitat on screen (where your own cell swims). */
 export function habitatOf(state: GameState, stage: StageId): HabitatDef | undefined {
   const hs = STAGES[stage].habitats;
   return hs?.find((h) => h.id === state.stages[stage].habitat) ?? hs?.[0];
+}
+
+/** The habitat a generator lives in (the first one when it doesn't say). */
+export function genHabitat(stage: StageId, gen: GeneratorDef): HabitatDef | undefined {
+  const hs = STAGES[stage].habitats;
+  return hs?.find((h) => h.id === gen.habitat) ?? hs?.[0];
 }
 
 /** How well a diet does on a habitat's food: grazers want algae, hunters bacteria. */
@@ -140,7 +189,7 @@ export function generatorRate(state: GameState, stage: StageId, gen: GeneratorDe
   const effects = stageEffects(state, stage);
   let m = Math.pow(2, milestonesReached(owned));
   for (const e of effects) if (e.kind === 'genMult' && e.target === gen.id) m *= e.mult;
-  m *= stageMult(effects) * dialMult(state, stage, gen) * swirlMult(state, stage) * habitatMult(state, stage);
+  m *= stageMult(effects) * dialMult(state, stage, gen) * swirlMult(state, stage) * habitatMult(state, stage, genHabitat(stage, gen));
   return D(gen.baseRate * owned * m * feedMult(state, stage));
 }
 

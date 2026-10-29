@@ -32,6 +32,7 @@ export function deserialize(text: string): GameState {
           totalEarned: D(s.totalEarned),
           generators: { ...fresh.generators, ...s.generators },
           upgrades: [...s.upgrades],
+          levels: { ...(s.levels ?? {}) },
           complete: s.complete,
           dials: { ...fresh.dials, ...s.dials },
           discovered: [...(s.discovered ?? [])],

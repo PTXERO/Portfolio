@@ -39,6 +39,30 @@ interface Pillar {
   maxH: number;
 }
 
+/**
+ * What lives where: each habitat has its own lineup, drawn in the same roles
+ * (a free-swimming swarm, colonies, a film on the rocks, mats on the floor,
+ * pillars, drifting specks, chimneys) in its own colours.
+ */
+interface Lineup {
+  swarm?: string;
+  colony?: string;
+  film?: string;
+  mat?: string;
+  pillar?: string;
+  specks?: string;
+  chimney?: string;
+  matColors: string[];
+  pillarColors: [string, string, string];
+  speck: 'plankton' | 'glow';
+}
+const LINEUPS: Record<string, Lineup> = {
+  shallows: { swarm: 'fission', colony: 'colony', film: 'biofilm', mat: 'mat', pillar: 'stromatolite', specks: 'plankton', matColors: [PAL.l, PAL.L, PAL.G, PAL.n], pillarColors: [PAL.r, PAL.R, PAL.l], speck: 'plankton' },
+  depths: { swarm: 'ambusher', colony: 'pack', mat: 'snowfeeder', specks: 'glow', matColors: ['#c2cde0', '#8fa8b8', '#5a6a70', '#46555c'], pillarColors: [PAL.r, PAL.R, PAL.w], speck: 'glow' },
+  vents: { swarm: 'thermophile', mat: 'sulfurMat', pillar: 'reef', chimney: 'chimney', matColors: [PAL.y, PAL.Y, '#a8782a', '#6a4a20'], pillarColors: ['#3a3236', '#4a4044', '#f2906c'], speck: 'plankton' },
+};
+type Role = 'swarm' | 'colony' | 'film' | 'mat' | 'pillar' | 'specks' | 'chimney';
+
 const FORM_SEC = 1.3;
 /** Where each member of a colony sits, relative to its centre. */
 const MEMBERS: [number, number][] = [
@@ -108,19 +132,38 @@ export class CellScene {
     return owned > 0 ? Math.min(1, 0.25 + 0.15 * Math.log2(owned)) : 0;
   }
 
-  /** Purchases, played out. `id` is a generator or boost id. */
+  private lineup(state: GameState): Lineup {
+    return LINEUPS[state.stages.cell.habitat] ?? LINEUPS.shallows;
+  }
+
+  /** How many of the generator playing `role` in this habitat are owned. */
+  private owned(state: GameState, role: Role): number {
+    const id = this.lineup(state)[role];
+    return id ? state.stages.cell.generators[id] ?? 0 : 0;
+  }
+
+  /** Purchases, played out. `id` is a generator or boost id. Life in other habitats isn't on screen. */
   purchase(state: GameState, id: string): void {
-    const gens = state.stages.cell.generators;
+    const L = this.lineup(state);
+    const role = (Object.keys(L) as (keyof Lineup)[]).find((k) => L[k] === id) as Role | undefined;
+    const isGen = state.stages.cell.generators[id] !== undefined;
+    if (isGen && !role) return;
     const fx = this.fx;
     const W = this.W;
     const floor = this.floor;
-    switch (id) {
-      case 'fission':
+    switch (role ?? id) {
+      case 'swarm':
         // Growth divisions come from the target; at the cap, divide just for show.
-        if (this.swarm.target >= visibleCount(gens.fission, 60)) this.swarm.divideBurst(1);
+        if (this.swarm.target >= visibleCount(this.owned(state, 'swarm'), 60)) this.swarm.divideBurst(1);
+        break;
+      case 'specks':
+        fx.sparkle(W * (0.2 + Math.random() * 0.6), this.top + 10 + Math.random() * 20);
+        break;
+      case 'chimney':
+        fx.dust(Math.floor(W * 0.5), floor, 10);
         break;
       case 'colony': {
-        const { count, size } = this.colonyTargets(gens.colony);
+        const { count, size } = this.colonyTargets(this.owned(state, 'colony'));
         if (this.colonies.length < count) this.colonies.push(this.newColony(this.colonies.length, size, true));
         else if (this.colonies.length) {
           // Full house: a cell swims over and joins an existing colony.
@@ -135,17 +178,17 @@ export class CellScene {
         }
         break;
       }
-      case 'biofilm':
+      case 'film':
         for (const rx of this.rockXs()) fx.rain(PAL.l, 6, rx - 10, rx + 10, () => floor - 6);
         break;
       case 'mat': {
-        const edge = Math.floor((W + this.matTarget(gens.mat)) / 2);
+        const edge = Math.floor((W + this.matTarget(this.owned(state, 'mat'))) / 2);
         fx.sparkle(edge, floor + 1);
         fx.sparkle(W - edge, floor + 1, 0.1);
         break;
       }
-      case 'stromatolite': {
-        const target = Math.min(6, gens.stromatolite);
+      case 'pillar': {
+        const target = Math.min(6, this.owned(state, 'pillar'));
         if (this.pillars.length < target) {
           const p = this.pillarAt(this.pillars.length);
           this.pillars.push(p);
@@ -210,7 +253,6 @@ export class CellScene {
     this.floor = floor;
     this.top = top;
     const st = state.stages.cell;
-    const gens = st.generators;
     const has = (u: string) => st.upgrades.includes(u);
     const look = (this.look = lookOf(state, 'cell'));
     // The swarm wears a lighter version of the look, so a crowd stays readable;
@@ -218,21 +260,24 @@ export class CellScene {
     const crowd: Look = { ...look, flagella: Math.min(1, look.flagella), cilia: false, thick: false, eyespot: false, spikes: false, toxin: false };
     const hab = HABITATS[habitatOf(state, 'cell')?.id ?? 'shallows'] ?? HABITATS.shallows;
     if (this.habitat !== st.habitat) {
-      // Moving house: a quick dark wipe and a fresh pond.
+      // Another habitat: a quick dark wipe, then its own life.
       if (this.habitat) this.wipe = 0.6;
       this.habitat = st.habitat;
       this.pond.moved();
+      this.ready = false;
     }
+    const L = this.lineup(state);
+    const n = (role: Role) => this.owned(state, role);
 
     // First frame on this stage: show what's owned without replaying it all.
     if (!this.ready) {
       this.ready = true;
-      this.swarm.fill(visibleCount(gens.fission, 60), W, floor, top);
-      const { count, size } = this.colonyTargets(gens.colony);
+      this.swarm.fill(visibleCount(n('swarm'), 60), W, floor, top);
+      const { count, size } = this.colonyTargets(n('colony'));
       this.colonies = Array.from({ length: count }, (_, i) => this.newColony(i, size, false));
-      this.pillars = Array.from({ length: Math.min(6, gens.stromatolite) }, (_, i) => ({ ...this.pillarAt(i), h: this.pillarAt(i).maxH }));
-      this.matShown = this.matTarget(gens.mat);
-      this.filmShown = this.filmTarget(gens.biofilm);
+      this.pillars = Array.from({ length: Math.min(6, n('pillar')) }, (_, i) => ({ ...this.pillarAt(i), h: this.pillarAt(i).maxH }));
+      this.matShown = this.matTarget(n('mat'));
+      this.filmShown = this.filmTarget(n('film'));
     }
 
     water(f, hab.water, floor);
@@ -252,9 +297,11 @@ export class CellScene {
         b.fillStyle = y < 4 ? '#5a2020' : '#3a1820';
         for (let x = (y + Math.floor(t * 3)) % 3; x < W; x += 3 + (y >> 1)) b.fillRect(x, floor - y, 1, 1);
       }
-      for (const [k, cx] of [[0, 0.3], [1, 0.62]] as const) {
+      // Two natural chimneys, plus one more for each Chimney City (up to six).
+      const spots = [0.3, 0.62, 0.12, 0.86, 0.46, 0.74].slice(0, 2 + Math.min(4, n('chimney')));
+      for (const [k, cx] of spots.entries()) {
         const x = Math.floor(W * cx);
-        const ch = 14 + k * 6;
+        const ch = 14 + ((k * 7) % 11);
         b.fillStyle = hab.rock[1];
         b.fillRect(x - 3, floor - ch, 6, ch);
         b.fillStyle = hab.rock[0];
@@ -270,15 +317,15 @@ export class CellScene {
       }
     }
 
-    // Stromatolites rise out of the sand at the back.
+    // Pillars (stromatolites, smoker reefs) rise out of the floor at the back.
     for (const p of this.pillars) {
       p.h = Math.min(p.maxH, p.h + dt * 14);
       for (let y = 0; y < Math.round(p.h); y++) {
-        b.fillStyle = (y >> 1) % 2 ? PAL.r : PAL.R;
+        b.fillStyle = (y >> 1) % 2 ? L.pillarColors[0] : L.pillarColors[1];
         b.fillRect(p.x - 3, floor - y, 6, 1);
       }
       if (p.h > 1) {
-        b.fillStyle = PAL.l;
+        b.fillStyle = L.pillarColors[2];
         b.fillRect(p.x - 3, floor - Math.round(p.h), 6, 1);
       }
     }
@@ -293,19 +340,19 @@ export class CellScene {
     for (let i = 0; i < 40; i++) b.fillRect((i * 29) % W, floor + 4 + ((i * 13) % Math.max(1, H - floor - 5)), 2, 1);
 
     // Microbial mats unroll outward from the middle.
-    this.matShown += (this.matTarget(gens.mat) - this.matShown) * Math.min(1, dt * 2.5);
+    this.matShown += (this.matTarget(n('mat')) - this.matShown) * Math.min(1, dt * 2.5);
     const mw = Math.round(this.matShown);
-    const layers = has('layering') ? 4 : 3;
+    const layers = st.habitat === 'shallows' && has('layering') ? 4 : 3;
     const mx0 = Math.floor((W - mw) / 2);
     for (let x = 0; x < mw; x++) {
       for (let l = 0; l < layers; l++) {
-        b.fillStyle = [PAL.l, PAL.L, PAL.G, PAL.n][l];
+        b.fillStyle = L.matColors[l];
         b.fillRect(mx0 + x, floor + 1 + l, 1, 1);
       }
     }
 
     // Rocks, with biofilm creeping up them.
-    this.filmShown += (this.filmTarget(gens.biofilm) - this.filmShown) * Math.min(1, dt * 2);
+    this.filmShown += (this.filmTarget(n('film')) - this.filmShown) * Math.min(1, dt * 2);
     const rocks: [number, number][] = [
       [this.rockXs()[0], 10],
       [this.rockXs()[1], 7],
@@ -368,12 +415,34 @@ export class CellScene {
     for (const cores of blobs) drawBlob(b, cores, style);
     for (const cores of blobs) drawBlob(b, cores, style, true);
 
+    // Drifting specks: plankton near the bright surface, or glowing lures in the dark.
+    const specks = visibleCount(n('specks'), 40);
+    for (let i = 0; i < specks; i++) {
+      const x = Math.floor((hash(i, 11) * W + t * (1 + (i % 3)) * (i % 2 ? 1 : -1) + W * 4) % W);
+      if (L.speck === 'plankton') {
+        const y = top + 4 + Math.floor(hash(i, 13) * Math.max(1, (floor - top) * 0.35) + Math.sin(t + i) * 1.5);
+        b.fillStyle = i % 3 ? PAL.l : '#c8f08a';
+        b.fillRect(x, y, 1, 1);
+        if (i % 4 === 0) b.fillRect(x + 1, y, 1, 1);
+      } else {
+        const y = top + 8 + Math.floor(hash(i, 17) * Math.max(1, floor - top - 16) + Math.sin(t * 0.7 + i) * 2);
+        const on = Math.sin(t * 2 + i * 1.7) > -0.3;
+        if (!on) continue;
+        b.fillStyle = i % 3 ? PAL.b : PAL.y;
+        b.fillRect(x, y, 1, 1);
+        b.globalAlpha = 0.35;
+        b.fillRect(x - 1, y, 3, 1);
+        b.fillRect(x, y - 1, 1, 3);
+        b.globalAlpha = 1;
+      }
+    }
+
     this.pond.step(f, state, floor, this.swarm);
     this.pond.drawBack(f);
 
     // The free-swimming swarm, dividing as it grows. Each cell wears the
     // lineage's mutations.
-    this.swarm.target = visibleCount(gens.fission, 60);
+    this.swarm.target = visibleCount(n('swarm'), 60);
     this.swarm.step(dt, t, W, floor, top);
     for (const c of this.swarm.cells) {
       if (c.fade > 0 && Math.floor(t * 14) % 2) continue; // blink out

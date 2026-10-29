@@ -24,6 +24,7 @@ import {
   goalShown,
   moveHabitat,
   nextReaction,
+  visitStage,
   reactions,
   setDial,
   tap,
@@ -35,9 +36,9 @@ import { dietOf, stageRate } from './economy/rates';
 import { clearStorage, exportSave, importSave, loadFromStorage, saveToStorage } from './economy/save';
 import { createState } from './economy/state';
 import { liveTick, TICK_SEC } from './economy/tick';
-import type { BuyAmount, DialId, GameState } from './economy/types';
+import type { BuyAmount, DialId, GameState, StageId } from './economy/types';
 import { Scene } from './scene/scene';
-import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
+import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const stageEl = $('stage');
@@ -170,6 +171,17 @@ function renderHud(): void {
   set('currency', format(st.currency));
   set('rate', `${format(stageRate(state, state.current))} ${def.currency}\nper second`);
   set('bank-chip', state.timeBank > 0 ? `⧗ ${formatTime(state.timeBank)}${state.warp > 1 ? ` · ${state.warp}×` : ''}` : '');
+  // Every stage reached stays open: a chip in the top bar hops between them.
+  const others = state.unlocked.filter((s) => s !== state.current);
+  const sw = $('stage-switch');
+  const swKey = others.join();
+  if (sw.dataset.key !== swKey) {
+    sw.dataset.key = swKey;
+    const here = state.unlocked.indexOf(state.current);
+    sw.innerHTML = others
+      .map((s) => `<button class="px-btn stage-chip" data-stage="${s}">${state.unlocked.indexOf(s) < here ? '‹ ' : ''}${STAGES[s].name}${state.unlocked.indexOf(s) > here ? ' ›' : ''}</button>`)
+      .join('');
+  }
   const iconEl = $('currency-icon');
   if (iconEl.dataset.stage !== state.current) {
     iconEl.dataset.stage = state.current;
@@ -255,7 +267,16 @@ function renderPanel(): void {
     b.classList.toggle('on', ui.open && b.dataset.tab === ui.tab);
     const dot = b.querySelector<HTMLElement>('.dot');
     const t = b.dataset.tab;
-    const on = t === 'boosts' || t === 'mutate' ? boostReady(state) : t === 'lab' ? finaleReady(state) : t === 'pond' ? organelleNear(state) || finaleReady(state) : false;
+    const on =
+      t === 'boosts' || t === 'mutate'
+        ? boostReady(state)
+        : t === 'lab'
+          ? finaleReady(state)
+          : t === 'pond'
+            ? organelleNear(state) || finaleReady(state)
+            : t === 'roots'
+              ? heirloomReady(state)
+              : false;
     if (dot) dot.hidden = !on;
   }
   if (!ui.open) return;
@@ -363,7 +384,7 @@ let swirlAngle: number | null = null;
 let swirlSpin = 0;
 
 stageEl.addEventListener('pointerdown', (e) => {
-  if (!modal.hidden || (e.target as HTMLElement).closest('#evolve')) return;
+  if (!modal.hidden || (e.target as HTMLElement).closest('#evolve, button')) return;
   stageEl.setPointerCapture(e.pointerId);
   const r = stageEl.getBoundingClientRect();
   const x = e.clientX - r.left;
@@ -424,6 +445,14 @@ function act(el: HTMLElement): void {
   else if (el.dataset.amount) state.buyAmount = el.dataset.amount === 'max' ? 'max' : (Number(el.dataset.amount) as BuyAmount);
   else if (el.dataset.warp) state.warp = Number(el.dataset.warp);
   else if (el.dataset.habitat) moveHabitat(state, id, el.dataset.habitat);
+  else if (el.dataset.stage) {
+    if (visitStage(state, el.dataset.stage as StageId)) {
+      scene.evolveFlash();
+      ui.tab = 'grow';
+      panelKey = '';
+      goalKey = '';
+    }
+  }
   else if (el.dataset.tab) {
     const t = el.dataset.tab as Tab;
     const order = tabsFor(state);

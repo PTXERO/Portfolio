@@ -397,3 +397,16 @@ textarea {
 .making-bar { height: 4px; margin-top: 4px; background: var(--slot); max-width: 160px; }
 .making-bar > i { display: block; height: 100%; width: 0; background: #5a5f78; transition: width 250ms linear; }
 .making-bar.on > i { background: var(--gold); }
+
+/* ---- Stage switch, habitat switch, Roots ---- */
+#stage-switch { display: flex; gap: 6px; margin-left: 8px; pointer-events: auto; }
+.stage-chip { padding: 2px 8px calc(2px + var(--depth)); font-size: 12px; }
+.hab-next { padding: 2px 8px calc(2px + var(--depth)); font-size: 12px; margin-left: 8px; vertical-align: middle; letter-spacing: 0; text-transform: none; }
+.mini.lv > i { width: 10px; }
+.goals { margin: 0 6px 10px; }
+.goal-row { display: grid; grid-template-columns: 12px 1fr auto; gap: 2px 8px; align-items: center; font-size: 13px; padding: 5px 0; border-bottom: 2px solid var(--slot); }
+.goal-row .check-box { width: 8px; height: 8px; background: var(--slot); box-shadow: 0 0 0 2px #2c3550; }
+.goal-row.ok .check-box { background: var(--mint); box-shadow: 0 0 0 2px var(--mint-lo); }
+.goal-row .fx { grid-column: 2 / 4; color: var(--dim); font-size: 12px; }
+.goal-row.ok .fx, .goal-row.ok .goal-name { color: var(--mint); }
+.feeds { color: var(--mint); }

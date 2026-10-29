@@ -19,8 +19,10 @@ import {
   goalProgress,
   reactionReady,
   reactions,
+  payStage,
   tap,
   triggerFinale,
+  upgradeCost,
   visibleUpgrades,
 } from '../src/economy/actions';
 import { formatTime } from '../src/economy/num';
@@ -69,9 +71,11 @@ function options(s: GameState, tapsPerSec: number): Option[] {
     out.push({ cost: generatorCost(s, stage, g.id).toNumber(), gain: effectiveRate(trial, tapsPerSec) - base, apply });
   }
   for (const u of visibleUpgrades(s, stage)) {
+    if (payStage(stage, u) !== stage) continue;
     const trial = cloneState(s);
-    trial.stages[stage].upgrades.push(u.id);
-    out.push({ cost: u.cost, gain: effectiveRate(trial, tapsPerSec) - base, apply: (x) => buyUpgrade(x, stage, u.id) });
+    trial.stages[stage].currency = trial.stages[stage].currency.add(upgradeCost(s, stage, u));
+    buyUpgrade(trial, stage, u.id);
+    out.push({ cost: upgradeCost(s, stage, u).toNumber(), gain: effectiveRate(trial, tapsPerSec) - base, apply: (x) => buyUpgrade(x, stage, u.id) });
   }
   return out.filter((o) => o.gain > 0);
 }
@@ -137,22 +141,30 @@ function visit(s: GameState, tapsPerSec: number): void {
     const st = s.stages[s.current];
     const money = st.currency.toNumber();
     // Unlocks (dials, the whirlpool, mutations) have no simple payback; players buy them when they can.
-    const unlock = visibleUpgrades(s, s.current).find((u) => (u.effect.kind === 'dialMax' || u.effect.kind === 'swirlMult' || !!u.branch) && u.cost <= money);
+    const own = visibleUpgrades(s, s.current).filter((u) => payStage(s.current, u) === s.current);
+    const price = (u: (typeof own)[number]) => upgradeCost(s, s.current, u).toNumber();
+    const unlock = own.find((u) => (u.effect.kind === 'dialMax' || u.effect.kind === 'swirlMult' || !!u.branch) && price(u) <= money);
     if (unlock) {
       buyUpgrade(s, s.current, unlock.id);
       continue;
     }
+    // Something new to grow: players try one as soon as they can afford it.
+    const fresh = STAGES[s.current].generators.find(
+      (g) => st.generators[g.id] === 0 && generatorVisible(s, s.current, g) && generatorCost(s, s.current, g.id).toNumber() <= money,
+    );
+    if (fresh) {
+      buyGenerator(s, s.current, fresh.id, 1);
+      continue;
+    }
     const rate = effectiveRate(s, tapsPerSec);
     // Boosts that cost under a minute of income get bought on sight, whatever their payback.
-    const cheap = visibleUpgrades(s, s.current).find((u) => u.cost <= money && u.cost <= rate * 60);
+    const cheap = own.find((u) => price(u) <= money && price(u) <= rate * 60);
     if (cheap) {
       buyUpgrade(s, s.current, cheap.id);
       continue;
     }
     // Save for the finale once it's in reach, otherwise for the next mutation (players save for what they want).
-    const nextMutation = visibleUpgrades(s, s.current)
-      .filter((u) => !!u.branch)
-      .reduce((m, u) => Math.min(m, u.cost), Infinity);
+    const nextMutation = own.filter((u) => !!u.branch).reduce((m, u) => Math.min(m, price(u)), Infinity);
     const goal = fin ? (checkReaction(s, s.current, fin).gens ? fin.cost ?? 0 : nextMutation) : STAGES[s.current].goal;
     const toGoal = (goal - money) / Math.max(rate, 1e-9);
     const affordable = options(s, tapsPerSec)
@@ -164,6 +176,41 @@ function visit(s: GameState, tapsPerSec: number): void {
   }
   if (s.current === stage && STAGES[stage].habitats) cellVisit(s);
   else if (s.current === stage && fin) chaseReaction(s);
+  spendPast(s);
+}
+
+/**
+ * Engaged players go back to earlier stages too: they buy heirlooms with the old
+ * currency, then grow the old stage with what's left (which feeds the new one).
+ */
+function spendPast(s: GameState): void {
+  const now = s.current;
+  for (const past of s.unlocked) {
+    if (past === now || !s.stages[past].complete) continue;
+    const wallet = s.stages[past];
+    const heirlooms = visibleUpgrades(s, now).filter((u) => u.pay === past);
+    for (let i = 0; i < 50; i++) {
+      const u = heirlooms.filter((x) => visibleUpgrades(s, now).includes(x)).sort((a, b) => upgradeCost(s, now, a).cmp(upgradeCost(s, now, b)))[0];
+      if (!u || !buyUpgrade(s, now, u.id)) break;
+    }
+    // Half of what's left goes into growing the old stage, best payback first.
+    const floor = wallet.currency.toNumber() / 2;
+    const gens = STAGES[past].generators.filter((g) => wallet.generators[g.id] > 0);
+    for (let k = 0; k < 300; k++) {
+      const base = stageRate(s, past).toNumber();
+      let best: { id: string; score: number } | null = null;
+      for (const g of gens) {
+        const cost = generatorCost(s, past, g.id).toNumber();
+        if (wallet.currency.toNumber() - cost < floor) continue;
+        const trial = cloneState(s);
+        trial.stages[past].generators[g.id] += 1;
+        const score = cost / Math.max(1e-9, stageRate(trial, past).toNumber() - base);
+        if (!best || score < best.score) best = { id: g.id, score };
+      }
+      const bought = !!best && buyGenerator(s, past, best.id, 1);
+      if (!bought) break;
+    }
+  }
 }
 
 /** Cell stage: catch any organelle that's within reach (trying each habitat), then live where output is best. */
@@ -189,7 +236,7 @@ function cellVisit(s: GameState): void {
 }
 
 /** Plays one strategy. `events` gets the time each upgrade, discovery and first generator happened. */
-export function run(strategy: Strategy, events?: Map<string, number>) {
+export function run(strategy: Strategy, events?: Map<string, number>, hook?: (s: GameState, t: number) => void) {
   const s = createState(0);
   tap(s); // every player's first action; nothing runs before it
   const done: Partial<Record<StageId, number>> = {};
@@ -229,6 +276,7 @@ export function run(strategy: Strategy, events?: Map<string, number>) {
       const st = s.stages.cell;
       console.log(`  ${formatTime(t).padStart(8)} DNA ${st.currency.toExponential(2)} rate ${stageRate(s, 'cell').toNumber().toExponential(2)} ${st.habitat} found [${st.discovered}] gens ${JSON.stringify(st.generators)} ups ${st.upgrades.length}`);
     }
+    hook?.(s, t);
     if (events) {
       const st = s.stages[s.current];
       const tag = (k: string) => {
@@ -236,6 +284,7 @@ export function run(strategy: Strategy, events?: Map<string, number>) {
       };
       for (const id of st.discovered) tag(id);
       for (const id of st.upgrades) tag(id);
+      for (const [id, n] of Object.entries(st.levels)) tag(`${id}@${n}`);
       for (const [id, n] of Object.entries(st.generators)) if (n > 0) tag(`gen:${id}`);
     }
     if (t >= nextVisit) {

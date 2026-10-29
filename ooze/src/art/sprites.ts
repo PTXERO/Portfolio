@@ -42,7 +42,18 @@ export const SPRITES = {
   mat: ['..........', '..........', 'llllllllll', 'LLLLLLLLLL', 'gggggggggg', 'GGGGGGGGGG', 'llllllllll', 'LLLLLLLLLL', 'ssssssssss', 'SSSSSSSSSS'],
   stromatolite: ['...llll...', '..lLLLLl..', '..rRRRRr..', '..rrrrrr..', '.lLLLLLLl.', '.rRRRRRRr.', '.rrrrrrrr.', 'lLLLLLLLLl', 'rRRRRRRRRr', 'rrrrrrrrrr'],
 
+  plankton: ['..........', '.l....l...', 'lLl..lLl..', '.l....l..l', '....l...lL', '...lLl...l', '.l..l..l..', 'lLl...lLl.', '.l.....l..', '..........'],
+  ambusher: ['..........', '...ooo....', '..oOOOo...', '.oOOnOOo..', 'oOOOOOOOo.', '.oOOOOOo..', '..oOOOo...', '.o.ooo.o..', 'o.......o.', '..........'],
+  snowfeeder: ['.w...w..w.', '...w....w.', 'w....w....', '..........', '..gg..gg..', '.gGGggGGg.', 'gGnGGGGnGg', 'rrrrrrrrrr', 'rRRrrrRRrr', 'rrrrrrrrrr'],
+  glow: ['..........', '.b......y.', 'bwb....ywy', '.b..b...y.', '...bwb....', '....b..b..', '.y....bwb.', 'ywy....b..', '.y........', '..........'],
+  pack: ['.oo...oo..', 'oOOo.oOOo.', 'oOnOooOnOo', '.oOOOOOOo.', '..oOOOOo..', '.oOOOOOOo.', 'oOnOooOnOo', 'oOOo.oOOo.', '.oo...oo..', '..........'],
+  thermophile: ['..........', '..OOO..OO.', '.OoooO.Oo.', 'OoonooO.O.', 'OooooOO...', '.OOOO..OO.', '...OO.OooO', '..OooOOnoO', '...OO.OooO', '.......OO.'],
+  sulfurMat: ['..........', '..........', '..........', 'yyyyyyyyyy', 'YyYyYyYyYy', 'yyyyyyyyyy', 'YYYYYYYYYY', 'rrrrrrrrrr', 'rRRrrrRRrr', 'rrrrrrrrrr'],
+  reef: ['...o..o...', '..oOooOo..', '..rOrrOr..', '.orRrrRro.', '.rrRrrRrr.', 'orRrrrrRro', 'rrRrrrrRrr', 'rRrrrrrrRr', 'rrrrrrrrrr', 'rrrrrrrrrr'],
+  chimney: ['..r.......', '.rr...r...', '..r..rr...', '.RRR..r...', '.RoR.RRR..', '.RRR.RoR..', 'RRRRRRRRR.', 'RrRRrRRrR.', 'rrrrrrrrrr', 'rrrrrrrrrr'],
+
   // Interface
+  roots: ['...ll...', '..lLLl..', '...LL...', 'sssLLsss', 'S.SLLS.S', '..S..S..', '.S.SS.S.', 'S..S..S.'],
   spark: ['...y....', '...y....', '..yyy...', 'yyywyyy.', '..yyy...', '...y....', '...y....', '........'],
   hourglass: ['bbbbbbb.', '.bwwwb..', '..bwb...', '...b....', '..byb...', '.byyyb..', 'bbbbbbb.', '........'],
   sprout: ['...ll...', '..lLLl..', '.l.L..l.', '...L.ll.', '...LlL..', '...L....', '..sSs...', '.sSSSs..'],

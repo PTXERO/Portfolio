@@ -5,7 +5,8 @@ import type { GameState, StageId } from './types';
 
 export const TICK_SEC = 0.1;
 
-/** A finished stage runs itself: it buys everything it can afford, top tier first. */
+/** Buys everything a stage can afford, top tier first. Finished stages no longer do this on
+ * their own (the player goes back to grow them); the simulator still uses it. */
 export function autobuy(state: GameState, stage: StageId): void {
   for (const u of visibleUpgrades(state, stage)) buyUpgrade(state, stage, u.id);
   const gens = STAGES[stage].generators;
@@ -25,7 +26,6 @@ export function tick(state: GameState, dt: number): void {
     st.currency = st.currency.add(gain);
     st.totalEarned = st.totalEarned.add(gain);
   }
-  for (const id of state.unlocked) if (state.stages[id].complete) autobuy(state, id);
   // Reactions are checked before the whirlpool fades, so a spin that's strong now counts now.
   if (!state.stages[state.current].complete) {
     catalyze(state, state.current, dt);

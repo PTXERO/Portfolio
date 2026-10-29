@@ -10,6 +10,8 @@ import {
   engulfable,
   evolve,
   forage,
+  upgradeCost,
+  visitStage,
   generatorCost,
   generatorVisible,
   moveHabitat,
@@ -19,7 +21,7 @@ import {
 } from '../src/economy/actions';
 import { D } from '../src/economy/num';
 import { applyOffline, timeBankCap } from '../src/economy/offline';
-import { dialMax, dietOf, habitatMult, milestonesReached, stageRate } from '../src/economy/rates';
+import { dialMax, dietOf, habitatMult, heroSpeed, milestonesReached, stageRate, upgradeLevel } from '../src/economy/rates';
 import { deserialize, exportSave, importSave, serialize } from '../src/economy/save';
 import { cloneState, createState } from '../src/economy/state';
 import { liveTick, tick } from '../src/economy/tick';
@@ -187,12 +189,14 @@ describe('offline', () => {
     expect(r.bankedSec).toBe(0);
   });
 
-  it('keeps finished stages buying while away', () => {
+  it('keeps finished stages producing while away (growing them is up to the player)', () => {
     const s = fresh();
     finishSoup(s);
     s.stages.soup.generators.amino = 5;
+    const before = s.stages.soup.currency;
     applyOffline(s, 2 * 3600 * 1000);
-    expect(s.stages.soup.generators.amino).toBeGreaterThan(5);
+    expect(s.stages.soup.generators.amino).toBe(5);
+    expect(s.stages.soup.currency.gt(before)).toBe(true);
   });
 });
 
@@ -355,7 +359,7 @@ describe('cell stage', () => {
   function cell() {
     const s = fresh();
     finishSoup(s);
-    s.stages.cell.currency = D(1e20);
+    s.stages.cell.currency = D(1e30);
     return s;
   }
 
@@ -368,12 +372,62 @@ describe('cell stage', () => {
 
   it('habitats open with mutations, and diet decides how well you do there', () => {
     const s = cell();
-    expect(moveHabitat(s, 'cell', 'depths')).toBe(false);
+    buyUpgrade(s, 'cell', 'thickMembrane');
+    expect(moveHabitat(s, 'cell', 'depths')).toBe(false); // needs level 2
     buyUpgrade(s, 'cell', 'thickMembrane');
     buyUpgrade(s, 'cell', 'hunter');
     const before = habitatMult(s, 'cell');
     expect(moveHabitat(s, 'cell', 'depths')).toBe(true);
     expect(habitatMult(s, 'cell')).toBeGreaterThan(before);
+  });
+
+  it('each habitat has its own lineup, opened with the habitat', () => {
+    const s = cell();
+    const ambusher = STAGES.cell.generators.find((g) => g.id === 'ambusher')!;
+    expect(generatorVisible(s, 'cell', ambusher)).toBe(false);
+    buyUpgrade(s, 'cell', 'thickMembrane');
+    buyUpgrade(s, 'cell', 'thickMembrane');
+    expect(generatorVisible(s, 'cell', ambusher)).toBe(true);
+    // It produces by its own habitat's fit, wherever you're looking.
+    buyUpgrade(s, 'cell', 'grazer');
+    s.stages.cell.generators.ambusher = 10;
+    const inShallows = stageRate(s, 'cell').toNumber();
+    moveHabitat(s, 'cell', 'depths');
+    expect(stageRate(s, 'cell').toNumber()).toBeCloseTo(inShallows, 6);
+  });
+
+  it('mutations come in levels, each dearer and each adding its effect again', () => {
+    const s = cell();
+    const flag = STAGES.cell.upgrades.find((u) => u.id === 'flagellum')!;
+    const c1 = upgradeCost(s, 'cell', flag);
+    buyUpgrade(s, 'cell', 'flagellum');
+    const c2 = upgradeCost(s, 'cell', flag);
+    expect(c2.gt(c1)).toBe(true);
+    for (let i = 0; i < 10; i++) buyUpgrade(s, 'cell', 'flagellum');
+    expect(upgradeLevel(s, 'cell', 'flagellum')).toBe(flag.levels);
+    expect(heroSpeed(s, 'cell')).toBeCloseTo(Math.pow((flag.effect as { mult: number }).mult, flag.levels!), 6);
+  });
+
+  it('heirlooms are paid for with the Soup\'s currency, and milestones there boost the Cell', () => {
+    const s = cell();
+    const dna = s.stages.cell.currency;
+    s.stages.soup.currency = D(1e15);
+    expect(buyUpgrade(s, 'cell', 'oldRecipes')).toBe(true);
+    expect(s.stages.cell.currency.eq(dna)).toBe(true);
+    expect(s.stages.soup.currency.lt(1e15)).toBe(true);
+    s.stages.cell.generators.fission = 10;
+    const before = stageRate(s, 'cell').toNumber();
+    s.stages.soup.generators.protocell = 30;
+    expect(stageRate(s, 'cell').toNumber()).toBeGreaterThan(before);
+  });
+
+  it('you can go back to the Soup without it ending again', () => {
+    const s = cell();
+    expect(visitStage(s, 'soup')).toBe(true);
+    expect(canEvolve(s)).toBe(false);
+    expect(evolve(s)).toBe(false);
+    expect(visitStage(s, 'cell')).toBe(true);
+    expect(s.stages.cell.currency.gt(0)).toBe(true);
   });
 
   it('organelles are engulfed only when their conditions hold', () => {
@@ -387,7 +441,7 @@ describe('cell stage', () => {
     // Organelles are never discovered by just waiting.
     const t = fresh();
     finishSoup(t);
-    t.stages.cell.currency = D(1e20);
+    t.stages.cell.currency = D(1e30);
     buyUpgrade(t, 'cell', 'grazer');
     tick(t, 10);
     expect(t.stages.cell.discovered).not.toContain('chloroplast');
@@ -407,7 +461,9 @@ describe('cell stage', () => {
     const s = cell();
     s.stages.cell.discovered = STAGES.cell.reactions!.filter((r) => !r.final).map((r) => r.id);
     s.stages.cell.generators.colony = 40;
-    for (const u of ['bigger', 'giant']) buyUpgrade(s, 'cell', u);
+    buyUpgrade(s, 'cell', 'bigger');
+    for (let i = 0; i < 5; i++) buyUpgrade(s, 'cell', 'cytoplasm');
+    buyUpgrade(s, 'cell', 'giant');
     expect(triggerFinale(s)).toBe(true);
     expect(canEvolve(s)).toBe(false);
   });

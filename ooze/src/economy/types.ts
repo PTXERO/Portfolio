@@ -25,6 +25,8 @@ export interface GeneratorDef {
   prefs?: Partial<Record<DialId, DialCurve>>;
   /** Hidden until this reaction has been discovered. */
   unlockedBy?: string;
+  /** The habitat this lives in (Cell stage). Each habitat has its own lineup. */
+  habitat?: string;
 }
 
 export type Effect =
@@ -65,7 +67,21 @@ export interface UpgradeDef {
   /** More effects, for mutations that change several things at once. */
   extra?: Effect[];
   /** Shown only once these hold: generators owned, a reaction known, other upgrades bought. */
-  requires?: { generator?: string; owned?: number; reaction?: string; upgrades?: string[]; anyReaction?: string[] };
+  requires?: {
+    generator?: string;
+    owned?: number;
+    reaction?: string;
+    upgrades?: string[];
+    anyReaction?: string[];
+    /** Other upgrades at these levels or higher. */
+    levels?: Record<string, number>;
+  };
+  /** How many times it can be bought, each level adding the effect again (default 1). */
+  levels?: number;
+  /** Cost multiplier per level owned (default 3). */
+  costGrowth?: number;
+  /** Paid in an earlier stage's currency instead of this stage's. */
+  pay?: StageId;
   /** Mutation Tree branch; upgrades without one are plain boosts. */
   branch?: string;
   /** Can't be bought alongside these (a choice, like diets). */
@@ -81,8 +97,17 @@ export interface HabitatDef {
   food: Record<FoodKind, number>;
   /** Share of output lost to predators with no defense, 0 to 1. */
   danger: number;
-  /** Locked until this upgrade is bought or reaction found. */
-  unlock?: { upgrade?: string; reaction?: string };
+  /** Locked until this upgrade reaches `level` (default 1) or this reaction is found. */
+  unlock?: { upgrade?: string; level?: number; reaction?: string };
+}
+
+/** A goal in an earlier stage that pays off in this one, e.g. "own 40 Protocells". */
+export interface MilestoneDef {
+  id: string;
+  stage: StageId;
+  gen: string;
+  owned: number;
+  bonus: Effect;
 }
 
 /** A discovery: happens by itself once its conditions all hold at the same moment. */
@@ -138,6 +163,8 @@ export interface StageDef {
   /** What the stage calls its collection (the Recipe Book, Organelles). */
   bookName?: string;
   habitats?: HabitatDef[];
+  /** Goals in earlier stages that boost this one. */
+  milestones?: MilestoneDef[];
   /** Text for the stage's finish screen. */
   ending?: { title: string; line: string };
   next?: StageId;
@@ -148,6 +175,8 @@ export interface StageState {
   totalEarned: Decimal;
   generators: Record<string, number>;
   upgrades: string[];
+  /** Levels of upgrades that have more than one; others are in `upgrades` at level 1. */
+  levels: Record<string, number>;
   complete: boolean;
   dials: Record<DialId, number>;
   /** Reaction ids, in the order they were found. */
@@ -156,7 +185,7 @@ export interface StageState {
   free: Record<string, number>;
   /** Progress toward each reaction's next free product, 0 to 1. */
   catalysis: Record<string, number>;
-  /** Where the lineage lives (Cell stage). */
+  /** The habitat on screen, where your own cell swims (Cell stage). */
   habitat: string;
   /** Food the hero has eaten, for stats. */
   eaten: number;
