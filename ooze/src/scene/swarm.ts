@@ -23,6 +23,9 @@ export interface Swimmer {
   dead: boolean;
   /** Seconds of the little squash after being born. */
   pop: number;
+  /** Seconds until an ambusher's next lunge, or left in the current one (Depths). */
+  timer: number;
+  lunging: boolean;
 }
 
 const SPEED = 9;
@@ -37,6 +40,14 @@ export class Swarm {
   /** How the local kind of cell moves: speed multiplier, and how twitchy it is. */
   speed = 1;
   jitter = 0;
+  /**
+   * Each habitat's cells behave their own way: Shallows cells school toward the
+   * sunlight; Depths ambushers hang still, then lunge; Vents cells ride the hot
+   * plumes up and sink back down beside them.
+   */
+  mode: 'school' | 'ambush' | 'vent' = 'school';
+  /** Where the light shafts (x at the surface, and their slant) and hot plumes are. */
+  env: { shafts: number[]; slant: number; plumes: number[] } = { shafts: [], slant: 0, plumes: [] };
   private spawnTimer = 0;
   private burst = 0;
   private burstTimer = 0;
@@ -55,6 +66,8 @@ export class Swarm {
       fade: 0,
       dead: false,
       pop: 0,
+      timer: Math.random() * 5,
+      lunging: false,
     };
   }
 
@@ -114,6 +127,45 @@ export class Swarm {
       const speed = SPEED * this.speed;
       let ax = Math.cos(c.heading) * speed - c.vx;
       let ay = Math.sin(c.heading) * speed - c.vy;
+      let max = c.split >= 0 ? speed * 0.2 : c.poked > 0 ? SPEED * 4 : speed * 1.6;
+      if (this.mode === 'school' && this.env.shafts.length) {
+        // Drawn to the nearest shaft of sunlight.
+        const sx = this.env.shafts.reduce((best, s) => {
+          const x = s + (c.y - top) * this.env.slant;
+          return Math.abs(x - c.x) < Math.abs(best - c.x) ? x : best;
+        }, Infinity);
+        if (Number.isFinite(sx)) ax += Math.max(-6, Math.min(6, (sx - c.x) * 0.4));
+      } else if (this.mode === 'ambush' && c.split < 0 && c.poked <= 0) {
+        // Hang almost still, then lunge in a burst, then settle again.
+        c.timer -= dt;
+        if (!c.lunging && c.timer <= 0) {
+          c.lunging = true;
+          c.timer = 0.35;
+          c.heading = Math.random() * Math.PI * 2;
+          c.vx = Math.cos(c.heading) * SPEED * 6;
+          c.vy = Math.sin(c.heading) * SPEED * 6;
+        } else if (c.lunging && c.timer <= 0) {
+          c.lunging = false;
+          c.timer = 3 + Math.random() * 5;
+        }
+        if (c.lunging) {
+          ax = 0;
+          ay = 0;
+          max = SPEED * 6;
+        } else {
+          ax = -c.vx * 3;
+          ay = -c.vy * 3 + Math.sin(t * 1.3 + c.phase) * 1.5;
+          max = SPEED * 0.4;
+        }
+      } else if (this.mode === 'vent' && this.env.plumes.length) {
+        // Find the nearest plume: rise inside it, drift out and sink beside it.
+        const px = this.env.plumes.reduce((best, p) => (Math.abs(p - c.x) < Math.abs(best - c.x) ? p : best), Infinity);
+        const dx = px - c.x;
+        const inside = Math.abs(dx) < 5;
+        ax += inside ? -Math.sign(dx || 1) * 2 : Math.max(-8, Math.min(8, dx * 0.6));
+        ay += inside ? -26 : 10;
+        if (inside && c.y < top + 14) ax += (c.phase % 2 < 1 ? -1 : 1) * 30;
+      }
       const gx = Math.floor(c.x / R);
       const gy = Math.floor(c.y / R);
       for (let i = -1; i <= 1; i++) {
@@ -140,8 +192,7 @@ export class Swarm {
       c.vx += ax * dt * 1.5;
       c.vy += ay * dt * 1.5;
       const sp = Math.hypot(c.vx, c.vy);
-      // A dividing cell slows almost to a stop.
-      const max = c.split >= 0 ? speed * 0.2 : c.poked > 0 ? SPEED * 4 : speed * 1.6;
+      // (A dividing cell slows almost to a stop: see max above.)
       if (sp > max) {
         c.vx *= max / sp;
         c.vy *= max / sp;

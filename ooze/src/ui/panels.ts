@@ -2,6 +2,7 @@
 // change) and then patched in place, so a button never vanishes under a finger.
 
 import { icon, type SpriteName } from '../art/sprites';
+import { lifeIcon } from '../scene/icons';
 import { STAGES } from '../content/stages';
 import {
   buyCount,
@@ -21,7 +22,7 @@ import {
 } from '../economy/actions';
 import { D, format, formatTime } from '../economy/num';
 import { timeBankCap } from '../economy/offline';
-import { dialMax, feedMult, generatorRate, habitatMult, maxLevel, milestoneMet, MILESTONES, nextMilestone, stageRate, upgradeLevel } from '../economy/rates';
+import { dialMax, dietOf, feedMult, generatorRate, habitatMult, maxLevel, milestoneMet, MILESTONES, nextMilestone, stageRate, upgradeLevel } from '../economy/rates';
 import { DIALS, type BuyAmount, type DialId, type Effect, type GameState, type ReactionDef, type StageId, type UpgradeDef } from '../economy/types';
 
 export type Tab = 'grow' | 'boosts' | 'lab' | 'mutate' | 'pond' | 'roots' | 'time' | 'menu';
@@ -188,7 +189,7 @@ export function layoutKey(state: GameState, tab: Tab): string {
     tab,
     state.current,
     tab === 'grow' ? shownGenerators(state).map((g) => g.id) : 0,
-    tab === 'grow' ? [state.unlocked, state.stages[state.current].habitat, openHabitats(state).length] : 0,
+    tab === 'grow' ? [state.unlocked, state.stages[state.current].habitat, openHabitats(state).length, dietOf(state, state.current)] : 0,
     tab === 'boosts' || tab === 'mutate' || tab === 'roots'
       ? [visibleUpgrades(state, state.current).map((u) => u.id), state.stages[state.current].upgrades, state.stages[state.current].levels]
       : 0,
@@ -207,7 +208,7 @@ export function layout(state: GameState, tab: Tab): string {
     const rows = shownGenerators(state)
       .map(
         (g) => `<div class="card px-box">
-          <div class="slot">${icon(g.id as SpriteName, 3)}</div>
+          <div class="slot">${lifeIcon(state, g.id) ?? icon(g.id as SpriteName, 3)}</div>
           <div class="info">
             <div class="name">${esc(g.name)}<span class="count" data-t="owned-${g.id}"></span></div>
             <div class="sub" data-t="sub-${g.id}"></div>

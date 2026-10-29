@@ -263,8 +263,9 @@ export class CellScene {
     const species = (st.habitat || 'shallows') as Look['species'];
     const crowd: Look = { ...look, flagella: Math.min(1, look.flagella), cilia: false, thick: false, eyespot: false, spikes: false, toxin: false, species };
     // Each place's cells move their own way: Depths ambushers drift slowly, Vents rods twitch in the heat.
-    this.swarm.speed = species === 'depths' ? 0.45 : species === 'vents' ? 1.3 : 1;
-    this.swarm.jitter = species === 'vents' ? 14 : 0;
+    this.swarm.speed = species === 'vents' ? 1.3 : 1;
+    this.swarm.jitter = species === 'vents' ? 10 : 0;
+    this.swarm.mode = species === 'depths' ? 'ambush' : species === 'vents' ? 'vent' : 'school';
     const hab = HABITATS[habitatOf(state, 'cell')?.id ?? 'shallows'] ?? HABITATS.shallows;
     if (this.habitat !== st.habitat) {
       // Another habitat: a quick dark wipe, then its own life.
@@ -468,6 +469,7 @@ export class CellScene {
       }
     }
 
+    this.swarm.env = { shafts: this.pond.env.shafts, slant: SHAFT_SLANT, plumes: this.pond.env.plumes };
     this.pond.step(f, state, floor, this.swarm);
     this.pond.drawBack(f);
 
