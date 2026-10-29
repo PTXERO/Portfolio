@@ -39,11 +39,12 @@ MANAGED_ROOTS = PUBLISH_ROOTS + tuple(BUILT_ROOTS)   # everything this tool may 
 SKIP_DIRS = {".git", ".github", ".claude", ".venv", "tools", "node_modules", "__pycache__", "data", "models"}
 SKIP_FILES = {".gitignore", ".DS_Store", "Thumbs.db"}
 SKIP_PATTERNS = ("reel-vault/server/",)   # server code runs on the PC, never on the static host
-# Neocities (free plan) accepts these; anything else is skipped with a note
+# Neocities accepts these (the free plan's list, plus audio, which the paid plan takes);
+# anything else is skipped with a note
 ALLOWED = set("""apng asc atom avif bin cjs css csv dae eot epub geojson gif glb glsl gltf gpg htm html
 ico jpeg jpg js json jxl key kml knowl less manifest map markdown md mf mid midi mjs mtl obj opml osdx
 otf pdf pgp pls png py rdf rss sass scss sf2 svg text toml ts tsv ttf txt webapp webmanifest webp woff
-woff2 xcf xml xsl xslt yaml yml""".split())
+woff2 xcf xml xsl xslt yaml yml mp3 ogg wav m4a""".split())
 # files Neocities won't take under their real type, published as .txt copies so the
 # one-line installers can live on the site:  irm https://ptxero.neocities.org/reel-vault/install.txt | iex
 PUBLISH_AS = {
