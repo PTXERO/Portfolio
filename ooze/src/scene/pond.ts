@@ -356,22 +356,22 @@ export class Pond {
       // It darts away when your cell comes near, until it tires and has to rest:
       // a fast cell (or a patient one) catches it.
       const away = Math.hypot(r.x - h.x, r.y - h.y);
-      let top = 6;
+      let fastest = 6;
       r.rest = Math.max(0, r.rest - dt);
       if (away < 26 && r.rest <= 0 && r.dash > 0) {
         r.dash -= dt;
         r.vx += ((r.x - h.x) / (away || 1)) * 90 * dt;
         r.vy += ((r.y - h.y) / (away || 1)) * 90 * dt;
-        top = 24;
+        fastest = 24;
         if (r.dash <= 0) {
           r.rest = 1.4;
           r.dash = 1.6;
         }
       }
       const sp = Math.hypot(r.vx, r.vy);
-      if (sp > top) {
-        r.vx *= top / sp;
-        r.vy *= top / sp;
+      if (sp > fastest) {
+        r.vx *= fastest / sp;
+        r.vy *= fastest / sp;
       }
       r.x = Math.max(6, Math.min(W - 6, r.x + r.vx * dt));
       r.y = Math.max(top + 6, Math.min(floor - 6, r.y + r.vy * dt));
