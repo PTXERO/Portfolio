@@ -1458,14 +1458,19 @@ export class RangeScene {
       if (X > -2 && X < W + 2 && Y > -3 && Y < H + 2) b.fillRect(Math.round(X), Math.round(Y), 1, 2);
     }
     if (this.storm > 0.7 && Math.random() < dt * 0.12) {
-      this.flash = 0.25;
+      // (Seconds since the flash: it plays out over about a second.)
+      this.flash = 0.0001;
       // The thunder after it, from somewhere off across the island.
       thunder({ level: 0.6 + Math.random() * 0.4, delay: 0.4 + Math.random() * 1.6 });
     }
+    // Lightning, gently: the sky brightens a little, flickers once more, and fades over a second
+    // (never a white-out).
     if (this.flash > 0) {
-      b.fillStyle = `rgba(240, 244, 255, ${Math.min(0.5, this.flash * 2.4)})`;
+      const f = this.flash;
+      const glow = f < 0.06 ? f / 0.06 : f < 0.14 ? 1 - ((f - 0.06) / 0.08) * 0.6 : f < 0.22 ? 0.4 + ((f - 0.14) / 0.08) * 0.35 : 0.75 * Math.max(0, 1 - (f - 0.22) / 0.85) ** 2;
+      b.fillStyle = `rgba(215, 225, 255, ${0.17 * glow})`;
       b.fillRect(0, 0, W, H);
-      this.flash -= dt;
+      this.flash = f + dt > 1.1 ? 0 : f + dt;
     }
     // After rain by day, the sun breaks through: soft rays of light across the view and a
     // fresher, brighter day (the shader draws it), easing in as the rain stops and out as the
