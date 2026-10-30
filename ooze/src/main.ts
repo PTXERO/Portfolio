@@ -14,7 +14,7 @@ import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
-import { build, gift, isAdult, setLean, shoreOf, startShore, walkChief, type Lean } from './economy/shore';
+import { build, gift, isAdult, setLean, shoreOf, shoreSeason, startShore, walkChief, type Lean } from './economy/shore';
 import { villageCard } from './ui/shorePanels';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
@@ -850,8 +850,9 @@ function renderHud(): void {
   const sh = def.shore ? st.shore : undefined;
   if (sh) {
     // New Shore counts people too (no limit: the culture begins when the village is big enough).
+    // (One of them is the number's icon: it reads as people.) On the right, what's in store.
     set('currency', String(sh.people.length));
-    set('rate', 'people');
+    set('rate', `${Math.floor(sh.food)} food\n${Math.floor(sh.wood)} wood`);
   } else if (ex) {
     // The Extinction counts people, not currency.
     set('currency', String(ex.people.length));
@@ -864,9 +865,8 @@ function renderHud(): void {
     const net = netRate(state);
     set('rate', `${net.lt(0) ? '−' : '+'}${format(net.abs())} ${def.currency}\nper second`);
   } else set('rate', `${format(stageRate(state, state.current))} ${def.currency}\nper second`);
-  const chief = sh?.people.find((p) => p.id === sh.chief);
   if (!sh) $('hud-news').hidden = true;
-  if (sh) set('bank-chip', chief ? `${chief.name} leads` : '');
+  if (sh) set('bank-chip', ['Spring', 'Summer', 'Autumn', 'Winter'][shoreSeason(sh).si]);
   else set('bank-chip', state.timeBank > 0 && !ex ? `⧗ ${formatTime(state.timeBank)}${state.warp > 1 ? ` · ${state.warp}×` : ''}` : '');
   set('stage-name', def.name);
   // Small buttons under the banner hop to the previous age (left) or the next one (right).
