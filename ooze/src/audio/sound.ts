@@ -9,9 +9,10 @@
 
 import type { GameState } from '../economy/types';
 
-export type Channel = 'master' | 'ambience' | 'effects';
+export type Channel = 'master' | 'music' | 'ambience' | 'effects';
 export const CHANNELS: { id: Channel; label: string }[] = [
   { id: 'master', label: 'All sound' },
+  { id: 'music', label: 'Music' },
   { id: 'ambience', label: 'Ambience' },
   { id: 'effects', label: 'Effects' },
 ];
@@ -19,7 +20,7 @@ export const CHANNELS: { id: Channel; label: string }[] = [
 const KEY = 'ooze-to-orbit/sound';
 /** Bumped when a sound file changes, so phones don't keep the old one. */
 const SFX_V = 6;
-const DEFAULTS: Record<Channel, number> = { master: 0.8, ambience: 0.6, effects: 0.7 };
+const DEFAULTS: Record<Channel, number> = { master: 0.8, music: 0.6, ambience: 0.6, effects: 0.7 };
 
 /** The loops are padded either side (so the mp3's own gaps fall outside them): where each
  * loop starts in its file, and how long it runs. */
@@ -43,7 +44,7 @@ export const volumes: Record<Channel, number> = (() => {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}');
     // (Taps and the whirlpool had a slider each before they were one.)
     if (saved.effects === undefined && saved.clicks !== undefined) saved.effects = saved.clicks;
-    return { master: saved.master ?? DEFAULTS.master, ambience: saved.ambience ?? DEFAULTS.ambience, effects: saved.effects ?? DEFAULTS.effects };
+    return { master: saved.master ?? DEFAULTS.master, music: saved.music ?? DEFAULTS.music, ambience: saved.ambience ?? DEFAULTS.ambience, effects: saved.effects ?? DEFAULTS.effects };
   } catch {
     return { ...DEFAULTS };
   }
@@ -112,6 +113,8 @@ export function unlockSound(): void {
   master.connect(limit).connect(ctx.destination);
   bus.ambience = ctx.createGain();
   bus.ambience.connect(master);
+  bus.music = ctx.createGain();
+  bus.music.connect(master);
   bus.effects = ctx.createGain();
   underwater(ctx, bus.effects, master);
   sky = ctx.createGain();
@@ -274,7 +277,7 @@ export function soundFrame(state: GameState): void {
   // barely there (fading in and out over a couple of seconds as you come and go).
   const depths = state.current === 'cell' && state.stages.cell.habitat === 'depths';
   loopTo('underwater', soup || state.current === 'cell' ? 1 : 0, bus.ambience, 0.8);
-  loopTo('depths', depths ? 0.08 : 0, bus.ambience, 0.8);
+  loopTo('depths', depths ? 0.08 : 0, bus.music, 0.8);
   const swirl = soup && state.swirl > 0.02 ? Math.min(1, state.swirl) : 0;
   loopTo('river', swirl * 0.8, bus.effects, swirl > 0 ? 0.15 : 0.3);
 }

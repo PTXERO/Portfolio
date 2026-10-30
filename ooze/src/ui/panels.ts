@@ -407,25 +407,28 @@ export function layout(state: GameState, tab: Tab): string {
   if (tab === 'explore') return exploreLayout(state, (u) => upgradeCard(state, id, u, 'spark'));
   if (tab === 'family') return familyLayout(state);
 
-  // The menu holds the time bank first, then saves.
+  // The menu: the time bank (part of play), then settings: sound, display, saves, and about.
   return `<div class="panel-head"><h2>Time bank</h2></div>
       <div class="bank"><span class="num big" data-t="bank"></span><span class="dim" data-t="bank-cap"></span></div>
       <div class="warp">${WARPS.map((w) => `<button class="px-btn" data-warp="${w}">${w}×</button>`).join('')}</div>
       <p class="note">While you're away, most of the time is played out for you. The rest is saved here. Spend it to run the game faster while you watch.</p>
       <p class="note" data-t="offline"></p>
-    <div class="panel-head"><h2>Menu</h2></div>
-    <div class="tools">
-      <button class="px-btn" data-act="export">Export save</button>
-      <button class="px-btn" data-act="import">Import</button>
-      <button class="px-btn" data-act="reset">Restart</button>
-    </div>
     <div class="panel-head"><h2>Sound</h2></div>
     <div class="sound">${CHANNELS.map((c) => `<label><span>${c.label}</span><input type="range" min="0" max="100" step="1" value="${Math.round(volumes[c.id] * 100)}" data-vol="${c.id}"></label>`).join('')}</div>
     <div class="panel-head"><h2>Interface size</h2></div>
     <div class="warp">${[0.9, 1, 1.15, 1.3].map((k, i) => `<button class="px-btn" data-uiscale="${k}">${['Small', 'Normal', 'Large', 'Huge'][i]}</button>`).join('')}</div>
+    <div class="panel-head"><h2>Save</h2></div>
+    <div class="tools">
+      <button class="px-btn" data-act="export">Export save</button>
+      <button class="px-btn" data-act="import">Import save</button>
+    </div>
     <textarea id="save-text" placeholder="Export gives you a backup code. To restore, paste one here and tap Import."></textarea>
+    <div class="panel-head"><h2>About</h2></div>
     <p class="note" data-t="stats"></p>
-    <button class="px-btn small" data-act="update">Check for updates</button>
+    <div class="tools">
+      <button class="px-btn small" data-act="update">Check for updates</button>
+      <button class="px-btn small" data-act="reset">Restart from the start</button>
+    </div>
     <p class="note">Ooze to Orbit · test build <span data-t="build"></span> · art and names are placeholders</p>`;
 }
 
