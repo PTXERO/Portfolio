@@ -48,7 +48,7 @@ const WELCOME_TRUST = 1.5;
 /** How near the chief must be to count as visiting (tiles). */
 export const VISIT_NEAR = 14;
 /** Scouts: how fast they go and how far they see (tiles). */
-const SCOUT_SPEED = 3.5;
+const SCOUT_SPEED = CHIEF_SPEED / 2;
 const SCOUT_SIGHT = 12;
 /** Trust a village of your own kin starts at, once found. */
 const FIRST_TRUST = 10;

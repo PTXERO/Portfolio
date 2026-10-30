@@ -845,14 +845,17 @@ export class RangeScene {
    * after it, mist in the hollows at dawn, winter's ice. */
   protected stepWeather(dt: number, si: number, next: number, turn: number, dayT: number): void {
     this.stormTimer -= dt;
-    if (this.stormTimer <= 0 && !this.stormLeft && si !== 3) {
+    // (Never in winter, nor as it's coming on: rain and snow don't come together.)
+    if (this.stormTimer <= 0 && !this.stormLeft && si !== 3 && !(next === 3 && turn > 0)) {
       this.stormLeft = 35 + Math.random() * 25;
       this.stormTimer = 200 + Math.random() * 220;
     }
     this.stormLeft = Math.max(0, this.stormLeft - dt);
     this.storm += ((this.stormLeft > 0 ? 1 : 0) - this.storm) * Math.min(1, dt / 5);
     this.wet = this.stormLeft > 0 ? Math.min(1, this.wet + dt / 8) : Math.max(0, this.wet - dt / 70);
-    const mistW = (si === 0 || si === 2 ? 1 : 0.5) * Math.max(0, 1 - Math.abs(dayT - 0.05) / 0.12);
+    // Rain or snow is the weather while it lasts: no mist with it.
+    const snowing = weight3(si, next, turn);
+    const mistW = (si === 0 || si === 2 ? 1 : 0.5) * Math.max(0, 1 - Math.abs(dayT - 0.05) / 0.12) * (1 - this.storm) * (1 - snowing);
     if (this.kept) Object.assign(this.kept, { storm: this.storm, left: this.stormLeft, timer: this.stormTimer, wet: this.wet, bow: this.bow });
     this.weather = [this.storm, mistW, weight3(si, next, turn), this.wet];
   }
@@ -867,10 +870,12 @@ export class RangeScene {
     // Petals, pollen and leaves are small things: from far up only a few are seen (else,
     // zoomed out, they read as snow). Snow is weather, and falls at any height.
     const near = Math.max(0.15, Math.min(1, (this.zoom - 0.6) / 2));
+    // While it rains or snows, that's all there is in the air: no petals, pollen or leaves.
+    const clear = (1 - this.storm) * (1 - weight(3));
     const mix: [Mote, number][] = [
-      ['petal', 16 * weight(0) * near],
-      ['pollen', 10 * weight(1)],
-      ['leaf', 16 * weight(2) * near],
+      ['petal', 16 * weight(0) * near * clear],
+      ['pollen', 10 * weight(1) * clear],
+      ['leaf', 16 * weight(2) * near * clear],
       ['snow', 45 * weight(3)],
     ];
     const want = Math.round(mix.reduce((a, [, n]) => a + n, 0));
@@ -1007,7 +1012,8 @@ export class RangeScene {
     // Summer nights: fireflies in the air over everything (a layer over the view, like the
     // seasons' motes, so they never look like something to tap). Each is a little dark body
     // whose tail lights up, glows and goes out, drifting in lazy loops.
-    const flyWant = Math.round(14 * weight(1) * Math.max(0, (night - 0.3) / 0.7));
+    // (Not in the rain.)
+    const flyWant = Math.round(14 * weight(1) * Math.max(0, (night - 0.3) / 0.7) * (this.storm < 0.05 && this.stormLeft <= 0 ? 1 : 0));
     while (this.flies.length < flyWant) this.flies.push({ x: Math.random() * W, y: H * 0.2 + Math.random() * H * 0.7, ph: Math.random() * 20 });
     this.flies.length = flyWant;
     for (const f of this.flies) {
