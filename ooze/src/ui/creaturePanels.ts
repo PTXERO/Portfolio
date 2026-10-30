@@ -517,5 +517,12 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
       b.disabled = !!s.egg;
       b.classList.toggle('gold', !s.egg);
     }
+    // The nursery's upgrades (Warm Brooding): gold when there's enough to buy, greyed when not.
+    for (const u of visibleUpgrades(state, CREATURE).filter((x) => x.branch === 'Family')) {
+      const btn = root.querySelector<HTMLButtonElement>(`[data-up="${u.id}"]`);
+      if (!btn) continue;
+      btn.disabled = s.currency.lt(upgradeCost(state, CREATURE, u));
+      btn.classList.toggle('gold', !btn.disabled);
+    }
   }
 }
