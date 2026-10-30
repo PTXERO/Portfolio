@@ -16,6 +16,21 @@ function fresh(diet = 'grazer', cannibal = false) {
   return state;
 }
 
+/** Builds it and lets it go up at once (for tests that need things standing). */
+function now(state: ReturnType<typeof fresh>, id: Parameters<typeof build>[1]): boolean {
+  const s = shoreOf(state)!;
+  // (The wood for it, whatever the stores hold.)
+  const keep = s.wood;
+  s.wood = 1e6;
+  const ok = build(state, id);
+  s.wood = keep;
+  if (s.building) {
+    s.building.left = 0;
+    shoreTick(state, 0.01);
+  }
+  return ok;
+}
+
 /** Builds what it can, cheapest first (the most an idle player would do with an auto-builder). */
 function autobuild(state: ReturnType<typeof fresh>) {
   const s = shoreOf(state)!;
@@ -76,16 +91,16 @@ describe('Winning over', () => {
     const v = s.villages[0];
     v.found = true;
     v.trust = 10;
-    s.food = 1000;
     v.pop = 8;
     s.wood = 1000;
-    build(state, 'hearth');
-    for (let i = 0; i < 3; i++) build(state, 'hut');
+    now(state, 'hearth');
+    for (let i = 0; i < 3; i++) now(state, 'hut');
+    s.food = 1000;
     s.chiefAt = { x: s.hearth.x, y: s.hearth.y };
-    expect(gift(state, v.id)).toBe(8);
+    expect(gift(state, v.id)).toBe(6);
     s.chiefAt = { x: v.x, y: v.y };
     s.chiefTo = null;
-    expect(gift(state, v.id)).toBe(16);
+    expect(gift(state, v.id)).toBe(12);
     const before = s.people.length;
     for (let i = 0; i < 20 && !v.joined; i++) gift(state, v.id);
     expect(v.joined).toBe(true);
@@ -101,11 +116,11 @@ describe('Winning over', () => {
     v.trust = 10;
     v.pop = 8;
     s.wood = 100000;
-    build(state, 'hearth');
-    for (let i = 0; i < 12; i++) build(state, 'hut');
+    now(state, 'hearth');
+    for (let i = 0; i < 12; i++) now(state, 'hut');
     s.chiefAt = { x: v.x + 3, y: v.y + 3 };
     s.chiefTo = null;
-    shoreTick(state, DAY_SEC * 30);
+    shoreTick(state, DAY_SEC * 40);
     expect(v.joined).toBe(true);
   });
 });
@@ -115,9 +130,9 @@ describe('Scouts', () => {
     const state = fresh();
     const s = shoreOf(state)!;
     s.wood = 200;
-    build(state, 'hearth');
-    build(state, 'hut');
-    expect(build(state, 'scout')).toBe(true);
+    now(state, 'hearth');
+    now(state, 'hut');
+    expect(now(state, 'scout')).toBe(true);
     const seen0 = state.stages.shore.seen.reduce((a, b) => a + b, 0);
     for (let i = 0; i < 1800; i++) shoreTick(state, 2);
     const seen1 = state.stages.shore.seen.reduce((a, b) => a + b, 0);
@@ -145,7 +160,7 @@ describe('Landmarks', () => {
     expect(s.relics).toContain('axe');
     expect(s.finds!.length).toBe(2);
     // The axe helps the wood along.
-    expect(boosts(s).wood).toBeCloseTo(0.15);
+    expect(boosts(s).wood).toBeCloseTo(0.08);
     // Walking away stops it.
     s.chiefTo = { x: s.hearth.x, y: s.hearth.y };
     const t = cave.t;
@@ -156,9 +171,9 @@ describe('Landmarks', () => {
     const state = fresh();
     const s = shoreOf(state)!;
     s.wood = 200;
-    build(state, 'hearth');
-    build(state, 'hut');
-    build(state, 'scout');
+    now(state, 'hearth');
+    now(state, 'hut');
+    now(state, 'scout');
     for (let i = 0; i < 1800; i++) shoreTick(state, 2);
     const found = poisOf(s).filter((p) => p.found);
     expect(found.length).toBeGreaterThan(0);
@@ -186,8 +201,8 @@ describe('Won over with no room', () => {
     expect(v.asking).toBeUndefined();
     expect(v.waiting).toBeDefined();
     s.wood = 10000;
-    build(state, 'hearth');
-    for (let i = 0; i < 6; i++) build(state, 'hut');
+    now(state, 'hearth');
+    for (let i = 0; i < 6; i++) now(state, 'hut');
     shoreTick(state, 4);
     expect(v.joined).toBe(true);
   });

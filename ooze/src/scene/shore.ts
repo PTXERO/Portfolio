@@ -59,6 +59,8 @@ export class ShoreScene extends RangeScene {
   private placed = -1;
   private lastT = 0;
   private chatter = 1;
+  /** Where the last building going up was (so it doesn't rise a second time when it's done). */
+  private wasBuilding: Pt | null = null;
   /** Who's hopping about on screen this frame: where, and their kind's voice. */
   private movers: { x: number; voice: Voice }[] = [];
   /** Looking at somewhere you chose (a village): the camera stays there, even as the sheet
@@ -108,7 +110,8 @@ export class ShoreScene extends RangeScene {
       }
     }
     for (const p of poisOf(s)) {
-      if (!p.found) continue;
+      // (Only close enough in to see them.)
+      if (!p.found || this.zoom < 1.6) continue;
       const X = this.sx(p.x);
       const Y = this.py(p.x, p.y);
       if (Math.hypot(ax - X, ay - (Y - 4)) < Math.max(7, this.zoom * 3)) {
@@ -232,7 +235,8 @@ export class ShoreScene extends RangeScene {
 
     // ---- The village ----
     s.built.forEach((bd, i) => {
-      if (!this.raised.has(i)) this.raised.set(i, t);
+      // (One just finished has already gone up, as it was being built.)
+      if (!this.raised.has(i)) this.raised.set(i, this.wasBuilding && Math.hypot(this.wasBuilding.x - bd.x, this.wasBuilding.y - bd.y) < 0.5 ? -99 : t);
       const X = Math.round(this.sx(bd.x));
       const Y = Math.round(this.py(bd.x, bd.y));
       if (!onScreen(X, Y)) return;
@@ -241,6 +245,18 @@ export class ShoreScene extends RangeScene {
       if (up < 1 && Math.random() < dt * 6) this.fx.dust(X, Y, 2);
       sprites.push({ y: bd.y, draw: () => this.drawBuild(b, bd.id, X, Y, z, close, up, t, s) });
     });
+    // What's going up: it rises as the work goes on, dust kicked up round it.
+    this.wasBuilding = s.building ? { x: s.building.x, y: s.building.y } : this.wasBuilding;
+    if (s.building) {
+      const bd = s.building;
+      const X = Math.round(this.sx(bd.x));
+      const Y = Math.round(this.py(bd.x, bd.y));
+      if (onScreen(X, Y)) {
+        const up = Math.max(0.05, 1 - bd.left / bd.total);
+        if (close && Math.random() < dt * 3) this.fx.dust(X, Y, 2);
+        sprites.push({ y: bd.y, draw: () => this.drawBuild(b, bd.id, X, Y, z, close, up, t, s) });
+      }
+    }
     for (const g of s.graves) {
       const X = Math.round(this.sx(g.x));
       const Y = Math.round(this.py(g.x, g.y));
@@ -378,9 +394,8 @@ export class ShoreScene extends RangeScene {
       const Y = Math.round(this.py(p.x, p.y));
       if (!onScreen(X, Y, 40)) continue;
       const layers = poiDef(p).layers;
-      const more = p.done < layers.length;
       const progress = p === here ? p.t / layers[p.done].sec : -1;
-      sprites.push({ y: p.y, draw: () => this.drawPoi(b, p.kind, X, Y, z, close, t, more, progress) });
+      sprites.push({ y: p.y, draw: () => this.drawPoi(b, p.kind, X, Y, z, close, t, progress) });
     }
 
     // ---- The island's other villages ----
@@ -566,17 +581,17 @@ export class ShoreScene extends RangeScene {
     b.restore();
   }
 
-  /** A landmark: what it is (close in), a glint while it still holds something, and how far
-   * the chief's got exploring it. */
-  private drawPoi(b: CanvasRenderingContext2D, kind: import('../content/shore').PoiKind, X: number, Y: number, z: number, close: boolean, t: number, more: boolean, progress: number): void {
+  /** A landmark: what it is (close in), and how far the chief's got exploring it. */
+  private drawPoi(b: CanvasRenderingContext2D, kind: import('../content/shore').PoiKind, X: number, Y: number, z: number, close: boolean, t: number, progress: number): void {
     const r = (x: number, y: number, w: number, h: number, c: string) => {
       b.fillStyle = c;
       b.fillRect(X + x * z, Y + y * z, w * z, h * z);
     };
     let top = -8;
+    // (Nothing marks them: from far out they're too small to see; close in, they're just there,
+    // for whoever's looking.)
     if (!close) {
-      b.fillStyle = more ? PAL.y : '#9a9488';
-      b.fillRect(X, Y - 1, 2, 2);
+      if (progress < 0) return;
       top = -4;
     } else {
       switch (kind) {
@@ -646,16 +661,6 @@ export class ShoreScene extends RangeScene {
           r(-1, -6, 2, 2, '#aaaab0');
           top = -9;
           break;
-      }
-    }
-    // Still something to find: a glint over it (a slow twinkle).
-    if (more) {
-      const on = Math.sin(t * 2.2 + X * 0.1) > -0.2;
-      if (on) {
-        b.fillStyle = PAL.y;
-        const gy = Y + top * z - 3;
-        b.fillRect(X, gy - 1, 1, 3);
-        b.fillRect(X - 1, gy, 3, 1);
       }
     }
     // Being explored: a bar filling over it.

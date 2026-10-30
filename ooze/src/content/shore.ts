@@ -72,19 +72,19 @@ export interface Boosts {
 
 export const BUILDS: BuildDef[] = [
   { id: 'hearth', cat: 'homes', name: 'The Hearth', does: 'A fire to gather round. Children are only born where there\'s a hearth.', wood: 6, growth: 1, max: 1 },
-  { id: 'hut', cat: 'homes', name: 'Hut', does: 'Room for 4 more.', wood: 10, growth: 1.16, after: 'hearth' },
+  { id: 'hut', cat: 'homes', name: 'Hut', does: 'Room for 4 more.', wood: 12, growth: 1.2, after: 'hearth' },
   { id: 'woodpile', cat: 'stores', name: 'Woodpile', does: 'Room for 50 more wood.', wood: 10, growth: 1.3, after: 'hearth' },
   { id: 'rack', cat: 'stores', name: 'Drying rack', does: 'Room for 40 more food.', wood: 14, growth: 1.3, after: 'hut' },
-  { id: 'camp', cat: 'work', name: 'Gathering camp', does: 'Food comes in 20% faster.', wood: 30, growth: 1.45, after: 'hut' },
-  { id: 'cutter', cat: 'work', name: 'Cutters\' shed', does: 'Wood comes in 20% faster.', wood: 30, growth: 1.45, after: 'woodpile' },
+  { id: 'camp', cat: 'work', name: 'Gathering camp', does: 'Food comes in 10% faster, and the land round the village feeds 5 more gatherers.', wood: 35, growth: 1.5, after: 'hut' },
+  { id: 'cutter', cat: 'work', name: 'Cutters\' shed', does: 'Wood comes in 10% faster.', wood: 35, growth: 1.5, after: 'woodpile' },
   { id: 'scout', cat: 'explore', name: 'Scout\'s hut', does: 'One of them goes out into the fog for you, finding what\'s out there (while you\'re away too).', wood: 20, growth: 2.2, max: 3, after: 'hut' },
-  { id: 'elders', cat: 'homes', name: 'Elders\' fire', does: 'The old teach the young: children grow up 25% faster.', wood: 40, growth: 1, max: 1, after: 'hut', fx: { grow: 0.25 } },
-  { id: 'longhouse', cat: 'homes', name: 'Longhouse', does: 'A great hall of a house: room for 12 more.', wood: 110, growth: 1.45, after: 'hut', learn: 'ruin', fx: { room: 12 } },
-  { id: 'pool', cat: 'homes', name: 'Bathing pool', does: 'Warm water, piped from a spring: children are born 20% more often.', wood: 50, growth: 1, max: 1, after: 'hut', learn: 'spring', fx: { births: 0.2 } },
-  { id: 'granary', cat: 'stores', name: 'Granary', does: 'Room for 120 more food, kept dry and cold: winter slows the food only half as much.', wood: 60, growth: 1.5, after: 'rack', learn: 'cave', fx: { foodCap: 120, winter: 0.5 } },
-  { id: 'weir', cat: 'work', name: 'Fishing weir', does: 'Stakes in the shallows, the way the drowned raft\'s makers did it: food comes in 15% faster.', wood: 35, growth: 1.5, after: 'hut', learn: 'wreck', fx: { food: 0.15 } },
+  { id: 'elders', cat: 'homes', name: 'Elders\' fire', does: 'The old teach the young: children grow up 15% faster.', wood: 60, growth: 1, max: 1, after: 'hut', fx: { grow: 0.15 } },
+  { id: 'longhouse', cat: 'homes', name: 'Longhouse', does: 'A great hall of a house: room for 12 more.', wood: 140, growth: 1.5, after: 'hut', learn: 'ruin', fx: { room: 12 } },
+  { id: 'pool', cat: 'homes', name: 'Bathing pool', does: 'Warm water, piped from a spring: children are born 10% more often.', wood: 70, growth: 1, max: 1, after: 'hut', learn: 'spring', fx: { births: 0.1 } },
+  { id: 'granary', cat: 'stores', name: 'Granary', does: 'Room for 120 more food, kept dry and cold: winter slows the food only half as much.', wood: 80, growth: 1.6, after: 'rack', learn: 'cave', fx: { foodCap: 120, winter: 0.5 } },
+  { id: 'weir', cat: 'work', name: 'Fishing weir', does: 'Stakes in the shallows, the way the drowned raft\'s makers did it: food comes in 5% faster, and the land feeds 6 more gatherers.', wood: 45, growth: 1.6, after: 'hut', learn: 'wreck', fx: { food: 0.05 } },
   { id: 'lookout', cat: 'explore', name: 'Lookout', does: 'A platform up high, like the one in the great tree: the land 30 tiles round the village is seen, and scouts see further.', wood: 45, growth: 1, max: 1, after: 'hut', learn: 'bigtree', fx: { watch: 30, sight: 4 } },
-  { id: 'trails', cat: 'explore', name: 'Trail markers', does: 'Cairns and blazes on the trees: the chief and the scouts walk 20% faster.', wood: 30, growth: 1, max: 1, after: 'scout', fx: { speed: 0.2 } },
+  { id: 'trails', cat: 'explore', name: 'Trail markers', does: 'Cairns and blazes on the trees: the chief and the scouts walk 10% faster.', wood: 40, growth: 1, max: 1, after: 'scout', fx: { speed: 0.1 } },
 ];
 
 // ---- Landmarks and relics ----
@@ -163,14 +163,14 @@ export interface RelicDef {
 }
 
 export const RELICS: RelicDef[] = [
-  { id: 'antler', name: 'Carved bone', does: 'Food comes in 10% faster.', fx: { food: 0.1 } },
-  { id: 'axe', name: 'Black stone axe', does: 'Wood comes in 15% faster.', fx: { wood: 0.15 } },
-  { id: 'shell', name: 'Spiral shell', does: 'Gifts win 25% more trust.', fx: { gift: 0.25 } },
-  { id: 'beads', name: 'Stone beads', does: 'Children are born 15% more often.', fx: { births: 0.15 } },
-  { id: 'crystal', name: 'Clear stone', does: 'The chief and the scouts see 5 tiles further.', fx: { sight: 5 } },
-  { id: 'wraps', name: 'Old foot-wraps', does: 'The chief and the scouts walk 15% faster.', fx: { speed: 0.15 } },
-  { id: 'figure', name: 'Clay figure', does: 'Children grow up 15% faster.', fx: { grow: 0.15 } },
-  { id: 'shard', name: 'Humming shard', does: 'Food and wood come in 5% faster. It hums like the spear.', fx: { food: 0.05, wood: 0.05 } },
+  { id: 'antler', name: 'Carved bone', does: 'Food comes in 5% faster.', fx: { food: 0.05 } },
+  { id: 'axe', name: 'Black stone axe', does: 'Wood comes in 8% faster.', fx: { wood: 0.08 } },
+  { id: 'shell', name: 'Spiral shell', does: 'Gifts win 15% more trust.', fx: { gift: 0.15 } },
+  { id: 'beads', name: 'Stone beads', does: 'Children are born 8% more often.', fx: { births: 0.08 } },
+  { id: 'crystal', name: 'Clear stone', does: 'The chief and the scouts see 3 tiles further.', fx: { sight: 3 } },
+  { id: 'wraps', name: 'Old foot-wraps', does: 'The chief and the scouts walk 8% faster.', fx: { speed: 0.08 } },
+  { id: 'figure', name: 'Clay figure', does: 'Children grow up 8% faster.', fx: { grow: 0.08 } },
+  { id: 'shard', name: 'Humming shard', does: 'Food and wood come in 3% faster. It hums like the spear.', fx: { food: 0.03, wood: 0.03 } },
 ];
 
 export const POI_SORT = { natural: 'Landmark', ruin: 'Ruins', strange: 'Strange' } as const;

@@ -353,6 +353,12 @@ Built in slices, each tested live (balance sims after).
    **The land feeds only so many gatherers** (14, +6 a camp, +8 a weir; past that each brings in
    little), so a village that outgrows its land starves, worse the shorter it is. A People tab
    lists everyone, by kind and age.
+2d. **Slower, quieter, mysterious** *(live)*: landmarks carry no marker (seen only close in,
+   by whoever looks; listed once noticed); buildings not yet learned show as ???; one building at
+   a time, each taking a while (longer for bigger, quicker with more hands); everything nerfed
+   (births, growing up, camps, relics, buildings, trust). Perfect auto-building no longer reaches
+   100 in 5½ hours (it levels off near 80 on room): the sims will set the real pace. People is a
+   view inside the Village tab.
 3. **Raids and defense**: the grace period, scouts, announced raids, Kairosoft-style battles.
 4. **Taking people and ideas**: diet leaning and shifts; cannibals' Dread.
 5. **The Far Voice**: whispers and the few powers.

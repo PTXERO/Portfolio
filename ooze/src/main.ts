@@ -15,7 +15,7 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { answerJoin, build, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
-import { findCard, joinCard, poiCard, setBuildCat, villageCard } from './ui/shorePanels';
+import { findCard, joinCard, poiCard, setBuildCat, setVillageView, villageCard } from './ui/shorePanels';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, say, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
@@ -1201,7 +1201,7 @@ function renderHint(): void {
     else if (state.stages.tribal.tribe?.ex && !Object.keys(state.stages.tribal.tribe.ex.casts ?? {}).length && !casting) text = 'They live or die on their own. Work miracles to save them';
   } else if (state.current === 'shore') {
     const s = shoreOf(state);
-    if (s && !s.built.length) text = 'Build the hearth (in the Build tab)';
+    if (s && !s.built.length && !s.building) text = 'Build the hearth (in the Build tab)';
     else if (!pokedThisStage) text = 'Tap the land to walk · pinch to zoom';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
@@ -1375,7 +1375,10 @@ function pondEvents(): void {
     } else if (e.type === 'poi') {
       const s = shoreOf(state);
       const p = s && poisOf(s).find((x) => x.id === e.id);
-      if (s && p) showModal(poiCard(s, p));
+      if (s && p) {
+        p.known = true;
+        showModal(poiCard(s, p));
+      }
     } else if (e.type === 'villager') {
       const s = shoreOf(state);
       const p = s?.people.find((x) => x.id === e.id);
@@ -1686,6 +1689,7 @@ function act(el: HTMLElement): void {
     }
   } else if (el.dataset.lean) setLean(state, el.dataset.lean as Lean);
   else if (el.dataset.buildcat) setBuildCat(el.dataset.buildcat);
+  else if (el.dataset.villageview) setVillageView(el.dataset.villageview);
   else if (el.dataset.join) {
     const [id, a] = el.dataset.join.split(':');
     answerJoin(state, Number(id), a as JoinAnswer);

@@ -21,15 +21,15 @@ export const DAY_SEC = 120;
 /** Days in a season (the year is four, from the spring they landed in). */
 export const SEASON_DAYS = 4;
 /** Days a child takes to grow up (and start working). */
-export const GROW_DAYS = 6;
+export const GROW_DAYS = 9;
 /** What a day's work brings in, each worker, before bonuses; and what each eats a day. */
-const FOOD_PER = 3;
+const FOOD_PER = 2.5;
 const WOOD_PER = 3;
 const EAT = 1;
 const EAT_CHILD = 0.5;
 /** Food a birth takes, and how often a pair of adults has a child (a day) with all well. */
-const BIRTH_FOOD = 8;
-const PAIR_RATE = 0.35;
+const BIRTH_FOOD = 12;
+const PAIR_RATE = 0.2;
 /** What's kept with nothing built to keep it in. */
 const FOOD_CAP = 40;
 const WOOD_CAP = 50;
@@ -42,9 +42,9 @@ const CHIEF_SPEED = 5;
 const HOME_SIGHT = 22;
 /** Winning a village over: trust a gift brings (twice as much brought by the chief in person),
  * a day of the chief's company, and the grazers' Welcome (kin drifting toward them). */
-const GIFT_TRUST = 8;
-const VISIT_TRUST = 4;
-const WELCOME_TRUST = 1.5;
+const GIFT_TRUST = 6;
+const VISIT_TRUST = 3;
+const WELCOME_TRUST = 1;
 /** How near the chief must be to count as visiting (tiles). */
 export const VISIT_NEAR = 14;
 /** Scouts: how fast they go and how far they see (tiles). */
@@ -115,6 +115,8 @@ export interface Poi {
   x: number;
   y: number;
   found: boolean;
+  /** Noticed by you: tapped, or the chief's been near it (only then is it listed). */
+  known?: boolean;
   done: number;
   t: number;
 }
@@ -151,6 +153,8 @@ export interface ShoreState {
   look: CreatureLook;
   cannibal: boolean;
   villages: Village[];
+  /** What's going up now (one at a time): where, and seconds left of how many. */
+  building?: { id: BuildId; x: number; y: number; left: number; total: number };
   /** Whether the raft they came on has been broken up for its wood. */
   raftTaken?: boolean;
   /** Scouts out exploring (one per scout's hut). */
@@ -419,7 +423,7 @@ export function buildCost(s: ShoreState, id: BuildId): number {
 
 /** Builds on offer now: unlocked, and not at their limit. */
 export function buildsOpen(s: ShoreState): typeof BUILDS {
-  return BUILDS.filter((b) => (!b.after || count(s, b.after) > 0) && (!b.learn || learned(s, b.id)) && (b.max === undefined || count(s, b.id) < b.max));
+  return BUILDS.filter((b) => (!b.after || count(s, b.after) > 0) && (!b.learn || learned(s, b.id)) && (b.max === undefined || count(s, b.id) + (s.building?.id === b.id ? 1 : 0) < b.max));
 }
 
 /** Whether a building that's learned out on the island has been. */
@@ -442,7 +446,7 @@ function placeFor(s: ShoreState, id: BuildId, is: Island): Pt {
       const x = Math.round((s.hearth.x + Math.cos(a) * r) * 2) / 2;
       const y = Math.round((s.hearth.y + Math.sin(a) * r * 0.8) * 2) / 2;
       if (!isLand(is, x, y) || is.biome[Math.round(y) * is.n + Math.round(x)] === Biome.Sand) continue;
-      if (s.built.some((b) => Math.hypot(b.x - x, b.y - y) < 2.8) || s.graves.some((g) => Math.hypot(g.x - x, g.y - y) < 2)) continue;
+      if (s.built.some((b) => Math.hypot(b.x - x, b.y - y) < 2.8) || (s.building && Math.hypot(s.building.x - x, s.building.y - y) < 2.8) || s.graves.some((g) => Math.hypot(g.x - x, g.y - y) < 2)) continue;
       // Workshops and stores keep out of the huts' rings.
       if (!inner && ring < 3) continue;
       return { x, y };
@@ -451,19 +455,33 @@ function placeFor(s: ShoreState, id: BuildId, is: Island): Pt {
   return { x: s.hearth.x + 4, y: s.hearth.y + 4 };
 }
 
+/** Seconds a building takes to put up: longer the bigger it is, quicker with more grown hands. */
+export function buildTime(s: ShoreState, id: BuildId): number {
+  const adults = s.people.filter((p) => isAdult(s, p)).length;
+  return (30 + buildCost(s, id) * 1.8) / (1 + 0.03 * Math.min(adults, 40));
+}
+
+/** Starts a building (one at a time: it goes up over a while, then it's there). */
 export function build(state: GameState, id: BuildId): boolean {
   const s = shoreOf(state);
-  if (!s || !buildsOpen(s).some((b) => b.id === id)) return false;
+  if (!s || s.building || !buildsOpen(s).some((b) => b.id === id)) return false;
   const cost = buildCost(s, id);
   if (s.wood < cost) return false;
+  const total = buildTime(s, id);
   s.wood -= cost;
   const at = placeFor(s, id, shoreIsland(s.seed));
-  s.built.push({ id, ...at, day: s.day + s.clock / DAY_SEC });
-  if (id === 'hearth') {
+  s.building = { id, ...at, left: total, total };
+  return true;
+}
+
+function finishBuilding(state: GameState, s: ShoreState): void {
+  const b = s.building!;
+  s.building = undefined;
+  s.built.push({ id: b.id, x: b.x, y: b.y, day: s.day + s.clock / DAY_SEC });
+  if (b.id === 'hearth') {
     s.news.push(SHORE_STORY.hearth);
     record(state, 'The hearth was lit.', 'shore', shoreWhen(s));
-  }
-  return true;
+  } else s.news.push(`The ${buildName(b.id, s.look.diet).toLowerCase()} is built.`);
 }
 
 /** Wood the raft gives, broken up. */
@@ -498,8 +516,8 @@ export function workPlan(s: ShoreState): { food: number; wood: number; eat: numb
   const kids = s.people.length - adults;
   const eat = adults * EAT + kids * EAT_CHILD;
   const bo = boosts(s);
-  const foodEach = FOOD_PER * (1 + 0.2 * count(s, 'camp') + bo.food) * seasonFood(s);
-  const woodEach = WOOD_PER * (1 + 0.2 * count(s, 'cutter') + bo.wood);
+  const foodEach = FOOD_PER * (1 + 0.1 * count(s, 'camp') + bo.food) * seasonFood(s);
+  const woodEach = WOOD_PER * (1 + 0.1 * count(s, 'cutter') + bo.wood);
   // Leaning one way or the other; with the stores full, hands go to the other.
   let share = s.lean === 'food' ? 0.75 : s.lean === 'wood' ? Math.min(1, (eat * 1.05) / Math.max(1, adults) / foodEach) : Math.min(1, (eat * 1.5) / Math.max(1, adults) / foodEach + 0.15);
   if (s.food >= foodCap(s) - 0.5) share = Math.min(share, (eat * 1.0) / Math.max(1, adults) / foodEach);
@@ -514,7 +532,7 @@ export function workPlan(s: ShoreState): { food: number; wood: number; eat: numb
 
 /** How many gatherers the land round the village feeds fully (more camps and weirs, more). */
 export function landFor(s: ShoreState): number {
-  return 14 + 6 * count(s, 'camp') + 8 * count(s, 'weir');
+  return 12 + 5 * count(s, 'camp') + 6 * count(s, 'weir');
 }
 
 // ---- Winning them over ----
@@ -695,6 +713,10 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
       born(state, s);
     }
   }
+  if (s.building) {
+    s.building.left -= dt;
+    if (s.building.left <= 0) finishBuilding(state, s);
+  }
   walk(state, s, dt);
   stepVassals(state, s, k);
   // Won over and waiting: with no answer, they wait for room; once there's room, they come; kept
@@ -872,11 +894,11 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
     s.newFinds.push(v.id);
     record(state, `They found ${v.name}: ${v.pop} of them, ${v.cannibal ? 'eaters of their own kind' : `${v.diet}s`}.`, 'shore', shoreWhen(s));
   }
-  // Landmarks come out of the fog as it's seen (by the chief or the scouts).
+  // Landmarks come out of the fog as it's seen (by the chief or the scouts), quietly: nothing
+  // says so. Only once you've noticed one (tapped it, or the chief's been by it) is it known.
   for (const p of poisOf(s)) {
-    if (p.found || !seen[Math.floor(p.y / CELL) * SHORE_CELLS + Math.floor(p.x / CELL)]) continue;
-    p.found = true;
-    s.news.push(`Found: ${poiName(p)}.`);
+    if (!p.found && seen[Math.floor(p.y / CELL) * SHORE_CELLS + Math.floor(p.x / CELL)]) p.found = true;
+    if (p.found && !p.known && Math.hypot(p.x - s.chiefAt.x, p.y - s.chiefAt.y) < 10) p.known = true;
   }
   explore(state, s, dt);
 }
