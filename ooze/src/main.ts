@@ -1169,7 +1169,7 @@ function pondEvents(): void {
       else if (got === 'caught') scene.float(e.x, e.y - 10, `caught ${state.stages[state.current].captured[e.id]} of ${r?.captures ?? 1}`, '#f5c45e');
     } else if (e.type === 'rare') {
       scene.float(e.x, e.y - 10, 'a rare microbe!', '#f5c45e');
-      cue('magic', 0.7);
+      cue('chime', 0.8);
     }
     else if (e.type === 'hit') scene.float(e.x, e.y - 10, ['thwack', 'ow!', 'scram!'][Math.floor(Math.random() * 3)], '#f2ead7');
     else if (e.type === 'court') {
