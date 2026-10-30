@@ -129,6 +129,8 @@ export function unlockSound(): void {
   underwater(ctx, bus.effects, master);
   sky = ctx.createGain();
   sky.connect(master);
+  squeakBus = ctx.createGain();
+  squeakBus.connect(sky);
   shallow = ctx.createBiquadFilter();
   shallow.type = 'lowpass';
   shallow.frequency.value = 2200;
@@ -225,6 +227,14 @@ const SQUEAKS: [number, number][] = [
   [0.0, 0.12], [0.2, 0.1], [0.38, 0.41], [0.87, 0.4], [1.35, 0.39], [1.82, 0.57], [2.47, 0.145], [2.695, 0.14], [2.915, 0.105],
 ];
 let lastSqueak = -1;
+/** The squeaks all go through this, so they fade out quickly when the herd leaves the view. */
+let squeakBus: GainNode;
+
+/** Whether any of the herd are hopping about in view (else their squeaks fade straight out). */
+export function herdInView(on: boolean): void {
+  if (!ctx || !squeakBus) return;
+  squeakBus.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, on ? 0.02 : 0.08);
+}
 
 /** One of the herd squeaks as it hops: one of nine, a little higher or lower, from where it is
  * on screen (`pan` −1 left to 1 right), at `level`. */
@@ -247,7 +257,7 @@ export function squeak(level: number, pan = 0): void {
     g.connect(p);
     out = p;
   }
-  out.connect(sky);
+  out.connect(squeakBus);
   src.connect(g);
   src.start(0, at, len);
 }
@@ -374,7 +384,7 @@ function musicFrame(state: GameState): void {
 
 /** Each frame: the hum in the water, the island's weather, the drone, music now and then, and
  * the whirlpool's rush. (`skies` is the Creature's weather: rain and snow, 0 to 1.) */
-export function soundFrame(state: GameState, skies: { rain: number; snow: number } | null = null): void {
+export function soundFrame(state: GameState, skies: { rain: number; snow: number; zoom: number } | null = null): void {
   if (!ctx) return;
   const soup = state.current === 'soup';
   // The hum under all the water; over the Extinction (from the strike on), a low drone; music
@@ -389,7 +399,10 @@ export function soundFrame(state: GameState, skies: { rain: number; snow: number
   const wind = skies ? Math.max(0, 1 - rain - snow) : 0;
   loopTo('rain', rain, bus.ambience, 1.5);
   loopTo('snowstorm', snow * 1.4, bus.ambience, 1.5);
-  loopTo('wind', wind * 0.45, bus.ambience, 1.5);
+  // The wind is loudest high over the island, and dies down as the view comes down near the
+  // ground (about a third, right in close).
+  const near = skies ? Math.max(0, Math.min(1, Math.log(skies.zoom / 0.3) / Math.log(8 / 0.3))) : 0;
+  loopTo('wind', wind * 0.45 * (1 - 0.65 * near), bus.ambience, 1.5);
   musicFrame(state);
   const swirl = soup && state.swirl > 0.02 ? Math.min(1, state.swirl) : 0;
   loopTo('river', swirl * 0.8, bus.effects, swirl > 0 ? 0.15 : 0.3);

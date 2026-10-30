@@ -8,7 +8,7 @@
 // Creatures are drawn side-on (the old pixel-RPG convention), sorted by depth.
 
 import { PAL } from '../art/sprites';
-import { squeak, thunder } from '../audio/sound';
+import { herdInView, squeak, thunder } from '../audio/sound';
 import { STAGES } from '../content/stages';
 import { islandFor, nearestNest, nestPoints, nestProgress, partyLeg, spot, statsOf, walkTo } from '../economy/creature';
 import { Biome, CELL, CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
@@ -140,8 +140,8 @@ export class RangeScene {
   protected wet = 0;
   protected weather: [number, number, number, number] = [0, 0, 0, 0];
   /** The weather as heard: how hard it's raining (a storm) and how far into winter (snow). */
-  get skies(): { rain: number; snow: number } {
-    return { rain: this.storm, snow: this.weather[2] };
+  get skies(): { rain: number; snow: number; zoom: number } {
+    return { rain: this.storm, snow: this.weather[2], zoom: this.zoom };
   }
   /** How deep in an ash winter the world is, 0 to 1 (the Extinction's; never on the Creature's). */
   protected ash = 0;
@@ -1128,7 +1128,8 @@ export class RangeScene {
       const moving = Math.hypot(m.vx, m.vy) > 0.15;
       if (moving) {
         const sx = this.sx(m.x);
-        if (sx > 0 && sx < W) {
+        const sy = this.py(m.x, m.y);
+        if (sx > 0 && sx < W && sy > this.viewTop && sy < (this.viewBottom || H)) {
           hopping++;
           hopX += sx;
         }
@@ -1155,6 +1156,7 @@ export class RangeScene {
 
     // Hopping about, they squeak: more often the more of them are on the move, heard only up
     // close (half volume fully zoomed in, fading fast as the view pulls back).
+    herdInView(hopping > 0);
     if (hopping) {
       this.squeakIn -= dt * Math.min(3, 0.6 + hopping * 0.35);
       if (this.squeakIn <= 0) {

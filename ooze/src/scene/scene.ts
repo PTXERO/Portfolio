@@ -79,7 +79,7 @@ export class Scene {
     return this.tribe.worldAt(x / this.px, y / this.px);
   }
   /** The Creature's weather, for the sound (null in other stages). */
-  get skies(): { rain: number; snow: number } | null {
+  get skies(): { rain: number; snow: number; zoom: number } | null {
     return this.stage === 'creature' ? this.shore.skies : null;
   }
 
