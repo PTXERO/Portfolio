@@ -111,7 +111,7 @@ describe('whispers', () => {
     ex.whisper = { id: 'challenge', who: [ex.people[0].id, ex.people[1].id], day: ex.day };
     tribeDecides(ex);
     expect(waitingOnChoice(ex)).toBe(false);
-    const said = ex.log.slice(-2).map((l) => l.text).join(' ');
+    const said = (ex.log ?? []).slice(-2).map((l) => l.text).join(' ');
     expect(said).toContain('The spear was silent');
     expect(said).not.toContain('The spear stood');
   });
