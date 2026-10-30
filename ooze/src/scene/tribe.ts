@@ -29,10 +29,12 @@ interface Person {
   lit: number;
 }
 
-/** Seconds the spear gathers itself once touched, before it lets go (on the blast in its sound),
- * and when, partway, it holds its breath. */
-const CHARGE = 8.0;
+/** Seconds the spear gathers itself once touched, before it lets go (on the blast in its sound:
+ * the deep swell, not the sharp hit just before it), when partway it holds its breath, and when
+ * that first hit comes (a flare, as if it almost let go). */
+const CHARGE = 9.5;
 const BREATH: [number, number] = [4.85, 5.3];
+const FLARE = 8.0;
 /** Every cell seen: there is no fog on what's left (they know every step of it). */
 const ALL_SEEN = new Uint8Array(CELLS * CELLS).fill(1);
 const DAY_SEC = 120;
@@ -1515,6 +1517,12 @@ export class TribeScene extends RangeScene {
       const c = this.charge;
       const held = c > BREATH[0] && c < BREATH[1] ? 0.35 + 0.65 * Math.abs((c - (BREATH[0] + BREATH[1]) / 2) / ((BREATH[1] - BREATH[0]) / 2)) : 1;
       const k = Math.min(1, this.charge / CHARGE) * held;
+      // The first hit: a flare of light at the tip, there and gone.
+      const flare = c > FLARE && c < FLARE + 0.35 ? 1 - (c - FLARE) / 0.35 : 0;
+      if (flare > 0) {
+        b.fillStyle = `rgba(230, 200, 255, ${0.22 * flare})`;
+        b.fillRect(0, 0, W, H);
+      }
       // (Where the spear's tip is now: the camera may still be settling.)
       const tip = { x: sx, y: sy - this.spearHeight() };
       b.fillStyle = `rgba(12, 4, 22, ${0.45 * k * k})`;
@@ -1535,7 +1543,7 @@ export class TribeScene extends RangeScene {
       b.globalAlpha = 1;
       // The tip: a light swelling and throbbing faster.
       const pulse = 0.6 + 0.4 * Math.sin(this.charge * (6 + k * 26));
-      const rad = 2 + k * 9 * pulse;
+      const rad = 2 + k * 9 * pulse + flare * 10;
       const g = b.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, rad * 2.5);
       g.addColorStop(0, `rgba(255, 245, 255, ${0.996 * k})`);
       g.addColorStop(0.3, `rgba(200, 110, 255, ${0.8 * k})`);
