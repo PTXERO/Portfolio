@@ -135,6 +135,23 @@ float hRaw(vec2 w) {
 }
 // The surface: water lies flat at sea level.
 float hTop(vec2 w) { return max(hRaw(w), 0.0); }
+/** How unseen a point is (0 seen, 1 not), soft-edged: the fog map blurred and stirred. */
+float fogField(vec2 p) {
+  float e = min(min(p.x, p.y), min(N - p.x, N - p.y));
+  float edgeFog = 1.0 - smoothstep(4.0, 34.0, e);
+  if (p.x < 0.0 || p.y < 0.0 || p.x >= N || p.y >= N) return 1.0;
+  vec2 q = p - uWind * uTime * 0.25;
+  vec2 j = (vec2(noise(q * 0.06), noise(q * 0.06 + 9.0)) - 0.5) * 7.0;
+  float f = (texture2D(uFog, (p + j + vec2(2.5, 0.0)) / N).a + texture2D(uFog, (p + j - vec2(2.5, 0.0)) / N).a
+    + texture2D(uFog, (p + j + vec2(0.0, 2.5)) / N).a + texture2D(uFog, (p + j - vec2(0.0, 2.5)) / N).a) * 0.25;
+  return max(smoothstep(0.15, 0.85, f), edgeFog);
+}
+/** The top of the fog bank over a point: some way over the land, billowing. */
+float fogTop(vec2 p) {
+  vec2 q = p - uWind * uTime * 0.25;
+  float bank = 0.06 + 0.22 * (noise(q * 0.03) * 0.6 + noise(q * 0.09) * 0.4);
+  return hTop(p) + fogField(p) * bank - 0.01;
+}
 float biomeAt(vec2 w) {
   if (w.x < 0.0 || w.y < 0.0 || w.x >= N || w.y >= N) return 0.0;
   return floor(texture2D(uHeight, (floor(w) + 0.5) / N).g * 255.0 / 20.0 + 0.5);
@@ -238,8 +255,7 @@ void main() {
 
   // Fog of war: soft, rolling cloud, with wisps at its edge.
   // Past what's been seen, and thickening toward the map's edge (and beyond it), all is cloud.
-  float edge = min(min(w.x, w.y), min(N - w.x, N - w.y));
-  float fogA = max(inside ? texture2D(uFog, w / N).a : 1.0, 1.0 - smoothstep(4.0, 34.0, edge));
+  float fogA = fogField(w);
   float fn = fbm(w * 0.06 + vec2(uTime * 0.02, -uTime * 0.013));
   float fn2 = fbm(w * 0.16 - vec2(uTime * 0.035, uTime * 0.02));
   float fog = smoothstep(0.3, 0.7, fogA + (fn - 0.5) * 0.6 + (fn2 - 0.5) * 0.2);
@@ -264,36 +280,42 @@ void main() {
   if (o.a > 0.01) lit = mix(lit, o.rgb * (uAmb * 1.1 + uSunCol * 0.95), o.a);
   lit *= 1.0 - cloudShade;
 
-  // The fog of war in the round: banks of fog standing over the unseen land, billowing and
-  // drifting, their tops rising and falling. Looked through along the line of sight (the
-  // nearest, highest part first), so a bank in front hides what's behind it, and its edge is a
-  // soft rolling wall rather than a step of white tiles. It rises from the land under it.
+  // The fog of war in the round: a bank of fog lying over the unseen land, one smooth billowing
+  // surface (found along the line of sight the way the land is, so a bank in front hides what's
+  // behind it), lit by its own shape: bright where it faces the sun, shadowed in its folds,
+  // thinning to nothing at its edge.
   {
-    float acc = 0.0;
-    vec3 fc = vec3(0.0);
-    vec3 fogLit = (0.32 + bright * 0.72) * mix(vec3(1.0), vec3(1.0, 0.86, 0.74), clamp(length(uHaze) * 3.0, 0.0, 1.0));
-    fogLit = mix(fogLit, vec3(0.42, 0.38, 0.35) * (0.45 + bright * 0.4), uAsh * 0.9);
-    for (int i = 0; i < 10; i++) {
-      float hh = 1.15 * (1.0 - (float(i) + 0.5) / 10.0);
+    // From high above down to the ground: the first point under the fog's top.
+    float hiH = 1.2;
+    float stepH = hiH / 22.0;
+    float found = -1.0;
+    for (int i = 0; i <= 22; i++) {
+      float hh = hiH - float(i) * stepH;
       vec2 p = vec2(wx, uCam.y + (art.y - uCam.w + hh * K * uCam.z) / (uCam.z * TY));
-      float ground = hTop(p);
-      // (Below the land here: the line of sight has met the ground.)
-      if (hh < ground) break;
-      vec2 q = p - uWind * uTime * 0.25;
-      float e = min(min(p.x, p.y), min(N - p.x, N - p.y));
-      float un = max(p.x >= 0.0 && p.y >= 0.0 && p.x < N && p.y < N ? texture2D(uFog, (p + (vec2(noise(q * 0.08), noise(q * 0.08 + 9.0)) - 0.5) * 8.0) / N).a : 1.0, 1.0 - smoothstep(4.0, 34.0, e));
-      if (un < 0.02) continue;
-      // The bank's top: some way over the land, rising and falling in billows.
-      float top = ground + 0.1 + 0.32 * (noise(q * 0.035) * 0.65 + noise(q * 0.11) * 0.35);
-      float d = un * smoothstep(top, top - 0.09, hh);
-      if (d <= 0.0) continue;
-      // Lit from above: bright at the top of a bank, greyer down in it.
-      float shade = 0.78 + 0.22 * smoothstep(top - 0.25, top, hh);
-      float a = d * 0.38;
-      fc += (1.0 - acc) * a * fogLit * shade;
-      acc += (1.0 - acc) * a;
+      if (hh < hTop(p)) break;
+      if (hh <= fogTop(p)) { found = hh; break; }
     }
-    if (acc > 0.0) lit = lit * (1.0 - acc) + fc;
+    if (found >= 0.0) {
+      // Narrowed down between that step and the one above.
+      float lo = found, hi = found + stepH;
+      for (int i = 0; i < 5; i++) {
+        float m = (lo + hi) * 0.5;
+        vec2 p = vec2(wx, uCam.y + (art.y - uCam.w + m * K * uCam.z) / (uCam.z * TY));
+        if (m <= fogTop(p)) lo = m; else hi = m;
+      }
+      vec2 p = vec2(wx, uCam.y + (art.y - uCam.w + lo * K * uCam.z) / (uCam.z * TY));
+      float depth = fogTop(p) - hTop(p);
+      // The bank's surface, from its slope: lit by the sun and the sky.
+      float e = 2.0;
+      vec3 nrm = normalize(vec3(-(fogTop(p + vec2(e, 0.0)) - fogTop(p - vec2(e, 0.0))) * K / (2.0 * e), -(fogTop(p + vec2(0.0, e)) - fogTop(p - vec2(0.0, e))) * K / (2.0 * e), 1.0));
+      float sunlit = max(dot(nrm, sunD), 0.0);
+      vec3 fogLit = (uAmb * 1.15 + uSunCol * (0.35 + 0.75 * sunlit)) * vec3(0.93, 0.95, 0.98);
+      fogLit = mix(fogLit, fogLit * vec3(1.0, 0.86, 0.74), clamp(length(uHaze) * 3.0, 0.0, 1.0));
+      fogLit = mix(fogLit, vec3(0.42, 0.38, 0.35) * (0.45 + bright * 0.4), uAsh * 0.9);
+      // A little texture in it, drifting.
+      fogLit *= 0.94 + 0.08 * noise((p - uWind * uTime * 0.25) * 0.15);
+      lit = mix(lit, fogLit, smoothstep(0.0, 0.07, depth));
+    }
   }
 
   // The clouds themselves, floating between you and the land: nearer the eye than the ground,
