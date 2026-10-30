@@ -2,7 +2,7 @@
 // homes, stores, work, exploring) and the Island (the villages found out there, and the scouts).
 
 import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
-import { buildCost, canPay, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import type { GameState } from '../economy/types';
@@ -30,9 +30,9 @@ const WHERE: Record<string, string> = {
 const DIET_NAME: Record<string, string> = { grazer: 'Grazers', hunter: 'Hunters', omnivore: 'Omnivores' };
 
 /** The Village tab: the village itself, or everyone in it. */
-let villageView: 'village' | 'people' = 'village';
+let villageView: 'village' | 'people' | 'elders' = 'village';
 export function setVillageView(v: string): void {
-  villageView = v === 'people' ? 'people' : 'village';
+  villageView = v === 'people' || v === 'elders' ? v : 'village';
 }
 
 /** The Build tab's sort on show (kept while you're in the stage). */
@@ -48,6 +48,7 @@ export function shoreKey(state: GameState, tab: string): string {
   if (tab === 'build') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor((v ?? 0) / 5)), s.building?.id, s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, canPay(s, b.id)])]);
   if (tab === 'island') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor(v ?? 0)), s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop)], Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
   const plan = workPlan(s);
+  if (villageView === 'elders' && count(s, 'council')) return JSON.stringify(['elders', s.steward, (s.steward?.on ? elderThink(s) : ELDERS_OFF).text, s.elders?.length, s.elders?.[s.elders.length - 1]?.text, s.building?.id]);
   if (villageView === 'people') return JSON.stringify(['people', s.people.length, s.chief, Math.floor(s.day / 2), s.hungry]);
   return JSON.stringify([s.cold, Math.round(forestShare(s) * 20), Math.round(burnPerDay(s) * 2), s.steward, s.hungry, shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, s.chief, s.people.filter((p) => isAdult(s, p)).length, s.people.filter((p) => p.founder).length]);
 }
@@ -91,9 +92,12 @@ export function shoreLayout(state: GameState, tab: string): string {
   if (!s) return '';
   if (tab === 'build') return buildLayout(s);
   if (tab === 'island') return islandLayout(s);
-  const views = `<div class="seg build-cats"><button class="px-btn${villageView === 'village' ? ' on' : ''}" data-villageview="village">The village</button><button class="px-btn${villageView === 'people' ? ' on' : ''}" data-villageview="people">People · ${s.people.length}</button><span class="seg-gap"></span><button class="px-btn" data-camera="home">Home</button><button class="px-btn" data-camera="chief">Chief</button></div>`;
-  if (villageView === 'people') return views + peopleLayout(s);
-  return views + storesCard(s) + workCard(s) + councilCard(s) + peopleCard(s);
+  const council = count(s, 'council') > 0;
+  const view = villageView === 'elders' && !council ? 'village' : villageView;
+  const views = `<div class="seg build-cats"><button class="px-btn${view === 'village' ? ' on' : ''}" data-villageview="village">The village</button><button class="px-btn${view === 'people' ? ' on' : ''}" data-villageview="people">People · ${s.people.length}</button>${council ? `<button class="px-btn${view === 'elders' ? ' on' : ''}" data-villageview="elders">Elders</button>` : ''}<span class="seg-gap"></span><button class="px-btn" data-camera="home">Home</button><button class="px-btn" data-camera="chief">Chief</button></div>`;
+  if (view === 'people') return views + peopleLayout(s);
+  if (view === 'elders') return views + eldersLayout(s);
+  return views + storesCard(s) + workCard(s) + peopleCard(s);
 }
 
 /** Whether a sort of building has anything in it yet (built, or to build). */
@@ -322,6 +326,15 @@ function councilCard(s: ShoreState): string {
   return `<div class="card px-box lean"><div class="info"><div class="name">The elders build</div>
     <div class="sub">${st.on ? `Whenever nothing's going up, they choose what's next: ${plan.does}.` : 'They leave the building to you.'}</div></div>
     <div class="seg"><button class="px-btn${st.on ? ' on' : ''}" data-steward="${st.on ? 'off' : 'on'}">${st.on ? 'On' : 'Off'}</button>${PLANS.map((p) => `<button class="px-btn${st.plan === p.id ? ' gold' : ''}" data-stewardplan="${p.id}"${st.on ? '' : ' disabled'}>${p.name}</button>`).join('')}</div></div>`;
+}
+
+/** The elders: what they're set to, what they're thinking now, and what they've thought. */
+function eldersLayout(s: ShoreState): string {
+  const now = s.steward?.on ? elderThink(s) : ELDERS_OFF;
+  const said = (s.elders ?? []).slice().reverse().filter((e, i) => i > 0 || e.text !== now.text);
+  return `${councilCard(s)}
+    <div class="card px-box"><div class="info"><div class="name">Round the council fire</div><div class="sub">${now.text}</div></div></div>
+    ${said.length ? `<div class="panel-head"><h2>What they've said</h2></div><div class="card px-box"><div class="info">${said.map((e) => `<div class="sub"><span class="dim">${e.when}.</span> ${e.text}</div>`).join('')}</div></div>` : ''}`;
 }
 
 function peopleCard(s: ShoreState): string {

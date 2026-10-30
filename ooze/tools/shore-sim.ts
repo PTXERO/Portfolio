@@ -94,6 +94,7 @@ function run(kind: Kind, seed: number, diet: string) {
     joined = s.villages.filter((v) => v.joined).length;
     if (marks[100] !== undefined) break;
   }
+  if (process.env.CHRON === kind + diet) for (const e of state.chronicle ?? []) if (e.era === 'shore') console.log(`${e.when} | ${e.text}`);
   const f = (x?: number) => (x === undefined ? '  —  ' : `${Math.floor(x / 3600)}h${String(Math.floor((x % 3600) / 60)).padStart(2, '0')}`);
   return `${kind.padEnd(9)} ${diet.padEnd(8)} 25:${f(marks[25])}  50:${f(marks[50])}  75:${f(marks[75])}  100:${f(marks[100])}  (people ${s.people.length}, joined ${joined}, relics ${s.relics?.length ?? 0}, learned ${s.learned?.length ?? 0}, food cap ${foodCap(s)})`;
 }

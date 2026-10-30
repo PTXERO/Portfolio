@@ -13,7 +13,7 @@ export interface ChronicleEntry {
 }
 
 /** The most kept (the oldest go first). */
-const KEEP = 500;
+const KEEP = 2000;
 
 /** When something happens, in the era's own time. */
 export function whenIn(state: GameState, era: StageId): string {

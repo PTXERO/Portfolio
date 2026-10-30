@@ -658,7 +658,7 @@ export function heirloomReady(state: GameState): boolean {
 /** The Chronicle: everything so far, newest first, under the era it happened in. */
 function chronicleLayout(state: GameState): string {
   const all = state.chronicle ?? [];
-  const shown = all.slice(-300).reverse();
+  const shown = all.slice(-600).reverse();
   // Everything from the same day (or minute, or season) under one heading, in the order it
   // happened; the newest days first.
   const groups: { era: string; when: string; lines: string[] }[] = [];
