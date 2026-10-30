@@ -104,8 +104,8 @@ const final: ReactionDef = {
   id: 'many',
   name: 'Many',
   flavor: 'A line long enough to fill the land.',
-  hints: ['One is not enough.', 'Every place roamed, a line six generations long, and a great herd across the land.'],
-  needs: { found: 7, generation: 6, pop: 400, gens: { territory: 8 } },
+  hints: ['One is not enough.', 'Every place roamed, a line five generations long, and a great herd across the land.'],
+  needs: { found: 7, generation: 5, pop: 400, gens: { territory: 8 } },
   final: true,
   cost: 2e10,
 };

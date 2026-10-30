@@ -1508,6 +1508,20 @@ export class TribeScene extends RangeScene {
     // A red haze over the burnt world, thinning as it cools.
     b.fillStyle = `rgba(150, 30, 20, ${0.16 * heat * (1 - this.ash)})`;
     b.fillRect(0, 0, W, H);
+    // The strike's own red wash carries on past its cutscene (so it doesn't drop away with it),
+    // and only fades as the camera finds them again.
+    if (!tribe.awake && (this.hold || this.released >= 0)) {
+      const w = this.hold ? 1 : Math.max(0, 1 - (t - this.released) / 3.5);
+      if (w > 0) {
+        b.fillStyle = `rgba(120, 14, 10, ${0.22 * w})`;
+        b.fillRect(0, 0, W, H);
+        const g = b.createRadialGradient(sx, sy, 0, sx, sy, W * 0.9);
+        g.addColorStop(0, `rgba(255, 120, 60, ${0.45 * w})`);
+        g.addColorStop(1, 'rgba(255, 60, 30, 0)');
+        b.fillStyle = g;
+        b.fillRect(0, 0, W, H);
+      }
+    }
 
     // Touched, the spear gathers itself: light streams in to its tip from all round, faster and
     // brighter, the world dimming about it; then it lets go (the shockwave below).
