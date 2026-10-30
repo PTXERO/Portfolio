@@ -104,14 +104,29 @@ function castOut(ex: ExtinctionState, p: Survivor, why: string): void {
   say(ex, why);
 }
 
-/** The spear's answer. */
-export function answerWhisper(ex: ExtinctionState, option: number): void {
+/** What they do when the spear says nothing: left to themselves, frightened and worn. */
+const LEFT_TO_THEM: Record<WhisperId, number> = { thief: 2, sick: 1, hoard: 1, voice: 2, offering: 1, challenge: 0, who: 2 };
+
+/** The spear stayed silent too long: they decide for themselves. */
+export function tribeDecides(ex: ExtinctionState): void {
+  const w = ex.whisper;
+  if (!w) return;
+  const lead = ex.people.find((p) => p.id === ex.leader)?.name;
+  say(ex, `The spear was silent. ${lead ? `${lead} decided for them.` : 'They decided for themselves.'}`);
+  answerWhisper(ex, LEFT_TO_THEM[w.id], true);
+}
+
+/** The spear's answer (or, `silent`, theirs without it). */
+export function answerWhisper(ex: ExtinctionState, option: number, silent = false): void {
   const w = ex.whisper;
   if (!w) return;
   ex.whisper = undefined;
   const a = byId(ex, w.who[0]);
   const b = w.who[1] !== undefined ? byId(ex, w.who[1]) : undefined;
   const lead = ex.people.find((p) => p.id === ex.leader)?.name ?? 'the one they followed';
+  /** Who said so: the spear, or (when it was silent) the leader. */
+  const said = silent ? lead : 'the spear';
+  const Said = said[0].toUpperCase() + said.slice(1);
   const hope = (n: number) => {
     for (const p of ex.people) p.hunger = Math.max(0, p.hunger - n * 0.02);
   };
@@ -122,8 +137,8 @@ export function answerWhisper(ex: ExtinctionState, option: number): void {
         remember(ex, a, 'was caught stealing, and spared');
         a.quirk = a.quirk === 'greedy' ? 'steady' : a.quirk;
         ex.madness = Math.max(0, (ex.madness ?? 0) - 3);
-        say(ex, `${a.name} was caught at the stores. The spear said spare them. ${a.name} wept, and didn't steal again.`);
-      } else if (option === 1) castOut(ex, a, `${a.name} was caught at the stores. On the spear's word, ${lead} drove them out into the ash. No one saw them again.`);
+        say(ex, `${a.name} was caught at the stores. ${Said} said spare them. ${a.name} wept, and didn't steal again.`);
+      } else if (option === 1) castOut(ex, a, `${a.name} was caught at the stores. ${silent ? `${lead}` : `On the spear's word, ${lead}`} drove them out into the ash. No one saw them again.`);
       else {
         remember(ex, a, 'was put to the raft for stealing');
         a.job = 'build';
@@ -140,12 +155,12 @@ export function answerWhisper(ex: ExtinctionState, option: number): void {
           const b2 = ex.people.find((p) => p !== a && p.sick === undefined);
           if (b2) {
             b2.hunger += 0.6;
-            say(ex, `They kept ${a.name} close, as the spear said. ${b2.name} sat with them, and caught the fever too.`);
+            say(ex, `They kept ${a.name} close, as ${said} said. ${b2.name} sat with them, and caught the fever too.`);
             break;
           }
         }
         a.hunger = Math.max(0, a.hunger - 0.4);
-        say(ex, `They kept ${a.name} close, as the spear said. The fever broke in three days.`);
+        say(ex, `They kept ${a.name} close, as ${said} said. The fever broke in three days.`);
       } else {
         remember(ex, a, 'was sent away from the camp, sick');
         a.hunger += 0.8;
@@ -159,7 +174,7 @@ export function answerWhisper(ex: ExtinctionState, option: number): void {
         ex.plants += 6;
         ex.meat += 4;
         a.grief = 2;
-        say(ex, `${a.name}'s family had been hiding food. The spear said share it, and it was shared. ${a.name} never forgave ${lead}.`);
+        say(ex, `${a.name}'s family had been hiding food. ${Said} said share it, and it was shared. ${a.name} never forgave ${lead}.`);
       } else {
         a.hunger = Math.max(0, a.hunger - 0.6);
         ex.madness = (ex.madness ?? 0) + 4;
@@ -194,7 +209,7 @@ export function answerWhisper(ex: ExtinctionState, option: number): void {
       } else {
         ex.prayer = Math.max(0, (ex.prayer ?? 0) - 2);
         hope(5);
-        say(ex, `${a?.name ?? 'One of them'} wanted to give the spear food. The spear wanted none. They ate it themselves.`);
+        say(ex, `${a?.name ?? 'One of them'} wanted to give the spear food. ${silent ? 'The spear said nothing' : 'The spear wanted none'}. They ate it themselves.`);
       }
       break;
     case 'challenge':
@@ -202,22 +217,23 @@ export function answerWhisper(ex: ExtinctionState, option: number): void {
       if (option === 0) {
         remember(ex, a, `challenged ${b?.name ?? 'the leader'}, and lost`);
         a.hurt = 2;
-        say(ex, `${a.name} challenged ${b?.name ?? 'the leader'}. The spear stood by ${b?.name ?? 'them'}, and ${a.name} sat apart after.`);
+        say(ex, `${a.name} challenged ${b?.name ?? 'the leader'}. ${silent ? 'The others stood' : 'The spear stood'} by ${b?.name ?? 'them'}, and ${a.name} sat apart after.`);
       } else {
         ex.leader = a.id;
         if (b) remember(ex, b, `was brought down by ${a.name}`);
         remember(ex, a, 'became the one they follow');
         ex.madness = (ex.madness ?? 0) + 3;
-        say(ex, `${a.name} challenged ${b?.name ?? 'the leader'}, and the spear backed them. The others follow ${a.name} now.`);
+        say(ex, `${a.name} challenged ${b?.name ?? 'the leader'}, and ${silent ? 'the others' : 'the spear'} backed them. The others follow ${a.name} now.`);
       }
       break;
     case 'who': {
       ex.sendRule = (['strong', 'young', 'family'] as SendRule[])[option] ?? 'family';
+      const agreed = silent ? 'They settled it among themselves.' : 'The spear agreed.';
       say(ex, ex.sendRule === 'family'
-        ? '“Send a family. Let what we are go on, even if we can\'t.” The spear agreed. A family would go.'
+        ? `“Send a family. Let what we are go on, even if we can't.” ${agreed} A family would go.`
         : ex.sendRule === 'young'
-          ? '“Send the young. They have the most life left in them.” The spear agreed. The youngest would go.'
-          : '“Send the strong. The sea will take the weak.” The spear agreed. The strongest would go.');
+          ? `“Send the young. They have the most life left in them.” ${agreed} The youngest would go.`
+          : `“Send the strong. The sea will take the weak.” ${agreed} The strongest would go.`);
       break;
     }
   }

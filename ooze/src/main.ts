@@ -15,9 +15,9 @@ import { STORY } from './content/tribal';
 import { awaken, sealed } from './economy/tribal';
 import { autoAssign, daysLeft, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { moodWord, QUIRKS } from './economy/society';
-import { cast, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
+import { cast, say, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
 import { CRISES, crisisAnswered, crisisAt, crisisMissed, startCrisis } from './economy/crises';
-import { answerWhisper, WHISPERS } from './economy/whispers';
+import { answerWhisper, tribeDecides, WHISPERS } from './economy/whispers';
 import { readGesture } from './ui/gesture';
 import {
   addSwirl,
@@ -344,10 +344,29 @@ function extinctionStep(sec: number): void {
     return;
   }
   if (waitingOnChoice(ex)) {
+    // The day waits for the spear's answer, but not for ever: left too long, they decide
+    // for themselves (the dead are left to the ash: eating them is the spear's to say).
+    choiceIdle += sec;
+    if (choiceIdle >= CHOICE_SEC) {
+      choiceIdle = 0;
+      if (ex.whisper) tribeDecides(ex);
+      else {
+        decideFallen(state, false);
+        say(ex, 'The spear was silent. They left the dead to the ash.');
+      }
+      if (modal.dataset.kind === 'whisper' || modal.dataset.kind === 'fallen') modal.hidden = true;
+      panelKey = '';
+      save();
+      return;
+    }
     if (ex.whisper) askWhisper();
     else askFallen();
+    const left = modal.querySelector<HTMLElement>('[data-t="choice-left"]');
+    const lead = ex.people.find((p) => p.id === ex.leader)?.name;
+    if (left) left.textContent = `If the spear stays silent, ${lead ?? 'they'} will decide in ${Math.ceil(CHOICE_SEC - choiceIdle)}s`;
     return;
   }
+  choiceIdle = 0;
   if (extinctionTick(state, sec)) {
     save();
     if (ex.escaped) showEscape(true);
@@ -647,6 +666,11 @@ function nightReport(): void {
 
 /** A question the tribe brings to the spear: the leader asks, the player whispers the answer
  * (time waits for it). */
+/** Seconds a choice waits for the spear before they decide for themselves, and how long this
+ * one has waited. */
+const CHOICE_SEC = 45;
+let choiceIdle = 0;
+
 function askWhisper(): void {
   const ex = state.stages.tribal.tribe?.ex;
   const w = ex?.whisper;
@@ -656,7 +680,8 @@ function askWhisper(): void {
   showModal(`<p class="label dim">Day ${ex.day + 1} · ${lead ? `${lead} comes to the spear` : 'They come to the spear'}</p>
     <h3>${def.ask(ex, w)}</h3>
     <p class="dim">What does the spear whisper?</p>
-    <div class="choices">${def.options.map((o, i) => `<button class="px-btn${i === 0 ? '' : ''}" data-whisper="${i}">${o}</button>`).join('')}</div>`);
+    <div class="choices">${def.options.map((o, i) => `<button class="px-btn${i === 0 ? '' : ''}" data-whisper="${i}">${o}</button>`).join('')}</div>
+    <p class="small dim" data-t="choice-left"></p>`);
   modal.dataset.kind = 'whisper';
 }
 
@@ -670,7 +695,8 @@ function askFallen(): void {
     <p>The others sit by the bodies. There is so little to eat.</p>
     <div class="choices"><button class="px-btn" data-act="fallen-leave">Leave them to the ash</button>
     <button class="px-btn grim" data-act="fallen-eat">Eat them</button></div>
-    <p class="small dim">Eating the dead makes your kind cannibals, for good: from now on, and in every age to come.${loses}</p>`);
+    <p class="small dim">Eating the dead makes your kind cannibals, for good: from now on, and in every age to come.${loses}</p>
+    <p class="small dim" data-t="choice-left"></p>`);
   modal.dataset.kind = 'fallen';
 }
 

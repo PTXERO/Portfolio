@@ -102,4 +102,17 @@ describe('whispers', () => {
     const [a, b] = four;
     expect(a.bonds?.some((x) => x.kind === 'mate' && x.id === b.id)).toBe(true);
   });
+
+  it('left unanswered, the leader decides, and the day goes on', async () => {
+    const { tribeDecides } = await import('../src/economy/whispers');
+    const { waitingOnChoice } = await import('../src/economy/extinction');
+    const s = game('omnivore');
+    const ex = s.stages.tribal.tribe!.ex!;
+    ex.whisper = { id: 'challenge', who: [ex.people[0].id, ex.people[1].id], day: ex.day };
+    tribeDecides(ex);
+    expect(waitingOnChoice(ex)).toBe(false);
+    const said = ex.log.slice(-2).map((l) => l.text).join(' ');
+    expect(said).toContain('The spear was silent');
+    expect(said).not.toContain('The spear stood');
+  });
 });
