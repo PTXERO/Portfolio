@@ -121,7 +121,7 @@ float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 uniform vec2 uWind; // which way the clouds drift, tiles a second
 const float CLOUD_H = 1.6; // how high they float (in the land's height units)
 float cloudAt(vec2 c) {
-  vec2 p = (c - uWind * uTime) * 0.011;
+  vec2 p = (c - uWind * uTime) * 0.016;
   float n = fbm(p) * 0.72 + fbm(p * 2.3 + 7.0) * 0.28;
   float cover = 0.62 - uWeather.x * 0.17 - uAsh * 0.15;
   return smoothstep(cover, cover + 0.14, n);
@@ -326,11 +326,13 @@ void main() {
   // against its height over the clouds; it reaches the clouds at zoom CLOUD_Z.) Puffy: sunlit
   // on top, shaded beneath, over everything, lit by the hour.
   {
-    float CLOUD_Z = 7.3;
+    // (The camera reaches the cloud layer only far past the closest zoom: at the usual zoom
+    // they're seen about 1.15 times the land's size, right in close about 1.5.)
+    float CLOUD_Z = 22.0;
     float CP = 1.0 / max(0.08, 1.0 - uCam.z / CLOUD_Z);
-    float cty = mix(1.0, TY, 0.35);
+    // A level layer CLOUD_H over the sea, seen with the land's slant, a little nearer the eye.
     vec2 ca = (art - vec2(uArt.x * 0.5, uCam.w)) / (uCam.z * CP);
-    vec2 cw = vec2(uCam.x + ca.x, uCam.y + ca.y / cty);
+    vec2 cw = vec2(uCam.x + ca.x, uCam.y + (ca.y + CLOUD_H * K) / TY);
     float d = cloudAt(cw);
     if (d > 0.002) {
       // Light from above and the sun's side: thinner toward it is the lit top, thicker the
@@ -342,7 +344,7 @@ void main() {
       cloudCol = mix(cloudCol, cloudCol * vec3(1.0, 0.8, 0.64), clamp(length(uHaze) * 3.0, 0.0, 1.0));
       cloudCol = mix(cloudCol, vec3(0.14, 0.16, 0.22) * shade, uNight * 0.85);
       cloudCol *= 1.0 - uWeather.x * 0.3 - uAsh * 0.4;
-      float a = smoothstep(0.0, 0.55, d) * 0.55 * (1.0 - smoothstep(5.2, 6.8, uCam.z));
+      float a = smoothstep(0.0, 0.55, d) * 0.55;
       lit = mix(lit, cloudCol, a);
     }
   }
