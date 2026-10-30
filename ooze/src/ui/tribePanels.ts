@@ -19,11 +19,39 @@ const DIET_LINE: Record<Diet, string> = {
 const n0 = (v: number) => String(Math.floor(v + 1e-6));
 
 /** Changes whenever what the panels show changes (rounded, so it isn't every frame). */
-export function tribeKey(state: GameState): string {
+/**
+ * When the open tab must be built afresh: only what changes its shape, for that tab. (The
+ * stores fill all day long; their numbers are written in place by tribeUpdate, so a big panel,
+ * the hundred of them or the web of ideas, isn't rebuilt every time a berry comes in.)
+ */
+export function tribeKey(state: GameState, tab: string): string {
   const t = tribeOf(state);
   const ex = t?.ex;
   if (!ex) return JSON.stringify([t?.awake]);
-  return JSON.stringify([ex.day, ex.people.map((p) => [p.id, p.job, Math.round(p.hunger * 4)]), Math.floor(ex.plants), Math.floor(ex.meat), Math.floor(ex.insight), ex.ration, ex.ideas, ex.diet, ex.over, picked, Math.floor(ex.wood ?? 0), ex.raft, ex.family, ex.escaped, ex.people.map((p) => p.sick), ex.auto, ex.focus, Math.floor(ex.prayer ?? 0), Math.floor(ex.dread ?? 0), ex.powers, ex.casts, ex.ordained, ex.log?.length]);
+  const base = [ex.day, ex.ideas, ex.diet, ex.over, ex.escaped, ex.people.length];
+  if (tab === 'ideas') {
+    // What can be afforded now (not the insight itself, which creeps up all day).
+    const can = MIND_TREE.filter((n) => !ex.ideas.includes(n.id) && reachable(ex.ideas, n.id) && ex.insight >= ideaCost(state, n.id)).map((n) => n.id);
+    return JSON.stringify([base, picked, can]);
+  }
+  if (tab === 'miracles') return JSON.stringify([base, Math.floor(ex.prayer ?? 0), Math.floor(ex.dread ?? 0), ex.powers, ex.casts, ex.ordained, ex.crisis?.kind]);
+  if (tab === 'chronicle') return JSON.stringify([base, ex.log?.length]);
+  return JSON.stringify([base, ex.people.map((p) => [p.id, p.job, Math.round(p.hunger * 4), p.sick]), ex.ration, RAFT.map((r) => Math.floor(((ex.raft?.[r.id] ?? 0) / r.work) * 20)), ex.family, ex.auto, ex.focus, Math.floor(ex.trees ?? 0), Math.floor(ex.ash / 10), Math.floor((ex.carrion ?? 0) / 10)]);
+}
+
+/** What changes all day without changing a panel's shape: written in place. */
+export function tribeUpdate(root: HTMLElement, state: GameState): void {
+  const ex = tribeOf(state)?.ex;
+  if (!ex) return;
+  const put = (k: string, v: string) => {
+    const el = root.querySelector<HTMLElement>(`[data-t="${k}"]`);
+    if (el && el.textContent !== v) el.textContent = v;
+  };
+  put('store-plants', n0(ex.plants));
+  put('store-meat', n0(ex.meat));
+  put('store-wood', n0(ex.wood ?? 0));
+  put('store-insight', n0(ex.insight));
+  put('ideas-insight', `${n0(ex.insight)} insight`);
 }
 
 export function tribeLayout(state: GameState): string {
@@ -44,7 +72,7 @@ function storesCard(ex: ExtinctionState): string {
   const y = dayYield(ex);
   const gain = (f: 'plants' | 'meat') => (['forage', 'scavenge', 'dig', 'fish'] as const).reduce((a, j) => a + (jobFood(ex.diet, j) === f ? y[j] : 0), 0);
   const cell = (name: string, have: number, gain: number, eats: boolean, note: string) =>
-    `<div class="store${eats ? '' : ' off'}"><span class="label dim">${name}</span><b class="num">${n0(have)}</b><span class="dim">+${n0(gain)} today${eats ? '' : ' · inedible'}</span><span class="tiny dim">${note}</span></div>`;
+    `<div class="store${eats ? '' : ' off'}"><span class="label dim">${name}</span><b class="num" data-t="store-${name.toLowerCase()}">${n0(have)}</b><span class="dim">+${n0(gain)} today${eats ? '' : ' · inedible'}</span><span class="tiny dim">${note}</span></div>`;
   return `<div class="panel-head"><h2>Survivors</h2><span class="dim">${ex.people.length} alive · ${ex.deaths} dead</span></div>
     <div class="card px-box ex-stores">
       ${cell('Plants', ex.plants, gain('plants'), plants, 'keeps')}
@@ -268,7 +296,7 @@ export function ideasLayout(state: GameState): string {
     const y = gx(Math.sin((b.angle * Math.PI) / 180) * 106);
     return `<span class="tb" style="left:${at(x)};top:${at(y)}">${b.name}</span>`;
   }).join('');
-  return `<div class="panel-head"><h2>Ideas</h2><span class="dim">${n0(ex.insight)} insight</span></div>
+  return `<div class="panel-head"><h2>Ideas</h2><span class="dim" data-t="ideas-insight">${n0(ex.insight)} insight</span></div>
     <div class="mind-tree"><div class="mind-pan" style="${webTransform()}"><svg viewBox="0 0 ${G} ${G}" shape-rendering="crispEdges" aria-hidden="true">${paths}</svg>${names}${buttons.join('')}</div>
     <div class="mind-zoom"><button class="px-btn" data-webzoom="in" aria-label="Zoom in">+</button><button class="px-btn" data-webzoom="out" aria-label="Zoom out">−</button><button class="px-btn" data-webzoom="fit">Fit</button></div></div>
     ${pickedCard(state, ex)}`;

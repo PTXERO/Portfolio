@@ -13,7 +13,7 @@ import { STAGES } from './content/stages';
 import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed } from './economy/tribal';
-import { autoAssign, daysLeft, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
+import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, say, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
 import { CRISES, crisisAnswered, crisisAt, crisisMissed, startCrisis } from './economy/crises';
@@ -319,6 +319,10 @@ let tickerText = '';
 /** Whether the menu was pulled full height for the web of ideas (and so goes back after). */
 let ideasFull = false;
 let guess: number | null = null;
+/** The countdown being worked out, a day a frame (null when it's done), and whether there's
+ * been a first guess yet (that one's worked out at once, so the strip never starts blank). */
+let guessJob: Generator<void, number | null> | null = null;
+let guessed = false;
 const extinctEl = document.createElement('div');
 extinctEl.id = 'extinct';
 extinctEl.hidden = true;
@@ -861,12 +865,17 @@ function renderGoal(): void {
   if (def.tribal) {
     const ex = state.stages.tribal.tribe?.ex;
     if (ex) {
-      // The countdown: how long they've got, if things go on as they are.
-      // (The guess re-runs whenever the plan changes, and every few seconds.)
-      const sig = JSON.stringify([ex.day, Math.floor(ex.clock / 4), ex.people.length, ex.people.map((p) => p.job), ex.ideas, ex.ration, ex.lead, ex.fallen]);
+      // The countdown: how long they've got, if things go on as they are. (The guess re-runs
+      // whenever the plan changes, and every 15 s; worked out a day a frame, in frame(), so it
+      // never stutters. The last guess stands till the new one's in.)
+      const sig = JSON.stringify([ex.day, Math.floor(ex.clock / 15), ex.people.length, ex.people.map((p) => p.job), ex.ideas, ex.ration, ex.lead, ex.fallen]);
       if (sig !== guessSig) {
         guessSig = sig;
-        guess = daysLeft(ex);
+        if (guessed) guessJob = daysLeftSteps(ex);
+        else {
+          guess = daysLeft(ex);
+          guessed = true;
+        }
       }
       const d = guess;
       const night = Math.max(0, Math.ceil(DAY_SEC - ex.clock));
@@ -1861,6 +1870,18 @@ function frame(now: number): void {
   const dt = Math.min(acc, 100) / 1000;
   acc %= FRAME_MS;
   scene.draw(state, dt);
+  // The Extinction's countdown, worked on a little each frame (about 4 ms at most).
+  if (guessJob) {
+    const t0 = performance.now();
+    do {
+      const r = guessJob.next();
+      if (r.done) {
+        guess = r.value;
+        guessJob = null;
+        break;
+      }
+    } while (performance.now() - t0 < 4);
+  }
   pondEvents();
   syncCine();
   habitatsOpened();

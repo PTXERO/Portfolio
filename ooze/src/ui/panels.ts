@@ -2,7 +2,7 @@
 // change) and then patched in place, so a button never vanishes under a finger.
 
 import { CHANNELS, volumes } from '../audio/sound';
-import { ideasLayout, spellsLayout, tribeKey, tribeLayout } from './tribePanels';
+import { ideasLayout, spellsLayout, tribeKey, tribeLayout, tribeUpdate } from './tribePanels';
 import { eraName } from '../economy/chronicle';
 import { icon, type SpriteName } from '../art/sprites';
 import { lifeIcon } from '../scene/icons';
@@ -248,7 +248,7 @@ export function layoutKey(state: GameState, tab: Tab): string {
       ? [visibleUpgrades(state, state.current).map((u) => u.id), state.stages[state.current].upgrades, state.stages[state.current].levels]
       : 0,
     tab === 'roots' ? (STAGES[state.current].milestones ?? []).map((m) => milestoneMet(state, m)) : 0,
-    STAGES[state.current].tribal ? tribeKey(state) : 0,
+    STAGES[state.current].tribal ? tribeKey(state, tab) : 0,
     tab === 'chronicle' ? state.chronicle?.length ?? 0 : 0,
     tab === 'body' || tab === 'explore' || tab === 'family' || (tab === 'grow' && STAGES[state.current].places) ? creatureKey(state) : 0,
     tab === 'lab' || tab === 'pond' ? [visibleDials(state), state.stages[state.current].discovered, reactions(state.current).map((r) => hintLevel(state, r))] : 0,
@@ -519,6 +519,7 @@ function setText(root: HTMLElement, key: string, text: string): void {
 export function update(root: HTMLElement, state: GameState, tab: Tab): void {
   const id = state.current;
   const st = state.stages[id];
+  if (STAGES[id].tribal) tribeUpdate(root, state);
 
   if (tab === 'grow' && STAGES[id].places) {
     creatureUpdate(root, state, 'grow');

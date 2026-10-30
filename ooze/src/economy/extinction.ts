@@ -902,6 +902,16 @@ export function extinctionTick(state: GameState, dt: number): boolean {
 
 /** Days until there's no one left, if things carry on as they are (null if they'd hold on). */
 export function daysLeft(ex: ExtinctionState): number | null {
+  const steps = daysLeftSteps(ex);
+  for (;;) {
+    const r = steps.next();
+    if (r.done) return r.value;
+  }
+}
+
+/** The same guess a day at a time, so it can be spread over frames (a whole run of days at
+ * once is long enough to stutter on a phone). */
+export function* daysLeftSteps(ex: ExtinctionState): Generator<void, number | null> {
   if (ex.over) return 0;
   const sim = JSON.parse(JSON.stringify(ex)) as ExtinctionState;
   // Dead go as decided (an undecided tribe leaves them, for the guess).
@@ -910,6 +920,7 @@ export function daysLeft(ex: ExtinctionState): number | null {
   work(sim, DAY_SEC - sim.clock);
   night(sim);
   for (let i = 0; i < 60 && !sim.over; i++) {
+    yield;
     work(sim, DAY_SEC);
     night(sim);
   }
