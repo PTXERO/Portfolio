@@ -9,6 +9,7 @@ import { DAY_SEC, terrainReady, type Habitat, isAdult, poiDef, poiHere, poisOf, 
 import type { GameState } from '../economy/types';
 import type { BuildId } from '../content/shore';
 import { RangeScene } from './range';
+import type { Sprite } from './wild';
 import { herdInView, squeak } from '../audio/sound';
 import { hash, type Frame } from './paint';
 
@@ -236,7 +237,7 @@ export class ShoreScene extends RangeScene {
     const indoors = this.storm > 0.4;
     const z = Math.max(1, Math.round(this.zoom / 2.4));
     const close = this.zoom >= 1.6;
-    const sprites: { y: number; draw: () => void }[] = [];
+    const sprites: Sprite[] = [];
     const fogged = (x: number, y: number) => !seen[Math.floor(y / CELL) * (is.n / CELL) + Math.floor(x / CELL)];
     const onScreen = (X: number, Y: number, m = 20) => X > -m && X < W + m && Y > -m * 2 && Y < H + m;
 
@@ -250,7 +251,7 @@ export class ShoreScene extends RangeScene {
       // Going up: it rises out of the ground over a few seconds, with dust.
       const up = Math.min(1, (t - this.raised.get(i)!) / 3);
       if (up < 1 && Math.random() < dt * 6) this.fx.dust(X, Y, 2);
-      sprites.push({ y: bd.y, draw: () => this.drawBuild(b, bd.id, X, Y, z, close, up, t, s) });
+      sprites.push({ y: bd.y, at: bd, draw: () => this.drawBuild(b, bd.id, X, Y, z, close, up, t, s) });
     });
     // What's going up: it rises as the work goes on, dust kicked up round it.
     this.wasBuilding = s.building ? { x: s.building.x, y: s.building.y } : this.wasBuilding;
@@ -261,7 +262,7 @@ export class ShoreScene extends RangeScene {
       if (onScreen(X, Y)) {
         const up = Math.max(0.05, 1 - bd.left / bd.total);
         if (close && Math.random() < dt * 3) this.fx.dust(X, Y, 2);
-        sprites.push({ y: bd.y, draw: () => this.drawBuild(b, bd.id, X, Y, z, close, up, t, s) });
+        sprites.push({ y: bd.y, at: bd, draw: () => this.drawBuild(b, bd.id, X, Y, z, close, up, t, s) });
       }
     }
     for (const g of s.graves) {
@@ -270,6 +271,7 @@ export class ShoreScene extends RangeScene {
       if (!close || !onScreen(X, Y)) continue;
       sprites.push({
         y: g.y,
+        at: g,
         draw: () => {
           b.fillStyle = '#5a5248';
           b.fillRect(X - 2 * z, Y - z, 4 * z, z);
@@ -284,6 +286,7 @@ export class ShoreScene extends RangeScene {
       const Y = Math.round(this.py(s.hearth.x, s.hearth.y));
       sprites.push({
         y: s.hearth.y,
+        at: s.hearth,
         draw: () => {
           b.fillStyle = PAL.k;
           b.fillRect(X, Y - 7, 1, 7);
@@ -356,6 +359,7 @@ export class ShoreScene extends RangeScene {
       if (close && onScreen(X, Y)) {
         sprites.push({
           y: r.y - 0.5,
+          at: r,
           draw: () => {
             b.fillStyle = '#6a4a30';
             for (let k = 0; k < 4; k++) b.fillRect(X - 5 * z, Y - (4 - k) * z, 10 * z, z);
@@ -402,7 +406,7 @@ export class ShoreScene extends RangeScene {
       if (!onScreen(X, Y, 40)) continue;
       const layers = poiDef(p).layers;
       const progress = p === here ? p.t / layers[p.done].sec : -1;
-      sprites.push({ y: p.y, draw: () => this.drawPoi(b, p.kind, X, Y, z, close, t, progress) });
+      sprites.push({ y: p.y, at: p, draw: () => this.drawPoi(b, p.kind, X, Y, z, close, t, progress) });
     }
 
     // ---- The island's other villages ----
@@ -424,7 +428,9 @@ export class ShoreScene extends RangeScene {
     this.wild.update(this.wildView, is, sprites, { b, t, dt, nests: [s.hearth], season: si, night, feet: this.walkers, me: s.chiefAt });
     this.trails.update(is.seed, this.walkers.filter((w) => w.goal && Math.hypot(w.goal.x - w.x, w.goal.y - w.y) > 0.3), dt, is.n);
     sprites.sort((a, c) => a.y - c.y);
-    for (const sp of sprites) sp.draw();
+    // (Each hidden behind any ridge between it and the camera.)
+    for (const sp of sprites) if (sp.at) this.behind(b, sp.at.x, sp.at.y, sp.draw);
+    else sp.draw();
     if (!this.shaded && night > 0) {
       b.fillStyle = `rgba(16, 24, 56, ${0.5 * night})`;
       b.fillRect(0, 0, W, H);
@@ -683,7 +689,7 @@ export class ShoreScene extends RangeScene {
     }
   }
 
-  private drawVillage(b: CanvasRenderingContext2D, sprites: { y: number; draw: () => void }[], s: ShoreState, v: Village, t: number, dt: number, z: number, close: boolean, fogged: (x: number, y: number) => boolean): void {
+  private drawVillage(b: CanvasRenderingContext2D, sprites: Sprite[], s: ShoreState, v: Village, t: number, dt: number, z: number, close: boolean, fogged: (x: number, y: number) => boolean): void {
     if (v.joined) return;
     // Turned away: for a day or two they're seen on the road with what they could carry, going
     // to whoever will have them; after that the place is empty.
@@ -717,6 +723,7 @@ export class ShoreScene extends RangeScene {
     {
       sprites.push({
         y: v.y + 0.1,
+        at: v,
         draw: () => {
           const sz = Math.max(2, Math.round(this.zoom * 0.8));
           const tall = 90;
@@ -744,11 +751,13 @@ export class ShoreScene extends RangeScene {
         const HY = Math.round(this.py(hx, hy));
         sprites.push({
           y: hy,
+          at: { x: hx, y: hy },
           draw: () => drawHut(b, kind, HX, HY, z, v.look.hue),
         });
       }
       sprites.push({
         y: v.y,
+        at: v,
         draw: () => {
           const f = Math.floor(t * 8) % 3;
           b.fillStyle = '#3a2a20';
@@ -792,6 +801,7 @@ export class ShoreScene extends RangeScene {
     // colours under it.
     sprites.push({
       y: v.y + 0.2,
+      at: v,
       draw: () => {
         const fy = Y - (close ? 10 * z + 4 : 8);
         b.fillStyle = PAL.k;

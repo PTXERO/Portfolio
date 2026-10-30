@@ -386,3 +386,6 @@ islands for checking.
 - **Biomes in 2.5D**: forests and meadows as 2D sprites standing on the 3D land (trees, grass
   tufts, bushes), sorted with the creatures so they walk behind and in front of them; trees that
   fall when the village cuts wood (and grow back).
+- **Camera rotation**: turning the view (two fingers freely, or a button in 90° steps) to see the far
+  side of mountains. Everything (the shader, light, fog, projection, taps, sorting) assumes a
+  north-facing camera, so free rotation is a big job; 90° steps about a third of it.

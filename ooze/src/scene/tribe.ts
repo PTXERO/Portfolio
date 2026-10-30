@@ -16,6 +16,7 @@ import { crisisAt } from '../economy/crises';
 import type { GameState } from '../economy/types';
 import { hash, type Frame } from './paint';
 import { RangeScene } from './range';
+import type { Sprite } from './wild';
 
 interface Person {
   x: number;
@@ -1021,7 +1022,9 @@ export class TribeScene extends RangeScene {
       },
     });
     sprites.sort((a, c) => a.y - c.y);
-    for (const s of sprites) s.draw();
+    // (Each hidden behind any ridge between it and the camera.)
+    for (const s of sprites as Sprite[]) if (s.at) this.behind(b, s.at.x, s.at.y, s.draw);
+    else s.draw();
     this.fx.run(f);
   }
 
@@ -1566,7 +1569,9 @@ export class TribeScene extends RangeScene {
     sprites.push({ y: frag.spear.y, draw: () => this.drawSpear(b, sx, sy, t, tribe.awake) });
 
     sprites.sort((a, c) => a.y - c.y);
-    for (const s of sprites) s.draw();
+    // (Each hidden behind any ridge between it and the camera.)
+    for (const s of sprites as Sprite[]) if (s.at) this.behind(b, s.at.x, s.at.y, s.draw);
+    else s.draw();
     // The look back: the spear's red glow over the island, fading as night comes down.
     const leftAge = this.departT >= 0 ? t - this.departT : -1;
     this.leftAge = leftAge;

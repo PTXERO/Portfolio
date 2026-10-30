@@ -20,7 +20,7 @@ import { creatureLookOf, drawMini, type CreatureLook } from './creatureLook';
 import { Effects, hash, mixColor, visibleCount, type Frame } from './paint';
 import { Sightings } from './sightings';
 import { Trails } from './trails';
-import { Wild, type Bush, type WildView } from './wild';
+import { Wild, type Bush, type Sprite, type WildView } from './wild';
 import type { PondEvent } from './pond';
 
 interface Member {
@@ -1060,16 +1060,50 @@ export class RangeScene {
     const X = this.sx(x);
     const Y = this.py(x, y);
     if (X < -40 || X > this.W + 40 || Y < -40 || Y > this.H + 40) return;
-    if (z < 1.6) {
-      b.fillStyle = o.hero ? PAL.y : DIET_DOT[look.diet] ?? PAL.g;
-      const s = o.hero ? 2 : 1;
-      b.fillRect(Math.round(X), Math.round(Y) - s, s, s);
+    this.behind(b, x, y, () => {
+      if (z < 1.6) {
+        b.fillStyle = o.hero ? PAL.y : DIET_DOT[look.diet] ?? PAL.g;
+        const s = o.hero ? 2 : 1;
+        b.fillRect(Math.round(X), Math.round(Y) - s, s, s);
+        return;
+      }
+      const k = z >= 6 ? 2 : 1;
+      // A cute little hop while it moves: up to a couple of pixels, the shadow staying put.
+      const opts = { left: o.left, frame: o.frame, sleeping: o.sleeping, scale: k, hop: (o.hop ?? 0) * k };
+      drawMini(b, look, X, Y, opts);
+    });
+  }
+
+  /** The screen row of the highest ground between a point and the camera, if it rises above the
+   * point (so whatever stands there is hidden behind it, up to that row); null if nothing's in
+   * the way. In 2.5D the land's drawn by the shader, which knows what's behind a ridge, but what
+   * stands on the land is drawn over it, and would show through a mountain without this. */
+  protected ridgeRow(x: number, y: number): number | null {
+    if (!this.shaded || !this.island) return null;
+    const foot = this.py(x, y);
+    // Ground further toward the camera than this can't rise into the way.
+    const span = (this.lift * 1.05) / this.tilt;
+    let top = Infinity;
+    for (let d = 0.75; d <= span; d += 0.75) {
+      const r = this.py(x, y + d);
+      if (r < top) top = r;
+    }
+    return top < foot - 0.5 ? top : null;
+  }
+
+  /** Draws something standing at a point, hidden wherever the land in front rises over it. */
+  protected behind(b: CanvasRenderingContext2D, x: number, y: number, draw: () => void): void {
+    const ridge = this.ridgeRow(x, y);
+    if (ridge === null) {
+      draw();
       return;
     }
-    const k = z >= 6 ? 2 : 1;
-    // A cute little hop while it moves: up to a couple of pixels, the shadow staying put.
-    const opts = { left: o.left, frame: o.frame, sleeping: o.sleeping, scale: k, hop: (o.hop ?? 0) * k };
-    drawMini(b, look, X, Y, opts);
+    b.save();
+    b.beginPath();
+    b.rect(0, 0, this.W, Math.floor(ridge));
+    b.clip();
+    draw();
+    b.restore();
   }
 
   draw(f: Frame, state: GameState): void {
@@ -1634,7 +1668,9 @@ export class RangeScene {
     this.sightings.update(this.wildView, is, sprites, { b, t, dt, night, winter });
 
     sprites.sort((a, c) => a.y - c.y);
-    for (const s of sprites) s.draw();
+    // (Each hidden behind any ridge between it and the camera.)
+    for (const s of sprites as Sprite[]) if (s.at) this.behind(b, s.at.x, s.at.y, s.draw);
+    else s.draw();
 
     // The fog, over everything on the ground (the shader draws its own, softer).
     if (!this.shaded) this.blitWorld(b, this.fog!);

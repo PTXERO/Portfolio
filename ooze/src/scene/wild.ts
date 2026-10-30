@@ -29,6 +29,8 @@ export interface WildView {
 export interface Sprite {
   y: number;
   draw: () => void;
+  /** Where it stands on the land (so it's hidden behind ridges in front of it). */
+  at?: { x: number; y: number };
 }
 
 export interface Bush {
@@ -176,7 +178,7 @@ export class Wild {
       if (!on(X, Y) || v.fogged?.(b.x, b.y)) continue;
       const k = z >= 6 ? 2 : 1;
       const n = Math.floor(b.ripe * 4);
-      sprites.push({ y: b.y, draw: () => drawBush(o.b, X, Y, k, b.tree, n, o.season) });
+      sprites.push({ y: b.y, at: b, draw: () => drawBush(o.b, X, Y, k, b.tree, n, o.season) });
     }
 
     // Crabs on the sand: sideways in little bursts; feet nearby send them under.
@@ -192,7 +194,7 @@ export class Wild {
         const Y = Math.round(v.py(c.x, c.y));
         if (!on(X, Y) || v.fogged?.(c.x, c.y)) continue;
         const legs = Math.floor(t * 10 + c.ph) % 2;
-        sprites.push({ y: c.y, draw: () => drawCrab(o.b, X, Y, z >= 6 ? 2 : 1, dx !== 0 && legs === 1) });
+        sprites.push({ y: c.y, at: c, draw: () => drawCrab(o.b, X, Y, z >= 6 ? 2 : 1, dx !== 0 && legs === 1) });
       }
     }
 
@@ -335,7 +337,7 @@ export class Wild {
         const left = moving ? g.vx < 0 : Math.sin(g.ph) < 0;
         const step = moving ? Math.floor(t * (scared ? 14 : 6) + g.ph) % 2 : 0;
         const graze = !moving && Math.sin(t * 0.7 + g.ph) > 0.2;
-        sprites.push({ y: g.y, draw: () => drawGrazer(o.b, X, Y, z, left, step, graze, o.night > 0.5) });
+        sprites.push({ y: g.y, at: g, draw: () => drawGrazer(o.b, X, Y, z, left, step, graze, o.night > 0.5) });
       }
     }
     // Gone over the hill: a while after leaving (and out of sight), they're gone.
