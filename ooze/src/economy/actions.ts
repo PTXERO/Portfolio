@@ -57,6 +57,20 @@ export function upgradeCost(state: GameState, stage: StageId, u: UpgradeDef): De
 export const payStage = (stage: StageId, u: UpgradeDef): StageId => u.pay ?? stage;
 
 /** Whether the requirements to start buying an upgrade hold (ignoring whether it's maxed). */
+/** The habitats an upgrade's effects are all about (empty if any of it helps everywhere). */
+function helpsOnly(stage: StageId, u: UpgradeDef): HabitatDef[] {
+  const def = STAGES[stage];
+  if (!def.habitats || u.target || u.pay) return [];
+  const out: HabitatDef[] = [];
+  for (const e of [u.effect, ...(u.extra ?? [])]) {
+    const id = e.kind === 'habitatMult' ? e.habitat : e.kind === 'genMult' ? def.generators.find((g) => g.id === e.target)?.habitat : undefined;
+    const h = id ? def.habitats.find((x) => x.id === id) : undefined;
+    if (!h) return [];
+    out.push(h);
+  }
+  return out;
+}
+
 export function upgradeUnlocked(state: GameState, stage: StageId, u: UpgradeDef): boolean {
   const st = state.stages[stage];
   const r = u.requires;
@@ -65,6 +79,9 @@ export function upgradeUnlocked(state: GameState, stage: StageId, u: UpgradeDef)
     const h = STAGES[stage].habitats?.find((x) => x.id === r.habitat);
     if (h && !habitatUnlocked(state, stage, h)) return false;
   }
+  // Something that only helps a place (or what lives there) waits until one of them is open.
+  const places = helpsOnly(stage, u);
+  if (places.length && !places.some((h) => habitatUnlocked(state, stage, h))) return false;
   if (r?.levels && !Object.entries(r.levels).every(([id, n]) => upgradeLevel(state, stage, id) >= n)) return false;
   if (r?.generator && (st.generators[r.generator] ?? 0) < (r.owned ?? 1)) return false;
   if (r?.reaction && !st.discovered.includes(r.reaction)) return false;
