@@ -8,7 +8,7 @@
 // Creatures are drawn side-on (the old pixel-RPG convention), sorted by depth.
 
 import { PAL } from '../art/sprites';
-import { thunder } from '../audio/sound';
+import { squeak, thunder } from '../audio/sound';
 import { STAGES } from '../content/stages';
 import { islandFor, nearestNest, nestPoints, nestProgress, partyLeg, spot, statsOf, walkTo } from '../economy/creature';
 import { Biome, CELL, CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
@@ -133,6 +133,8 @@ export class RangeScene {
   protected sightings = new Sightings();
   /** Weather: a storm building and passing (0 to 1), the ground still wet after, mist, ice. */
   protected storm = 0;
+  /** Until the herd's next squeak (counts down faster the more are hopping). */
+  private squeakIn = 1;
   protected stormLeft = 0;
   protected stormTimer = 90;
   protected wet = 0;
@@ -1008,6 +1010,8 @@ export class RangeScene {
       this.momentTimer = 4 + Math.random() * 6;
       this.startMoment(is, home, bases, grazeR, dayT, winter, si);
     }
+    let hopping = 0;
+    let hopX = 0;
     this.members.forEach((m, i) => {
       // Where instinct takes each one (around its own nest, if it lives away from home).
       const c = m.base > 0 && bases[m.base] ? bases[m.base] : center;
@@ -1122,6 +1126,13 @@ export class RangeScene {
       }
       if (m.role === 'guard' && bt && bt.flinch <= 0 && Math.hypot(bt.x - m.x, bt.y - m.y) < 1.5 && Math.random() < dt * 1.2) this.hitBeast(state, bt);
       const moving = Math.hypot(m.vx, m.vy) > 0.15;
+      if (moving) {
+        const sx = this.sx(m.x);
+        if (sx > 0 && sx < W) {
+          hopping++;
+          hopX += sx;
+        }
+      }
       const a = m.act;
       const settled = !!a && !moving && Math.hypot(a.x - m.x, a.y - m.y) < 0.8;
       // Facing: each other when nuzzling, out from home on lookout, else the way it goes.
@@ -1141,6 +1152,17 @@ export class RangeScene {
         },
       });
     });
+
+    // Hopping about, they squeak: more often the more of them are on the move, heard only up
+    // close (half volume fully zoomed in, fading fast as the view pulls back).
+    if (hopping) {
+      this.squeakIn -= dt * Math.min(3, 0.6 + hopping * 0.35);
+      if (this.squeakIn <= 0) {
+        this.squeakIn = 0.5 + Math.random() * 1.4;
+        const near = Math.max(0, (this.zoom - 2.5) / (ZOOM_MAX - 2.5));
+        squeak(0.5 * near ** 1.8, (hopX / hopping / W) * 2 - 1);
+      }
+    }
 
     // A beast slinks in now and then and stalks the nearest of the herd.
     this.beastTimer -= dt;

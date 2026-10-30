@@ -3,7 +3,8 @@
 // as loud as it's strong (silent when there isn't one). The drops and the rush are heard as
 // if from under the water: muffled, and ringing on in a long reverb. The Menu has a volume
 // for the ambience and one for the effects. Lightning, in any stage, brings thunder: one of
-// four, at random (muffled too when it's heard from under the Soup). Buttons pop.
+// four, at random (muffled too when it's heard from under the Soup). Buttons pop. The herd
+// squeaks as it hops about, heard only up close.
 //
 // Browsers only let sound start from a tap, so nothing plays (or loads) until the first one.
 
@@ -19,7 +20,7 @@ export const CHANNELS: { id: Channel; label: string }[] = [
 
 const KEY = 'ooze-to-orbit/sound';
 /** Bumped when a sound file changes, so phones don't keep the old one. */
-const SFX_V = 13;
+const SFX_V = 14;
 const DEFAULTS: Record<Channel, number> = { master: 0.8, music: 0.6, ambience: 0.6, effects: 0.7 };
 
 /** The loops are padded either side (so the mp3's own gaps fall outside them): where each
@@ -59,7 +60,7 @@ export const volumes: Record<Channel, number> = (() => {
 let ctx: AudioContext | null = null;
 let master: GainNode;
 const bus = {} as Record<Exclude<Channel, 'master'>, GainNode>;
-type Sound = Loop | 'drops' | 'pop' | 'thunder0' | 'thunder1' | 'thunder2' | 'thunder3' | Cue;
+type Sound = Loop | 'drops' | 'squeaks' | 'pop' | 'thunder0' | 'thunder1' | 'thunder2' | 'thunder3' | Cue;
 /** One-off sounds for moments: an organelle found, a rare microbe gulped down (three glugs),
  * one turning up, a new habitat opening, the boom from the Soup into the Cell, and the meteor's
  * approach (a rumble swelling to the moment it strikes, timed to the cutscene), its impact, and
@@ -133,7 +134,7 @@ export function unlockSound(): void {
   shallow.frequency.value = 2200;
   shallow.connect(sky);
   applyVolumes();
-  for (const name of ['pop', 'drops', ...CUES, 'thunder0', 'thunder1', 'thunder2', 'thunder3', 'underwater', 'drone', 'wind', 'rain', 'snowstorm', 'depths', 'river'] as const) {
+  for (const name of ['pop', 'drops', 'squeaks', ...CUES, 'thunder0', 'thunder1', 'thunder2', 'thunder3', 'underwater', 'drone', 'wind', 'rain', 'snowstorm', 'depths', 'river'] as const) {
     fetch(`${import.meta.env.BASE_URL}sfx/${name}.mp3?v=${SFX_V}`)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
       .then((a) => new Promise<AudioBuffer>((ok, no) => ctx!.decodeAudioData(a, ok, no)))
@@ -217,6 +218,38 @@ export function glug(): void {
   if (i === lastGlug) i = (i + 1) % 3;
   lastGlug = i;
   cue(`glug${i}` as Cue, 0.9);
+}
+
+/** The squeaks, laid end to end in one file: [start, length] seconds. */
+const SQUEAKS: [number, number][] = [
+  [0.0, 0.12], [0.2, 0.1], [0.38, 0.41], [0.87, 0.4], [1.35, 0.39], [1.82, 0.57], [2.47, 0.145], [2.695, 0.14], [2.915, 0.105],
+];
+let lastSqueak = -1;
+
+/** One of the herd squeaks as it hops: one of nine, a little higher or lower, from where it is
+ * on screen (`pan` −1 left to 1 right), at `level`. */
+export function squeak(level: number, pan = 0): void {
+  const buf = buffers.squeaks;
+  if (!ctx || !buf || ctx.state !== 'running' || level <= 0.005) return;
+  let i = Math.floor(Math.random() * SQUEAKS.length);
+  if (i === lastSqueak) i = (i + 1) % SQUEAKS.length;
+  lastSqueak = i;
+  const [at, len] = SQUEAKS[i];
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = 0.88 + Math.random() * 0.3;
+  const g = ctx.createGain();
+  g.gain.value = level * (0.7 + Math.random() * 0.3);
+  let out: AudioNode = g;
+  if (ctx.createStereoPanner) {
+    const p = ctx.createStereoPanner();
+    p.pan.value = Math.max(-1, Math.min(1, pan)) * 0.6;
+    g.connect(p);
+    out = p;
+  }
+  out.connect(sky);
+  src.connect(g);
+  src.start(0, at, len);
 }
 
 /** A button pressed: a pop, a touch higher or lower each time. */
