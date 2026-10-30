@@ -173,7 +173,7 @@ export class SoupScene {
   /** A jagged bolt from the surface down, flickering; optionally with a flash. */
   private bolt(x0: number, flash: boolean): void {
     const seed = Math.random() * 100;
-    thunder({ level: flash ? 1 : 0.3, under: true });
+    thunder({ level: flash ? 1 : 0.55, under: true });
     this.fx.add(0.5, (f, age) => {
       if (age > 0.35 || Math.floor(age * 30) % 3 === 2) return;
       let x = x0;

@@ -1456,7 +1456,7 @@ export class RangeScene {
     if (this.storm > 0.7 && Math.random() < dt * 0.12) {
       this.flash = 0.25;
       // The thunder after it, from somewhere off across the island.
-      thunder({ level: 0.4 + Math.random() * 0.4, delay: 0.4 + Math.random() * 1.6 });
+      thunder({ level: 0.6 + Math.random() * 0.4, delay: 0.4 + Math.random() * 1.6 });
     }
     if (this.flash > 0) {
       b.fillStyle = `rgba(240, 244, 255, ${Math.min(0.5, this.flash * 2.4)})`;

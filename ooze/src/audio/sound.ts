@@ -17,6 +17,8 @@ export const CHANNELS: { id: Channel; label: string }[] = [
 ];
 
 const KEY = 'ooze-to-orbit/sound';
+/** Bumped when a sound file changes, so phones don't keep the old one. */
+const SFX_V = 2;
 const DEFAULTS: Record<Channel, number> = { master: 0.8, ambience: 0.6, effects: 0.7 };
 
 /** The loops are padded either side (so the mp3's own gaps fall outside them): where each
@@ -50,9 +52,11 @@ const bus = {} as Record<Exclude<Channel, 'master'>, GainNode>;
 type Sound = 'underwater' | 'river' | 'drops' | 'pop' | 'thunder0' | 'thunder1' | 'thunder2' | 'thunder3';
 const buffers: Partial<Record<Sound, AudioBuffer>> = {};
 /** The thunders, evened out (they were recorded at very different loudness). */
-const THUNDER_GAIN = [1, 0.62, 0.95, 0.5];
+const THUNDER_GAIN = [1, 1, 1.3, 1];
 /** Effects heard in the open air (thunder above the water): no muffling, a little room. */
 let sky: GainNode;
+/** Thunder heard from under the Soup: only lightly muffled (the drops' muffling takes all of it). */
+let shallow: BiquadFilterNode;
 let lastThunder = -1;
 let thunderAt = -99;
 /** The two loops, once running: their own gain (fading in and out) on top of the channel's. */
@@ -91,16 +95,27 @@ export function unlockSound(): void {
   ctx = new AC();
   void ctx.resume();
   master = ctx.createGain();
-  master.connect(ctx.destination);
+  // A limiter last, so loud thunder over everything else doesn't crackle.
+  const limit = ctx.createDynamicsCompressor();
+  limit.threshold.value = -6;
+  limit.knee.value = 4;
+  limit.ratio.value = 12;
+  limit.attack.value = 0.003;
+  limit.release.value = 0.25;
+  master.connect(limit).connect(ctx.destination);
   bus.ambience = ctx.createGain();
   bus.ambience.connect(master);
   bus.effects = ctx.createGain();
   underwater(ctx, bus.effects, master);
   sky = ctx.createGain();
   sky.connect(master);
+  shallow = ctx.createBiquadFilter();
+  shallow.type = 'lowpass';
+  shallow.frequency.value = 2200;
+  shallow.connect(sky);
   applyVolumes();
   for (const name of ['pop', 'drops', 'thunder0', 'thunder1', 'thunder2', 'thunder3', 'underwater', 'river'] as const) {
-    fetch(`${import.meta.env.BASE_URL}sfx/${name}.mp3`)
+    fetch(`${import.meta.env.BASE_URL}sfx/${name}.mp3?v=${SFX_V}`)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
       .then((a) => new Promise<AudioBuffer>((ok, no) => ctx!.decodeAudioData(a, ok, no)))
       .then((b) => (buffers[name] = b))
@@ -184,7 +199,7 @@ export function thunder(opts: { level?: number; under?: boolean; delay?: number 
   if (!ctx || ctx.state !== 'running') return;
   const level = opts.level ?? 1;
   const now = ctx.currentTime;
-  if (level < 0.6 && now - thunderAt < 8) return;
+  if (level < 0.6 && now - thunderAt < 8) return; // (the Soup's small bolts)
   let i = Math.floor(Math.random() * 4);
   if (i === lastThunder) i = (i + 1 + Math.floor(Math.random() * 3)) % 4;
   const buf = buffers[`thunder${i}` as Sound];
@@ -195,8 +210,8 @@ export function thunder(opts: { level?: number; under?: boolean; delay?: number 
   src.buffer = buf;
   src.playbackRate.value = 0.9 + Math.random() * 0.15;
   const g = ctx.createGain();
-  g.gain.value = level * THUNDER_GAIN[i];
-  src.connect(g).connect(opts.under ? bus.effects : sky);
+  g.gain.value = 1.4 * level * THUNDER_GAIN[i];
+  src.connect(g).connect(opts.under ? shallow : sky);
   src.start(now + (opts.delay ?? 0));
 }
 
