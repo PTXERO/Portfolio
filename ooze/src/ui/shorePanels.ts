@@ -393,8 +393,8 @@ export function joinCard(s: ShoreState, v: Village): string {
 /** A deck of choices to flip through (swipe, or the arrows), each a card with what it gives and
  * what it costs, and a check to choose it. */
 export function deck(cards: { act: string; title: string; line: string; good: string[]; bad: string[] }[]): string {
-  return `<div class="deck">
-    <div class="deck-cards">${cards
+  return `<div class="deck" data-i="0" data-n="${cards.length}">
+    <div class="deck-cards"><div class="deck-track">${cards
       .map(
         (c, i) => `<div class="deck-card px-box" data-card="${i}">
           <div class="deck-num">${i + 1} / ${cards.length}</div>
@@ -404,7 +404,7 @@ export function deck(cards: { act: string; title: string; line: string; good: st
           <button class="px-btn gold deck-pick" data-join="${c.act}"><i class="check"></i>Choose this</button>
         </div>`,
       )
-      .join('')}</div>
+      .join('')}</div></div>
     <div class="deck-nav"><button class="px-btn" data-deck="-1" aria-label="Previous">‹</button><span class="deck-dots">${cards.map((_, i) => `<i${i ? '' : ' class="on"'}></i>`).join('')}</span><button class="px-btn" data-deck="1" aria-label="Next">›</button></div>
   </div>`;
 }

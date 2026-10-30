@@ -1754,9 +1754,8 @@ function act(el: HTMLElement): void {
     }
   }
   else if (el.dataset.deck) {
-    // Flip to the next (or last) card in the deck.
-    const cards = el.closest('.deck')?.querySelector<HTMLElement>('.deck-cards');
-    if (cards) cards.scrollBy({ left: Number(el.dataset.deck) * cards.clientWidth, behavior: 'smooth' });
+    const deck = el.closest<HTMLElement>('.deck');
+    if (deck) flipDeck(deck, Number(el.dataset.deck));
   }
   else if (el.dataset.join) {
     const [id, a] = el.dataset.join.split(':');
@@ -2158,17 +2157,28 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 window.addEventListener('pagehide', save);
-// A deck of choices: the dot under it follows the card on show.
-document.addEventListener(
-  'scroll',
-  (e) => {
-    const cards = e.target as HTMLElement;
-    if (!cards.classList?.contains('deck-cards')) return;
-    const i = Math.round(cards.scrollLeft / Math.max(1, cards.clientWidth));
-    cards.parentElement?.querySelectorAll('.deck-dots i').forEach((d, k) => d.classList.toggle('on', k === i));
-  },
-  true,
-);
+// A deck of choices: one card on show, flipped one at a time (the arrows, or a swipe).
+function flipDeck(deck: HTMLElement, by: number): void {
+  const n = Number(deck.dataset.n ?? 1);
+  const i = Math.max(0, Math.min(n - 1, Number(deck.dataset.i ?? 0) + by));
+  deck.dataset.i = String(i);
+  const track = deck.querySelector<HTMLElement>('.deck-track');
+  if (track) track.style.transform = `translateX(${-i * 100}%)`;
+  deck.querySelectorAll('.deck-dots i').forEach((d, k) => d.classList.toggle('on', k === i));
+}
+let deckSwipe: { deck: HTMLElement; x: number; y: number } | null = null;
+document.addEventListener('pointerdown', (e) => {
+  const deck = (e.target as HTMLElement).closest<HTMLElement>('.deck');
+  deckSwipe = deck ? { deck, x: e.clientX, y: e.clientY } : null;
+});
+document.addEventListener('pointerup', (e) => {
+  if (!deckSwipe) return;
+  const dx = e.clientX - deckSwipe.x;
+  const dy = e.clientY - deckSwipe.y;
+  // A swipe: mostly sideways, far enough to mean it.
+  if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) flipDeck(deckSwipe.deck, dx < 0 ? 1 : -1);
+  deckSwipe = null;
+});
 // Back from another app or tab (or the page restored from the back button): the sound picks up
 // again (on iPhone, if it can't yet, the first touch does it).
 window.addEventListener('pageshow', () => soundHidden(false));
