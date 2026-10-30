@@ -1834,7 +1834,7 @@ function frame(now: number): void {
   habitatsOpened();
   renderSpellbar();
   renderCrisis();
-  soundFrame(state);
+  soundFrame(state, scene.skies);
 }
 
 // A save made mid-ending (closed during the credits) picks up at the reveal. This also

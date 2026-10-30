@@ -137,6 +137,10 @@ export class RangeScene {
   protected stormTimer = 90;
   protected wet = 0;
   protected weather: [number, number, number, number] = [0, 0, 0, 0];
+  /** The weather as heard: how hard it's raining (a storm) and how far into winter (snow). */
+  get skies(): { rain: number; snow: number } {
+    return { rain: this.storm, snow: this.weather[2] };
+  }
   /** How deep in an ash winter the world is, 0 to 1 (the Extinction's; never on the Creature's). */
   protected ash = 0;
   protected rain: { x: number; y: number; z: number; v: number }[] = [];

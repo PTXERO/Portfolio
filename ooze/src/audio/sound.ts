@@ -1,4 +1,4 @@
-// Sound: the underwater hum of the Soup and the Cell (a seamless loop; the Depths have faint music now and then), the Extinction's low drone, a water drop for every tap in the Soup
+// Sound: the underwater hum of the Soup and the Cell (a seamless loop; the Depths have faint music now and then), the Extinction's low drone, the Creature's weather (wind, rain, a winter storm), a water drop for every tap in the Soup
 // and the Cell (one of many, never the same twice running), and the rush of the whirlpool,
 // as loud as it's strong (silent when there isn't one). The drops and the rush are heard as
 // if from under the water: muffled, and ringing on in a long reverb. The Menu has a volume
@@ -19,7 +19,7 @@ export const CHANNELS: { id: Channel; label: string }[] = [
 
 const KEY = 'ooze-to-orbit/sound';
 /** Bumped when a sound file changes, so phones don't keep the old one. */
-const SFX_V = 12;
+const SFX_V = 13;
 const DEFAULTS: Record<Channel, number> = { master: 0.8, music: 0.6, ambience: 0.6, effects: 0.7 };
 
 /** The loops are padded either side (so the mp3's own gaps fall outside them): where each
@@ -31,6 +31,10 @@ const LOOPS = {
   depths: { pad: 0.25, len: 132.6 },
   // A low rumbling drone over the whole Extinction.
   drone: { pad: 0.25, len: 115.0 },
+  // The Creature's island: wind in the trees, rain in a storm, a howling winter.
+  wind: { pad: 0.25, len: 80.0 },
+  rain: { pad: 0.25, len: 62.0 },
+  snowstorm: { pad: 0.25, len: 115.0 },
 };
 type Loop = keyof typeof LOOPS;
 /** The drops, laid end to end in one file: [start, length] seconds. */
@@ -129,7 +133,7 @@ export function unlockSound(): void {
   shallow.frequency.value = 2200;
   shallow.connect(sky);
   applyVolumes();
-  for (const name of ['pop', 'drops', ...CUES, 'thunder0', 'thunder1', 'thunder2', 'thunder3', 'underwater', 'drone', 'depths', 'river'] as const) {
+  for (const name of ['pop', 'drops', ...CUES, 'thunder0', 'thunder1', 'thunder2', 'thunder3', 'underwater', 'drone', 'wind', 'rain', 'snowstorm', 'depths', 'river'] as const) {
     fetch(`${import.meta.env.BASE_URL}sfx/${name}.mp3?v=${SFX_V}`)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
       .then((a) => new Promise<AudioBuffer>((ok, no) => ctx!.decodeAudioData(a, ok, no)))
@@ -274,7 +278,6 @@ function loopTo(name: Loop, level: number, out: GainNode, fade: number): void {
   g.gain.setTargetAtTime(level, ctx.currentTime, fade);
 }
 
-/** Each frame: the hum in the Soup, the rush while a whirlpool turns. */
 // ---- Music: now and then, not always ----
 // Like Minecraft's: a while after you arrive somewhere with music, it fades in slowly, plays
 // its piece through, and fades away; then there's quiet, for minutes, before it may come again.
@@ -336,13 +339,24 @@ function musicFrame(state: GameState): void {
   }
 }
 
-export function soundFrame(state: GameState): void {
+/** Each frame: the hum in the water, the island's weather, the drone, music now and then, and
+ * the whirlpool's rush. (`skies` is the Creature's weather: rain and snow, 0 to 1.) */
+export function soundFrame(state: GameState, skies: { rain: number; snow: number } | null = null): void {
   if (!ctx) return;
   const soup = state.current === 'soup';
   // The hum under all the water; over the Extinction (from the strike on), a low drone; music
   // now and then.
   loopTo('underwater', soup || state.current === 'cell' ? 1 : 0, bus.ambience, 0.8);
   loopTo('drone', state.current === 'tribal' ? 1 : 0, bus.ambience, 2.5);
+  // The Creature's island: the weather shares one level between rain, the winter storm and,
+  // in whatever's left, plain wind, so as one comes on the others give way (the storm and the
+  // seasons build slowly, and each fades over a second or two besides: no whiplash).
+  const rain = skies ? Math.min(1, skies.rain) : 0;
+  const snow = skies ? Math.min(1 - rain, skies.snow) : 0;
+  const wind = skies ? Math.max(0, 1 - rain - snow) : 0;
+  loopTo('rain', rain, bus.ambience, 1.5);
+  loopTo('snowstorm', snow * 1.4, bus.ambience, 1.5);
+  loopTo('wind', wind, bus.ambience, 1.5);
   musicFrame(state);
   const swirl = soup && state.swirl > 0.02 ? Math.min(1, state.swirl) : 0;
   loopTo('river', swirl * 0.8, bus.effects, swirl > 0 ? 0.15 : 0.3);
