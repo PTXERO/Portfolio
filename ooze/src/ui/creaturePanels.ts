@@ -239,7 +239,7 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
     : '';
   const walk = `<div class="card px-box trip"><div class="info"><div class="name" data-t="walk-title"></div><div class="sub" data-t="walk-sub"></div>${choice}</div>
     <button class="px-btn home-btn" data-act="walkhome" data-t="home-btn">Home</button></div>
-    <p class="note">Tap anywhere on the map to send your creature there. It clears the fog as it walks: Senses lets it see further, Speed gets it there sooner. Places it finds are settled: each gives on its own every time it grows back.</p>
+    <p class="note">Tap anywhere on the map to send your creature there. It clears the fog as it walks: Senses lets it see further, Speed gets it there sooner. Places it finds keep giving: each pays out on its own every time it grows back. (A place is settled when the herd moves its nest there.)</p>
     ${visibleUpgrades(state, CREATURE)
       .filter((u) => u.branch === 'Wandering')
       .map(upgradeCard)
@@ -273,7 +273,7 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
       }
       return `<div class="card px-box place${found ? ' owned' : ''}">
         <div class="info">
-          <div class="name">${esc(p.name)} ${found ? '<span class="tag">Settled</span>' : ''}</div>
+          <div class="name">${esc(p.name)} ${found ? '<span class="tag">Found</span>' : ''}</div>
           <div class="flavor">${esc(p.flavor)}</div>
           ${!found && needs ? `<ul class="checks">${needs}</ul>` : ''}
           <div class="sub" data-t="place-${p.id}"></div>

@@ -222,7 +222,7 @@ function showTripReport(): boolean {
       <button class="px-btn gold" data-act="dismiss">Okay</button>`, 8);
     return true;
   }
-  showModal(`<p class="label dim">Settled: the ${place.name}</p>
+  showModal(`<p class="label dim">Found: the ${place.name}</p>
     <h3>${page ? `New in the ${def.bookName}: ${page.name}` : 'Back again'}</h3>
     <p>+${format(D(r.earned))} ${def.currency}</p>
     ${page ? `<p class="fx">${rewardText('creature', page)}</p>` : ''}
@@ -1267,7 +1267,7 @@ function showPlaceCard(id: string, x: number, y: number): void {
     ? short.length
       ? `Too much for it yet: ${short.map(([k, n]) => `${k} ${n}`).join(', ')}`
       : `Finding it: about ${format(tripPay(state, p))} ${def.currency}`
-    : `Settled: gives ${format(tripPay(state, p).mul(FARM_PAY))} ${def.currency} every time it grows back (next in ${formatTime(rest)})`;
+    : `Found: gives ${format(tripPay(state, p).mul(FARM_PAY))} ${def.currency} every time it grows back (next in ${formatTime(rest)})`;
   const parts = p.parts.filter((pid) => s.parts.includes(pid)).length;
   placeCard.innerHTML = `<div class="name">${found ? p.name : 'Something out here'}</div>
     <div class="sub">${formatTime(walkSeconds(state, q.x, q.y))} away · parts ${parts}/${p.parts.length}</div>
@@ -1760,7 +1760,7 @@ async function startFromLink(): Promise<void> {
     state = importSave(code);
     state.lastSeen = Date.now();
     if (where === 'tribal') {
-      // The Creature played through: every place settled, six generations, a big herd.
+      // The Creature played through: every place found, six generations, a big herd.
       const c = state.stages.creature;
       for (const r of STAGES.creature.reactions!) if (!c.discovered.includes(r.id)) c.discovered.push(r.id);
       for (const p of STAGES.creature.places!) c.trips[p.id] = Math.max(1, c.trips[p.id] ?? 0);

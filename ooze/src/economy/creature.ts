@@ -598,7 +598,7 @@ export function placeRest(state: GameState): number {
   return PLACE_REST * (foragesOnItsOwn(state) ? 0.6 : 1);
 }
 
-/** Settled places give, each time they've grown back, without anyone needing to go there. */
+/** Found places give, each time they've grown back, without anyone needing to go there. */
 function placeTick(state: GameState): void {
   const s = st(state);
   for (const p of def().places!) {
@@ -622,7 +622,7 @@ export function placeRestLeft(state: GameState, id: string): number {
   return Math.max(0, (st(state).partyReady[id] ?? 0) - st(state).year);
 }
 
-/** Whether the settled places grow back quicker (Foraging Rounds, a late Wandering upgrade). */
+/** Whether the found places grow back quicker (Foraging Rounds, a late Wandering upgrade). */
 export function foragesOnItsOwn(state: GameState): boolean {
   return stageEffects(state, CREATURE).some((e) => e.kind === 'rounds');
 }
