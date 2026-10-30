@@ -1,8 +1,8 @@
 // New Shore's panels: the Village (stores, who's working at what, the people), Build (by sort:
 // homes, stores, work, exploring) and the Island (the villages found out there, and the scouts).
 
-import { BUILD_CATS, BUILDS, buildName, type BuildCat, type BuildDef, type BuildId } from '../content/shore';
-import { buildCost, buildsOpen, canWin, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { BUILD_CATS, BUILDS, buildName, POI_SORT, POIS, RELICS, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
+import { buildCost, buildsOpen, canWin, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { miniIcon } from '../scene/creatureLook';
 import type { GameState } from '../economy/types';
 
@@ -27,8 +27,8 @@ export function setBuildCat(c: string): void {
 export function shoreKey(state: GameState, tab: string): string {
   const s = shoreOf(state);
   if (!s) return '';
-  if (tab === 'build') return JSON.stringify([buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, s.wood >= buildCost(s, b.id)])]);
-  if (tab === 'island') return JSON.stringify([count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
+  if (tab === 'build') return JSON.stringify([s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, s.wood >= buildCost(s, b.id)])]);
+  if (tab === 'island') return JSON.stringify([s.relics, poisOf(s).map((p) => (p.found ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
   const plan = workPlan(s);
   return JSON.stringify([shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, s.chief, s.people.filter((p) => isAdult(s, p)).length, s.people.filter((p) => p.founder).length]);
 }
@@ -72,7 +72,13 @@ export function shoreLayout(state: GameState, tab: string): string {
 
 /** Whether a sort of building has anything in it yet (built, or to build). */
 function catShown(s: ShoreState, c: BuildCat): boolean {
-  return BUILDS.some((b) => b.cat === c && (count(s, b.id) > 0 || buildsOpen(s).includes(b)));
+  return BUILDS.some((b) => b.cat === c && (count(s, b.id) > 0 || buildsOpen(s).includes(b) || teaser(s, b)));
+}
+
+/** A building still to be learned out on the island, shown so there's a reason to go and look
+ * (once what it follows is built). */
+function teaser(s: ShoreState, b: BuildDef): boolean {
+  return !!b.learn && !learned(s, b.id) && (!b.after || count(s, b.after) > 0);
 }
 
 function storesCard(s: ShoreState): string {
@@ -111,8 +117,11 @@ function buildLayout(s: ShoreState): string {
   const tabs = cats.length > 1 ? `<div class="seg build-cats">${cats.map((c) => `<button class="px-btn${c.id === buildCat ? ' on' : ''}" data-buildcat="${c.id}">${c.name}${can(c.id) && c.id !== buildCat ? '<i class="dot"></i>' : ''}</button>`).join('')}</div>` : '';
   const rows = BUILDS.filter((b) => b.cat === buildCat && (open.includes(b) || count(s, b.id) > 0))
     .map((b) => buildRow(s, b, open.includes(b)))
-    .join('');
-  const locked = BUILDS.filter((b) => !open.includes(b) && !count(s, b.id)).length;
+    .join('') +
+    BUILDS.filter((b) => b.cat === buildCat && teaser(s, b))
+      .map((b) => `<div class="card px-box build locked"><div class="info"><div class="name">${b.name}</div><div class="sub">${b.does}</div><div class="sub hint">Not known yet: learned at ${aPoi(b.learn!)} out on the island.</div></div></div>`)
+      .join('');
+  const locked = BUILDS.filter((b) => !open.includes(b) && !count(s, b.id) && !b.learn).length;
   const raft = s.raftTaken
     ? ''
     : `<div class="card px-box build"><div class="info"><div class="name">The raft</div><div class="sub">Pulled up on the beach where it landed. Its logs would make good wood.</div></div>
@@ -131,11 +140,79 @@ function buildRow(s: ShoreState, b: BuildDef, open: boolean): string {
     <button class="px-btn buy${poor ? '' : ' gold'}" data-build="${b.id}"${poor ? ' disabled' : ''}><span class="num">${cost}</span> wood</button></div>`;
 }
 
+const aPoi = (k: string) => {
+  const n = POIS.find((p) => p.id === k)!.name.toLowerCase();
+  return n.startsWith('the ') ? n : `${/^[aeiou]/.test(n) ? 'an' : 'a'} ${n}`;
+};
+
 function islandLayout(s: ShoreState): string {
+  return villagesCard(s) + landmarksCard(s) + relicsCard(s) + scoutsCard(s);
+}
+
+function landmarksCard(s: ShoreState): string {
+  const found = poisOf(s).filter((p) => p.found);
+  const head = `<div class="panel-head"><h2>Landmarks</h2><span class="dim">${found.length} found</span></div>`;
+  if (!found.length) return `${head}<div class="card px-box"><div class="info"><div class="sub">Nothing yet. There are old and strange places out in the fog: walk out, or send scouts, to find them.</div></div></div>`;
+  const here = poiHere(s);
+  // The ones with something still to find first, nearest the chief first.
+  const d = (p: Poi) => Math.hypot(p.x - s.chiefAt.x, p.y - s.chiefAt.y);
+  const left = (p: Poi) => poiDef(p).layers.length - p.done;
+  found.sort((a, b) => Number(left(b) > 0) - Number(left(a) > 0) || d(a) - d(b));
+  return head + found.map((p) => poiRow(s, p, p === here)).join('');
+}
+
+function poiRow(s: ShoreState, p: Poi, here: boolean): string {
+  const def = poiDef(p);
+  const left = def.layers.length - p.done;
+  const chief = s.people.find((q) => q.id === s.chief)?.name ?? 'The chief';
+  const status = here
+    ? `<b class="green">${chief} is exploring it…</b>`
+    : left
+      ? `${p.done ? 'There\'s more to find here.' : 'Not explored yet.'} ${Math.round(Math.hypot(p.x - s.chiefAt.x, p.y - s.chiefAt.y))} steps away.`
+      : 'Explored.';
+  return `<div class="card px-box poi${left ? '' : ' done'}"><div class="info"><div class="name">${def.name} <span class="tag">${POI_SORT[def.sort]}</span></div>
+    <div class="sub">${status}</div></div>
+    <div class="col">${left && !here ? `<button class="px-btn gold" data-gopoi="${p.id}">Go</button>` : ''}<button class="px-btn" data-seepoi="${p.id}">Look</button></div></div>`;
+}
+
+function relicsCard(s: ShoreState): string {
+  const have = s.relics ?? [];
+  if (!have.length) return '';
+  return `<div class="panel-head"><h2>Relics</h2><span class="dim">${have.length} of ${RELICS.length}</span></div>
+    <div class="card px-box"><div class="info">${have.map((id) => {
+      const r = RELICS.find((x) => x.id === id)!;
+      return `<div class="relic"><b>${r.name}</b> <span class="dim">${r.does}</span></div>`;
+    }).join('')}</div></div>`;
+}
+
+/** A landmark's card (tapped on the map). */
+export function poiCard(s: ShoreState, p: Poi): string {
+  const def = poiDef(p);
+  const left = def.layers.length - p.done;
+  const chief = s.people.find((q) => q.id === s.chief)?.name ?? 'The chief';
+  const here = poiHere(s) === p;
+  return `<p class="label dim">${POI_SORT[def.sort]}</p><h3>${def.name}</h3><p>${def.seen}</p>
+    <p class="dim">${left ? (here ? `${chief} is exploring it. Stay a while.` : `${p.done ? 'There\'s more to find here.' : 'No one\'s explored it yet.'} Only ${chief} can: go there and stay a while.`) : 'Explored: there\'s nothing more to find.'}</p>
+    <div class="choices">${left && !here ? `<button class="px-btn gold" data-gopoi="${p.id}">${chief} goes there</button>` : ''}<button class="px-btn" data-act="dismiss">OK</button></div>`;
+}
+
+/** What exploring turned up (a card). */
+export function findCard(p: Poi, f: Find, dup: boolean): string {
+  const relic = f.relic ? RELICS.find((r) => r.id === f.relic) : undefined;
+  const build = f.learn ? BUILDS.find((b) => b.id === f.learn) : undefined;
+  const got = dup
+    ? `<p class="dim">They have one like it already: what was there is taken as wood (+30).</p>`
+    : `${relic ? `<p class="fx">Relic: <b>${relic.name}</b>. ${relic.does}</p>` : ''}${build ? `<p class="fx">Learned: <b>${build.name}</b> (in Build). ${build.does}</p>` : ''}${f.wood ? `<p class="fx">+${f.wood} wood</p>` : ''}${f.food ? `<p class="fx">+${f.food} food</p>` : ''}`;
+  const more = p.done < poiDef(p).layers.length;
+  return `<p class="label dim">${poiName(p)}</p><h3>${relic && !dup ? relic.name : build && !dup ? 'Something learned' : 'Found'}</h3><p>${f.text}</p>${got}
+    ${more ? '<p class="dim tiny">There\'s more to find here.</p>' : ''}<button class="px-btn gold" data-act="dismiss">OK</button>`;
+}
+
+function scoutsCard(s: ShoreState): string {
   const scouts = count(s, 'scout');
   const out = `<div class="card px-box"><div class="info"><div class="name">Out in the fog</div>
     <div class="sub">${scouts ? `${scouts} scout${scouts > 1 ? 's are' : ' is'} out exploring for you.` : 'No scouts yet (build a Scout\'s hut to send one out).'} Tap the land to send ${s.people.find((p) => p.id === s.chief)?.name ?? 'the chief'} walking.</div></div></div>`;
-  return villagesCard(s) + out;
+  return out;
 }
 
 function peopleCard(s: ShoreState): string {

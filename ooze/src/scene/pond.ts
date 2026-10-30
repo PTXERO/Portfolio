@@ -32,7 +32,8 @@ export type PondEvent =
   | { type: 'person'; i: number; x: number; y: number }
   /** New Shore: a village was tapped (by id), or one of yours (by id). */
   | { type: 'village'; id: number; x: number; y: number }
-  | { type: 'villager'; id: number; x: number; y: number };
+  | { type: 'villager'; id: number; x: number; y: number }
+  | { type: 'poi'; id: number; x: number; y: number };
 
 interface Hero {
   x: number;

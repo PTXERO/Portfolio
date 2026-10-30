@@ -14,8 +14,8 @@ import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
-import { build, gift, isAdult, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
-import { setBuildCat, villageCard } from './ui/shorePanels';
+import { build, gift, isAdult, poisOf, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
+import { findCard, poiCard, setBuildCat, villageCard } from './ui/shorePanels';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, say, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
@@ -940,6 +940,15 @@ function shoreFrame(): void {
       modal.dataset.village = String(v.id);
     }
   }
+  // What exploring turned up: a card each.
+  if (s.finds?.length && modal.hidden && !cine()) {
+    const f = s.finds.shift()!;
+    const p = poisOf(s).find((x) => x.id === f.poi);
+    if (p) {
+      cue(f.find.relic && !f.dup ? 'shine' : 'chime', 0.5);
+      showModal(findCard(p, f.find, !!f.dup));
+    }
+  }
   // A village won over: they come to live by your hearth.
   for (const v of s.villages) {
     if (!v.joined || joinedSeen.has(v.id) || !modal.hidden || cine()) continue;
@@ -1355,6 +1364,10 @@ function pondEvents(): void {
         showModal(villageCard(s, v));
         modal.dataset.village = String(v.id);
       }
+    } else if (e.type === 'poi') {
+      const s = shoreOf(state);
+      const p = s && poisOf(s).find((x) => x.id === e.id);
+      if (s && p) showModal(poiCard(s, p));
     } else if (e.type === 'villager') {
       const s = shoreOf(state);
       const p = s?.people.find((x) => x.id === e.id);
@@ -1665,6 +1678,19 @@ function act(el: HTMLElement): void {
     }
   } else if (el.dataset.lean) setLean(state, el.dataset.lean as Lean);
   else if (el.dataset.buildcat) setBuildCat(el.dataset.buildcat);
+  else if (el.dataset.gopoi || el.dataset.seepoi) {
+    const s = shoreOf(state);
+    const p = s && poisOf(s).find((x) => x.id === Number(el.dataset.gopoi ?? el.dataset.seepoi));
+    if (s && p) {
+      if (el.dataset.gopoi) {
+        // Right up to it (a step short, on its near side).
+        walkChief(state, { x: p.x, y: p.y + 2 });
+        scene.shoreScene.follow();
+      } else scene.shoreScene.lookAt(p, 3);
+      modal.hidden = true;
+      if (!isWide()) ui.open = false;
+    }
+  }
   else if (el.dataset.gift) {
     const s = shoreOf(state);
     const id = Number(el.dataset.gift);

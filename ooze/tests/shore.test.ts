@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createState } from '../src/economy/state';
-import { build, buildCost, buildsOpen, DAY_SEC, gift, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { boosts, build, buildCost, buildsOpen, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import type { TribeState } from '../src/economy/types';
 
@@ -116,5 +116,44 @@ describe('Scouts', () => {
     console.log('seen cells', seen0, '->', seen1, 'found', s.villages.filter((v) => v.found).length, 'of', s.villages.length);
     expect(seen1).toBeGreaterThan(seen0 * 5);
     expect(s.villages.some((v) => v.found)).toBe(true);
+  });
+});
+
+describe('Landmarks', () => {
+  it('are placed on their own ground; the chief explores them layer by layer for relics and know-how', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    const pois = poisOf(s);
+    expect(pois.length).toBeGreaterThan(15);
+    const cave = pois.find((p) => p.kind === 'cave')!;
+    cave.found = true;
+    s.chiefAt = { x: cave.x, y: cave.y + 2 };
+    s.chiefTo = null;
+    s.wood = 0;
+    shoreTick(state, 45);
+    expect(cave.done).toBe(1);
+    expect(s.learned).toContain('granary');
+    shoreTick(state, 75);
+    expect(s.relics).toContain('axe');
+    expect(s.finds!.length).toBe(2);
+    // The axe helps the wood along.
+    expect(boosts(s).wood).toBeCloseTo(0.15);
+    // Walking away stops it.
+    s.chiefTo = { x: s.hearth.x, y: s.hearth.y };
+    const t = cave.t;
+    shoreTick(state, 5);
+    expect(cave.t).toBe(t);
+  });
+  it('scouts find landmarks, but only the chief explores them', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    s.wood = 200;
+    build(state, 'hearth');
+    build(state, 'hut');
+    build(state, 'scout');
+    for (let i = 0; i < 1800; i++) shoreTick(state, 2);
+    const found = poisOf(s).filter((p) => p.found);
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.every((p) => p.done === 0 || Math.hypot(p.x - s.chiefAt.x, p.y - s.chiefAt.y) < 6)).toBe(true);
   });
 });

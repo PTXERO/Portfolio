@@ -337,6 +337,14 @@ Built in slices, each tested live (balance sims after).
    nearby); grazers' Welcome (+1.5 a day for every kin village found). At 100 they join: their
    people move in and walk over, keeping their own look; children take a parent's kind. Every
    camp's smoke shows over the fog, and the village starts where the raft landed.
+2b. **Things to do before conflict** *(live)*: landmarks (POIs) all over the island — great
+   bones, the great tree, hot springs, standing stones, caves, fallen walls, a wrecked raft (someone
+   crossed before), the crater, summit cairns — found by the chief or scouts as the fog draws back,
+   but explored only by the chief: standing there, each layer gives up a relic (lasting effects:
+   food, wood, births, growing up, sight, walking, trust), know-how (a building learned there) or
+   wood. Build tab: Village / Build (Homes, Stores, Work, Exploring) / Island tabs; new buildings —
+   Elders' fire, Longhouse (ruins), Bathing pool (hot spring), Granary (cave), Fishing weir (the
+   wreck), Lookout (the great tree), Trail markers — the learned ones shown with where to look.
 3. **Raids and defense**: the grace period, scouts, announced raids, Kairosoft-style battles.
 4. **Taking people and ideas**: diet leaning and shifts; cannibals' Dread.
 5. **The Far Voice**: whispers and the few powers.

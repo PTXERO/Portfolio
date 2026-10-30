@@ -5,7 +5,7 @@
 
 import { PAL } from '../art/sprites';
 import { Biome, CELL, isLand, type Pt } from '../economy/island';
-import { DAY_SEC, isAdult, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
+import { DAY_SEC, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
 import type { GameState } from '../economy/types';
 import type { BuildId } from '../content/shore';
 import { RangeScene } from './range';
@@ -104,6 +104,15 @@ export class ShoreScene extends RangeScene {
       const Y = this.py(v.x, v.y);
       if (Math.hypot(ax - X, ay - (Y - 5)) < Math.max(8, this.zoom * 3)) {
         this.events.push({ type: 'village', id: v.id, x: X, y: Y - 10 });
+        return;
+      }
+    }
+    for (const p of poisOf(s)) {
+      if (!p.found) continue;
+      const X = this.sx(p.x);
+      const Y = this.py(p.x, p.y);
+      if (Math.hypot(ax - X, ay - (Y - 4)) < Math.max(7, this.zoom * 3)) {
+        this.events.push({ type: 'poi', id: p.id, x: X, y: Y - 10 });
         return;
       }
     }
@@ -361,6 +370,19 @@ export class ShoreScene extends RangeScene {
       b.fillRect(X, Y + 2, 1, 1);
     }
 
+    // ---- Landmarks ----
+    const here = poiHere(s);
+    for (const p of poisOf(s)) {
+      if (!p.found) continue;
+      const X = Math.round(this.sx(p.x));
+      const Y = Math.round(this.py(p.x, p.y));
+      if (!onScreen(X, Y, 40)) continue;
+      const layers = poiDef(p).layers;
+      const more = p.done < layers.length;
+      const progress = p === here ? p.t / layers[p.done].sec : -1;
+      sprites.push({ y: p.y, draw: () => this.drawPoi(b, p.kind, X, Y, z, close, t, more, progress) });
+    }
+
     // ---- The island's other villages ----
     for (const v of s.villages) this.drawVillage(b, sprites, s, v, t, dt, z, close, fogged);
     // Out and about, they squeak, each kind in its own voice: higher or lower, chattier or
@@ -542,6 +564,111 @@ export class ShoreScene extends RangeScene {
       }
     }
     b.restore();
+  }
+
+  /** A landmark: what it is (close in), a glint while it still holds something, and how far
+   * the chief's got exploring it. */
+  private drawPoi(b: CanvasRenderingContext2D, kind: import('../content/shore').PoiKind, X: number, Y: number, z: number, close: boolean, t: number, more: boolean, progress: number): void {
+    const r = (x: number, y: number, w: number, h: number, c: string) => {
+      b.fillStyle = c;
+      b.fillRect(X + x * z, Y + y * z, w * z, h * z);
+    };
+    let top = -8;
+    if (!close) {
+      b.fillStyle = more ? PAL.y : '#9a9488';
+      b.fillRect(X, Y - 1, 2, 2);
+      top = -4;
+    } else {
+      switch (kind) {
+        case 'bones':
+          for (let k = 0; k < 4; k++) {
+            r(-6 + k * 3, -6 + Math.abs(k - 1.5), 1, 6 - Math.abs(k - 1.5), '#e8e2d0');
+          }
+          r(-7, -1, 13, 1, '#c8c0a8');
+          top = -9;
+          break;
+        case 'bigtree':
+          r(-1, -10, 3, 10, '#5a4030');
+          r(-6, -18, 13, 8, '#2f5a2a');
+          r(-4, -20, 9, 3, '#3f7a3a');
+          r(-5, -16, 3, 2, '#4f8a4a');
+          top = -22;
+          break;
+        case 'spring': {
+          r(-4, -2, 8, 2, '#5fb0c8');
+          r(-3, -2, 6, 1, '#9ad8e8');
+          for (let k = 0; k < 3; k++) {
+            const h = (t * 3 + k * 2) % 6;
+            b.fillStyle = `rgba(240, 244, 248, ${0.6 * (1 - h / 6)})`;
+            b.fillRect(X + (k - 1) * 2 * z, Y - (3 + h) * z, z, z);
+          }
+          top = -10;
+          break;
+        }
+        case 'stones':
+          for (const [x, h] of [[-6, 6], [-3, 7], [1, 7], [4, 6]] as const) r(x, -h, 2, h, '#8a8a90');
+          r(-6, -1, 12, 1, '#5a5a60');
+          top = -10;
+          break;
+        case 'cave':
+          r(-6, -7, 12, 7, '#6a6a70');
+          r(-3, -5, 6, 5, '#141418');
+          r(-2, -6, 4, 1, '#141418');
+          top = -10;
+          break;
+        case 'ruin':
+          r(-6, -3, 12, 1, '#9a948a');
+          r(-6, -3, 1, 3, '#9a948a');
+          r(5, -4, 1, 4, '#9a948a');
+          r(-6, -1, 5, 1, '#7a746a');
+          r(2, -1, 4, 1, '#7a746a');
+          r(-2, -2, 1, 2, '#5a8a4a');
+          top = -7;
+          break;
+        case 'wreck':
+          r(-6, -2, 10, 1, '#6a4a30');
+          r(-5, -3, 10, 1, '#5a3a24');
+          r(-4, -1, 10, 1, '#6a4a30');
+          r(2, -5, 1, 4, '#c8b080');
+          top = -8;
+          break;
+        case 'crater':
+          r(-6, -1, 12, 1, '#5a4a3a');
+          r(-5, -2, 2, 1, '#7a6a5a');
+          r(3, -2, 2, 1, '#7a6a5a');
+          r(-2, -1, 4, 1, '#1a1410');
+          if (Math.floor(t * 2) % 2) r(0, -2, 1, 1, '#c8a0ff');
+          top = -7;
+          break;
+        case 'cairn':
+          r(-3, -2, 6, 2, '#8a8a90');
+          r(-2, -4, 4, 2, '#9a9aa0');
+          r(-1, -6, 2, 2, '#aaaab0');
+          top = -9;
+          break;
+      }
+    }
+    // Still something to find: a glint over it (a slow twinkle).
+    if (more) {
+      const on = Math.sin(t * 2.2 + X * 0.1) > -0.2;
+      if (on) {
+        b.fillStyle = PAL.y;
+        const gy = Y + top * z - 3;
+        b.fillRect(X, gy - 1, 1, 3);
+        b.fillRect(X - 1, gy, 3, 1);
+      }
+    }
+    // Being explored: a bar filling over it.
+    if (progress >= 0) {
+      const w = 14;
+      const gy = Y + top * z - 7;
+      b.fillStyle = PAL.k;
+      b.fillRect(X - w / 2 - 1, gy - 1, w + 2, 4);
+      b.fillStyle = '#3a3e52';
+      b.fillRect(X - w / 2, gy, w, 2);
+      b.fillStyle = PAL.y;
+      b.fillRect(X - w / 2, gy, Math.round(w * Math.min(1, progress)), 2);
+    }
   }
 
   private drawVillage(b: CanvasRenderingContext2D, sprites: { y: number; draw: () => void }[], s: ShoreState, v: Village, t: number, dt: number, z: number, close: boolean, fogged: (x: number, y: number) => boolean): void {
