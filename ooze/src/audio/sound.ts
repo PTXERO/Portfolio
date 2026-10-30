@@ -356,7 +356,7 @@ export function soundFrame(state: GameState, skies: { rain: number; snow: number
   const wind = skies ? Math.max(0, 1 - rain - snow) : 0;
   loopTo('rain', rain, bus.ambience, 1.5);
   loopTo('snowstorm', snow * 1.4, bus.ambience, 1.5);
-  loopTo('wind', wind, bus.ambience, 1.5);
+  loopTo('wind', wind * 0.45, bus.ambience, 1.5);
   musicFrame(state);
   const swirl = soup && state.swirl > 0.02 ? Math.min(1, state.swirl) : 0;
   loopTo('river', swirl * 0.8, bus.effects, swirl > 0 ? 0.15 : 0.3);
