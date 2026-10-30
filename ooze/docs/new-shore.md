@@ -345,6 +345,14 @@ Built in slices, each tested live (balance sims after).
    wood. Build tab: Village / Build (Homes, Stores, Work, Exploring) / Island tabs; new buildings —
    Elders' fire, Longhouse (ruins), Bathing pool (hot spring), Granary (cave), Fishing weir (the
    wreck), Lookout (the great tree), Trail markers — the learned ones shown with where to look.
+2c. **No room for them** *(live)*: a village won over with no room asks what you'll do: take
+   them in crowded; let them keep their village as a **vassal** (tribute at a tax you set, growth
+   slower the more you take, loyalty falling under a heavy hand until they throw you off); ask
+   them to wait for room (they come when there's room, or give up after ten days, trusting you
+   less); or turn them away (they quietly walk off and swell an enemy camp). Unanswered, they wait.
+   **The land feeds only so many gatherers** (14, +6 a camp, +8 a weir; past that each brings in
+   little), so a village that outgrows its land starves, worse the shorter it is. A People tab
+   lists everyone, by kind and age.
 3. **Raids and defense**: the grace period, scouts, announced raids, Kairosoft-style battles.
 4. **Taking people and ideas**: diet leaning and shifts; cannibals' Dread.
 5. **The Far Voice**: whispers and the few powers.

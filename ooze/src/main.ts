@@ -14,8 +14,8 @@ import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
-import { build, gift, isAdult, poisOf, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
-import { findCard, poiCard, setBuildCat, villageCard } from './ui/shorePanels';
+import { answerJoin, build, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
+import { findCard, joinCard, poiCard, setBuildCat, villageCard } from './ui/shorePanels';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, say, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
@@ -898,6 +898,7 @@ function renderHud(): void {
 const shoreNews: string[] = [];
 /** Villages already known to have joined (so only new ones get a card; not those in the save). */
 const joinedSeen = new Set<number>();
+const askedSeen = new Set<string>();
 let joinedReady = false;
 function renderShoreGoal(): void {
   const s = shoreOf(state);
@@ -939,6 +940,13 @@ function shoreFrame(): void {
       showModal(`<p class="label dim">Found</p>${villageCard(s, v).replace(/^<p class="label dim">[^<]*<\/p>/, '')}`);
       modal.dataset.village = String(v.id);
     }
+  }
+  // A village won over with no room for them: the question, once.
+  for (const v of s.villages) {
+    if (v.asking === undefined || askedSeen.has(`${v.id}:${v.asking}`) || !modal.hidden || cine()) continue;
+    askedSeen.add(`${v.id}:${v.asking}`);
+    cue('chime', 0.5);
+    showModal(joinCard(s, v));
   }
   // What exploring turned up: a card each.
   if (s.finds?.length && modal.hidden && !cine()) {
@@ -1678,6 +1686,21 @@ function act(el: HTMLElement): void {
     }
   } else if (el.dataset.lean) setLean(state, el.dataset.lean as Lean);
   else if (el.dataset.buildcat) setBuildCat(el.dataset.buildcat);
+  else if (el.dataset.join) {
+    const [id, a] = el.dataset.join.split(':');
+    answerJoin(state, Number(id), a as JoinAnswer);
+    modal.hidden = true;
+    panelKey = '';
+    save();
+  } else if (el.dataset.askjoin) {
+    const s = shoreOf(state);
+    const v = s?.villages.find((x) => x.id === Number(el.dataset.askjoin));
+    if (s && v && v.asking !== undefined) showModal(joinCard(s, v));
+  } else if (el.dataset.tax) {
+    const [id, t] = el.dataset.tax.split(':');
+    setTax(state, Number(id), Number(t));
+    panelKey = '';
+  }
   else if (el.dataset.gopoi || el.dataset.seepoi) {
     const s = shoreOf(state);
     const p = s && poisOf(s).find((x) => x.id === Number(el.dataset.gopoi ?? el.dataset.seepoi));

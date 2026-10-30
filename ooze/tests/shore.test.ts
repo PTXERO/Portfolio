@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createState } from '../src/economy/state';
-import { boosts, build, buildCost, buildsOpen, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { answerJoin, boosts, build, setTax, workPlan, buildCost, buildsOpen, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import type { TribeState } from '../src/economy/types';
 
@@ -77,6 +77,10 @@ describe('Winning over', () => {
     v.found = true;
     v.trust = 10;
     s.food = 1000;
+    v.pop = 8;
+    s.wood = 1000;
+    build(state, 'hearth');
+    for (let i = 0; i < 3; i++) build(state, 'hut');
     s.chiefAt = { x: s.hearth.x, y: s.hearth.y };
     expect(gift(state, v.id)).toBe(8);
     s.chiefAt = { x: v.x, y: v.y };
@@ -95,6 +99,10 @@ describe('Winning over', () => {
     const v = s.villages[0];
     v.found = true;
     v.trust = 10;
+    v.pop = 8;
+    s.wood = 100000;
+    build(state, 'hearth');
+    for (let i = 0; i < 12; i++) build(state, 'hut');
     s.chiefAt = { x: v.x + 3, y: v.y + 3 };
     s.chiefTo = null;
     shoreTick(state, DAY_SEC * 30);
@@ -155,5 +163,73 @@ describe('Landmarks', () => {
     const found = poisOf(s).filter((p) => p.found);
     expect(found.length).toBeGreaterThan(0);
     expect(found.every((p) => p.done === 0 || Math.hypot(p.x - s.chiefAt.x, p.y - s.chiefAt.y) < 6)).toBe(true);
+  });
+});
+
+describe('Won over with no room', () => {
+  const setup = () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    const v = s.villages[0];
+    v.found = true;
+    v.trust = 99;
+    v.pop = 20;
+    s.food = 1000;
+    return { state, s, v };
+  };
+  it('asks what to do; unanswered, they wait, and come once there is room', () => {
+    const { state, s, v } = setup();
+    gift(state, v.id);
+    expect(v.joined).toBeFalsy();
+    expect(v.asking).toBeDefined();
+    shoreTick(state, DAY_SEC * 1.5);
+    expect(v.asking).toBeUndefined();
+    expect(v.waiting).toBeDefined();
+    s.wood = 10000;
+    build(state, 'hearth');
+    for (let i = 0; i < 6; i++) build(state, 'hut');
+    shoreTick(state, 4);
+    expect(v.joined).toBe(true);
+  });
+  it('kept waiting too long, they give up', () => {
+    const { state, v } = setup();
+    gift(state, v.id);
+    answerJoin(state, v.id, 'wait');
+    shoreTick(state, DAY_SEC * 11);
+    expect(v.waiting).toBeUndefined();
+    expect(v.joined).toBeFalsy();
+    expect(v.trust).toBeGreaterThanOrEqual(60);
+    expect(v.trust).toBeLessThan(65);
+  });
+  it('as a vassal they pay tribute and grow; taxed hard they revolt', () => {
+    const { state, s, v } = setup();
+    gift(state, v.id);
+    answerJoin(state, v.id, 'vassal');
+    s.food = 0;
+    s.wood = 0;
+    shoreTick(state, DAY_SEC * 5);
+    expect(s.food).toBeGreaterThan(0);
+    expect(v.pop).toBeGreaterThan(20);
+    setTax(state, v.id, 0.6);
+    shoreTick(state, DAY_SEC * 40);
+    expect(v.vassal).toBeUndefined();
+  });
+  it('turned away, they go to swell an enemy camp', () => {
+    const { state, s, v } = setup();
+    gift(state, v.id);
+    const before = s.villages.filter((x) => x !== v).reduce((a, x) => a + x.pop, 0);
+    answerJoin(state, v.id, 'away');
+    expect(v.gone).toBeDefined();
+    expect(s.villages.filter((x) => x !== v).reduce((a, x) => a + x.pop, 0)).toBe(before + 20);
+  });
+  it('a village too big for its food starves, more the shorter it is', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    for (let i = 0; i < 100; i++) s.people.push({ id: 100 + i, name: 'X' + i, born: -10 });
+    // (More than the land round a small camp can feed.)
+    expect(workPlan(s).foodRate).toBeLessThan(workPlan(s).eat);
+    s.food = 0;
+    shoreTick(state, DAY_SEC * 4);
+    expect(s.people.length).toBeLessThan(100);
   });
 });

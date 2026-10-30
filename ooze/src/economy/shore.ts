@@ -87,7 +87,18 @@ export interface Village {
   /** Kin only: how far they've been won over (0 to 100), and whether they've joined you. */
   trust?: number;
   joined?: boolean;
+  /** Won over, but there wasn't room: waiting for your answer (since this day), or waiting for
+   * room (since this day; they lose patience). */
+  asking?: number;
+  waiting?: number;
+  /** Kept their own village, as yours: what you take of what they make (0 to 0.6), and how loyal
+   * they are (0 to 100; at nothing, they throw you off). */
+  vassal?: { tax: number; loyalty: number };
+  /** Turned away: gone from the island's map (to the village they went to, that day). */
+  gone?: { to: number; day: number };
 }
+
+export type JoinAnswer = 'crowd' | 'vassal' | 'wait' | 'away';
 
 export interface Scout {
   at: Pt;
@@ -482,7 +493,7 @@ export function shoreWhen(s: ShoreState): string {
 }
 
 /** The village's day: how many work at food and at wood, and what that brings in. */
-export function workPlan(s: ShoreState): { food: number; wood: number; eat: number; foodRate: number; woodRate: number } {
+export function workPlan(s: ShoreState): { food: number; wood: number; eat: number; foodRate: number; woodRate: number; land: number } {
   const adults = s.people.filter((p) => isAdult(s, p)).length;
   const kids = s.people.length - adults;
   const eat = adults * EAT + kids * EAT_CHILD;
@@ -495,7 +506,15 @@ export function workPlan(s: ShoreState): { food: number; wood: number; eat: numb
   if (s.wood >= woodCap(s) - 0.5) share = 1;
   const food = Math.round(adults * Math.max(0, Math.min(1, share)));
   const wood = adults - food;
-  return { food, wood, eat, foodRate: food * foodEach, woodRate: wood * woodEach };
+  // The land round the village feeds only so many: past that, each more brings in less.
+  const land = landFor(s);
+  const working = food <= land ? food : land + (food - land) * 0.15;
+  return { food, wood, eat, foodRate: working * foodEach, woodRate: wood * woodEach, land };
+}
+
+/** How many gatherers the land round the village feeds fully (more camps and weirs, more). */
+export function landFor(s: ShoreState): number {
+  return 14 + 6 * count(s, 'camp') + 8 * count(s, 'weir');
 }
 
 // ---- Winning them over ----
@@ -511,7 +530,12 @@ export function giftCost(v: Village): number {
 
 /** Whether they can be won over now: found, kin, not yet joined. */
 export function canWin(s: ShoreState, v: Village): boolean {
-  return v.found && !v.joined && relation(s, v) === 'kin';
+  return v.found && !v.joined && !v.vassal && !v.gone && v.asking === undefined && v.waiting === undefined && relation(s, v) === 'kin';
+}
+
+/** Room left in the village (beds not yet slept in). */
+export function roomLeft(s: ShoreState): number {
+  return room(s) - s.people.length;
 }
 
 /** A gift of food: trust, twice as much with the chief there to give it. */
@@ -527,7 +551,81 @@ export function gift(state: GameState, id: number): number {
 
 function addTrust(state: GameState, s: ShoreState, v: Village, n: number): void {
   v.trust = Math.min(100, (v.trust ?? FIRST_TRUST) + n);
-  if (v.trust >= 100) join(state, s, v);
+  if (v.trust < 100) return;
+  // Won over. With room for them they simply come; without, it's for you to say.
+  if (roomLeft(s) >= v.pop) join(state, s, v);
+  else {
+    v.asking = s.day + s.clock / DAY_SEC;
+    s.news.push(`${cap(v.name)} would join you, but there's no room for them.`);
+  }
+}
+
+/** Patience: days they'll wait for an answer (then they wait for room), and for room. */
+const ASK_DAYS = 1;
+const WAIT_DAYS = 10;
+
+/** Your answer to a village won over when there isn't room for them. */
+export function answerJoin(state: GameState, id: number, a: JoinAnswer): void {
+  const s = shoreOf(state);
+  const v = s?.villages.find((x) => x.id === id);
+  if (!s || !v || v.asking === undefined) return;
+  v.asking = undefined;
+  const today = s.day + s.clock / DAY_SEC;
+  if (a === 'crowd') join(state, s, v);
+  else if (a === 'wait') {
+    v.waiting = today;
+    record(state, `${cap(v.name)} were asked to wait until there was room for them.`, 'shore', shoreWhen(s));
+  } else if (a === 'vassal') {
+    v.vassal = { tax: 0.2, loyalty: 80 };
+    s.news.push(`${cap(v.name)} keep their village, and are yours.`);
+    record(state, `${cap(v.name)} kept their own village, and pay tribute to the hearth.`, 'shore', shoreWhen(s));
+  } else {
+    // They go. Where, no one says: they walk off to whoever will have them.
+    const to = s.villages.filter((x) => x !== v && !x.joined && !x.gone && !x.vassal && relation(s, x) !== 'kin').sort((p, q) => Math.hypot(p.x - v.x, p.y - v.y) - Math.hypot(q.x - v.x, q.y - v.y))[0];
+    v.gone = { to: to?.id ?? -1, day: today };
+    if (to) to.pop += v.pop;
+    s.news.push(`${cap(v.name)} left their village, and went away.`);
+    record(state, `${cap(v.name)} were turned away. They left their village, and were not seen again.`, 'shore', shoreWhen(s));
+  }
+}
+
+/** What you take from a vassal village. */
+export function setTax(state: GameState, id: number, tax: number): void {
+  const v = shoreOf(state)?.villages.find((x) => x.id === id);
+  if (v?.vassal) v.vassal.tax = Math.max(0, Math.min(0.6, tax));
+}
+
+/** A vassal village's day: what they send you, how they grow (less, the more you take, and less
+ * as they fill their land), and how loyal they are (they'll bear a light hand for ever, a heavy
+ * one only so long). */
+export function vassalDay(v: Village): { food: number; wood: number; growth: number; loyalty: number } {
+  const t = v.vassal?.tax ?? 0;
+  const cap = 70;
+  return {
+    food: v.pop * 0.9 * t,
+    wood: v.pop * 0.45 * t,
+    growth: v.pop * 0.05 * (1 - t * 1.8) * Math.max(0, 1 - v.pop / cap),
+    loyalty: 100 - t * 170,
+  };
+}
+
+function stepVassals(state: GameState, s: ShoreState, k: number): void {
+  for (const v of s.villages) {
+    if (!v.vassal) continue;
+    const d = vassalDay(v);
+    s.food = Math.min(foodCap(s), s.food + d.food * k);
+    s.wood = Math.min(woodCap(s), s.wood + d.wood * k);
+    v.pop = Math.max(4, v.pop + d.growth * k);
+    // Loyalty settles toward what the tax makes it (5 a day), and a starving lord is no lord.
+    const target = s.hungry > 1 ? Math.min(d.loyalty, 30) : d.loyalty;
+    v.vassal.loyalty += Math.sign(target - v.vassal.loyalty) * Math.min(Math.abs(target - v.vassal.loyalty), 5 * k);
+    if (v.vassal.loyalty <= 0) {
+      v.vassal = undefined;
+      v.trust = 30;
+      s.news.push(`${cap(v.name)} have thrown off your rule.`);
+      record(state, `${cap(v.name)} would pay no more, and threw off the hearth's rule.`, 'shore', shoreWhen(s));
+    }
+  }
 }
 
 /** Won over: they leave their village and move into yours, another kind among you. */
@@ -598,6 +696,23 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
     }
   }
   walk(state, s, dt);
+  stepVassals(state, s, k);
+  // Won over and waiting: with no answer, they wait for room; once there's room, they come; kept
+  // waiting too long, they give up on you.
+  const today = s.day + s.clock / DAY_SEC;
+  for (const v of s.villages) {
+    if (v.asking !== undefined && today - v.asking > ASK_DAYS) answerJoin(state, v.id, 'wait');
+    if (v.waiting === undefined) continue;
+    if (roomLeft(s) >= v.pop) {
+      v.waiting = undefined;
+      join(state, s, v);
+    } else if (today - v.waiting > WAIT_DAYS) {
+      v.waiting = undefined;
+      v.trust = 60;
+      s.news.push(`${cap(v.name)} grew tired of waiting.`);
+      record(state, `${cap(v.name)} grew tired of waiting for room, and trust you less for it.`, 'shore', shoreWhen(s));
+    }
+  }
   // Trust grows by itself where the chief stays a while, and (for grazers) as kin drift in.
   for (const v of s.villages) {
     if (!canWin(s, v)) continue;
@@ -632,13 +747,15 @@ function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>
     if (p.dies === undefined || s.day < p.dies) continue;
     die(state, s, p, 'old age');
   }
-  // Hunger: a day with no food and not enough coming in; after a few, the weakest go.
+  // Hunger: a day with no food and not enough coming in. After a couple, the weakest begin to
+  // die, more the shorter the food is (a village far bigger than its fields starves fast).
   if (s.food < 0.5 && plan.foodRate < plan.eat) {
     s.hungry++;
-    if (s.hungry >= 3 && s.people.length > 2) {
-      const weakest = [...s.people].filter((p) => p.id !== s.chief).sort((a, b) => a.born - b.born)[0];
-      if (weakest) die(state, s, weakest, 'hunger');
-      s.hungry = 1;
+    if (s.hungry >= 2 && s.people.length > 2) {
+      const short = 1 - plan.foodRate / plan.eat;
+      const n = Math.max(1, Math.round(s.people.length * short * 0.15));
+      const weakest = [...s.people].filter((p) => p.id !== s.chief).sort((a, b) => Number(!!b.founder) - Number(!!a.founder) || a.born - b.born);
+      for (const p of weakest.slice(0, n)) die(state, s, p, 'hunger');
     }
   } else s.hungry = 0;
 }

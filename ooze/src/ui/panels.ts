@@ -30,12 +30,13 @@ import { timeBankCap } from '../economy/offline';
 import { dialMax, dietOf, feedMult, generatorRate, habitatMult, maxLevel, milestoneMet, MILESTONES, nextMilestone, stageRate, upgradeLevel } from '../economy/rates';
 import { DIALS, type BuyAmount, type DialId, type Effect, type GameState, type ReactionDef, type StageId, type UpgradeDef } from '../economy/types';
 
-export type Tab = 'grow' | 'build' | 'island' | 'boosts' | 'lab' | 'mutate' | 'pond' | 'body' | 'explore' | 'family' | 'roots' | 'ideas' | 'miracles' | 'chronicle' | 'menu';
+export type Tab = 'grow' | 'build' | 'island' | 'people' | 'boosts' | 'lab' | 'mutate' | 'pond' | 'body' | 'explore' | 'family' | 'roots' | 'ideas' | 'miracles' | 'chronicle' | 'menu';
 
 export const TABS: { id: Tab; label: string; sprite: SpriteName }[] = [
   { id: 'grow', label: 'Grow', sprite: 'sprout' },
   { id: 'build', label: 'Build', sprite: 'hut' },
   { id: 'island', label: 'Island', sprite: 'island' },
+  { id: 'people', label: 'People', sprite: 'family' },
   { id: 'boosts', label: 'Boosts', sprite: 'spark' },
   { id: 'lab', label: 'Lab', sprite: 'flask' },
   { id: 'mutate', label: 'Mutate', sprite: 'helix' },
@@ -60,6 +61,7 @@ export function tabsFor(state: GameState): Tab[] {
     grow: true,
     build: !!def.shore,
     island: !!def.shore,
+    people: !!def.shore,
     boosts: !habitats && !creature && !def.tribal && !def.shore,
     lab: !habitats && !creature && !def.shore && reactions(state.current).length > 0,
     mutate: habitats,
@@ -267,7 +269,7 @@ export function layout(state: GameState, tab: Tab): string {
   const def = STAGES[id];
   const cur = icon(CURRENCY_ICON[id], 2);
 
-  if (def.shore && (tab === 'grow' || tab === 'build' || tab === 'island')) return shoreLayout(state, tab);
+  if (def.shore && (tab === 'grow' || tab === 'build' || tab === 'island' || tab === 'people')) return shoreLayout(state, tab);
   if (def.tribal && tab === 'grow') return tribeLayout(state);
   if (def.tribal && tab === 'ideas') return ideasLayout(state);
   if (def.tribal && tab === 'miracles') return spellsLayout(state);

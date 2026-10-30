@@ -673,6 +673,30 @@ export class ShoreScene extends RangeScene {
 
   private drawVillage(b: CanvasRenderingContext2D, sprites: { y: number; draw: () => void }[], s: ShoreState, v: Village, t: number, dt: number, z: number, close: boolean, fogged: (x: number, y: number) => boolean): void {
     if (v.joined) return;
+    // Turned away: for a day or two they're seen on the road with what they could carry, going
+    // to whoever will have them; after that the place is empty.
+    if (v.gone) {
+      const to = s.villages.find((x) => x.id === v.gone!.to);
+      if (!to || s.day - v.gone.day > 2) return;
+      let list = this.locals.get(v.id) ?? [];
+      this.locals.set(v.id, list);
+      for (const w of list) {
+        w.goal = { x: to.x + (hash(w.id, 3) - 0.5) * 6, y: to.y + (hash(w.id, 4) - 0.5) * 4 };
+        const dx = w.goal.x - w.x;
+        const dy = w.goal.y - w.y;
+        const d = Math.hypot(dx, dy);
+        if (d < 1) continue;
+        w.x += (dx / d) * Math.min(d, 1.1 * dt);
+        w.y += (dy / d) * Math.min(d, 1.1 * dt);
+        const x = w.x;
+        const y = w.y;
+        if (fogged(x, y)) continue;
+        sprites.push({ y, draw: () => this.drawBeing(b, v.look, x, y, { left: dx < 0, frame: Math.floor(t * 6 + w.ph) % 2, hop: Math.abs(Math.sin(t * 6 + w.ph)) }) });
+      }
+      list = list.filter((w) => Math.hypot((w.goal?.x ?? 0) - w.x, (w.goal?.y ?? 0) - w.y) > 1);
+      this.locals.set(v.id, list);
+      return;
+    }
     const X = Math.round(this.sx(v.x));
     const Y = Math.round(this.py(v.x, v.y));
     if (X < -150 || X > this.W + 150 || Y < -200 || Y > this.H + 200) return;
@@ -767,7 +791,7 @@ export class ShoreScene extends RangeScene {
         const fy = Y - (close ? 10 * z + 4 : 8);
         b.fillStyle = PAL.k;
         b.fillRect(X, fy, 1, Y - fy);
-        b.fillStyle = REL_COL[rel];
+        b.fillStyle = v.vassal ? '#e8c86a' : REL_COL[rel];
         b.fillRect(X + 1, fy, 4, 3);
         b.fillStyle = v.look.hue?.[1] ?? PAL.w;
         b.fillRect(X + 1, fy + 3, 4, 1);

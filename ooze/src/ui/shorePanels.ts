@@ -2,8 +2,9 @@
 // homes, stores, work, exploring) and the Island (the villages found out there, and the scouts).
 
 import { BUILD_CATS, BUILDS, buildName, POI_SORT, POIS, RELICS, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
-import { buildCost, buildsOpen, canWin, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { buildCost, buildsOpen, canWin, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { miniIcon } from '../scene/creatureLook';
+import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import type { GameState } from '../economy/types';
 
 const n0 = (v: number) => String(Math.floor(v + 1e-6));
@@ -28,9 +29,10 @@ export function shoreKey(state: GameState, tab: string): string {
   const s = shoreOf(state);
   if (!s) return '';
   if (tab === 'build') return JSON.stringify([s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, s.wood >= buildCost(s, b.id)])]);
-  if (tab === 'island') return JSON.stringify([s.relics, poisOf(s).map((p) => (p.found ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
+  if (tab === 'island') return JSON.stringify([s.relics, poisOf(s).map((p) => (p.found ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop)], Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
   const plan = workPlan(s);
-  return JSON.stringify([shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, s.chief, s.people.filter((p) => isAdult(s, p)).length, s.people.filter((p) => p.founder).length]);
+  if (tab === 'people') return JSON.stringify([s.people.length, s.chief, Math.floor(s.day / 2)]);
+  return JSON.stringify([s.hungry, shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, s.chief, s.people.filter((p) => isAdult(s, p)).length, s.people.filter((p) => p.founder).length]);
 }
 
 export function shoreUpdate(root: HTMLElement, state: GameState): void {
@@ -67,6 +69,7 @@ export function shoreLayout(state: GameState, tab: string): string {
   if (!s) return '';
   if (tab === 'build') return buildLayout(s);
   if (tab === 'island') return islandLayout(s);
+  if (tab === 'people') return peopleLayout(s);
   return [storesCard(s), workCard(s), peopleCard(s)].join('');
 }
 
@@ -90,7 +93,7 @@ function storesCard(s: ShoreState): string {
       ${cell('food', 'Food', s.food, foodCap(s), `${net >= 0 ? '+' : ''}${n0(net)} a day`)}
       ${cell('wood', 'Wood', s.wood, woodCap(s), `+${n0(plan.woodRate)} a day`)}
       <div class="store"><span class="label dim">People</span><b class="num">${s.people.length}<span class="dim">/${room(s)}</span></b><span class="dim">room</span></div>
-      <div class="sub diet">${seasonLine(s)}<span data-t="shore-birth">${birthLine(s)}</span></div>
+      <div class="sub diet">${s.hungry ? `<b class="starving">Starving: not enough food for everyone. ${s.hungry >= 2 ? 'People are dying.' : 'Soon people will die.'}</b> ` : ''}${seasonLine(s)}<span data-t="shore-birth">${birthLine(s)}</span></div>
     </div>`;
 }
 
@@ -104,7 +107,8 @@ function workCard(s: ShoreState): string {
   const plan = workPlan(s);
   const kids = s.people.length - plan.food - plan.wood;
   return `<div class="card px-box lean"><div class="info"><div class="name">What they work at</div>
-    <div class="sub">${plan.food} gathering food, ${plan.wood} cutting wood${kids > 0 ? `, ${kids} too young` : ''}. They work it out for themselves; you set what they lean toward.</div></div>
+    <div class="sub">${plan.food} gathering food, ${plan.wood} cutting wood${kids > 0 ? `, ${kids} too young` : ''}. They work it out for themselves; you set what they lean toward.</div>
+    <div class="sub${plan.food > plan.land ? ' starving' : ' dim'}">The land round the village feeds ${plan.land} gatherers${plan.food > plan.land ? `: ${plan.food - plan.land} more than it can, and they find little` : ''}. Gathering camps and weirs let it feed more.</div></div>
     <div class="seg">${LEANS.map((l) => `<button class="px-btn${s.lean === l.id ? ' gold' : ''}" data-lean="${l.id}">${l.name}</button>`).join('')}</div></div>`;
 }
 
@@ -208,6 +212,38 @@ export function findCard(p: Poi, f: Find, dup: boolean): string {
     ${more ? '<p class="dim tiny">There\'s more to find here.</p>' : ''}<button class="px-btn gold" data-act="dismiss">OK</button>`;
 }
 
+/** Everyone, by name: the chief and the four first, then the grown, then the children; each
+ * with their kind, and how old (in words). */
+function peopleLayout(s: ShoreState): string {
+  const today = s.day + s.clock / DAY_SEC;
+  const icons = new Map<string, string>();
+  const iconOf = (k: number | undefined) => {
+    const key = String(k ?? 'ours');
+    if (!icons.has(key)) icons.set(key, miniIcon(k === undefined ? s.look : s.villages.find((v) => v.id === k)?.look ?? s.look, 2));
+    return icons.get(key)!;
+  };
+  const age = (p: ShorePerson) => {
+    if (!isAdult(s, p)) return 'a child';
+    if (p.dies !== undefined && p.dies - today < 12) return 'old';
+    return today - p.born < 20 ? 'young' : 'grown';
+  };
+  const rank = (p: ShorePerson) => (p.id === s.chief ? 0 : p.founder ? 1 : isAdult(s, p) ? 2 : 3);
+  const list = [...s.people].sort((a, b) => rank(a) - rank(b) || a.born - b.born);
+  const kinds = new Map<string, number>();
+  for (const p of s.people) {
+    const name = p.kind === undefined ? 'your own kind' : cap(s.villages.find((v) => v.id === p.kind)?.name ?? 'others');
+    kinds.set(name, (kinds.get(name) ?? 0) + 1);
+  }
+  const plan = workPlan(s);
+  const fed = plan.foodRate >= plan.eat || s.food > 0.5;
+  return `<div class="panel-head"><h2>The People</h2><span class="dim">${s.people.length}</span></div>
+    <div class="card px-box"><div class="info"><div class="sub">${[...kinds].map(([k, n]) => `${n} ${k}`).join(' · ')}</div>
+    <div class="sub">${fed ? `Fed: ${n0(plan.foodRate)} food a day comes in, ${n0(plan.eat)} is eaten.` : `<b class="starving">Hungry: ${n0(plan.eat)} food a day is needed, only ${n0(plan.foodRate)} comes in.</b>`}</div></div></div>
+    <div class="card px-box people-list"><div class="info">${list
+      .map((p) => `<div class="person">${iconOf(p.kind)}<b>${p.name}</b><span class="dim">${p.id === s.chief ? 'chief' : p.founder ? 'one of the four' : age(p)}</span></div>`)
+      .join('')}</div></div>`;
+}
+
 function scoutsCard(s: ShoreState): string {
   const scouts = count(s, 'scout');
   const out = `<div class="card px-box"><div class="info"><div class="name">Out in the fog</div>
@@ -237,10 +273,49 @@ function villageRow(s: ShoreState, v: Village): string {
     return `<div class="card px-box village"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">Joined</span></div>
       <div class="sub">They live by your hearth now.</div></div></div>`;
   }
+  if (v.gone) return '';
+  const icon = `<span class="kind">${miniIcon(v.look, 2)}</span>`;
+  if (v.vassal) return vassalRow(v);
+  if (v.asking !== undefined) {
+    return `<div class="card px-box village">${icon}<div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">Won over</span></div>
+      <div class="sub">They'd join you, but there's no room for all ${Math.round(v.pop)} of them.</div></div>
+      <div class="col"><button class="px-btn gold" data-askjoin="${v.id}">Decide</button></div></div>`;
+  }
+  if (v.waiting !== undefined) {
+    return `<div class="card px-box village">${icon}<div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">Waiting</span></div>
+      <div class="sub">Waiting for room: ${Math.round(v.pop)} of them, ${Math.max(0, roomLeft(s))} beds free. They won't wait for ever.</div></div>
+      <div class="col"><button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
+  }
   const win = canWin(s, v);
-  return `<div class="card px-box village"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-${rel}">${REL_NAME[rel]}</span></div>
+  return `<div class="card px-box village">${icon}<div class="info"><div class="name">${cap(v.name)} <span class="rel rel-${rel}">${REL_NAME[rel]}</span></div>
     <div class="sub">${v.pop} ${v.cannibal ? 'eaters of their own' : DIET_NAME[v.diet] ?? v.diet}. ${win ? '' : REL_LINE[rel]}</div>${win ? trustBar(v) : ''}</div>
     <div class="col">${win ? `<button class="px-btn${s.food >= giftCost(v) ? ' gold' : ''}" data-gift="${v.id}"${s.food >= giftCost(v) ? '' : ' disabled'}>Gift ${giftCost(v)}</button>` : ''}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
+}
+
+const TAXES = [0, 0.1, 0.25, 0.4, 0.6];
+
+function vassalRow(v: Village): string {
+  const d = vassalDay(v);
+  const loy = Math.round(v.vassal!.loyalty);
+  const mood = loy > 70 ? 'content' : loy > 40 ? 'grumbling' : loy > 15 ? 'restless' : 'on the edge of revolt';
+  return `<div class="card px-box village vassal"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-vassal">Yours</span></div>
+    <div class="sub">${Math.floor(v.pop)} of them, ${mood}. They send ${n0(d.food)} food and ${n0(d.wood)} wood a day${d.growth > 0.05 ? ', and are growing' : d.growth < -0.05 ? ', and are dwindling' : ''}.</div>
+    <div class="trust"><span class="tiny dim">Loyal</span><div class="making-bar on loyal"><i style="width: ${loy}%"></i></div><span class="tiny num">${loy}</span></div>
+    <div class="seg tax"><span class="tiny dim">Take</span>${TAXES.map((t) => `<button class="px-btn${Math.abs(v.vassal!.tax - t) < 0.01 ? ' on' : ''}" data-tax="${v.id}:${t}">${Math.round(t * 100)}%</button>`).join('')}</div></div>
+    <div class="col"><button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
+}
+
+/** Won over, but there's no room: what's to be done with them? */
+export function joinCard(s: ShoreState, v: Village): string {
+  const free = Math.max(0, roomLeft(s));
+  return `<p class="label dim">Won over</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)}</h3></div>
+    <p>They would join you: all ${Math.round(v.pop)} of them. But there's room by your hearth for only ${free} more.</p>
+    <div class="choices">
+      <button class="px-btn" data-join="${v.id}:crowd">Take them in anyway<span class="tiny dim"> · crowded: no children till there's room, and more to feed</span></button>
+      <button class="px-btn" data-join="${v.id}:vassal">Let them keep their village, as yours<span class="tiny dim"> · they pay you tribute and grow on their own</span></button>
+      <button class="px-btn" data-join="${v.id}:wait">Ask them to wait for room<span class="tiny dim"> · they'll come when there's room, if it's soon</span></button>
+      <button class="px-btn" data-join="${v.id}:away">Turn them away</button>
+    </div>`;
 }
 
 function trustBar(v: Village): string {

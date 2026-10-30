@@ -30,11 +30,12 @@ export function tick(state: GameState, dt: number): void {
     st.currency = st.currency.add(gain);
     st.totalEarned = st.totalEarned.add(gain);
   }
-  // Reactions are checked before the whirlpool fades, so a spin that's strong now counts now.
-  if (!state.stages[state.current].complete) {
-    catalyze(state, state.current, dt);
-    discoverReactions(state, state.current);
-  }
+  // Known reactions keep making their products in every open stage, finished or not (they
+  // used to stop once a stage was done, or while you were in another, and the Lab's countdowns
+  // froze). New ones are found only in the stage you're in, until it's finished. (Reactions
+  // run before the whirlpool fades, so a spin that's strong now counts now.)
+  for (const id of state.unlocked) if (!sealed(state, id)) catalyze(state, id, dt);
+  if (!state.stages[state.current].complete) discoverReactions(state, state.current);
   if (!sealed(state, 'creature')) creatureTick(state, dt);
   tribeTick(state, dt);
   shoreTick(state, dt);
