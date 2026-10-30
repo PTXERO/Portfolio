@@ -7,7 +7,7 @@
 // `cinematic` class) until the caller hands it back.
 
 import { STORY } from '../content/tribal';
-import { cue, thunder } from '../audio/sound';
+import { cue } from '../audio/sound';
 
 /** Seconds into the cutscene that each beat happens. */
 const UI_OUT = 0.8;
@@ -151,7 +151,7 @@ export function playStrike(onImpact: () => void, onDone: () => void, target: () 
       // The world changes behind the white.
       if (!boomed) {
         boomed = true;
-        thunder();
+        cue('impact');
       }
       if (s > 0.25 && !changed) {
         changed = true;
