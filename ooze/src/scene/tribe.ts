@@ -4,7 +4,7 @@
 // survivors huddle at the old home; one of them (the one you were) walks out to the spear, and
 // when you touch it they wake. After that they go about the ash on their own.
 
-import { thunder } from '../audio/sound';
+import { cue, thunder } from '../audio/sound';
 import { PAL } from '../art/sprites';
 import { SEASON_SEC } from '../economy/rates';
 import { Biome, CELLS, ISLAND, isLand, islandOf, reveal, CELL, type Island, type Pt } from '../economy/island';
@@ -29,6 +29,8 @@ interface Person {
   lit: number;
 }
 
+/** Seconds the spear gathers itself once touched, before it lets go. */
+const CHARGE = 2.6;
 /** Every cell seen: there is no fog on what's left (they know every step of it). */
 const ALL_SEEN = new Uint8Array(CELLS * CELLS).fill(1);
 const DAY_SEC = 120;
@@ -119,6 +121,8 @@ export class TribeScene extends RangeScene {
   hold = false;
   /** The shockwave when they wake: seconds since it went out (-1 when there isn't one). */
   private wave = -1;
+  /** Before it: the spear gathering itself once touched (seconds in, -1 when not). */
+  private charge = -1;
   private smoke: { x: number; y: number; z: number; life: number }[] = [];
   private placed = false;
   /** The camera handed on from the Creature's map at the strike. */
@@ -172,8 +176,11 @@ export class TribeScene extends RangeScene {
     const Y = this.py(spear.x, spear.y);
     const tall = this.spearHeight();
     if (!t.awake && this.arrived && Math.abs(ax - X) < Math.max(8, tall * 0.25) && ay > Y - tall - 4 && ay < Y + 4) {
-      this.events.push({ type: 'spear', x: X, y: Y - tall });
-      this.wave = 0;
+      // Touched: it gathers itself first (then lets go, and they wake).
+      if (this.charge < 0 && this.wave < 0) {
+        this.charge = 0;
+        cue('charge');
+      }
       return;
     }
     // After the waking: a tap on one of them says who they are.
@@ -1482,6 +1489,46 @@ export class TribeScene extends RangeScene {
     // A red haze over the burnt world, thinning as it cools.
     b.fillStyle = `rgba(150, 30, 20, ${0.16 * heat * (1 - this.ash)})`;
     b.fillRect(0, 0, W, H);
+
+    // Touched, the spear gathers itself: light streams in to its tip from all round, faster and
+    // brighter, the world dimming about it; then it lets go (the shockwave below).
+    if (this.charge >= 0) {
+      this.charge += dt;
+      const k = Math.min(1, this.charge / CHARGE);
+      // (Where the spear's tip is now: the camera may still be settling.)
+      const tip = { x: sx, y: sy - this.spearHeight() };
+      b.fillStyle = `rgba(12, 4, 22, ${0.45 * k * k})`;
+      b.fillRect(0, 0, W, H);
+      const reach = Math.max(W, H) * 0.6;
+      for (let i = 0; i < 70; i++) {
+        // Each mote comes in from its own direction, again and again, quicker as it builds.
+        const a = hash(i, 211) * Math.PI * 2;
+        const lap = (this.charge * (0.5 + k * 1.6) + hash(i, 213)) % 1;
+        const r = reach * (0.25 + hash(i, 215) * 0.75) * (1 - lap) ** 1.5;
+        const x = tip.x + Math.cos(a) * r;
+        const y = tip.y + Math.sin(a) * r * 0.7;
+        b.globalAlpha = Math.min(1, k * 1.8) * (0.4 + 0.6 * lap);
+        b.fillStyle = i % 3 ? 'rgba(180, 90, 255, 0.996)' : 'rgba(255, 90, 120, 0.996)';
+        const len = 1 + Math.round(k * 3);
+        b.fillRect(Math.round(x - (Math.cos(a) * len) / 2), Math.round(y), len, 1);
+      }
+      b.globalAlpha = 1;
+      // The tip: a light swelling and throbbing faster.
+      const pulse = 0.6 + 0.4 * Math.sin(this.charge * (6 + k * 26));
+      const rad = 2 + k * 9 * pulse;
+      const g = b.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, rad * 2.5);
+      g.addColorStop(0, `rgba(255, 245, 255, ${0.996 * k})`);
+      g.addColorStop(0.3, `rgba(200, 110, 255, ${0.8 * k})`);
+      g.addColorStop(1, 'rgba(120, 40, 200, 0)');
+      b.fillStyle = g;
+      b.fillRect(tip.x - rad * 2.5, tip.y - rad * 2.5, rad * 5, rad * 5);
+      if (this.charge >= CHARGE) {
+        this.charge = -1;
+        this.wave = 0;
+        this.events.push({ type: 'spear', x: tip.x, y: tip.y });
+        cue('kick');
+      }
+    }
 
     // The waking: a shockwave of purple and red light rolls out from the spear across the
     // whole world (it glows: the shader blooms it), the air itself tinted for a moment.

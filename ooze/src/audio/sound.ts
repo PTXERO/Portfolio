@@ -1,4 +1,4 @@
-// Sound: the underwater hum of the Soup and the Cell (a seamless loop; the Depths have faint music now and then), a water drop for every tap in the Soup
+// Sound: the underwater hum of the Soup and the Cell (a seamless loop; the Depths have faint music now and then), the Extinction's low drone, a water drop for every tap in the Soup
 // and the Cell (one of many, never the same twice running), and the rush of the whirlpool,
 // as loud as it's strong (silent when there isn't one). The drops and the rush are heard as
 // if from under the water: muffled, and ringing on in a long reverb. The Menu has a volume
@@ -19,7 +19,7 @@ export const CHANNELS: { id: Channel; label: string }[] = [
 
 const KEY = 'ooze-to-orbit/sound';
 /** Bumped when a sound file changes, so phones don't keep the old one. */
-const SFX_V = 8;
+const SFX_V = 10;
 const DEFAULTS: Record<Channel, number> = { master: 0.8, music: 0.6, ambience: 0.6, effects: 0.7 };
 
 /** The loops are padded either side (so the mp3's own gaps fall outside them): where each
@@ -29,6 +29,8 @@ const LOOPS = {
   river: { pad: 0.25, len: 41.0 },
   // Music, drowned in a long reverb (baked in, wrapping round so the seam rings over too).
   depths: { pad: 0.25, len: 132.6 },
+  // A low rumbling drone over the whole Extinction.
+  drone: { pad: 0.25, len: 115.0 },
 };
 type Loop = keyof typeof LOOPS;
 /** The drops, laid end to end in one file: [start, length] seconds. */
@@ -56,9 +58,10 @@ const bus = {} as Record<Exclude<Channel, 'master'>, GainNode>;
 type Sound = Loop | 'drops' | 'pop' | 'thunder0' | 'thunder1' | 'thunder2' | 'thunder3' | Cue;
 /** One-off sounds for moments: an organelle found, a rare microbe gulped down (three glugs),
  * one turning up, a new habitat opening, the boom from the Soup into the Cell, and the meteor's
- * approach (a rumble swelling to the moment it strikes, timed to the cutscene). */
-export type Cue = 'shine' | 'glug0' | 'glug1' | 'glug2' | 'chime' | 'ascend' | 'boom' | 'meteor';
-const CUES: Cue[] = ['shine', 'glug0', 'glug1', 'glug2', 'chime', 'ascend', 'boom', 'meteor'];
+ * approach (a rumble swelling to the moment it strikes, timed to the cutscene), and the spear,
+ * touched, charging up and letting go. */
+export type Cue = 'shine' | 'glug0' | 'glug1' | 'glug2' | 'chime' | 'ascend' | 'boom' | 'meteor' | 'charge' | 'kick';
+const CUES: Cue[] = ['shine', 'glug0', 'glug1', 'glug2', 'chime', 'ascend', 'boom', 'meteor', 'charge', 'kick'];
 const buffers: Partial<Record<Sound, AudioBuffer>> = {};
 /** The thunders, evened out (they were recorded at very different loudness). */
 const THUNDER_GAIN = [1, 1, 1.3, 1];
@@ -125,7 +128,7 @@ export function unlockSound(): void {
   shallow.frequency.value = 2200;
   shallow.connect(sky);
   applyVolumes();
-  for (const name of ['pop', 'drops', ...CUES, 'thunder0', 'thunder1', 'thunder2', 'thunder3', 'underwater', 'depths', 'river'] as const) {
+  for (const name of ['pop', 'drops', ...CUES, 'thunder0', 'thunder1', 'thunder2', 'thunder3', 'underwater', 'drone', 'depths', 'river'] as const) {
     fetch(`${import.meta.env.BASE_URL}sfx/${name}.mp3?v=${SFX_V}`)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
       .then((a) => new Promise<AudioBuffer>((ok, no) => ctx!.decodeAudioData(a, ok, no)))
@@ -335,8 +338,10 @@ function musicFrame(state: GameState): void {
 export function soundFrame(state: GameState): void {
   if (!ctx) return;
   const soup = state.current === 'soup';
-  // The hum under all the water; music now and then.
+  // The hum under all the water; over the Extinction (from the strike on), a low drone; music
+  // now and then.
   loopTo('underwater', soup || state.current === 'cell' ? 1 : 0, bus.ambience, 0.8);
+  loopTo('drone', state.current === 'tribal' ? 1 : 0, bus.ambience, 2.5);
   musicFrame(state);
   const swirl = soup && state.swirl > 0.02 ? Math.min(1, state.swirl) : 0;
   loopTo('river', swirl * 0.8, bus.effects, swirl > 0 ? 0.15 : 0.3);
