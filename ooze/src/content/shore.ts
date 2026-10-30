@@ -93,7 +93,7 @@ export const BUILDS: BuildDef[] = [
   { id: 'cutter', cat: 'work', name: 'Cutters\' shed', does: 'Wood comes in 10% faster.', wood: 35, growth: 1, after: 'woodpile' },
   { id: 'scout', cat: 'explore', name: 'Scout\'s hut', does: 'One of them goes out into the fog for you, finding what\'s out there (while you\'re away too).', wood: 20, growth: 1, max: 2, after: 'hut' },
   { id: 'elders', cat: 'homes', name: 'Elders\' fire', does: 'The old teach the young: children grow up 15% faster.', wood: 60, growth: 1, max: 1, after: 'hut', fx: { grow: 0.15 }, burn: 0.4 },
-  { id: 'longhouse', cat: 'homes', name: 'Longhouse', does: 'A great hall of a house: room for 12 more, and one fire keeps it all warm.', wood: 40, growth: 1, after: 'hut', learn: 'ruin', fx: { room: 12 }, burn: 0.8 },
+  { id: 'longhouse', cat: 'homes', name: 'Longhouse', does: 'A great hall of a house: room for 12 more, and one fire down the middle keeps it all warm, for less wood than a hut.', wood: 40, growth: 1, after: 'hut', learn: 'ruin', fx: { room: 12 }, burn: 0.3 },
   { id: 'pool', cat: 'homes', name: 'Bathing pool', does: 'Warm water, piped from a spring: children are born 10% more often.', wood: 70, growth: 1, max: 1, after: 'hut', learn: 'spring', fx: { births: 0.1 }, burn: 0.4 },
   { id: 'granary', cat: 'stores', name: 'Granary', does: 'Room for 120 more food, kept dry and cold: winter slows the food only half as much.', wood: 80, growth: 1, after: 'rack', learn: 'cave', fx: { foodCap: 120, winter: 0.5 } },
   { id: 'weir', cat: 'work', name: 'Fishing weir', does: 'Stakes in the shallows, the way the drowned raft\'s makers did it: food comes in 5% faster, and the land feeds 6 more gatherers.', wood: 45, growth: 1, after: 'hut', learn: 'wreck', fx: { food: 0.05 } },
