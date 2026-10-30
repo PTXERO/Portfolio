@@ -397,12 +397,14 @@ export function soundFrame(state: GameState, skies: { rain: number; snow: number
   const rain = skies ? Math.min(1, skies.rain) : 0;
   const snow = skies ? Math.min(1 - rain, skies.snow) : 0;
   const wind = skies ? Math.max(0, 1 - rain - snow) : 0;
-  loopTo('rain', rain, bus.ambience, 1.5);
-  loopTo('snowstorm', snow * 1.4, bus.ambience, 1.5);
+  // (Gone quickly when there's no weather to hear: the strike begins, or the stage changes.)
+  const fade = skies ? 1.5 : 0.15;
+  loopTo('rain', rain, bus.ambience, fade);
+  loopTo('snowstorm', snow * 1.4, bus.ambience, fade);
   // The wind is loudest high over the island, and dies down as the view comes down near the
   // ground (about a third, right in close).
   const near = skies ? Math.max(0, Math.min(1, Math.log(skies.zoom / 0.3) / Math.log(8 / 0.3))) : 0;
-  loopTo('wind', wind * 0.45 * (1 - 0.65 * near), bus.ambience, 1.5);
+  loopTo('wind', wind * 0.45 * (1 - 0.65 * near), bus.ambience, fade);
   musicFrame(state);
   const swirl = soup && state.swirl > 0.02 ? Math.min(1, state.swirl) : 0;
   loopTo('river', swirl * 0.8, bus.effects, swirl > 0 ? 0.15 : 0.3);

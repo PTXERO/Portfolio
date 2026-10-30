@@ -1856,7 +1856,8 @@ function frame(now: number): void {
   habitatsOpened();
   renderSpellbar();
   renderCrisis();
-  soundFrame(state, scene.skies);
+  // (Once the strike begins, the island's weather is hushed at once: the night falls still.)
+  soundFrame(state, striking ? null : scene.skies);
 }
 
 // A save made mid-ending (closed during the credits) picks up at the reveal. This also
