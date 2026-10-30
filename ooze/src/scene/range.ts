@@ -248,6 +248,12 @@ export class RangeScene {
     this.kept = all[key] = { storm: this.storm, left: this.stormLeft, timer: this.stormTimer, wet: this.wet, bow: this.bow };
   }
 
+  /** Which way the clouds drift over this island (its prevailing wind), tiles a second. */
+  get wind(): [number, number] {
+    const a = ((this.island?.seed ?? 0) % 628) / 100;
+    return [Math.cos(a) * 1.4, Math.sin(a) * 1.4];
+  }
+
   /** Tiles across the island on show, and fog cells across. */
   protected get n(): number {
     return this.island?.n ?? ISLAND;

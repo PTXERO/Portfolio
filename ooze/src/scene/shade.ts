@@ -116,6 +116,17 @@ float fbm(vec2 p) {
 }
 float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 
+// Clouds: a layer high over the island, drifting with the wind (thicker in a storm). How much
+// cloud there is over a point (0 to 1).
+uniform vec2 uWind; // which way the clouds drift, tiles a second
+const float CLOUD_H = 1.6; // how high they float (in the land's height units)
+float cloudAt(vec2 c) {
+  vec2 p = (c - uWind * uTime) * 0.011;
+  float n = fbm(p) * 0.72 + fbm(p * 2.3 + 7.0) * 0.28;
+  float cover = 0.57 - uWeather.x * 0.24 - uAsh * 0.2;
+  return smoothstep(cover, cover + 0.2, n);
+}
+
 // Raw height (below 0 is under water), smooth between tiles.
 float hRaw(vec2 w) {
   if (w.x < 0.0 || w.y < 0.0 || w.x > N || w.y > N) return -0.3;
@@ -214,9 +225,13 @@ void main() {
     lit = mix(lit, vec3(0.55, 0.64, 0.74) * clamp(lum(uAmb + uSunCol), 0.2, 1.1), puddle * 0.6);
   }
 
-  // Clouds drift over, their shadows darkening the land below (heavy and grey in a storm).
-  float cloud = smoothstep(0.52 - uWeather.x * 0.4 - uAsh * 0.3, 0.78, fbm(w * 0.018 + vec2(uTime * 0.012, uTime * 0.005) * (1.0 + uWeather.x * 2.0)));
-  lit *= 1.0 - cloud * (0.22 + uWeather.x * 0.2 + uAsh * 0.25) * (1.0 - uNight);
+  // The clouds' shadows: from here, up toward the sun to the cloud layer; whatever cloud is in
+  // the way shades the ground (so shadows drape over the hills, longer and further off as the
+  // sun gets low, and slide across the land as the clouds drift). Applied below, over what
+  // stands on the land too.
+  vec3 sunD = uSun.z > 0.08 ? uSun : vec3(0.3, -0.5, 0.8);
+  vec2 shadowAt = w + sunD.xy / max(sunD.z, 0.25) * max(0.0, CLOUD_H - h) * K;
+  float cloudShade = cloudAt(shadowAt) * (0.34 + uWeather.x * 0.16 + uAsh * 0.2) * (1.0 - uNight * 0.8);
   // The ash winter: the light drained, brown and low, the colour gone out of everything.
   lit = mix(lit, vec3(lum(lit)) * vec3(0.95, 0.86, 0.8), uAsh * 0.8) * (1.0 - uAsh * 0.55);
   lit = mix(lit, vec3(lum(lit)) * vec3(0.86, 0.9, 1.0), uWeather.x * 0.45) * (1.0 - uWeather.x * 0.3);
@@ -247,6 +262,16 @@ void main() {
   vec2 ouv = (floor(art) + 0.5) / uArt;
   vec4 o = texture2D(uOver, ouv);
   if (o.a > 0.01) lit = mix(lit, o.rgb * (uAmb * 1.1 + uSunCol * 0.95), o.a);
+  lit *= 1.0 - cloudShade;
+
+  // The clouds themselves, where the line of sight meets their layer: soft and thin, over
+  // everything, lit by the time of day (thinning away as the view comes right down close).
+  float cloudY = uCam.y + (art.y - uCam.w + CLOUD_H * K * uCam.z) / (uCam.z * TY);
+  float cloudHere = cloudAt(vec2(wx, cloudY));
+  vec3 cloudCol = mix(vec3(0.95, 0.96, 0.98) * clamp(lum(uAmb + uSunCol) * 1.25, 0.25, 1.15), vec3(0.16, 0.18, 0.24), uNight * 0.85);
+  cloudCol = mix(cloudCol, cloudCol * vec3(1.0, 0.82, 0.68), clamp(length(uHaze) * 3.0, 0.0, 1.0));
+  cloudCol *= 1.0 - cloudHere * 0.16 - uWeather.x * 0.25;
+  lit = mix(lit, cloudCol, cloudHere * 0.3 * (1.0 - smoothstep(4.0, 7.0, uCam.z)));
 
   // Glow: only things marked as shining (fireflies, a beast's eye, drawn at alpha 254) bloom,
   // so creatures and snow stay dark at night.
@@ -301,6 +326,8 @@ export interface ShadeParams {
   bow: [number, number, number, number];
   /** How deep in an ash winter the world is (0 to 1). */
   ash?: number;
+  /** Which way the clouds drift (tiles a second). */
+  wind?: [number, number];
   /** How far the land rises, the slant, and the haze over the far side (see RangeScene). */
   lift?: number;
   tilt?: number;
@@ -528,6 +555,7 @@ export class MapShader {
     gl.uniform4fv(this.u('uBow'), p.bow);
     gl.uniform1f(this.u('uBlend'), p.blend);
     gl.uniform1f(this.u('uN'), this.n);
+    gl.uniform2f(this.u('uWind'), p.wind?.[0] ?? 1.2, p.wind?.[1] ?? 0.4);
     gl.uniform1f(this.u('uK'), p.lift ?? LIFT);
     gl.uniform1f(this.u('uTY'), p.tilt ?? TILT);
     gl.uniform1f(this.u('uDepth'), p.depth ?? 0);
