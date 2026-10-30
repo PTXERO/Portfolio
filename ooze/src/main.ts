@@ -1741,6 +1741,11 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.lean) setLean(state, el.dataset.lean as Lean);
   else if (el.dataset.buildcat) setBuildCat(el.dataset.buildcat);
   else if (el.dataset.villageview) setVillageView(el.dataset.villageview);
+  else if (el.dataset.deck) {
+    // Flip to the next (or last) card in the deck.
+    const cards = el.closest('.deck')?.querySelector<HTMLElement>('.deck-cards');
+    if (cards) cards.scrollBy({ left: Number(el.dataset.deck) * cards.clientWidth, behavior: 'smooth' });
+  }
   else if (el.dataset.join) {
     const [id, a] = el.dataset.join.split(':');
     answerJoin(state, Number(id), a as JoinAnswer);
@@ -2141,6 +2146,17 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 window.addEventListener('pagehide', save);
+// A deck of choices: the dot under it follows the card on show.
+document.addEventListener(
+  'scroll',
+  (e) => {
+    const cards = e.target as HTMLElement;
+    if (!cards.classList?.contains('deck-cards')) return;
+    const i = Math.round(cards.scrollLeft / Math.max(1, cards.clientWidth));
+    cards.parentElement?.querySelectorAll('.deck-dots i').forEach((d, k) => d.classList.toggle('on', k === i));
+  },
+  true,
+);
 // Back from another app or tab (or the page restored from the back button): the sound picks up
 // again (on iPhone, if it can't yet, the first touch does it).
 window.addEventListener('pageshow', () => soundHidden(false));

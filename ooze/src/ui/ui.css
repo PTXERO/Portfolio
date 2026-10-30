@@ -787,3 +787,23 @@ body.wide.tab-ideas #sheet { width: clamp(420px, 42vw, 820px); }
 .people-list .person .px-icon { flex: none; }
 .people-list .person .dim { margin-left: auto; font-size: 12px; }
 .choices .px-btn .tiny { display: block; font-weight: 400; }
+
+/* A deck of choices: cards side by side, flipped through by swiping (or the arrows). */
+.deck { margin-top: 8px; }
+.deck-cards { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding: 4px 2px 8px; overscroll-behavior-x: contain; }
+.deck-cards::-webkit-scrollbar { display: none; }
+.deck-card { flex: 0 0 100%; box-sizing: border-box; scroll-snap-align: center; display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; min-height: 210px; background: var(--panel-hi, #2a3048); }
+.deck-card h4 { margin: 0; font-size: 18px; color: var(--gold); }
+.deck-card p { margin: 0; font-size: 14px; }
+.deck-card ul { list-style: none; margin: 2px 0 0; padding: 0; font-size: 13px; flex: 1; }
+.deck-card li { padding-left: 16px; position: relative; margin: 3px 0; }
+.deck-card li.good::before { content: '+'; position: absolute; left: 2px; color: #8acf6a; font-weight: 700; }
+.deck-card li.bad::before { content: '−'; position: absolute; left: 2px; color: #ff8a7a; font-weight: 700; }
+.deck-num { font-size: 11px; color: var(--dim); letter-spacing: 0.08em; text-align: right; }
+.deck-pick { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.check { display: inline-block; width: 6px; height: 11px; border: solid currentColor; border-width: 0 3px 3px 0; transform: rotate(45deg) translateY(-2px); }
+.deck-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.deck-nav .px-btn { padding: 2px 14px calc(2px + var(--depth)); font-size: 18px; }
+.deck-dots { display: flex; gap: 6px; }
+.deck-dots i { width: 7px; height: 7px; background: var(--slot, #3a3e52); }
+.deck-dots i.on { background: var(--gold); }

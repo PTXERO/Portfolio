@@ -336,14 +336,34 @@ function vassalRow(v: Village): string {
 /** Won over, but there's no room: what's to be done with them? */
 export function joinCard(s: ShoreState, v: Village): string {
   const free = Math.max(0, roomLeft(s));
+  const n = Math.round(v.pop);
   return `<p class="label dim">Won over</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)}</h3></div>
-    <p>They would join you: all ${Math.round(v.pop)} of them. But there's room by your hearth for only ${free} more.</p>
-    <div class="choices">
-      <button class="px-btn" data-join="${v.id}:crowd">Take them in anyway<span class="tiny dim"> · crowded: no children till there's room, and more to feed</span></button>
-      <button class="px-btn" data-join="${v.id}:vassal">Let them keep their village, as yours<span class="tiny dim"> · they pay you tribute and grow on their own</span></button>
-      <button class="px-btn" data-join="${v.id}:wait">Ask them to wait for room<span class="tiny dim"> · they'll come when there's room, if it's soon</span></button>
-      <button class="px-btn" data-join="${v.id}:away">Turn them away</button>
-    </div>`;
+    <p>They would join you: all ${n} of them. But there's room by your hearth for only ${free} more.</p>
+    ${deck([
+      { act: `${v.id}:crowd`, title: 'Take them in', line: `All ${n} come to live by your hearth now.`, good: [`${n} more people, today`], bad: ['Crowded: no children till there\'s room', 'Many more mouths to feed'] },
+      { act: `${v.id}:vassal`, title: 'Keep their village, as yours', line: 'They stay where they are, and answer to your hearth.', good: ['Food and wood sent to you every day', 'They grow on their own'], bad: ['Take too much and they grow restless, then revolt'] },
+      { act: `${v.id}:wait`, title: 'Ask them to wait', line: 'They\'ll come once there\'s room for them.', good: ['They join by themselves, when there\'s room'], bad: ['Ten days, then they give up on you'] },
+      { act: `${v.id}:away`, title: 'Turn them away', line: 'They leave their village, and go.', good: ['No more mouths to feed'], bad: ['Where they\'ll go, no one says'] },
+    ])}`;
+}
+
+/** A deck of choices to flip through (swipe, or the arrows), each a card with what it gives and
+ * what it costs, and a check to choose it. */
+export function deck(cards: { act: string; title: string; line: string; good: string[]; bad: string[] }[]): string {
+  return `<div class="deck">
+    <div class="deck-cards">${cards
+      .map(
+        (c, i) => `<div class="deck-card px-box" data-card="${i}">
+          <div class="deck-num">${i + 1} / ${cards.length}</div>
+          <h4>${c.title}</h4>
+          <p>${c.line}</p>
+          <ul>${c.good.map((g) => `<li class="good">${g}</li>`).join('')}${c.bad.map((b) => `<li class="bad">${b}</li>`).join('')}</ul>
+          <button class="px-btn gold deck-pick" data-join="${c.act}"><i class="check"></i>Choose this</button>
+        </div>`,
+      )
+      .join('')}</div>
+    <div class="deck-nav"><button class="px-btn" data-deck="-1" aria-label="Previous">‹</button><span class="deck-dots">${cards.map((_, i) => `<i${i ? '' : ' class="on"'}></i>`).join('')}</span><button class="px-btn" data-deck="1" aria-label="Next">›</button></div>
+  </div>`;
 }
 
 function trustBar(v: Village): string {
