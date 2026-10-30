@@ -190,9 +190,12 @@ export class Pond {
   private spawnPos(kind?: FoodKind): [number, number] {
     const y = this.top + 8 + Math.random() * Math.max(1, this.floor - this.top - 16);
     // In the Shallows, algae grows where the sunlight falls.
-    if (kind === 'algae' && this.env.shafts.length && Math.random() < 0.8) {
-      const sx = this.env.shafts[Math.floor(Math.random() * this.env.shafts.length)];
-      return [Math.max(6, Math.min(this.W - 6, sx + (y - this.top) * SHAFT_SLANT + (Math.random() - 0.5) * 10)), y];
+    // (Only shafts that are on screen at that depth: one already past the edge would pile its
+    // algae up against the side.)
+    const lit = this.env.shafts.map((sx) => sx + (y - this.top) * SHAFT_SLANT).filter((x) => x > 8 && x < this.W - 8);
+    if (kind === 'algae' && lit.length && Math.random() < 0.8) {
+      const x = lit[Math.floor(Math.random() * lit.length)];
+      return [Math.max(6, Math.min(this.W - 6, x + (Math.random() - 0.5) * 10)), y];
     }
     return [6 + Math.random() * (this.W - 12), y];
   }

@@ -129,9 +129,12 @@ export class Swarm {
       let ay = Math.sin(c.heading) * speed - c.vy;
       let max = c.split >= 0 ? speed * 0.2 : c.poked > 0 ? SPEED * 4 : speed * 1.6;
       if (this.mode === 'school' && this.env.shafts.length) {
-        // Drawn to the nearest shaft of sunlight.
+        // Drawn to the nearest shaft of sunlight, where it is at this cell's depth. (A shaft
+        // leans as it falls and drifts across: deep down it's often already past the edge, and
+        // chasing it there only piles the school against the side.)
         const sx = this.env.shafts.reduce((best, s) => {
           const x = s + (c.y - top) * this.env.slant;
+          if (x < 10 || x > w - 10) return best;
           return Math.abs(x - c.x) < Math.abs(best - c.x) ? x : best;
         }, Infinity);
         if (Number.isFinite(sx)) ax += Math.max(-6, Math.min(6, (sx - c.x) * 0.4));
