@@ -1,40 +1,51 @@
 // The crossing: forty days and forty nights adrift. A pixel seascape full screen: the raft with
 // the four on it, riding the swell; day and night going over (the sun across the sky, then the
-// dark and the stars), with what happens on the way: a storm, a dead calm, one of them sick,
-// the food running low, stars they've never seen; and on the fortieth day, a bird coming down
-// onto the raft with something green in its beak. No sail, no oar: it goes where the sea takes it.
+// dark and the stars), with what happens on the way. The days go by quickly, but time slows,
+// and the view closes in on the raft, for what matters: the storm, one of them falling sick,
+// stars they've never seen. Then a dead calm, the food running low, and on the fortieth day a
+// bird coming down onto the raft with something green in its beak. It opens out of black and
+// ends in black, so the scenes either side fade into and out of it.
+//
+// The sea is drawn a pixel at a time in perspective: wave rows close together at the horizon
+// and wide up close, a glitter road under the sun or moon, foam in the storm, and in the calm,
+// the sky mirrored in it.
 
 import { STORY } from '../content/tribal';
 import { thunder } from '../audio/sound';
 import { storyLine } from './strike';
 
 const DAYS = 40;
-/** Seconds a day takes on screen; the bird after the last, and the whole. */
-const PER_DAY = 0.75;
-const SPAN = DAYS * PER_DAY;
-const BIRD = SPAN + 0.5;
-const END = SPAN + 5.5;
-/** What happens, by day: [from, to). */
-const STORM: [number, number] = [8.5, 13.5];
+/** Days a second, ordinarily; much slower through what matters. */
+const RATE = 1;
+const SLOW = 0.22;
+/** What happens, by day: [from, to). The slow-in windows are the heart of each. */
+const STORM: [number, number] = [8.5, 13];
+const STORM_IN: [number, number] = [9, 12.5];
 const CALM: [number, number] = [16.5, 21.5];
 const SICK: [number, number] = [22.5, 29.5];
-const STARS: [number, number] = [32, 38.5];
+const SICK_IN: [number, number] = [23, 26];
+const STARS: [number, number] = [32.6, 36.4];
+const STARS_IN: [number, number] = [33, 36];
 /** The story's lines through the crossing, by day. */
 const LINES: [number, number, string][] = [
   [0, 6, STORY.crossFirst],
-  [9, 13.5, STORY.crossStorm],
+  [9, 12.6, STORY.crossStorm],
   [17, 21.5, STORY.crossCalm],
-  [23, 28, STORY.crossSick],
-  [29.5, 32.5, STORY.crossHunger],
-  [33, 38.5, STORY.crossStars],
+  [23, 26.2, STORY.crossSick],
+  [29.5, 32.6, STORY.crossHunger],
+  [33, 36.2, STORY.crossStars],
 ];
-/** The raft and the four, drawn this many times larger than the rest. */
+/** The raft and the four, drawn this many times larger than the sea about them. */
 const S = 2;
+/** Seconds to fade up out of black, and back down into it. */
+const FADE = 1.4;
+/** After the fortieth day: the bird comes down, then the end (in seconds). */
+const BIRD_FOR = 6;
 
 /** How far into an event (0 outside it, 1 in its middle), easing in and out over a day. */
-function within(day: number, [a, b]: [number, number]): number {
+function within(day: number, [a, b]: [number, number], edge = 1): number {
   if (day <= a || day >= b) return 0;
-  return Math.min(1, (day - a) / 1, (b - day) / 1);
+  return Math.min(1, (day - a) / edge, (b - day) / edge);
 }
 
 export function playCrossing(look: { body: string; belly: string }, onDone: () => void): void {
@@ -48,18 +59,28 @@ export function playCrossing(look: { body: string; belly: string }, onDone: () =
   const counter = document.createElement('div');
   counter.className = 'crossing-day';
   document.body.append(counter);
-  const b = cv.getContext('2d')!;
-  const start = performance.now();
-  let last = start;
-  const stars = Array.from({ length: 60 }, () => ({ x: Math.random() * W, y: Math.random() * H * 0.45 }));
+  const out = cv.getContext('2d')!;
+  out.imageSmoothingEnabled = false;
+  // Everything's drawn here first, then shown (closer in, for what matters).
+  const off = document.createElement('canvas');
+  off.width = W;
+  off.height = H;
+  const b = off.getContext('2d')!;
+  const horizon = Math.round(H * 0.46);
+  const sea = b.createImageData(W, H - horizon);
+  const stars = Array.from({ length: 70 }, () => ({ x: Math.random() * W, y: Math.random() * horizon * 0.95, tw: Math.random() * 6 }));
   // Stars they've never seen: a shape of bright ones, high in the middle of the sky.
   const strange = Array.from({ length: 9 }, (_, i) => {
     const a = (i / 9) * Math.PI * 2;
-    return { x: W * 0.5 + Math.cos(a) * W * (0.12 + (i % 3) * 0.05), y: H * 0.2 + Math.sin(a) * H * 0.07 };
+    return { x: W * 0.5 + Math.cos(a) * W * (0.13 + (i % 3) * 0.05), y: horizon * 0.42 + Math.sin(a) * horizon * 0.16 };
   });
-  const drops = Array.from({ length: 140 }, () => ({ x: Math.random() * W, y: Math.random() * H, v: 120 + Math.random() * 80 }));
-  const horizon = Math.round(H * 0.5);
+  const drops = Array.from({ length: 160 }, () => ({ x: Math.random() * W, y: Math.random() * H, v: 130 + Math.random() * 90 }));
+  const start = performance.now();
+  let last = start;
+  let days = 0;
+  let zoom = 1;
   let flash = 0;
+  let birdAt = -1;
   let lineNow = '';
   let dayNow = -1;
 
@@ -73,48 +94,65 @@ export function playCrossing(look: { body: string; belly: string }, onDone: () =
     const t = (now - start) / 1000;
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    const days = Math.min(DAYS, t / PER_DAY);
-    const storm = within(days, STORM);
+    // Time: the days go quickly, except through what matters (and slower in the calm).
+    const focus = Math.max(within(days, STORM_IN, 0.8), within(days, SICK_IN, 0.8), within(days, STARS_IN, 0.8));
     const calm = within(days, CALM);
+    if (days < DAYS) days = Math.min(DAYS, days + dt * RATE * (1 - (1 - SLOW) * focus) * (1 - 0.4 * calm));
+    else if (birdAt < 0) birdAt = t;
+    const storm = within(days, STORM);
     const sick = within(days, SICK);
     const strangeK = within(days, STARS);
-    const phase = days % 1; // 0 dawn, 0.5 dusk
-    const sunUp = Math.sin(phase * Math.PI * 2); // 1 at noon (0.25), -1 at midnight (0.75)
+    // (For the strange stars, it's night while we look.)
+    const starsIn = within(days, STARS_IN, 0.8);
+    const rawPhase = days % 1;
+    const phase = rawPhase + (0.78 - rawPhase) * starsIn;
+    const sunUp = Math.sin(phase * Math.PI * 2);
     const light = Math.max(0, Math.min(1, 0.5 + sunUp * 0.7)) * (1 - storm * 0.6);
-    // Sky: dark to blue to dawn-warm (greyed in the storm).
     const warm = phase < 0.12 || (phase > 0.4 && phase < 0.6) || phase > 0.92 ? 1.1 : 0.8;
     const grey = (c: number, g: number) => Math.round(c * (1 - storm * 0.5) + g * storm * 0.5);
     const top = [grey(10 + 60 * light, 30), grey(14 + 110 * light, 32), grey(30 + 170 * light, 38)];
     const low = [grey(20 + 200 * light * warm, 40), grey(20 + 150 * light, 42), grey(40 + 120 * light, 48)];
+    const skyAt = (y: number): number[] => {
+      const k = Math.max(0, Math.min(1, y / horizon));
+      return [top[0] + (low[0] - top[0]) * k, top[1] + (low[1] - top[1]) * k, top[2] + (low[2] - top[2]) * k];
+    };
+
+    // ---- The sky ----
     for (let y = 0; y < horizon; y++) {
-      const k = y / horizon;
-      b.fillStyle = `rgb(${Math.round(top[0] + (low[0] - top[0]) * k)}, ${Math.round(top[1] + (low[1] - top[1]) * k)}, ${Math.round(top[2] + (low[2] - top[2]) * k)})`;
+      const c = skyAt(y);
+      b.fillStyle = `rgb(${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])})`;
       b.fillRect(0, y, W, 1);
     }
-    // Stars by night (hidden by the storm's cloud).
     const dark = Math.max(0, 0.4 - light) * 2 * (1 - storm);
     if (dark > 0) {
-      b.fillStyle = `rgba(242, 234, 215, ${dark})`;
-      for (const s of stars) b.fillRect(Math.round(s.x), Math.round(s.y), 1, 1);
+      for (const s of stars) {
+        b.fillStyle = `rgba(242, 234, 215, ${dark * (0.6 + 0.4 * Math.sin(t * 2 + s.tw))})`;
+        b.fillRect(Math.round(s.x), Math.round(s.y), 1, 1);
+      }
       if (strangeK > 0) {
         // Ones they've never seen: brighter, in a shape, faintly joined.
-        b.fillStyle = `rgba(180, 220, 255, ${dark * strangeK * 0.35})`;
+        b.fillStyle = `rgba(160, 210, 255, ${dark * strangeK * 0.4})`;
         for (let i = 0; i < strange.length; i++) {
           const p = strange[i];
           const q = strange[(i + 1) % strange.length];
-          for (let k = 0; k <= 1; k += 0.08) b.fillRect(Math.round(p.x + (q.x - p.x) * k), Math.round(p.y + (q.y - p.y) * k), 1, 1);
+          for (let k = 0; k <= 1; k += 0.06) b.fillRect(Math.round(p.x + (q.x - p.x) * k), Math.round(p.y + (q.y - p.y) * k), 1, 1);
         }
-        b.fillStyle = `rgba(220, 240, 255, ${dark * strangeK})`;
-        for (const p of strange) b.fillRect(Math.round(p.x) - 1, Math.round(p.y), 3, 1), b.fillRect(Math.round(p.x), Math.round(p.y) - 1, 1, 3);
+        for (const p of strange) {
+          const tw = 0.75 + 0.25 * Math.sin(t * 3 + p.x);
+          b.fillStyle = `rgba(220, 240, 255, ${dark * strangeK * tw})`;
+          b.fillRect(Math.round(p.x) - 1, Math.round(p.y), 3, 1);
+          b.fillRect(Math.round(p.x), Math.round(p.y) - 1, 1, 3);
+        }
       }
     }
     // The sun (by day) or the moon (by night), arcing over (behind the storm's cloud).
+    const arc = phase < 0.5 ? phase / 0.5 : (phase - 0.5) / 0.5;
+    const ax = W * (0.1 + arc * 0.8);
+    const ay = horizon - Math.sin(arc * Math.PI) * horizon * 0.8;
+    const day = phase < 0.5;
     if (storm < 0.8) {
-      const arc = phase < 0.5 ? phase / 0.5 : (phase - 0.5) / 0.5;
-      const ax = W * (0.1 + arc * 0.8);
-      const ay = horizon - Math.sin(arc * Math.PI) * horizon * 0.8;
       b.globalAlpha = 1 - storm;
-      if (phase < 0.5) {
+      if (day) {
         const g = b.createRadialGradient(ax, ay, 0, ax, ay, 18);
         g.addColorStop(0, 'rgba(255, 240, 200, 0.9)');
         g.addColorStop(1, 'rgba(255, 200, 120, 0)');
@@ -123,48 +161,98 @@ export function playCrossing(look: { body: string; belly: string }, onDone: () =
         b.fillStyle = '#fff4d0';
         b.fillRect(Math.round(ax) - 2, Math.round(ay) - 2, 5, 5);
       } else {
-        // A crescent: a disc, with the sky's own colour bitten out of it.
         const mx = Math.round(ax);
         const my = Math.round(ay);
         b.fillStyle = '#e8e4d8';
         b.fillRect(mx - 1, my - 3, 3, 7);
         b.fillRect(mx - 3, my - 1, 7, 3);
         b.fillRect(mx - 2, my - 2, 5, 5);
-        const k = Math.max(0, Math.min(1, my / horizon));
-        b.fillStyle = `rgb(${top.map((c, i) => Math.round(c + (low[i] - c) * k)).join(',')})`;
+        const c = skyAt(my);
+        b.fillStyle = `rgb(${c.map(Math.round).join(',')})`;
         b.fillRect(mx, my - 2, 3, 5);
         b.fillRect(mx + 1, my - 3, 2, 7);
       }
       b.globalAlpha = 1;
     }
-    // The storm: heavy cloud low over the sea.
     if (storm > 0) {
-      for (let k = 0; k < 7; k++) {
-        const cx = ((k * 41 + t * 6) % (W + 60)) - 30;
-        const cy = horizon * (0.15 + (k % 3) * 0.12);
-        b.fillStyle = `rgba(30, 30, 38, ${0.7 * storm})`;
-        b.fillRect(Math.round(cx), Math.round(cy), 46, 10 + (k % 2) * 5);
-        b.fillRect(Math.round(cx) + 8, Math.round(cy) - 5, 26, 6);
+      for (let k = 0; k < 8; k++) {
+        const cx = ((k * 41 + t * 7) % (W + 60)) - 30;
+        const cy = horizon * (0.12 + (k % 3) * 0.12);
+        b.fillStyle = `rgba(28, 28, 36, ${0.75 * storm})`;
+        b.fillRect(Math.round(cx), Math.round(cy), 48, 10 + (k % 2) * 6);
+        b.fillRect(Math.round(cx) + 8, Math.round(cy) - 5, 28, 6);
       }
     }
-    // The sea: bands of swell, glinting under the sun (still as glass in the calm).
-    const swell = 1 + storm * 2.5 - calm * 0.9;
-    for (let y = horizon; y < H; y++) {
-      const k = (y - horizon) / (H - horizon);
-      const shade = 0.35 + light * 0.65;
-      b.fillStyle = `rgb(${Math.round((20 + 30 * k) * shade)}, ${Math.round((50 + 60 * k) * shade)}, ${Math.round((90 + 50 * k) * shade)})`;
-      b.fillRect(0, y, W, 1);
-      const tt = calm > 0.5 ? 0 : t;
-      if ((y + Math.floor(tt * 6 * swell)) % 5 === 0) {
-        b.fillStyle = `rgba(200, 225, 240, ${(0.15 + light * 0.25) * (1 + storm)})`;
-        for (let x = (y * 37 + Math.floor(tt * 20 * swell)) % 23; x < W; x += 23) b.fillRect(x, y, 3 + (y % 3) + Math.round(storm * 3), 1);
+
+    // ---- The sea, in perspective, a pixel at a time ----
+    const rough = 1 + storm * 1.8 - calm * 0.85;
+    const glow = day ? [255, 226, 160] : [220, 226, 240];
+    const glowK = (1 - storm) * (day ? 0.9 * light : 0.5 * (1 - light));
+    const data = sea.data;
+    const SH = H - horizon;
+    for (let y = 0; y < SH; y++) {
+      const d = (y + 1) / SH; // 0 far, 1 near
+      const z = 1 / (d * 0.92 + 0.08);
+      const shade = 0.3 + light * 0.7;
+      const base = [(14 + 26 * d) * shade, (40 + 60 * d) * shade, (78 + 60 * d) * shade];
+      const haze = Math.pow(1 - d, 6);
+      const mirrorRow = skyAt(horizon - y * 1.6 - 2);
+      const road = 3 + d * W * 0.12;
+      for (let x = 0; x < W; x++) {
+        const wx = ((x - W / 2) / W) * z * 5;
+        const wz = z * 2.2;
+        const w1 = Math.sin(wx * 1.6 + wz * 3.1 - t * 0.9);
+        const w2 = Math.sin(wx * 3.4 - wz * 5.3 + t * 1.3) * 0.55;
+        const w3 = Math.sin(wx * 7.1 + wz * 8.9 - t * 2.1) * 0.3;
+        const wave = (w1 + w2 + w3) * rough;
+        const slope = Math.cos(wx * 1.6 + wz * 3.1 - t * 0.9) * rough;
+        let r = base[0] + slope * 10 * shade;
+        let g = base[1] + slope * 14 * shade;
+        let bl = base[2] + slope * 16 * shade;
+        // In the calm, the sky lies on the water.
+        if (calm > 0) {
+          const m = calm * 0.7;
+          r = r * (1 - m) + mirrorRow[0] * 0.85 * m;
+          g = g * (1 - m) + mirrorRow[1] * 0.85 * m;
+          bl = bl * (1 - m) + mirrorRow[2] * 0.9 * m;
+        }
+        // A glittering road under the sun or the moon.
+        const fromRoad = Math.abs(x - ax) / road;
+        if (glowK > 0 && fromRoad < 1 && w3 + w2 > 0.25 - calm * 0.5) {
+          const k = glowK * (1 - fromRoad) * (0.6 + 0.4 * d);
+          r += (glow[0] - r) * k;
+          g += (glow[1] - g) * k;
+          bl += (glow[2] - bl) * k;
+        }
+        // Crests: a fleck of foam, many in the storm.
+        if (wave > 1.55 - storm * 0.4) {
+          const f = Math.min(1, (wave - 1.4) * 0.8) * (0.5 + storm * 0.5) * (0.4 + 0.6 * d);
+          r += (200 - r) * f;
+          g += (215 - g) * f;
+          bl += (225 - bl) * f;
+        }
+        // Far off, the sea goes into haze at the horizon.
+        r = r * (1 - haze) + low[0] * haze;
+        g = g * (1 - haze) + low[1] * haze;
+        bl = bl * (1 - haze) + low[2] * haze;
+        const i = (y * W + x) * 4;
+        data[i] = r;
+        data[i + 1] = g;
+        data[i + 2] = bl;
+        data[i + 3] = 255;
       }
     }
-    // The raft riding the swell, the four on it (and their food, going down day by day).
-    const rx = Math.round(W * 0.5 + Math.sin(t * 0.4) * 4 * swell);
-    const ry = Math.round(horizon + (H - horizon) * 0.2 + Math.sin(t * 2.2) * 2 * swell);
-    const tilt = Math.sin(t * 1.7) * 1.2 * swell;
+    b.putImageData(sea, 0, horizon);
+
+    // ---- The raft riding the swell, the four on it, and their food going down ----
+    const swell = 1 + storm * 2.2 - calm * 0.9;
+    const rx = Math.round(W * 0.5 + Math.sin(t * 0.4) * 3 * swell);
+    const ry = Math.round(horizon + SH * 0.3 + Math.sin(t * 2.1) * 1.6 * swell);
+    const tilt = Math.sin(t * 1.6) * 1.2 * swell;
     const px = (x: number, y: number, w: number, h: number) => b.fillRect(rx + x * S, ry + y * S, w * S, h * S);
+    // A shadow on the water under it, and in the calm, its likeness.
+    b.fillStyle = `rgba(4, 10, 20, ${0.35 + calm * 0.2})`;
+    px(-13, 3, 26, 1);
     b.fillStyle = '#6a4a30';
     for (let k = 0; k < 3; k++) px(-12, k, 24, 1);
     b.fillStyle = '#c8b080';
@@ -178,41 +266,22 @@ export function playCrossing(look: { body: string; belly: string }, onDone: () =
       const y = -3 + Math.round(tilt * (i - 1.5) * 0.3);
       // One of them falls sick: lying down, greyer, the others close about them.
       const down = i === 2 && sick > 0.3;
+      const huddle = sick > 0.3 && (i === 1 || i === 3) ? (i === 1 ? 1 : -1) : 0;
       b.fillStyle = down ? '#6f8f92' : look.body;
       if (down) px(x - 1, 1 + y, 5, 2);
-      else px(x, y, 3, 3);
-      b.fillStyle = look.belly;
-      if (!down) px(x, y + 2, 3, 1);
-      b.fillStyle = '#10141f';
-      if (!down) px(x + (i % 2 ? 0 : 2), y, 1, 1);
-    }
-    // Rain, and lightning now and then (the thunder after).
-    if (storm > 0) {
-      b.fillStyle = `rgba(190, 200, 220, ${0.5 * storm})`;
-      for (const d of drops) {
-        d.y += d.v * dt;
-        d.x -= d.v * 0.25 * dt;
-        if (d.y > H) {
-          d.y = -4;
-          d.x = Math.random() * (W + 20);
-        }
-        b.fillRect(Math.round(d.x), Math.round(d.y), 1, 3);
+      else px(x + huddle, y, 3, 3);
+      if (!down) {
+        b.fillStyle = look.belly;
+        px(x + huddle, y + 2, 3, 1);
+        b.fillStyle = '#10141f';
+        px(x + huddle + (i % 2 ? 0 : 2), y, 1, 1);
       }
-      if (storm > 0.6 && Math.random() < dt * 0.9) {
-        flash = 1;
-        thunder({ level: 0.5 + Math.random() * 0.4, delay: 0.2 + Math.random() * 0.8 });
-      }
-    }
-    if (flash > 0) {
-      b.fillStyle = `rgba(220, 225, 255, ${0.35 * flash})`;
-      b.fillRect(0, 0, W, H);
-      flash = Math.max(0, flash - dt * 3);
     }
     // The bird, on the last morning: it comes down onto the raft with green in its beak.
-    if (t > BIRD) {
-      const k = Math.min(1, (t - BIRD) / 2.5);
+    if (birdAt >= 0) {
+      const k = Math.min(1, (t - birdAt) / 2.8);
       const bx = Math.round(W * 0.95 - (W * 0.95 - rx) * k);
-      const by = Math.round(H * 0.15 + (ry - 8 - H * 0.15) * k);
+      const by = Math.round(H * 0.12 + (ry - 9 - H * 0.12) * k);
       const flap = k < 1 ? Math.floor(t * 8) % 2 : 0;
       b.fillStyle = '#f2ead7';
       b.fillRect(bx - 3, by - flap * 2, 3, 1);
@@ -221,19 +290,54 @@ export function playCrossing(look: { body: string; belly: string }, onDone: () =
       b.fillStyle = '#5fbf78';
       b.fillRect(bx - 2, by + 1, 2, 1);
     }
-    // The count of days, small, out of the way of the story.
-    const d = Math.min(DAYS, Math.floor(days) + 1);
-    if (d !== dayNow) {
-      dayNow = d;
-      counter.textContent = `Day ${d} of ${DAYS}`;
+
+    // ---- Shown: closing in on the raft for what matters ----
+    zoom += (1 + 1.25 * focus - zoom) * Math.min(1, dt * 1.2);
+    const cw = W / zoom;
+    const ch = H / zoom;
+    const cx = Math.max(0, Math.min(W - cw, rx - cw / 2));
+    const cy = Math.max(0, Math.min(H - ch, ry - 6 - ch * 0.55));
+    out.drawImage(off, cx, cy, cw, ch, 0, 0, W, H);
+    // Rain across the view, and lightning now and then (the thunder after).
+    if (storm > 0) {
+      out.fillStyle = `rgba(190, 200, 220, ${0.5 * storm})`;
+      for (const dd of drops) {
+        dd.y += dd.v * dt;
+        dd.x -= dd.v * 0.25 * dt;
+        if (dd.y > H) {
+          dd.y = -4;
+          dd.x = Math.random() * (W + 20);
+        }
+        out.fillRect(Math.round(dd.x), Math.round(dd.y), 1, 3);
+      }
+      if (storm > 0.6 && Math.random() < dt * 0.8) {
+        flash = 1;
+        thunder({ level: 0.5 + Math.random() * 0.4, delay: 0.2 + Math.random() * 0.8 });
+      }
     }
-    const line = t > BIRD + 1 ? STORY.crossBird : LINES.find(([a, z]) => days >= a && days < z)?.[2] ?? '';
-    if (t < END - 0.5) say(line);
-    if (t > END - 1) {
-      cv.style.opacity = String(Math.max(0, END - t));
-      counter.style.opacity = cv.style.opacity;
+    if (flash > 0) {
+      out.fillStyle = `rgba(220, 225, 255, ${0.35 * flash})`;
+      out.fillRect(0, 0, W, H);
+      flash = Math.max(0, flash - dt * 3);
     }
-    if (t < END) requestAnimationFrame(frame);
+    // Out of black at the start, back into it at the end.
+    const end = birdAt >= 0 ? birdAt + BIRD_FOR : Infinity;
+    const black = Math.max(t < FADE ? 1 - t / FADE : 0, t > end - FADE ? Math.min(1, (t - (end - FADE)) / FADE) : 0);
+    if (black > 0) {
+      out.fillStyle = `rgba(0, 0, 0, ${black})`;
+      out.fillRect(0, 0, W, H);
+    }
+
+    // The count of days, small, out of the way of the story; and the story's line.
+    const dn = Math.min(DAYS, Math.floor(days) + 1);
+    if (dn !== dayNow) {
+      dayNow = dn;
+      counter.textContent = `Day ${dn} of ${DAYS}`;
+    }
+    counter.style.opacity = String(0.8 * (1 - black));
+    const line = birdAt >= 0 ? STORY.crossBird : LINES.find(([a, z]) => days >= a && days < z)?.[2] ?? '';
+    say(t > end - FADE ? '' : line);
+    if (t < end) requestAnimationFrame(frame);
     else {
       cv.remove();
       counter.remove();

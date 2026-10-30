@@ -29,8 +29,9 @@ interface Person {
   lit: number;
 }
 
-/** Seconds into the leaving when the camera turns back to the spear. */
-const LOOK_BACK = 19;
+/** The look back at the spear: how long the camera takes over it (seconds) before the scene
+ * fades out to the crossing. */
+export const LOOK_BACK_SEC = 10;
 /** Seconds the spear gathers itself once touched, before it lets go (on the blast in its sound:
  * the deep swell, not the sharp hit just before it), when partway it holds its breath, and when
  * that first hit comes (a flare, as if it almost let go). */
@@ -129,8 +130,12 @@ export class TribeScene extends RangeScene {
   private wave = -1;
   /** Before it: the spear gathering itself once touched (seconds in, -1 when not). */
   private charge = -1;
-  /** Seconds since the leaving began, as of the last frame (-1 when not leaving). */
+  /** Seconds since the leaving began, as of the last frame (-1 when not leaving), and when the
+   * camera turned back to the spear (scene seconds; -1 before the raft is out of sight). */
   private leftAge = -1;
+  private backAt = -1;
+  private lastT = 0;
+  private cheerIn = 0;
   /** How many of them are moving in view this frame (and where), and until the next squeak. */
   private wandering = 0;
   private wanderX = 0;
@@ -833,6 +838,7 @@ export class TribeScene extends RangeScene {
 
   depart(ids: number[]): void {
     this.departT = -1;
+    this.backAt = -1;
     this.leavingIds = ids;
     this.leaving = [];
   }
@@ -840,8 +846,13 @@ export class TribeScene extends RangeScene {
   /** The four leaving, and where each is on screen (art pixels, over their heads), while they
    * go down to the raft and push off (for their names). */
   leavingLabels(): { id: number; x: number; y: number }[] {
-    if (this.departT < 0 || !this.leaving.length || this.leftAge >= LOOK_BACK - 2) return [];
+    if (this.departT < 0 || !this.leaving.length || this.leftAge > 15 || this.backAt >= 0) return [];
     return this.leaving.map((q, k) => ({ id: this.leavingIds[k], x: this.sx(q.x), y: this.py(q.x, q.y) - Math.max(8, 2.6 * this.zoom) }));
+  }
+
+  /** Seconds since the camera turned back to the spear (-1 when it hasn't yet). */
+  lookingBack(): number {
+    return this.backAt >= 0 ? this.lastT - this.backAt : -1;
   }
 
   /** Seconds into the leaving (or -1 when there isn't one). */
@@ -858,9 +869,9 @@ export class TribeScene extends RangeScene {
     const dx = this.raftAt.x - c.x;
     const dy = this.raftAt.y - c.y;
     const l = Math.hypot(dx, dy) || 1;
-    const k = Math.max(0, Math.min(1, (age - 9) / 17));
+    const k = Math.max(0, Math.min(1, (age - 9) / 30));
     const e = k * k;
-    return { x: this.raftAt.x + (dx / l) * 60 * e, y: this.raftAt.y + (dy / l) * 60 * e };
+    return { x: this.raftAt.x + (dx / l) * 120 * e, y: this.raftAt.y + (dy / l) * 120 * e };
   }
 
   /** The new island: green, unburnt, the four come ashore on its beach, and on a rise inland
@@ -1366,7 +1377,7 @@ export class TribeScene extends RangeScene {
       const x = p.x;
       const yy = p.y;
       // Seeing the four off: once they're aboard, the crowd on the beach bobs and waves.
-      const waving = !moving && this.departT >= 0 && t - this.departT > 7 && t - this.departT < 22;
+      const waving = !moving && this.departT >= 0 && t - this.departT > 7 && this.backAt < 0;
       const hop = moving ? Math.abs(Math.sin(t * 7 + p.ph * 3)) * 2 : waving ? Math.abs(Math.sin(t * (4 + (p.ph % 3)) + p.ph * 5)) * 2.5 : 0;
       const lit = p.lit >= 0 ? t - p.lit : -1;
       sprites.push({
@@ -1511,16 +1522,32 @@ export class TribeScene extends RangeScene {
     if (age >= 0 && this.raftAt) {
       const raft = this.raftWhileLeaving(age)!;
       if (!this.leaving.length) this.leaving = this.leavingIds.map((_, k) => ({ x: frag.camp.x + k - 1.5, y: frag.camp.y + 1, vx: 0, vy: 0, ph: k * 2, goal: null, wait: 0, lit: -100 }));
-      // The camera: in close on the four as they go down and board; out a little to follow the
-      // raft off; then, as it goes small, turning back to look at the spear one last time, the
-      // whole island in view and the night coming down over it.
-      const back = age >= LOOK_BACK;
-      const kc = Math.min(1, dt * (back ? 0.9 : 1.8));
-      const aim = back ? frag.spear : age < 8 ? { x: (this.raftAt.x + frag.camp.x) / 2 * 0.3 + this.raftAt.x * 0.7, y: (this.raftAt.y + frag.camp.y) / 2 * 0.3 + this.raftAt.y * 0.7 } : raft;
+      // The camera: in close on the four as they go down and board; then it stays on the beach
+      // as the raft goes out, until it's gone from sight altogether; only then does it turn,
+      // slowly, back to the spear for one last look, the whole island coming into view and
+      // the night coming down over it.
+      this.lastT = t;
+      const RX = this.sx(raft.x);
+      const RY = this.py(raft.x, raft.y);
+      const gone = RX < -12 || RX > this.W + 12 || RY < this.viewTop - 12 || RY > (this.viewBottom || this.H) + 12;
+      if (this.backAt < 0 && age > 10 && (gone || age > 45)) this.backAt = t;
+      const back = this.backAt >= 0;
+      const kc = Math.min(1, dt * (back ? 0.3 : 1.8));
+      const beach = { x: this.raftAt.x * 0.7 + frag.camp.x * 0.3, y: this.raftAt.y * 0.7 + frag.camp.y * 0.3 };
+      const aim = back ? frag.spear : beach;
       this.camX += (aim.x - this.camX) * kc;
-      this.camY += (aim.y - (back ? 0 : 3) - this.camY) * kc;
-      const zoomTo = back ? 0.9 : age < 8 ? 5.2 : 3.4;
-      this.zoom += (zoomTo - this.zoom) * Math.min(1, dt * (back ? 0.45 : 1.2));
+      this.camY += (aim.y - (back ? 0 : 2) - this.camY) * kc;
+      const zoomTo = back ? 0.9 : age < 8 ? 5.2 : 3.6;
+      this.zoom += (zoomTo - this.zoom) * Math.min(1, dt * (back ? 0.25 : 1.2));
+      // Seeing them off: the crowd cheers, a whole beach of squeaks, bright and quick.
+      if (age > 7 && !back) {
+        herdInView(true);
+        this.cheerIn -= dt;
+        if (this.cheerIn <= 0) {
+          this.cheerIn = 0.06 + Math.random() * 0.16;
+          squeak(0.3 + Math.random() * 0.25, Math.random() * 1.6 - 0.8, 1.15 + Math.random() * 0.25);
+        }
+      }
       this.leaving.forEach((q, k) => {
         const walk = Math.min(1, age / 7);
         const from = { x: frag.camp.x + k - 1.5, y: frag.camp.y + 1 };
@@ -1547,8 +1574,8 @@ export class TribeScene extends RangeScene {
     // The look back: the spear's red glow over the island, fading as night comes down.
     const leftAge = this.departT >= 0 ? t - this.departT : -1;
     this.leftAge = leftAge;
-    if (leftAge >= LOOK_BACK) {
-      const k = Math.min(1, (leftAge - LOOK_BACK) / 8);
+    if (this.backAt >= 0 && leftAge >= 0) {
+      const k = Math.min(1, (t - this.backAt) / (LOOK_BACK_SEC - 1));
       const glow = b.createRadialGradient(sx, sy, 0, sx, sy, Math.max(20, 60 * this.zoom));
       glow.addColorStop(0, `rgba(230, 50, 60, ${0.55 * (1 - k)})`);
       glow.addColorStop(1, 'rgba(230, 50, 60, 0)');

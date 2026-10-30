@@ -383,6 +383,12 @@ function musicFrame(state: GameState): void {
   }
 }
 
+/** Off the spear's island (the raft gone, the crossing begun), its rumble ends. */
+let droneHushed = false;
+export function hushDrone(on: boolean): void {
+  droneHushed = on;
+}
+
 /** Each frame: the hum in the water, the island's weather, the drone, music now and then, and
  * the whirlpool's rush. (`skies` is the Creature's weather: rain and snow, 0 to 1.) */
 export function soundFrame(state: GameState, skies: { rain: number; snow: number; zoom: number } | null = null): void {
@@ -391,7 +397,7 @@ export function soundFrame(state: GameState, skies: { rain: number; snow: number
   // The hum under all the water; over the Extinction (from the strike on), a low drone; music
   // now and then.
   loopTo('underwater', soup || state.current === 'cell' ? 1 : 0, bus.ambience, 0.8);
-  loopTo('drone', state.current === 'tribal' ? 1 : 0, bus.ambience, 2.5);
+  loopTo('drone', state.current === 'tribal' && !droneHushed ? 1 : 0, bus.ambience, droneHushed ? 0.8 : 2.5);
   // The Creature's island: the weather shares one level between rain, the winter storm and,
   // in whatever's left, plain wind, so as one comes on the others give way (the storm and the
   // seasons build slowly, and each fades over a second or two besides: no whiplash).

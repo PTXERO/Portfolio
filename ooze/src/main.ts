@@ -50,10 +50,11 @@ import { liveTick, TICK_SEC } from './economy/tick';
 import type { BuyAmount, DialId, GameState, RunInPolicy, StageId } from './economy/types';
 import { breed, buyPart, chooseEvent, EVENT_DC, court, equipPart, FARM_PAY, foundNest, islandFor, netRate, SIGHTINGS, placeRestLeft, placeSeen, placeShort, releaseMate, tripEventDue, tripPay, walkHome, walkSeconds, walkTo } from './economy/creature';
 import { Scene } from './scene/scene';
+import { LOOK_BACK_SEC } from './scene/tribe';
 import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
 import { playCrossing } from './ui/crossing';
-import { cue, glug, popSound, setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
+import { cue, glug, hushDrone, popSound, setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
 import { miniIcon } from './scene/creatureLook';
 import { glyph, panWeb, pickIdea, webTransform, webView, zoomWeb } from './ui/tribePanels';
 import { record } from './economy/chronicle';
@@ -333,6 +334,7 @@ function extinctionStep(sec: number): void {
   const t = state.stages.tribal.tribe;
   if (t?.awake && (!t.ex || !t.ex.powers)) {
     startExtinction(state);
+    hushDrone(false);
     panelKey = '';
     tabsKey = '';
     save();
@@ -740,6 +742,8 @@ function showEscape(fresh = false): void {
     extinctEl.hidden = false;
     requestAnimationFrame(() => extinctEl.classList.add('in'));
   };
+  // (Off the spear's island now: its rumble is over.)
+  hushDrone(true);
   if (!fresh) return screen();
   // The four walk down and board; the raft goes out with the others shouting after it; forty
   // days adrift; then the new island, and smoke on a hill.
@@ -758,20 +762,37 @@ function showEscape(fresh = false): void {
     [13000, `“Don't forget us!” ${pick(0)} shouted from the shore.`],
     [15500, `“Tell them who we were!” called ${pick(1)}.`],
     [18000, `“We will,” ${four[0] ?? 'they'} called back, and then they were too far to hear.`],
-    // (The camera turns back to the spear here, and night comes down over the island.)
-    [21500, STORY.lookBack],
   ];
   for (const [at, line] of lines) window.setTimeout(() => storyLine(line), at);
-  window.setTimeout(() => {
-    storyLine('');
-    playCrossing({ body: '#4aa7b0', belly: '#9ad8d4' }, () => {
-      scene.tribeScene.holdOld = false;
-      scene.tribeScene.arrive();
-      // Ashore one by one; then they look inland, the fog drawing back, the smoke rising.
-      window.setTimeout(() => storyLine(STORY.landing), 10000);
-      window.setTimeout(screen, 19000);
-    });
-  }, 28500);
+  // The rest goes by what's on screen: once the raft's out of sight the camera turns back to
+  // the spear (and its line); when that's done, down into black, the island's rumble ends, and
+  // up out of it into the crossing; the crossing ends in black, and up out of it they land.
+  let saidBack = false;
+  const watch = window.setInterval(() => {
+    const back = scene.tribeScene.lookingBack();
+    if (back >= 0 && !saidBack) {
+      saidBack = true;
+      storyLine(STORY.lookBack);
+    }
+    if (back < LOOK_BACK_SEC) return;
+    window.clearInterval(watch);
+    fadeTo(1, 1500);
+    window.setTimeout(() => {
+      storyLine('');
+      hushDrone(true);
+      playCrossing({ body: '#4aa7b0', belly: '#9ad8d4' }, () => {
+        fadeTo(1, 0);
+        scene.tribeScene.holdOld = false;
+        scene.tribeScene.arrive();
+        window.setTimeout(() => fadeTo(0, 1800), 100);
+        // Ashore one by one; then they look inland, the fog drawing back, the smoke rising.
+        window.setTimeout(() => storyLine(STORY.landing), 10000);
+        window.setTimeout(screen, 19000);
+      });
+      // (The crossing opens out of black itself.)
+      window.setTimeout(() => fadeTo(0, 0), 60);
+    }, 1600);
+  }, 200);
 }
 
 /** No one left: the last of them looks round, alone. Then how long they lasted, and again. */
@@ -1869,6 +1890,15 @@ new ResizeObserver(() => {
 
 let last = performance.now();
 let acc = 0;
+/** A black veil over everything, for fading between scenes: to `to` (0 clear, 1 black) over ms. */
+const veil = document.createElement('div');
+veil.id = 'veil';
+document.body.appendChild(veil);
+function fadeTo(to: number, ms: number): void {
+  veil.style.transition = `opacity ${ms}ms ease-in-out`;
+  veil.style.opacity = String(to);
+}
+
 /** The four leaving on the raft: their names over their heads, till the raft is far out. */
 const leavingNames = new Map<number, HTMLElement>();
 function nameLeaving(): void {
