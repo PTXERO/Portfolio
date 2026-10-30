@@ -850,7 +850,7 @@ function renderHud(): void {
   if (sh) {
     // New Shore counts people too (toward a hundred).
     set('currency', String(sh.people.length));
-    set('rate', 'people\nof 100');
+    set('rate', 'of 100\npeople');
   } else if (ex) {
     // The Extinction counts people, not currency.
     set('currency', String(ex.people.length));
@@ -863,7 +863,10 @@ function renderHud(): void {
     const net = netRate(state);
     set('rate', `${net.lt(0) ? '−' : '+'}${format(net.abs())} ${def.currency}\nper second`);
   } else set('rate', `${format(stageRate(state, state.current))} ${def.currency}\nper second`);
-  set('bank-chip', state.timeBank > 0 && !ex && !sh ? `⧗ ${formatTime(state.timeBank)}${state.warp > 1 ? ` · ${state.warp}×` : ''}` : '');
+  const chief = sh?.people.find((p) => p.id === sh.chief);
+  if (!sh) $('hud-news').hidden = true;
+  if (sh) set('bank-chip', chief ? `${chief.name} leads` : '');
+  else set('bank-chip', state.timeBank > 0 && !ex ? `⧗ ${formatTime(state.timeBank)}${state.warp > 1 ? ` · ${state.warp}×` : ''}` : '');
   set('stage-name', def.name);
   // Small buttons under the banner hop to the previous age (left) or the next one (right).
   const ageNav = $('age-nav');
@@ -895,24 +898,18 @@ const shoreNews: string[] = [];
 function renderShoreGoal(): void {
   const s = shoreOf(state);
   if (!s) return;
+  // (All in the one banner at the top: who leads, how many, and the news under it.)
   if (goalKey !== 'shore') {
     goalKey = 'shore';
     tickerText = '';
-    evolveEl.hidden = false;
-    evolveEl.innerHTML = `<div class="evolve-row"><span class="label" data-g="when"></span><span class="label dim" data-g="chief"></span></div>
-      <div class="ex-row"><div class="ex-count safe" data-g="count"></div><div class="ticker"><span data-g="tick"></span></div></div>`;
+    evolveEl.hidden = true;
   }
-  const g = (k: string) => evolveEl.querySelector<HTMLElement>(`[data-g="${k}"]`)!;
-  const put = (k: string, text: string) => {
-    if (g(k).textContent !== text) g(k).textContent = text;
-  };
-  put('chief', s.people.find((p) => p.id === s.chief)?.name ? `${s.people.find((p) => p.id === s.chief)!.name} leads` : '');
-  put('when', `${s.built.some((b) => b.id === 'hearth') ? 'The village' : 'No hearth yet'}`);
-  put('count', `${s.people.length} of 100 people`);
+  const box = $('hud-news');
   const news = shoreNews.slice(-3).join('   ·   ');
+  box.hidden = !news;
   if (news !== tickerText) {
     tickerText = news;
-    const t = g('tick');
+    const t = box.firstElementChild as HTMLElement;
     t.textContent = news;
     t.style.setProperty('--dur', `${Math.max(10, news.length * 0.16)}s`);
     t.style.animation = 'none';

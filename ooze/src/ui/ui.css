@@ -764,3 +764,4 @@ body.wide.tab-ideas #sheet { width: clamp(420px, 42vw, 820px); }
 .card .seg { flex: none; }
 .card.lean { flex-wrap: wrap; }
 .card.lean .seg { width: 100%; justify-content: flex-end; }
+#hud-news { margin-top: 6px; }
