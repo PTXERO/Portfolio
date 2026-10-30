@@ -317,11 +317,12 @@ export class Scene {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    const shaded = !!this.shader && this.isMap;
+    // (No island to light yet, as while New Shore's is being made: the plain picture.)
+    const inp = this.shader && this.isMap ? this.map.shadeInputs() : null;
+    const shaded = !!inp;
     if (this.shader) this.shader.canvas.style.display = shaded ? 'block' : 'none';
     if (shaded) {
       // The island is drawn lit by the shader underneath; this canvas keeps only what's on top.
-      const inp = this.map.shadeInputs();
       if (inp) {
         this.shader!.setIsland(inp.key, inp.n, inp.heights);
         this.shader!.setFog(inp.fog, inp.fogVersion);

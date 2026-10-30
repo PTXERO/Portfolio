@@ -14,7 +14,9 @@ export const ISLAND = 360;
 export const CELL = 3;
 export const CELLS = ISLAND / CELL;
 
-export const Biome = { Deep: 0, Sea: 1, Sand: 2, Grass: 3, Forest: 4, Marsh: 5, High: 6, Rock: 7, Peak: 8 } as const;
+/** Kinds of ground. (Desert, lakes, rivers and dry scrub are New Shore's, from its second
+ * generation of island; lakes are water, rivers can be waded.) */
+export const Biome = { Deep: 0, Sea: 1, Sand: 2, Grass: 3, Forest: 4, Marsh: 5, High: 6, Rock: 7, Peak: 8, Desert: 9, Lake: 10, River: 11, Scrub: 12 } as const;
 export type Biome = (typeof Biome)[keyof typeof Biome];
 
 export interface Pt {
@@ -252,7 +254,8 @@ export function isLand(island: Island, x: number, y: number): boolean {
   const yi = Math.round(y);
   const N = island.n;
   if (xi < 0 || yi < 0 || xi >= N || yi >= N) return false;
-  return island.biome[yi * N + xi] >= Biome.Sand;
+  const b = island.biome[yi * N + xi];
+  return b >= Biome.Sand && b !== Biome.Lake;
 }
 
 // ---- Fog: which cells have been seen ----

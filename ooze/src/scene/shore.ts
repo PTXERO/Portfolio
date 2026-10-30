@@ -5,7 +5,7 @@
 
 import { PAL } from '../art/sprites';
 import { Biome, CELL, isLand, type Pt } from '../economy/island';
-import { DAY_SEC, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
+import { DAY_SEC, terrainReady, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
 import type { GameState } from '../economy/types';
 import type { BuildId } from '../content/shore';
 import { RangeScene } from './range';
@@ -166,6 +166,13 @@ export class ShoreScene extends RangeScene {
     if (!this.viewBottom) this.viewTop = f.top;
     const s = shoreOf(state);
     if (!s) return;
+    // The island's still being made (or loaded): the fog, until it's there.
+    if (!terrainReady(s.seed)) {
+      b.fillStyle = '#c8ced4';
+      b.fillRect(0, 0, W, H);
+      this.island = null;
+      return;
+    }
     this.keepWeather(state, 'shore');
     const is = shoreIsland(s.seed);
     this.island = is;

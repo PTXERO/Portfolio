@@ -13,8 +13,9 @@ import { STAGES } from './content/stages';
 import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
-import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
-import { answerJoin, build, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
+import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
+import { prepareShoreIsland } from './economy/terrainStore';
+import { answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
 import { findCard, joinCard, poiCard, setBuildCat, setVillageView, villageCard } from './ui/shorePanels';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
@@ -295,6 +296,25 @@ function collectNews(): void {
   save();
 }
 
+/** Whether New Shore's island is still being made or loaded (nothing of it runs meanwhile). */
+let waitingIsland = false;
+function needIsland(): void {
+  const s = state.stages.shore.shore;
+  if (!s || s.terrain === undefined || terrainReady(s.seed)) return;
+  waitingIsland = true;
+  const done = () => {
+    waitingIsland = false;
+    catchUp();
+    scene.reload();
+    render();
+  };
+  prepareShoreIsland(s.seed).then(done, () => {
+    // (No worker: made here instead.)
+    shoreIsland(s.seed);
+    done();
+  });
+}
+
 function catchUp(): void {
   const r = applyOffline(state);
   // (Not in the Extinction: its clock doesn't run while away.)
@@ -303,6 +323,8 @@ function catchUp(): void {
 }
 
 function step(): void {
+  // (While New Shore's island is still being made, its time waits: none of it is lost.)
+  if (waitingIsland) return;
   const now = Date.now();
   const gap = (now - state.lastSeen) / 1000;
   if (gap > LIVE_GAP_SEC) catchUp();
@@ -728,6 +750,8 @@ function showEscape(fresh = false): void {
   alone = true;
   modal.hidden = true;
   syncCine();
+  // The island they'll land on is made in the background while they cross.
+  if (t.landed) void prepareShoreIsland(t.landed.seed).catch(() => undefined);
   const screen = () => {
     storyLine('');
     extinctEl.innerHTML = `<div class="ending-inner">
@@ -1210,6 +1234,8 @@ function renderHint(): void {
 }
 
 function render(): void {
+  // (A save loaded or imported into New Shore: its island may need making first.)
+  if (state.current === 'shore' && !waitingIsland) needIsland();
   // Mid-press, leave the page alone (see the button handling below).
   if (pressed?.isConnected && performance.now() - pressT < 4000) return;
   applyUiPrefs();
@@ -2028,7 +2054,10 @@ async function startFromLink(): Promise<void> {
   if (!confirm(`Start a fresh game ${what}? This replaces your current save (export it from the Menu first if you want to keep it).`)) return;
   try {
     const code = (await (await fetch('./creature-start.txt', { cache: 'no-store' })).text()).trim();
-    state = importSave(code);
+    const next = importSave(code);
+    // (Straight to New Shore: its island is made first, before anything changes on screen.)
+    if (where === 'shore') await prepareShoreIsland(landedSeed(islandFor(next).seed)).catch(() => undefined);
+    state = next;
     state.lastSeen = Date.now();
     if (where === 'tribal') {
       // The Creature played through: every place found, six generations, a big herd.
@@ -2188,7 +2217,9 @@ function frame(now: number): void {
 // A save made mid-ending (closed during the credits) picks up at the reveal. This also
 // carries on a Cell finished before the Creature existed: its ending now leads somewhere.
 if (canEvolve(state) && !(STAGES[state.current].next === 'tribal' && ui.watching)) playEnding();
-catchUp();
+// New Shore's island has to be loaded (or made) before its time can be caught up.
+needIsland();
+if (!waitingIsland) catchUp();
 render();
 document.fonts?.ready.then(() => render());
 requestAnimationFrame(frame);

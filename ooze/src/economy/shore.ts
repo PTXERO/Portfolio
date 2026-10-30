@@ -10,6 +10,7 @@
 import { BUILDS, buildName, POIS, RELICS, SHORE_STORY, type Boosts, type BuildId, type Find, type PoiKind, type RelicId } from '../content/shore';
 import { record } from './chronicle';
 import { Biome, CELL, isLand, islandOf, reveal, type Island, type Pt } from './island';
+import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import type { CreatureLook } from '../scene/creatureLook';
 import type { GameState, TribeState } from './types';
 
@@ -123,6 +124,8 @@ export interface Poi {
 
 export interface ShoreState {
   seed: number;
+  /** Which generation of island it stands on (unset: the first). */
+  terrain?: number;
   /** Days since landfall, and seconds into the day. */
   day: number;
   clock: number;
@@ -185,8 +188,30 @@ function rng(seed: number): () => number {
   };
 }
 
+/** Islands of the second generation (see terrain.ts), as they're made or loaded, and which
+ * seeds are older New Shores still on the first (their villages and landmarks stand on it). */
+const made = new Map<number, Island>();
+const firstGen = new Set<number>();
+
+/** Hands over an island made elsewhere (in a worker, or loaded from the device). */
+export function provideTerrain(seed: number, t: Terrain): void {
+  made.set(seed, { seed, n: SHORE_N, biome: t.biome, height: t.height, home: t.home, places: {} });
+}
+
+/** Whether New Shore's island for a seed is ready to use without making it here and now. */
+export function terrainReady(seed: number): boolean {
+  return firstGen.has(seed) || made.has(seed);
+}
+
 export function shoreIsland(seed: number): Island {
-  return islandOf(seed, [], SHORE_N);
+  if (firstGen.has(seed)) return islandOf(seed, [], SHORE_N);
+  let is = made.get(seed);
+  if (!is) {
+    // Not made ahead of time (tests, the simulator, or it wasn't ready): made now.
+    provideTerrain(seed, generateTerrain(seed, SHORE_N));
+    is = made.get(seed)!;
+  }
+  return is;
 }
 
 const SYL = ['ka', 'ri', 'mo', 'tu', 'na', 'sa', 'ke', 'lo', 'vi', 'ra', 'en', 'ul', 'ha', 'po', 'mi', 'zu', 'ta', 'ne', 'ok', 'ya', 'bo', 'li', 'fe', 'gu', 'da', 'shi'];
@@ -316,6 +341,7 @@ export function newShore(tribe: TribeState): ShoreState {
   const people: ShorePerson[] = four.map((p, i) => ({ id: i, name: p.name, trait: p.trait, born: -20, founder: true }));
   return {
     seed,
+    terrain: TERRAIN_V,
     day: 0,
     clock: 0,
     // What they kept from the crossing (the raft itself is still on the beach: its wood is
@@ -345,7 +371,10 @@ export function newShore(tribe: TribeState): ShoreState {
 }
 
 export function shoreOf(state: GameState): ShoreState | undefined {
-  return state.stages.shore.shore;
+  const s = state.stages.shore.shore;
+  // (A New Shore begun before the second generation of island keeps its first.)
+  if (s && s.terrain === undefined && !firstGen.has(s.seed)) firstGen.add(s.seed);
+  return s;
 }
 
 /** Into New Shore: the stage opens, with the four on the beach. */
@@ -359,6 +388,7 @@ export function startShore(state: GameState): ShoreState | undefined {
     const s = st.shore;
     reveal(shoreIsland(s.seed), st.seen, s.beach.x, s.beach.y, HOME_SIGHT);
     reveal(shoreIsland(s.seed), st.seen, s.hearth.x, s.hearth.y, HOME_SIGHT);
+    poisOf(s);
   }
   if (!state.unlocked.includes('shore')) state.unlocked.push('shore');
   state.current = 'shore';

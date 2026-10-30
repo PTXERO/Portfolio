@@ -408,7 +408,7 @@ export class RangeScene {
       for (let i = 0; i < this.n * this.n; i++) {
         const h16 = Math.round(Math.max(0, Math.min(1, (is.height[i] - H_LO) / H_SPAN)) * 65535);
         d[i * 4] = h16 >> 8;
-        d[i * 4 + 1] = is.biome[i] * 28;
+        d[i * 4 + 1] = is.biome[i] * 20;
         d[i * 4 + 3] = h16 & 255;
       }
       this.heightData = d;
@@ -535,6 +535,12 @@ export class RangeScene {
       snow: rgb('#f6f9fa'),
       flower: rgb(PAL.y),
       flower2: rgb(PAL.w),
+      // New Shore's: desert sand and its dune shadows, dry scrub, fresh water.
+      desert: rgb(si === 3 ? '#cfb88a' : '#dcbc7c'),
+      dune: rgb(si === 3 ? '#b8a070' : '#c4a062'),
+      scrub: rgb(mixColor(L.grass, '#c8a860', si === 1 ? 0.6 : 0.5)),
+      scrubDark: rgb(mixColor(L.dark, '#8a7040', 0.45)),
+      fresh: rgb(si === 3 ? '#5a8aa0' : '#4a9ab5'),
     };
     const H = is.height;
     for (let y = 0; y < N; y++) {
@@ -572,13 +578,24 @@ export class RangeScene {
           case Biome.Peak:
             p = slope > 0.006 ? c.rock : c.peak;
             break;
+          case Biome.Desert:
+            // Dunes: long ripples across the sand, their lee sides in shadow.
+            p = Math.sin((x * 0.55 + y * 0.25) + hash(Math.floor(x / 9) + Math.floor(y / 9) * 131, 17) * 4) > 0.55 ? c.dune : n < 0.06 ? c.dune : c.desert;
+            break;
+          case Biome.Scrub:
+            p = n < 0.22 ? c.scrubDark : n > 0.93 ? c.desert : c.scrub;
+            break;
+          case Biome.Lake:
+          case Biome.River:
+            p = c.fresh;
+            break;
           default:
             p = n < 0.18 ? c.grassDark : c.grass;
             if (si === 0 && n > 0.985) p = n > 0.993 ? c.flower : c.flower2;
         }
         const sc = is.scar?.[i] ?? 0;
         if (sc) p = charred(p, bi, sc, n, x, y);
-        else if (si === 3 && (bi === Biome.Grass || bi === Biome.High || bi === Biome.Sand) && n > 0.15) p = c.snow;
+        else if (si === 3 && (bi === Biome.Grass || bi === Biome.High || bi === Biome.Sand || bi === Biome.Scrub) && n > 0.15) p = c.snow;
         img.data[i * 4] = p[0];
         img.data[i * 4 + 1] = p[1];
         img.data[i * 4 + 2] = p[2];

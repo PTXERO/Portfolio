@@ -370,6 +370,17 @@ Built in slices, each tested live (balance sims after).
 it; the turn to Phase 2 comes when the village is big enough, at a size set by the balance sims
 (about a hundred).
 
+## 11b. The island, second generation *(live)*
+
+`src/economy/terrain.ts`: a ragged coast with capes and bays; 2–3 mountain ranges along wandering
+spines, ridged at the peaks; 1–2 plateaus with cliffs; hill country and flat plains; particle
+erosion (90k drops) cutting valleys; the land flooded from the sea up (priority flood): deep wide
+hollows become lakes, the rest fill; flow gathered downhill into rivers (wadeable; lakes aren't);
+the wind's rain shadow behind the ranges plus a dry country make scrub and desert; snow on the
+peaks only. Made once in a worker while the crossing plays and kept on the device (IndexedDB);
+older New Shores keep the first-generation island. `npx tsx tools/terrain-preview.ts <dir>` dumps
+islands for checking.
+
 ## 12. Polish backlog (back burner)
 
 - **Biomes in 2.5D**: forests and meadows as 2D sprites standing on the 3D land (trees, grass

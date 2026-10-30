@@ -699,6 +699,11 @@ export function launchBlockers(ex: ExtinctionState): string[] {
   return out;
 }
 
+/** The island the raft comes to (from the spear's island's seed). */
+export function landedSeed(seed: number): number {
+  return ((seed * 7919 + 104729) >>> 0) % 2 ** 31;
+}
+
 /** The family sets off: the Extinction is survived. */
 export function launch(state: GameState): boolean {
   const t = state.stages.tribal.tribe;
@@ -711,7 +716,7 @@ export function launch(state: GameState): boolean {
   // The spear's island is remembered as they left it; forty days adrift, they come ashore on
   // another.
   t.ashIsland = { seed: t.seed, left: ex.people.length - FAMILY, days: ex.day, cannibal: t.cannibal, fate: 'madness' };
-  t.landed = { seed: ((t.seed * 7919 + 104729) >>> 0) % 2 ** 31, day: ex.day + 40 };
+  t.landed = { seed: landedSeed(t.seed), day: ex.day + 40 };
   return true;
 }
 

@@ -126,7 +126,7 @@ float hRaw(vec2 w) {
 float hTop(vec2 w) { return max(hRaw(w), 0.0); }
 float biomeAt(vec2 w) {
   if (w.x < 0.0 || w.y < 0.0 || w.x >= N || w.y >= N) return 0.0;
-  return floor(texture2D(uHeight, (floor(w) + 0.5) / N).g * 255.0 / 28.0 + 0.5);
+  return floor(texture2D(uHeight, (floor(w) + 0.5) / N).g * 255.0 / 20.0 + 0.5);
 }
 // Where a bit of ground lands on screen (art pixels, row).
 float screenRow(vec2 w) { return (w.y - uCam.y) * uCam.z * TY + uCam.w - hTop(w) * K * uCam.z; }
@@ -172,7 +172,10 @@ void main() {
   sunLight = mix(sunLight, sunLight * uShadeCol, shade);
 
   vec3 lit;
-  bool water = biome < 1.5 && raw <= 0.0;
+  // Fresh water (lakes and rivers, up on the land) is water too, shallow, and freezes in winter.
+  bool fresh = biome > 9.5 && biome < 11.5;
+  bool water = (biome < 1.5 && raw <= 0.0) || fresh;
+  if (fresh) raw = -0.01;
   if (water) {
     vec2 ww = w * 0.45;
     float t = uTime;
