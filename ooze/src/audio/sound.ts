@@ -274,7 +274,7 @@ export function soundFrame(state: GameState): void {
   // barely there (fading in and out over a couple of seconds as you come and go).
   const depths = state.current === 'cell' && state.stages.cell.habitat === 'depths';
   loopTo('underwater', soup || state.current === 'cell' ? 1 : 0, bus.ambience, 0.8);
-  loopTo('depths', depths ? 0.2 : 0, bus.ambience, 0.8);
+  loopTo('depths', depths ? 0.08 : 0, bus.ambience, 0.8);
   const swirl = soup && state.swirl > 0.02 ? Math.min(1, state.swirl) : 0;
   loopTo('river', swirl * 0.8, bus.effects, swirl > 0 ? 0.15 : 0.3);
 }
