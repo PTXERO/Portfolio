@@ -411,7 +411,7 @@ export function deck(cards: { act: string; title: string; line: string; good: st
 
 function trustBar(v: Village): string {
   const t = Math.floor(v.trust ?? 0);
-  return `<div class="trust"><span class="tiny dim">Trust</span><div class="making-bar on"><i style="width: ${t}%"></i></div><span class="tiny num" data-t="trust-${v.id}">${t}</span></div>`;
+  return `<div class="trust"><span class="tiny dim">Trust</span><div class="making-bar on"><i style="width: ${t}%"></i></div></div>`;
 }
 
 export function villageCard(s: ShoreState, v: Village): string {

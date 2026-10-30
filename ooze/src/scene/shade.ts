@@ -123,8 +123,8 @@ const float CLOUD_H = 1.6; // how high they float (in the land's height units)
 float cloudAt(vec2 c) {
   vec2 p = (c - uWind * uTime) * 0.011;
   float n = fbm(p) * 0.72 + fbm(p * 2.3 + 7.0) * 0.28;
-  float cover = 0.57 - uWeather.x * 0.24 - uAsh * 0.2;
-  return smoothstep(cover, cover + 0.2, n);
+  float cover = 0.62 - uWeather.x * 0.17 - uAsh * 0.15;
+  return smoothstep(cover, cover + 0.14, n);
 }
 
 // Raw height (below 0 is under water), smooth between tiles.
@@ -296,14 +296,30 @@ void main() {
     if (acc > 0.0) lit = lit * (1.0 - acc) + fc;
   }
 
-  // The clouds themselves, where the line of sight meets their layer: soft and thin, over
-  // everything, lit by the time of day (thinning away as the view comes right down close).
-  float cloudY = uCam.y + (art.y - uCam.w + CLOUD_H * K * uCam.z) / (uCam.z * TY);
-  float cloudHere = cloudAt(vec2(wx, cloudY));
-  vec3 cloudCol = mix(vec3(0.95, 0.96, 0.98) * clamp(lum(uAmb + uSunCol) * 1.25, 0.25, 1.15), vec3(0.16, 0.18, 0.24), uNight * 0.85);
-  cloudCol = mix(cloudCol, cloudCol * vec3(1.0, 0.82, 0.68), clamp(length(uHaze) * 3.0, 0.0, 1.0));
-  cloudCol *= 1.0 - cloudHere * 0.16 - uWeather.x * 0.25;
-  lit = mix(lit, cloudCol, cloudHere * 0.3 * (1.0 - smoothstep(4.0, 7.0, uCam.z)));
+  // The clouds themselves, floating between you and the land: nearer the eye than the ground,
+  // so the layer is seen larger and slides faster as the view pans or zooms (parallax), and
+  // the camera's angle slants it less than the land. Puffy: sunlit on top, shaded beneath,
+  // over everything, lit by the hour; gone as the view comes right down under them.
+  {
+    float CP = 1.7;
+    float cty = mix(1.0, TY, 0.35);
+    vec2 ca = (art - vec2(uArt.x * 0.5, uCam.w)) / (uCam.z * CP);
+    vec2 cw = vec2(uCam.x + ca.x, uCam.y + ca.y / cty);
+    float d = cloudAt(cw);
+    if (d > 0.002) {
+      // Light from above and the sun's side: thinner toward it is the lit top, thicker the
+      // shaded underside.
+      vec2 toward = normalize(vec2(sunD.x, sunD.y - 0.6)) * 7.0;
+      float dl = cloudAt(cw + toward);
+      float shade = clamp(0.86 + (d - dl) * 0.9, 0.58, 1.12);
+      vec3 cloudCol = vec3(0.97, 0.97, 0.99) * clamp(lum(uAmb + uSunCol) * 1.3, 0.25, 1.2) * shade;
+      cloudCol = mix(cloudCol, cloudCol * vec3(1.0, 0.8, 0.64), clamp(length(uHaze) * 3.0, 0.0, 1.0));
+      cloudCol = mix(cloudCol, vec3(0.14, 0.16, 0.22) * shade, uNight * 0.85);
+      cloudCol *= 1.0 - uWeather.x * 0.3 - uAsh * 0.4;
+      float a = smoothstep(0.0, 0.55, d) * 0.82 * (1.0 - smoothstep(4.5, 7.5, uCam.z));
+      lit = mix(lit, cloudCol, a);
+    }
+  }
 
   // Glow: only things marked as shining (fireflies, a beast's eye, drawn at alpha 254) bloom,
   // so creatures and snow stay dark at night.
