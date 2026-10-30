@@ -4,6 +4,7 @@
 // survivors huddle at the old home; one of them (the one you were) walks out to the spear, and
 // when you touch it they wake. After that they go about the ash on their own.
 
+import { thunder } from '../audio/sound';
 import { PAL } from '../art/sprites';
 import { SEASON_SEC } from '../economy/rates';
 import { Biome, CELLS, ISLAND, isLand, islandOf, reveal, CELL, type Island, type Pt } from '../economy/island';
@@ -415,6 +416,7 @@ export class TribeScene extends RangeScene {
   /** A miracle happens: show it, and leave what it leaves (the tribe goes to piles). */
   wonder(id: SpellId, pts: Pt[]): void {
     this.wonders.push({ id, age: 0, pts });
+    if (id === 'lightning') thunder();
     const end = pts[pts.length - 1];
     const until = 60;
     if (id === 'quicken') {

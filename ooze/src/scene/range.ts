@@ -8,6 +8,7 @@
 // Creatures are drawn side-on (the old pixel-RPG convention), sorted by depth.
 
 import { PAL } from '../art/sprites';
+import { thunder } from '../audio/sound';
 import { STAGES } from '../content/stages';
 import { islandFor, nearestNest, nestPoints, nestProgress, partyLeg, spot, statsOf, walkTo } from '../economy/creature';
 import { Biome, CELL, CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
@@ -1452,7 +1453,11 @@ export class RangeScene {
       const Y = lift(r);
       if (X > -2 && X < W + 2 && Y > -3 && Y < H + 2) b.fillRect(Math.round(X), Math.round(Y), 1, 2);
     }
-    if (this.storm > 0.7 && Math.random() < dt * 0.12) this.flash = 0.25;
+    if (this.storm > 0.7 && Math.random() < dt * 0.12) {
+      this.flash = 0.25;
+      // The thunder after it, from somewhere off across the island.
+      thunder({ level: 0.4 + Math.random() * 0.4, delay: 0.4 + Math.random() * 1.6 });
+    }
     if (this.flash > 0) {
       b.fillStyle = `rgba(240, 244, 255, ${Math.min(0.5, this.flash * 2.4)})`;
       b.fillRect(0, 0, W, H);

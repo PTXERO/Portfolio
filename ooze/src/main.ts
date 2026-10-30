@@ -52,7 +52,7 @@ import { Scene } from './scene/scene';
 import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
 import { playCrossing } from './ui/crossing';
-import { setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
+import { popSound, setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
 import { miniIcon } from './scene/creatureLook';
 import { glyph, panWeb, pickIdea, webTransform, webView, zoomWeb } from './ui/tribePanels';
 import { record } from './economy/chronicle';
@@ -1442,6 +1442,7 @@ stageEl.addEventListener('pointercancel', endSwirl);
 
 function act(el: HTMLElement): void {
   const id = state.current;
+  popSound();
   if (el.dataset.gen) {
     if (buyGenerator(state, id, el.dataset.gen, buyCount(state, id, el.dataset.gen, state.buyAmount))) scene.purchase(state, el.dataset.gen);
   } else if (el.dataset.up) {

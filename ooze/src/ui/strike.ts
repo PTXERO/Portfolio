@@ -7,6 +7,7 @@
 // `cinematic` class) until the caller hands it back.
 
 import { STORY } from '../content/tribal';
+import { thunder } from '../audio/sound';
 
 /** Seconds into the cutscene that each beat happens. */
 const UI_OUT = 0.8;
@@ -52,6 +53,7 @@ export function playStrike(onImpact: () => void, onDone: () => void, target: () 
   });
   const bits: Bit[] = [];
   let changed = false;
+  let boomed = false;
   let last = start;
 
   const say = (text: string) => storyLine(text, words);
@@ -145,6 +147,10 @@ export function playStrike(onImpact: () => void, onDone: () => void, target: () 
       }
       shake(s < 1.8 ? 'quake-hard' : s < 4 ? 'quake' : s < 6 ? 'quake-soft' : '');
       // The world changes behind the white.
+      if (!boomed) {
+        boomed = true;
+        thunder();
+      }
       if (s > 0.25 && !changed) {
         changed = true;
         onImpact();

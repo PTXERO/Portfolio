@@ -3,6 +3,7 @@
 // charge), circling fingers spin a whirlpool, and discoveries get their moment.
 
 import { blit, PAL, type SpriteName } from '../art/sprites';
+import { thunder } from '../audio/sound';
 import { STAGES } from '../content/stages';
 import { conditionsHold, nextReaction } from '../economy/actions';
 import type { GameState, ReactionDef } from '../economy/types';
@@ -172,6 +173,7 @@ export class SoupScene {
   /** A jagged bolt from the surface down, flickering; optionally with a flash. */
   private bolt(x0: number, flash: boolean): void {
     const seed = Math.random() * 100;
+    thunder({ level: flash ? 1 : 0.3, under: true });
     this.fx.add(0.5, (f, age) => {
       if (age > 0.35 || Math.floor(age * 30) % 3 === 2) return;
       let x = x0;

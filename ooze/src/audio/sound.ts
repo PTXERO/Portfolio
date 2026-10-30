@@ -2,7 +2,8 @@
 // and the Cell (one of many, never the same twice running), and the rush of the whirlpool,
 // as loud as it's strong (silent when there isn't one). The drops and the rush are heard as
 // if from under the water: muffled, and ringing on in a long reverb. The Menu has a volume
-// for the ambience and one for the effects.
+// for the ambience and one for the effects. Lightning, in any stage, brings thunder: one of
+// four, at random (muffled too when it's heard from under the Soup). Buttons pop.
 //
 // Browsers only let sound start from a tap, so nothing plays (or loads) until the first one.
 
@@ -46,7 +47,14 @@ export const volumes: Record<Channel, number> = (() => {
 let ctx: AudioContext | null = null;
 let master: GainNode;
 const bus = {} as Record<Exclude<Channel, 'master'>, GainNode>;
-const buffers: Partial<Record<'underwater' | 'river' | 'drops', AudioBuffer>> = {};
+type Sound = 'underwater' | 'river' | 'drops' | 'pop' | 'thunder0' | 'thunder1' | 'thunder2' | 'thunder3';
+const buffers: Partial<Record<Sound, AudioBuffer>> = {};
+/** The thunders, evened out (they were recorded at very different loudness). */
+const THUNDER_GAIN = [1, 0.62, 0.95, 0.5];
+/** Effects heard in the open air (thunder above the water): no muffling, a little room. */
+let sky: GainNode;
+let lastThunder = -1;
+let thunderAt = -99;
 /** The two loops, once running: their own gain (fading in and out) on top of the channel's. */
 const loops: Partial<Record<'underwater' | 'river', GainNode>> = {};
 let lastDrop = -1;
@@ -66,6 +74,7 @@ function applyVolumes(): void {
   const now = ctx.currentTime;
   master.gain.setTargetAtTime(volumes.master, now, 0.05);
   for (const k of Object.keys(bus) as (keyof typeof bus)[]) bus[k].gain.setTargetAtTime(volumes[k], now, 0.05);
+  sky.gain.setTargetAtTime(volumes.effects, now, 0.05);
 }
 
 /** Called from the first taps: makes the sound (browsers only allow it from a tap). */
@@ -87,8 +96,10 @@ export function unlockSound(): void {
   bus.ambience.connect(master);
   bus.effects = ctx.createGain();
   underwater(ctx, bus.effects, master);
+  sky = ctx.createGain();
+  sky.connect(master);
   applyVolumes();
-  for (const name of ['drops', 'underwater', 'river'] as const) {
+  for (const name of ['pop', 'drops', 'thunder0', 'thunder1', 'thunder2', 'thunder3', 'underwater', 'river'] as const) {
     fetch(`${import.meta.env.BASE_URL}sfx/${name}.mp3`)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
       .then((a) => new Promise<AudioBuffer>((ok, no) => ctx!.decodeAudioData(a, ok, no)))
@@ -151,6 +162,42 @@ export function tapSound(): void {
   g.gain.value = 0.55 + Math.random() * 0.45;
   src.connect(g).connect(bus.effects);
   src.start(0, at, len);
+}
+
+/** A button pressed: a pop, a touch higher or lower each time. */
+export function popSound(): void {
+  const buf = buffers.pop;
+  if (!ctx || !buf || ctx.state !== 'running') return;
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = 0.94 + Math.random() * 0.12;
+  const g = ctx.createGain();
+  g.gain.value = 0.6;
+  src.connect(g).connect(sky);
+  src.start();
+}
+
+/** Thunder: one of the four (not the last one heard), at a loudness (1 a strike overhead, less
+ * far off), after a delay (light comes before sound). Under the Soup it's heard through the
+ * water. Small far-off ones don't pile up on top of a thunder still rolling. */
+export function thunder(opts: { level?: number; under?: boolean; delay?: number } = {}): void {
+  if (!ctx || ctx.state !== 'running') return;
+  const level = opts.level ?? 1;
+  const now = ctx.currentTime;
+  if (level < 0.6 && now - thunderAt < 8) return;
+  let i = Math.floor(Math.random() * 4);
+  if (i === lastThunder) i = (i + 1 + Math.floor(Math.random() * 3)) % 4;
+  const buf = buffers[`thunder${i}` as Sound];
+  if (!buf) return;
+  lastThunder = i;
+  thunderAt = now;
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = 0.9 + Math.random() * 0.15;
+  const g = ctx.createGain();
+  g.gain.value = level * THUNDER_GAIN[i];
+  src.connect(g).connect(opts.under ? bus.effects : sky);
+  src.start(now + (opts.delay ?? 0));
 }
 
 /** Fades a loop toward a level (starting it the first time it's wanted). */
