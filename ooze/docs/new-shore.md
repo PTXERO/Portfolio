@@ -138,6 +138,17 @@ The spear's will becomes a faith — "the Far Voice":
 
 *To design: the powers themselves, and the whisper set.*
 
+**Notes for later (faith as a force, from the user):**
+- **Conversion is per village.** Winning a village over (or taking it) doesn't make its people
+  believe: each village (and each kind among your own people) has its own faith in the spear, and
+  has to be converted, by the Far Voice, by rites, by living alongside believers.
+- **Devotion rises and falls with use.** Using the spear's powers raises devotion; leaving them
+  unused lets it fade. A people whose devotion runs out can **lose the religion** altogether.
+- **Getting it back** might take something special: a relic of the spear in a later era, or
+  similar.
+- Faith becomes a factor across eras: in Phase 2's Rites lane, between villages of different
+  faiths, and later on.
+
 ## 6. Phase 2 — Culture (100 → the Republic)
 
 The long haul, idle at heart. At about a hundred people a short moment marks the turn (a great
@@ -362,8 +373,12 @@ Built in slices, each tested live (balance sims after).
 3. **Raids and defense**: the grace period, scouts, announced raids, Kairosoft-style battles.
 4. **Taking people and ideas**: diet leaning and shifts; cannibals' Dread.
 5. **The Far Voice**: whispers and the few powers.
-6. **Delegation**: Scout *(the Scout's hut is live: up to 2 scouts explore the fog on their
-   own, offline too)*, Envoy, War chief, Steward (the idle side of Phase 1).
+6. **Delegation** *(Scout, Steward and Envoy live)*: the Scout's hut (up to 2 scouts explore the fog
+   on their own); the Elders' council (the steward: they build whenever nothing's going up, by a
+   priority you set: Balanced, Homes, Food or Stores); the Envoy's hut (a gift a day to the nearest
+   kin being won over, if there's food to spare). All offline too. With them, an idle player
+   (checking in every half hour) reaches 100 in about 6h20, an engaged one about 3h. War chief
+   comes with raids.
 7. **The turn**: at a hundred, into Phase 2 (the Long Road).
 
 **No cap at a hundred.** The village isn't limited to 100 and the interface doesn't count toward

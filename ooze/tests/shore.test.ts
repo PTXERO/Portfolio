@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { answerJoin, boosts, build, setTax, shoreIsland, takeRaft, walkChief, workPlan, buildCost, buildsOpen, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { answerJoin, boosts, build, foodCap, setTax, shoreIsland, takeRaft, walkChief, workPlan, buildCost, buildsOpen, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import type { TribeState } from '../src/economy/types';
 
@@ -282,5 +282,35 @@ describe('Finding the way', () => {
     for (let i = 0; i < 3000 && s.chiefTo; i++) shoreTick(state, 1);
     expect(s.chiefTo).toBeNull();
     expect(isLand(shoreIsland(s.seed), s.chiefAt.x, s.chiefAt.y)).toBe(true);
+  });
+});
+
+describe('The elders and the envoy', () => {
+  it('the elders build on their own once there is a council', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    now(state, 'hearth');
+    now(state, 'hut');
+    now(state, 'council');
+    expect(s.steward?.on).toBe(true);
+    const before = s.built.length;
+    for (let i = 0; i < 1800; i++) shoreTick(state, 2);
+    expect(s.built.length).toBeGreaterThan(before + 2);
+  });
+  it('the envoy takes gifts to kin by themselves', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    now(state, 'hearth');
+    now(state, 'hut');
+    now(state, 'envoy');
+    const v = s.villages[0];
+    v.found = true;
+    v.trust = 10;
+    v.pop = 8;
+    for (let d = 0; d < 5; d++) {
+      s.food = foodCap(s);
+      shoreTick(state, DAY_SEC);
+    }
+    expect(v.trust!).toBeGreaterThan(20);
   });
 });

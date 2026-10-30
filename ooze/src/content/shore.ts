@@ -21,7 +21,7 @@ export const SHORE_STORY = {
   found: '[STORY] Smoke, and huts, and others like them. Not like them.',
 };
 
-export type BuildId = 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails';
+export type BuildId = 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails' | 'council' | 'envoy';
 
 /** The Build tab's sorts of building. */
 export type BuildCat = 'homes' | 'stores' | 'work' | 'explore';
@@ -84,6 +84,8 @@ export const BUILDS: BuildDef[] = [
   { id: 'granary', cat: 'stores', name: 'Granary', does: 'Room for 120 more food, kept dry and cold: winter slows the food only half as much.', wood: 80, growth: 1.6, after: 'rack', learn: 'cave', fx: { foodCap: 120, winter: 0.5 } },
   { id: 'weir', cat: 'work', name: 'Fishing weir', does: 'Stakes in the shallows, the way the drowned raft\'s makers did it: food comes in 5% faster, and the land feeds 6 more gatherers.', wood: 45, growth: 1.6, after: 'hut', learn: 'wreck', fx: { food: 0.05 } },
   { id: 'lookout', cat: 'explore', name: 'Lookout', does: 'A platform up high, like the one in the great tree: the land 30 tiles round the village is seen, and scouts see further.', wood: 45, growth: 1, max: 1, after: 'hut', learn: 'bigtree', fx: { watch: 30, sight: 4 } },
+  { id: 'council', cat: 'homes', name: 'Elders\' council', does: 'The elders see to the building when you\'re not there: they choose what goes up next, by what you\'ve said matters most.', wood: 50, growth: 1, max: 1, after: 'hut' },
+  { id: 'envoy', cat: 'explore', name: 'Envoy\'s hut', does: 'Once a day, if there\'s food to spare, an envoy takes a gift to the nearest kin you\'re winning over (while you\'re away too).', wood: 60, growth: 1, max: 1, after: 'hut' },
   { id: 'trails', cat: 'explore', name: 'Trail markers', does: 'Cairns and blazes on the trees: the chief and the scouts walk 10% faster.', wood: 40, growth: 1, max: 1, after: 'scout', fx: { speed: 0.1 } },
 ];
 

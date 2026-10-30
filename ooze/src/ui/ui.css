@@ -814,3 +814,4 @@ body.wide.tab-ideas #sheet { width: clamp(420px, 42vw, 820px); }
 #modal > .px-box { background: rgba(31, 37, 56, 0.72); text-shadow: 0 1px 0 rgba(10, 12, 20, 0.85); }
 #modal .deck-card { background: rgba(52, 64, 95, 0.5); }
 .seg-gap { flex: 1; }
+.card.lean .seg { flex-wrap: wrap; }

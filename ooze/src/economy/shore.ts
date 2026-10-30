@@ -104,6 +104,7 @@ export interface Village {
 }
 
 export type JoinAnswer = 'crowd' | 'vassal' | 'wait' | 'away';
+export type StewardPlan = 'balanced' | 'homes' | 'food' | 'stores';
 
 export interface Scout {
   at: Pt;
@@ -166,6 +167,10 @@ export interface ShoreState {
   villages: Village[];
   /** What's going up now (one at a time): where, and seconds left of how many. */
   building?: { id: BuildId; x: number; y: number; left: number; total: number };
+  /** The elders' council, once built: whether they build while you're away, and what for. */
+  steward?: { on: boolean; plan: StewardPlan };
+  /** The last day the envoy took a gift. */
+  envoyDay?: number;
   /** Whether the raft they came on has been broken up for its wood. */
   raftTaken?: boolean;
   /** Scouts out exploring (one per scout's hut). */
@@ -582,10 +587,50 @@ export function build(state: GameState, id: BuildId): boolean {
   return true;
 }
 
+/** What the elders would build next, by what you've said matters most (null: nothing yet, or
+ * they're saving up for what's needed). */
+export function stewardPick(s: ShoreState): BuildId | null {
+  if (s.building) return null;
+  const open = new Set(buildsOpen(s).map((b) => b.id));
+  if (open.has('hearth')) return 'hearth';
+  const plan = workPlan(s);
+  const free = room(s) - s.people.length;
+  const homes = (): BuildId | null => (open.has('longhouse') && buildCost(s, 'longhouse') / 12 < buildCost(s, 'hut') / 4 ? 'longhouse' : open.has('hut') ? 'hut' : null);
+  const food = (): BuildId | null => (open.has('weir') && buildCost(s, 'weir') < buildCost(s, 'camp') ? 'weir' : open.has('camp') ? 'camp' : null);
+  const stores = (): BuildId | null => (s.food >= foodCap(s) * 0.9 ? (open.has('granary') && buildCost(s, 'granary') / 120 < buildCost(s, 'rack') / 40 ? 'granary' : open.has('rack') ? 'rack' : null) : null);
+  const p = s.steward?.plan ?? 'balanced';
+  const wants: (() => BuildId | null)[] =
+    p === 'homes'
+      ? [() => (free <= 4 ? homes() : null), () => (plan.food > plan.land ? food() : null)]
+      : p === 'food'
+        ? [() => (plan.food > plan.land - 2 ? food() : null), () => (free <= 2 ? homes() : null), stores]
+        : p === 'stores'
+          ? [stores, () => (free <= 2 ? homes() : null), () => (plan.food > plan.land ? food() : null)]
+          : [() => (free <= 2 ? homes() : null), () => (plan.food > plan.land ? food() : null), stores];
+  for (const w of wants) {
+    let need = w();
+    if (!need) continue;
+    // More than the woodpiles hold: a woodpile first.
+    if (buildCost(s, need) > woodCap(s) && open.has('woodpile')) need = 'woodpile';
+    return s.wood >= buildCost(s, need) ? need : null;
+  }
+  // Nothing pressing: something useful, if the wood's piling up.
+  const extras: BuildId[] = ['elders', 'pool', 'granary', 'rack', 'cutter', 'lookout', 'woodpile', 'camp', 'hut'];
+  const pick = extras.filter((id) => open.has(id)).sort((a, b) => buildCost(s, a) - buildCost(s, b))[0];
+  return pick && s.wood >= buildCost(s, pick) && s.wood > woodCap(s) * 0.6 ? pick : null;
+}
+
+export function setSteward(state: GameState, on: boolean, plan?: StewardPlan): void {
+  const s = shoreOf(state);
+  if (!s || !count(s, 'council')) return;
+  s.steward = { on, plan: plan ?? s.steward?.plan ?? 'balanced' };
+}
+
 function finishBuilding(state: GameState, s: ShoreState): void {
   const b = s.building!;
   s.building = undefined;
   s.built.push({ id: b.id, x: b.x, y: b.y, day: s.day + s.clock / DAY_SEC });
+  if (b.id === 'council') s.steward ??= { on: true, plan: 'balanced' };
   if (b.id === 'hearth') {
     s.news.push(SHORE_STORY.hearth);
     record(state, 'The hearth was lit.', 'shore', shoreWhen(s));
@@ -628,8 +673,8 @@ export function workPlan(s: ShoreState): { food: number; wood: number; eat: numb
   const woodEach = WOOD_PER * (1 + 0.1 * count(s, 'cutter') + bo.wood);
   // Leaning one way or the other; with the stores full, hands go to the other.
   let share = s.lean === 'food' ? 0.75 : s.lean === 'wood' ? Math.min(1, (eat * 1.05) / Math.max(1, adults) / foodEach) : Math.min(1, (eat * 1.5) / Math.max(1, adults) / foodEach + 0.15);
-  if (s.food >= foodCap(s) - 0.5) share = Math.min(share, (eat * 1.0) / Math.max(1, adults) / foodEach);
-  if (s.wood >= woodCap(s) - 0.5) share = 1;
+  if (s.food >= foodCap(s) - 0.01) share = Math.min(share, (eat * 1.0) / Math.max(1, adults) / foodEach);
+  if (s.wood >= woodCap(s) - 0.01) share = 1;
   const food = Math.round(adults * Math.max(0, Math.min(1, share)));
   const wood = adults - food;
   // The land round the village feeds only so many: past that, each more brings in less.
@@ -860,6 +905,11 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
     s.building.left -= dt;
     if (s.building.left <= 0) finishBuilding(state, s);
   }
+  // The elders build, when they're asked to and nothing's going up.
+  if (!s.building && s.steward?.on && count(s, 'council')) {
+    const id = stewardPick(s);
+    if (id) build(state, id);
+  }
   walk(state, s, dt);
   stepVassals(state, s, k);
   // Won over and waiting: with no answer, they wait for room; once there's room, they come; kept
@@ -907,6 +957,14 @@ function born(state: GameState, s: ShoreState): void {
 }
 
 function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>): void {
+  // The envoy's day: a gift to the nearest kin being won over, if there's food to spare.
+  if (count(s, 'envoy') && s.envoyDay !== s.day) {
+    const v = s.villages.filter((x) => canWin(s, x)).sort((a, b) => Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y) - Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y))[0];
+    if (v && s.food >= giftCost(v) + 20) {
+      s.envoyDay = s.day;
+      gift(state, v.id);
+    }
+  }
   // Old age.
   for (const p of [...s.people]) {
     if (p.dies === undefined || s.day < p.dies) continue;

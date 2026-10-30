@@ -15,6 +15,7 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
+import { setSteward, type StewardPlan } from './economy/shore';
 import { answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
 import { findCard, joinCard, poiCard, setBuildCat, setVillageView, villageCard } from './ui/shorePanels';
 import type { BuildId } from './content/shore';
@@ -1741,6 +1742,8 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.lean) setLean(state, el.dataset.lean as Lean);
   else if (el.dataset.buildcat) setBuildCat(el.dataset.buildcat);
   else if (el.dataset.villageview) setVillageView(el.dataset.villageview);
+  else if (el.dataset.steward) setSteward(state, el.dataset.steward === 'on');
+  else if (el.dataset.stewardplan) setSteward(state, true, el.dataset.stewardplan as StewardPlan);
   else if (el.dataset.camera) {
     // Back to the village (and the camera stays there), or back with the chief.
     const s = shoreOf(state);

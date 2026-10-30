@@ -57,9 +57,18 @@ function run(kind: Kind, seed: number, diet: string) {
     shoreTick(state, STEP);
     for (const v of s.villages) if (v.asking !== undefined) answerJoin(state, v.id, gifts ? 'crowd' : 'wait');
     if (t % every === 0) {
-      for (let i = 0; i < 3; i++) {
-        const id = choose(state, explore);
-        if (!id || !build(state, id)) break;
+      if (kind === 'idle') {
+        // The idle player sets the elders and the envoy to work, sends out a scout, and leaves
+        // the rest to them.
+        for (const id of ['hearth', 'hut', 'council', 'envoy', 'scout'] as BuildId[]) {
+          if (s.building) break;
+          if (!s.built.some((b) => b.id === id) && buildsOpen(s).some((b) => b.id === id) && s.wood >= buildCost(s, id)) build(state, id);
+        }
+      } else {
+        for (let i = 0; i < 3; i++) {
+          const id = choose(state, explore);
+          if (!id || !build(state, id)) break;
+        }
       }
     }
     // The chief's day (an active player looks in every half minute or so).

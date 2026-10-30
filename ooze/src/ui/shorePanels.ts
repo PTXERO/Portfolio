@@ -49,7 +49,7 @@ export function shoreKey(state: GameState, tab: string): string {
   if (tab === 'island') return JSON.stringify([s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop)], Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
   const plan = workPlan(s);
   if (villageView === 'people') return JSON.stringify(['people', s.people.length, s.chief, Math.floor(s.day / 2), s.hungry]);
-  return JSON.stringify([s.hungry, shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, s.chief, s.people.filter((p) => isAdult(s, p)).length, s.people.filter((p) => p.founder).length]);
+  return JSON.stringify([s.steward, s.hungry, shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, s.chief, s.people.filter((p) => isAdult(s, p)).length, s.people.filter((p) => p.founder).length]);
 }
 
 export function shoreUpdate(root: HTMLElement, state: GameState): void {
@@ -93,7 +93,7 @@ export function shoreLayout(state: GameState, tab: string): string {
   if (tab === 'island') return islandLayout(s);
   const views = `<div class="seg build-cats"><button class="px-btn${villageView === 'village' ? ' on' : ''}" data-villageview="village">The village</button><button class="px-btn${villageView === 'people' ? ' on' : ''}" data-villageview="people">People · ${s.people.length}</button><span class="seg-gap"></span><button class="px-btn" data-camera="home">Home</button><button class="px-btn" data-camera="chief">Chief</button></div>`;
   if (villageView === 'people') return views + peopleLayout(s);
-  return views + storesCard(s) + workCard(s) + peopleCard(s);
+  return views + storesCard(s) + workCard(s) + councilCard(s) + peopleCard(s);
 }
 
 /** Whether a sort of building has anything in it yet (built, or to build). */
@@ -277,6 +277,23 @@ function scoutsCard(s: ShoreState): string {
   const out = `<div class="card px-box"><div class="info"><div class="name">Out in the fog</div>
     <div class="sub">${scouts ? `${scouts} scout${scouts > 1 ? 's are' : ' is'} out exploring for you.` : 'No scouts yet (build a Scout\'s hut to send one out).'} Tap the land to send ${s.people.find((p) => p.id === s.chief)?.name ?? 'the chief'} walking.</div></div></div>`;
   return out;
+}
+
+const PLANS: { id: string; name: string; does: string }[] = [
+  { id: 'balanced', name: 'Balanced', does: 'room when it\'s short, food when the land is, stores when they\'re full' },
+  { id: 'homes', name: 'Homes', does: 'room first, always a little ahead' },
+  { id: 'food', name: 'Food', does: 'camps and weirs before the land runs short' },
+  { id: 'stores', name: 'Stores', does: 'racks and granaries, and woodpiles for the big builds' },
+];
+
+/** The elders' council: building while you're away, by what you've said matters most. */
+function councilCard(s: ShoreState): string {
+  if (!count(s, 'council')) return '';
+  const st = s.steward ?? { on: true, plan: 'balanced' };
+  const plan = PLANS.find((p) => p.id === st.plan) ?? PLANS[0];
+  return `<div class="card px-box lean"><div class="info"><div class="name">The elders build</div>
+    <div class="sub">${st.on ? `Whenever nothing's going up, they choose what's next: ${plan.does}.` : 'They leave the building to you.'}</div></div>
+    <div class="seg"><button class="px-btn${st.on ? ' on' : ''}" data-steward="${st.on ? 'off' : 'on'}">${st.on ? 'On' : 'Off'}</button>${PLANS.map((p) => `<button class="px-btn${st.plan === p.id ? ' gold' : ''}" data-stewardplan="${p.id}"${st.on ? '' : ' disabled'}>${p.name}</button>`).join('')}</div></div>`;
 }
 
 function peopleCard(s: ShoreState): string {
