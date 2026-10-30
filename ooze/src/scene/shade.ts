@@ -142,15 +142,20 @@ float fogField(vec2 p) {
   float edgeFog = 1.0 - smoothstep(4.0, 34.0, e);
   if (p.x < 0.0 || p.y < 0.0 || p.x >= N || p.y >= N) return 1.0;
   vec2 q = p - uWind * uTime * 0.25;
-  vec2 j = (vec2(noise(q * 0.06), noise(q * 0.06 + 9.0)) - 0.5) * 7.0;
-  float f = (texture2D(uFog, (p + j + vec2(2.5, 0.0)) / N).a + texture2D(uFog, (p + j - vec2(2.5, 0.0)) / N).a
-    + texture2D(uFog, (p + j + vec2(0.0, 2.5)) / N).a + texture2D(uFog, (p + j - vec2(0.0, 2.5)) / N).a) * 0.25;
-  return max(smoothstep(0.15, 0.85, f), edgeFog);
+  vec2 j = (vec2(noise(q * 0.06), noise(q * 0.06 + 9.0)) - 0.5) * 6.0;
+  float f = texture2D(uFog, (p + j) / N).a * 0.2;
+  for (int k = 0; k < 8; k++) {
+    float a = float(k) * 0.785;
+    f += texture2D(uFog, (p + j + vec2(cos(a), sin(a)) * 5.0) / N).a * 0.1;
+  }
+  // (A speck left unseen between scouts' paths is a haze, not a bank: only what's mostly unseen
+  // round about fogs up fully.)
+  return max(smoothstep(0.3, 0.9, f), edgeFog);
 }
 /** The top of the fog bank over a point: some way over the land, billowing. */
 float fogTop(vec2 p) {
   vec2 q = p - uWind * uTime * 0.25;
-  float bank = 0.06 + 0.22 * (noise(q * 0.03) * 0.6 + noise(q * 0.09) * 0.4);
+  float bank = 0.02 + 0.07 * (noise(q * 0.03) * 0.6 + noise(q * 0.09) * 0.4);
   return hTop(p) + fogField(p) * bank - 0.01;
 }
 float biomeAt(vec2 w) {
@@ -306,16 +311,13 @@ void main() {
       }
       vec2 p = vec2(wx, uCam.y + (art.y - uCam.w + lo * K * uCam.z) / (uCam.z * TY));
       float depth = fogTop(p) - hTop(p);
-      // The bank's surface, from its slope: lit by the sun and the sky.
-      float e = 2.0;
-      vec3 nrm = normalize(vec3(-(fogTop(p + vec2(e, 0.0)) - fogTop(p - vec2(e, 0.0))) * K / (2.0 * e), -(fogTop(p + vec2(0.0, e)) - fogTop(p - vec2(0.0, e))) * K / (2.0 * e), 1.0));
-      float sunlit = max(dot(nrm, sunD), 0.0);
-      vec3 fogLit = (uAmb * 1.15 + uSunCol * (0.35 + 0.75 * sunlit)) * vec3(0.93, 0.95, 0.98);
+      // Soft and even, as mist is: lit by the sky and the sun, a touch brighter where it's deep.
+      vec3 fogLit = (uAmb * 1.1 + uSunCol * 0.85) * vec3(0.92, 0.94, 0.97) * (0.95 + 0.06 * smoothstep(0.0, 0.08, depth));
       fogLit = mix(fogLit, fogLit * vec3(1.0, 0.86, 0.74), clamp(length(uHaze) * 3.0, 0.0, 1.0));
       fogLit = mix(fogLit, vec3(0.42, 0.38, 0.35) * (0.45 + bright * 0.4), uAsh * 0.9);
       // A little texture in it, drifting.
       fogLit *= 0.94 + 0.08 * noise((p - uWind * uTime * 0.25) * 0.15);
-      lit = mix(lit, fogLit, smoothstep(0.0, 0.07, depth));
+      lit = mix(lit, fogLit, smoothstep(0.0, 0.06, depth) * 0.92);
     }
   }
 
@@ -340,7 +342,7 @@ void main() {
       // shaded underside.
       vec2 toward = normalize(vec2(sunD.x, sunD.y - 0.6)) * 7.0;
       float dl = cloudAt(cw + toward);
-      float shade = clamp(0.86 + (d - dl) * 0.9, 0.58, 1.12);
+      float shade = clamp(0.95 + (d - dl) * 0.35, 0.84, 1.04);
       vec3 cloudCol = vec3(0.97, 0.97, 0.99) * clamp(lum(uAmb + uSunCol) * 1.3, 0.25, 1.2) * shade;
       cloudCol = mix(cloudCol, cloudCol * vec3(1.0, 0.8, 0.64), clamp(length(uHaze) * 3.0, 0.0, 1.0));
       cloudCol = mix(cloudCol, vec3(0.14, 0.16, 0.22) * shade, uNight * 0.85);

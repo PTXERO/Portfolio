@@ -248,7 +248,7 @@ export class RangeScene {
     this.kept = all[key] = { storm: this.storm, left: this.stormLeft, timer: this.stormTimer, wet: this.wet, bow: this.bow };
   }
 
-  /** How high the clouds float over this island: a little over its highest peak (worked out
+  /** How high the clouds float over this island: about its highest peaks (worked out
    * once an island). */
   private cloudFor = { key: '', h: 1.4 };
   get cloudH(): number {
@@ -258,7 +258,8 @@ export class RangeScene {
     if (this.cloudFor.key !== key) {
       let top = 0;
       for (let i = 0; i < is.height.length; i += 7) if (is.height[i] > top) top = is.height[i];
-      this.cloudFor = { key, h: Math.max(0.9, top * 1.15 + 0.3) };
+      // Just over the highest peaks: the tallest reach up into them.
+      this.cloudFor = { key, h: Math.max(0.6, top + 0.05) };
     }
     return this.cloudFor.h;
   }
