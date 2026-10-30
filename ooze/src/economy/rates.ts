@@ -294,17 +294,17 @@ export function foragers(state: GameState): number {
 /** Each Home Range makes the land this much richer. */
 export const TERRITORY_RICH = 0.03;
 /** Each point of the creature's stats (all five together) adds this to what the herd forages. */
-export const BODY_FORAGE = 0.004;
+/** Senses: each point, the herd forages this much more (it spots more food). */
+export const BODY_FORAGE = 0.03;
 
 /** What the line's body adds to foraging: better legs, mouths and eyes find and carry more. */
 export function bodyMult(state: GameState): number {
-  const total = Object.values(statsOf(state)).reduce((a, b) => a + b, 0);
-  return 1 + BODY_FORAGE * total;
+  return 1 + BODY_FORAGE * statsOf(state).senses;
 }
 
 export function herdMult(state: GameState): number {
   const effects = stageEffects(state, 'creature');
-  // Territory makes the land richer: +3% each. A better body forages better: +0.4% a stat point.
+  // Territory makes the land richer: +3% each. Keener senses spot more food: +3% a point.
   return stageMult(effects) * feedMult(state, 'creature') * (1 + TERRITORY_RICH * (state.stages.creature.generators.territory ?? 0)) * bodyMult(state);
 }
 

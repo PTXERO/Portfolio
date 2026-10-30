@@ -52,7 +52,7 @@ export function birthRate(state: GameState): number {
   const s = st(state);
   // Nests help less and less as there get to be many; nesters help by the share of the
   // herd they are (not their number), so a big herd doesn't refill in moments.
-  return (0.02 + 0.03 * Math.sqrt(s.generators.nest)) * (1 + 2 * (s.roles.carer / Math.max(1, s.pop))) * seasonOf(state).season.births;
+  return (0.02 + 0.03 * Math.sqrt(s.generators.nest)) * (1 + 2 * (s.roles.carer / Math.max(1, s.pop))) * seasonOf(state).season.births * statFx(state).births;
 }
 
 /** Biomass the herd eats per second: less with marsh grazing and fat stores, more in winter. */
@@ -67,7 +67,7 @@ export function winterLoss(state: GameState): number {
   const s = st(state);
   if (!seasonOf(state).season.winter || s.pop < 1) return 0;
   const guarded = Math.min(0.9, (s.roles.guard / Math.max(1, s.pop)) * 4 + 0.03 * s.generators.den);
-  return 0.0008 * (1 - guarded) * effectProduct(state, 'winterMult');
+  return (0.0008 * (1 - guarded) * effectProduct(state, 'winterMult')) / statFx(state).hardship;
 }
 
 /** Food gathered minus food eaten, per second. Negative means the herd is going hungry. */
@@ -113,6 +113,25 @@ export function statsOf(state: GameState): Record<Stat, number> {
   return out;
 }
 
+/**
+ * What the body's stats do for the herd: Strength carries more home (found places, parties,
+ * trips), Speed gets round the places sooner (they give again sooner), Senses spots more food
+ * (the herd forages more), Toughness sees them through winter and hunger, Charm brings more
+ * births. (Speed also walks faster, Senses sees further, Strength drives beasts off, Charm wins
+ * mates and hurries eggs; and places and run-ins ask for stats.)
+ */
+export const STAT_FX = { carry: 0.05, regrow: 0.02, forage: 0.03, hardship: 0.04, births: 0.03 };
+export function statFx(state: GameState): { carry: number; regrow: number; forage: number; hardship: number; births: number } {
+  const s = statsOf(state);
+  return {
+    carry: 1 + STAT_FX.carry * s.strength,
+    regrow: 1 + STAT_FX.regrow * s.speed,
+    forage: 1 + STAT_FX.forage * s.senses,
+    hardship: 1 + STAT_FX.hardship * s.toughness,
+    births: 1 + STAT_FX.births * s.charm,
+  };
+}
+
 /** Energy a part takes to wear: half its stats, rounded up, unless it says. */
 export function partEnergy(p: PartDef): number {
   return p.energy ?? Math.ceil(Object.values(p.stats).reduce((n, v) => n + (v ?? 0), 0) / 2);
@@ -141,6 +160,7 @@ export function canWear(state: GameState, id: string): boolean {
 function tripMult(state: GameState): number {
   let m = 1;
   for (const e of stageEffects(state, CREATURE)) if (e.kind === 'tripMult') m *= e.mult;
+  m *= statFx(state).carry;
   return m;
 }
 
@@ -595,7 +615,7 @@ export const FARM_PAY = 0.05;
 
 /** Seconds a settled place takes to grow back (quicker with Foraging Rounds). */
 export function placeRest(state: GameState): number {
-  return PLACE_REST * (foragesOnItsOwn(state) ? 0.6 : 1);
+  return (PLACE_REST * (foragesOnItsOwn(state) ? 0.6 : 1)) / statFx(state).regrow;
 }
 
 /** Found places give, each time they've grown back, without anyone needing to go there. */
@@ -790,7 +810,7 @@ export function creatureTick(state: GameState, dt: number, rand: () => number = 
   const hungry = s.currency.lt(eat);
   s.currency = hungry ? D(0) : s.currency.sub(eat);
   // Hungry, the herd thins by 1% a second; fed, it grows toward what housing allows.
-  if (hungry) s.pop = Math.max(1, s.pop * Math.exp(-0.01 * dt));
+  if (hungry) s.pop = Math.max(1, s.pop * Math.exp((-0.01 / statFx(state).hardship) * dt));
   else s.pop = Math.max(Math.min(s.pop, housing(state)), Math.min(housing(state), s.pop + birthRate(state) * dt));
   s.pop = Math.max(1, s.pop * Math.exp(-winterLoss(state) * dt));
   settleRoles(state);

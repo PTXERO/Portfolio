@@ -30,6 +30,7 @@ import {
   islandFor,
   placeSeen,
   placeShort,
+  statFx,
   statsOf,
   tripPay,
   walkSeconds,
@@ -40,7 +41,7 @@ import {
 import { EVENTS } from '../content/creature';
 import { seenShare } from '../economy/island';
 import { buyCount, generatorCost, generatorVisible } from '../economy/actions';
-import { BODY_FORAGE, bodyMult, foragers, SEASON_SEC, seasonOf, stageRate } from '../economy/rates';
+import { bodyMult, foragers, SEASON_SEC, seasonOf, stageRate } from '../economy/rates';
 import { D, format, formatTime } from '../economy/num';
 import { checkReaction, lockHint, payStage, reactionReady, upgradeCost, upgradeUnlocked, visibleUpgrades } from '../economy/actions';
 import type { UpgradeDef } from '../economy/types';
@@ -211,7 +212,7 @@ export function bodyLayout(state: GameState, upgradeCard: (u: (typeof STAGES)['c
       .join('') + nextHint(state, (u) => !u.branch && !u.pay && !u.target);
   return `<div class="portrait">${creatureIcon(creatureLookOf(state), 4)}<div class="stats">${stats}</div></div>
     <div class="energy-bar"><span class="label">Energy</span><span class="pips" data-pips></span><span class="num" data-t="energy"></span></div>
-    <p class="note" data-t="body-forage"></p>
+    <ul class="stat-fx">${STATS.map((k) => `<li data-t="statfx-${k}"></li>`).join('')}</ul>
     <p class="note">Tap a part to wear it. Each costs energy (⚡); your creature can only wear what its body can power. Generations and a Bigger Heart give it more.</p>${slots}
     <div class="panel-head"><h2>Training</h2></div>${training}
     ${boosts ? `<div class="panel-head"><h2>Boosts</h2></div>${boosts}` : ''}`;
@@ -388,7 +389,14 @@ export function creatureUpdate(root: HTMLElement, state: GameState, tab: 'grow' 
     const used = energyUsed(state);
     const budget = energyBudget(state);
     setText(root, 'energy', `${used} / ${budget}`);
-    setText(root, 'body-forage', `Its body helps the whole herd forage: +${Math.round((bodyMult(state) - 1) * 100)}% (every stat point +${Math.round(BODY_FORAGE * 1000) / 10}%).`);
+    // What each stat is doing for the herd right now.
+    const fx = statFx(state);
+    const pct = (k: number) => `${Math.round((k - 1) * 100)}%`;
+    setText(root, 'statfx-strength', `Strength: carries ${pct(fx.carry)} more home from places, parties and trips; drives beasts off sooner`);
+    setText(root, 'statfx-speed', `Speed: found places grow back ${pct(fx.regrow)} faster; walks faster`);
+    setText(root, 'statfx-senses', `Senses: the herd forages ${pct(bodyMult(state))} more; sees further through the fog`);
+    setText(root, 'statfx-toughness', `Toughness: ${Math.round((1 - 1 / fx.hardship) * 100)}% fewer lost to winter and hunger`);
+    setText(root, 'statfx-charm', `Charm: ${pct(fx.births)} more births; wins mates more easily; hurries eggs`);
     const pips = root.querySelector<HTMLElement>('[data-pips]');
     const pipKey = `${used}/${budget}`;
     if (pips && pips.dataset.k !== pipKey) {

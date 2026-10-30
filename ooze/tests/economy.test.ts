@@ -831,11 +831,24 @@ describe('creature stage', () => {
     expect(c.partyReady.tidePools).toBeGreaterThan(c.year);
   });
 
-  it('Foraging Rounds makes settled places grow back sooner', () => {
+  it('Foraging Rounds (and Speed) make found places grow back sooner', () => {
     const s = creatureGame();
-    expect(placeRest(s)).toBe(PLACE_REST);
+    const base = placeRest(s);
+    // (Speed already shortens the wait a little: 2% a point.)
+    expect(base).toBeLessThan(PLACE_REST);
     s.stages.creature.upgrades.push('rounds');
-    expect(placeRest(s)).toBeLessThan(PLACE_REST);
+    expect(placeRest(s)).toBeLessThan(base);
+  });
+
+  it('the body\'s stats work for the herd', async () => {
+    const { statFx, winterLoss, birthRate } = await import('../src/economy/creature');
+    const s = creatureGame();
+    const before = statFx(s);
+    s.stages.creature.levels.trainStrength = 10;
+    s.stages.creature.upgrades.push('trainStrength');
+    expect(statFx(s).carry).toBeGreaterThan(before.carry);
+    expect(birthRate(s)).toBeGreaterThan(0);
+    expect(winterLoss(s)).toBeGreaterThanOrEqual(0);
   });
 
   it('once the island is all explored, a new nest can be founded at a found place', () => {

@@ -1155,7 +1155,16 @@ export class RangeScene {
     });
 
     // Hopping about, they squeak: more often the more of them are on the move, heard only up
-    // close (half volume fully zoomed in, fading fast as the view pulls back).
+    // close (half volume fully zoomed in, fading fast as the view pulls back). Your own creature
+    // too, on the way somewhere (and the mates trotting after it).
+    if (st.walk && !st.walk.event) {
+      const hx = this.sx(me.x);
+      const hy = this.py(me.x, me.y);
+      if (hx > 0 && hx < W && hy > this.viewTop && hy < (this.viewBottom || H)) {
+        hopping += 1 + st.mates.length;
+        hopX += hx * (1 + st.mates.length);
+      }
+    }
     herdInView(hopping > 0);
     if (hopping) {
       this.squeakIn -= dt * Math.min(3, 0.6 + hopping * 0.35);
