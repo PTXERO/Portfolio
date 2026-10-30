@@ -19,7 +19,7 @@ export const CHANNELS: { id: Channel; label: string }[] = [
 
 const KEY = 'ooze-to-orbit/sound';
 /** Bumped when a sound file changes, so phones don't keep the old one. */
-const SFX_V = 6;
+const SFX_V = 7;
 const DEFAULTS: Record<Channel, number> = { master: 0.8, music: 0.6, ambience: 0.6, effects: 0.7 };
 
 /** The loops are padded either side (so the mp3's own gaps fall outside them): where each
@@ -55,9 +55,10 @@ let master: GainNode;
 const bus = {} as Record<Exclude<Channel, 'master'>, GainNode>;
 type Sound = Loop | 'drops' | 'pop' | 'thunder0' | 'thunder1' | 'thunder2' | 'thunder3' | Cue;
 /** One-off sounds for moments: an organelle found, a rare microbe gulped down (three glugs),
- * one turning up, a new habitat opening, and the boom from the Soup into the Cell. */
-export type Cue = 'shine' | 'glug0' | 'glug1' | 'glug2' | 'chime' | 'ascend' | 'boom';
-const CUES: Cue[] = ['shine', 'glug0', 'glug1', 'glug2', 'chime', 'ascend', 'boom'];
+ * one turning up, a new habitat opening, the boom from the Soup into the Cell, and the meteor's
+ * approach (a rumble swelling to the moment it strikes, timed to the cutscene). */
+export type Cue = 'shine' | 'glug0' | 'glug1' | 'glug2' | 'chime' | 'ascend' | 'boom' | 'meteor';
+const CUES: Cue[] = ['shine', 'glug0', 'glug1', 'glug2', 'chime', 'ascend', 'boom', 'meteor'];
 const buffers: Partial<Record<Sound, AudioBuffer>> = {};
 /** The thunders, evened out (they were recorded at very different loudness). */
 const THUNDER_GAIN = [1, 1, 1.3, 1];

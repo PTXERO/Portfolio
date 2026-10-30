@@ -7,7 +7,7 @@
 // `cinematic` class) until the caller hands it back.
 
 import { STORY } from '../content/tribal';
-import { thunder } from '../audio/sound';
+import { cue, thunder } from '../audio/sound';
 
 /** Seconds into the cutscene that each beat happens. */
 const UI_OUT = 0.8;
@@ -55,6 +55,8 @@ export function playStrike(onImpact: () => void, onDone: () => void, target: () 
   let changed = false;
   let boomed = false;
   let last = start;
+  // The rumble of its coming: it swells to the moment of the strike (HIT seconds in).
+  cue('meteor');
 
   const say = (text: string) => storyLine(text, words);
   const shake = (cls: string) => {
