@@ -65,6 +65,7 @@ export function deserialize(text: string): GameState {
           mates: s.mates ?? [],
           egg: s.egg ?? null,
           generation: s.generation ?? 0,
+          keepBreeding: s.keepBreeding ?? true,
           pop: s.pop ?? fresh.pop,
           roles: { ...fresh.roles, ...(s.roles ?? {}) },
           year: s.year ?? 0,

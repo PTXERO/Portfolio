@@ -588,6 +588,28 @@ describe('creature stage', () => {
     return s;
   }
 
+  it('keeps breeding on its own, through the night, with the mate who brings the most', async () => {
+    const { creatureTick } = await import('../src/economy/creature');
+    const s = creatureGame();
+    const c = s.stages.creature;
+    c.currency = D(1e30);
+    c.mates = [
+      { id: 1, name: 'Old', parts: {} },
+      { id: 2, name: 'New', parts: { legs: 'stubby' } },
+    ] as typeof c.mates;
+    creatureTick(s, 1);
+    expect(c.egg?.mate.name).toBe('New');
+    // Eight hours away: the first egg hatches and the next is laid by itself.
+    for (let i = 0; i < 8 * 60; i++) creatureTick(s, 60);
+    expect(c.generation).toBeGreaterThanOrEqual(2);
+    c.keepBreeding = false;
+    c.mates.push({ id: 3, name: 'Later', parts: {} } as (typeof c.mates)[number]);
+    for (let i = 0; i < 24 * 60 && c.egg; i++) creatureTick(s, 60);
+    expect(c.egg).toBe(null);
+    creatureTick(s, 1);
+    expect(c.egg).toBe(null);
+  });
+
   it('starts with a simple body that its parts add up to', () => {
     const s = creatureGame();
     expect(s.stages.creature.equipped.legs).toBe('nubs');
@@ -645,7 +667,8 @@ describe('creature stage', () => {
     expect(c.discovered).toContain('tidePools');
     expect(placeSeen(s, 'tidePools')).toBe(true);
     expect(c.parts.some((id) => STAGES.creature.places!.find((p) => p.id === 'tidePools')!.parts.includes(id))).toBe(true);
-    expect(c.mates.length).toBe(1);
+    // (The mate met there goes straight to an egg: the line keeps breeding on its own.)
+    expect(c.mates.length + (c.egg ? 1 : 0)).toBe(1);
     expect(c.currency.gt(before)).toBe(true);
     expect(s.reports.find((r) => r.kind === 'trip')?.success).toBe(true);
     // Off toward the far side of the island: the fog clears as it goes.

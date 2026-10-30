@@ -12,7 +12,7 @@ export function newIsland(def: StageDef, seed = Math.floor(Math.random() * 2 ** 
   return { seed: def.places ? seed : 0, pos: { x: -1, y: -1 }, seen: new Uint8Array(CELLS * CELLS), walk: null, autoRoam: true, roamOpts: { places: true, settle: true, mandatory: false, policy: 'ready' }, nextFind: 0, parties: [], partyReady: {}, sightings: {}, nests: [], nestSettle: {} };
 }
 
-function creatureStart(def: StageDef): Pick<StageState, 'parts' | 'equipped' | 'seed' | 'pos' | 'seen' | 'walk' | 'autoRoam' | 'nextFind' | 'parties' | 'partyReady' | 'sightings' | 'nests' | 'nestSettle' | 'roamOpts' | 'trips' | 'mates' | 'egg' | 'generation' | 'pop' | 'roles' | 'year'> {
+function creatureStart(def: StageDef): Pick<StageState, 'parts' | 'equipped' | 'seed' | 'pos' | 'seen' | 'walk' | 'autoRoam' | 'nextFind' | 'parties' | 'partyReady' | 'sightings' | 'nests' | 'nestSettle' | 'roamOpts' | 'trips' | 'mates' | 'egg' | 'generation' | 'keepBreeding' | 'pop' | 'roles' | 'year'> {
   const starters = (def.parts ?? []).filter((p) => p.cost === 0);
   const equipped: StageState['equipped'] = {};
   for (const p of starters) equipped[p.slot] ??= p.id;
@@ -24,6 +24,7 @@ function creatureStart(def: StageDef): Pick<StageState, 'parts' | 'equipped' | '
     mates: [],
     egg: null,
     generation: 0,
+    keepBreeding: true,
     pop: def.places ? 3 : 0,
     roles: { forager: 0, carer: 0, digger: 0, guard: 0, scout: 0 },
     year: 0,
@@ -101,6 +102,7 @@ export function cloneState(s: GameState): GameState {
       mates: st.mates.map((m) => ({ ...m, parts: { ...m.parts } })),
       egg: st.egg && { ...st.egg, mate: { ...st.egg.mate, parts: { ...st.egg.mate.parts } } },
       generation: st.generation,
+      keepBreeding: st.keepBreeding,
       pop: st.pop,
       roles: { ...st.roles },
       year: st.year,

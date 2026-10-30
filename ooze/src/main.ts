@@ -1527,6 +1527,7 @@ function act(el: HTMLElement): void {
     const c = state.stages.creature;
     const k = el.dataset.roamopt;
     if (k === 'explore') c.autoRoam = !c.autoRoam;
+    else if (k === 'breed') c.keepBreeding = !c.keepBreeding;
     else if (k === 'places' || k === 'settle' || k === 'mandatory') c.roamOpts[k] = !c.roamOpts[k];
   } else if (el.dataset.uiscale) {
     ui.scale = Number(el.dataset.uiscale);

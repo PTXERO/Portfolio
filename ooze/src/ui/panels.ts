@@ -405,7 +405,7 @@ export function layout(state: GameState, tab: Tab): string {
   if (tab === 'body') return bodyLayout(state, (u) => upgradeCard(state, id, u, 'spark'));
   // (Body lists Training and the plain boosts; Roots lists heirlooms and giving back.)
   if (tab === 'explore') return exploreLayout(state, (u) => upgradeCard(state, id, u, 'spark'));
-  if (tab === 'family') return familyLayout(state);
+  if (tab === 'family') return familyLayout(state, (u) => upgradeCard(state, id, u, 'spark'));
 
   // The menu: the time bank (part of play), then settings: sound, display, saves, and about.
   return `<div class="panel-head"><h2>Time bank</h2></div>

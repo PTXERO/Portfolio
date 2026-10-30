@@ -414,6 +414,8 @@ export interface StageState {
   egg: { mate: Mate; left: number; total: number } | null;
   /** How many generations the line has bred. */
   generation: number;
+  /** Whether a new egg is laid by itself whenever there's a mate and no egg (Family tab). */
+  keepBreeding: boolean;
 }
 
 export type BuyAmount = 1 | 10 | 'max';

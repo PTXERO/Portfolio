@@ -159,7 +159,7 @@ const UPGRADES: UpgradeDef[] = [
   { id: 'rounds', branch: 'Wandering', name: 'Foraging Rounds', flavor: 'It knows where everything grows, and tends it.', cost: 2e7, effect: { kind: 'rounds' }, requires: { reaction: 'forest' } },
   { id: 'parties', branch: 'Wandering', name: 'Foraging Parties', flavor: 'The young know the way now. They go without being led.', cost: 1e9, levels: 3, costGrowth: 8, effect: { kind: 'parties', count: 1 }, requires: { reaction: 'highlands', upgrades: ['rounds'] } },
   { id: 'curiosity', branch: 'Wandering', name: 'Curiosity', flavor: 'It can never leave a corner of the map alone.', cost: 3000, levels: 3, costGrowth: 60, effect: { kind: 'curiosity', level: 1 }, requires: { found: 2 } },
-  { id: 'brooding', branch: 'Instincts', name: 'Warm Brooding', flavor: 'The whole nest takes turns keeping the eggs warm.', cost: 3e7, levels: 4, costGrowth: 10, effect: { kind: 'eggMult', mult: 0.8 }, requires: { found: 5 } },
+  { id: 'brooding', branch: 'Family', name: 'Warm Brooding', flavor: 'The whole nest takes turns keeping the eggs warm.', cost: 3e7, levels: Infinity, costGrowth: 6, effect: { kind: 'eggMult', mult: 0.85 }, requires: { found: 5 } },
   // Herd and seasons.
   { id: 'fatStores', name: 'Fat Stores', flavor: 'Eat in summer, live on it in winter.', cost: 400, levels: 5, costGrowth: 6, effect: { kind: 'upkeepMult', mult: 0.85 }, requires: { pop: 10 } },
   { id: 'thickCoats', name: 'Thick Coats', flavor: 'Fur, feathers or blubber: whatever keeps the cold out.', cost: 2000, levels: 5, costGrowth: 6, effect: { kind: 'winterMult', mult: 0.7 }, requires: { found: 2 } },

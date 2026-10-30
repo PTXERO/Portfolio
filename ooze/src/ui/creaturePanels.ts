@@ -128,7 +128,7 @@ const PLACE_TEXT: Record<string, string> = {
 /** What changes the creature tabs' layout. */
 export function creatureKey(state: GameState): unknown {
   const s = state.stages[CREATURE];
-  return [s.parts, s.equipped, s.autoRoam, JSON.stringify(s.roamOpts), s.walk?.event?.id ?? '', s.trips, STAGES[CREATURE].places!.map((p) => placeSeen(state, p.id)), energyBudget(state), state.unlocked.length, s.mates.map((m) => m.id), !!s.egg, s.generation, s.discovered, s.levels, visibleUpgrades(state, CREATURE).map((u) => u.id)];
+  return [s.parts, s.equipped, s.autoRoam, JSON.stringify(s.roamOpts), s.walk?.event?.id ?? '', s.trips, STAGES[CREATURE].places!.map((p) => placeSeen(state, p.id)), energyBudget(state), state.unlocked.length, s.mates.map((m) => m.id), !!s.egg, s.keepBreeding, s.generation, s.discovered, s.levels, visibleUpgrades(state, CREATURE).map((u) => u.id)];
 }
 
 /** The Herd tab: how many, how fed, what season, who does what, and the buildings. */
@@ -300,7 +300,7 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
     <div class="panel-head"><h2>${def.bookName}</h2><span class="label dim">${s.discovered.filter((id) => id !== fin.id).length} / ${def.places!.length}</span></div>${places}${finale}`;
 }
 
-export function familyLayout(state: GameState): string {
+export function familyLayout(state: GameState, upgradeCard: (u: UpgradeDef) => string): string {
   const s = state.stages[CREATURE];
   const look = creatureLookOf(state);
   const egg = `<div class="card px-box egg"><div class="slot">${icon('family', 3)}</div><div class="info"><div class="name" data-t="egg-title"></div><div class="sub" data-t="egg-sub"></div><div class="making-bar on" data-bar="egg"><i></i></div></div></div>`;
@@ -314,8 +314,15 @@ export function familyLayout(state: GameState): string {
       </div>`,
     )
     .join('');
+  const nursery =
+    visibleUpgrades(state, CREATURE)
+      .filter((u) => u.branch === 'Family')
+      .map(upgradeCard)
+      .join('') + nextHint(state, (u) => u.branch === 'Family');
   return `<div class="panel-head"><h2>Generation ${s.generation}</h2><span class="label dim">Line ×${(GENERATION_MULT ** s.generation).toFixed(2)}</span></div>
     ${egg}
+    <div class="opts"><button class="px-btn opt${s.keepBreeding ? ' on' : ''}" data-roamopt="breed"><span class="tick">${s.keepBreeding ? '✓' : ''}</span><span><b>Keep breeding</b><span class="dim">Whenever there's no egg, a new one is laid with the mate who brings the most new parts, even while you're away</span></span></button></div>
+    ${nursery}
     <div class="panel-head"><h2>Mates</h2><span class="label dim">${s.mates.length} / ${MAX_MATES}</span></div>
     ${mates || '<p class="note">Mates are met while roaming, or courted when one wanders by the herd. The first new place your creature finds always has one.</p>'}
     <p class="note">Each generation makes the whole line stronger (all output ×${GENERATION_MULT}, every stat +1), and the young inherit one of the mate's parts that the line doesn't have yet. Eggs take longer each generation; Charm, Nesting Instinct and Warm Brooding hurry them.</p>`;

@@ -803,6 +803,13 @@ export function creatureTick(state: GameState, dt: number, rand: () => number = 
     s.egg.left -= dt;
     if (s.egg.left <= 0) hatch(state);
   }
+  // Left to itself (overnight, say), the line keeps breeding: whenever there's no egg and a
+  // mate, the next is laid with the mate who'd bring the line the most new parts.
+  if (!s.egg && s.keepBreeding && s.mates.length) {
+    const fresh = (m: Mate) => Object.values(m.parts).filter((id) => !!id && !s.parts.includes(id)).length;
+    const best = s.mates.reduce((a, m) => (fresh(m) > fresh(a) ? m : a));
+    breed(state, best.id);
+  }
 }
 
 export { D };
