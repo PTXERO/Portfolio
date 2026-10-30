@@ -13,6 +13,7 @@
 import { STORY } from '../content/tribal';
 import { thunder } from '../audio/sound';
 import { storyLine } from './strike';
+import { drawMini, type CreatureLook } from '../scene/creatureLook';
 
 const DAYS = 40;
 /** Days a second, ordinarily; much slower through what matters. */
@@ -52,7 +53,7 @@ function within(day: number, [a, b]: [number, number], edge = 1): number {
   return Math.min(1, (day - a) / edge, (b - day) / edge);
 }
 
-export function playCrossing(look: { body: string; belly: string }, onDone: () => void): void {
+export function playCrossing(look: CreatureLook, onDone: () => void): void {
   const cv = document.createElement('canvas');
   cv.id = 'strike';
   const W = Math.ceil(window.innerWidth / 3);
@@ -219,7 +220,7 @@ export function playCrossing(look: { body: string; belly: string }, onDone: () =
       b.fillRect(Math.round(landX - lw * 0.42), horizon - 1, Math.round(lw * 0.7), 1);
       for (let k = 0; k < 12; k++) {
         const h = ((t * 4 + k * 4) % 40) * e;
-        b.fillStyle = `rgba(215, 215, 220, ${0.45 * e * (1 - h / 40)})`;
+        b.fillStyle = `rgba(52, 46, 46, ${0.55 * e * (1 - h / 40)})`;
         b.fillRect(Math.round(landX + lw * 0.12 + Math.sin(h * 0.15 + k) * 1.5 + h * 0.2), Math.round(horizon - lh - 2 - h), 2, 2);
       }
     }
@@ -301,21 +302,14 @@ export function playCrossing(look: { body: string; belly: string }, onDone: () =
     const food = Math.max(0, Math.round(4 * (1 - days / 36)));
     b.fillStyle = '#8a6a3c';
     for (let k = 0; k < food; k++) px(5 + (k % 2), -1 - Math.floor(k / 2), 1, 1);
+    // The four: the player's own kind (their parts, their colours), as small as on the map.
     for (let i = 0; i < 4; i++) {
-      const x = -10 + i * 4;
-      const y = -3 + Math.round(tilt * (i - 1.5) * 0.3);
-      // One of them falls sick: lying down, greyer, the others close about them.
+      // One of them falls sick: lying down, the others drawn in close about them.
       const down = i === 2 && sick > 0.3;
-      const huddle = sick > 0.3 && (i === 1 || i === 3) ? (i === 1 ? 1 : -1) : 0;
-      b.fillStyle = down ? '#6f8f92' : look.body;
-      if (down) px(x - 1, 1 + y, 5, 2);
-      else px(x + huddle, y, 3, 3);
-      if (!down) {
-        b.fillStyle = look.belly;
-        px(x + huddle, y + 2, 3, 1);
-        b.fillStyle = '#10141f';
-        px(x + huddle + (i % 2 ? 0 : 2), y, 1, 1);
-      }
+      const huddle = sick > 0.3 && (i === 1 || i === 3) ? (i === 1 ? 2 : -2) : 0;
+      const x = rx + (-15 + i * 10 + huddle);
+      const y = ry + Math.round(tilt * (i - 1.5) * 0.6);
+      drawMini(b, look, x, y, { left: i % 2 === 1, sleeping: down, frame: 0, hop: down || calm > 0.5 ? 0 : Math.abs(Math.sin(t * 1.5 + i)) * 0.6 });
     }
     // The bird, on the last morning: it comes down onto the raft with green in its beak.
     if (birdAt >= 0) {
@@ -340,8 +334,10 @@ export function playCrossing(look: { body: string; belly: string }, onDone: () =
     const cw = W / zoom;
     const ch = H / zoom;
     const drift = { x: Math.sin(t * 0.11) * cw * 0.06 + Math.sin(t * 0.27) * cw * 0.02, y: Math.sin(t * 0.17 + 1) * ch * 0.03 };
-    const focusX = rx + (landX - rx) * 0.75 * te + drift.x * (1 - te);
-    const focusY = ry - 6 + (horizon - (ry - 6)) * 0.35 * te + drift.y;
+    // (For the strange stars, the camera looks up from the raft to them.)
+    const up = starsIn * starsIn * (3 - 2 * starsIn);
+    const focusX = rx + (landX - rx) * 0.75 * te + (W * 0.5 - rx) * up + drift.x * (1 - te);
+    const focusY = ry - 6 + (horizon - (ry - 6)) * 0.35 * te + (horizon * 0.42 - (ry - 6)) * up + drift.y;
     const cx = Math.max(0, Math.min(W - cw, focusX - cw / 2));
     const cy = Math.max(0, Math.min(H - ch, focusY - ch * 0.55));
     out.drawImage(off, cx, cy, cw, ch, 0, 0, W, H);

@@ -780,7 +780,7 @@ function showEscape(fresh = false): void {
     window.setTimeout(() => {
       storyLine('');
       hushDrone(true);
-      playCrossing({ body: '#4aa7b0', belly: '#9ad8d4' }, () => {
+      playCrossing(t.look as never, () => {
         fadeTo(1, 0);
         scene.tribeScene.holdOld = false;
         scene.tribeScene.arrive();

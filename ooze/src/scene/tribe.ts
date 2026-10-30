@@ -1007,7 +1007,7 @@ export class TribeScene extends RangeScene {
         const puffs = Math.round(10 + 16 * smokeK);
         for (let k = 0; k < puffs; k++) {
           const h = (t * 5 + k * (tall / puffs)) % tall;
-          b.fillStyle = `rgba(215, 215, 220, ${(0.35 + 0.25 * smokeK) * (1 - h / tall)})`;
+          b.fillStyle = `rgba(${48 + Math.round(h / 6)}, ${42 + Math.round(h / 6)}, ${42 + Math.round(h / 6)}, ${(0.5 + 0.3 * smokeK) * (1 - h / tall)})`;
           b.fillRect(FX + Math.round(Math.sin(h * 0.08 + k) * 3 + h * 0.25), FY - 8 - Math.round(h), sz + Math.round(h / 20), sz + Math.round(h / 20));
         }
       },
@@ -1401,8 +1401,10 @@ export class TribeScene extends RangeScene {
     });
     // Wandering the ash, they squeak too: lower now, and less often (sadder than the herd's),
     // heard only up close, and only while some of them are moving in view.
-    herdInView(this.wandering > 0);
-    if (this.wandering) {
+    // (While the crowd cheers the raft off, that's what's heard: the squeaks stay up for it.)
+    const cheering = this.departT >= 0 && t - this.departT > 7 && this.backAt < 0;
+    herdInView(this.wandering > 0 || cheering);
+    if (this.wandering && !cheering) {
       this.sadSqueakIn -= dt * Math.min(2, 0.4 + this.wandering * 0.2);
       if (this.sadSqueakIn <= 0) {
         this.sadSqueakIn = 0.9 + Math.random() * 2;
@@ -1541,7 +1543,6 @@ export class TribeScene extends RangeScene {
       this.zoom += (zoomTo - this.zoom) * Math.min(1, dt * (back ? 0.25 : 1.2));
       // Seeing them off: the crowd cheers, a whole beach of squeaks, bright and quick.
       if (age > 7 && !back) {
-        herdInView(true);
         this.cheerIn -= dt;
         if (this.cheerIn <= 0) {
           this.cheerIn = 0.06 + Math.random() * 0.16;
