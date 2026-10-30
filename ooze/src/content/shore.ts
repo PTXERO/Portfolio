@@ -23,9 +23,19 @@ export const SHORE_STORY = {
 
 export type BuildId = 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout';
 
+/** The Build tab's sorts of building. */
+export type BuildCat = 'homes' | 'stores' | 'work' | 'explore';
+export const BUILD_CATS: { id: BuildCat; name: string }[] = [
+  { id: 'homes', name: 'Homes' },
+  { id: 'stores', name: 'Stores' },
+  { id: 'work', name: 'Work' },
+  { id: 'explore', name: 'Exploring' },
+];
+
 export interface BuildDef {
   id: BuildId;
   name: string;
+  cat: BuildCat;
   /** What it does, for the card. */
   does: string;
   /** Wood for the first; each after costs `growth` times the last. */
@@ -38,13 +48,13 @@ export interface BuildDef {
 }
 
 export const BUILDS: BuildDef[] = [
-  { id: 'hearth', name: 'The Hearth', does: 'A fire to gather round. Children are only born where there\'s a hearth.', wood: 6, growth: 1, max: 1 },
-  { id: 'hut', name: 'Hut', does: 'Room for 4 more.', wood: 10, growth: 1.16, after: 'hearth' },
-  { id: 'woodpile', name: 'Woodpile', does: 'Room for 50 more wood.', wood: 10, growth: 1.3, after: 'hearth' },
-  { id: 'rack', name: 'Drying rack', does: 'Room for 40 more food.', wood: 14, growth: 1.3, after: 'hut' },
-  { id: 'camp', name: 'Gathering camp', does: 'Food comes in 20% faster.', wood: 30, growth: 1.45, after: 'hut' },
-  { id: 'cutter', name: 'Cutters\' shed', does: 'Wood comes in 20% faster.', wood: 30, growth: 1.45, after: 'woodpile' },
-  { id: 'scout', name: 'Scout\'s hut', does: 'One of them goes out into the fog for you, finding what\'s out there (while you\'re away too).', wood: 20, growth: 2.2, max: 3, after: 'hut' },
+  { id: 'hearth', cat: 'homes', name: 'The Hearth', does: 'A fire to gather round. Children are only born where there\'s a hearth.', wood: 6, growth: 1, max: 1 },
+  { id: 'hut', cat: 'homes', name: 'Hut', does: 'Room for 4 more.', wood: 10, growth: 1.16, after: 'hearth' },
+  { id: 'woodpile', cat: 'stores', name: 'Woodpile', does: 'Room for 50 more wood.', wood: 10, growth: 1.3, after: 'hearth' },
+  { id: 'rack', cat: 'stores', name: 'Drying rack', does: 'Room for 40 more food.', wood: 14, growth: 1.3, after: 'hut' },
+  { id: 'camp', cat: 'work', name: 'Gathering camp', does: 'Food comes in 20% faster.', wood: 30, growth: 1.45, after: 'hut' },
+  { id: 'cutter', cat: 'work', name: 'Cutters\' shed', does: 'Wood comes in 20% faster.', wood: 30, growth: 1.45, after: 'woodpile' },
+  { id: 'scout', cat: 'explore', name: 'Scout\'s hut', does: 'One of them goes out into the fog for you, finding what\'s out there (while you\'re away too).', wood: 20, growth: 2.2, max: 3, after: 'hut' },
 ];
 
 /** The camp that gathers food is the diet's own. */

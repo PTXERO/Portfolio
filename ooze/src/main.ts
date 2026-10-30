@@ -15,7 +15,7 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { build, gift, isAdult, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
-import { villageCard } from './ui/shorePanels';
+import { setBuildCat, villageCard } from './ui/shorePanels';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, say, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
@@ -1184,7 +1184,7 @@ function renderHint(): void {
     else if (state.stages.tribal.tribe?.ex && !Object.keys(state.stages.tribal.tribe.ex.casts ?? {}).length && !casting) text = 'They live or die on their own. Work miracles to save them';
   } else if (state.current === 'shore') {
     const s = shoreOf(state);
-    if (s && !s.built.length) text = 'Build the hearth (in the Village tab)';
+    if (s && !s.built.length) text = 'Build the hearth (in the Build tab)';
     else if (!pokedThisStage) text = 'Tap the land to walk · pinch to zoom';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
@@ -1664,6 +1664,7 @@ function act(el: HTMLElement): void {
       save();
     }
   } else if (el.dataset.lean) setLean(state, el.dataset.lean as Lean);
+  else if (el.dataset.buildcat) setBuildCat(el.dataset.buildcat);
   else if (el.dataset.gift) {
     const s = shoreOf(state);
     const id = Number(el.dataset.gift);

@@ -72,6 +72,8 @@ export const SPRITES = {
   spark: ['...y....', '...y....', '..yyy...', 'yyywyyy.', '..yyy...', '...y....', '...y....', '........'],
   hourglass: ['bbbbbbb.', '.bwwwb..', '..bwb...', '...b....', '..byb...', '.byyyb..', 'bbbbbbb.', '........'],
   sprout: ['...ll...', '..lLLl..', '.l.L..l.', '...L.ll.', '...LlL..', '...L....', '..sSs...', '.sSSSs..'],
+  hut: ['...O....', '..OyO...', '.OoyoO..', 'OoooooO.', '.ookoo..', '.ookoo..', '.ooooo..', 'llllllll'],
+  island: ['bbbbbbbb', 'bbllllbb', 'blLLLlsb', 'blLLllsb', 'bsllllsb', 'bbsssbbb', 'bbbbbbbb', '........'],
   menu: ['........', 'wwwwwww.', '........', 'wwwwwww.', '........', 'wwwwwww.', '........', '........'],
   book: ['.OOOOOO.', 'Owwwwww.', 'Owkkwww.', 'Owwwwww.', 'Owkkkww.', 'Owwwwww.', 'OOOOOOO.', '........'],
   helix: ['.g....p.', '..g..p..', '...gp...', '...pg...', '..p..g..', '.p....g.', '.g....p.', '..g..p..'],
