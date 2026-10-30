@@ -66,6 +66,23 @@ describe('the spear\'s will', () => {
   }, 60_000);
 });
 
+describe('lightning', () => {
+  it('brought down on one of them, kills them, and terrifies the rest', () => {
+    const s = game('omnivore');
+    const ex = s.stages.tribal.tribe!.ex!;
+    ex.prayer = 40;
+    const n = ex.people.length;
+    const who = ex.people[2];
+    const dread = ex.dread ?? 0;
+    const r = cast(ex, 'lightning', { struck: 2 });
+    expect(r.ok).toBe(true);
+    expect(ex.people.length).toBe(n - 1);
+    expect(ex.people.includes(who)).toBe(false);
+    expect(ex.dread ?? 0).toBeGreaterThan(dread);
+    expect(ex.people.some((p) => p.bonds?.some((b) => b.id === who.id))).toBe(false);
+  });
+});
+
 describe('crises', () => {
   it('cost lives when missed, and only one miracle can be ordained', async () => {
     const { startCrisis, crisisMissed } = await import('../src/economy/crises');

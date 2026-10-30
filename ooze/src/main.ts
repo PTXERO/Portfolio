@@ -449,12 +449,21 @@ function finishCast(): void {
   const last = W[W.length - 1];
   let at = [last];
   let people: number[] | undefined;
+  let struck: number | undefined;
   if (id === 'lightning') {
     // Where it comes down: the lowest point of the zigzag.
     const low = pts.reduce((a, p) => (p.y > a.y ? p : a));
-    const tree = tribe.nearSpot(ex, 'wood', scene.worldAt(low.x, low.y), 6);
-    if (!tree) return fizzle('Bring it down onto a charred tree');
-    at = [tree];
+    const ground = scene.worldAt(low.x, low.y);
+    // On one of them, it strikes them dead (the nearest, if it comes down among several).
+    const under = tribe.inside(ground, 1.6);
+    if (under.length) {
+      struck = under.reduce((a, i) => (tribe.distTo(i, ground) < tribe.distTo(a, ground) ? i : a));
+      at = [tribe.personAt(struck)];
+    } else {
+      const tree = tribe.nearSpot(ex, 'wood', ground, 6);
+      if (!tree) return fizzle('Bring it down onto a charred tree');
+      at = [tree];
+    }
   } else if (id === 'rain') {
     const c = { x: W.reduce((a, p) => a + p.x, 0) / W.length, y: W.reduce((a, p) => a + p.y, 0) / W.length };
     if (!tribe.landAt(c)) return fizzle('Over the ash, not the sea');
@@ -485,8 +494,9 @@ function finishCast(): void {
   const now = crisisAt(ex);
   const near = (p: { x: number; y: number }) => !!now && Math.hypot(p.x - now.x, p.y - now.y) < (c?.kind === 'storm' ? 12 : 9);
   const answers = !!c && c.spell === id && (c.kind === 'trapped' ? !!people?.some((i) => ex.people[i]?.id === c.who) : c.kind === 'cold' ? true : at.some(near) || W.some(near));
-  const r = cast(ex, id, { people, power: answers && c!.kind !== 'trapped' && c!.kind !== 'cold' ? 2 : 1 });
+  const r = cast(ex, id, { people, struck, power: answers && c!.kind !== 'trapped' && c!.kind !== 'cold' ? 2 : 1 });
   if (!r.ok) return fizzle(r.text);
+  if (struck !== undefined) tribe.remove(struck);
   cue('spell', 0.8);
   tribe.wonder(id, at);
   scene.float(end.x, end.y - 12, answers ? `${crisisAnswered(ex)} · ${r.text}` : r.text, '#e8b0ff');

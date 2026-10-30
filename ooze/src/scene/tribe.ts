@@ -412,6 +412,21 @@ export class TribeScene extends RangeScene {
   }
 
   /** Those (of the ones drawn) inside a circle on the island: their places in the tribe. */
+  /** One of them gone where they stood (struck down): that one leaves the scene, not the last. */
+  remove(i: number): void {
+    this.people.splice(i, 1);
+  }
+
+  /** Where one of them is (by index into the tribe), and how far that is from a point. */
+  personAt(i: number): Pt {
+    const p = this.people[i];
+    return { x: p.x, y: p.y };
+  }
+  distTo(i: number, c: Pt): number {
+    const p = this.people[i];
+    return p ? Math.hypot(p.x - c.x, p.y - c.y) : Infinity;
+  }
+
   inside(c: Pt, r: number): number[] {
     const out: number[] = [];
     this.people.forEach((p, i) => {

@@ -21,6 +21,7 @@ import {
   type Diet,
   type ExtinctionState,
   type Focus,
+  type Survivor,
 } from './extinction';
 import { remember } from './society';
 import { chooseFour, leftBehind } from './whispers';
@@ -48,7 +49,7 @@ const ALL: Diet[] = ['herbivore', 'carnivore', 'omnivore', 'cannibal'];
 const carrionStart = (ex: ExtinctionState) => (ex.people.length + ex.deaths) * 6;
 
 export const SPELLS: SpellDef[] = [
-  { id: 'lightning', name: 'Lightning', gesture: 'zigzag', how: 'Draw a zigzag down onto a charred tree.', does: 'The tree burns down to wood (+10), and tonight they have fire, even without knowing it.', cost: 6, dread: 12, diets: ALL, hint: '', found: () => true },
+  { id: 'lightning', name: 'Lightning', gesture: 'zigzag', how: 'Draw a zigzag down onto a charred tree.', does: 'The tree burns down to wood (+10), and tonight they have fire, even without knowing it. Brought down on one of them, it kills them.', cost: 6, dread: 12, diets: ALL, hint: '', found: () => true },
   { id: 'rain', name: 'Rain', gesture: 'spiral', how: 'Draw a spiral over the ash.', does: 'Rain falls and green comes up through the ash (its food grows back), and tonight is not cold.', cost: 8, dread: 6, diets: ALL, hint: 'When the ash runs thin.', found: (ex) => ex.day >= 5 && ex.ash < ex.ashMax * 0.45 },
   { id: 'ward', name: 'Ward', gesture: 'circle', how: 'Draw a circle round some of them.', does: 'Those inside are cured of the shaking, and the hunger eases a little.', cost: 9, dread: 4, diets: ALL, hint: 'When death comes for them in earnest.', found: (ex) => ex.day >= 4 && ex.deaths >= 4 },
   { id: 'quicken', name: 'Quicken the ash', gesture: 'line', how: 'Draw a line across the ash.', does: 'Seeds buried under the fire wake all at once: a furrow of fireweed springs up along the line (+16 plants).', cost: 8, dread: 8, diets: ['herbivore', 'omnivore'], hint: 'When the fallen fruit is gone.', found: (ex) => ex.day >= 7 && ex.carrion < carrionStart(ex) * 0.15 },
@@ -104,11 +105,29 @@ export function canCast(ex: ExtinctionState, id: SpellId, ordained = false): boo
   return !ex.over && !ex.escaped && (ex.powers ?? []).includes(id) && s.diets.includes(ex.diet) && (ex.prayer ?? 0) >= s.cost * (ordained ? ORDAIN_COST : 1);
 }
 
+/** Lightning on one of them: dead where they stood. The rest are terrified, and those who
+ * loved them grieve; the island's madness feeds on it. */
+function strikeDown(ex: ExtinctionState, p: Survivor): void {
+  ex.people = ex.people.filter((q) => q !== p);
+  ex.deaths += 1;
+  ex.dread = Math.min(100, (ex.dread ?? 0) + 25);
+  ex.madness = Math.min(100, (ex.madness ?? 0) + 5);
+  for (const q of ex.people) {
+    const bond = (q.bonds ?? []).find((b) => b.id === p.id);
+    if (bond) {
+      q.grief = 3;
+      remember(ex, q, `saw ${p.name} struck down by the spear`);
+    }
+    q.bonds = (q.bonds ?? []).filter((b) => b.id !== p.id);
+  }
+  say(ex, `Lightning came down out of a clear sky onto ${p.name}. There was nothing left to bury. No one went near the spear for days.`);
+}
+
 /**
  * Works a miracle. `people` are the indexes (into ex.people) of those inside a Ward. Its
  * effect lands at once, and the tribe re-plans straight away (they run to what appeared).
  */
-export function cast(ex: ExtinctionState, id: SpellId, opts: { people?: number[]; ordained?: boolean; power?: number } = {}): { ok: boolean; text: string } {
+export function cast(ex: ExtinctionState, id: SpellId, opts: { people?: number[]; ordained?: boolean; power?: number; struck?: number } = {}): { ok: boolean; text: string } {
   if (!canCast(ex, id, opts.ordained)) return { ok: false, text: 'Not enough prayer.' };
   const s = SPELL[id];
   let text = '';
@@ -118,6 +137,14 @@ export function cast(ex: ExtinctionState, id: SpellId, opts: { people?: number[]
   const n = (v: number) => Math.round(v * k);
   switch (id) {
     case 'lightning':
+      // Brought down on one of them, it kills them.
+      if (opts.struck !== undefined) {
+        const p = ex.people[opts.struck];
+        if (!p) return { ok: false, text: 'No one there.' };
+        strikeDown(ex, p);
+        text = `${p.name} is dead`;
+        break;
+      }
       ex.wood = (ex.wood ?? 0) + n(10);
       ex.trees = Math.max(0, (ex.trees ?? 0) - 3);
       ex.fireTonight = true;
