@@ -24,17 +24,17 @@ const STORM: [number, number] = [8.5, 13];
 const STORM_IN: [number, number] = [9, 12.5];
 const CALM: [number, number] = [16.5, 21.5];
 const SICK: [number, number] = [22.5, 29.5];
-const SICK_IN: [number, number] = [23, 26];
-const STARS: [number, number] = [32.6, 36.4];
-const STARS_IN: [number, number] = [33, 36];
+const SICK_IN: [number, number] = [23, 25];
+const STARS: [number, number] = [32.8, 35.6];
+const STARS_IN: [number, number] = [33, 35];
 /** The story's lines through the crossing, by day. */
 const LINES: [number, number, string][] = [
   [0, 6, STORY.crossFirst],
   [9, 12.6, STORY.crossStorm],
   [17, 21.5, STORY.crossCalm],
-  [23, 26.2, STORY.crossSick],
+  [23, 25.2, STORY.crossSick],
   [29.5, 32.6, STORY.crossHunger],
-  [33, 36.2, STORY.crossStars],
+  [33, 35.2, STORY.crossStars],
 ];
 /** The raft and the four, drawn this many times larger than the sea about them. */
 const S = 2;
