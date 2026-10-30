@@ -315,7 +315,8 @@ your people.
 4. The island: POIs, rival villages (kinds, sizes, placement), the map at 8×.
 5. The full idea list for each Age, per diet (the table in §6.5 is the shared skeleton).
 6. ~~Can a culture take in another diet?~~ **Decided** (§4.6): not by diplomacy, but by taking
-   people and ideas from defeated villages, until the diet shifts. Still to set: the
-   thresholds, and which shifts are possible (e.g. can grazers ever become hunters?).
+   people and ideas from defeated villages, until the diet shifts — and only **toward the
+   middle**: hunters → omnivores (taking in grazers, learning to farm), grazers → omnivores
+   (taking a predator's ways); omnivores stay; never straight across. Still to set: thresholds.
 7. Exact pacing numbers.
 8. ~~"Racing" for hunters~~ **Decided**: festival contests growing into the Arena (§7).
