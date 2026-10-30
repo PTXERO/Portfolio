@@ -237,8 +237,9 @@ export function herdInView(on: boolean): void {
 }
 
 /** One of the herd squeaks as it hops: one of nine, a little higher or lower, from where it is
- * on screen (`pan` −1 left to 1 right), at `level`. */
-export function squeak(level: number, pan = 0): void {
+ * on screen (`pan` −1 left to 1 right), at `level`; `pitch` below 1 for a lower, sadder one
+ * (the Extinction's). */
+export function squeak(level: number, pan = 0, pitch = 1): void {
   const buf = buffers.squeaks;
   if (!ctx || !buf || ctx.state !== 'running' || level <= 0.005) return;
   let i = Math.floor(Math.random() * SQUEAKS.length);
@@ -247,7 +248,7 @@ export function squeak(level: number, pan = 0): void {
   const [at, len] = SQUEAKS[i];
   const src = ctx.createBufferSource();
   src.buffer = buf;
-  src.playbackRate.value = 0.88 + Math.random() * 0.3;
+  src.playbackRate.value = pitch * (0.88 + Math.random() * 0.3);
   const g = ctx.createGain();
   g.gain.value = level * (0.7 + Math.random() * 0.3);
   let out: AudioNode = g;

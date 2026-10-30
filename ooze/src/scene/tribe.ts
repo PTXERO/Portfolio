@@ -4,7 +4,7 @@
 // survivors huddle at the old home; one of them (the one you were) walks out to the spear, and
 // when you touch it they wake. After that they go about the ash on their own.
 
-import { cue, thunder } from '../audio/sound';
+import { cue, herdInView, squeak, thunder } from '../audio/sound';
 import { PAL } from '../art/sprites';
 import { SEASON_SEC } from '../economy/rates';
 import { Biome, CELLS, ISLAND, isLand, islandOf, reveal, CELL, type Island, type Pt } from '../economy/island';
@@ -127,6 +127,10 @@ export class TribeScene extends RangeScene {
   private wave = -1;
   /** Before it: the spear gathering itself once touched (seconds in, -1 when not). */
   private charge = -1;
+  /** How many of them are moving in view this frame (and where), and until the next squeak. */
+  private wandering = 0;
+  private wanderX = 0;
+  private sadSqueakIn = 2;
   private smoke: { x: number; y: number; z: number; life: number }[] = [];
   private placed = false;
   /** The camera handed on from the Creature's map at the strike. */
@@ -1233,6 +1237,8 @@ export class TribeScene extends RangeScene {
     const from = this.walker ?? frag.spear;
     const spreadSpeed = Math.max(SPREAD_SPEED, Math.hypot(frag.camp.x - from.x, frag.camp.y - from.y) / SPREAD_SEC);
     const spread = this.spreadAt >= 0 ? (t - this.spreadAt) * spreadSpeed : -1;
+    this.wandering = 0;
+    this.wanderX = 0;
     this.people.forEach((p, i) => {
       if (p.lit < 0 && spread >= 0 && Math.hypot(p.x - from.x, p.y - from.y) < spread) {
         p.lit = t;
@@ -1325,6 +1331,14 @@ export class TribeScene extends RangeScene {
         p.y = ny;
       }
       const moving = Math.hypot(p.vx, p.vy) > 0.12;
+      if (moving) {
+        const sx2 = this.sx(p.x);
+        const sy2 = this.py(p.x, p.y);
+        if (sx2 > 0 && sx2 < W && sy2 > this.viewTop && sy2 < (this.viewBottom || H)) {
+          this.wandering++;
+          this.wanderX += sx2;
+        }
+      }
       const left = moving ? p.vx < 0 : frag.spear.x < p.x;
       const x = p.x;
       const yy = p.y;
@@ -1349,6 +1363,17 @@ export class TribeScene extends RangeScene {
         },
       });
     });
+    // Wandering the ash, they squeak too: lower now, and less often (sadder than the herd's),
+    // heard only up close, and only while some of them are moving in view.
+    herdInView(this.wandering > 0);
+    if (this.wandering) {
+      this.sadSqueakIn -= dt * Math.min(2, 0.4 + this.wandering * 0.2);
+      if (this.sadSqueakIn <= 0) {
+        this.sadSqueakIn = 0.9 + Math.random() * 2;
+        const near = Math.max(0, (this.zoom - 2.5) / (8 - 2.5));
+        squeak(0.45 * near ** 1.8, (this.wanderX / this.wandering / W) * 2 - 1, 0.7);
+      }
+    }
     if (spread >= 0) {
       // The wave itself: a soft ring of gold going out over the ground.
       const reach = Math.max(...this.people.map((p) => Math.hypot(p.x - from.x, p.y - from.y)), 10);
