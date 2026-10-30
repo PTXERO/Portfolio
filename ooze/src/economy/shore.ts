@@ -7,7 +7,7 @@
 //
 // Time is counted in days (DAY_SEC each). Everything runs offline too.
 
-import { BUILDS, buildName, POIS, RELICS, SHORE_STORY, type Boosts, type BuildId, type Find, type PoiKind, type RelicId } from '../content/shore';
+import { BUILDS, buildName, POIS, RELICS, SHORE_STORY, type Res, type Boosts, type BuildId, type Find, type PoiKind, type RelicId } from '../content/shore';
 import { record } from './chronicle';
 import { Biome, CELL, isLand, islandOf, reveal, type Island, type Pt } from './island';
 import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
@@ -171,6 +171,8 @@ export interface ShoreState {
   steward?: { on: boolean; plan: StewardPlan };
   /** The last day the envoy took a gift. */
   envoyDay?: number;
+  /** What's in store of the land's other resources (fish goes straight into the food). */
+  res?: Partial<Record<Res, number>>;
   /** Whether the raft they came on has been broken up for its wood. */
   raftTaken?: boolean;
   /** Scouts out exploring (one per scout's hut). */
@@ -488,7 +490,7 @@ export function isAdult(s: ShoreState, p: ShorePerson): boolean {
   return s.day + s.clock / DAY_SEC - p.born >= GROW_DAYS / (1 + boosts(s).grow);
 }
 
-const NO_BOOSTS: Boosts = { food: 0, wood: 0, births: 0, grow: 0, speed: 0, sight: 0, gift: 0, room: 0, foodCap: 0, woodCap: 0, winter: 0, watch: 0 };
+const NO_BOOSTS: Boosts = { food: 0, wood: 0, births: 0, grow: 0, speed: 0, sight: 0, gift: 0, room: 0, foodCap: 0, woodCap: 0, winter: 0, watch: 0, cheap: 0, mend: 0 };
 const boostCache = new WeakMap<ShoreState, { key: string; b: Boosts }>();
 
 /** What the buildings and relics add up to (worked out again only when either changes). */
@@ -531,7 +533,55 @@ export function woodCap(s: ShoreState): number {
 
 export function buildCost(s: ShoreState, id: BuildId): number {
   const def = BUILDS.find((b) => b.id === id)!;
-  return Math.ceil(def.wood * def.growth ** count(s, id));
+  const cheap = id === 'hut' ? 1 - boosts(s).cheap : 1;
+  return Math.ceil(def.wood * def.growth ** count(s, id) * cheap);
+}
+
+// ---- The land's resources ----
+
+/** What each kind of land gives (beyond food and wood). */
+export const RES_OF: Record<Habitat, Res[]> = {
+  river: ['fish', 'clay'],
+  lake: ['fish', 'reeds'],
+  marsh: ['reeds', 'herbs', 'clay'],
+  desert: ['salt', 'flint'],
+  scrub: ['flint', 'herbs'],
+  forest: ['timber', 'herbs'],
+  meadow: ['herbs'],
+  mountain: ['stone', 'flint'],
+  coast: ['fish', 'salt'],
+};
+/** Kept of each at most; a day's from each village that gives it; food a day from each with fish. */
+export const RES_CAP = 60;
+const RES_DAY = 2;
+const FISH_FOOD = 5;
+
+/** Whether a village is yours to draw on: joined (their old village kept as an outpost) or a
+ * vassal (what their land gives comes as tribute, more the more you take). */
+export function held(v: Village): boolean {
+  return !!v.habitat && !v.gone && (!!v.joined || !!v.vassal);
+}
+
+/** Villages you hold that give a resource. */
+export function sourcesOf(s: ShoreState, r: Res): Village[] {
+  return s.villages.filter((v) => held(v) && RES_OF[v.habitat!].includes(r));
+}
+
+/** Whether there's enough of what a building needs beyond wood. */
+export function hasNeeds(s: ShoreState, id: BuildId): boolean {
+  const needs = BUILDS.find((b) => b.id === id)!.needs ?? {};
+  return (Object.keys(needs) as Res[]).every((r) => (s.res?.[r] ?? 0) >= (needs[r] ?? 0));
+}
+
+function stepResources(s: ShoreState, k: number): void {
+  for (const v of s.villages) {
+    if (!held(v)) continue;
+    const share = v.vassal ? 0.5 + v.vassal.tax : 1;
+    for (const r of RES_OF[v.habitat!]) {
+      if (r === 'fish') s.food = Math.min(foodCap(s), s.food + FISH_FOOD * share * k);
+      else (s.res ??= {})[r] = Math.min(RES_CAP, (s.res?.[r] ?? 0) + RES_DAY * share * k);
+    }
+  }
 }
 
 /** Builds on offer now: unlocked, and not at their limit. */
@@ -579,9 +629,11 @@ export function build(state: GameState, id: BuildId): boolean {
   const s = shoreOf(state);
   if (!s || s.building || !buildsOpen(s).some((b) => b.id === id)) return false;
   const cost = buildCost(s, id);
-  if (s.wood < cost) return false;
+  if (s.wood < cost || !hasNeeds(s, id)) return false;
   const total = buildTime(s, id);
   s.wood -= cost;
+  const needs = BUILDS.find((b) => b.id === id)!.needs ?? {};
+  for (const r of Object.keys(needs) as Res[]) s.res![r] = (s.res?.[r] ?? 0) - (needs[r] ?? 0);
   const at = placeFor(s, id, shoreIsland(s.seed));
   s.building = { id, ...at, left: total, total };
   return true;
@@ -612,11 +664,11 @@ export function stewardPick(s: ShoreState): BuildId | null {
     if (!need) continue;
     // More than the woodpiles hold: a woodpile first.
     if (buildCost(s, need) > woodCap(s) && open.has('woodpile')) need = 'woodpile';
-    return s.wood >= buildCost(s, need) ? need : null;
+    return s.wood >= buildCost(s, need) && hasNeeds(s, need) ? need : null;
   }
   // Nothing pressing: something useful, if the wood's piling up.
-  const extras: BuildId[] = ['elders', 'pool', 'granary', 'rack', 'cutter', 'lookout', 'woodpile', 'camp', 'hut'];
-  const pick = extras.filter((id) => open.has(id)).sort((a, b) => buildCost(s, a) - buildCost(s, b))[0];
+  const extras: BuildId[] = ['elders', 'pool', 'granary', 'rack', 'cutter', 'lookout', 'woodpile', 'camp', 'hut', 'pottery', 'thatcher', 'salter', 'healer', 'toolmaker'];
+  const pick = extras.filter((id) => open.has(id) && hasNeeds(s, id)).sort((a, b) => buildCost(s, a) - buildCost(s, b))[0];
   return pick && s.wood >= buildCost(s, pick) && s.wood > woodCap(s) * 0.6 ? pick : null;
 }
 
@@ -912,6 +964,7 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
   }
   walk(state, s, dt);
   stepVassals(state, s, k);
+  stepResources(s, k);
   // Won over and waiting: with no answer, they wait for room; once there's room, they come; kept
   // waiting too long, they give up on you.
   const today = s.day + s.clock / DAY_SEC;
@@ -976,7 +1029,7 @@ function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>
     s.hungry++;
     if (s.hungry >= 2 && s.people.length > 2) {
       const short = 1 - plan.foodRate / plan.eat;
-      const n = Math.max(1, Math.round(s.people.length * short * 0.15));
+      const n = Math.max(1, Math.round(s.people.length * short * 0.15 * (1 - boosts(s).mend)));
       const weakest = [...s.people].filter((p) => p.id !== s.chief).sort((a, b) => Number(!!b.founder) - Number(!!a.founder) || a.born - b.born);
       for (const p of weakest.slice(0, n)) die(state, s, p, 'hunger');
     }

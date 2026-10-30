@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { answerJoin, boosts, build, foodCap, setTax, shoreIsland, takeRaft, walkChief, workPlan, buildCost, buildsOpen, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { answerJoin, boosts, build, foodCap, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, buildCost, buildsOpen, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import type { TribeState } from '../src/economy/types';
 
@@ -312,5 +312,33 @@ describe('The elders and the envoy', () => {
       shoreTick(state, DAY_SEC);
     }
     expect(v.trust!).toBeGreaterThan(20);
+  });
+});
+
+describe('Resources of the land', () => {
+  it('a joined village keeps an outpost that gives its land’s resources; buildings spend them', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    now(state, 'hearth');
+    for (let i = 0; i < 12; i++) now(state, 'hut');
+    now(state, 'rack');
+    const v = s.villages[0];
+    v.habitat = 'river';
+    v.found = true;
+    v.trust = 99;
+    v.pop = 6;
+    s.food = foodCap(s);
+    gift(state, v.id);
+    expect(v.joined).toBe(true);
+    expect(sourcesOf(s, 'clay').length).toBe(1);
+    shoreTick(state, DAY_SEC * 12);
+    expect(s.res?.clay ?? 0).toBeGreaterThan(20);
+    expect(build(state, 'pottery')).toBe(true);
+    expect(s.res!.clay!).toBeLessThan(10);
+    // Without a village where there's salt, no salting shed.
+    expect(sourcesOf(s, 'salt').length).toBe(0);
+    s.wood = 1000;
+    s.building = undefined;
+    expect(build(state, 'salter')).toBe(false);
   });
 });

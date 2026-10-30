@@ -21,7 +21,11 @@ export const SHORE_STORY = {
   found: '[STORY] Smoke, and huts, and others like them. Not like them.',
 };
 
-export type BuildId = 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails' | 'council' | 'envoy';
+export type BuildId = 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails' | 'council' | 'envoy' | 'pottery' | 'thatcher' | 'salter' | 'healer' | 'toolmaker';
+
+/** What the land gives beyond food and wood: each only where it's found (see HABITATS). */
+export type Res = 'fish' | 'clay' | 'reeds' | 'salt' | 'herbs' | 'timber' | 'flint' | 'stone';
+export const RES_NAME: Record<Res, string> = { fish: 'Fish', clay: 'Clay', reeds: 'Reeds', salt: 'Salt', herbs: 'Herbs', timber: 'Timber', flint: 'Flint', stone: 'Stone' };
 
 /** The Build tab's sorts of building. */
 export type BuildCat = 'homes' | 'stores' | 'work' | 'explore';
@@ -49,6 +53,8 @@ export interface BuildDef {
   learn?: PoiKind;
   /** What it adds (see Boosts). */
   fx?: Partial<Boosts>;
+  /** What else it takes, beyond wood (only to be had from a village where it's found). */
+  needs?: Partial<Record<Res, number>>;
 }
 
 /** Everything buildings and relics can add to: shares (0.15 is +15%) except room, the stores
@@ -68,6 +74,10 @@ export interface Boosts {
   winter: number;
   /** Tiles round the village seen from it. */
   watch: number;
+  /** Share off what huts cost. */
+  cheap: number;
+  /** Share of hunger's deaths kept off. */
+  mend: number;
 }
 
 export const BUILDS: BuildDef[] = [
@@ -86,6 +96,11 @@ export const BUILDS: BuildDef[] = [
   { id: 'lookout', cat: 'explore', name: 'Lookout', does: 'A platform up high, like the one in the great tree: the land 30 tiles round the village is seen, and scouts see further.', wood: 45, growth: 1, max: 1, after: 'hut', learn: 'bigtree', fx: { watch: 30, sight: 4 } },
   { id: 'council', cat: 'homes', name: 'Elders\' council', does: 'The elders see to the building when you\'re not there: they choose what goes up next, by what you\'ve said matters most.', wood: 50, growth: 1, max: 1, after: 'hut' },
   { id: 'envoy', cat: 'explore', name: 'Envoy\'s hut', does: 'Once a day, if there\'s food to spare, an envoy takes a gift to the nearest kin you\'re winning over (while you\'re away too).', wood: 60, growth: 1, max: 1, after: 'hut' },
+  { id: 'pottery', cat: 'stores', name: 'Pottery', does: 'Pots for everything: room for 100 more food.', wood: 40, growth: 1.5, after: 'rack', needs: { clay: 20 }, fx: { foodCap: 100 } },
+  { id: 'thatcher', cat: 'homes', name: 'Thatcher', does: 'Reed thatch, quick to lay: huts cost 20% less.', wood: 30, growth: 1, max: 1, after: 'hut', needs: { reeds: 15 }, fx: { cheap: 0.2 } },
+  { id: 'salter', cat: 'stores', name: 'Salting shed', does: 'Salted food keeps: winter slows the food half as much, and room for 40 more.', wood: 45, growth: 1, max: 1, after: 'rack', needs: { salt: 20 }, fx: { winter: 0.5, foodCap: 40 } },
+  { id: 'healer', cat: 'homes', name: 'Healer\'s hut', does: 'Herbs and the knowing of them: half as many die when food runs short, and children come 5% more often.', wood: 45, growth: 1, max: 1, after: 'hut', needs: { herbs: 20 }, fx: { mend: 0.5, births: 0.05 } },
+  { id: 'toolmaker', cat: 'work', name: 'Toolmaker', does: 'Flint knapped sharp: food and wood come in 10% faster.', wood: 50, growth: 1, max: 1, after: 'hut', needs: { flint: 20 }, fx: { food: 0.1, wood: 0.1 } },
   { id: 'trails', cat: 'explore', name: 'Trail markers', does: 'Cairns and blazes on the trees: the chief and the scouts walk 10% faster.', wood: 40, growth: 1, max: 1, after: 'scout', fx: { speed: 0.1 } },
 ];
 

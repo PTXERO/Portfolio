@@ -1,8 +1,8 @@
 // New Shore's panels: the Village (stores, who's working at what, the people), Build (by sort:
 // homes, stores, work, exploring) and the Island (the villages found out there, and the scouts).
 
-import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
-import { buildCost, buildsOpen, canWin, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
+import { buildCost, buildsOpen, canWin, hasNeeds, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import type { GameState } from '../economy/types';
@@ -45,8 +45,8 @@ export function setBuildCat(c: string): void {
 export function shoreKey(state: GameState, tab: string): string {
   const s = shoreOf(state);
   if (!s) return '';
-  if (tab === 'build') return JSON.stringify([s.building?.id, s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, s.wood >= buildCost(s, b.id)])]);
-  if (tab === 'island') return JSON.stringify([s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop)], Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
+  if (tab === 'build') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor((v ?? 0) / 5)), s.building?.id, s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, s.wood >= buildCost(s, b.id)])]);
+  if (tab === 'island') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor(v ?? 0)), s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop)], Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
   const plan = workPlan(s);
   if (villageView === 'people') return JSON.stringify(['people', s.people.length, s.chief, Math.floor(s.day / 2), s.hungry]);
   return JSON.stringify([s.steward, s.hungry, shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, s.chief, s.people.filter((p) => isAdult(s, p)).length, s.people.filter((p) => p.founder).length]);
@@ -171,14 +171,40 @@ function buildRow(s: ShoreState, b: BuildDef, open: boolean): string {
   const name = `${buildName(b.id, s.look.diet)}${have && b.max !== 1 ? ` <span class="dim">×${have}</span>` : ''}`;
   if (!open) return `<div class="card px-box build done"><div class="info"><div class="name">${name}</div><div class="sub">${b.does}</div></div><span class="tag">Built</span></div>`;
   const cost = buildCost(s, b.id);
-  const poor = s.wood < cost || !!s.building;
-  return `<div class="card px-box build"><div class="info"><div class="name">${name}</div><div class="sub">${b.does}</div></div>
+  const poor = s.wood < cost || !!s.building || !hasNeeds(s, b.id);
+  // What else it takes: how much there is, or (with none of it to be had) where it's found.
+  const needs = (Object.keys(b.needs ?? {}) as Res[]).map((r) => {
+    const want = b.needs![r]!;
+    const have = Math.floor(s.res?.[r] ?? 0);
+    if (have >= want) return `<span class="fx">${want} ${RES_NAME[r].toLowerCase()}</span>`;
+    if (sourcesOf(s, r).length) return `${want} ${RES_NAME[r].toLowerCase()} (${have} so far)`;
+    return `<span class="starving">Needs ${RES_NAME[r].toLowerCase()}: you have no village ${whereRes(r)} yet.</span>`;
+  });
+  return `<div class="card px-box build"><div class="info"><div class="name">${name}</div><div class="sub">${b.does}</div>${needs.length ? `<div class="sub">${needs.join(' · ')}</div>` : ''}</div>
     <button class="px-btn buy${poor ? '' : ' gold'}" data-build="${b.id}"${poor ? ' disabled' : ''}><span class="num">${cost}</span> wood</button></div>`;
+}
+
+/** Where a resource is to be had, in words: "by a river or in the marsh". */
+const PLACE: Record<string, string> = { river: 'by a river', lake: 'by a lake', marsh: 'in the marsh', desert: 'in the desert', scrub: 'in the dry scrub', forest: 'in the woods', meadow: 'on the open grass', mountain: 'in the hills', coast: 'on the coast' };
+function whereRes(r: Res): string {
+  const places = (Object.keys(RES_OF) as (keyof typeof RES_OF)[]).filter((h) => RES_OF[h].includes(r)).map((h) => PLACE[h]);
+  return places.length > 1 ? `${places.slice(0, -1).join(', ')} or ${places[places.length - 1]}` : places[0];
+}
+
+/** Everything the island's land gives: how much is kept, and from whom (or where to look). */
+function resourcesCard(s: ShoreState): string {
+  const rows = (Object.keys(RES_NAME) as Res[]).map((r) => {
+    const from = sourcesOf(s, r);
+    const have = r === 'fish' ? '' : `<b class="num">${Math.floor(s.res?.[r] ?? 0)}</b><span class="dim">/${RES_CAP}</span> `;
+    const line = from.length ? `${have}from ${from.map((v) => cap(v.name)).join(', ')}${r === 'fish' ? ' (into the food)' : ''}` : `<span class="dim">None yet: found ${whereRes(r)}.</span>`;
+    return `<div class="relic"><b>${RES_NAME[r]}</b> ${line}</div>`;
+  });
+  return `<div class="panel-head"><h2>Resources</h2><span class="dim">from the villages you hold</span></div><div class="card px-box"><div class="info">${rows.join('')}</div></div>`;
 }
 
 
 function islandLayout(s: ShoreState): string {
-  return villagesCard(s) + landmarksCard(s) + relicsCard(s) + scoutsCard(s);
+  return villagesCard(s) + resourcesCard(s) + landmarksCard(s) + relicsCard(s) + scoutsCard(s);
 }
 
 function landmarksCard(s: ShoreState): string {
@@ -401,10 +427,11 @@ export function villageCard(s: ShoreState, v: Village): string {
         ${near ? '' : `<button class="px-btn" data-visit="${v.id}">${chief} visits them</button>`}
         <button class="px-btn" data-act="dismiss">Later</button>
       </div>`
-    : `<p class="dim tiny">(Raiding and defending come next.)</p><button class="px-btn gold" data-act="dismiss">OK</button>`;
+    : `<p class="dim tiny">${v.joined ? 'They live by your hearth now; a few stay on at their old village, working its land for you.' : v.vassal ? 'Yours: they pay tribute (set what you take on the Island tab).' : '(Raiding and defending come next.)'}</p><button class="px-btn gold" data-act="dismiss">OK</button>`;
   return `<p class="label dim">${REL_NAME[rel]}</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)}</h3></div>
     <p>${v.pop} of them, ${v.cannibal ? 'eaters of their own kind' : `${(DIET_NAME[v.diet] ?? v.diet).toLowerCase()}`}, another kind altogether.${v.habitat ? ` ${WHERE[v.habitat]}` : ''}</p>
     <p class="dim">${REL_LINE[rel]}</p>
+    ${v.habitat ? `<p class="fx">Their land gives: ${RES_OF[v.habitat].map((r) => RES_NAME[r].toLowerCase()).join(', ')}.</p>` : ''}
     ${actions}`;
 }
 

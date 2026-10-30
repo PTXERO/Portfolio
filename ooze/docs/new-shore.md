@@ -398,7 +398,7 @@ islands for checking.
 
 ## 11c. Resources of the land (planned)
 
-*Status: plan, for discussion. Nothing built yet.*
+*Status: Phase 1 part live. Joined clans leave an outpost; access plus a small stock (2 a day from each village, kept up to 60; fish goes straight into the food, 5 a day); vassals give a share by the tax. Pottery (clay), Thatcher (reeds), Salting shed (salt), Healer's hut (herbs), Toolmaker (flint); timber and stone stockpiled for later. Grain, copper and tin with Phase 2.*
 
 Every habitat has things only it gives. Your own village has wood and food; everything else
 belongs to the land a clan lives on. To have it, you need a village there: so every clan on the

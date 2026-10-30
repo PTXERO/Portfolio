@@ -102,7 +102,7 @@ export class ShoreScene extends RangeScene {
     if (!s || !this.island) return;
     // A found village's flag, or one of your own.
     for (const v of s.villages) {
-      if (!v.found || v.joined) continue;
+      if (!v.found || v.gone) continue;
       const X = this.sx(v.x);
       const Y = this.py(v.x, v.y);
       if (Math.hypot(ax - X, ay - (Y - 5)) < Math.max(8, this.zoom * 3)) {
@@ -691,7 +691,35 @@ export class ShoreScene extends RangeScene {
   }
 
   private drawVillage(b: CanvasRenderingContext2D, sprites: Sprite[], s: ShoreState, v: Village, t: number, dt: number, z: number, close: boolean, fogged: (x: number, y: number) => boolean): void {
-    if (v.joined) return;
+    // Joined: their old village is an outpost now, a few still working its land for you (a
+    // couple of their huts, a small fire, your gold flag).
+    if (v.joined) {
+      if (fogged(v.x, v.y)) return;
+      const X = Math.round(this.sx(v.x));
+      const Y = Math.round(this.py(v.x, v.y));
+      if (X < -60 || X > this.W + 60 || Y < -80 || Y > this.H + 60) return;
+      if (close) {
+        for (let k = 0; k < 2; k++) {
+          const hx = v.x + (k ? 3 : -3);
+          const hy = v.y + (k ? -1 : 1);
+          const HX = Math.round(this.sx(hx));
+          const HY = Math.round(this.py(hx, hy));
+          sprites.push({ y: hy, at: { x: hx, y: hy }, draw: () => drawHut(b, v.habitat ?? 'meadow', HX, HY, z, v.look.hue) });
+        }
+      }
+      sprites.push({
+        y: v.y + 0.2,
+        at: v,
+        draw: () => {
+          const fy = Y - (close ? 10 * z + 4 : 8);
+          b.fillStyle = PAL.k;
+          b.fillRect(X, fy, 1, Y - fy);
+          b.fillStyle = '#e8c86a';
+          b.fillRect(X + 1, fy, 4, 3);
+        },
+      });
+      return;
+    }
     // Turned away: for a day or two they're seen on the road with what they could carry, going
     // to whoever will have them; after that the place is empty.
     if (v.gone) {
