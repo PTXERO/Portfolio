@@ -122,11 +122,11 @@ function villagesCard(s: ShoreState): string {
 function villageRow(s: ShoreState, v: Village): string {
   const rel = relation(s, v);
   if (v.joined) {
-    return `<div class="card px-box village"><img class="kind" src="${miniIcon(v.look, 2)}" alt=""><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">Joined</span></div>
+    return `<div class="card px-box village"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">Joined</span></div>
       <div class="sub">They live by your hearth now.</div></div></div>`;
   }
   const win = canWin(s, v);
-  return `<div class="card px-box village"><img class="kind" src="${miniIcon(v.look, 2)}" alt=""><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-${rel}">${REL_NAME[rel]}</span></div>
+  return `<div class="card px-box village"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-${rel}">${REL_NAME[rel]}</span></div>
     <div class="sub">${v.pop} ${v.cannibal ? 'eaters of their own' : DIET_NAME[v.diet] ?? v.diet}. ${win ? '' : REL_LINE[rel]}</div>${win ? trustBar(v) : ''}</div>
     <div class="col">${win ? `<button class="px-btn${s.food >= giftCost(v) ? ' gold' : ''}" data-gift="${v.id}"${s.food >= giftCost(v) ? '' : ' disabled'}>Gift ${giftCost(v)}</button>` : ''}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
 }
@@ -150,7 +150,7 @@ export function villageCard(s: ShoreState, v: Village): string {
         <button class="px-btn" data-act="dismiss">Later</button>
       </div>`
     : `<p class="dim tiny">(Raiding and defending come next.)</p><button class="px-btn gold" data-act="dismiss">OK</button>`;
-  return `<p class="label dim">${REL_NAME[rel]}</p><div class="village-head"><img class="kind" src="${miniIcon(v.look, 3)}" alt=""><h3>${cap(v.name)}</h3></div>
+  return `<p class="label dim">${REL_NAME[rel]}</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)}</h3></div>
     <p>${v.pop} of them, ${v.cannibal ? 'eaters of their own kind' : `${(DIET_NAME[v.diet] ?? v.diet).toLowerCase()}`}, another kind altogether.</p>
     <p class="dim">${REL_LINE[rel]}</p>
     ${actions}`;

@@ -946,7 +946,7 @@ function shoreFrame(): void {
     joinedSeen.add(v.id);
     if (!joinedReady) continue;
     cue('ascend', 0.5);
-    showModal(`<p class="label dim">Joined</p><div class="village-head"><img class="kind" src="${miniIcon(v.look, 3)}" alt=""><h3>${v.name[0].toUpperCase() + v.name.slice(1)}</h3></div>
+    showModal(`<p class="label dim">Joined</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${v.name[0].toUpperCase() + v.name.slice(1)}</h3></div>
       <p>They've been won over. ${v.pop} of them are coming to live by your hearth: another kind among you, from now on.</p>
       <button class="px-btn gold" data-act="dismiss">Welcome them</button>`);
   }
