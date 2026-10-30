@@ -1,4 +1,4 @@
-// Sound: the underwater hum of the Soup and the Cell (a seamless loop; the Depths have faint music instead), a water drop for every tap in the Soup
+// Sound: the underwater hum of the Soup and the Cell (a seamless loop; the Depths add faint music), a water drop for every tap in the Soup
 // and the Cell (one of many, never the same twice running), and the rush of the whirlpool,
 // as loud as it's strong (silent when there isn't one). The drops and the rush are heard as
 // if from under the water: muffled, and ringing on in a long reverb. The Menu has a volume
@@ -270,10 +270,10 @@ function loopTo(name: Loop, level: number, out: GainNode, fade: number): void {
 export function soundFrame(state: GameState): void {
   if (!ctx) return;
   const soup = state.current === 'soup';
-  // The Cell's Depths have their own sound: faint music, far off in the dark, barely there.
-  // Elsewhere under the water, the hum. (Each fades over a couple of seconds between them.)
+  // The hum under all the water; in the Cell's Depths, faint music too, far off in the dark,
+  // barely there (fading in and out over a couple of seconds as you come and go).
   const depths = state.current === 'cell' && state.stages.cell.habitat === 'depths';
-  loopTo('underwater', (soup || state.current === 'cell') && !depths ? 1 : 0, bus.ambience, 0.8);
+  loopTo('underwater', soup || state.current === 'cell' ? 1 : 0, bus.ambience, 0.8);
   loopTo('depths', depths ? 0.2 : 0, bus.ambience, 0.8);
   const swirl = soup && state.swirl > 0.02 ? Math.min(1, state.swirl) : 0;
   loopTo('river', swirl * 0.8, bus.effects, swirl > 0 ? 0.15 : 0.3);
