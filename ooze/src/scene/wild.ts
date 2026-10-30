@@ -5,7 +5,7 @@
 // Berry bushes near home ripen through the year (not in winter) and the herd strips them;
 // fruit trees at the forest's edge do the same in autumn. Crabs scuttle on the beaches and
 // duck away from feet; small birds peck about and burst up when anything comes close; fish
-// jump offshore; a little wild herd of grazers keeps to the far grass and bolts from you;
+// jump offshore; little wild herds of grazers wander through, graze, and bolt from you;
 // and now and then giant dragonflies settle on the grass, until something comes too close.
 
 import { PAL } from '../art/sprites';
@@ -66,6 +66,16 @@ interface Grazer {
   ph: number;
 }
 
+/** A little wild herd passing through: where it's grazing, how long it'll stay, and (once it's
+ * had enough or been frightened) which way it's going. */
+interface Herd {
+  members: Grazer[];
+  at: Pt;
+  stay: number;
+  leaving: Pt | null;
+  gone: number;
+}
+
 /** How fast bushes ripen (a share a second) in each season, and trees (autumn only). */
 const BUSH_GROW = [0.012, 0.02, 0.008, 0];
 const TREE_GROW = [0, 0.004, 0.02, 0];
@@ -77,7 +87,8 @@ export class Wild {
   private crabs: Crab[] = [];
   private flocks: Flock[] = [];
   private flockTimer = 40 + Math.random() * 60;
-  private grazers: Grazer[] = [];
+  private herds: Herd[] = [];
+  private herdTimer = 8 + Math.random() * 25;
   private fishTimer = 3;
   private seed = -1;
 
@@ -114,8 +125,7 @@ export class Wild {
       ...spots(30, 23, edge).map((p) => ({ ...p, ripe: 0.3, tree: true })),
     ];
     this.crabs = spots(26, 37, sand).map((p, i) => ({ ...p, ph: i * 1.7, hide: 0 }));
-    const far = spots(1, 53, (x, y) => grass(x, y) || biomeAt(is, x, y) === Biome.High, [30, 70])[0];
-    this.grazers = far ? Array.from({ length: 5 }, (_, i) => ({ x: far.x + (hash(i, 59) - 0.5) * 4, y: far.y + (hash(i, 61) - 0.5) * 3, vx: 0, vy: 0, ph: i * 2.1 })) : [];
+    this.herds = [];
   }
 
   /** The nearest bush or tree with fruit worth walking to, within `r` tiles of a point. */
@@ -249,14 +259,58 @@ export class Wild {
       }
     }
 
-    // The wild grazers: drift about the far grass, and bolt from your creature.
-    if (this.grazers.length) {
-      const cx = this.grazers.reduce((a, g) => a + g.x, 0) / this.grazers.length;
-      const cy = this.grazers.reduce((a, g) => a + g.y, 0) / this.grazers.length;
+    // Wild grazers: now and then a little herd wanders in (from just out of view, or somewhere
+    // else on the island), grazes a while, bolts from your creature if it comes close, and
+    // moves on; it's a while before another comes.
+    this.herdTimer -= dt;
+    if (this.herdTimer <= 0 && this.herds.length < 2) {
+      this.herdTimer = 70 + Math.random() * 150;
+      const open = (x: number, y: number) => {
+        const g = biomeAt(is, x, y);
+        return g === Biome.Grass || g === Biome.High;
+      };
+      for (let i = 0; i < 40; i++) {
+        const inView = Math.random() < 0.6;
+        const goal = inView ? v.toWorld(v.W * (0.15 + Math.random() * 0.7), v.H * (0.25 + Math.random() * 0.5)) : { x: 6 + Math.random() * (is.n - 12), y: 6 + Math.random() * (is.n - 12) };
+        if (!open(goal.x, goal.y) || near(goal.x, goal.y, 10)) continue;
+        // In from out of view: a way off from where they'll graze.
+        const a = Math.random() * Math.PI * 2;
+        const span = Math.max(v.W, v.H) / Math.max(0.5, z) * 0.6 + 6;
+        const from = inView ? { x: goal.x + Math.cos(a) * span, y: goal.y + Math.sin(a) * span } : goal;
+        const start = isLand(is, from.x, from.y) ? from : goal;
+        const n = 3 + Math.floor(Math.random() * 4);
+        this.herds.push({
+          members: Array.from({ length: n }, (_, k) => ({ x: start.x + (Math.random() - 0.5) * 4, y: start.y + (Math.random() - 0.5) * 3, vx: 0, vy: 0, ph: k * 2.1 + Math.random() })),
+          at: goal,
+          stay: 60 + Math.random() * 150,
+          leaving: null,
+          gone: 0,
+        });
+        break;
+      }
+    }
+    for (const h of this.herds) {
+      const cx = h.members.reduce((a, g) => a + g.x, 0) / h.members.length;
+      const cy = h.members.reduce((a, g) => a + g.y, 0) / h.members.length;
       const scared = Math.hypot(o.me.x - cx, o.me.y - cy) < 7;
-      for (const g of this.grazers) {
-        let gx = cx + Math.cos(t * 0.05 + g.ph) * 2.5;
-        let gy = cy + Math.sin(t * 0.04 + g.ph) * 1.8;
+      h.stay -= dt;
+      // Had enough, or frightened off: they move on, away from whoever frightened them.
+      if (!h.leaving && (h.stay <= 0 || scared)) {
+        const a = scared ? Math.atan2(cy - o.me.y, cx - o.me.x) : Math.random() * Math.PI * 2;
+        h.leaving = { x: cx + Math.cos(a) * 80, y: cy + Math.sin(a) * 80 };
+      }
+      if (h.leaving) h.gone += dt;
+      const target = h.leaving ?? h.at;
+      for (const g of h.members) {
+        let gx: number;
+        let gy: number;
+        if (h.leaving || Math.hypot(h.at.x - cx, h.at.y - cy) > 3) {
+          gx = target.x + Math.cos(g.ph) * 2;
+          gy = target.y + Math.sin(g.ph) * 1.5;
+        } else {
+          gx = h.at.x + Math.cos(t * 0.05 + g.ph) * 2.5;
+          gy = h.at.y + Math.sin(t * 0.04 + g.ph) * 1.8;
+        }
         if (scared) {
           const d = Math.hypot(g.x - o.me.x, g.y - o.me.y) || 1;
           gx = g.x + ((g.x - o.me.x) / d) * 8;
@@ -265,7 +319,7 @@ export class Wild {
         const dx = gx - g.x;
         const dy = gy - g.y;
         const d = Math.hypot(dx, dy) || 1;
-        const sp = scared ? 3.2 : d > 0.3 ? 0.4 : 0;
+        const sp = scared ? 3.2 : h.leaving || d > 3 ? 0.9 : d > 0.3 ? 0.4 : 0;
         g.vx += ((dx / d) * sp - g.vx) * Math.min(1, dt * 3);
         g.vy += ((dy / d) * sp - g.vy) * Math.min(1, dt * 3);
         const nx = g.x + g.vx * dt;
@@ -284,6 +338,12 @@ export class Wild {
         sprites.push({ y: g.y, draw: () => drawGrazer(o.b, X, Y, z, left, step, graze, o.night > 0.5) });
       }
     }
+    // Gone over the hill: a while after leaving (and out of sight), they're gone.
+    this.herds = this.herds.filter((h) => {
+      if (h.gone < 25) return true;
+      // (Or, if they've got stuck at the water's edge in view, after a while longer anyway.)
+      return h.gone < 90 && h.members.some((g) => on(v.sx(g.x), v.py(g.x, g.y)));
+    });
   }
 
 }
