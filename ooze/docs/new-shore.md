@@ -381,6 +381,84 @@ peaks only. Made once in a worker while the crossing plays and kept on the devic
 older New Shores keep the first-generation island. `npx tsx tools/terrain-preview.ts <dir>` dumps
 islands for checking.
 
+## 11c. Resources of the land (planned)
+
+*Status: plan, for discussion. Nothing built yet.*
+
+Every habitat has things only it gives. Your own village has wood and food; everything else
+belongs to the land a clan lives on. To have it, you need a village there: so every clan on the
+island is something you want, not just more people.
+
+### The resources
+
+| Resource | Where (habitat) | What it's for (Phase 1) | Later (Phase 2) |
+|---|---|---|---|
+| **Fish** | river, lake, coast | food that doesn't count against the land's limit | fishing fleets, harbours |
+| **Clay** | river, marsh | pottery: stores hold far more (and food keeps) | Clay & Field age; bricks |
+| **Reeds** | lake, marsh | thatch and baskets: huts cheaper, carrying more | boats (with timber) |
+| **Salt** | coast, desert | salted food: winter hardly bites, food keeps | trade's first currency |
+| **Flint** | desert, mountain | sharp tools: work goes faster; first spears | arms (War lane) |
+| **Stone** | mountain | stone huts and the palisade's footing | walls, roads, great works |
+| **Timber** | forest | hardwood: big buildings (Longhouse, lookout) | ships, the great hall |
+| **Herbs** | marsh, meadow, forest | healing: fewer die young, the old live longer | healers, rites |
+| **Grain** | meadow, scrub | wild grain: the first fields (grazers, omnivores) | farming, the Food lane |
+| **Copper**, **Tin** | one seam each, in the mountains | — (found and claimed) | the Bronze Age gate |
+
+Copper and tin are rare on purpose: one seam of each, usually in hard country, usually near
+someone who won't give it up.
+
+### How a resource becomes yours: a village where it is
+
+Any village you hold in that habitat gives its land's resources:
+
+- **Joined**: when a clan moves in, their old village becomes an **outpost**: a few stay on to
+  work it, and its resources are yours. (So winning the Riverfolk gives you clay and fish.)
+- **Vassal**: they keep their village and pay its resources as tribute, along with food and
+  wood (the tax setting takes a share).
+- **Conquered** (with raids, milestone 3): a village taken by force works its land for you, at
+  first grudgingly (less, until it settles).
+- **Founded** (later): a daughter settlement you build yourself on empty land of that kind.
+
+What diet allows still holds: predators and enemies can't be won over, so the clans sitting on
+flint and stone in the hills (often hunters) have to be raided or driven off. **Resources are the
+reason to fight**, as well as the reason to make friends.
+
+### What you see
+
+- **Finding a clan shows what their land has**: "The Riverfolk: clay, fish." Their card says it,
+  and the Island tab keeps a **Resources** list: each one known, where it's found, and whether
+  you have it ("You have no village by a river yet").
+- **Buildings that need a resource** say so in Build: "Pottery — needs Clay (you have no village
+  by a river yet)". (Unlike the ??? buildings learned at landmarks, these show what they need:
+  that's the pull toward a clan.)
+- On the map, an outpost or vassal village flies your colour.
+
+### How much (first pass)
+
+- **Phase 1: access, plus a small stock.** Having a resource unlocks what it's for (the binary
+  part), and each village that gives it adds a little to a stock (a few a day) that special
+  buildings spend (pottery: 20 clay; the palisade: 40 stone). Two villages with clay: twice the
+  clay.
+- **Phase 2: quantities and roads.** Resources travel by road from where they're made; more
+  settlements, more of each; trade with clans you haven't taken.
+
+### Diet
+
+Each diet wants different things first, so the island looks different to each:
+
+- **Hunters**: flint (weapons, faster hunts), timber, stone. They'll fight for the hills.
+- **Grazers**: grain, herbs, reeds. Their Welcome brings kin, and kin live on good land.
+- **Omnivores**: clay, salt, fish. Storage and trade: the road to the Forum.
+- **Cannibals**: whatever they can take.
+
+### Open questions
+
+1. Should joined clans leave an outpost behind (as above), or move in completely and give up
+   their land (then only vassals and conquest give resources)?
+2. Is the stock (spent on buildings) wanted in Phase 1, or just access (simpler)?
+3. Which come first in the build: fish, clay, reeds, salt and herbs (kin-friendly) in Phase 1;
+   flint and stone with raids (milestone 3); grain, copper and tin with Phase 2?
+
 ## 12. Polish backlog (back burner)
 
 - **Biomes in 2.5D**: forests and meadows as 2D sprites standing on the 3D land (trees, grass
