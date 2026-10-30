@@ -871,8 +871,10 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
     reveal(is, seen, s.hearth.x, s.hearth.y, HOME_SIGHT + bo.watch);
   }
   // Scouts: one for each scout's hut, out in the fog on their own.
-  const huts = count(s, 'scout');
+  // (Two at most, even where an older save built more huts.)
+  const huts = Math.min(2, count(s, 'scout'));
   s.scouts ??= [];
+  if (s.scouts.length > huts) s.scouts.length = huts;
   while (s.scouts.length < huts) s.scouts.push({ at: { ...s.hearth }, to: null, left: 0 });
   s.scouts.forEach((sc, k) => {
     if (!sc.to || sc.left <= 0) {

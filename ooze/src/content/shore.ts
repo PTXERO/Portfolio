@@ -77,7 +77,7 @@ export const BUILDS: BuildDef[] = [
   { id: 'rack', cat: 'stores', name: 'Drying rack', does: 'Room for 40 more food.', wood: 14, growth: 1.3, after: 'hut' },
   { id: 'camp', cat: 'work', name: 'Gathering camp', does: 'Food comes in 10% faster, and the land round the village feeds 5 more gatherers.', wood: 35, growth: 1.5, after: 'hut' },
   { id: 'cutter', cat: 'work', name: 'Cutters\' shed', does: 'Wood comes in 10% faster.', wood: 35, growth: 1.5, after: 'woodpile' },
-  { id: 'scout', cat: 'explore', name: 'Scout\'s hut', does: 'One of them goes out into the fog for you, finding what\'s out there (while you\'re away too).', wood: 20, growth: 2.2, max: 3, after: 'hut' },
+  { id: 'scout', cat: 'explore', name: 'Scout\'s hut', does: 'One of them goes out into the fog for you, finding what\'s out there (while you\'re away too).', wood: 20, growth: 2.2, max: 2, after: 'hut' },
   { id: 'elders', cat: 'homes', name: 'Elders\' fire', does: 'The old teach the young: children grow up 15% faster.', wood: 60, growth: 1, max: 1, after: 'hut', fx: { grow: 0.15 } },
   { id: 'longhouse', cat: 'homes', name: 'Longhouse', does: 'A great hall of a house: room for 12 more.', wood: 140, growth: 1.5, after: 'hut', learn: 'ruin', fx: { room: 12 } },
   { id: 'pool', cat: 'homes', name: 'Bathing pool', does: 'Warm water, piped from a spring: children are born 10% more often.', wood: 70, growth: 1, max: 1, after: 'hut', learn: 'spring', fx: { births: 0.1 } },

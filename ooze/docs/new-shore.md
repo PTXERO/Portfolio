@@ -362,7 +362,7 @@ Built in slices, each tested live (balance sims after).
 3. **Raids and defense**: the grace period, scouts, announced raids, Kairosoft-style battles.
 4. **Taking people and ideas**: diet leaning and shifts; cannibals' Dread.
 5. **The Far Voice**: whispers and the few powers.
-6. **Delegation**: Scout *(the Scout's hut is live: up to 3 scouts explore the fog on their
+6. **Delegation**: Scout *(the Scout's hut is live: up to 2 scouts explore the fog on their
    own, offline too)*, Envoy, War chief, Steward (the idle side of Phase 1).
 7. **The turn**: at a hundred, into Phase 2 (the Long Road).
 
