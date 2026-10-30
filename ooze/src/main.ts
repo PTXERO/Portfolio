@@ -1126,7 +1126,7 @@ function playEnding(): void {
   // look up when they're ready.)
   const after = def.next
     ? `<p class="stir">…but something is still moving.</p>
-      <button class="px-btn gold pulse" data-act="look">Look closer</button>${def.next === 'tribal' ? '<button class="px-btn" data-act="keep">Keep watching</button>' : ''}`
+      <button class="px-btn gold pulse" data-act="look">${def.next === 'tribal' ? 'Look up' : 'Look closer'}</button>${def.next === 'tribal' ? '<button class="px-btn" data-act="keep">Keep watching</button>' : ''}`
     : `<p class="stir">The story continues in a future update.</p>
       <button class="px-btn gold" data-act="keep">Keep watching</button>`;
   ending.innerHTML = `<div class="ending-inner">
