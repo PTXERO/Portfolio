@@ -39,8 +39,12 @@ const LINES: [number, number, string][] = [
 const S = 2;
 /** Seconds to fade up out of black, and back down into it. */
 const FADE = 1.4;
-/** After the fortieth day: the bird comes down, then the end (in seconds). */
-const BIRD_FOR = 6;
+/** After the fortieth day (seconds): the bird comes down; then land rises into view, the camera
+ * turning to it; then the end. */
+const BIRD_FOR = 12;
+const LAND_AT = 3;
+/** The black bars top and bottom (a share of the height each), for the film of it. */
+const BARS = 0.1;
 
 /** How far into an event (0 outside it, 1 in its middle), easing in and out over a day. */
 function within(day: number, [a, b]: [number, number], edge = 1): number {
@@ -184,6 +188,42 @@ export function playCrossing(look: { body: string; belly: string }, onDone: () =
       }
     }
 
+    // ---- Islands on the horizon ----
+    // Behind them at first, the spear's island, dark, with its red spark, sinking away; at the
+    // end, ahead, green land rising out of the sea, smoke going up from it.
+    const hump = (cx: number, w: number, h: number, fill: string, bumps: number) => {
+      b.fillStyle = fill;
+      for (let x = Math.floor(cx - w / 2); x <= cx + w / 2; x++) {
+        const u = (x - cx) / (w / 2);
+        const top = h * Math.sqrt(Math.max(0, 1 - u * u)) * (0.85 + 0.15 * Math.sin(u * bumps + cx));
+        if (top >= 1) b.fillRect(x, Math.round(horizon - top), 1, Math.ceil(top) + 1);
+      }
+    };
+    const behind = Math.max(0, 1 - days / 4.5);
+    if (behind > 0) {
+      const w = W * 0.32 * behind + 4;
+      hump(W * 0.2, w, horizon * 0.14 * behind + 1, `rgba(24, 18, 22, ${0.85})`, 7);
+      b.fillStyle = `rgba(255, 70, 70, ${0.6 + 0.4 * Math.sin(t * 3)})`;
+      b.fillRect(Math.round(W * 0.2), Math.round(horizon - horizon * 0.14 * behind - 2), 1, 2);
+    }
+    const land = birdAt >= 0 ? Math.max(0, Math.min(1, (t - birdAt - LAND_AT) / 5)) : 0;
+    const landX = W * 0.8;
+    if (land > 0) {
+      const e = 1 - (1 - land) * (1 - land);
+      const lw = W * 0.5 * e;
+      const lh = horizon * 0.2 * e;
+      hump(landX, lw * 1.15, lh * 0.7, `rgba(${Math.round(60 + 40 * light)}, ${Math.round(90 + 50 * light)}, ${Math.round(90 + 40 * light)}, 0.9)`, 5);
+      hump(landX - lw * 0.1, lw, lh, `rgba(${Math.round(30 + 40 * light)}, ${Math.round(70 + 70 * light)}, ${Math.round(40 + 30 * light)}, 0.95)`, 11);
+      // A pale line of beach, and smoke from somewhere inland.
+      b.fillStyle = `rgba(220, 205, 160, ${0.7 * e})`;
+      b.fillRect(Math.round(landX - lw * 0.42), horizon - 1, Math.round(lw * 0.7), 1);
+      for (let k = 0; k < 12; k++) {
+        const h = ((t * 4 + k * 4) % 40) * e;
+        b.fillStyle = `rgba(215, 215, 220, ${0.45 * e * (1 - h / 40)})`;
+        b.fillRect(Math.round(landX + lw * 0.12 + Math.sin(h * 0.15 + k) * 1.5 + h * 0.2), Math.round(horizon - lh - 2 - h), 2, 2);
+      }
+    }
+
     // ---- The sea, in perspective, a pixel at a time ----
     const rough = 1 + storm * 1.8 - calm * 0.85;
     const glow = day ? [255, 226, 160] : [220, 226, 240];
@@ -292,11 +332,18 @@ export function playCrossing(look: { body: string; belly: string }, onDone: () =
     }
 
     // ---- Shown: closing in on the raft for what matters ----
-    zoom += (1 + 1.25 * focus - zoom) * Math.min(1, dt * 1.2);
+    // The camera: a little in, drifting and swaying like a hand-held shot; closing in on the
+    // raft for what matters; at the end, easing out and turning to the land as it rises.
+    const turn = birdAt >= 0 ? Math.max(0, Math.min(1, (t - birdAt - LAND_AT + 0.5) / 4)) : 0;
+    const te = turn * turn * (3 - 2 * turn);
+    zoom += (1.18 + 1.2 * focus - 0.18 * te - zoom) * Math.min(1, dt * 0.9);
     const cw = W / zoom;
     const ch = H / zoom;
-    const cx = Math.max(0, Math.min(W - cw, rx - cw / 2));
-    const cy = Math.max(0, Math.min(H - ch, ry - 6 - ch * 0.55));
+    const drift = { x: Math.sin(t * 0.11) * cw * 0.06 + Math.sin(t * 0.27) * cw * 0.02, y: Math.sin(t * 0.17 + 1) * ch * 0.03 };
+    const focusX = rx + (landX - rx) * 0.75 * te + drift.x * (1 - te);
+    const focusY = ry - 6 + (horizon - (ry - 6)) * 0.35 * te + drift.y;
+    const cx = Math.max(0, Math.min(W - cw, focusX - cw / 2));
+    const cy = Math.max(0, Math.min(H - ch, focusY - ch * 0.55));
     out.drawImage(off, cx, cy, cw, ch, 0, 0, W, H);
     // Rain across the view, and lightning now and then (the thunder after).
     if (storm > 0) {
@@ -320,6 +367,11 @@ export function playCrossing(look: { body: string; belly: string }, onDone: () =
       out.fillRect(0, 0, W, H);
       flash = Math.max(0, flash - dt * 3);
     }
+    // The bars of the film.
+    const bar = Math.round(H * BARS);
+    out.fillStyle = '#000';
+    out.fillRect(0, 0, W, bar);
+    out.fillRect(0, H - bar, W, bar);
     // Out of black at the start, back into it at the end.
     const end = birdAt >= 0 ? birdAt + BIRD_FOR : Infinity;
     const black = Math.max(t < FADE ? 1 - t / FADE : 0, t > end - FADE ? Math.min(1, (t - (end - FADE)) / FADE) : 0);
