@@ -2,7 +2,7 @@
 // homes, stores, work, exploring) and the Island (the villages found out there, and the scouts).
 
 import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
-import { buildCost, buildsOpen, canWin, hasNeeds, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { buildCost, canPay, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import type { GameState } from '../economy/types';
@@ -45,11 +45,11 @@ export function setBuildCat(c: string): void {
 export function shoreKey(state: GameState, tab: string): string {
   const s = shoreOf(state);
   if (!s) return '';
-  if (tab === 'build') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor((v ?? 0) / 5)), s.building?.id, s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, s.wood >= buildCost(s, b.id)])]);
+  if (tab === 'build') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor((v ?? 0) / 5)), s.building?.id, s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, canPay(s, b.id)])]);
   if (tab === 'island') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor(v ?? 0)), s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop)], Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
   const plan = workPlan(s);
   if (villageView === 'people') return JSON.stringify(['people', s.people.length, s.chief, Math.floor(s.day / 2), s.hungry]);
-  return JSON.stringify([s.steward, s.hungry, shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, s.chief, s.people.filter((p) => isAdult(s, p)).length, s.people.filter((p) => p.founder).length]);
+  return JSON.stringify([s.cold, Math.round(forestShare(s) * 20), Math.round(burnPerDay(s) * 2), s.steward, s.hungry, shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, s.chief, s.people.filter((p) => isAdult(s, p)).length, s.people.filter((p) => p.founder).length]);
 }
 
 export function shoreUpdate(root: HTMLElement, state: GameState): void {
@@ -61,7 +61,7 @@ export function shoreUpdate(root: HTMLElement, state: GameState): void {
   };
   put('shore-food', n0(s.food));
   if (s.building) {
-    put('build-left', `${Math.ceil(s.building.left)}s`);
+    put('build-left', `${Math.ceil(buildLeftSec(s))}s`);
     const bar = root.querySelector<HTMLElement>('[data-bar="building"] > i');
     if (bar) bar.style.width = `${Math.round((1 - s.building.left / s.building.total) * 100)}%`;
   }
@@ -114,9 +114,9 @@ function storesCard(s: ShoreState): string {
   return `<div class="panel-head"><h2>The Village</h2><span class="dim">${s.people.length} people</span></div>
     <div class="card px-box ex-stores shore-stores">
       ${cell('food', 'Food', s.food, foodCap(s), `${net >= 0 ? '+' : ''}${n0(net)} a day`)}
-      ${cell('wood', 'Wood', s.wood, woodCap(s), `+${n0(plan.woodRate)} a day`)}
+      ${cell('wood', 'Wood', s.wood, woodCap(s), `${plan.woodRate - burnPerDay(s) >= 0 ? '+' : ''}${n0(plan.woodRate - burnPerDay(s))} a day`)}
       <div class="store"><span class="label dim">People</span><b class="num">${s.people.length}<span class="dim">/${room(s)}</span></b><span class="dim">room</span></div>
-      <div class="sub diet">${s.hungry ? `<b class="starving">Starving: not enough food for everyone. ${s.hungry >= 2 ? 'People are dying.' : 'Soon people will die.'}</b> ` : ''}${seasonLine(s)}<span data-t="shore-birth">${birthLine(s)}</span></div>
+      <div class="sub diet">${s.cold ? `<b class="starving">Freezing: no wood for the fires. ${s.cold >= 2 ? 'The young and the old are dying.' : 'Soon they will start to die.'}</b> ` : ''}${s.hungry ? `<b class="starving">Starving: not enough food for everyone. ${s.hungry >= 2 ? 'People are dying.' : 'Soon people will die.'}</b> ` : ''}${seasonLine(s)}<span data-t="shore-birth">${birthLine(s)}</span></div>
     </div>`;
 }
 
@@ -128,13 +128,15 @@ const LEANS: { id: Lean; name: string }[] = [
 
 function workCard(s: ShoreState): string {
   const plan = workPlan(s);
-  const kids = s.people.length - plan.food - plan.wood;
+  const b = builders(s);
+  const kids = s.people.length - plan.food - plan.wood - b;
   if (!count(s, 'hearth')) {
     return `<div class="card px-box"><div class="info"><div class="name">No village yet</div>
       <div class="sub">They sit by the raft, living on what the crossing left them. Nothing's gathered until there's a hearth: break up the raft for its wood, and build one.</div></div></div>`;
   }
   return `<div class="card px-box lean"><div class="info"><div class="name">What they work at</div>
-    <div class="sub">${plan.food} gathering food, ${plan.wood} cutting wood${kids > 0 ? `, ${kids} too young` : ''}. They work it out for themselves; you set what they lean toward.</div>
+    <div class="sub">${plan.food} gathering food, ${plan.wood} cutting wood${b ? `, ${b} building` : ''}${kids > 0 ? `, ${kids} too young` : ''}. They work it out for themselves; you set what they lean toward.</div>
+    <div class="sub dim">Firewood: ${burnPerDay(s).toFixed(1)} a day${shoreSeason(s).si === 3 ? ' (winter: twice as much)' : ''}. The woods round about: ${Math.round(forestShare(s) * 100)}%${forestShare(s) < 0.5 ? ', thinning (a forester would plant more)' : ''}.</div>
     <div class="sub${plan.food > plan.land ? ' starving' : ' dim'}">The land round the village feeds ${plan.land} gatherers${plan.food > plan.land ? `: ${plan.food - plan.land} more than it can, and they find little` : ''}. Gathering camps and weirs let it feed more.</div></div>
     <div class="seg">${LEANS.map((l) => `<button class="px-btn${s.lean === l.id ? ' gold' : ''}" data-lean="${l.id}">${l.name}</button>`).join('')}</div></div>`;
 }
@@ -144,7 +146,7 @@ function buildLayout(s: ShoreState): string {
   const cats = BUILD_CATS.filter((c) => catShown(s, c.id));
   if (!cats.some((c) => c.id === buildCat)) buildCat = cats[0]?.id ?? 'homes';
   // A dot on a sort with something in it you can build now.
-  const can = (c: BuildCat) => !s.building && open.some((b) => b.cat === c && s.wood >= buildCost(s, b.id));
+  const can = (c: BuildCat) => !s.building && open.some((b) => b.cat === c && canPay(s, b.id));
   const tabs = cats.length > 1 ? `<div class="seg build-cats">${cats.map((c) => `<button class="px-btn${c.id === buildCat ? ' on' : ''}" data-buildcat="${c.id}">${c.name}${can(c.id) && c.id !== buildCat ? '<i class="dot"></i>' : ''}</button>`).join('')}</div>` : '';
   const rows = BUILDS.filter((b) => b.cat === buildCat && (open.includes(b) || count(s, b.id) > 0))
     .map((b) => buildRow(s, b, open.includes(b)))
@@ -160,7 +162,7 @@ function buildLayout(s: ShoreState): string {
   const going = s.building
     ? `<div class="card px-box build going"><div class="info"><div class="name">Building: ${buildName(s.building.id, s.look.diet)}</div>
       <div class="making-bar on" data-bar="building"><i style="width: ${Math.round((1 - s.building.left / s.building.total) * 100)}%"></i></div>
-      <div class="sub">One thing at a time: <span data-t="build-left">${Math.ceil(s.building.left)}s</span> to go. More grown hands build faster.</div></div></div>`
+      <div class="sub"><span data-t="build-left">${Math.ceil(buildLeftSec(s))}s</span> to go, with ${builders(s)} at it (not gathering meanwhile). Further from the hearth takes longer.</div></div></div>`
     : '';
   return `<div class="panel-head"><h2>Build</h2><span class="dim"><span data-t="shore-wood">${n0(s.wood)}</span> wood</span></div>${going}${raft}${tabs}${rows}${locked ? `<p class="dim tiny">More to build once there's a ${count(s, 'hearth') ? 'hut' : 'hearth'}.</p>` : ''}`;
 }
@@ -171,7 +173,7 @@ function buildRow(s: ShoreState, b: BuildDef, open: boolean): string {
   const name = `${buildName(b.id, s.look.diet)}${have && b.max !== 1 ? ` <span class="dim">×${have}</span>` : ''}`;
   if (!open) return `<div class="card px-box build done"><div class="info"><div class="name">${name}</div><div class="sub">${b.does}</div></div><span class="tag">Built</span></div>`;
   const cost = buildCost(s, b.id);
-  const poor = s.wood < cost || !!s.building || !hasNeeds(s, b.id);
+  const poor = !canPay(s, b.id) || !!s.building;
   // What else it takes: how much there is, or (with none of it to be had) where it's found.
   const needs = (Object.keys(b.needs ?? {}) as Res[]).map((r) => {
     const want = b.needs![r]!;

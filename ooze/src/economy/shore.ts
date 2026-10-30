@@ -31,7 +31,7 @@ const EAT = 1;
 const EAT_CHILD = 0.5;
 /** Food a birth takes, and how often a pair of adults has a child (a day) with all well. */
 const BIRTH_FOOD = 12;
-const PAIR_RATE = 0.15;
+const PAIR_RATE = 0.12;
 /** What's kept with nothing built to keep it in. */
 const FOOD_CAP = 40;
 const WOOD_CAP = 50;
@@ -171,6 +171,10 @@ export interface ShoreState {
   steward?: { on: boolean; plan: StewardPlan };
   /** The last day the envoy took a gift. */
   envoyDay?: number;
+  /** Wood still standing in the woods round the village (see FOREST_MAX). */
+  forest?: number;
+  /** Winter days in a row with no firewood. */
+  cold?: number;
   /** What's in store of the land's other resources (fish goes straight into the food). */
   res?: Partial<Record<Res, number>>;
   /** Whether the raft they came on has been broken up for its wood. */
@@ -619,9 +623,53 @@ function placeFor(s: ShoreState, id: BuildId, is: Island): Pt {
 }
 
 /** Seconds a building takes to put up: longer the bigger it is, quicker with more grown hands. */
-export function buildTime(s: ShoreState, id: BuildId): number {
+/** Work a builder does a second. */
+const BUILD_RATE = 0.28;
+
+/** How many are at the building (taken off gathering while it goes up): a few, more in a
+ * bigger village. */
+export function builders(s: ShoreState): number {
+  if (!s.building) return 0;
   const adults = s.people.filter((p) => isAdult(s, p)).length;
-  return (30 + buildCost(s, id) * 1.8) / (1 + 0.03 * Math.min(adults, 40));
+  return Math.max(Math.min(1, adults), Math.min(6, Math.round(adults * 0.2)));
+}
+
+/** The work a building takes: more for a bigger one, and more the further out it goes (the
+ * wood hauled from the stores by the hearth, and the ground cleared). */
+function buildWork(s: ShoreState, id: BuildId, at: Pt): number {
+  const d = Math.hypot(at.x - s.hearth.x, at.y - s.hearth.y);
+  return (20 + buildCost(s, id) * 1.5) * (1 + d / 40);
+}
+
+/** Seconds left on what's going up, at the pace the builders are going. */
+export function buildLeftSec(s: ShoreState): number {
+  return s.building ? s.building.left / Math.max(0.01, builders(s) * BUILD_RATE) : 0;
+}
+
+// ---- Firewood and the woods ----
+
+/** The woods round the village, at most (wood still standing to be cut), and how fast they grow
+ * back a day on their own and with each forester. */
+export const FOREST_MAX = 400;
+const REGROW = 3;
+const REGROW_FORESTER = 10;
+
+/** Firewood the village burns a day (the hearth, homes kept warm): twice as much in winter. */
+export function burnPerDay(s: ShoreState): number {
+  let b = 0;
+  for (const def of BUILDS) if (def.burn) b += def.burn * count(s, def.id);
+  return b * (shoreSeason(s).si === 3 ? 2 : 1);
+}
+
+/** How thick the woods round the village still are (0 to 1); cutting's slower as they thin. */
+export function forestShare(s: ShoreState): number {
+  return (s.forest ?? FOREST_MAX) / FOREST_MAX;
+}
+
+/** Whether there's the wood (and whatever else) for it. (Half a log short is near enough: the
+ * fires nibble at a full woodpile, and a build costing what it holds should still go up.) */
+export function canPay(s: ShoreState, id: BuildId): boolean {
+  return s.wood + 0.5 >= buildCost(s, id) && hasNeeds(s, id);
 }
 
 /** Starts a building (one at a time: it goes up over a while, then it's there). */
@@ -629,12 +677,12 @@ export function build(state: GameState, id: BuildId): boolean {
   const s = shoreOf(state);
   if (!s || s.building || !buildsOpen(s).some((b) => b.id === id)) return false;
   const cost = buildCost(s, id);
-  if (s.wood < cost || !hasNeeds(s, id)) return false;
-  const total = buildTime(s, id);
-  s.wood -= cost;
+  if (!canPay(s, id)) return false;
+  s.wood = Math.max(0, s.wood - cost);
   const needs = BUILDS.find((b) => b.id === id)!.needs ?? {};
   for (const r of Object.keys(needs) as Res[]) s.res![r] = (s.res?.[r] ?? 0) - (needs[r] ?? 0);
   const at = placeFor(s, id, shoreIsland(s.seed));
+  const total = buildWork(s, id, at);
   s.building = { id, ...at, left: total, total };
   return true;
 }
@@ -659,17 +707,22 @@ export function stewardPick(s: ShoreState): BuildId | null {
         : p === 'stores'
           ? [stores, () => (free <= 2 ? homes() : null), () => (plan.food > plan.land ? food() : null)]
           : [() => (free <= 2 ? homes() : null), () => (plan.food > plan.land ? food() : null), stores];
+  // Come autumn they keep wood back for the winter's fires (six days of it).
+  const reserve = shoreSeason(s).si >= 2 ? burnPerDay(s) * (shoreSeason(s).si === 3 ? 1 : 2) * 6 : 0;
+  const afford = (id: BuildId) => canPay(s, id) && s.wood + 0.5 - buildCost(s, id) >= (id === 'forester' || id === 'woodpile' ? 0 : reserve);
+  // The woods thinning: a forester, before anything else.
+  if (open.has('forester') && forestShare(s) < 0.5 && count(s, 'forester') < 1 + s.people.length / 30) return afford('forester') ? 'forester' : null;
   for (const w of wants) {
     let need = w();
     if (!need) continue;
     // More than the woodpiles hold: a woodpile first.
-    if (buildCost(s, need) > woodCap(s) && open.has('woodpile')) need = 'woodpile';
-    return s.wood >= buildCost(s, need) && hasNeeds(s, need) ? need : null;
+    if (buildCost(s, need) + reserve > woodCap(s) && open.has('woodpile')) need = 'woodpile';
+    return afford(need) ? need : null;
   }
   // Nothing pressing: something useful, if the wood's piling up.
   const extras: BuildId[] = ['elders', 'pool', 'granary', 'rack', 'cutter', 'lookout', 'woodpile', 'camp', 'hut', 'pottery', 'thatcher', 'salter', 'healer', 'toolmaker'];
   const pick = extras.filter((id) => open.has(id) && hasNeeds(s, id)).sort((a, b) => buildCost(s, a) - buildCost(s, b))[0];
-  return pick && s.wood >= buildCost(s, pick) && s.wood > woodCap(s) * 0.6 ? pick : null;
+  return pick && afford(pick) && s.wood > woodCap(s) * 0.6 ? pick : null;
 }
 
 export function setSteward(state: GameState, on: boolean, plan?: StewardPlan): void {
@@ -717,17 +770,23 @@ export function shoreWhen(s: ShoreState): string {
 
 /** The village's day: how many work at food and at wood, and what that brings in. */
 export function workPlan(s: ShoreState): { food: number; wood: number; eat: number; foodRate: number; woodRate: number; land: number } {
-  const adults = s.people.filter((p) => isAdult(s, p)).length;
-  const kids = s.people.length - adults;
-  const eat = adults * EAT + kids * EAT_CHILD;
+  const grown = s.people.filter((p) => isAdult(s, p)).length;
+  const kids = s.people.length - grown;
+  const eat = grown * EAT + kids * EAT_CHILD;
+  // (Those building aren't gathering.)
+  const adults = grown - builders(s);
   const bo = boosts(s);
   const foodEach = FOOD_PER * (1 + 0.1 * count(s, 'camp') + bo.food) * seasonFood(s);
-  const woodEach = WOOD_PER * (1 + 0.1 * count(s, 'cutter') + bo.wood);
+  // Cutting's slower as the woods round the village thin out.
+  const woodEach = WOOD_PER * (1 + 0.1 * count(s, 'cutter') + bo.wood) * Math.max(0.25, Math.min(1, forestShare(s) * 2));
   // Leaning one way or the other; with the stores full, hands go to the other.
   let share = s.lean === 'food' ? 0.75 : s.lean === 'wood' ? Math.min(1, (eat * 1.05) / Math.max(1, adults) / foodEach) : Math.min(1, (eat * 1.5) / Math.max(1, adults) / foodEach + 0.15);
   if (s.food >= foodCap(s) - 0.01) share = Math.min(share, (eat * 1.0) / Math.max(1, adults) / foodEach);
-  if (s.wood >= woodCap(s) - 0.01) share = 1;
-  const food = Math.round(adults * Math.max(0, Math.min(1, share)));
+  if (s.wood >= woodCap(s) - 0.5) share = 1;
+  let food = Math.round(adults * Math.max(0, Math.min(1, share)));
+  // Enough on wood to keep the fires going (unless there's hardly food to eat, or the woodpile's
+  // full).
+  if (s.wood < woodCap(s) - 0.5 && s.food > eat * 2) food = Math.min(food, adults - Math.min(adults, Math.ceil((burnPerDay(s) * 1.25) / woodEach)));
   const wood = adults - food;
   // The land round the village feeds only so many: past that, each more brings in less.
   const land = landFor(s);
@@ -935,7 +994,12 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
   // The day's work comes in as it's done, and is eaten as it goes.
   const plan = workPlan(s);
   s.food = Math.min(foodCap(s), s.food + (plan.foodRate - plan.eat) * k);
-  s.wood = Math.min(woodCap(s), s.wood + plan.woodRate * k);
+  // Wood comes in from the woods (thinning them), and the fires burn it.
+  // (Only what there's room for is cut: a full woodpile leaves the trees standing.)
+  s.wood = Math.max(0, s.wood - burnPerDay(s) * k);
+  const cut = Math.max(0, Math.min(plan.woodRate * k, s.forest ?? FOREST_MAX, woodCap(s) - s.wood));
+  s.wood += cut;
+  s.forest = Math.min(FOREST_MAX, (s.forest ?? FOREST_MAX) - cut + (REGROW + REGROW_FORESTER * count(s, 'forester')) * k);
   if (s.food < 0) s.food = 0;
   s.clock += dt;
   if (s.clock >= DAY_SEC) {
@@ -954,7 +1018,7 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
     }
   }
   if (s.building) {
-    s.building.left -= dt;
+    s.building.left -= builders(s) * BUILD_RATE * dt;
     if (s.building.left <= 0) finishBuilding(state, s);
   }
   // The elders build, when they're asked to and nothing's going up.
@@ -1022,6 +1086,17 @@ function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>
     if (p.dies === undefined || s.day < p.dies) continue;
     die(state, s, p, 'old age');
   }
+  // Cold: a winter's day with no firewood. After a couple, the youngest and the oldest begin
+  // to die of it.
+  if (shoreSeason(s).si === 3 && s.wood < 0.5 && burnPerDay(s) > 0 && plan.woodRate < burnPerDay(s)) {
+    s.cold = (s.cold ?? 0) + 1;
+    if (s.cold >= 2 && s.people.length > 2) {
+      const today = s.day + s.clock / DAY_SEC;
+      const frail = [...s.people].filter((p) => p.id !== s.chief).sort((a, b) => Math.min(today - b.born, (b.dies ?? 999) - today) - Math.min(today - a.born, (a.dies ?? 999) - today));
+      const n = Math.max(1, Math.round(s.people.length * 0.04));
+      for (const p of frail.slice(-n)) die(state, s, p, 'cold');
+    }
+  } else s.cold = 0;
   // Hunger: a day with no food and not enough coming in. After a couple, the weakest begin to
   // die, more the shorter the food is (a village far bigger than its fields starves fast).
   if (s.food < 0.5 && plan.foodRate < plan.eat) {
@@ -1035,7 +1110,7 @@ function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>
   } else s.hungry = 0;
 }
 
-function die(state: GameState, s: ShoreState, p: ShorePerson, why: 'old age' | 'hunger'): void {
+function die(state: GameState, s: ShoreState, p: ShorePerson, why: 'old age' | 'hunger' | 'cold'): void {
   s.people = s.people.filter((q) => q !== p);
   s.deaths++;
   // Buried a little way out from the hearth, together.
@@ -1048,8 +1123,8 @@ function die(state: GameState, s: ShoreState, p: ShorePerson, why: 'old age' | '
     s.news.push(line);
     record(state, `${p.name}, one of the four who crossed, died of old age.${left ? '' : ' The last of them.'}`, 'shore', shoreWhen(s));
   } else {
-    s.news.push(why === 'hunger' ? `${p.name} died of hunger.` : `${p.name} died of old age.`);
-    if (why === 'hunger') record(state, `${p.name} died of hunger.`, 'shore', shoreWhen(s));
+    s.news.push(why === 'hunger' ? `${p.name} died of hunger.` : why === 'cold' ? `${p.name} died of the cold.` : `${p.name} died of old age.`);
+    if (why !== 'old age') record(state, `${p.name} died of ${why === 'cold' ? 'the cold, with no wood for the fire' : 'hunger'}.`, 'shore', shoreWhen(s));
   }
   if (p.id === s.chief) {
     // The heir: the eldest of the four left, else the eldest grown.

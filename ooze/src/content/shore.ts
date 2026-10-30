@@ -21,7 +21,7 @@ export const SHORE_STORY = {
   found: '[STORY] Smoke, and huts, and others like them. Not like them.',
 };
 
-export type BuildId = 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails' | 'council' | 'envoy' | 'pottery' | 'thatcher' | 'salter' | 'healer' | 'toolmaker';
+export type BuildId = 'forester' | 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails' | 'council' | 'envoy' | 'pottery' | 'thatcher' | 'salter' | 'healer' | 'toolmaker';
 
 /** What the land gives beyond food and wood: each only where it's found (see HABITATS). */
 export type Res = 'fish' | 'clay' | 'reeds' | 'salt' | 'herbs' | 'timber' | 'flint' | 'stone';
@@ -42,9 +42,12 @@ export interface BuildDef {
   cat: BuildCat;
   /** What it does, for the card. */
   does: string;
-  /** Wood for the first; each after costs `growth` times the last. */
+  /** Wood it takes to build (the same every time). */
   wood: number;
+  /** (Kept for older code: always 1, costs don't rise.) */
   growth: number;
+  /** Firewood it burns a day (twice as much in winter): the fire, and homes kept warm. */
+  burn?: number;
   /** At most this many (unset: no limit). */
   max?: number;
   /** Shown once this is built. */
@@ -81,25 +84,26 @@ export interface Boosts {
 }
 
 export const BUILDS: BuildDef[] = [
-  { id: 'hearth', cat: 'homes', name: 'The Hearth', does: 'A fire to gather round. Children are only born where there\'s a hearth.', wood: 6, growth: 1, max: 1 },
-  { id: 'hut', cat: 'homes', name: 'Hut', does: 'Room for 4 more.', wood: 12, growth: 1.2, after: 'hearth' },
-  { id: 'woodpile', cat: 'stores', name: 'Woodpile', does: 'Room for 50 more wood.', wood: 10, growth: 1.3, after: 'hearth' },
-  { id: 'rack', cat: 'stores', name: 'Drying rack', does: 'Room for 40 more food.', wood: 14, growth: 1.3, after: 'hut' },
-  { id: 'camp', cat: 'work', name: 'Gathering camp', does: 'Food comes in 10% faster, and the land round the village feeds 5 more gatherers.', wood: 35, growth: 1.5, after: 'hut' },
-  { id: 'cutter', cat: 'work', name: 'Cutters\' shed', does: 'Wood comes in 10% faster.', wood: 35, growth: 1.5, after: 'woodpile' },
-  { id: 'scout', cat: 'explore', name: 'Scout\'s hut', does: 'One of them goes out into the fog for you, finding what\'s out there (while you\'re away too).', wood: 20, growth: 2.2, max: 2, after: 'hut' },
-  { id: 'elders', cat: 'homes', name: 'Elders\' fire', does: 'The old teach the young: children grow up 15% faster.', wood: 60, growth: 1, max: 1, after: 'hut', fx: { grow: 0.15 } },
-  { id: 'longhouse', cat: 'homes', name: 'Longhouse', does: 'A great hall of a house: room for 12 more.', wood: 170, growth: 1.5, after: 'hut', learn: 'ruin', fx: { room: 12 } },
-  { id: 'pool', cat: 'homes', name: 'Bathing pool', does: 'Warm water, piped from a spring: children are born 10% more often.', wood: 70, growth: 1, max: 1, after: 'hut', learn: 'spring', fx: { births: 0.1 } },
-  { id: 'granary', cat: 'stores', name: 'Granary', does: 'Room for 120 more food, kept dry and cold: winter slows the food only half as much.', wood: 80, growth: 1.6, after: 'rack', learn: 'cave', fx: { foodCap: 120, winter: 0.5 } },
-  { id: 'weir', cat: 'work', name: 'Fishing weir', does: 'Stakes in the shallows, the way the drowned raft\'s makers did it: food comes in 5% faster, and the land feeds 6 more gatherers.', wood: 45, growth: 1.6, after: 'hut', learn: 'wreck', fx: { food: 0.05 } },
+  { id: 'hearth', cat: 'homes', name: 'The Hearth', does: 'A fire to gather round. Children are only born where there\'s a hearth. Burns 1 wood a day.', wood: 6, growth: 1, max: 1, burn: 1 },
+  { id: 'hut', cat: 'homes', name: 'Hut', does: 'Room for 4 more. Burns a little firewood, more in winter.', wood: 14, growth: 1, after: 'hearth', burn: 0.35 },
+  { id: 'woodpile', cat: 'stores', name: 'Woodpile', does: 'Room for 50 more wood.', wood: 10, growth: 1, after: 'hearth' },
+  { id: 'rack', cat: 'stores', name: 'Drying rack', does: 'Room for 40 more food.', wood: 14, growth: 1, after: 'hut' },
+  { id: 'camp', cat: 'work', name: 'Gathering camp', does: 'Food comes in 10% faster, and the land round the village feeds 5 more gatherers.', wood: 35, growth: 1, after: 'hut' },
+  { id: 'forester', cat: 'work', name: 'Forester', does: 'Plants and tends the woods round the village, so they grow back faster than they\'re cut.', wood: 25, growth: 1, after: 'woodpile' },
+  { id: 'cutter', cat: 'work', name: 'Cutters\' shed', does: 'Wood comes in 10% faster.', wood: 35, growth: 1, after: 'woodpile' },
+  { id: 'scout', cat: 'explore', name: 'Scout\'s hut', does: 'One of them goes out into the fog for you, finding what\'s out there (while you\'re away too).', wood: 20, growth: 1, max: 2, after: 'hut' },
+  { id: 'elders', cat: 'homes', name: 'Elders\' fire', does: 'The old teach the young: children grow up 15% faster.', wood: 60, growth: 1, max: 1, after: 'hut', fx: { grow: 0.15 }, burn: 0.4 },
+  { id: 'longhouse', cat: 'homes', name: 'Longhouse', does: 'A great hall of a house: room for 12 more.', wood: 170, growth: 1, after: 'hut', learn: 'ruin', fx: { room: 12 }, burn: 1 },
+  { id: 'pool', cat: 'homes', name: 'Bathing pool', does: 'Warm water, piped from a spring: children are born 10% more often.', wood: 70, growth: 1, max: 1, after: 'hut', learn: 'spring', fx: { births: 0.1 }, burn: 0.4 },
+  { id: 'granary', cat: 'stores', name: 'Granary', does: 'Room for 120 more food, kept dry and cold: winter slows the food only half as much.', wood: 80, growth: 1, after: 'rack', learn: 'cave', fx: { foodCap: 120, winter: 0.5 } },
+  { id: 'weir', cat: 'work', name: 'Fishing weir', does: 'Stakes in the shallows, the way the drowned raft\'s makers did it: food comes in 5% faster, and the land feeds 6 more gatherers.', wood: 45, growth: 1, after: 'hut', learn: 'wreck', fx: { food: 0.05 } },
   { id: 'lookout', cat: 'explore', name: 'Lookout', does: 'A platform up high, like the one in the great tree: the land 30 tiles round the village is seen, and scouts see further.', wood: 45, growth: 1, max: 1, after: 'hut', learn: 'bigtree', fx: { watch: 30, sight: 4 } },
   { id: 'council', cat: 'homes', name: 'Elders\' council', does: 'The elders see to the building when you\'re not there: they choose what goes up next, by what you\'ve said matters most.', wood: 50, growth: 1, max: 1, after: 'hut' },
   { id: 'envoy', cat: 'explore', name: 'Envoy\'s hut', does: 'Once a day, if there\'s food to spare, an envoy takes a gift to the nearest kin you\'re winning over (while you\'re away too).', wood: 60, growth: 1, max: 1, after: 'hut' },
-  { id: 'pottery', cat: 'stores', name: 'Pottery', does: 'Pots for everything: room for 100 more food.', wood: 40, growth: 1.5, after: 'rack', needs: { clay: 20 }, fx: { foodCap: 100 } },
+  { id: 'pottery', cat: 'stores', name: 'Pottery', does: 'Pots for everything: room for 100 more food.', wood: 40, growth: 1, after: 'rack', needs: { clay: 20 }, fx: { foodCap: 100 } },
   { id: 'thatcher', cat: 'homes', name: 'Thatcher', does: 'Reed thatch, quick to lay: huts cost 20% less.', wood: 30, growth: 1, max: 1, after: 'hut', needs: { reeds: 15 }, fx: { cheap: 0.2 } },
   { id: 'salter', cat: 'stores', name: 'Salting shed', does: 'Salted food keeps: winter slows the food half as much, and room for 40 more.', wood: 45, growth: 1, max: 1, after: 'rack', needs: { salt: 20 }, fx: { winter: 0.5, foodCap: 40 } },
-  { id: 'healer', cat: 'homes', name: 'Healer\'s hut', does: 'Herbs and the knowing of them: half as many die when food runs short, and children come 5% more often.', wood: 45, growth: 1, max: 1, after: 'hut', needs: { herbs: 20 }, fx: { mend: 0.5, births: 0.05 } },
+  { id: 'healer', cat: 'homes', name: 'Healer\'s hut', does: 'Herbs and the knowing of them: half as many die when food runs short, and children come 5% more often.', wood: 45, growth: 1, max: 1, after: 'hut', needs: { herbs: 20 }, fx: { mend: 0.5, births: 0.05 }, burn: 0.3 },
   { id: 'toolmaker', cat: 'work', name: 'Toolmaker', does: 'Flint knapped sharp: food and wood come in 10% faster.', wood: 50, growth: 1, max: 1, after: 'hut', needs: { flint: 20 }, fx: { food: 0.1, wood: 0.1 } },
   { id: 'trails', cat: 'explore', name: 'Trail markers', does: 'Cairns and blazes on the trees: the chief and the scouts walk 10% faster.', wood: 40, growth: 1, max: 1, after: 'scout', fx: { speed: 0.1 } },
 ];

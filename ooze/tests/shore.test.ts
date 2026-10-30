@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { answerJoin, boosts, build, foodCap, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, buildCost, buildsOpen, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { answerJoin, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import type { TribeState } from '../src/economy/types';
 
@@ -32,14 +32,10 @@ function now(state: ReturnType<typeof fresh>, id: Parameters<typeof build>[1]): 
   return ok;
 }
 
-/** Builds what it can, cheapest first (the most an idle player would do with an auto-builder). */
+/** Builds what a sensible player would (the elders' own choice). */
 function autobuild(state: ReturnType<typeof fresh>) {
-  const s = shoreOf(state)!;
-  for (;;) {
-    const open = buildsOpen(s).sort((a, b) => buildCost(s, a.id) - buildCost(s, b.id));
-    const pick = open.find((b) => buildCost(s, b.id) <= s.wood);
-    if (!pick || !build(state, pick.id)) break;
-  }
+  const id = stewardPick(shoreOf(state)!);
+  if (id) build(state, id);
 }
 
 describe('New Shore', () => {
@@ -295,9 +291,10 @@ describe('The elders and the envoy', () => {
     now(state, 'hut');
     now(state, 'council');
     expect(s.steward?.on).toBe(true);
+    s.wood = 50;
     const before = s.built.length;
     for (let i = 0; i < 1800; i++) shoreTick(state, 2);
-    expect(s.built.length).toBeGreaterThan(before + 2);
+    expect(s.built.length).toBeGreaterThan(before + 1);
   });
   it('the envoy takes gifts to kin by themselves', () => {
     const state = fresh();

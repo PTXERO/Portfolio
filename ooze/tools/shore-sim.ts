@@ -1,7 +1,7 @@
 // New Shore's pace: how long each kind of player takes to grow the village to a hundred.
 // npm run sim:shore
 import { createState } from '../src/economy/state';
-import { answerJoin, build, buildCost, buildsOpen, canWin, chiefNear, foodCap, gift, giftCost, poiDef, poiHere, poisOf, room, shoreOf, shoreTick, startShore, takeRaft, walkChief, woodCap, workPlan } from '../src/economy/shore';
+import { answerJoin, build, canPay, stewardPick, buildsOpen, canWin, chiefNear, foodCap, gift, giftCost, poiDef, poiHere, poisOf, room, shoreOf, shoreTick, startShore, takeRaft, walkChief, woodCap, workPlan } from '../src/economy/shore';
 import { isLand } from '../src/economy/island';
 import { shoreIsland } from '../src/economy/shore';
 import type { TribeState } from '../src/economy/types';
@@ -21,25 +21,13 @@ function fresh(seed: number, diet: string) {
   return state;
 }
 
-/** What a sensible player builds next (or null: save up for it). */
+/** What a sensible player builds next (or null: save up for it): what the elders would, and a
+ * scout's hut for an explorer. */
 function choose(state: ReturnType<typeof fresh>, explorer: boolean): BuildId | null {
   const s = shoreOf(state)!;
   if (s.building) return null;
-  const open = new Set(buildsOpen(s).map((b) => b.id));
-  const plan = workPlan(s);
-  const want = (id: BuildId) => (open.has(id) ? id : null);
-  if (open.has('hearth')) return 'hearth';
-  const free = room(s) - s.people.length;
-  let need: BuildId | null = null;
-  if (free <= 2) need = open.has('longhouse') && buildCost(s, 'longhouse') / 12 < buildCost(s, 'hut') / 4 ? 'longhouse' : 'hut';
-  else if (plan.food > plan.land) need = want('weir') && buildCost(s, 'weir') < buildCost(s, 'camp') ? 'weir' : 'camp';
-  else if (explorer && open.has('scout') && s.built.filter((b) => b.id === 'scout').length < 1) need = 'scout';
-  if (need && buildCost(s, need) > woodCap(s)) need = 'woodpile';
-  if (need) return s.wood >= buildCost(s, need) ? need : null;
-  // Nothing pressing: the cheapest useful thing, if the wood's piling up.
-  const extras: BuildId[] = ['elders', 'pool', 'granary', 'rack', 'cutter', 'trails', 'lookout', 'woodpile', 'camp', 'hut'];
-  const pick = extras.filter((id) => open.has(id)).sort((a, b) => buildCost(s, a) - buildCost(s, b))[0];
-  return pick && s.wood >= buildCost(s, pick) && s.wood > woodCap(s) * 0.6 ? pick : null;
+  if (explorer && !s.built.some((b) => b.id === 'scout') && buildsOpen(s).some((b) => b.id === 'scout')) return canPay(s, 'scout') ? 'scout' : null;
+  return stewardPick(s);
 }
 
 function run(kind: Kind, seed: number, diet: string) {
@@ -62,7 +50,7 @@ function run(kind: Kind, seed: number, diet: string) {
         // the rest to them.
         for (const id of ['hearth', 'hut', 'council', 'envoy', 'scout'] as BuildId[]) {
           if (s.building) break;
-          if (!s.built.some((b) => b.id === id) && buildsOpen(s).some((b) => b.id === id) && s.wood >= buildCost(s, id)) build(state, id);
+          if (!s.built.some((b) => b.id === id) && buildsOpen(s).some((b) => b.id === id) && canPay(s, id)) build(state, id);
         }
       } else {
         for (let i = 0; i < 3; i++) {
@@ -101,6 +89,7 @@ function run(kind: Kind, seed: number, diet: string) {
         if (v) walkChief(state, { x: v.x + 4, y: v.y + 4 });
       }
     }
+    if (process.env.TRACE === kind + diet && t % 1800 === 0) console.log(`${(t / 3600).toFixed(1)}h day ${s.day} people ${s.people.length} room ${room(s)} wood ${s.wood.toFixed(0)}/${woodCap(s)} food ${s.food.toFixed(0)}/${foodCap(s)} forest ${(s.forest ?? 400).toFixed(0)} building ${s.building?.id ?? '-'} plan ${JSON.stringify(workPlan(s))} built ${s.built.map((b) => b.id).join(',')}`);
     for (const m of [25, 50, 75, 100]) if (marks[m] === undefined && s.people.length >= m) marks[m] = t;
     joined = s.villages.filter((v) => v.joined).length;
     if (marks[100] !== undefined) break;
