@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createState } from '../src/economy/state';
-import { build, buildCost, buildsOpen, DAY_SEC, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { build, buildCost, buildsOpen, DAY_SEC, gift, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import type { TribeState } from '../src/economy/types';
 
@@ -66,5 +66,38 @@ describe('New Shore', () => {
     expect(shoreOf(back)).toEqual(shoreOf(state));
     expect(back.stages.shore.seen).toEqual(state.stages.shore.seen);
     expect(back.current).toBe('shore');
+  });
+});
+
+describe('Winning over', () => {
+  it('gifts and visits raise trust until kin join, bringing their kind', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    const v = s.villages[0];
+    v.found = true;
+    v.trust = 10;
+    s.food = 1000;
+    s.chiefAt = { x: s.hearth.x, y: s.hearth.y };
+    expect(gift(state, v.id)).toBe(8);
+    s.chiefAt = { x: v.x, y: v.y };
+    s.chiefTo = null;
+    expect(gift(state, v.id)).toBe(16);
+    const before = s.people.length;
+    for (let i = 0; i < 20 && !v.joined; i++) gift(state, v.id);
+    expect(v.joined).toBe(true);
+    expect(s.people.length).toBe(before + v.pop);
+    expect(s.people.filter((p) => p.kind === v.id).length).toBe(v.pop);
+    expect(gift(state, v.id)).toBe(0);
+  });
+  it('the chief staying a while wins them over by itself', () => {
+    const state = fresh('hunter');
+    const s = shoreOf(state)!;
+    const v = s.villages[0];
+    v.found = true;
+    v.trust = 10;
+    s.chiefAt = { x: v.x + 3, y: v.y + 3 };
+    s.chiefTo = null;
+    shoreTick(state, DAY_SEC * 30);
+    expect(v.joined).toBe(true);
   });
 });

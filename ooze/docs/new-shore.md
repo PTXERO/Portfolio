@@ -332,7 +332,11 @@ Built in slices, each tested live (balance sims after).
    four dying of old age after the first birth, the chief walking the fog, and the island's
    villages (kinds, diets, relations) found as the fog draws back. Debug: `?start=shore`.
    First pacing (perfect auto-building): 100 people at about 2h15m.
-2. **Winning over**: Trust, gifts, visits by the chief, joining (new kinds in the village).
+2. **Winning over** *(live)*: Trust per kin village (starts at 10 once found); gifts of food
+   (cost grows with their size; ×2 brought by the chief in person); the chief's company (+4 a day
+   nearby); grazers' Welcome (+1.5 a day for every kin village found). At 100 they join: their
+   people move in and walk over, keeping their own look; children take a parent's kind. Every
+   camp's smoke shows over the fog, and the village starts where the raft landed.
 3. **Raids and defense**: the grace period, scouts, announced raids, Kairosoft-style battles.
 4. **Taking people and ideas**: diet leaning and shifts; cannibals' Dread.
 5. **The Far Voice**: whispers and the few powers.

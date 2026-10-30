@@ -2,7 +2,7 @@
 // villages found out on the island.
 
 import { BUILDS, buildName, type BuildId } from '../content/shore';
-import { buildCost, buildsOpen, count, foodCap, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { buildCost, buildsOpen, canWin, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { miniIcon } from '../scene/creatureLook';
 import type { GameState } from '../economy/types';
 
@@ -23,7 +23,7 @@ export function shoreKey(state: GameState): string {
   if (!s) return '';
   const plan = workPlan(s);
   const can = buildsOpen(s).map((b) => [b.id, s.wood >= buildCost(s, b.id)]);
-  return JSON.stringify([shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, can, s.villages.filter((v) => v.found).map((v) => v.id), s.chief, s.people.filter((p) => isAdult(s, p)).length]);
+  return JSON.stringify([shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, can, s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief, s.people.filter((p) => isAdult(s, p)).length]);
 }
 
 export function shoreUpdate(root: HTMLElement, state: GameState): void {
@@ -121,18 +121,39 @@ function villagesCard(s: ShoreState): string {
 
 function villageRow(s: ShoreState, v: Village): string {
   const rel = relation(s, v);
+  if (v.joined) {
+    return `<div class="card px-box village"><img class="kind" src="${miniIcon(v.look, 2)}" alt=""><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">Joined</span></div>
+      <div class="sub">They live by your hearth now.</div></div></div>`;
+  }
+  const win = canWin(s, v);
   return `<div class="card px-box village"><img class="kind" src="${miniIcon(v.look, 2)}" alt=""><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-${rel}">${REL_NAME[rel]}</span></div>
-    <div class="sub">${v.pop} ${v.cannibal ? 'eaters of their own' : DIET_NAME[v.diet] ?? v.diet}. ${REL_LINE[rel]}</div></div>
-    <button class="px-btn" data-seevillage="${v.id}">Look</button></div>`;
+    <div class="sub">${v.pop} ${v.cannibal ? 'eaters of their own' : DIET_NAME[v.diet] ?? v.diet}. ${win ? '' : REL_LINE[rel]}</div>${win ? trustBar(v) : ''}</div>
+    <div class="col">${win ? `<button class="px-btn${s.food >= giftCost(v) ? ' gold' : ''}" data-gift="${v.id}"${s.food >= giftCost(v) ? '' : ' disabled'}>Gift ${giftCost(v)}</button>` : ''}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
+}
+
+function trustBar(v: Village): string {
+  const t = Math.floor(v.trust ?? 0);
+  return `<div class="trust"><span class="tiny dim">Trust</span><div class="making-bar on"><i style="width: ${t}%"></i></div><span class="tiny num" data-t="trust-${v.id}">${t}</span></div>`;
 }
 
 export function villageCard(s: ShoreState, v: Village): string {
   const rel = relation(s, v);
+  const win = canWin(s, v);
+  const near = chiefNear(s, v);
+  const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
+  const actions = win
+    ? `${trustBar(v)}
+      <p class="dim tiny">${near ? `${chief} is with them: gifts count twice, and every day there they trust you more.` : `Gifts count twice brought by ${chief} in person, and the longer ${chief} stays, the more they trust you.`} At full trust they join you.</p>
+      <div class="choices">
+        <button class="px-btn${s.food >= giftCost(v) ? ' gold' : ''}" data-gift="${v.id}"${s.food >= giftCost(v) ? '' : ' disabled'}>Send a gift · ${giftCost(v)} food${near ? ' (×2)' : ''}</button>
+        ${near ? '' : `<button class="px-btn" data-visit="${v.id}">${chief} visits them</button>`}
+        <button class="px-btn" data-act="dismiss">Later</button>
+      </div>`
+    : `<p class="dim tiny">(Raiding and defending come next.)</p><button class="px-btn gold" data-act="dismiss">OK</button>`;
   return `<p class="label dim">${REL_NAME[rel]}</p><div class="village-head"><img class="kind" src="${miniIcon(v.look, 3)}" alt=""><h3>${cap(v.name)}</h3></div>
     <p>${v.pop} of them, ${v.cannibal ? 'eaters of their own kind' : `${(DIET_NAME[v.diet] ?? v.diet).toLowerCase()}`}, another kind altogether.</p>
     <p class="dim">${REL_LINE[rel]}</p>
-    <p class="dim tiny">(Winning them over, raiding and defending come next.)</p>
-    <button class="px-btn gold" data-act="dismiss">OK</button>`;
+    ${actions}`;
 }
 
 const cap = (t: string) => t[0].toUpperCase() + t.slice(1);

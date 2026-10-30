@@ -69,7 +69,7 @@ export class ShoreScene extends RangeScene {
     if (!s || !this.island) return;
     // A found village's flag, or one of your own.
     for (const v of s.villages) {
-      if (!v.found) continue;
+      if (!v.found || v.joined) continue;
       const X = this.sx(v.x);
       const Y = this.py(v.x, v.y);
       if (Math.hypot(ax - X, ay - (Y - 5)) < Math.max(8, this.zoom * 3)) {
@@ -278,7 +278,26 @@ export class ShoreScene extends RangeScene {
       if (!onScreen(X, Y)) continue;
       const left = moving ? (isChief ? (s.chiefTo?.x ?? x) < x : (w.goal?.x ?? x) < x) : hash(w.id, Math.floor(t / 5)) < 0.5;
       const sleeping = night > 0.5 && !moving && !isChief;
-      sprites.push({ y, draw: () => this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 7 + w.ph) % 2 : 0, sleeping, hero: isChief, hop: moving ? Math.abs(Math.sin(t * 7 + w.ph)) * 1.5 : 0 }) });
+      const kin = p.kind !== undefined ? s.villages.find((v) => v.id === p.kind)?.look ?? look : look;
+      sprites.push({ y, draw: () => this.drawBeing(b, kin, x, y, { left, frame: moving ? Math.floor(t * 7 + w.ph) % 2 : 0, sleeping, hero: isChief, hop: moving ? Math.abs(Math.sin(t * 7 + w.ph)) * 1.5 : 0 }) });
+    }
+    // The raft they came on, pulled up on the beach where it landed.
+    {
+      const r = { x: s.beach.x - 2, y: s.beach.y + 1 };
+      const X = Math.round(this.sx(r.x));
+      const Y = Math.round(this.py(r.x, r.y));
+      if (close && onScreen(X, Y)) {
+        sprites.push({
+          y: r.y - 0.5,
+          draw: () => {
+            b.fillStyle = '#6a4a30';
+            for (let k = 0; k < 4; k++) b.fillRect(X - 5 * z, Y - (4 - k) * z, 10 * z, z);
+            b.fillStyle = '#c8b080';
+            b.fillRect(X - 3 * z, Y - 4 * z, z, 4 * z);
+            b.fillRect(X + 2 * z, Y - 4 * z, z, 4 * z);
+          },
+        });
+      }
     }
     // Where the chief is going: a small marker on the ground.
     if (s.chiefTo) {
@@ -334,8 +353,10 @@ export class ShoreScene extends RangeScene {
     this.walkers = this.walkers.filter((w) => ids.has(w.id));
     for (const p of s.people) {
       if (this.walkers.some((w) => w.id === p.id)) continue;
-      // The newborn come from the huts; the four (at first) come up from the beach with the chief.
-      const from = s.built.length ? s.hearth : s.chiefAt;
+      // The newborn come from the huts; the four (at first) come up from the beach with the chief;
+      // those who've just joined walk in from their old village.
+      const old = p.kind !== undefined && p.joined !== undefined && s.day - p.joined < 1 ? s.villages.find((v) => v.id === p.kind) : undefined;
+      const from = old ?? (s.built.length ? s.hearth : s.chiefAt);
       this.walkers.push({ id: p.id, x: from.x + (hash(p.id, 1) - 0.5) * 3, y: from.y + (hash(p.id, 2) - 0.5) * 2, goal: null, wait: hash(p.id, 3) * 2, ph: hash(p.id, 4) * 9, job: 'home' });
     }
     // (Before the hearth is lit, the others follow the chief.)
@@ -451,12 +472,13 @@ export class ShoreScene extends RangeScene {
   }
 
   private drawVillage(b: CanvasRenderingContext2D, sprites: { y: number; draw: () => void }[], s: ShoreState, v: Village, t: number, dt: number, z: number, close: boolean, fogged: (x: number, y: number) => boolean): void {
+    if (v.joined) return;
     const X = Math.round(this.sx(v.x));
     const Y = Math.round(this.py(v.x, v.y));
     if (X < -150 || X > this.W + 150 || Y < -200 || Y > this.H + 200) return;
     const hidden = fogged(v.x, v.y);
-    // The smoke you saw from the beach: always there, over the fog. Others' smoke shows once found.
-    if (v.id === 0 || !hidden) {
+    // Every camp's smoke goes up over the fog: a column to walk toward, all over the island.
+    {
       sprites.push({
         y: v.y + 0.1,
         draw: () => {

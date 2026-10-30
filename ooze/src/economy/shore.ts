@@ -40,6 +40,15 @@ export const CHIEF_SIGHT = 16;
 const CHIEF_SPEED = 5;
 /** The village's own ground: seen from the start. */
 const HOME_SIGHT = 22;
+/** Winning a village over: trust a gift brings (twice as much brought by the chief in person),
+ * a day of the chief's company, and the grazers' Welcome (kin drifting toward them). */
+const GIFT_TRUST = 8;
+const VISIT_TRUST = 4;
+const WELCOME_TRUST = 1.5;
+/** How near the chief must be to count as visiting (tiles). */
+export const VISIT_NEAR = 14;
+/** Trust a village of your own kin starts at, once found. */
+const FIRST_TRUST = 10;
 
 export type Lean = 'food' | 'balanced' | 'wood';
 export type Relation = 'kin' | 'prey' | 'predator' | 'enemy';
@@ -54,6 +63,9 @@ export interface ShorePerson {
   trait?: string;
   /** The day they'll die of old age. */
   dies?: number;
+  /** Of another kind: the village they came from (its id), and the day they joined. */
+  kind?: number;
+  joined?: number;
 }
 
 export interface Village {
@@ -69,6 +81,9 @@ export interface Village {
   look: CreatureLook;
   /** Seen by the chief (or the village's own lookouts). */
   found: boolean;
+  /** Kin only: how far they've been won over (0 to 100), and whether they've joined you. */
+  trust?: number;
+  joined?: boolean;
 }
 
 export interface ShoreState {
@@ -176,15 +191,19 @@ export function shoreWorld(seed: number, look: CreatureLook, cannibal: boolean):
     return true;
   };
   const beach = { ...is.home };
+  // The village starts right where the raft came in: the nearest open ground just up from
+  // the beach (a few steps inland, off the sand).
   let hearth = { ...beach };
   const inward = Math.atan2(N / 2 - beach.y, N / 2 - beach.x);
-  for (let k = 0; k < 300; k++) {
-    const a = inward + (rand() - 0.5) * 1.6;
-    const r = 18 + rand() * 14;
-    const p = { x: Math.round(beach.x + Math.cos(a) * r), y: Math.round(beach.y + Math.sin(a) * r) };
-    if (open(p.x, p.y) && at(p.x, p.y) === Biome.Grass) {
-      hearth = p;
-      break;
+  search: for (let r = 5; r < 40; r++) {
+    for (let k = 0; k < 24; k++) {
+      // Inland first, then round to either side.
+      const a = inward + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.22;
+      const p = { x: Math.round(beach.x + Math.cos(a) * r), y: Math.round(beach.y + Math.sin(a) * r) };
+      if (open(p.x, p.y) && at(p.x, p.y) === Biome.Grass) {
+        hearth = p;
+        break search;
+      }
     }
   }
   // The diets out there, chosen against yours: always some kin to win over (not for
@@ -405,6 +424,59 @@ export function workPlan(s: ShoreState): { food: number; wood: number; eat: numb
   return { food, wood, eat, foodRate: food * foodEach, woodRate: wood * woodEach };
 }
 
+// ---- Winning them over ----
+
+export function chiefNear(s: ShoreState, v: Village): boolean {
+  return Math.hypot(s.chiefAt.x - v.x, s.chiefAt.y - v.y) < VISIT_NEAR;
+}
+
+/** Food a gift takes: more for a bigger village. */
+export function giftCost(v: Village): number {
+  return Math.ceil(6 + v.pop * 0.5);
+}
+
+/** Whether they can be won over now: found, kin, not yet joined. */
+export function canWin(s: ShoreState, v: Village): boolean {
+  return v.found && !v.joined && relation(s, v) === 'kin';
+}
+
+/** A gift of food: trust, twice as much with the chief there to give it. */
+export function gift(state: GameState, id: number): number {
+  const s = shoreOf(state);
+  const v = s?.villages.find((x) => x.id === id);
+  if (!s || !v || !canWin(s, v) || s.food < giftCost(v)) return 0;
+  s.food -= giftCost(v);
+  const gain = GIFT_TRUST * (chiefNear(s, v) ? 2 : 1);
+  addTrust(state, s, v, gain);
+  return gain;
+}
+
+function addTrust(state: GameState, s: ShoreState, v: Village, n: number): void {
+  v.trust = Math.min(100, (v.trust ?? FIRST_TRUST) + n);
+  if (v.trust >= 100) join(state, s, v);
+}
+
+/** Won over: they leave their village and move into yours, another kind among you. */
+function join(state: GameState, s: ShoreState, v: Village): void {
+  if (v.joined) return;
+  v.joined = true;
+  const rand = rng(s.seed * 17 + v.id * 977);
+  const today = s.day + s.clock / DAY_SEC;
+  const used = new Set(s.people.map((p) => p.name));
+  for (let i = 0; i < v.pop; i++) {
+    let name = nameFrom(rand);
+    for (let k = 0; k < 10 && used.has(name); k++) name = nameFrom(rand);
+    used.add(name);
+    // Mostly grown, some children; each with their years ahead of them.
+    const age = rand() < 0.25 ? rand() * GROW_DAYS : GROW_DAYS + rand() * 40;
+    s.people.push({ id: s.nextId++, name, born: today - age, dies: today - age + 70 + rand() * 30, kind: v.id, joined: today });
+  }
+  s.news.push(`${cap(v.name)} have joined you: ${v.pop} of them.`);
+  record(state, `${cap(v.name)} joined them: ${v.pop} people of another kind, come to live by their hearth.`, 'shore', shoreWhen(s));
+}
+
+const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
+
 /** The chief walks somewhere (on the island). */
 export function walkChief(state: GameState, to: Pt): void {
   const s = shoreOf(state);
@@ -452,6 +524,12 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
     }
   }
   walk(state, s, dt);
+  // Trust grows by itself where the chief stays a while, and (for grazers) as kin drift in.
+  for (const v of s.villages) {
+    if (!canWin(s, v)) continue;
+    const per = (chiefNear(s, v) ? VISIT_TRUST : 0) + (s.look.diet === 'grazer' ? WELCOME_TRUST : 0);
+    if (per) addTrust(state, s, v, per * k);
+  }
 }
 
 function born(state: GameState, s: ShoreState): void {
@@ -460,7 +538,10 @@ function born(state: GameState, s: ShoreState): void {
   let name = nameFrom(rand);
   for (let i = 0; i < 10 && used.has(name); i++) name = nameFrom(rand);
   const today = s.day + s.clock / DAY_SEC;
-  s.people.push({ id: s.nextId++, name, born: today, dies: today + 70 + rand() * 30 });
+  // The child is of one of the grown ones' kinds (as the village mixes, so do its children).
+  const grown = s.people.filter((p) => isAdult(s, p));
+  const parent = grown[Math.floor(rand() * grown.length)];
+  s.people.push({ id: s.nextId++, name, born: today, dies: today + 70 + rand() * 30, kind: parent?.kind });
   s.births++;
   if (s.firstBirth === undefined) {
     s.firstBirth = s.day;
@@ -556,6 +637,7 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
       const c = Math.floor(v.y / CELL) * SHORE_CELLS + Math.floor(v.x / CELL);
       if (!seen[c]) continue;
       v.found = true;
+      if (relation(s, v) === 'kin') v.trust ??= FIRST_TRUST;
       s.newFinds.push(v.id);
       record(state, `They found ${v.name}: ${v.pop} of them, ${v.cannibal ? 'eaters of their own kind' : `${v.diet}s`}.`, 'shore', shoreWhen(s));
     }

@@ -14,7 +14,7 @@ import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
-import { build, isAdult, setLean, shoreOf, startShore, type Lean } from './economy/shore';
+import { build, gift, isAdult, setLean, shoreOf, startShore, walkChief, type Lean } from './economy/shore';
 import { villageCard } from './ui/shorePanels';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
@@ -159,6 +159,7 @@ function showModal(html: string, autoSec = 0): void {
   }
   clearTimeout(modalTimer);
   modal.dataset.kind = '';
+  modal.dataset.village = '';
   const bar = autoSec ? `<div class="making-bar on auto-close" style="--dur: ${autoSec}s"><i></i></div>` : '';
   modal.innerHTML = `<div class="px-box">${html}${bar}</div>`;
   modal.hidden = false;
@@ -895,6 +896,9 @@ function renderHud(): void {
 /** New Shore's strip: how many toward a hundred, and the village's news going by. (No clock:
  * this is just life now.) */
 const shoreNews: string[] = [];
+/** Villages already known to have joined (so only new ones get a card; not those in the save). */
+const joinedSeen = new Set<number>();
+let joinedReady = false;
 function renderShoreGoal(): void {
   const s = shoreOf(state);
   if (!s) return;
@@ -933,8 +937,20 @@ function shoreFrame(): void {
     if (v) {
       cue('chime', 0.5);
       showModal(`<p class="label dim">Found</p>${villageCard(s, v).replace(/^<p class="label dim">[^<]*<\/p>/, '')}`);
+      modal.dataset.village = String(v.id);
     }
   }
+  // A village won over: they come to live by your hearth.
+  for (const v of s.villages) {
+    if (!v.joined || joinedSeen.has(v.id) || !modal.hidden || cine()) continue;
+    joinedSeen.add(v.id);
+    if (!joinedReady) continue;
+    cue('ascend', 0.5);
+    showModal(`<p class="label dim">Joined</p><div class="village-head"><img class="kind" src="${miniIcon(v.look, 3)}" alt=""><h3>${v.name[0].toUpperCase() + v.name.slice(1)}</h3></div>
+      <p>They've been won over. ${v.pop} of them are coming to live by your hearth: another kind among you, from now on.</p>
+      <button class="px-btn gold" data-act="dismiss">Welcome them</button>`);
+  }
+  joinedReady = true;
 }
 
 /** The strip under the top bar: this stage's own goal. It never names what comes next. */
@@ -1335,7 +1351,10 @@ function pondEvents(): void {
     else if (e.type === 'village') {
       const s = shoreOf(state);
       const v = s?.villages.find((x) => x.id === e.id);
-      if (s && v) showModal(villageCard(s, v));
+      if (s && v) {
+        showModal(villageCard(s, v));
+        modal.dataset.village = String(v.id);
+      }
     } else if (e.type === 'villager') {
       const s = shoreOf(state);
       const p = s?.people.find((x) => x.id === e.id);
@@ -1644,6 +1663,30 @@ function act(el: HTMLElement): void {
       save();
     }
   } else if (el.dataset.lean) setLean(state, el.dataset.lean as Lean);
+  else if (el.dataset.gift) {
+    const s = shoreOf(state);
+    const id = Number(el.dataset.gift);
+    const got = gift(state, id);
+    if (got && s) {
+      cue('chime', 0.35);
+      const r = el.getBoundingClientRect();
+      scene.float(r.left + r.width / 2, r.top, `+${got} trust`, '#8acf6a');
+      // (The card, if it's open, shows the new trust.)
+      const v = s.villages.find((x) => x.id === id);
+      if (!modal.hidden && modal.dataset.village === String(id) && v && !v.joined) {
+        showModal(villageCard(s, v));
+        modal.dataset.village = String(id);
+      } else if (v?.joined) modal.hidden = true;
+      save();
+    }
+  } else if (el.dataset.visit) {
+    const v = shoreOf(state)?.villages.find((x) => x.id === Number(el.dataset.visit));
+    if (v) {
+      walkChief(state, { x: v.x + 4, y: v.y + 4 });
+      scene.shoreScene.follow();
+      modal.hidden = true;
+    }
+  }
   else if (el.dataset.seevillage) {
     const v = shoreOf(state)?.villages.find((x) => x.id === Number(el.dataset.seevillage));
     if (v) {

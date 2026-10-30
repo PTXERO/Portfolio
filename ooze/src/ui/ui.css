@@ -765,3 +765,7 @@ body.wide.tab-ideas #sheet { width: clamp(420px, 42vw, 820px); }
 .card.lean { flex-wrap: wrap; }
 .card.lean .seg { width: 100%; justify-content: flex-end; }
 #hud-news { margin-top: 6px; }
+.trust { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.trust .making-bar { flex: 1; margin-top: 0; max-width: none; }
+.trust .making-bar > i { background: #8acf6a; }
+.card .col { display: flex; flex-direction: column; gap: 4px; flex: none; }
