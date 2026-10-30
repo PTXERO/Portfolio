@@ -152,6 +152,15 @@ float fogField(vec2 p) {
   // round about fogs up fully.)
   return max(smoothstep(0.3, 0.9, f), edgeFog);
 }
+/** The fog's colour at a point: rolling cloud, lit by the hour (ash in an ash winter). */
+vec3 fogColour(vec2 w) {
+  float fn = fbm(w * 0.06 + vec2(uTime * 0.02, -uTime * 0.013));
+  float fn2 = fbm(w * 0.16 - vec2(uTime * 0.035, uTime * 0.02));
+  float bright = clamp(lum(uAmb + uSunCol), 0.15, 1.2);
+  float k = smoothstep(0.3, 0.75, fn * 0.7 + fn2 * 0.3);
+  vec3 c = mix(vec3(0.70, 0.74, 0.79), vec3(0.95, 0.96, 0.97), k) * (0.3 + bright * 0.72);
+  return mix(c, mix(vec3(0.2, 0.18, 0.17), vec3(0.42, 0.38, 0.35), k) * (0.45 + bright * 0.4), uAsh * 0.9);
+}
 /** The top of the fog bank over a point: some way over the land, billowing. */
 float fogTop(vec2 p) {
   vec2 q = p - uWind * uTime * 0.25;
@@ -266,10 +275,7 @@ void main() {
   float fn2 = fbm(w * 0.16 - vec2(uTime * 0.035, uTime * 0.02));
   float fog = smoothstep(0.3, 0.7, fogA + (fn - 0.5) * 0.6 + (fn2 - 0.5) * 0.2);
   float bright = clamp(lum(uAmb + uSunCol), 0.15, 1.2);
-  vec3 fogCol = mix(vec3(0.70, 0.74, 0.79), vec3(0.95, 0.96, 0.97), smoothstep(0.3, 0.75, fn * 0.7 + fn2 * 0.3)) * (0.3 + bright * 0.72);
-  // In an ash winter the clouds are ash: dark, brown-grey, heavy.
-  fogCol = mix(fogCol, mix(vec3(0.2, 0.18, 0.17), vec3(0.42, 0.38, 0.35), smoothstep(0.3, 0.75, fn * 0.7 + fn2 * 0.3)) * (0.45 + bright * 0.4), uAsh * 0.9);
-  lit = mix(lit, fogCol, fog);
+  lit = mix(lit, fogColour(w), fog);
   // Morning mist lies in the low ground and burns off as the sun climbs.
   float mist = uWeather.y * (1.0 - smoothstep(0.02, 0.3, h)) * smoothstep(0.35, 0.7, fbm(w * 0.05 + vec2(uTime * 0.01, 0.0)));
   lit = mix(lit, vec3(0.86, 0.88, 0.92) * (0.35 + bright * 0.7), mist * 0.75);
@@ -311,13 +317,9 @@ void main() {
       }
       vec2 p = vec2(wx, uCam.y + (art.y - uCam.w + lo * K * uCam.z) / (uCam.z * TY));
       float depth = fogTop(p) - hTop(p);
-      // Soft and even, as mist is: lit by the sky and the sun, a touch brighter where it's deep.
-      vec3 fogLit = (uAmb * 1.1 + uSunCol * 0.85) * vec3(0.92, 0.94, 0.97) * (0.95 + 0.06 * smoothstep(0.0, 0.08, depth));
-      fogLit = mix(fogLit, fogLit * vec3(1.0, 0.86, 0.74), clamp(length(uHaze) * 3.0, 0.0, 1.0));
-      fogLit = mix(fogLit, vec3(0.42, 0.38, 0.35) * (0.45 + bright * 0.4), uAsh * 0.9);
-      // A little texture in it, drifting.
-      fogLit *= 0.94 + 0.08 * noise((p - uWind * uTime * 0.25) * 0.15);
-      lit = mix(lit, fogLit, smoothstep(0.0, 0.06, depth) * 0.92);
+      // The very same cloudy fog as lies on the ground (one even fog over the unseen land: the
+      // bank only adds its depth at the edges, hiding what's behind).
+      lit = mix(lit, fogColour(p), smoothstep(0.0, 0.06, depth) * 0.92);
     }
   }
 
