@@ -101,3 +101,20 @@ describe('Winning over', () => {
     expect(v.joined).toBe(true);
   });
 });
+
+describe('Scouts', () => {
+  it('a scout explores the fog and finds villages on their own', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    s.wood = 200;
+    build(state, 'hearth');
+    build(state, 'hut');
+    expect(build(state, 'scout')).toBe(true);
+    const seen0 = state.stages.shore.seen.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < 1800; i++) shoreTick(state, 2);
+    const seen1 = state.stages.shore.seen.reduce((a, b) => a + b, 0);
+    console.log('seen cells', seen0, '->', seen1, 'found', s.villages.filter((v) => v.found).length, 'of', s.villages.length);
+    expect(seen1).toBeGreaterThan(seen0 * 5);
+    expect(s.villages.some((v) => v.found)).toBe(true);
+  });
+});

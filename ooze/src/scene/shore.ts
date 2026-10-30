@@ -9,6 +9,7 @@ import { isAdult, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type Sh
 import type { GameState } from '../economy/types';
 import type { BuildId } from '../content/shore';
 import { RangeScene } from './range';
+import { herdInView, squeak } from '../audio/sound';
 import { hash, type Frame } from './paint';
 
 interface Walker {
@@ -41,6 +42,10 @@ export class ShoreScene extends RangeScene {
   private raised = new Map<number, number>();
   private placed = -1;
   private lastT = 0;
+  private chatter = 1;
+  /** Looking at somewhere you chose (a village): the camera stays there, even as the sheet
+   * opens or closes, until you send the chief somewhere. */
+  private looking = false;
 
   reset(): void {
     super.reset();
@@ -54,6 +59,7 @@ export class ShoreScene extends RangeScene {
   lookAt(p: Pt, zoom = 3): void {
     this.pinned = false;
     this.auto = false;
+    this.looking = true;
     this.camX = p.x;
     this.camY = this.shaded ? p.y - (this.heightAt(p.x, p.y) * this.lift) / this.tilt : p.y;
     this.zoom = zoom;
@@ -62,6 +68,12 @@ export class ShoreScene extends RangeScene {
   /** Follow the chief again. */
   follow(): void {
     this.auto = true;
+    this.looking = false;
+  }
+
+  setView(top: number, bottom: number): void {
+    super.setView(top, bottom);
+    if (this.looking) this.auto = false;
   }
 
   tap(state: GameState, ax: number, ay: number): void {
@@ -94,7 +106,7 @@ export class ShoreScene extends RangeScene {
     const at = this.toWorld(ax, ay);
     if (isLand(this.island, at.x, at.y)) {
       s.chiefTo = { x: at.x, y: at.y };
-      this.auto = true;
+      this.follow();
     }
   }
 
@@ -234,6 +246,8 @@ export class ShoreScene extends RangeScene {
     const plan = workPlan(s);
     const woods = this.woodsNear(s);
     let foodLeft = plan.food;
+    let hopping = 0;
+    let hopX = 0;
     const look = s.look;
     for (const w of this.walkers) {
       const p = s.people.find((q) => q.id === w.id);
@@ -276,6 +290,10 @@ export class ShoreScene extends RangeScene {
       const X = this.sx(x);
       const Y = this.py(x, y);
       if (!onScreen(X, Y)) continue;
+      if (moving && Y > this.viewTop && Y < (this.viewBottom || H)) {
+        hopping++;
+        hopX += X;
+      }
       const left = moving ? (isChief ? (s.chiefTo?.x ?? x) < x : (w.goal?.x ?? x) < x) : hash(w.id, Math.floor(t / 5)) < 0.5;
       const sleeping = night > 0.5 && !moving && !isChief;
       const kin = p.kind !== undefined ? s.villages.find((v) => v.id === p.kind)?.look ?? look : look;
@@ -297,6 +315,41 @@ export class ShoreScene extends RangeScene {
             b.fillRect(X + 2 * z, Y - 4 * z, z, 4 * z);
           },
         });
+      }
+    }
+    // The scouts, out in the fog for you (seen wherever they are, a pennant over them).
+    for (const sc of s.scouts ?? []) {
+      const moving = !!sc.to;
+      const x = sc.at.x;
+      const y = sc.at.y;
+      const X = this.sx(x);
+      const Y = this.py(x, y);
+      if (!onScreen(X, Y)) continue;
+      if (moving && Y > this.viewTop && Y < (this.viewBottom || H)) {
+        hopping++;
+        hopX += X;
+      }
+      const left = (sc.to?.x ?? x) < x;
+      sprites.push({
+        y,
+        draw: () => {
+          this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 7) % 2 : 0, hop: moving ? Math.abs(Math.sin(t * 7)) * 1.5 : 0 });
+          const fy = Math.round(Y) - (close ? 6 * z + 6 : 6);
+          b.fillStyle = PAL.k;
+          b.fillRect(Math.round(X), fy, 1, 4);
+          b.fillStyle = PAL.y;
+          b.fillRect(Math.round(X) + 1, fy, 2, 2);
+        },
+      });
+    }
+    // Out and about, they squeak (heard up close, quieter as the view pulls back).
+    herdInView(hopping > 0);
+    if (hopping) {
+      this.chatter -= dt * Math.min(3, 0.6 + hopping * 0.3);
+      if (this.chatter <= 0) {
+        this.chatter = 0.5 + Math.random() * 1.4;
+        const near = Math.max(0, Math.min(1, (this.zoom - 1.2) / 6.8));
+        squeak(0.45 * near ** 1.2, (hopX / hopping / W) * 2 - 1);
       }
     }
     // Where the chief is going: a small marker on the ground.
@@ -455,6 +508,16 @@ export class ShoreScene extends RangeScene {
         const hunt = s.look.diet === 'hunter';
         r(3, -2, 2, 2, hunt ? '#a8443a' : '#6aa04a');
         r(4, -3, 1, 1, hunt ? '#d8d0c0' : '#8acf6a');
+        break;
+      }
+      case 'scout': {
+        // A small hut with a tall pole and a pennant: the scouts' own.
+        const th = '#b08a4a';
+        r(-3, -3, 6, 3, th);
+        r(-2, -5, 4, 2, th);
+        r(-1, -2, 2, 2, '#2a1e18');
+        r(3, -10, 1, 10, '#5a4030');
+        r(4, -10, 3, 2, Math.floor(t * 2) % 2 ? PAL.y : '#e8a040');
         break;
       }
       case 'cutter': {

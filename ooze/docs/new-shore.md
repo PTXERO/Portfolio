@@ -340,5 +340,16 @@ Built in slices, each tested live (balance sims after).
 3. **Raids and defense**: the grace period, scouts, announced raids, Kairosoft-style battles.
 4. **Taking people and ideas**: diet leaning and shifts; cannibals' Dread.
 5. **The Far Voice**: whispers and the few powers.
-6. **Delegation**: Scout, Envoy, War chief, Steward (the idle side of Phase 1).
+6. **Delegation**: Scout *(the Scout's hut is live: up to 3 scouts explore the fog on their
+   own, offline too)*, Envoy, War chief, Steward (the idle side of Phase 1).
 7. **The turn**: at a hundred, into Phase 2 (the Long Road).
+
+**No cap at a hundred.** The village isn't limited to 100 and the interface doesn't count toward
+it; the turn to Phase 2 comes when the village is big enough, at a size set by the balance sims
+(about a hundred).
+
+## 12. Polish backlog (back burner)
+
+- **Biomes in 2.5D**: forests and meadows as 2D sprites standing on the 3D land (trees, grass
+  tufts, bushes), sorted with the creatures so they walk behind and in front of them; trees that
+  fall when the village cuts wood (and grow back).

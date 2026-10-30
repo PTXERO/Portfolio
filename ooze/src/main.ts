@@ -849,9 +849,9 @@ function renderHud(): void {
   const ex = def.tribal ? st.tribe?.ex : undefined;
   const sh = def.shore ? st.shore : undefined;
   if (sh) {
-    // New Shore counts people too (toward a hundred).
+    // New Shore counts people too (no limit: the culture begins when the village is big enough).
     set('currency', String(sh.people.length));
-    set('rate', 'of 100\npeople');
+    set('rate', 'people');
   } else if (ex) {
     // The Extinction counts people, not currency.
     set('currency', String(ex.people.length));
@@ -893,7 +893,7 @@ function renderHud(): void {
   }
 }
 
-/** New Shore's strip: how many toward a hundred, and the village's news going by. (No clock:
+/** New Shore's strip: just the village's news going by. (No clock:
  * this is just life now.) */
 const shoreNews: string[] = [];
 /** Villages already known to have joined (so only new ones get a card; not those in the save). */

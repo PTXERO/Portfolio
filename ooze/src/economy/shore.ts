@@ -47,6 +47,9 @@ const VISIT_TRUST = 4;
 const WELCOME_TRUST = 1.5;
 /** How near the chief must be to count as visiting (tiles). */
 export const VISIT_NEAR = 14;
+/** Scouts: how fast they go and how far they see (tiles). */
+const SCOUT_SPEED = 3.5;
+const SCOUT_SIGHT = 12;
 /** Trust a village of your own kin starts at, once found. */
 const FIRST_TRUST = 10;
 
@@ -86,6 +89,13 @@ export interface Village {
   joined?: boolean;
 }
 
+export interface Scout {
+  at: Pt;
+  to: Pt | null;
+  /** Seconds before giving up on where they're headed (stuck behind water, say). */
+  left: number;
+}
+
 export interface ShoreState {
   seed: number;
   /** Days since landfall, and seconds into the day. */
@@ -118,6 +128,8 @@ export interface ShoreState {
   look: CreatureLook;
   cannibal: boolean;
   villages: Village[];
+  /** Scouts out exploring (one per scout's hut). */
+  scouts?: Scout[];
   /** Things the interface should show (and clear): births, deaths, finds. */
   news: string[];
   /** Ids of villages found since the interface last looked. */
@@ -598,49 +610,82 @@ function die(state: GameState, s: ShoreState, p: ShorePerson, why: 'old age' | '
 
 /** The chief's walk: straight toward where they're going, round water where it can; what's
  * near them is seen, and villages they come in sight of are found. */
+/** A step toward `to`: straight on if it's land, else edging along the shore. Null if there's
+ * no way on from here. */
+function stepToward(is: Island, at: Pt, to: Pt, speed: number, dt: number): Pt | null {
+  const dx = to.x - at.x;
+  const dy = to.y - at.y;
+  const d = Math.hypot(dx, dy);
+  if (d < 0.3) return { ...to };
+  const stepLen = Math.min(d, speed * dt);
+  const ux = dx / d;
+  const uy = dy / d;
+  for (const t of [0, 0.5, -0.5, 1, -1, 1.5, -1.5]) {
+    const c = Math.cos(t);
+    const sn = Math.sin(t);
+    const nx = at.x + (ux * c - uy * sn) * stepLen;
+    const ny = at.y + (ux * sn + uy * c) * stepLen;
+    if (isLand(is, nx, ny)) return { x: nx, y: ny };
+  }
+  return null;
+}
+
+/** Where a scout heads next: the nearest unseen land a fair way off (else the smoke of a camp
+ * not yet found, else anywhere). Seeded by the scout and the day, so offline runs the same. */
+function scoutGoal(s: ShoreState, seen: Uint8Array, is: Island, sc: Scout, k: number): Pt {
+  const rand = rng(s.seed * 31 + s.day * 7 + k * 101 + Math.floor(sc.at.x) * 3);
+  let best: Pt | null = null;
+  let bestD = Infinity;
+  for (let i = 0; i < 80; i++) {
+    const a = rand() * Math.PI * 2;
+    const r = 30 + rand() * 130;
+    const x = sc.at.x + Math.cos(a) * r;
+    const y = sc.at.y + Math.sin(a) * r;
+    if (!isLand(is, x, y) || seen[Math.floor(y / CELL) * SHORE_CELLS + Math.floor(x / CELL)]) continue;
+    const d = Math.hypot(x - sc.at.x, y - sc.at.y);
+    if (d < bestD) {
+      bestD = d;
+      best = { x, y };
+    }
+  }
+  if (best) return best;
+  const v = s.villages.filter((x) => !x.found).sort((a, b) => Math.hypot(a.x - sc.at.x, a.y - sc.at.y) - Math.hypot(b.x - sc.at.x, b.y - sc.at.y))[0];
+  return v ? { x: v.x, y: v.y } : { x: s.hearth.x + (rand() - 0.5) * 200, y: s.hearth.y + (rand() - 0.5) * 200 };
+}
+
 function walk(state: GameState, s: ShoreState, dt: number): void {
   const is = shoreIsland(s.seed);
   const seen = state.stages.shore.seen;
-  const to = s.chiefTo;
-  if (to) {
-    const dx = to.x - s.chiefAt.x;
-    const dy = to.y - s.chiefAt.y;
-    const d = Math.hypot(dx, dy);
-    const stepLen = Math.min(d, CHIEF_SPEED * dt);
-    if (d < 0.3) s.chiefTo = null;
-    else {
-      const ux = dx / d;
-      const uy = dy / d;
-      // Straight on if it's land; else edge along the shore (whichever side is land).
-      const tries = [0, 0.5, -0.5, 1, -1, 1.5, -1.5];
-      let moved = false;
-      for (const t of tries) {
-        const c = Math.cos(t);
-        const sn = Math.sin(t);
-        const vx = ux * c - uy * sn;
-        const vy = ux * sn + uy * c;
-        const nx = s.chiefAt.x + vx * stepLen;
-        const ny = s.chiefAt.y + vy * stepLen;
-        if (isLand(is, nx, ny)) {
-          s.chiefAt = { x: nx, y: ny };
-          moved = true;
-          break;
-        }
-      }
-      if (!moved) s.chiefTo = null;
-    }
+  if (s.chiefTo) {
+    const next = stepToward(is, s.chiefAt, s.chiefTo, CHIEF_SPEED, dt);
+    if (!next || Math.hypot(next.x - s.chiefTo.x, next.y - s.chiefTo.y) < 0.3) s.chiefTo = null;
+    if (next) s.chiefAt = next;
   }
-  if (seen.length === SHORE_CELLS * SHORE_CELLS) {
-    reveal(is, seen, s.chiefAt.x, s.chiefAt.y, CHIEF_SIGHT);
-    for (const v of s.villages) {
-      if (v.found) continue;
-      const c = Math.floor(v.y / CELL) * SHORE_CELLS + Math.floor(v.x / CELL);
-      if (!seen[c]) continue;
-      v.found = true;
-      if (relation(s, v) === 'kin') v.trust ??= FIRST_TRUST;
-      s.newFinds.push(v.id);
-      record(state, `They found ${v.name}: ${v.pop} of them, ${v.cannibal ? 'eaters of their own kind' : `${v.diet}s`}.`, 'shore', shoreWhen(s));
+  if (seen.length !== SHORE_CELLS * SHORE_CELLS) return;
+  reveal(is, seen, s.chiefAt.x, s.chiefAt.y, CHIEF_SIGHT);
+  // Scouts: one for each scout's hut, out in the fog on their own.
+  const huts = count(s, 'scout');
+  s.scouts ??= [];
+  while (s.scouts.length < huts) s.scouts.push({ at: { ...s.hearth }, to: null, left: 0 });
+  s.scouts.forEach((sc, k) => {
+    if (!sc.to || sc.left <= 0) {
+      sc.to = scoutGoal(s, seen, is, sc, k);
+      sc.left = Math.hypot(sc.to.x - sc.at.x, sc.to.y - sc.at.y) / SCOUT_SPEED * 2 + 5;
     }
+    sc.left -= dt;
+    const next = stepToward(is, sc.at, sc.to, SCOUT_SPEED, dt);
+    if (!next || Math.hypot(next.x - sc.to.x, next.y - sc.to.y) < 0.5) sc.to = null;
+    if (next) sc.at = next;
+    reveal(is, seen, sc.at.x, sc.at.y, SCOUT_SIGHT);
+  });
+  for (const v of s.villages) {
+    if (v.found) continue;
+    const c = Math.floor(v.y / CELL) * SHORE_CELLS + Math.floor(v.x / CELL);
+    if (!seen[c]) continue;
+    v.found = true;
+    if (relation(s, v) === 'kin') v.trust ??= FIRST_TRUST;
+    s.newFinds.push(v.id);
+    record(state, `They found ${v.name}: ${v.pop} of them, ${v.cannibal ? 'eaters of their own kind' : `${v.diet}s`}.`, 'shore', shoreWhen(s));
   }
 }
 

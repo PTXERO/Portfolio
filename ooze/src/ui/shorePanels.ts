@@ -65,7 +65,7 @@ function storesCard(s: ShoreState): string {
   const plan = workPlan(s);
   const net = plan.foodRate - plan.eat;
   const cell = (key: string, name: string, have: number, cap: number, gain: string) => `<div class="store"><span class="label dim">${name}</span><b class="num"><span data-t="shore-${key}">${n0(have)}</span><span class="dim">/${cap}</span></b><span class="dim">${gain}</span></div>`;
-  return `<div class="panel-head"><h2>The Village</h2><span class="dim">${s.people.length} of 100</span></div>
+  return `<div class="panel-head"><h2>The Village</h2><span class="dim">${s.people.length} people</span></div>
     <div class="card px-box ex-stores shore-stores">
       ${cell('food', 'Food', s.food, foodCap(s), `${net >= 0 ? '+' : ''}${n0(net)} a day`)}
       ${cell('wood', 'Wood', s.wood, woodCap(s), `+${n0(plan.woodRate)} a day`)}

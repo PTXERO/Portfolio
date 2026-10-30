@@ -21,7 +21,7 @@ export const SHORE_STORY = {
   found: '[STORY] Smoke, and huts, and others like them. Not like them.',
 };
 
-export type BuildId = 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter';
+export type BuildId = 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout';
 
 export interface BuildDef {
   id: BuildId;
@@ -44,6 +44,7 @@ export const BUILDS: BuildDef[] = [
   { id: 'rack', name: 'Drying rack', does: 'Room for 40 more food.', wood: 14, growth: 1.3, after: 'hut' },
   { id: 'camp', name: 'Gathering camp', does: 'Food comes in 20% faster.', wood: 30, growth: 1.45, after: 'hut' },
   { id: 'cutter', name: 'Cutters\' shed', does: 'Wood comes in 20% faster.', wood: 30, growth: 1.45, after: 'woodpile' },
+  { id: 'scout', name: 'Scout\'s hut', does: 'One of them goes out into the fog for you, finding what\'s out there (while you\'re away too).', wood: 20, growth: 2.2, max: 3, after: 'hut' },
 ];
 
 /** The camp that gathers food is the diet's own. */
