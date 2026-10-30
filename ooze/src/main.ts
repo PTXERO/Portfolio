@@ -1239,7 +1239,9 @@ function pondEvents(): void {
       panelKey = '';
       save();
       window.setTimeout(
-        () =>
+        () => {
+          // Inside its mind, a choir.
+          cue('choir', 0.75);
           playWaking(() => {
             scene.spreadWake();
             storyLine(STORY.wakeSub);
@@ -1249,7 +1251,8 @@ function pondEvents(): void {
               syncCine();
               render();
             }, 8000);
-          }),
+          });
+        },
         2400,
       );
     }
