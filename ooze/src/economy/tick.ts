@@ -2,6 +2,7 @@ import { sealed, tribeTick } from './tribal';
 import { STAGES } from '../content/stages';
 import { affordableCount, buyGenerator, buyUpgrade, catalyze, discoverReactions, SWIRL_FADE_PER_SEC, visibleUpgrades } from './actions';
 import { creatureTick } from './creature';
+import { shoreTick } from './shore';
 import { ACCLIM_SEC, stageRate } from './rates';
 import type { GameState, StageId } from './types';
 
@@ -36,6 +37,7 @@ export function tick(state: GameState, dt: number): void {
   }
   if (!sealed(state, 'creature')) creatureTick(state, dt);
   tribeTick(state, dt);
+  shoreTick(state, dt);
   // Your cell settles into whichever habitat it's living in (Cell stage).
   for (const id of state.unlocked) {
     const st = state.stages[id];

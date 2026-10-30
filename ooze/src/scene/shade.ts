@@ -36,7 +36,8 @@ precision highp float;
 uniform sampler2D uHeight;
 uniform vec3 uSun;
 varying vec2 vUv;
-const float N = ${ISLAND.toFixed(1)};
+uniform float uN; // tiles across the island
+#define N uN
 const float K = ${LIFT.toFixed(1)};
 float hTop(vec2 w) {
   vec4 t = texture2D(uHeight, w / N);
@@ -93,7 +94,8 @@ uniform vec3 uGrade; // the time of day's and the season's colour cast
 uniform vec3 uHaze; // light the low sun scatters through the air (rosy at dawn, orange at dusk)
 varying vec2 vUv;
 
-const float N = ${ISLAND.toFixed(1)};
+uniform float uN; // tiles across the island
+#define N uN
 const float K = ${LIFT.toFixed(1)};
 const float TY = ${TILT.toFixed(2)};
 
@@ -335,7 +337,10 @@ export class MapShader {
   /** Ground textures by the canvas they came from (one per season), uploaded once. */
   private grounds = new Map<HTMLCanvasElement, WebGLTexture>();
   private groundVer = new Map<HTMLCanvasElement, string>();
-  private heightSeed = -1;
+  private heightKey = '';
+  /** Tiles across the island, and texels across its light map (half as many on a big one). */
+  private n = ISLAND;
+  private lightN = ISLAND;
   private fogVersion = -1;
   private trailTex: WebGLTexture;
   private trailVersion = -1;
@@ -367,13 +372,14 @@ export class MapShader {
 
   /** Re-lights the island's light map (only when the sun has moved enough to show). */
   private relight(sun: number[]): void {
-    const key = `${this.heightSeed}|${sun.map((v) => v.toFixed(2)).join()}`;
+    const key = `${this.heightKey}|${sun.map((v) => v.toFixed(2)).join()}`;
     if (key === this.lightKey) return;
     this.lightKey = key;
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.lightFbo);
-    gl.viewport(0, 0, ISLAND, ISLAND);
+    gl.viewport(0, 0, this.lightN, this.lightN);
     gl.useProgram(this.lightProg);
+    gl.uniform1f(gl.getUniformLocation(this.lightProg, 'uN'), this.n);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.heightTex);
     gl.uniform1i(gl.getUniformLocation(this.lightProg, 'uHeight'), 2);
@@ -388,14 +394,20 @@ export class MapShader {
   }
 
   /** The island's heights and kinds of ground (once per island). */
-  setIsland(seed: number, data: Uint8Array): void {
-    if (seed === this.heightSeed) return;
-    this.heightSeed = seed;
+  setIsland(key: string, n: number, data: Uint8Array): void {
+    if (key === this.heightKey) return;
+    this.heightKey = key;
     this.grounds.forEach((t) => this.gl.deleteTexture(t));
     this.grounds.clear();
     const gl = this.gl;
+    if (n !== this.n) {
+      this.n = n;
+      this.lightN = n > 512 ? Math.ceil(n / 2) : n;
+      gl.bindTexture(gl.TEXTURE_2D, this.lightTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.lightN, this.lightN, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    }
     gl.bindTexture(gl.TEXTURE_2D, this.heightTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, ISLAND, ISLAND, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
   }
 
   /** The fog over the island (re-sent only when it changes). */
@@ -495,6 +507,7 @@ export class MapShader {
     gl.uniform1f(this.u('uAsh'), p.ash ?? 0);
     gl.uniform4fv(this.u('uBow'), p.bow);
     gl.uniform1f(this.u('uBlend'), p.blend);
+    gl.uniform1f(this.u('uN'), this.n);
     gl.uniform2f(this.u('uArt'), artW, artH);
     gl.uniform4f(this.u('uCam'), p.cam[0], p.cam[1], p.cam[2], p.cam[3]);
     gl.uniform1f(this.u('uTime'), p.time);

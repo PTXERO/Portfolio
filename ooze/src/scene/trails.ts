@@ -6,14 +6,15 @@ import { ISLAND } from '../economy/island';
 
 /** Tiles per cell of the trail map. */
 const CELL = 2;
-const N = ISLAND / CELL;
 /** Wear a second of one walker adds, and how quickly paths grass over (share a second). */
 const WEAR = 0.012;
 const REGROW = 1 / 2400;
 const KEY = 'ooze-to-orbit/trails/';
 
 export class Trails {
-  private wear = new Float32Array(N * N);
+  /** Cells across (the island's tiles over CELL). */
+  private N = ISLAND / CELL;
+  private wear = new Float32Array(this.N * this.N);
   readonly canvas = document.createElement('canvas');
   version = 0;
   private seed = -1;
@@ -21,13 +22,19 @@ export class Trails {
   private sinceSave = 0;
 
   constructor() {
-    this.canvas.width = N;
-    this.canvas.height = N;
+    this.canvas.width = this.N;
+    this.canvas.height = this.N;
   }
 
   /** Loads the island's trails (once per island). */
-  private load(seed: number): void {
+  private load(seed: number, n: number): void {
     this.seed = seed;
+    if (n / CELL !== this.N) {
+      this.N = n / CELL;
+      this.wear = new Float32Array(this.N * this.N);
+      this.canvas.width = this.N;
+      this.canvas.height = this.N;
+    }
     this.wear.fill(0);
     try {
       const raw = localStorage.getItem(KEY + seed);
@@ -55,15 +62,16 @@ export class Trails {
 
   private redraw(): void {
     const ctx = this.canvas.getContext('2d')!;
-    const img = ctx.createImageData(N, N);
+    const img = ctx.createImageData(this.N, this.N);
     for (let i = 0; i < this.wear.length; i++) img.data[i * 4 + 3] = Math.round(Math.min(1, this.wear[i]) * 255);
     ctx.putImageData(img, 0, 0);
     this.version++;
   }
 
   /** A frame: `feet` walked for `dt` seconds (only the ones moving count). */
-  update(seed: number, feet: { x: number; y: number }[], dt: number): void {
-    if (seed !== this.seed) this.load(seed);
+  update(seed: number, feet: { x: number; y: number }[], dt: number, n = ISLAND): void {
+    if (seed !== this.seed || n / CELL !== this.N) this.load(seed, n);
+    const N = this.N;
     for (const p of feet) {
       const cx = Math.floor(p.x / CELL);
       const cy = Math.floor(p.y / CELL);

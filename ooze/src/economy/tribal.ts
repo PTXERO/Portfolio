@@ -20,16 +20,18 @@ export const MAX_SURVIVORS = 100;
 const FORAGE_ASLEEP = 0.15;
 const FORAGE_AWAKE = 0.6;
 
-/** Once the Tribal era has begun, every era before it is sealed: no going back, nothing runs. */
+/** Once the Tribal era has begun, every era before it is sealed: no going back, nothing runs.
+ * (And once they're ashore on the new island, the Extinction is behind them too.) */
 export function sealed(state: GameState, id: StageId): boolean {
-  return id !== TRIBAL && state.unlocked.includes(TRIBAL);
+  if (state.unlocked.includes('shore')) return id !== 'shore';
+  return id !== TRIBAL && id !== 'shore' && state.unlocked.includes(TRIBAL);
 }
 
 /** What the eras before leave: each tenfold of what they made adds a little, for good. */
 export function heritageOf(state: GameState): number {
   let sum = 0;
   for (const id of STAGE_ORDER) {
-    if (id === TRIBAL) continue;
+    if (id === TRIBAL || id === 'shore') continue;
     const t = state.stages[id].totalEarned;
     if (t.gt(1)) sum += t.log10();
   }
@@ -182,7 +184,7 @@ export function ashenFor(state: GameState): Ashen {
       }
     }
   }
-  const out: Ashen = { island: { seed: base.seed + 7777, biome, height, home: { ...base.home }, places: {}, scar }, spear, camp: { ...base.home } };
+  const out: Ashen = { island: { seed: base.seed + 7777, n: N, biome, height, home: { ...base.home }, places: {}, scar }, spear, camp: { ...base.home } };
   ashen.set(base.seed, out);
   return out;
 }

@@ -1,7 +1,7 @@
 import type { ExtinctionState } from './extinction';
 import type { Decimal } from './num';
 
-export type StageId = 'soup' | 'cell' | 'creature' | 'tribal';
+export type StageId = 'soup' | 'cell' | 'creature' | 'tribal' | 'shore';
 
 /** The Soup's environment controls. Each runs from 0 to 3. */
 export type DialId = 'heat' | 'light' | 'charge';
@@ -301,6 +301,8 @@ export interface StageDef {
   next?: StageId;
   /** The Tribal era: people, jobs and building (see economy/tribal.ts). */
   tribal?: true;
+  /** New Shore: the village and the island (see economy/shore.ts). */
+  shore?: true;
 }
 
 /** The tribe: who lived through the strike, and what they've become since. */
@@ -343,6 +345,8 @@ export interface TribeState {
 export interface StageState {
   /** Tribal era only. */
   tribe?: TribeState;
+  /** New Shore only. */
+  shore?: import('./shore').ShoreState;
   currency: Decimal;
   totalEarned: Decimal;
   generators: Record<string, number>;

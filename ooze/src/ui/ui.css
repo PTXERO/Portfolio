@@ -748,3 +748,19 @@ body.wide.tab-ideas #sheet { width: clamp(420px, 42vw, 820px); }
 
 /* A black veil for fading between scenes (over the cutscenes, under nothing that matters). */
 #veil { position: fixed; inset: 0; z-index: 63; background: #000; opacity: 0; pointer-events: none; }
+
+/* New Shore */
+.shore-stores { grid-template-columns: repeat(3, 1fr); }
+.shore-stores .store b .dim { font-size: 15px; }
+.card.village { gap: 8px; }
+.kind { image-rendering: pixelated; flex: none; }
+.rel { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-left: 4px; }
+.rel-kin { color: #8acf6a; }
+.rel-prey { color: var(--gold); }
+.rel-predator { color: #e8615a; }
+.rel-enemy { color: #c04848; }
+.village-head { display: flex; align-items: center; gap: 10px; }
+.village-head h3 { margin: 0; }
+.card .seg { flex: none; }
+.card.lean { flex-wrap: wrap; }
+.card.lean .seg { width: 100%; justify-content: flex-end; }

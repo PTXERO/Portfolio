@@ -11,6 +11,7 @@ import type { GameState, StageId } from '../economy/types';
 import { CellScene } from './cell';
 import { RangeScene } from './range';
 import { TribeScene } from './tribe';
+import { ShoreScene } from './shore';
 import { MapShader } from './shade';
 import type { PondEvent } from './pond';
 import { ring, type Frame } from './paint';
@@ -48,7 +49,9 @@ export class Scene {
   private stage: StageId | '' = '';
   private soup = new SoupScene();
   private cell = new CellScene();
-  private shore = new RangeScene();
+  private range = new RangeScene();
+  /** New Shore's island and village. */
+  private village = new ShoreScene();
   /** The Tribal era's map: the same island, broken (it builds on the Creature's). */
   private tribe = new TribeScene();
   /** Whether the walk to the spear is done (and it's waiting to be touched). */
@@ -59,12 +62,12 @@ export class Scene {
    * lands (the timing matches the strike's: from the omen to just before it hits). */
   frameStrike(state: GameState): void {
     const { spear } = ashenFor(state);
-    this.shore.pinCamera(spear.x, spear.y, 0.5, 1, 4.4);
+    this.range.pinCamera(spear.x, spear.y, 0.5, 1, 4.4);
   }
 
   /** Where the spear comes down, on screen (CSS pixels). */
   strikePoint(state: GameState): { x: number; y: number } {
-    const p = this.shore.screenOf(ashenFor(state).spear);
+    const p = this.range.screenOf(ashenFor(state).spear);
     const r = this.canvas.getBoundingClientRect();
     return { x: r.left + p.x * this.px, y: r.top + p.y * this.px };
   }
@@ -84,9 +87,10 @@ export class Scene {
     return this.tribe.leavingLabels().map((l) => ({ id: l.id, x: l.x * this.px, y: l.y * this.px }));
   }
 
-  /** The Creature's weather, for the sound (null in other stages). */
+  /** The island's weather, for the sound (null off the islands). */
   get skies(): { rain: number; snow: number; zoom: number } | null {
-    return this.stage === 'creature' ? this.shore.skies : null;
+    // (New Shore has no weather of its own yet: just the wind.)
+    return this.stage === 'creature' ? this.range.skies : this.stage === 'shore' ? this.village.skies : null;
   }
 
   get tribeScene(): TribeScene {
@@ -111,11 +115,15 @@ export class Scene {
 
   /** The map on show: the Creature's island or the Tribal era's fragment. */
   private get map(): RangeScene {
-    return this.stage === 'tribal' ? this.tribe : this.shore;
+    return this.stage === 'tribal' ? this.tribe : this.stage === 'shore' ? this.village : this.range;
   }
 
   private get isMap(): boolean {
-    return this.stage === 'creature' || this.stage === 'tribal';
+    return this.stage === 'creature' || this.stage === 'tribal' || this.stage === 'shore';
+  }
+
+  get shoreScene(): ShoreScene {
+    return this.village;
   }
   private displace = (x: number, y: number) => this.push(x, y);
   /** CSS pixels covered by the overlays at the top of the scene. */
@@ -183,8 +191,9 @@ export class Scene {
 
   /** Where the tab sheet starts (CSS pixels from the top), so the map centres above it. */
   setVisibleBottom(cssPx: number): void {
-    this.shore.setView(this.topCss / this.px, cssPx / this.px);
+    this.range.setView(this.topCss / this.px, cssPx / this.px);
     this.tribe.setView(this.topCss / this.px, cssPx / this.px);
+    this.village.setView(this.topCss / this.px, cssPx / this.px);
   }
 
   get zoomed(): boolean {
@@ -227,8 +236,8 @@ export class Scene {
   /** Plays a purchase out in the scene. Call after the purchase went through. */
   purchase(state: GameState, id: string): void {
     if (state.current === 'soup') this.soup.purchase(state, id, this.displace);
-    else if (state.current === 'creature') this.shore.purchase(state, id);
-    else if (state.current !== 'tribal') this.cell.purchase(state, id);
+    else if (state.current === 'creature') this.range.purchase(state, id);
+    else if (state.current !== 'tribal' && state.current !== 'shore') this.cell.purchase(state, id);
   }
 
   /** Tells the scene how much of its bottom the open sheet covers, so the floor stays in view. */
@@ -283,18 +292,19 @@ export class Scene {
 
     if (this.stage !== state.current) {
       // Into the Extinction the camera carries straight on (the strike lands where it looks).
-      const [cx, cy, cz] = this.shore.camParams;
+      const [cx, cy, cz] = this.range.camParams;
       const handOn = state.current === 'tribal' && this.stage === 'creature';
       this.stage = state.current;
       this.soup.reset();
       this.cell.reset();
-      this.shore.reset();
+      this.range.reset();
       this.tribe.reset();
+      this.village.reset();
       if (handOn) this.tribe.takeCamera(cx, cy, cz);
     }
     const frame: Frame = { b: this.b, W: this.W, H: this.H, t: this.time, dt, top: Math.ceil(this.topCss / this.px), bottom: Math.ceil(this.bottomCss / this.px) };
     if (state.current === 'soup') this.soup.draw(frame, state, this.displace);
-    else if (state.current === 'creature' || state.current === 'tribal') {
+    else if (state.current === 'creature' || state.current === 'tribal' || state.current === 'shore') {
       this.map.shaded = !!this.shader;
       this.map.draw(frame, state);
     } else this.cell.draw(frame, state);
@@ -313,7 +323,7 @@ export class Scene {
       // The island is drawn lit by the shader underneath; this canvas keeps only what's on top.
       const inp = this.map.shadeInputs();
       if (inp) {
-        this.shader!.setIsland(inp.seed, inp.heights);
+        this.shader!.setIsland(inp.key, inp.n, inp.heights);
         this.shader!.setFog(inp.fog, inp.fogVersion);
         this.shader!.render(this.buffer, this.W, this.H, { cam: this.map.camParams, tint: inp.tint, time: this.time, day: (this.time % 120) / 120, ground: inp.ground, blend: inp.blend, trail: inp.trail, trailVersion: inp.trailVersion, weather: inp.weather, bow: inp.bow, ash: inp.ash });
       }

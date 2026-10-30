@@ -2,7 +2,7 @@
 
 *The era after the Extinction. A game in its own right, and a long one.*
 
-Status: **planning** (nothing built yet). Decisions made so far are written as decided; open
+Status: **building** (milestone 1 live; see §11). Decisions made so far are written as decided; open
 questions are collected at the end. Keep this up to date as we decide things.
 
 ---
@@ -320,3 +320,21 @@ your people.
    (taking a predator's ways); omnivores stay; never straight across. Still to set: thresholds.
 7. Exact pacing numbers.
 8. ~~"Racing" for hunters~~ **Decided**: festival contests growing into the Arena (§7).
+
+## 11. Build milestones
+
+Built in slices, each tested live (balance sims after).
+
+1. **Landfall and the hearth** *(live)*: the stage (`shore`), the 8× island (1020 tiles, rolling
+   land with a few ranges), the four walking up from the beach, the hearth and the village laid
+   out round it (huts, woodpiles, racks, the diet's gathering camp, cutters' shed), food and wood
+   gathered by themselves with a lean (food, balanced, wood), births (hearth, room, food), the
+   four dying of old age after the first birth, the chief walking the fog, and the island's
+   villages (kinds, diets, relations) found as the fog draws back. Debug: `?start=shore`.
+   First pacing (perfect auto-building): 100 people at about 2h15m.
+2. **Winning over**: Trust, gifts, visits by the chief, joining (new kinds in the village).
+3. **Raids and defense**: the grace period, scouts, announced raids, Kairosoft-style battles.
+4. **Taking people and ideas**: diet leaning and shifts; cannibals' Dread.
+5. **The Far Voice**: whispers and the few powers.
+6. **Delegation**: Scout, Envoy, War chief, Steward (the idle side of Phase 1).
+7. **The turn**: at a hundred, into Phase 2 (the Long Road).

@@ -26,6 +26,8 @@ function mixHex(a: string, b: string, t: number): string {
 export interface CreatureLook {
   parts: Partial<Record<Slot, string>>;
   diet: string;
+  /** Another kind's own colours (body, edge), in place of their diet's. */
+  hue?: [string, string];
 }
 
 export function creatureLookOf(state: GameState): CreatureLook {
@@ -44,7 +46,7 @@ function bake(look: CreatureLook, frame: number): HTMLCanvasElement {
   c.width = W;
   c.height = H;
   const b = c.getContext('2d')!;
-  const [fill, edge] = DIET_COLORS[look.diet] ?? DIET_COLORS.none;
+  const [fill, edge] = look.hue ?? DIET_COLORS[look.diet] ?? DIET_COLORS.none;
   const px = (x: number, y: number, col: string) => {
     b.fillStyle = col;
     b.fillRect(Math.round(x), Math.round(y), 1, 1);
@@ -206,7 +208,7 @@ function bake(look: CreatureLook, frame: number): HTMLCanvasElement {
  */
 export function drawCreature(b: CanvasRenderingContext2D, look: CreatureLook, x: number, groundY: number, opts: { left?: boolean; frame?: number; scale?: number } = {}): void {
   const frame = opts.frame ?? 0;
-  const key = `${look.diet}|${Object.values(look.parts).join('.')}|${frame}`;
+  const key = `${look.diet}|${look.hue ?? ''}|${Object.values(look.parts).join('.')}|${frame}`;
   let c = cache.get(key);
   if (!c) {
     if (cache.size > 200) cache.clear();
@@ -248,7 +250,7 @@ function bakeMini(look: CreatureLook, frame: number, sleeping: boolean): { c: HT
   c.width = MW;
   c.height = MH;
   const b = c.getContext('2d')!;
-  const [fill, edge] = DIET_COLORS[look.diet] ?? DIET_COLORS.none;
+  const [fill, edge] = look.hue ?? DIET_COLORS[look.diet] ?? DIET_COLORS.none;
   const dark = mix(fill, '#10141f', 0.45);
   const px = (x: number, y: number, col: string) => {
     b.fillStyle = col;
@@ -359,7 +361,7 @@ export function drawMini(
   opts: { left?: boolean; frame?: number; sleeping?: boolean; scale?: number; hop?: number } = {},
 ): void {
   const k = Math.max(1, Math.round(opts.scale ?? 1));
-  const key = `${look.diet}|${Object.values(look.parts).join('.')}|${opts.frame ? 1 : 0}|${opts.sleeping ? 1 : 0}`;
+  const key = `${look.diet}|${look.hue ?? ''}|${Object.values(look.parts).join('.')}|${opts.frame ? 1 : 0}|${opts.sleeping ? 1 : 0}`;
   let m = miniCache.get(key);
   if (!m) {
     if (miniCache.size > 300) miniCache.clear();

@@ -24,6 +24,8 @@ export interface Pt {
 
 export interface Island {
   seed: number;
+  /** Tiles across (and down): ISLAND for the Creature's, bigger for New Shore's. */
+  n: number;
   biome: Uint8Array;
   /** Height above the sea, roughly 0 to 1 on land (below 0 is water). */
   height: Float32Array;
@@ -89,29 +91,44 @@ function fbm(x: number, y: number, seed: number, scale: number, octaves = 4): nu
   return v / norm;
 }
 
-const cache = new Map<number, Island>();
+const cache = new Map<string, Island>();
 
-/** The island for a seed (built once, then kept). */
-export function islandOf(seed: number, places: PlaceDef[] = []): Island {
-  const hit = cache.get(seed);
+/** The island for a seed (built once, then kept). A bigger one (`n` tiles across) has the same
+ * kind of ground at the same scale, just more of it: a longer, wilder coast and more ranges. */
+export function islandOf(seed: number, places: PlaceDef[] = [], n = ISLAND): Island {
+  const key = `${seed}/${n}`;
+  const hit = cache.get(key);
   if (hit) return hit;
-  const N = ISLAND;
+  const N = n;
+  const big = N !== ISLAND;
   const rand = rng(seed);
   const height = new Float32Array(N * N);
   const biome = new Uint8Array(N * N);
-  // A mountain range somewhere off-centre gives the island a spine.
+  // A mountain range somewhere off-centre gives the island a spine (a big island has more).
   const ma = rand() * Math.PI * 2;
-  const mx = N / 2 + Math.cos(ma) * N * 0.12;
-  const my = N / 2 + Math.sin(ma) * N * 0.12;
+  const ranges = [{ x: N / 2 + Math.cos(ma) * N * 0.12, y: N / 2 + Math.sin(ma) * N * 0.12, r: N * (big ? 0.11 : 0.2) }];
+  if (big) {
+    for (let k = 0; k < 3; k++) {
+      const a = ma + 1.6 + k * 1.5 + rand() * 0.8;
+      const r = N * (0.18 + rand() * 0.14);
+      ranges.push({ x: N / 2 + Math.cos(a) * r, y: N / 2 + Math.sin(a) * r, r: N * (0.07 + rand() * 0.06) });
+    }
+  }
+  const warpScale = big ? 60 * Math.sqrt(N / ISLAND) : 60;
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
       // Distance from the middle, with a wobbly coastline.
       const dx = (x - N / 2) / (N * 0.44);
       const dy = (y - N / 2) / (N * 0.44);
-      const warp = (fbm(x, y, seed + 7, 60, 3) - 0.5) * 0.55;
+      const warp = (fbm(x, y, seed + 7, warpScale, big ? 4 : 3) - 0.5) * 0.55;
       const d = Math.sqrt(dx * dx + dy * dy) + warp;
-      const ridge = Math.max(0, 1 - Math.hypot(x - mx, y - my) / (N * 0.2));
-      const h = fbm(x, y, seed, 45) * 0.7 + 0.42 - d * d * 1.05 + ridge * ridge * 0.45;
+      let ridge = 0;
+      for (const m of ranges) ridge = Math.max(ridge, 1 - Math.hypot(x - m.x, y - m.y) / m.r);
+      // (A big island is low and rolling inland, falling away only near the coast, with its
+      // ranges standing out of it; the small one is one dome.)
+      const h = big
+        ? fbm(x, y, seed, 45) * 0.7 + 0.02 - d * 0.08 - Math.max(0, d - 0.5) ** 2 * 3.2 + ridge * ridge * 0.55
+        : fbm(x, y, seed, 45) * 0.7 + 0.42 - d * d * 1.05 + ridge * ridge * 0.45;
       height[y * N + x] = h;
     }
   }
@@ -206,35 +223,36 @@ export function islandOf(seed: number, places: PlaceDef[] = []): Island {
     placesOut[p.id] = best;
     taken.push(best);
     // A place that had to settle for plain ground gets its ground made right around it.
-    if (!fits[spot.where](best.x, best.y)) stamp(biome, best, spot.where);
+    if (!fits[spot.where](best.x, best.y)) stamp(biome, best, spot.where, N);
   }
-  const island: Island = { seed, biome, height, home, places: placesOut };
-  cache.set(seed, island);
+  const island: Island = { seed, n: N, biome, height, home, places: placesOut };
+  cache.set(key, island);
   // Only the last few are kept (the game uses one; tests and the simulator roll many).
   if (cache.size > 4) cache.delete(cache.keys().next().value!);
   return island;
 }
 
-function stamp(biome: Uint8Array, p: Pt, where: string): void {
+function stamp(biome: Uint8Array, p: Pt, where: string, N: number): void {
   const b: number = where === 'marsh' ? Biome.Marsh : where === 'forest' ? Biome.Forest : where === 'high' ? Biome.High : where === 'coast' || where === 'pools' ? Biome.Sand : Biome.Rock;
   for (let j = -7; j <= 7; j++) {
     for (let i = -7; i <= 7; i++) {
       if (i * i + j * j > 49) continue;
       const x = p.x + i;
       const y = p.y + j;
-      if (x < 0 || y < 0 || x >= ISLAND || y >= ISLAND) continue;
-      const k = y * ISLAND + x;
+      if (x < 0 || y < 0 || x >= N || y >= N) continue;
+      const k = y * N + x;
       if (biome[k] >= Biome.Sand) biome[k] = b;
     }
   }
-  if (where === 'cave') biome[p.y * ISLAND + p.x] = Biome.Peak;
+  if (where === 'cave') biome[p.y * N + p.x] = Biome.Peak;
 }
 
 export function isLand(island: Island, x: number, y: number): boolean {
   const xi = Math.round(x);
   const yi = Math.round(y);
-  if (xi < 0 || yi < 0 || xi >= ISLAND || yi >= ISLAND) return false;
-  return island.biome[yi * ISLAND + xi] >= Biome.Sand;
+  const N = island.n;
+  if (xi < 0 || yi < 0 || xi >= N || yi >= N) return false;
+  return island.biome[yi * N + xi] >= Biome.Sand;
 }
 
 // ---- Fog: which cells have been seen ----
@@ -247,6 +265,7 @@ export function cellOf(x: number, y: number): number {
 
 /** Marks every cell within `r` tiles of a point seen. Returns how many were new (land only). */
 export function reveal(island: Island, seen: Uint8Array, x: number, y: number, r: number): number {
+  const CELLS = island.n / CELL;
   let fresh = 0;
   const c0x = Math.floor((x - r) / CELL);
   const c1x = Math.floor((x + r) / CELL);
@@ -268,6 +287,7 @@ export function reveal(island: Island, seen: Uint8Array, x: number, y: number, r
 
 /** Share of the island's land that has been seen, 0 to 1. */
 export function seenShare(island: Island, seen: Uint8Array): number {
+  const CELLS = island.n / CELL;
   let landCells = 0;
   let seenLand = 0;
   for (let i = 0; i < CELLS * CELLS; i++) {
@@ -289,8 +309,8 @@ export function packSeen(seen: Uint8Array): string {
   return btoa(s);
 }
 
-export function unpackSeen(text: string | undefined): Uint8Array {
-  const seen = new Uint8Array(CELLS * CELLS);
+export function unpackSeen(text: string | undefined, cells = CELLS): Uint8Array {
+  const seen = new Uint8Array(cells * cells);
   if (!text) return seen;
   try {
     const s = atob(text);

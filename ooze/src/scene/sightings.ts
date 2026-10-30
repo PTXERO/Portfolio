@@ -4,7 +4,7 @@
 // on winter nights.
 
 import { PAL } from '../art/sprites';
-import { Biome, ISLAND, isLand, type Island } from '../economy/island';
+import { Biome, isLand, type Island } from '../economy/island';
 import type { Sprite, WildView } from './wild';
 
 interface Sighting {
@@ -34,8 +34,8 @@ export class Sightings {
     // On the map, in view: deep-ish water for the whale, a beach for the tortoise.
     for (let i = 0; i < 40; i++) {
       const w = v.toWorld(v.W * (0.15 + Math.random() * 0.7), v.H * (0.3 + Math.random() * 0.5));
-      if (w.x < 2 || w.y < 2 || w.x > ISLAND - 3 || w.y > ISLAND - 3) continue;
-      const b = is.biome[Math.round(w.y) * ISLAND + Math.round(w.x)];
+      if (w.x < 2 || w.y < 2 || w.x > is.n - 3 || w.y > is.n - 3) continue;
+      const b = is.biome[Math.round(w.y) * is.n + Math.round(w.x)];
       const ok = kind === 'whale' ? !isLand(is, w.x, w.y) && b === Biome.Deep : b === Biome.Sand;
       if (ok) {
         this.cur = { kind, x: w.x, y: w.y, sky: false, age: 0, life: kind === 'whale' ? 14 : 40, dir };

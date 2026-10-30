@@ -11,7 +11,7 @@ import { PAL } from '../art/sprites';
 import { herdInView, squeak, thunder } from '../audio/sound';
 import { STAGES } from '../content/stages';
 import { islandFor, nearestNest, nestPoints, nestProgress, partyLeg, spot, statsOf, walkTo } from '../economy/creature';
-import { Biome, CELL, CELLS, ISLAND, isLand, type Island, type Pt } from '../economy/island';
+import { Biome, CELL, ISLAND, isLand, type Island, type Pt } from '../economy/island';
 import { SEASON_SEC, seasonOf } from '../economy/rates';
 import { H_LO, H_SPAN, LIFT, TILT } from './shade';
 import type { GameState, Role } from '../economy/types';
@@ -187,13 +187,21 @@ export class RangeScene {
   /** True while the lighting shader draws night and fog (see shade.ts), so they're left out here. */
   shaded = false;
   protected heightData: Uint8Array | null = null;
-  protected heightDataSeed = -1;
+  protected heightDataSeed = '';
   /** Bumped whenever the fog changes, so the shader re-sends it only then. */
   protected fogVersion = 0;
   /** This season's ground and the next one's, and how far the change has got (0 to 1). */
   protected groundPair: [HTMLCanvasElement, HTMLCanvasElement] | null = null;
   protected seasonBlend = 0;
   protected seasonPair: [number, number] = [0, 1];
+
+  /** Tiles across the island on show, and fog cells across. */
+  protected get n(): number {
+    return this.island?.n ?? ISLAND;
+  }
+  protected get cells(): number {
+    return this.n / CELL;
+  }
 
   reset(): void {
     this.fx.clear();
@@ -265,11 +273,11 @@ export class RangeScene {
     if (!is) return 0;
     const fx = x - 0.5 - Math.floor(x - 0.5);
     const fy = y - 0.5 - Math.floor(y - 0.5);
-    const x0 = Math.max(0, Math.min(ISLAND - 2, Math.floor(x - 0.5)));
-    const y0 = Math.max(0, Math.min(ISLAND - 2, Math.floor(y - 0.5)));
+    const x0 = Math.max(0, Math.min(this.n - 2, Math.floor(x - 0.5)));
+    const y0 = Math.max(0, Math.min(this.n - 2, Math.floor(y - 0.5)));
     const h = is.height;
-    const k = y0 * ISLAND + x0;
-    const v = (h[k] * (1 - fx) + h[k + 1] * fx) * (1 - fy) + (h[k + ISLAND] * (1 - fx) + h[k + ISLAND + 1] * fx) * fy;
+    const k = y0 * this.n + x0;
+    const v = (h[k] * (1 - fx) + h[k + 1] * fx) * (1 - fy) + (h[k + this.n] * (1 - fx) + h[k + this.n + 1] * fx) * fy;
     return Math.max(0, Math.min(H_LO + H_SPAN, v));
   }
 
@@ -330,8 +338,8 @@ export class RangeScene {
   }
 
   protected clamp(): void {
-    this.camX = Math.max(0, Math.min(ISLAND, this.camX));
-    this.camY = Math.max(0, Math.min(ISLAND, this.camY));
+    this.camX = Math.max(0, Math.min(this.n, this.camX));
+    this.camY = Math.max(0, Math.min(this.n, this.camY));
   }
 
   /** The camera, for the shader: centre (tiles), zoom, and the screen row of the centre. */
@@ -346,24 +354,25 @@ export class RangeScene {
   }
 
   /** What the shader needs: the island's heights and kinds, the fog, and the seasons' ground. */
-  shadeInputs(): { seed: number; heights: Uint8Array; fog: HTMLCanvasElement; fogVersion: number; ground: [HTMLCanvasElement, HTMLCanvasElement]; blend: number; tint: [number, number, number]; trail: HTMLCanvasElement; trailVersion: number; weather: [number, number, number, number]; bow: [number, number, number, number]; ash: number } | null {
+  shadeInputs(): { key: string; n: number; heights: Uint8Array; fog: HTMLCanvasElement; fogVersion: number; ground: [HTMLCanvasElement, HTMLCanvasElement]; blend: number; tint: [number, number, number]; trail: HTMLCanvasElement; trailVersion: number; weather: [number, number, number, number]; bow: [number, number, number, number]; ash: number } | null {
     const is = this.island;
     if (!is || !this.fog || !this.groundPair) return null;
-    if (!this.heightData || this.heightDataSeed !== is.seed) {
+    const key = `${is.seed}/${is.n}`;
+    if (!this.heightData || this.heightDataSeed !== key) {
       // 16 bits of height (high byte in r, low in a), and the kind of ground in g.
-      const d = new Uint8Array(ISLAND * ISLAND * 4);
-      for (let i = 0; i < ISLAND * ISLAND; i++) {
+      const d = new Uint8Array(this.n * this.n * 4);
+      for (let i = 0; i < this.n * this.n; i++) {
         const h16 = Math.round(Math.max(0, Math.min(1, (is.height[i] - H_LO) / H_SPAN)) * 65535);
         d[i * 4] = h16 >> 8;
         d[i * 4 + 1] = is.biome[i] * 28;
         d[i * 4 + 3] = h16 & 255;
       }
       this.heightData = d;
-      this.heightDataSeed = is.seed;
+      this.heightDataSeed = key;
     }
     const [a, c] = this.seasonPair;
     const tint = SEASON_TINT[a].map((v, i) => v + (SEASON_TINT[c][i] - v) * this.seasonBlend) as [number, number, number];
-    return { seed: is.seed, heights: this.heightData, fog: this.fog, fogVersion: this.fogVersion, ground: this.groundPair, blend: this.seasonBlend, tint, trail: this.trails.canvas, trailVersion: this.trails.version, weather: this.weather, bow: this.bowView, ash: this.ash };
+    return { key, n: is.n, heights: this.heightData, fog: this.fog, fogVersion: this.fogVersion, ground: this.groundPair, blend: this.seasonBlend, tint, trail: this.trails.canvas, trailVersion: this.trails.version, weather: this.weather, bow: this.bowView, ash: this.ash };
   }
 
   // ---- Input ----
@@ -412,7 +421,7 @@ export class RangeScene {
       for (const pl of STAGES.creature.places!) {
         const p = is.places[pl.id];
         const found = (st.trips[pl.id] ?? 0) > 0;
-        if (!found && !st.seen[Math.floor(p.y / CELL) * CELLS + Math.floor(p.x / CELL)]) continue;
+        if (!found && !st.seen[Math.floor(p.y / CELL) * this.cells + Math.floor(p.x / CELL)]) continue;
         const X = this.sx(p.x);
         const Y = this.py(p.x, p.y);
         if (Math.abs(X + 1 - ax) < 5 && ay > Y - 11 && ay < Y + 2) {
@@ -444,7 +453,7 @@ export class RangeScene {
   // ---- The ground and the fog ----
 
   protected paintGround(is: Island, si: number): HTMLCanvasElement {
-    const N = ISLAND;
+    const N = is.n;
     const cv = document.createElement('canvas');
     cv.width = N;
     cv.height = N;
@@ -528,12 +537,12 @@ export class RangeScene {
 
   /** Clears the fog wherever new cells have been seen since last time. */
   protected paintFog(seen: Uint8Array): void {
-    const N = ISLAND;
+    const N = this.n;
     if (!this.fog || !this.fogKnown) {
       this.fog = document.createElement('canvas');
       this.fog.width = N;
       this.fog.height = N;
-      this.fogKnown = new Uint8Array(CELLS * CELLS);
+      this.fogKnown = new Uint8Array(this.cells * this.cells);
       const b = this.fog.getContext('2d')!;
       const img = b.createImageData(N, N);
       const f0 = rgb(FOG[0]);
@@ -552,10 +561,10 @@ export class RangeScene {
     }
     const known = this.fogKnown;
     const b = this.fog.getContext('2d')!;
-    for (let i = 0; i < CELLS * CELLS; i++) {
+    for (let i = 0; i < this.cells * this.cells; i++) {
       if (!seen[i] || known[i]) continue;
       known[i] = 1;
-      b.clearRect((i % CELLS) * CELL, Math.floor(i / CELLS) * CELL, CELL, CELL);
+      b.clearRect((i % this.cells) * CELL, Math.floor(i / this.cells) * CELL, CELL, CELL);
       this.fogVersion++;
     }
   }
@@ -566,8 +575,8 @@ export class RangeScene {
     const br = this.toWorld(this.W, this.H);
     const x0 = Math.max(0, Math.floor(tl.x));
     const y0 = Math.max(0, Math.floor(tl.y));
-    const x1 = Math.min(ISLAND, Math.ceil(br.x));
-    const y1 = Math.min(ISLAND, Math.ceil(br.y));
+    const x1 = Math.min(this.n, Math.ceil(br.x));
+    const y1 = Math.min(this.n, Math.ceil(br.y));
     if (x1 <= x0 || y1 <= y0) return;
     // (Safari won't draw a source rectangle that reaches outside the image, so it's clipped.)
     b.drawImage(layer, x0, y0, x1 - x0, y1 - y0, this.sx(x0), this.sy(y0), (x1 - x0) * this.zoom, (y1 - y0) * this.zoom);
@@ -622,7 +631,7 @@ export class RangeScene {
       const a = Math.random() * Math.PI * 2;
       const d = Math.random() * range;
       const p = { x: is.home.x + Math.cos(a) * d, y: is.home.y + Math.sin(a) * d };
-      const b = is.biome[Math.round(p.y) * ISLAND + Math.round(p.x)];
+      const b = is.biome[Math.round(p.y) * this.n + Math.round(p.x)];
       if (b === Biome.Grass || b === Biome.High) return p;
     }
     // No grass in reach yet: anywhere dry near home.
@@ -637,28 +646,28 @@ export class RangeScene {
   /** Paths over land between two spots, found once and kept (a breadth-first walk over the map's cells). */
   protected paths = new Map<string, Pt[]>();
   protected landPath(is: Island, from: Pt, to: Pt): Pt[] {
-    const cell = (p: Pt) => Math.min(CELLS - 1, Math.max(0, Math.floor(p.y / CELL))) * CELLS + Math.min(CELLS - 1, Math.max(0, Math.floor(p.x / CELL)));
+    const cell = (p: Pt) => Math.min(this.cells - 1, Math.max(0, Math.floor(p.y / CELL))) * this.cells + Math.min(this.cells - 1, Math.max(0, Math.floor(p.x / CELL)));
     const a = cell(from);
     const b = cell(to);
     const key = `${a}>${b}`;
     const known = this.paths.get(key);
     if (known) return known.map((p) => ({ ...p }));
-    const prev = new Int32Array(CELLS * CELLS).fill(-1);
-    const land = (i: number) => isLand(is, (i % CELLS) * CELL + CELL / 2, Math.floor(i / CELLS) * CELL + CELL / 2);
+    const prev = new Int32Array(this.cells * this.cells).fill(-1);
+    const land = (i: number) => isLand(is, (i % this.cells) * CELL + CELL / 2, Math.floor(i / this.cells) * CELL + CELL / 2);
     const queue = [a];
     prev[a] = a;
     for (let h = 0; h < queue.length && prev[b] < 0; h++) {
       const i = queue[h];
-      const x = i % CELLS;
-      for (const j of [x > 0 ? i - 1 : -1, x < CELLS - 1 ? i + 1 : -1, i - CELLS, i + CELLS]) {
-        if (j < 0 || j >= CELLS * CELLS || prev[j] >= 0 || (!land(j) && j !== b)) continue;
+      const x = i % this.cells;
+      for (const j of [x > 0 ? i - 1 : -1, x < this.cells - 1 ? i + 1 : -1, i - this.cells, i + this.cells]) {
+        if (j < 0 || j >= this.cells * this.cells || prev[j] >= 0 || (!land(j) && j !== b)) continue;
         prev[j] = i;
         queue.push(j);
       }
     }
     const out: Pt[] = [];
     if (prev[b] >= 0) {
-      for (let i = b, k = 0; i !== a; i = prev[i], k++) if (k % 3 === 0) out.unshift({ x: (i % CELLS) * CELL + CELL / 2, y: Math.floor(i / CELLS) * CELL + CELL / 2 });
+      for (let i = b, k = 0; i !== a; i = prev[i], k++) if (k % 3 === 0) out.unshift({ x: (i % this.cells) * CELL + CELL / 2, y: Math.floor(i / this.cells) * CELL + CELL / 2 });
     }
     out.push({ ...to });
     this.paths.set(key, out);
@@ -671,7 +680,7 @@ export class RangeScene {
 
   protected get wildView(): WildView {
     const seen = this.seenNow;
-    return { zoom: this.zoom, W: this.W, H: this.H, sx: (x) => this.sx(x), py: (x, y) => this.py(x, y), fx: this.fx, toWorld: (x, y) => this.toWorld(x, y), fogged: seen ? (x, y) => !seen[Math.floor(y / CELL) * CELLS + Math.floor(x / CELL)] : undefined };
+    return { zoom: this.zoom, W: this.W, H: this.H, sx: (x) => this.sx(x), py: (x, y) => this.py(x, y), fx: this.fx, toWorld: (x, y) => this.toWorld(x, y), fogged: seen ? (x, y) => !seen[Math.floor(y / CELL) * this.cells + Math.floor(x / CELL)] : undefined };
   }
 
   /** A little pink heart rising over a spot (age 0 to about 1). */
@@ -694,7 +703,7 @@ export class RangeScene {
       const d = Math.sqrt(Math.random()) * r;
       const x = from.x + Math.cos(a) * d;
       const y = from.y + Math.sin(a) * d;
-      if (x < 1 || y < 1 || x > ISLAND - 2 || y > ISLAND - 2 || !ok(x, y)) continue;
+      if (x < 1 || y < 1 || x > this.n - 2 || y > this.n - 2 || !ok(x, y)) continue;
       if (d < bd) {
         bd = d;
         best = { x, y };
@@ -748,7 +757,7 @@ export class RangeScene {
     let spot: Pt | null = null;
     if (kind === 'rest') {
       // Shade: at the edge of the trees, else anywhere grassy.
-      spot = this.findSpot(m, 14, (x, y) => inR(x, y) && is.biome[Math.round(y) * ISLAND + Math.round(x)] === Biome.Forest) ?? this.findSpot(m, 6, inR);
+      spot = this.findSpot(m, 14, (x, y) => inR(x, y) && is.biome[Math.round(y) * this.n + Math.round(x)] === Biome.Forest) ?? this.findSpot(m, 6, inR);
     } else if (kind === 'drink') {
       spot = this.findSpot(m, 14, (x, y) => inR(x, y) && (!land(x + 1.2, y) || !land(x - 1.2, y) || !land(x, y + 1.2) || !land(x, y - 1.2)));
     } else if (kind === 'eat' && near) {
@@ -757,8 +766,8 @@ export class RangeScene {
       let best = -Infinity;
       for (let i = 0; i < 50; i++) {
         const p = this.findSpot(nest, Math.min(12, R), land);
-        if (p && is.height[Math.round(p.y) * ISLAND + Math.round(p.x)] > best) {
-          best = is.height[Math.round(p.y) * ISLAND + Math.round(p.x)];
+        if (p && is.height[Math.round(p.y) * this.n + Math.round(p.x)] > best) {
+          best = is.height[Math.round(p.y) * this.n + Math.round(p.x)];
           spot = p;
         }
       }
@@ -903,7 +912,7 @@ export class RangeScene {
     for (const pl of STAGES.creature.places!) {
       const p = is.places[pl.id];
       const found = (st.trips[pl.id] ?? 0) > 0;
-      if (!found && !st.seen[Math.floor(p.y / CELL) * CELLS + Math.floor(p.x / CELL)]) continue;
+      if (!found && !st.seen[Math.floor(p.y / CELL) * this.cells + Math.floor(p.x / CELL)]) continue;
       const X = Math.round(this.sx(p.x));
       const Y = Math.round(this.py(p.x, p.y));
       if (X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;

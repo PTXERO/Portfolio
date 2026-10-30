@@ -13,7 +13,10 @@ import { STAGES } from './content/stages';
 import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
-import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
+import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
+import { build, isAdult, setLean, shoreOf, shoreWhen, startShore, type Lean } from './economy/shore';
+import { villageCard } from './ui/shorePanels';
+import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, say, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
 import { CRISES, crisisAnswered, crisisAt, crisisMissed, startCrisis } from './economy/crises';
@@ -736,8 +739,7 @@ function showEscape(fresh = false): void {
       ${t.cannibal ? '<p class="dim">They are cannibals now, and always will be.</p>' : ''}
       <p class="dim">Those left on the ash didn't last. The island did to them what it had begun to.</p>
       <p>Ashore on a new island. Someone was already there.</p>
-      <p class="stir">The story continues in a future update.</p>
-      <button class="px-btn gold" data-act="look-landed">Look around</button>
+      <button class="px-btn gold" data-act="look-landed">Go ashore</button>
     </div>`;
     extinctEl.hidden = false;
     requestAnimationFrame(() => extinctEl.classList.add('in'));
@@ -832,7 +834,7 @@ function renderTabs(): void {
   if (!ids.includes(ui.tab)) ui.tab = 'grow';
   tabsEl.style.gridTemplateColumns = `repeat(${ids.length}, 1fr)`;
   tabsEl.innerHTML = TABS.filter((t) => ids.includes(t.id))
-    .map((t) => `<button class="px-btn tab" data-tab="${t.id}">${icon(t.sprite, 3)}<span>${t.id === 'grow' && STAGES[state.current].places ? 'Herd' : t.id === 'grow' && STAGES[state.current].tribal ? 'Survivors' : t.label}</span><i class="dot" hidden></i></button>`)
+    .map((t) => `<button class="px-btn tab" data-tab="${t.id}">${icon(t.sprite, 3)}<span>${t.id === 'grow' && STAGES[state.current].places ? 'Herd' : t.id === 'grow' && STAGES[state.current].tribal ? 'Survivors' : t.id === 'grow' && STAGES[state.current].shore ? 'Village' : t.label}</span><i class="dot" hidden></i></button>`)
     .join('');
 }
 
@@ -844,19 +846,24 @@ function renderHud(): void {
     if (el.textContent !== text) el.textContent = text;
   };
   const ex = def.tribal ? st.tribe?.ex : undefined;
-  if (ex) {
+  const sh = def.shore ? st.shore : undefined;
+  if (sh) {
+    // New Shore counts people too (toward a hundred).
+    set('currency', String(sh.people.length));
+    set('rate', `people\nday ${sh.day + 1}`);
+  } else if (ex) {
     // The Extinction counts people, not currency.
     set('currency', String(ex.people.length));
     set('rate', `alive\n${ex.deaths} dead`);
   } else set('currency', format(st.currency));
-  if (ex) {
+  if (ex || sh) {
     /* set above */
   } else if (def.places) {
     // The herd eats: show what's left after that.
     const net = netRate(state);
     set('rate', `${net.lt(0) ? '−' : '+'}${format(net.abs())} ${def.currency}\nper second`);
   } else set('rate', `${format(stageRate(state, state.current))} ${def.currency}\nper second`);
-  set('bank-chip', state.timeBank > 0 && !ex ? `⧗ ${formatTime(state.timeBank)}${state.warp > 1 ? ` · ${state.warp}×` : ''}` : '');
+  set('bank-chip', state.timeBank > 0 && !ex && !sh ? `⧗ ${formatTime(state.timeBank)}${state.warp > 1 ? ` · ${state.warp}×` : ''}` : '');
   set('stage-name', def.name);
   // Small buttons under the banner hop to the previous age (left) or the next one (right).
   const ageNav = $('age-nav');
@@ -873,7 +880,7 @@ function renderHud(): void {
     ageNav.innerHTML = `${prev ? btn(prev, 'prev') : '<span></span>'}${next ? btn(next, 'next') : '<span></span>'}`;
   }
   const iconEl = $('currency-icon');
-    const look = ex ? st.tribe!.look : null;
+    const look = sh ? sh.look : ex ? st.tribe!.look : null;
   const iconKey = state.current + (look ? JSON.stringify(look) : '');
   if (iconEl.dataset.stage !== iconKey) {
     iconEl.dataset.stage = iconKey;
@@ -882,9 +889,60 @@ function renderHud(): void {
   }
 }
 
+/** New Shore's strip: the day, how many toward a hundred, and the village's news going by. */
+const shoreNews: string[] = [];
+function renderShoreGoal(): void {
+  const s = shoreOf(state);
+  if (!s) return;
+  if (goalKey !== 'shore') {
+    goalKey = 'shore';
+    tickerText = '';
+    evolveEl.hidden = false;
+    evolveEl.innerHTML = `<div class="evolve-row"><span class="label" data-g="day"></span><span class="label dim" data-g="when"></span></div>
+      <div class="ex-row"><div class="ex-count safe" data-g="count"></div><div class="ticker"><span data-g="tick"></span></div></div>`;
+  }
+  const g = (k: string) => evolveEl.querySelector<HTMLElement>(`[data-g="${k}"]`)!;
+  const put = (k: string, text: string) => {
+    if (g(k).textContent !== text) g(k).textContent = text;
+  };
+  put('day', `Day ${s.day + 1} ashore`);
+  put('when', `${s.built.some((b) => b.id === 'hearth') ? 'The village' : 'No hearth yet'}`);
+  put('count', `${s.people.length} of 100`);
+  const news = shoreNews.slice(-3).join('   ·   ');
+  if (news !== tickerText) {
+    tickerText = news;
+    const t = g('tick');
+    t.textContent = news;
+    t.style.setProperty('--dur', `${Math.max(10, news.length * 0.16)}s`);
+    t.style.animation = 'none';
+    void t.offsetWidth;
+    t.style.animation = '';
+  }
+}
+
+/** New Shore's news since the last frame: births and deaths go by on the strip; a village
+ * found gets its own card. */
+function shoreFrame(): void {
+  const s = shoreOf(state);
+  if (!s || state.current !== 'shore') return;
+  if (s.news.length) {
+    shoreNews.push(...s.news.splice(0));
+    if (shoreNews.length > 12) shoreNews.splice(0, shoreNews.length - 12);
+  }
+  if (s.newFinds.length && modal.hidden && !cine()) {
+    const v = s.villages.find((x) => x.id === s.newFinds[0]);
+    s.newFinds.shift();
+    if (v) {
+      cue('chime', 0.5);
+      showModal(`<p class="label dim">Found · ${shoreWhen(s)}</p>${villageCard(s, v).replace(/^<p class="label dim">[^<]*<\/p>/, '')}`);
+    }
+  }
+}
+
 /** The strip under the top bar: this stage's own goal. It never names what comes next. */
 function renderGoal(): void {
   const def = STAGES[state.current];
+  if (def.shore) return renderShoreGoal();
   // The Tribal era: for now, just what's asked before they wake.
   if (def.tribal) {
     const ex = state.stages.tribal.tribe?.ex;
@@ -1110,6 +1168,10 @@ function renderHint(): void {
     if (!state.stages.tribal.tribe?.awake) text = 'Tap the spear';
     else if (state.stages.tribal.tribe?.ex && state.stages.tribal.tribe.ex.day === 0 && state.stages.tribal.tribe.ex.people.every((p) => p.job === 'rest')) text = 'Set them to work, or they starve';
     else if (state.stages.tribal.tribe?.ex && !Object.keys(state.stages.tribal.tribe.ex.casts ?? {}).length && !casting) text = 'They live or die on their own. Work miracles to save them';
+  } else if (state.current === 'shore') {
+    const s = shoreOf(state);
+    if (s && !s.built.length) text = 'Build the hearth (in the Village tab)';
+    else if (!pokedThisStage) text = 'Tap the land to walk · pinch to zoom';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
   hint.hidden = !text || !modal.hidden || (ui.open && ui.full);
@@ -1215,7 +1277,7 @@ function moveOn(): void {
 }
 
 /** Whether the screen shows a map (the Creature's island or what's left of it). */
-const onMap = () => state.current === 'creature' || state.current === 'tribal';
+const onMap = () => state.current === 'creature' || state.current === 'tribal' || state.current === 'shore';
 
 // ---- The story's hold on the screen ----
 // From the strike to the waking, everything but the world and the story's words steps away
@@ -1272,6 +1334,15 @@ function pondEvents(): void {
       if (got) scene.float(e.x, e.y, `${e.party ? 'party home ' : ''}+${format(D(got))}`, '#f5c45e');
     } else if (e.type === 'place') showPlaceCard(e.id, e.x, e.y);
     else if (e.type === 'person') showPersonCard(e.i, e.x, e.y);
+    else if (e.type === 'village') {
+      const s = shoreOf(state);
+      const v = s?.villages.find((x) => x.id === e.id);
+      if (s && v) showModal(villageCard(s, v));
+    } else if (e.type === 'villager') {
+      const s = shoreOf(state);
+      const p = s?.people.find((x) => x.id === e.id);
+      if (s && p) scene.float(e.x, e.y, `${p.name}${p.id === s.chief ? ', chief' : p.founder ? ', one of the four' : isAdult(s, p) ? '' : ', a child'}`, '#f2ead7');
+    }
     else if (e.type === 'spear' && awaken(state)) {
       // The waking: it touches the spear, and they know that they are. A flash, the
       // shockwave rolling out across the world, then the words; then the Extinction begins.
@@ -1569,6 +1640,19 @@ function act(el: HTMLElement): void {
     if (pan) pan.setAttribute('style', webTransform());
   }
   else if (el.dataset.cast) startCast(el.dataset.cast as SpellId);
+  else if (el.dataset.build) {
+    if (build(state, el.dataset.build as BuildId)) {
+      tapSound();
+      save();
+    }
+  } else if (el.dataset.lean) setLean(state, el.dataset.lean as Lean);
+  else if (el.dataset.seevillage) {
+    const v = shoreOf(state)?.villages.find((x) => x.id === Number(el.dataset.seevillage));
+    if (v) {
+      scene.shoreScene.lookAt(v, 3);
+      if (!isWide()) ui.open = false;
+    }
+  }
   else if (el.dataset.ordain) {
     const ex = state.stages.tribal.tribe?.ex;
     if (ex) toggleOrdain(ex, el.dataset.ordain as SpellId);
@@ -1671,8 +1755,17 @@ function act(el: HTMLElement): void {
         save();
         break;
       case 'look-landed':
+        // Ashore: New Shore begins.
         extinctEl.classList.remove('in');
         window.setTimeout(() => (extinctEl.hidden = true), 600);
+        startShore(state);
+        record(state, 'They came ashore on a new island. There was smoke inland.', 'shore', 'Landfall');
+        scene.reload();
+        panelKey = '';
+        goalKey = '';
+        ui.tab = 'grow';
+        save();
+        render();
         break;
       case 'cast-cancel':
         endCast();
@@ -1816,10 +1909,12 @@ async function checkForUpdate(manual = false): Promise<void> {
 async function startFromLink(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const where = params.get('start');
-  if (where !== 'creature' && where !== 'tribal' && where !== 'escape') return;
+  if (where !== 'creature' && where !== 'tribal' && where !== 'escape' && where !== 'shore') return;
   history.replaceState(null, '', location.pathname);
   const what =
-    where === 'escape'
+    where === 'shore'
+      ? 'at the start of New Shore (just ashore)'
+      : where === 'escape'
       ? 'in the Extinction, the raft built and the night about to fall (to see them set off)'
       : where === 'tribal'
         ? 'at the end of the Creature stage (to see the strike and the Extinction)'
@@ -1839,7 +1934,7 @@ async function startFromLink(): Promise<void> {
       c.pop = 400;
       if (c.seen) c.seen.fill(1);
     }
-    if (where === 'escape') {
+    if (where === 'escape' || where === 'shore') {
       // Into the Extinction, awake, with the raft done and the crossing's food put by: at
       // nightfall (a few seconds off) they set out.
       if (!state.unlocked.includes('tribal')) state.unlocked.push('tribal');
@@ -1854,6 +1949,12 @@ async function startFromLink(): Promise<void> {
       ex.voyage = 40;
       ex.sendRule = 'family';
       ex.clock = DAY_SEC - 6;
+      if (where === 'shore') {
+        ex.family = ex.people.slice(0, 4).map((p) => p.id);
+        launch(state);
+        startShore(state);
+        record(state, 'They came ashore on a new island. There was smoke inland.', 'shore', 'Landfall');
+      }
     }
     scene.reload();
     save();
@@ -1965,6 +2066,7 @@ function frame(now: number): void {
     } while (performance.now() - t0 < 4);
   }
   pondEvents();
+  shoreFrame();
   syncCine();
   habitatsOpened();
   renderSpellbar();

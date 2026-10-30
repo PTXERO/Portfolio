@@ -9,7 +9,7 @@
 // and now and then giant dragonflies settle on the grass, until something comes too close.
 
 import { PAL } from '../art/sprites';
-import { Biome, ISLAND, isLand, type Island, type Pt } from '../economy/island';
+import { Biome, isLand, type Island, type Pt } from '../economy/island';
 import { hash, type Effects } from './paint';
 
 /** What the wild needs from the map's camera. */
@@ -70,7 +70,7 @@ interface Grazer {
 const BUSH_GROW = [0.012, 0.02, 0.008, 0];
 const TREE_GROW = [0, 0.004, 0.02, 0];
 
-const biomeAt = (is: Island, x: number, y: number) => is.biome[Math.round(y) * ISLAND + Math.round(x)];
+const biomeAt = (is: Island, x: number, y: number) => is.biome[Math.round(y) * is.n + Math.round(x)];
 
 export class Wild {
   bushes: Bush[] = [];
@@ -98,10 +98,10 @@ export class Wild {
           x = h.x + Math.cos(a) * d;
           y = h.y + Math.sin(a) * d;
         } else {
-          x = 2 + hash(i, salt + (is.seed % 997)) * (ISLAND - 4);
-          y = 2 + hash(i, salt + 7 + (is.seed % 991)) * (ISLAND - 4);
+          x = 2 + hash(i, salt + (is.seed % 997)) * (is.n - 4);
+          y = 2 + hash(i, salt + 7 + (is.seed % 991)) * (is.n - 4);
         }
-        if (x > 2 && y > 2 && x < ISLAND - 2 && y < ISLAND - 2 && ok(x, y) && out.every((p) => Math.hypot(p.x - x, p.y - y) > 3)) out.push({ x, y });
+        if (x > 2 && y > 2 && x < is.n - 2 && y < is.n - 2 && ok(x, y) && out.every((p) => Math.hypot(p.x - x, p.y - y) > 3)) out.push({ x, y });
       }
       return out;
     };
@@ -195,7 +195,7 @@ export class Wild {
       this.flockTimer = 60 + Math.random() * 120;
       for (let i = 0; i < 30; i++) {
         const inView = Math.random() < 0.6;
-        const w = inView ? v.toWorld(v.W * (0.1 + Math.random() * 0.8), v.H * (0.2 + Math.random() * 0.6)) : { x: 2 + Math.random() * (ISLAND - 4), y: 2 + Math.random() * (ISLAND - 4) };
+        const w = inView ? v.toWorld(v.W * (0.1 + Math.random() * 0.8), v.H * (0.2 + Math.random() * 0.6)) : { x: 2 + Math.random() * (is.n - 4), y: 2 + Math.random() * (is.n - 4) };
         const g = biomeAt(is, w.x, w.y);
         if ((g === Biome.Grass || g === Biome.Marsh || g === Biome.High) && !near(w.x, w.y, 6)) {
           this.flocks.push({ x: w.x, y: w.y, up: -1, dir: 1, stay: 40 + Math.random() * 80 });

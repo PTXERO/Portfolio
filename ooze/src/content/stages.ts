@@ -1,4 +1,5 @@
 import { tribal } from './tribal';
+import { shore } from './shore';
 import { creature } from './creature';
 import type { StageDef, StageId } from '../economy/types';
 
@@ -329,5 +330,5 @@ const cell: StageDef = {
   ],
 };
 
-export const STAGES: Record<StageId, StageDef> = { soup, cell, creature, tribal };
-export const STAGE_ORDER: StageId[] = ['soup', 'cell', 'creature', 'tribal'];
+export const STAGES: Record<StageId, StageDef> = { soup, cell, creature, tribal, shore };
+export const STAGE_ORDER: StageId[] = ['soup', 'cell', 'creature', 'tribal', 'shore'];

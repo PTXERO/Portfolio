@@ -29,7 +29,10 @@ export type PondEvent =
   /** Extinction: the leader gathered by hand at a work place (or listened at the spear). */
   | { type: 'hand'; job: import('../economy/extinction').JobId; x: number; y: number }
   /** Extinction: one of them was tapped (their place in the tribe). */
-  | { type: 'person'; i: number; x: number; y: number };
+  | { type: 'person'; i: number; x: number; y: number }
+  /** New Shore: a village was tapped (by id), or one of yours (by id). */
+  | { type: 'village'; id: number; x: number; y: number }
+  | { type: 'villager'; id: number; x: number; y: number };
 
 interface Hero {
   x: number;

@@ -1,6 +1,7 @@
 import { STAGES, STAGE_ORDER } from '../content/stages';
 import { settleHabitat } from './actions';
 import { MAX_SURVIVORS } from './tribal';
+import { SHORE_CELLS } from './shore';
 import { createStageState, createState } from './state';
 import { D } from './num';
 import { packSeen, unpackSeen } from './island';
@@ -15,7 +16,7 @@ export function serialize(state: GameState): string {
   const stages: Record<string, SavedStage> = {};
   for (const id of STAGE_ORDER) {
     const st = state.stages[id];
-    stages[id] = { ...st, currency: st.currency.toString(), totalEarned: st.totalEarned.toString(), seen: id === 'creature' ? packSeen(st.seen) : '' };
+    stages[id] = { ...st, currency: st.currency.toString(), totalEarned: st.totalEarned.toString(), seen: id === 'creature' || id === 'shore' ? packSeen(st.seen) : '' };
   }
   return JSON.stringify({ ...state, stages } satisfies SavedGame);
 }
@@ -51,7 +52,7 @@ export function deserialize(text: string): GameState {
           // Saves from before the island: a new one is rolled (and old trips start over).
           seed: s.seed ?? fresh.seed,
           pos: s.seed !== undefined && s.pos ? s.pos : fresh.pos,
-          seen: s.seed !== undefined ? unpackSeen(s.seen) : fresh.seen,
+          seen: id === 'shore' ? unpackSeen(s.seen, SHORE_CELLS) : s.seed !== undefined ? unpackSeen(s.seen) : fresh.seen,
           walk: s.seed !== undefined ? (s.walk ?? null) : null,
           autoRoam: s.autoRoam ?? true,
           roamOpts: { ...fresh.roamOpts, ...(s.roamOpts ?? {}) },
@@ -59,6 +60,7 @@ export function deserialize(text: string): GameState {
           parties: s.seed !== undefined ? (s.parties ?? []) : [],
           partyReady: s.seed !== undefined ? { ...(s.partyReady ?? {}) } : {},
           sightings: { ...(s.sightings ?? {}) },
+          shore: s.shore ? structuredClone(s.shore) : undefined,
           tribe: s.tribe ? { ...s.tribe, look: { ...s.tribe.look, parts: { ...s.tribe.look.parts } }, stats: { ...s.tribe.stats } } : undefined,
           nests: s.seed !== undefined ? [...(s.nests ?? [])] : [],
           nestSettle: s.seed !== undefined ? { ...(s.nestSettle ?? {}) } : {},

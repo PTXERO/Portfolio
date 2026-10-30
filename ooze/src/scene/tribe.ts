@@ -7,8 +7,9 @@
 import { cue, herdInView, squeak, thunder } from '../audio/sound';
 import { PAL } from '../art/sprites';
 import { SEASON_SEC } from '../economy/rates';
-import { Biome, CELLS, ISLAND, isLand, islandOf, reveal, CELL, type Island, type Pt } from '../economy/island';
+import { Biome, CELLS, ISLAND, isLand, reveal, CELL, type Island, type Pt } from '../economy/island';
 import { BURNT, LAKE, ashenFor, tribeOf } from '../economy/tribal';
+import { shoreWorld } from '../economy/shore';
 import { DAY_SEC as EX_DAY, RAFT, raftPart, WINTER, type ExtinctionState, type JobId } from '../economy/extinction';
 import type { SpellId } from '../economy/miracles';
 import { crisisAt } from '../economy/crises';
@@ -878,7 +879,9 @@ export class TribeScene extends RangeScene {
    * the smoke of someone else's fire, and them. */
   private drawLanded(f: Frame, tribe: NonNullable<ReturnType<typeof tribeOf>>): void {
     const { b, W, H, t, dt } = f;
-    const is = islandOf(tribe.landed!.seed);
+    // (The same island, beach and smoke New Shore begins with.)
+    const world = shoreWorld(tribe.landed!.seed, tribe.look as never, !!tribe.cannibal);
+    const is = world.island;
     this.island = is;
     this.ash = 0;
     if (this.landSeed !== is.seed) {
@@ -887,21 +890,13 @@ export class TribeScene extends RangeScene {
       this.fog = null;
       this.fogKnown = null;
       this.groundSeed = is.seed;
-      // Their camp: on land a fair way inland from the beach.
-      this.localCamp = { ...is.home };
-      for (let k = 0; k < 200; k++) {
-        const a = hash(k, 91) * Math.PI * 2;
-        const r = 30 + hash(k, 93) * 18;
-        const p = { x: is.home.x + Math.cos(a) * r, y: is.home.y + Math.sin(a) * r };
-        if (isLand(is, p.x, p.y) && isLand(is, p.x + 3, p.y) && isLand(is, p.x - 3, p.y)) {
-          this.localCamp = p;
-          break;
-        }
-      }
+      // Their camp: the nearest village, on a rise inland from the beach.
+      const v0 = world.villages[0];
+      this.localCamp = v0 ? { x: v0.x, y: v0.y } : { ...is.home };
       const at = (c: Pt, k: number, r: number): Person => ({ x: c.x + (hash(k, 95) - 0.5) * r, y: c.y + (hash(k, 97) - 0.5) * r * 0.7, vx: 0, vy: 0, ph: hash(k, 99) * 9, goal: null, wait: hash(k, 101) * 3, lit: -100 });
       this.family = Array.from({ length: 4 }, (_, k) => at(is.home, k, 3));
       // The fog of a new place: only the beach they come ashore on is known.
-      this.landSeen = new Uint8Array(CELLS * CELLS);
+      this.landSeen = new Uint8Array((is.n / CELL) ** 2);
       reveal(is, this.landSeen, is.home.x, is.home.y, 12);
       this.locals = Array.from({ length: 14 }, (_, k) => at(this.localCamp, k + 10, 7));
       this.camX = (is.home.x * 2 + this.localCamp.x) / 3;
@@ -917,7 +912,7 @@ export class TribeScene extends RangeScene {
     // turns inland to the smoke.
     if (this.arriveT === -1) this.arriveT = t;
     const ta = this.arriveT >= 0 ? t - this.arriveT : 99;
-    const out = { x: is.home.x - ISLAND / 2, y: is.home.y - ISLAND / 2 };
+    const out = { x: is.home.x - is.n / 2, y: is.home.y - is.n / 2 };
     const ol = Math.hypot(out.x, out.y) || 1;
     const shore = { x: is.home.x - 2, y: is.home.y + 1 };
     const sea = { x: shore.x + (out.x / ol) * 24, y: shore.y + (out.y / ol) * 24 };
@@ -959,7 +954,7 @@ export class TribeScene extends RangeScene {
     }
     const sprites: { y: number; draw: () => void }[] = [];
     const ours = tribe.look as never;
-    const fogged = (x: number, y: number) => !!this.landSeen && !this.landSeen[Math.floor(y / CELL) * CELLS + Math.floor(x / CELL)];
+    const fogged = (x: number, y: number) => !!this.landSeen && !this.landSeen[Math.floor(y / CELL) * (is.n / CELL) + Math.floor(x / CELL)];
     // The locals: another kind altogether (other legs, other jaws, the other diet).
     const p = tribe.look.parts;
     const theirs = { parts: { legs: p.legs === 'hooves' ? 'runner' : 'hooves', mouth: p.mouth === 'tusks' ? 'fangs' : 'tusks', back: p.back === 'spines' ? 'sail' : 'spines', eyes: 'periscope' }, diet: tribe.look.diet === 'hunter' ? 'grazer' : 'hunter' } as never;
