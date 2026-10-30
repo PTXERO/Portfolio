@@ -18,7 +18,7 @@ export const CHANNELS: { id: Channel; label: string }[] = [
 
 const KEY = 'ooze-to-orbit/sound';
 /** Bumped when a sound file changes, so phones don't keep the old one. */
-const SFX_V = 2;
+const SFX_V = 3;
 const DEFAULTS: Record<Channel, number> = { master: 0.8, ambience: 0.6, effects: 0.7 };
 
 /** The loops are padded either side (so the mp3's own gaps fall outside them): where each
@@ -49,7 +49,11 @@ export const volumes: Record<Channel, number> = (() => {
 let ctx: AudioContext | null = null;
 let master: GainNode;
 const bus = {} as Record<Exclude<Channel, 'master'>, GainNode>;
-type Sound = 'underwater' | 'river' | 'drops' | 'pop' | 'thunder0' | 'thunder1' | 'thunder2' | 'thunder3';
+type Sound = 'underwater' | 'river' | 'drops' | 'pop' | 'thunder0' | 'thunder1' | 'thunder2' | 'thunder3' | Cue;
+/** One-off sounds for moments: an organelle found, a rare microbe gulped down (three glugs),
+ * one turning up, a new habitat opening, and the boom from the Soup into the Cell. */
+export type Cue = 'shine' | 'glug0' | 'glug1' | 'glug2' | 'magic' | 'ascend' | 'boom';
+const CUES: Cue[] = ['shine', 'glug0', 'glug1', 'glug2', 'magic', 'ascend', 'boom'];
 const buffers: Partial<Record<Sound, AudioBuffer>> = {};
 /** The thunders, evened out (they were recorded at very different loudness). */
 const THUNDER_GAIN = [1, 1, 1.3, 1];
@@ -114,7 +118,7 @@ export function unlockSound(): void {
   shallow.frequency.value = 2200;
   shallow.connect(sky);
   applyVolumes();
-  for (const name of ['pop', 'drops', 'thunder0', 'thunder1', 'thunder2', 'thunder3', 'underwater', 'river'] as const) {
+  for (const name of ['pop', 'drops', ...CUES, 'thunder0', 'thunder1', 'thunder2', 'thunder3', 'underwater', 'river'] as const) {
     fetch(`${import.meta.env.BASE_URL}sfx/${name}.mp3?v=${SFX_V}`)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
       .then((a) => new Promise<AudioBuffer>((ok, no) => ctx!.decodeAudioData(a, ok, no)))
@@ -177,6 +181,27 @@ export function tapSound(): void {
   g.gain.value = 0.55 + Math.random() * 0.45;
   src.connect(g).connect(bus.effects);
   src.start(0, at, len);
+}
+
+/** A moment's sound, at a loudness (under the Effects volume). */
+export function cue(name: Cue, level = 1): void {
+  const buf = buffers[name];
+  if (!ctx || !buf || ctx.state !== 'running') return;
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const g = ctx.createGain();
+  g.gain.value = level;
+  src.connect(g).connect(sky);
+  src.start();
+}
+
+/** A rare microbe gulped down: one of the three glugs, a touch higher or lower. */
+let lastGlug = -1;
+export function glug(): void {
+  let i = Math.floor(Math.random() * 3);
+  if (i === lastGlug) i = (i + 1) % 3;
+  lastGlug = i;
+  cue(`glug${i}` as Cue, 0.9);
 }
 
 /** A button pressed: a pop, a touch higher or lower each time. */

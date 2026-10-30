@@ -32,6 +32,7 @@ import {
   forage,
   goalProgress,
   goalShown,
+  habitatUnlocked,
   moveHabitat,
   nextReaction,
   visitStage,
@@ -52,7 +53,7 @@ import { Scene } from './scene/scene';
 import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
 import { playCrossing } from './ui/crossing';
-import { popSound, setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
+import { cue, glug, popSound, setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
 import { miniIcon } from './scene/creatureLook';
 import { glyph, panWeb, pickIdea, webTransform, webView, zoomWeb } from './ui/tribePanels';
 import { record } from './economy/chronicle';
@@ -266,6 +267,7 @@ function showDiscovery(): void {
   const r = reactions(state.current).find((x) => x.id === id);
   if (!r) return;
   scene.discovery();
+  if (STAGES[state.current].habitats) cue('shine');
   const n = state.stages[state.current].discovered.indexOf(id) + 1;
   const kind = STAGES[state.current].habitats ? 'New organelle' : 'New reaction';
   showModal(`<p class="label dim">${kind} · ${n} of ${reactions(state.current).length}</p>
@@ -1118,6 +1120,7 @@ function closeEnding(): void {
 function moveOn(): void {
   const was = state.current;
   if (evolve(state)) {
+    if (was === 'soup') cue('boom');
     record(state, `The ${STAGES[was].name} was over.`, was);
     record(state, STAGES[state.current].tribal ? 'The spear fell, and the world burned.' : `The ${STAGES[state.current].name} began.`);
     scene.evolveFlash();
@@ -1161,9 +1164,13 @@ function pondEvents(): void {
     else if (e.type === 'engulf') {
       const got = engulf(state, state.current, e.id);
       const r = reactions(state.current).find((x) => x.id === e.id);
+      if (got) glug();
       if (got === 'found') scene.float(e.x, e.y - 10, 'engulfed!', '#f5c45e');
       else if (got === 'caught') scene.float(e.x, e.y - 10, `caught ${state.stages[state.current].captured[e.id]} of ${r?.captures ?? 1}`, '#f5c45e');
-    } else if (e.type === 'rare') scene.float(e.x, e.y - 10, 'a rare microbe!', '#f5c45e');
+    } else if (e.type === 'rare') {
+      scene.float(e.x, e.y - 10, 'a rare microbe!', '#f5c45e');
+      cue('magic', 0.7);
+    }
     else if (e.type === 'hit') scene.float(e.x, e.y - 10, ['thwack', 'ow!', 'scram!'][Math.floor(Math.random() * 3)], '#f2ead7');
     else if (e.type === 'court') {
       const name = court(state);
@@ -1542,12 +1549,15 @@ function act(el: HTMLElement): void {
         ending.classList.remove('in');
         setTimeout(() => (ending.hidden = true), 600);
         break;
-      case 'evolve':
+      case 'evolve': {
+        const was = state.current;
         if (evolve(state)) {
+          if (was === 'soup') cue('boom');
           scene.evolveFlash();
           pokedThisStage = false;
         }
         break;
+      }
       case 'dismiss':
         modal.hidden = true;
         break;
@@ -1757,6 +1767,23 @@ new ResizeObserver(() => {
 
 let last = performance.now();
 let acc = 0;
+/** A habitat newly open (Depths, Vents): a rising chime, and its name. */
+let openSeen = '';
+function habitatsOpened(): void {
+  const habitats = STAGES[state.current].habitats;
+  if (!habitats) return void (openSeen = '');
+  const open = habitats.filter((h) => habitatUnlocked(state, state.current, h));
+  const key = `${state.current}:${open.length}`;
+  const [stage, was] = openSeen.split(':');
+  if (stage === state.current && open.length > Number(was)) {
+    cue('ascend');
+    const h = open[open.length - 1];
+    const r = stageEl.getBoundingClientRect();
+    scene.float(r.width / 2, r.height * 0.45, `The ${h.name} are open`, '#9ad8d4');
+  }
+  openSeen = key;
+}
+
 function frame(now: number): void {
   requestAnimationFrame(frame);
   acc += now - last;
@@ -1767,6 +1794,7 @@ function frame(now: number): void {
   scene.draw(state, dt);
   pondEvents();
   syncCine();
+  habitatsOpened();
   renderSpellbar();
   renderCrisis();
   soundFrame(state);
