@@ -416,10 +416,10 @@ export function newShore(tribe: TribeState): ShoreState {
     terrain: TERRAIN_V,
     day: 0,
     clock: 0,
-    // What they kept from the crossing (the raft itself is still on the beach: its wood is
-    // there to be taken).
-    food: 12,
-    wood: 8,
+    // Nothing: what they had went in the crossing. The raft's on the beach, though, and its
+    // wood is the hearth.
+    food: 0,
+    wood: 0,
     people,
     nextId: people.length,
     births: 0,
@@ -629,6 +629,9 @@ export function workPlan(s: ShoreState): { food: number; wood: number; eat: numb
   // The land round the village feeds only so many: past that, each more brings in less.
   const land = landFor(s);
   const working = food <= land ? food : land + (food - land) * 0.15;
+  // Before there's a hearth there's no village yet: no one gathers, and no one goes hungry
+  // (they're still living on what the crossing left them).
+  if (!count(s, 'hearth')) return { food: 0, wood: 0, eat: 0, foodRate: 0, woodRate: 0, land };
   return { food, wood, eat, foodRate: working * foodEach, woodRate: wood * woodEach, land };
 }
 

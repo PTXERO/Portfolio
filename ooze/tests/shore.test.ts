@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createState } from '../src/economy/state';
-import { answerJoin, boosts, build, setTax, workPlan, buildCost, buildsOpen, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { answerJoin, boosts, build, setTax, takeRaft, workPlan, buildCost, buildsOpen, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import type { TribeState } from '../src/economy/types';
 
@@ -62,6 +62,7 @@ describe('New Shore', () => {
     const s = shoreOf(state)!;
     const marks: string[] = [];
     let hundred = -1;
+    takeRaft(state);
     for (let sec = 0; sec < 6 * 3600; sec += 10) {
       shoreTick(state, 10);
       if (sec % 60 === 0) autobuild(state);
@@ -240,6 +241,7 @@ describe('Won over with no room', () => {
   it('a village too big for its food starves, more the shorter it is', () => {
     const state = fresh();
     const s = shoreOf(state)!;
+    now(state, 'hearth');
     for (let i = 0; i < 100; i++) s.people.push({ id: 100 + i, name: 'X' + i, born: -10 });
     // (More than the land round a small camp can feed.)
     expect(workPlan(s).foodRate).toBeLessThan(workPlan(s).eat);

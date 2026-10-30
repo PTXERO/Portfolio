@@ -129,6 +129,10 @@ const LEANS: { id: Lean; name: string }[] = [
 function workCard(s: ShoreState): string {
   const plan = workPlan(s);
   const kids = s.people.length - plan.food - plan.wood;
+  if (!count(s, 'hearth')) {
+    return `<div class="card px-box"><div class="info"><div class="name">No village yet</div>
+      <div class="sub">They sit by the raft, living on what the crossing left them. Nothing's gathered until there's a hearth: break up the raft for its wood, and build one.</div></div></div>`;
+  }
   return `<div class="card px-box lean"><div class="info"><div class="name">What they work at</div>
     <div class="sub">${plan.food} gathering food, ${plan.wood} cutting wood${kids > 0 ? `, ${kids} too young` : ''}. They work it out for themselves; you set what they lean toward.</div>
     <div class="sub${plan.food > plan.land ? ' starving' : ' dim'}">The land round the village feeds ${plan.land} gatherers${plan.food > plan.land ? `: ${plan.food - plan.land} more than it can, and they find little` : ''}. Gathering camps and weirs let it feed more.</div></div>

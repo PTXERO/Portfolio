@@ -1225,7 +1225,8 @@ function renderHint(): void {
     else if (state.stages.tribal.tribe?.ex && !Object.keys(state.stages.tribal.tribe.ex.casts ?? {}).length && !casting) text = 'They live or die on their own. Work miracles to save them';
   } else if (state.current === 'shore') {
     const s = shoreOf(state);
-    if (s && !s.built.length && !s.building) text = 'Build the hearth (in the Build tab)';
+    if (s && !s.raftTaken && !s.built.length && !s.building) text = 'Break up the raft for wood (in the Build tab)';
+    else if (s && !s.built.length && !s.building) text = 'Build the hearth (in the Build tab)';
     else if (!pokedThisStage) text = 'Tap the land to walk · pinch to zoom';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
