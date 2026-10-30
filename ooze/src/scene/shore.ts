@@ -317,7 +317,7 @@ export class ShoreScene extends RangeScene {
         });
       }
     }
-    // The scouts, out in the fog for you (seen wherever they are, a pennant over them).
+    // The scouts, out in the fog for you (seen wherever they are).
     for (const sc of s.scouts ?? []) {
       const moving = !!sc.to;
       const x = sc.at.x;
@@ -332,14 +332,7 @@ export class ShoreScene extends RangeScene {
       const left = (sc.to?.x ?? x) < x;
       sprites.push({
         y,
-        draw: () => {
-          this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 7) % 2 : 0, hop: moving ? Math.abs(Math.sin(t * 7)) * 1.5 : 0 });
-          const fy = Math.round(Y) - (close ? 6 * z + 6 : 6);
-          b.fillStyle = PAL.k;
-          b.fillRect(Math.round(X), fy, 1, 4);
-          b.fillStyle = PAL.y;
-          b.fillRect(Math.round(X) + 1, fy, 2, 2);
-        },
+        draw: () => this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 7) % 2 : 0, hop: moving ? Math.abs(Math.sin(t * 7)) * 1.5 : 0 }),
       });
     }
     // Out and about, they squeak (heard up close, quieter as the view pulls back).
