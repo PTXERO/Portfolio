@@ -80,11 +80,24 @@ events. Full Trust: they move in.
 
 ### 4.4 Raiding and defending
 
-- **Raids** play out over a short siege bar; win and you take their land and stores, lose and
-  you lose people.
+**Battles are simple and automatic, in the spirit of Kairosoft's battle sims** — readable at a
+glance and cheap to run (no heavy simulation, no unit control):
+
+- Two small lines of fighters face each other, side-on; they trade blows over a few rounds
+  while health bars drain; the side with the numbers usually wins, with a little luck.
+- A side's strength is just: fighters × their arms (the War lane's tier) × the kind's strength
+  (tusked kinds hit harder…) × walls (defending) — plus small bonuses (the chief leading, a
+  war song, Glory).
+- Losses come out of each side in proportion to the blows taken; the loser breaks and runs (or,
+  if it's a fight to the death, falls).
+- One active touch at most: a **rally** tap while you watch. Nothing else to manage.
+
+- **Raids**: win and you take their land and stores (and see §4.7: their people, their ideas);
+  lose and you lose fighters.
 - **Defense**: raids are announced with a countdown (like the Extinction's crises) — time to
   raise walls, arm defenders, pull people in.
-- Prey win against predators by holding enough raids off, then attacking with numbers.
+- Prey beat predators **by numbers**: hold enough raids off, then attack with a much bigger
+  force.
 
 ### 4.5 New kinds
 
@@ -92,7 +105,21 @@ Kinds who join stay visibly different in the village (other legs, jaws, colours)
 brings a strength (tusked kinds make warriors, keen-eyed kinds scout further, seafaring kinds
 build boats…). Who joins in Phase 1 tilts the culture in Phase 2.
 
-### 4.6 The chief
+### 4.6 Becoming another people
+
+You can't *win over* a village of another diet by diplomacy — but your people can still change:
+
+- **Taking people**: survivors of a village you defeat can be taken in, and they bring their
+  ways with them.
+- **Taking ideas**: a defeated village's ideas can be taken too (hunters learning to farm from
+  the grazers they beat; grazers taking a predator's weapons).
+
+Together these build a **diet leaning**. Past a threshold the culture's diet shifts (hunters
+who take in enough grazers and their farming become omnivores…): everything already learned is
+kept, and the new diet's road opens. **Cannibals never change** — that's been for good since
+the Extinction.
+
+### 4.7 The chief
 
 You play the tribe's leader (one of the four, then their heirs), walking the map like the
 Creature. Being there counts: gifts brought in person count double; raids you lead hit
@@ -185,7 +212,7 @@ First pass of ideas per Age (to be expanded per diet, §7):
 | Clay & Field | Ancestors; the four as legends | Seasons kept; harvest festival | Pottery; weaving | Tallies; signs on pots | Council; laws spoken | Marriage between kinds | Palisade; spears | Longhouse; standing stones |
 | Bronze | Heroes of the island wars | Priests of the Far Voice | Copper → bronze; the wheel | Picture marks; trade tallies | Chiefs and households; tribute | Clans by kind; guild lines | Bronze arms; shields | Chief's hall; first shrine |
 | Iron | Epics; the island's story | Temples; the calendar | Iron; the plough; ships | Written law; scribes | One council over many villages; roads | Citizens and strangers; a common tongue | Iron arms; forts | Roads; harbour |
-| Republic | Myth made history | State festivals; oaths | Concrete; arches; coin | Schools; records; maps | Assembly / senate; magistrates | One people of many kinds | Drilled army (legions / chariots / walled towns / terror) | Forum, Circus, or League city; aqueduct |
+| Republic | Myth made history | State festivals; oaths | Concrete; arches; coin | Schools; records; maps | Assembly / senate; magistrates | One people of many kinds | Drilled army (legions / chariots / walled towns / terror) | Forum, Arena, or League city; aqueduct |
 
 ### 6.6 Settling the island
 
@@ -204,14 +231,15 @@ signature mechanic.
 - **Food**: hunting only, never farming: tracking → pack hunts → drives → game runs (managing
   the island's wild herds) → great hunts.
 - **Glory** (signature): earned only by aggression (raids won, great hunts, champions); feeds
-  War and Stories and sets off festivals. **Racing**: hunt-festival races grow into
-  beast-riding, then chariot races, and in the end the **Circus**.
+  War and Stories and sets off festivals. **Racing**: the hunters' festivals are contests —
+  foot races grow into beast-riding, then chariot races, and in the end **the Arena**: a great
+  stadium for staged hunts and races, where their love of the chase peaks.
 - **War**: ambush → war bands → swift raiders → chariots. Raids recharge faster; every win
   feeds Glory.
 - **Rule**: the strongest leads; challenges settled by contest.
 - **Kin**: winning villages over is slow, but captives can become kin in time.
 - **Weakness**: no farming; food rises and falls with the hunt unless the game runs are tended.
-- **Republic**: the Circus.
+- **Republic**: the Arena.
 
 ### Omnivores — the balance
 - **Food**: farming and ranching only (no hunting, no foraging): fields → herds → rotation →
@@ -282,11 +310,12 @@ your people.
 ## 10. Open questions
 
 1. Phase 1's buildings and jobs in detail (what the village builds, what each does).
-2. Raids and defense in detail (strength, siege bar, losses; what "by numbers" means).
+2. Battle numbers (Kairosoft-style, §4.4): strengths, rounds, losses, how big "by numbers" is.
 3. The Far Voice's powers and whispers.
 4. The island: POIs, rival villages (kinds, sizes, placement), the map at 8×.
 5. The full idea list for each Age, per diet (the table in §6.5 is the shared skeleton).
-6. Can a culture ever take in another diet late on (e.g. omnivores taking in grazer refugees
-   through a Kin idea), or is the diet rule absolute all era? *(leaning: absolute)*
+6. ~~Can a culture take in another diet?~~ **Decided** (§4.6): not by diplomacy, but by taking
+   people and ideas from defeated villages, until the diet shifts. Still to set: the
+   thresholds, and which shifts are possible (e.g. can grazers ever become hunters?).
 7. Exact pacing numbers.
-8. "Racing" for hunters: read as races growing into the Circus — confirm.
+8. ~~"Racing" for hunters~~ **Decided**: festival contests growing into the Arena (§7).
