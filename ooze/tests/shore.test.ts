@@ -97,12 +97,12 @@ describe('Winning over', () => {
     for (let i = 0; i < 3; i++) now(state, 'hut');
     s.food = 1000;
     s.chiefAt = { x: s.hearth.x, y: s.hearth.y };
-    expect(gift(state, v.id)).toBe(6);
+    expect(gift(state, v.id)).toBe(4);
     s.chiefAt = { x: v.x, y: v.y };
     s.chiefTo = null;
-    expect(gift(state, v.id)).toBe(12);
+    expect(gift(state, v.id)).toBe(8);
     const before = s.people.length;
-    for (let i = 0; i < 20 && !v.joined; i++) gift(state, v.id);
+    for (let i = 0; i < 30 && !v.joined; i++) gift(state, v.id);
     expect(v.joined).toBe(true);
     expect(s.people.length).toBe(before + v.pop);
     expect(s.people.filter((p) => p.kind === v.id).length).toBe(v.pop);
@@ -120,7 +120,7 @@ describe('Winning over', () => {
     for (let i = 0; i < 12; i++) now(state, 'hut');
     s.chiefAt = { x: v.x + 3, y: v.y + 3 };
     s.chiefTo = null;
-    shoreTick(state, DAY_SEC * 40);
+    shoreTick(state, DAY_SEC * 50);
     expect(v.joined).toBe(true);
   });
 });

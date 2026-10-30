@@ -21,7 +21,7 @@ export const DAY_SEC = 120;
 /** Days in a season (the year is four, from the spring they landed in). */
 export const SEASON_DAYS = 4;
 /** Days a child takes to grow up (and start working). */
-export const GROW_DAYS = 9;
+export const GROW_DAYS = 10;
 /** What a day's work brings in, each worker, before bonuses; and what each eats a day. */
 const FOOD_PER = 2.5;
 const WOOD_PER = 3;
@@ -29,7 +29,7 @@ const EAT = 1;
 const EAT_CHILD = 0.5;
 /** Food a birth takes, and how often a pair of adults has a child (a day) with all well. */
 const BIRTH_FOOD = 12;
-const PAIR_RATE = 0.2;
+const PAIR_RATE = 0.15;
 /** What's kept with nothing built to keep it in. */
 const FOOD_CAP = 40;
 const WOOD_CAP = 50;
@@ -42,9 +42,9 @@ const CHIEF_SPEED = 5;
 const HOME_SIGHT = 22;
 /** Winning a village over: trust a gift brings (twice as much brought by the chief in person),
  * a day of the chief's company, and the grazers' Welcome (kin drifting toward them). */
-const GIFT_TRUST = 6;
-const VISIT_TRUST = 3;
-const WELCOME_TRUST = 1;
+const GIFT_TRUST = 4;
+const VISIT_TRUST = 2;
+const WELCOME_TRUST = 0.7;
 /** How near the chief must be to count as visiting (tiles). */
 export const VISIT_NEAR = 14;
 /** Scouts: how fast they go and how far they see (tiles). */
@@ -543,7 +543,7 @@ export function chiefNear(s: ShoreState, v: Village): boolean {
 
 /** Food a gift takes: more for a bigger village. */
 export function giftCost(v: Village): number {
-  return Math.ceil(6 + v.pop * 0.5);
+  return Math.ceil(10 + v.pop * 0.8);
 }
 
 /** Whether they can be won over now: found, kin, not yet joined. */
