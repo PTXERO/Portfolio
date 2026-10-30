@@ -1,4 +1,4 @@
-// Sound: the underwater hum of the Soup and the Cell (a seamless loop; the Depths have a slow drum instead), a water drop for every tap in the Soup
+// Sound: the underwater hum of the Soup and the Cell (a seamless loop; the Depths have faint music instead), a water drop for every tap in the Soup
 // and the Cell (one of many, never the same twice running), and the rush of the whirlpool,
 // as loud as it's strong (silent when there isn't one). The drops and the rush are heard as
 // if from under the water: muffled, and ringing on in a long reverb. The Menu has a volume
@@ -18,7 +18,7 @@ export const CHANNELS: { id: Channel; label: string }[] = [
 
 const KEY = 'ooze-to-orbit/sound';
 /** Bumped when a sound file changes, so phones don't keep the old one. */
-const SFX_V = 5;
+const SFX_V = 6;
 const DEFAULTS: Record<Channel, number> = { master: 0.8, ambience: 0.6, effects: 0.7 };
 
 /** The loops are padded either side (so the mp3's own gaps fall outside them): where each
@@ -26,8 +26,8 @@ const DEFAULTS: Record<Channel, number> = { master: 0.8, ambience: 0.6, effects:
 const LOOPS = {
   underwater: { pad: 0.25, len: 116.048 },
   river: { pad: 0.25, len: 41.0 },
-  // (Cut on the beat: the drum carries on across the seam.)
-  depths: { pad: 0.25, len: 108.4977 },
+  // Music, drowned in a long reverb (baked in, wrapping round so the seam rings over too).
+  depths: { pad: 0.25, len: 132.6 },
 };
 type Loop = keyof typeof LOOPS;
 /** The drops, laid end to end in one file: [start, length] seconds. */
@@ -270,11 +270,11 @@ function loopTo(name: Loop, level: number, out: GainNode, fade: number): void {
 export function soundFrame(state: GameState): void {
   if (!ctx) return;
   const soup = state.current === 'soup';
-  // The Cell's Depths have their own sound: a slow drum in the dark. Elsewhere under the water,
-  // the hum. (Each fades over a couple of seconds as you move between them.)
+  // The Cell's Depths have their own sound: faint music, far off in the dark, barely there.
+  // Elsewhere under the water, the hum. (Each fades over a couple of seconds between them.)
   const depths = state.current === 'cell' && state.stages.cell.habitat === 'depths';
   loopTo('underwater', (soup || state.current === 'cell') && !depths ? 1 : 0, bus.ambience, 0.8);
-  loopTo('depths', depths ? 0.7 : 0, bus.ambience, 0.8);
+  loopTo('depths', depths ? 0.2 : 0, bus.ambience, 0.8);
   const swirl = soup && state.swirl > 0.02 ? Math.min(1, state.swirl) : 0;
   loopTo('river', swirl * 0.8, bus.effects, swirl > 0 ? 0.15 : 0.3);
 }
