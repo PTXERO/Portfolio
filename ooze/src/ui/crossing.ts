@@ -53,7 +53,8 @@ function within(day: number, [a, b]: [number, number], edge = 1): number {
   return Math.min(1, (day - a) / edge, (b - day) / edge);
 }
 
-export function playCrossing(look: CreatureLook, onDone: () => void): void {
+/** (`from`: the day to start on; for looking at one part of it while working on it.) */
+export function playCrossing(look: CreatureLook, onDone: () => void, from = 0): void {
   const cv = document.createElement('canvas');
   cv.id = 'strike';
   const W = Math.ceil(window.innerWidth / 3);
@@ -74,15 +75,23 @@ export function playCrossing(look: CreatureLook, onDone: () => void): void {
   const horizon = Math.round(H * 0.46);
   const sea = b.createImageData(W, H - horizon);
   const stars = Array.from({ length: 70 }, () => ({ x: Math.random() * W, y: Math.random() * horizon * 0.95, tw: Math.random() * 6 }));
-  // Stars they've never seen: a shape of bright ones, high in the middle of the sky.
-  const strange = Array.from({ length: 9 }, (_, i) => {
-    const a = (i / 9) * Math.PI * 2;
-    return { x: W * 0.5 + Math.cos(a) * W * (0.13 + (i % 3) * 0.05), y: horizon * 0.42 + Math.sin(a) * horizon * 0.16 };
-  });
+  // Stars they've never seen, high in the middle of the sky: a shelter, and a fire beside it
+  // (of what's ahead: somewhere to stay). Cool stars for the hut, warm ones for the flame;
+  // each run of points is joined, faintly, like a star chart.
+  const u = W * 0.05;
+  const at = (x: number, y: number) => ({ x: W * 0.5 + x * u, y: horizon * 0.42 + y * u });
+  const hut = [
+    [at(-2.6, -0.5), at(-1.0, -2.2), at(0.6, -0.5)],
+    [at(-2.2, -0.5), at(-2.2, 1.4), at(0.2, 1.4), at(0.2, -0.5)],
+    [at(-1.3, 1.4), at(-1.3, 0.4), at(-0.7, 0.4), at(-0.7, 1.4)],
+  ];
+  const fire = [[at(1.3, 1.4), at(1.6, 0.3), at(1.9, 0.9), at(2.2, -0.4), at(2.5, 0.7), at(2.8, 0.3), at(2.9, 1.4), at(1.3, 1.4)]];
+  /** Where a star sits (the ends and corners of the shapes; some brighter than others). */
+  const strange = [...hut, ...fire].flatMap((run, r) => run.map((p, i) => ({ ...p, warm: r >= hut.length, big: (i + r) % 3 === 0 })));
   const drops = Array.from({ length: 160 }, () => ({ x: Math.random() * W, y: Math.random() * H, v: 130 + Math.random() * 90 }));
   const start = performance.now();
   let last = start;
-  let days = 0;
+  let days = from;
   let zoom = 1;
   let flash = 0;
   let birdAt = -1;
@@ -135,18 +144,27 @@ export function playCrossing(look: CreatureLook, onDone: () => void): void {
         b.fillRect(Math.round(s.x), Math.round(s.y), 1, 1);
       }
       if (strangeK > 0) {
-        // Ones they've never seen: brighter, in a shape, faintly joined.
-        b.fillStyle = `rgba(160, 210, 255, ${dark * strangeK * 0.4})`;
-        for (let i = 0; i < strange.length; i++) {
-          const p = strange[i];
-          const q = strange[(i + 1) % strange.length];
-          for (let k = 0; k <= 1; k += 0.06) b.fillRect(Math.round(p.x + (q.x - p.x) * k), Math.round(p.y + (q.y - p.y) * k), 1, 1);
-        }
+        // Ones they've never seen: brighter, in shapes, faintly joined.
+        const joins = (runs: { x: number; y: number }[][], col: string) => {
+          b.fillStyle = col;
+          for (const run of runs) {
+            for (let i = 0; i + 1 < run.length; i++) {
+              const p = run[i];
+              const q = run[i + 1];
+              const n = Math.ceil(Math.hypot(q.x - p.x, q.y - p.y));
+              for (let k = 0; k <= n; k += 2) b.fillRect(Math.round(p.x + ((q.x - p.x) * k) / n), Math.round(p.y + ((q.y - p.y) * k) / n), 1, 1);
+            }
+          }
+        };
+        joins(hut, `rgba(150, 200, 255, ${dark * strangeK * 0.35})`);
+        joins(fire, `rgba(255, 170, 110, ${dark * strangeK * 0.35})`);
         for (const p of strange) {
-          const tw = 0.75 + 0.25 * Math.sin(t * 3 + p.x);
-          b.fillStyle = `rgba(220, 240, 255, ${dark * strangeK * tw})`;
-          b.fillRect(Math.round(p.x) - 1, Math.round(p.y), 3, 1);
-          b.fillRect(Math.round(p.x), Math.round(p.y) - 1, 1, 3);
+          const tw = 0.7 + 0.3 * Math.sin(t * 3 + p.x * 0.7 + p.y);
+          b.fillStyle = p.warm ? `rgba(255, 200, 140, ${dark * strangeK * tw})` : `rgba(220, 240, 255, ${dark * strangeK * tw})`;
+          if (p.big) {
+            b.fillRect(Math.round(p.x) - 1, Math.round(p.y), 3, 1);
+            b.fillRect(Math.round(p.x), Math.round(p.y) - 1, 1, 3);
+          } else b.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
         }
       }
     }
