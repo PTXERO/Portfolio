@@ -16,6 +16,17 @@ const REL_LINE = {
   enemy: 'Enemies. Nothing will ever change that.',
 } as const;
 const REL_NAME = { kin: 'Kin', prey: 'Prey', predator: 'Predators', enemy: 'Enemies' } as const;
+const WHERE: Record<string, string> = {
+  river: 'They live along the river, in huts up on stilts.',
+  lake: 'They live by the lake, their huts up on stilts at the water.',
+  desert: 'They live out in the desert, in low tents of hide.',
+  scrub: 'They live in the dry scrub country.',
+  forest: 'They live deep in the woods, in domes of bark and leaves.',
+  meadow: 'They live out on the open grass.',
+  mountain: 'They live up in the hills, in huts of stone.',
+  coast: 'They live on the shore, in shelters of driftwood.',
+  marsh: 'They live in the marsh, among the reeds.',
+};
 const DIET_NAME: Record<string, string> = { grazer: 'Grazers', hunter: 'Hunters', omnivore: 'Omnivores' };
 
 /** The Village tab: the village itself, or everyone in it. */
@@ -351,7 +362,7 @@ export function villageCard(s: ShoreState, v: Village): string {
       </div>`
     : `<p class="dim tiny">(Raiding and defending come next.)</p><button class="px-btn gold" data-act="dismiss">OK</button>`;
   return `<p class="label dim">${REL_NAME[rel]}</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)}</h3></div>
-    <p>${v.pop} of them, ${v.cannibal ? 'eaters of their own kind' : `${(DIET_NAME[v.diet] ?? v.diet).toLowerCase()}`}, another kind altogether.</p>
+    <p>${v.pop} of them, ${v.cannibal ? 'eaters of their own kind' : `${(DIET_NAME[v.diet] ?? v.diet).toLowerCase()}`}, another kind altogether.${v.habitat ? ` ${WHERE[v.habitat]}` : ''}</p>
     <p class="dim">${REL_LINE[rel]}</p>
     ${actions}`;
 }

@@ -5,7 +5,7 @@
 
 import { PAL } from '../art/sprites';
 import { Biome, CELL, isLand, type Pt } from '../economy/island';
-import { DAY_SEC, terrainReady, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
+import { DAY_SEC, terrainReady, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
 import type { GameState } from '../economy/types';
 import type { BuildId } from '../content/shore';
 import { RangeScene } from './range';
@@ -734,7 +734,7 @@ export class ShoreScene extends RangeScene {
     // Their huts (in their own colours), round their fire.
     const huts = Math.max(2, Math.round(v.pop / 5));
     if (close) {
-      const thatch = v.look.hue?.[0] ?? '#8a6a3a';
+      const kind = v.habitat ?? 'meadow';
       for (let k = 0; k < huts; k++) {
         const a = k * 2.4 + v.id;
         const rr = 4 + (k % 3) * 2.5;
@@ -744,14 +744,7 @@ export class ShoreScene extends RangeScene {
         const HY = Math.round(this.py(hx, hy));
         sprites.push({
           y: hy,
-          draw: () => {
-            b.fillStyle = thatch;
-            b.fillRect(HX - 4 * z, HY - 3 * z, 8 * z, 3 * z);
-            b.fillRect(HX - 3 * z, HY - 5 * z, 6 * z, 2 * z);
-            b.fillRect(HX - 2 * z, HY - 6 * z, 4 * z, z);
-            b.fillStyle = '#2a1e18';
-            b.fillRect(HX - z, HY - 2 * z, 2 * z, 2 * z);
-          },
+          draw: () => drawHut(b, kind, HX, HY, z, v.look.hue),
         });
       }
       sprites.push({
@@ -809,5 +802,85 @@ export class ShoreScene extends RangeScene {
         b.fillRect(X + 1, fy + 3, 4, 1);
       },
     });
+  }
+}
+
+/** Another village's hut, as where they live makes it: up on stilts by water, hide tents in the
+ * desert, stone in the hills, leaf and bark in the woods, driftwood on the shore, thatch on the
+ * open grass. (Their own colours in the trim.) */
+function drawHut(b: CanvasRenderingContext2D, kind: Habitat, X: number, Y: number, z: number, hue?: [string, string]): void {
+  const r = (x: number, y: number, w: number, h: number, c: string) => {
+    b.fillStyle = c;
+    b.fillRect(X + x * z, Y + y * z, w * z, h * z);
+  };
+  const trim = hue?.[1] ?? '#c8a060';
+  switch (kind) {
+    case 'river':
+    case 'lake':
+    case 'marsh':
+      // On stilts over the wet ground, a reed roof.
+      r(-3, -2, 1, 2, '#4a3828');
+      r(2, -2, 1, 2, '#4a3828');
+      r(-4, -3, 8, 1, '#6a5038');
+      r(-3, -6, 6, 3, kind === 'marsh' ? '#7a7a4a' : '#8a7a5a');
+      r(-2, -7, 4, 1, kind === 'marsh' ? '#6a6a3a' : '#7a6a4a');
+      r(-1, -5, 2, 2, '#2a1e18');
+      r(-4, -6, 1, 1, trim);
+      break;
+    case 'desert':
+    case 'scrub':
+      if (kind === 'desert') {
+        // A low hide tent, its poles crossed at the top.
+        r(-4, -2, 8, 2, '#c8a070');
+        r(-3, -3, 6, 1, '#c8a070');
+        r(-2, -4, 4, 1, '#b8905a');
+        r(-1, -5, 1, 1, '#5a4030');
+        r(1, -5, 1, 1, '#5a4030');
+        r(-1, -2, 2, 2, '#3a2818');
+        r(-4, -2, 1, 1, trim);
+      } else {
+        r(-4, -3, 8, 3, '#a8905a');
+        r(-3, -5, 6, 2, '#a8905a');
+        r(-2, -6, 4, 1, '#8a7a4a');
+        r(-1, -2, 2, 2, '#2a1e18');
+        r(-4, -3, 8, 1, trim);
+      }
+      break;
+    case 'mountain':
+      // Round, of stacked stone, a smoke hole.
+      r(-4, -3, 8, 3, '#8a8a90');
+      r(-3, -5, 6, 2, '#9a9aa0');
+      r(-3, -2, 2, 1, '#6a6a70');
+      r(1, -4, 2, 1, '#6a6a70');
+      r(-1, -6, 2, 1, '#5a5a60');
+      r(-1, -2, 2, 2, '#1e1a18');
+      r(3, -3, 1, 1, trim);
+      break;
+    case 'forest':
+      // A dome of bark and leaves.
+      r(-4, -3, 8, 3, '#5a4030');
+      r(-3, -5, 6, 2, '#4a6a3a');
+      r(-2, -6, 4, 1, '#5a8a4a');
+      r(-3, -4, 1, 1, '#6a9a5a');
+      r(-1, -2, 2, 2, '#1e1610');
+      r(2, -5, 1, 1, trim);
+      break;
+    case 'coast':
+      // A lean-to of driftwood, grey from the sea.
+      r(-4, -1, 8, 1, '#8a8478');
+      r(-3, -2, 7, 1, '#9a948a');
+      r(-2, -3, 6, 1, '#8a8478');
+      r(-1, -4, 5, 1, '#9a948a');
+      r(2, -5, 1, 5, '#6a6458');
+      r(-3, -1, 2, 1, '#2a2420');
+      r(3, -5, 1, 1, trim);
+      break;
+    default:
+      // Thatch, on the open grass.
+      r(-4, -3, 8, 3, '#b08a4a');
+      r(-3, -5, 6, 2, '#b08a4a');
+      r(-2, -6, 4, 1, '#9a7a3a');
+      r(-1, -2, 2, 2, '#2a1e18');
+      r(-4, -3, 8, 1, trim);
   }
 }

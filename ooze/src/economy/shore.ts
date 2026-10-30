@@ -83,6 +83,8 @@ export interface Village {
   pop: number;
   /** Their kind: how they look. */
   look: CreatureLook;
+  /** Where they live (shapes their name, their kind, their huts). */
+  habitat?: Habitat;
   /** Seen by the chief (or the village's own lookouts). */
   found: boolean;
   /** Kin only: how far they've been won over (0 to 100), and whether they've joined you. */
@@ -221,22 +223,69 @@ function nameFrom(rand: () => number): string {
   return s[0].toUpperCase() + s.slice(1);
 }
 
-const LEGS = ['nubs', 'stubby', 'paddles', 'crabLegs', 'runner', 'webbedFeet', 'springLegs', 'climber', 'hooves', 'treeClaws'];
-const MOUTHS = ['gums', 'jaws', 'filterMouth', 'pincers', 'snout', 'beak', 'grinders', 'hookBeak', 'fangs', 'tusks'];
-const EYES = ['eyespots', 'lensEyes', 'periscope', 'stalkEyes', 'sideEyes', 'glowEyes', 'hawkEyes'];
-const BACKS = ['bare', 'spines', 'sail', 'shell', 'mossCoat', 'woollyCoat', 'leafFrill', 'stonePlates'];
-const TAILS = ['stub', 'finTail', 'clubTail', 'bushyTail', 'curlTail', 'spikeTail', 'crestTail'];
-/** Kinds' own colours (body, edge): never quite the diet colours the player's line wears. */
-const HUES: [string, string][] = [
-  ['#6a5a9a', '#b8a6f0'],
-  ['#3f7a4a', '#9ad88a'],
-  ['#8a4a6a', '#e89ac0'],
-  ['#4a6a8a', '#9ac8f0'],
-  ['#8a7a3a', '#e8d88a'],
-  ['#5a5a5a', '#c8c8c8'],
-  ['#9a5a2a', '#f0a868'],
-  ['#2a7a7a', '#7ae0d0'],
-];
+/** Where a village lives, which shapes everything about it: its name, its kind's body and
+ * colours, and its huts. */
+export type Habitat = 'river' | 'lake' | 'desert' | 'scrub' | 'forest' | 'meadow' | 'mountain' | 'coast' | 'marsh';
+
+interface HabitatDef {
+  /** Names: `the {word}folk`, `the {word} people`, `the {word} clan`. */
+  words: string[];
+  legs: string[];
+  backs: string[];
+  tails: string[];
+  eyes: string[];
+  /** Their colours (body, edge): a pair is picked. */
+  hues: [string, string][];
+  /** How well each diet does here (higher, likelier they settle here). */
+  likes: Record<string, number>;
+}
+
+export const HABITATS: Record<Habitat, HabitatDef> = {
+  river: { words: ['River', 'Ford', 'Rush', 'Stream'], legs: ['webbedFeet', 'paddles'], backs: ['bare', 'shell', 'barnacles'], tails: ['finTail', 'paddleTail', 'eelTail'], eyes: ['wetEyes', 'periscope'], hues: [['#2f5f8a', '#8ac0e8'], ['#2a7a7a', '#7ae0d0']], likes: { grazer: 2, omnivore: 3, hunter: 1 } },
+  lake: { words: ['Lake', 'Still-water', 'Mere', 'Pool'], legs: ['webbedFeet', 'paddles'], backs: ['bare', 'shell', 'backFin'], tails: ['eelTail', 'finTail'], eyes: ['wetEyes', 'stalkEyes'], hues: [['#2a6a7a', '#80d0d8'], ['#3a5a8a', '#a0b8f0']], likes: { grazer: 3, omnivore: 2, hunter: 1 } },
+  desert: { words: ['Dune', 'Sand', 'Dust', 'Sun'], legs: ['runner', 'springLegs', 'caveStriders'], backs: ['sail', 'spines', 'bare'], tails: ['feelerTail', 'balanceTail', 'spikeTail'], eyes: ['sideEyes', 'hawkEyes'], hues: [['#a8783a', '#f0c880'], ['#9a6a4a', '#e8b890']], likes: { grazer: 0.3, omnivore: 1, hunter: 3 } },
+  scrub: { words: ['Dry-grass', 'Thorn', 'Brush', 'Dust'], legs: ['hooves', 'runner', 'stubby'], backs: ['woollyCoat', 'spines', 'bare'], tails: ['stub', 'curlTail', 'balanceTail'], eyes: ['sideEyes', 'lensEyes'], hues: [['#8a7a4a', '#d8c88a'], ['#7a6a3a', '#c8b070']], likes: { grazer: 1.5, omnivore: 1.5, hunter: 2 } },
+  forest: { words: ['Wood', 'Bough', 'Fern', 'Leaf'], legs: ['treeClaws', 'climber', 'stubby'], backs: ['mossCoat', 'leafFrill', 'barkPlates'], tails: ['bushyTail', 'curlTail', 'balanceTail'], eyes: ['nightEyes', 'lensEyes', 'brightEyes'], hues: [['#3f6a3a', '#9ad88a'], ['#5a4a2a', '#b8a070']], likes: { grazer: 2, omnivore: 2, hunter: 3 } },
+  meadow: { words: ['Meadow', 'Long-grass', 'Field', 'Flower'], legs: ['hooves', 'runner', 'springLegs'], backs: ['woollyCoat', 'bare', 'leafFrill'], tails: ['stub', 'crestTail', 'bushyTail'], eyes: ['sideEyes', 'brightEyes'], hues: [['#8a7a2a', '#f0dc78'], ['#7a5a8a', '#d8b0f0']], likes: { grazer: 3, omnivore: 2, hunter: 1 } },
+  mountain: { words: ['Stone', 'Crag', 'High', 'Cliff'], legs: ['climber', 'caveStriders', 'hooves'], backs: ['stonePlates', 'woollyCoat', 'crystalSpines'], tails: ['clubTail', 'spikeTail', 'stub'], eyes: ['hawkEyes', 'farSight', 'nightEyes'], hues: [['#5a5a62', '#c0c4cc'], ['#4a4a5a', '#a8b0c8']], likes: { grazer: 1, omnivore: 1.5, hunter: 3 } },
+  coast: { words: ['Shore', 'Tide', 'Shell', 'Salt'], legs: ['crabLegs', 'paddles', 'suckerFeet'], backs: ['shell', 'barnacles', 'backFin'], tails: ['finTail', 'paddleTail'], eyes: ['stalkEyes', 'wetEyes'], hues: [['#9a4a4a', '#f0a090'], ['#8a5a6a', '#f0b0c0']], likes: { grazer: 1, omnivore: 3, hunter: 2 } },
+  marsh: { words: ['Reed', 'Fen', 'Bog', 'Mire'], legs: ['suckerFeet', 'webbedFeet'], backs: ['mossCoat', 'bare'], tails: ['reedTail', 'eelTail'], eyes: ['periscope', 'stalkEyes'], hues: [['#5a6a3a', '#b8c880'], ['#4a5a4a', '#a0b8a0']], likes: { grazer: 2, omnivore: 2.5, hunter: 1 } },
+};
+
+/** Mouths go with what they eat. */
+const MOUTHS: Record<string, string[]> = {
+  grazer: ['grinders', 'beak', 'snout', 'filterMouth', 'mudSifter'],
+  hunter: ['fangs', 'tusks', 'hookBeak', 'jaws', 'pincers'],
+  omnivore: ['jaws', 'beak', 'snout', 'mudSifter', 'pincers'],
+};
+
+/** What a place is, from what's round it: rivers and lakes first (they matter most to whoever
+ * lives there), then the sea, then whatever the ground mostly is. */
+export function habitatAt(is: Island, x: number, y: number): Habitat {
+  const N = is.n;
+  const c: number[] = new Array(13).fill(0);
+  let all = 0;
+  for (let j = -10; j <= 10; j += 2) {
+    for (let i = -10; i <= 10; i += 2) {
+      if (i * i + j * j > 100) continue;
+      const xx = Math.round(x + i);
+      const yy = Math.round(y + j);
+      if (xx < 0 || yy < 0 || xx >= N || yy >= N) continue;
+      c[is.biome[yy * N + xx]]++;
+      all++;
+    }
+  }
+  const share = (b: number) => c[b] / Math.max(1, all);
+  if (share(Biome.River) > 0.04) return 'river';
+  if (share(Biome.Lake) > 0.1) return 'lake';
+  if (share(Biome.Sea) + share(Biome.Deep) + share(Biome.Sand) > 0.25) return 'coast';
+  if (share(Biome.Marsh) > 0.25) return 'marsh';
+  if (share(Biome.Desert) > 0.35) return 'desert';
+  if (share(Biome.High) + share(Biome.Rock) + share(Biome.Peak) > 0.35) return 'mountain';
+  if (share(Biome.Scrub) > 0.35) return 'scrub';
+  if (share(Biome.Forest) > 0.4) return 'forest';
+  return 'meadow';
+}
 
 /** Who eats whom: hunters prey on omnivores, omnivores on grazers. */
 const CHAIN = ['hunter', 'omnivore', 'grazer'];
@@ -294,36 +343,59 @@ export function shoreWorld(seed: number, look: CreatureLook, cannibal: boolean):
     { diet: ours },
     { diet: others[Math.floor(rand() * others.length)] },
   ];
+  // Each settles where its diet does well (grazers on the grass and by water, hunters in the
+  // woods, the hills and the dry country, omnivores almost anywhere), spread out over the island
+  // (the first within sight of the beach: the smoke they saw).
   const villages: Village[] = [];
   const taken: Pt[] = [hearth];
+  const fine = (x: number, y: number) => {
+    for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) {
+      const b = at(x + i, y + j);
+      if (!isLand(is, x + i, y + j) || b === Biome.River || b === Biome.Peak) return false;
+    }
+    return true;
+  };
   plan.forEach((p, i) => {
-    let best: Pt | null = null;
-    for (let tries = 0; tries < 600 && !best; tries++) {
-      // The first sits on a rise within sight of the beach; the rest spread out over the island.
+    let best: { q: Pt; h: Habitat } | null = null;
+    let bestScore = -Infinity;
+    let valid = 0;
+    for (let tries = 0; tries < 1500 && valid < 40; tries++) {
       const a = rand() * Math.PI * 2;
-      const r = i === 0 ? 50 + rand() * 25 : 120 + rand() * N * 0.4;
-      const c = i === 0 ? hearth : { x: N / 2, y: N / 2 };
-      const q = { x: Math.round(c.x + Math.cos(a) * (i === 0 ? r : rand() * N * 0.42)), y: Math.round(c.y + Math.sin(a) * (i === 0 ? r : rand() * N * 0.42)) };
-      if (q.x < 10 || q.y < 10 || q.x > N - 10 || q.y > N - 10 || !open(q.x, q.y)) continue;
-      const near = i === 0 ? 0 : 140 - tries / 10;
-      if (taken.some((t) => Math.hypot(t.x - q.x, t.y - q.y) < Math.max(60, near))) continue;
-      best = q;
+      const q =
+        i === 0
+          ? { x: Math.round(hearth.x + Math.cos(a) * (50 + rand() * 25)), y: Math.round(hearth.y + Math.sin(a) * (50 + rand() * 25)) }
+          : { x: Math.round(N / 2 + Math.cos(a) * rand() * N * 0.42), y: Math.round(N / 2 + Math.sin(a) * rand() * N * 0.42) };
+      if (q.x < 12 || q.y < 12 || q.x > N - 12 || q.y > N - 12 || !fine(q.x, q.y)) continue;
+      const gap = i === 0 ? 30 : Math.max(60, 140 - tries / 12);
+      if (taken.some((t) => Math.hypot(t.x - q.x, t.y - q.y) < gap)) continue;
+      valid++;
+      const h = habitatAt(is, q.x, q.y);
+      // (A place already settled by another village is less likely again: the island's kinds vary.)
+      const score = (HABITATS[h].likes[p.diet] ?? 1) - 1.3 * villages.filter((v) => v.habitat === h).length + rand() * 1.2;
+      if (score > bestScore) {
+        bestScore = score;
+        best = { q, h };
+      }
     }
     if (!best) return;
-    taken.push(best);
+    taken.push(best.q);
     const pick = <T>(a: T[]) => a[Math.floor(rand() * a.length)];
-    const b = at(best.x, best.y);
-    const where = b === Biome.Forest ? pick(['Wood', 'Fern', 'Bough']) : b === Biome.Sand ? pick(['Shore', 'Tide', 'Shell']) : pick(['Meadow', 'Hill', 'Reed', 'Stone', 'River', 'Mist']);
-    const name = pick([`the ${where}folk`, `the ${where} clan`, `the ${where} people`]);
+    const hd = HABITATS[best.h];
+    let name = '';
+    for (let k = 0; k < 12 && (!name || villages.some((v) => v.name === name || v.name.split(' ')[1]?.startsWith(name.split(' ')[1]?.replace('folk', '') ?? ''))); k++) {
+      const word = pick(hd.words);
+      name = pick([`the ${word}folk`, `the ${word} clan`, `the ${word} people`]);
+    }
     villages.push({
       id: i,
       name,
-      x: best.x,
-      y: best.y,
+      x: best.q.x,
+      y: best.q.y,
       diet: p.diet,
       cannibal: p.cannibal,
+      habitat: best.h,
       pop: Math.round(8 + rand() * 32),
-      look: { parts: { legs: pick(LEGS), mouth: pick(MOUTHS), eyes: pick(EYES), back: pick(BACKS), tail: pick(TAILS) }, diet: p.diet, hue: HUES[(i * 3 + Math.floor(rand() * 8)) % HUES.length] },
+      look: { parts: { legs: pick(hd.legs), mouth: pick(MOUTHS[p.diet] ?? MOUTHS.omnivore), eyes: pick(hd.eyes), back: pick(hd.backs), tail: pick(hd.tails) }, diet: p.diet, hue: pick(hd.hues) },
       found: false,
     });
   });
