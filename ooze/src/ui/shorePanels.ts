@@ -2,7 +2,7 @@
 // villages found out on the island.
 
 import { BUILDS, buildName, type BuildId } from '../content/shore';
-import { buildCost, buildsOpen, count, DAY_SEC, foodCap, GROW_DAYS, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { buildCost, buildsOpen, count, foodCap, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { miniIcon } from '../scene/creatureLook';
 import type { GameState } from '../economy/types';
 
@@ -35,7 +35,6 @@ export function shoreUpdate(root: HTMLElement, state: GameState): void {
   };
   put('shore-food', n0(s.food));
   put('shore-wood', n0(s.wood));
-  put('shore-day', `Day ${s.day + 1}`);
   const birth = birthLine(s);
   put('shore-birth', birth);
 }
@@ -58,7 +57,7 @@ function storesCard(s: ShoreState): string {
   const plan = workPlan(s);
   const net = plan.foodRate - plan.eat;
   const cell = (key: string, name: string, have: number, cap: number, gain: string) => `<div class="store"><span class="label dim">${name}</span><b class="num"><span data-t="shore-${key}">${n0(have)}</span><span class="dim">/${cap}</span></b><span class="dim">${gain}</span></div>`;
-  return `<div class="panel-head"><h2>The Village</h2><span class="dim"><span data-t="shore-day">Day ${s.day + 1}</span> ashore</span></div>
+  return `<div class="panel-head"><h2>The Village</h2><span class="dim">${s.people.length} of 100</span></div>
     <div class="card px-box ex-stores shore-stores">
       ${cell('food', 'Food', s.food, foodCap(s), `${net >= 0 ? '+' : ''}${n0(net)} a day`)}
       ${cell('wood', 'Wood', s.wood, woodCap(s), `+${n0(plan.woodRate)} a day`)}
@@ -97,14 +96,13 @@ function buildCard(s: ShoreState): string {
 }
 
 function peopleCard(s: ShoreState): string {
-  const today = s.day + s.clock / DAY_SEC;
   const four = s.people.filter((p) => p.founder);
   const chief = s.people.find((p) => p.id === s.chief);
   const grown = s.people.filter((p) => !p.founder && isAdult(s, p)).length;
   const young = s.people.filter((p) => !isAdult(s, p)).length;
   return `<div class="card px-box"><div class="info"><div class="name">${chief ? `${chief.name} leads` : 'The people'}</div>
-    <div class="sub">${four.length ? `Of the four who crossed: ${four.map((p) => p.name).join(', ')}.` : 'The four who crossed are all gone.'} ${grown ? `${grown} born here and grown. ` : ''}${young ? `${young} children (grown in ${GROW_DAYS} days).` : ''}</div>
-    <div class="sub dim">${s.births} born · ${s.deaths} dead · day ${Math.floor(today) + 1}. Tap the land to send ${chief?.name ?? 'the chief'} walking; the fog draws back where they go.</div></div></div>`;
+    <div class="sub">${four.length ? `Of the four who crossed: ${four.map((p) => p.name).join(', ')}.` : 'The four who crossed are all gone.'} ${grown ? `${grown} born here and grown. ` : ''}${young ? `${young} children.` : ''}</div>
+    <div class="sub dim">${s.births} born · ${s.deaths} dead. Tap the land to send ${chief?.name ?? 'the chief'} walking; the fog draws back where they go.</div></div></div>`;
 }
 
 function villagesCard(s: ShoreState): string {

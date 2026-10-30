@@ -14,7 +14,7 @@ import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
-import { build, isAdult, setLean, shoreOf, shoreWhen, startShore, type Lean } from './economy/shore';
+import { build, isAdult, setLean, shoreOf, startShore, type Lean } from './economy/shore';
 import { villageCard } from './ui/shorePanels';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
@@ -850,7 +850,7 @@ function renderHud(): void {
   if (sh) {
     // New Shore counts people too (toward a hundred).
     set('currency', String(sh.people.length));
-    set('rate', `people\nday ${sh.day + 1}`);
+    set('rate', 'people\nof 100');
   } else if (ex) {
     // The Extinction counts people, not currency.
     set('currency', String(ex.people.length));
@@ -889,7 +889,8 @@ function renderHud(): void {
   }
 }
 
-/** New Shore's strip: the day, how many toward a hundred, and the village's news going by. */
+/** New Shore's strip: how many toward a hundred, and the village's news going by. (No clock:
+ * this is just life now.) */
 const shoreNews: string[] = [];
 function renderShoreGoal(): void {
   const s = shoreOf(state);
@@ -898,16 +899,16 @@ function renderShoreGoal(): void {
     goalKey = 'shore';
     tickerText = '';
     evolveEl.hidden = false;
-    evolveEl.innerHTML = `<div class="evolve-row"><span class="label" data-g="day"></span><span class="label dim" data-g="when"></span></div>
+    evolveEl.innerHTML = `<div class="evolve-row"><span class="label" data-g="when"></span><span class="label dim" data-g="chief"></span></div>
       <div class="ex-row"><div class="ex-count safe" data-g="count"></div><div class="ticker"><span data-g="tick"></span></div></div>`;
   }
   const g = (k: string) => evolveEl.querySelector<HTMLElement>(`[data-g="${k}"]`)!;
   const put = (k: string, text: string) => {
     if (g(k).textContent !== text) g(k).textContent = text;
   };
-  put('day', `Day ${s.day + 1} ashore`);
+  put('chief', s.people.find((p) => p.id === s.chief)?.name ? `${s.people.find((p) => p.id === s.chief)!.name} leads` : '');
   put('when', `${s.built.some((b) => b.id === 'hearth') ? 'The village' : 'No hearth yet'}`);
-  put('count', `${s.people.length} of 100`);
+  put('count', `${s.people.length} of 100 people`);
   const news = shoreNews.slice(-3).join('   ·   ');
   if (news !== tickerText) {
     tickerText = news;
@@ -934,7 +935,7 @@ function shoreFrame(): void {
     s.newFinds.shift();
     if (v) {
       cue('chime', 0.5);
-      showModal(`<p class="label dim">Found · ${shoreWhen(s)}</p>${villageCard(s, v).replace(/^<p class="label dim">[^<]*<\/p>/, '')}`);
+      showModal(`<p class="label dim">Found</p>${villageCard(s, v).replace(/^<p class="label dim">[^<]*<\/p>/, '')}`);
     }
   }
 }

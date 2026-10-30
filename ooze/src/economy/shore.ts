@@ -368,8 +368,11 @@ export function setLean(state: GameState, lean: Lean): void {
   if (s) s.lean = lean;
 }
 
+/** When something happened, for the Chronicle: not a count of days (this is just life now),
+ * but whose time it was. */
 export function shoreWhen(s: ShoreState): string {
-  return `Day ${s.day + 1} ashore`;
+  const chief = s.people.find((p) => p.id === s.chief);
+  return chief ? `In ${chief.name}'s time` : 'New Shore';
 }
 
 /** The village's day: how many work at food and at wood, and what that brings in. */
