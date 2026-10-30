@@ -318,12 +318,16 @@ void main() {
     }
   }
 
-  // The clouds themselves, floating between you and the land: nearer the eye than the ground,
-  // so the layer is seen larger and slides faster as the view pans or zooms (parallax), and
-  // the camera's angle slants it less than the land. Puffy: sunlit on top, shaded beneath,
-  // over everything, lit by the hour; gone as the view comes right down under them.
+  // The clouds themselves, floating between you and the land. The view is a camera: zooming in
+  // brings it down toward the island, so the clouds (nearer it than the ground) grow faster
+  // than the land as it comes down, slide faster as it pans, and slant less as it tilts; far
+  // out they're barely apart from the land, and right in close the camera passes down through
+  // them. (How much bigger than the land they're seen: the camera's height over the ground
+  // against its height over the clouds; it reaches the clouds at zoom CLOUD_Z.) Puffy: sunlit
+  // on top, shaded beneath, over everything, lit by the hour.
   {
-    float CP = 1.7;
+    float CLOUD_Z = 7.3;
+    float CP = 1.0 / max(0.08, 1.0 - uCam.z / CLOUD_Z);
     float cty = mix(1.0, TY, 0.35);
     vec2 ca = (art - vec2(uArt.x * 0.5, uCam.w)) / (uCam.z * CP);
     vec2 cw = vec2(uCam.x + ca.x, uCam.y + ca.y / cty);
@@ -338,7 +342,7 @@ void main() {
       cloudCol = mix(cloudCol, cloudCol * vec3(1.0, 0.8, 0.64), clamp(length(uHaze) * 3.0, 0.0, 1.0));
       cloudCol = mix(cloudCol, vec3(0.14, 0.16, 0.22) * shade, uNight * 0.85);
       cloudCol *= 1.0 - uWeather.x * 0.3 - uAsh * 0.4;
-      float a = smoothstep(0.0, 0.55, d) * 0.82 * (1.0 - smoothstep(4.5, 7.5, uCam.z));
+      float a = smoothstep(0.0, 0.55, d) * 0.55 * (1.0 - smoothstep(5.2, 6.8, uCam.z));
       lit = mix(lit, cloudCol, a);
     }
   }
