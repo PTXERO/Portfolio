@@ -1197,6 +1197,15 @@ function cine(): boolean {
 }
 function syncCine(): void {
   const on = cine();
+  // A popup already open when the story takes the screen (an egg hatching, say) waits until
+  // after: hidden under the story it would otherwise swallow every tap, and seem frozen.
+  if (on && !modal.hidden && modal.dataset.kind !== 'whisper' && modal.dataset.kind !== 'fallen') {
+    const box = modal.firstElementChild as HTMLElement | null;
+    box?.querySelector('.auto-close')?.remove();
+    if (box) heldModals.unshift([box.innerHTML, 0]);
+    clearTimeout(modalTimer);
+    modal.hidden = true;
+  }
   document.body.classList.toggle('cinematic', on);
   scene.holdWalk = striking;
   if (!striking && !waking && beforeWaking()) storyLine(scene.spearReady ? STORY.touch : STORY.approach);
@@ -1389,7 +1398,8 @@ stageEl.addEventListener('pointercancel', castUp, true);
 for (const ev of ['pointerdown', 'touchend', 'click']) document.addEventListener(ev, unlockSound, true);
 
 stageEl.addEventListener('pointerdown', (e) => {
-  if (!modal.hidden || (e.target as HTMLElement).closest('#evolve, button, #placecard')) return;
+  // (A popup only blocks the world when it can be seen: never under a cutscene.)
+  if ((!modal.hidden && !cine()) || (e.target as HTMLElement).closest('#evolve, button, #placecard')) return;
   placeCard.hidden = true;
   if (state.current === 'tribal') scene.tribeScene.chosen = -1;
   stageEl.setPointerCapture(e.pointerId);
