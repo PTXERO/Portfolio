@@ -325,7 +325,7 @@ export class Scene {
       if (inp) {
         this.shader!.setIsland(inp.key, inp.n, inp.heights);
         this.shader!.setFog(inp.fog, inp.fogVersion);
-        this.shader!.render(this.buffer, this.W, this.H, { cam: this.map.camParams, tint: inp.tint, time: this.time, day: (this.time % 120) / 120, ground: inp.ground, blend: inp.blend, trail: inp.trail, trailVersion: inp.trailVersion, weather: inp.weather, bow: inp.bow, ash: inp.ash });
+        this.shader!.render(this.buffer, this.W, this.H, { cam: this.map.camParams, tint: inp.tint, time: this.time, day: (this.time % 120) / 120, ground: inp.ground, blend: inp.blend, trail: inp.trail, trailVersion: inp.trailVersion, weather: inp.weather, bow: inp.bow, ash: inp.ash, lift: this.map.liftTilt[0], tilt: this.map.liftTilt[1], depth: this.map.liftTilt[2] });
       }
       ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     } else ctx.drawImage(this.buffer, 0, 0, this.W * this.px * this.dpr, this.H * this.px * this.dpr);

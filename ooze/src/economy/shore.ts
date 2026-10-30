@@ -18,6 +18,8 @@ export const SHORE_N = 1020;
 export const SHORE_CELLS = SHORE_N / CELL;
 /** Seconds in a day. */
 export const DAY_SEC = 120;
+/** Days in a season (the year is four, from the spring they landed in). */
+export const SEASON_DAYS = 4;
 /** Days a child takes to grow up (and start working). */
 export const GROW_DAYS = 6;
 /** What a day's work brings in, each worker, before bonuses; and what each eats a day. */
@@ -304,6 +306,18 @@ export function isAdult(s: ShoreState, p: ShorePerson): boolean {
   return s.day + s.clock / DAY_SEC - p.born >= GROW_DAYS;
 }
 
+/** The season now (0 spring, 1 summer, 2 autumn, 3 winter) and how far into it (0 to 1). */
+export function shoreSeason(s: Pick<ShoreState, 'day' | 'clock'>): { si: number; into: number } {
+  const y = ((s.day + s.clock / DAY_SEC) / SEASON_DAYS) % 4;
+  return { si: Math.floor(y), into: y % 1 };
+}
+
+/** Food comes in slower in winter (and a little better at harvest). */
+export function seasonFood(s: ShoreState): number {
+  const { si } = shoreSeason(s);
+  return si === 3 ? 0.7 : si === 2 ? 1.1 : 1;
+}
+
 export function room(s: ShoreState): number {
   return BASE_ROOM + count(s, 'hut') * 4;
 }
@@ -380,7 +394,7 @@ export function workPlan(s: ShoreState): { food: number; wood: number; eat: numb
   const adults = s.people.filter((p) => isAdult(s, p)).length;
   const kids = s.people.length - adults;
   const eat = adults * EAT + kids * EAT_CHILD;
-  const foodEach = FOOD_PER * (1 + 0.2 * count(s, 'camp'));
+  const foodEach = FOOD_PER * (1 + 0.2 * count(s, 'camp')) * seasonFood(s);
   const woodEach = WOOD_PER * (1 + 0.2 * count(s, 'cutter'));
   // Leaning one way or the other; with the stores full, hands go to the other.
   let share = s.lean === 'food' ? 0.75 : s.lean === 'wood' ? Math.min(1, (eat * 1.05) / Math.max(1, adults) / foodEach) : Math.min(1, (eat * 1.5) / Math.max(1, adults) / foodEach + 0.15);

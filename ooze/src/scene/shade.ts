@@ -38,7 +38,8 @@ uniform vec3 uSun;
 varying vec2 vUv;
 uniform float uN; // tiles across the island
 #define N uN
-const float K = ${LIFT.toFixed(1)};
+uniform float uK; // how far the land rises (tiles per unit of height)
+#define K uK
 float hTop(vec2 w) {
   vec4 t = texture2D(uHeight, w / N);
   return max((t.r * 65280.0 + t.a * 255.0) / 65535.0 * ${H_SPAN.toFixed(2)} + ${H_LO.toFixed(2)}, 0.0);
@@ -96,8 +97,11 @@ varying vec2 vUv;
 
 uniform float uN; // tiles across the island
 #define N uN
-const float K = ${LIFT.toFixed(1)};
-const float TY = ${TILT.toFixed(2)};
+uniform float uK; // how far the land rises (tiles per unit of height)
+#define K uK
+uniform float uTY; // the slant: how much depth is squashed
+#define TY uTY
+uniform float uDepth; // haze over the far side of the view
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -134,9 +138,9 @@ void main() {
   // March from the furthest ground that could rise into this pixel back to the ground
   // right under it: the first that reaches up to the pixel is what's seen.
   float span = K * 1.05 / TY;
-  float stepW = span / 56.0;
+  float stepW = span / 72.0;
   float wy = base;
-  for (int i = 0; i <= 56; i++) {
+  for (int i = 0; i <= 72; i++) {
     float y = base + span - float(i) * stepW;
     if (screenRow(vec2(wx, y)) <= art.y) { wy = y; break; }
   }
@@ -230,6 +234,11 @@ void main() {
   float mist = uWeather.y * (1.0 - smoothstep(0.02, 0.3, h)) * smoothstep(0.35, 0.7, fbm(w * 0.05 + vec2(uTime * 0.01, 0.0)));
   lit = mix(lit, vec3(0.86, 0.88, 0.92) * (0.35 + bright * 0.7), mist * 0.75);
 
+  // Depth in the air: the far side of the view fades into a soft, sky-coloured haze.
+  float far = uDepth * (1.0 - smoothstep(0.02, 0.6, vUv.y));
+  vec3 airCol = mix(vec3(0.62, 0.72, 0.84), vec3(0.95, 0.72, 0.55), clamp(length(uHaze) * 3.0, 0.0, 1.0)) * clamp(lum(uAmb + uSunCol), 0.12, 1.1);
+  lit = mix(lit, airCol, far * 0.55);
+
   // Creatures, markers and weather, drawn by the scene at their lifted spots: lit as
   // figures standing up in the light.
   vec2 ouv = (floor(art) + 0.5) / uArt;
@@ -289,6 +298,10 @@ export interface ShadeParams {
   bow: [number, number, number, number];
   /** How deep in an ash winter the world is (0 to 1). */
   ash?: number;
+  /** How far the land rises, the slant, and the haze over the far side (see RangeScene). */
+  lift?: number;
+  tilt?: number;
+  depth?: number;
 }
 
 function compile(gl: WebGLRenderingContext, vs: string, fs: string): WebGLProgram {
@@ -341,6 +354,8 @@ export class MapShader {
   /** Tiles across the island, and texels across its light map (half as many on a big one). */
   private n = ISLAND;
   private lightN = ISLAND;
+  /** The lift the light map was made for. */
+  private liftK = LIFT;
   private fogVersion = -1;
   private trailTex: WebGLTexture;
   private trailVersion = -1;
@@ -372,7 +387,7 @@ export class MapShader {
 
   /** Re-lights the island's light map (only when the sun has moved enough to show). */
   private relight(sun: number[]): void {
-    const key = `${this.heightKey}|${sun.map((v) => v.toFixed(2)).join()}`;
+    const key = `${this.heightKey}|${this.liftK}|${sun.map((v) => v.toFixed(2)).join()}`;
     if (key === this.lightKey) return;
     this.lightKey = key;
     const gl = this.gl;
@@ -380,6 +395,7 @@ export class MapShader {
     gl.viewport(0, 0, this.lightN, this.lightN);
     gl.useProgram(this.lightProg);
     gl.uniform1f(gl.getUniformLocation(this.lightProg, 'uN'), this.n);
+    gl.uniform1f(gl.getUniformLocation(this.lightProg, 'uK'), this.liftK);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.heightTex);
     gl.uniform1i(gl.getUniformLocation(this.lightProg, 'uHeight'), 2);
@@ -473,6 +489,7 @@ export class MapShader {
     const g0 = this.groundTex(p.ground[0]);
     const g1 = this.groundTex(p.ground[1]);
     const sky = this.sky(p.day);
+    this.liftK = p.lift ?? LIFT;
     this.relight(sky.sun);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -508,6 +525,9 @@ export class MapShader {
     gl.uniform4fv(this.u('uBow'), p.bow);
     gl.uniform1f(this.u('uBlend'), p.blend);
     gl.uniform1f(this.u('uN'), this.n);
+    gl.uniform1f(this.u('uK'), p.lift ?? LIFT);
+    gl.uniform1f(this.u('uTY'), p.tilt ?? TILT);
+    gl.uniform1f(this.u('uDepth'), p.depth ?? 0);
     gl.uniform2f(this.u('uArt'), artW, artH);
     gl.uniform4f(this.u('uCam'), p.cam[0], p.cam[1], p.cam[2], p.cam[3]);
     gl.uniform1f(this.u('uTime'), p.time);

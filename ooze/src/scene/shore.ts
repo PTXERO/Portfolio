@@ -5,12 +5,11 @@
 
 import { PAL } from '../art/sprites';
 import { Biome, CELL, isLand, type Pt } from '../economy/island';
-import { isAdult, relation, shoreIsland, shoreOf, workPlan, type ShoreState, type Village } from '../economy/shore';
+import { isAdult, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
 import type { GameState } from '../economy/types';
 import type { BuildId } from '../content/shore';
 import { RangeScene } from './range';
 import { hash, type Frame } from './paint';
-import { LIFT, TILT } from './shade';
 
 interface Walker {
   id: number;
@@ -27,6 +26,13 @@ interface Walker {
 const REL_COL = { kin: '#8acf6a', prey: PAL.y, predator: '#e8615a', enemy: '#9a2a2a' } as const;
 
 export class ShoreScene extends RangeScene {
+  // A new era, a new game: the land stands up more, seen from lower down, with the far side
+  // fading into the air.
+  protected lift = 30;
+  protected tilt = 0.62;
+  depth = 0.85;
+  /** A season's ground being painted, a few rows a frame (the island's too big for one go). */
+  private painting: { si: number; job: Generator<void, HTMLCanvasElement> } | null = null;
   private walkers: Walker[] = [];
   private locals = new Map<number, Walker[]>();
   private woods: Pt[] = [];
@@ -49,7 +55,7 @@ export class ShoreScene extends RangeScene {
     this.pinned = false;
     this.auto = false;
     this.camX = p.x;
-    this.camY = this.shaded ? p.y - (this.heightAt(p.x, p.y) * LIFT) / TILT : p.y;
+    this.camY = this.shaded ? p.y - (this.heightAt(p.x, p.y) * this.lift) / this.tilt : p.y;
     this.zoom = zoom;
   }
 
@@ -137,7 +143,7 @@ export class ShoreScene extends RangeScene {
     if (this.auto) {
       const me = s.chiefAt;
       const k = this.snap ? 1 : Math.min(1, dt * 3);
-      const ty = this.shaded ? me.y - (this.heightAt(me.x, me.y) * LIFT) / TILT : me.y;
+      const ty = this.shaded ? me.y - (this.heightAt(me.x, me.y) * this.lift) / this.tilt : me.y;
       this.camX += (me.x - this.camX) * k;
       this.camY += (ty - this.camY) * k;
       this.snap = false;
@@ -147,22 +153,35 @@ export class ShoreScene extends RangeScene {
       this.fog = null;
       this.fogKnown = null;
       this.groundSeed = is.seed;
+      this.painting = null;
     }
-    this.seasonBlend = 0;
-    this.seasonPair = [0, 0];
-    if (!this.ground.has(0)) this.ground.set(0, this.paintGround(is, 0));
-    this.groundPair = [this.ground.get(0)!, this.ground.get(0)!];
+    // The seasons, by the village's own clock: each blends into the next over its second half.
+    // The season on show is painted at once if it must be; the rest are painted ahead, a few
+    // rows a frame, and a turn waits until its ground is ready.
+    const { si, into } = shoreSeason(s);
+    const next = (si + 1) % 4;
+    if (!this.ground.has(si)) this.ground.set(si, this.paintGround(is, si));
+    this.paintAhead(is, next, 4);
+    const ready = this.ground.has(next);
+    const bl = Math.max(0, Math.min(1, (into - 0.45) / 0.55));
+    const turn = ready ? bl * bl * (3 - 2 * bl) : 0;
+    this.seasonBlend = turn;
+    this.seasonPair = [si, next];
+    this.groundPair = [this.ground.get(si)!, ready ? this.ground.get(next)! : this.ground.get(si)!];
     this.paintFog(seen);
     b.imageSmoothingEnabled = false;
     if (this.shaded) b.clearRect(0, 0, W, H);
     else {
       b.fillStyle = '#24506e';
       b.fillRect(0, 0, W, H);
-      this.blitWorld(b, this.ground.get(0)!);
+      this.blitWorld(b, this.ground.get(si)!);
     }
 
     const dayT = (t % 120) / 120;
     const night = Math.max(0, Math.min(1, (0.125 - Math.abs(dayT - 0.875)) * 40));
+    this.stepWeather(dt, si, next, turn, dayT);
+    // In a storm (or a winter night) they keep to the village.
+    const indoors = this.storm > 0.4;
     const z = Math.max(1, Math.round(this.zoom / 2.4));
     const close = this.zoom >= 1.6;
     const sprites: { y: number; draw: () => void }[] = [];
@@ -225,7 +244,7 @@ export class ShoreScene extends RangeScene {
         w.x = s.chiefAt.x;
         w.y = s.chiefAt.y;
       } else {
-        w.job = !grown || night > 0.5 ? 'home' : foodLeft-- > 0 ? 'food' : 'wood';
+        w.job = !grown || night > 0.5 || indoors ? 'home' : foodLeft-- > 0 ? 'food' : 'wood';
         w.wait -= dt;
         if (!w.goal || w.wait <= 0) {
           w.wait = 4 + hash(w.id, Math.floor(t / 7)) * 6;
@@ -276,12 +295,37 @@ export class ShoreScene extends RangeScene {
     // ---- The island's other villages ----
     for (const v of s.villages) this.drawVillage(b, sprites, s, v, t, dt, z, close, fogged);
 
-    this.wild.update(this.wildView, is, sprites, { b, t, dt, nests: [s.hearth], season: 0, night, feet: this.walkers, me: s.chiefAt });
+    this.wild.update(this.wildView, is, sprites, { b, t, dt, nests: [s.hearth], season: si, night, feet: this.walkers, me: s.chiefAt });
     this.trails.update(is.seed, this.walkers.filter((w) => w.goal && Math.hypot(w.goal.x - w.x, w.goal.y - w.y) > 0.3), dt, is.n);
     sprites.sort((a, c) => a.y - c.y);
     for (const sp of sprites) sp.draw();
+    if (!this.shaded && night > 0) {
+      b.fillStyle = `rgba(16, 24, 56, ${0.5 * night})`;
+      b.fillRect(0, 0, W, H);
+    }
+    this.drawAir(f, si, next, turn, night, dayT);
     this.fx.run(f);
     this.lastT = t;
+  }
+
+  /** Paints a season's ground ahead of time, for at most `ms` this frame (then the one after
+   * it, and so on round the year, so every season is ready long before it comes). */
+  private paintAhead(is: import('../economy/island').Island, from: number, ms: number): void {
+    const t0 = performance.now();
+    for (let k = 0; k < 4 && performance.now() - t0 < ms; k++) {
+      const si = (from + k) % 4;
+      if (this.ground.has(si)) continue;
+      if (!this.painting || this.painting.si !== si) this.painting = { si, job: this.paintGroundSteps(is, si) };
+      while (performance.now() - t0 < ms) {
+        const r = this.painting.job.next();
+        if (r.done) {
+          this.ground.set(si, r.value);
+          this.painting = null;
+          break;
+        }
+      }
+      return;
+    }
   }
 
   /** One figure on screen for each of the village's people, kept in step with who's alive. */

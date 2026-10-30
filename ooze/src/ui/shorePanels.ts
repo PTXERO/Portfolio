@@ -2,7 +2,7 @@
 // villages found out on the island.
 
 import { BUILDS, buildName, type BuildId } from '../content/shore';
-import { buildCost, buildsOpen, count, foodCap, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { buildCost, buildsOpen, count, foodCap, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { miniIcon } from '../scene/creatureLook';
 import type { GameState } from '../economy/types';
 
@@ -23,7 +23,7 @@ export function shoreKey(state: GameState): string {
   if (!s) return '';
   const plan = workPlan(s);
   const can = buildsOpen(s).map((b) => [b.id, s.wood >= buildCost(s, b.id)]);
-  return JSON.stringify([s.people.length, s.built.length, s.lean, plan.food, plan.wood, can, s.villages.filter((v) => v.found).map((v) => v.id), s.chief, s.people.filter((p) => isAdult(s, p)).length]);
+  return JSON.stringify([shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, can, s.villages.filter((v) => v.found).map((v) => v.id), s.chief, s.people.filter((p) => isAdult(s, p)).length]);
 }
 
 export function shoreUpdate(root: HTMLElement, state: GameState): void {
@@ -37,6 +37,14 @@ export function shoreUpdate(root: HTMLElement, state: GameState): void {
   put('shore-wood', n0(s.wood));
   const birth = birthLine(s);
   put('shore-birth', birth);
+}
+
+const SEASONS = ['Spring', 'Summer', 'Autumn', 'Winter'];
+function seasonLine(s: ShoreState): string {
+  const { si } = shoreSeason(s);
+  if (si === 3) return '<b class="winter">Winter: food comes in slower.</b> ';
+  if (si === 2) return '<b class="green">Autumn: a good harvest.</b> ';
+  return `${SEASONS[si]}. `;
 }
 
 function birthLine(s: ShoreState): string {
@@ -62,7 +70,7 @@ function storesCard(s: ShoreState): string {
       ${cell('food', 'Food', s.food, foodCap(s), `${net >= 0 ? '+' : ''}${n0(net)} a day`)}
       ${cell('wood', 'Wood', s.wood, woodCap(s), `+${n0(plan.woodRate)} a day`)}
       <div class="store"><span class="label dim">People</span><b class="num">${s.people.length}<span class="dim">/${room(s)}</span></b><span class="dim">room</span></div>
-      <div class="sub diet" data-t="shore-birth">${birthLine(s)}</div>
+      <div class="sub diet">${seasonLine(s)}<span data-t="shore-birth">${birthLine(s)}</span></div>
     </div>`;
 }
 

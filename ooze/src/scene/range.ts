@@ -195,6 +195,16 @@ export class RangeScene {
   protected seasonBlend = 0;
   protected seasonPair: [number, number] = [0, 1];
 
+  /** How much the land rises on screen (art px per unit of height, per zoom), and how much the
+   * slant squashes depth: each era's island can stand up more (New Shore's is the most 3D). */
+  protected lift = LIFT;
+  protected tilt = TILT;
+  /** Haze over the far (top) side of the view, 0 to 1: depth in the air. */
+  depth = 0;
+  get liftTilt(): [number, number, number] {
+    return [this.lift, this.tilt, this.depth];
+  }
+
   /** Tiles across the island on show, and fog cells across. */
   protected get n(): number {
     return this.island?.n ?? ISLAND;
@@ -284,7 +294,7 @@ export class RangeScene {
   /** Screen row of a point on the ground: in 2.5D, raised by the land's height and seen at a slant. */
   protected py(x: number, y: number): number {
     if (!this.shaded) return this.sy(y);
-    return (y - this.camY) * this.zoom * TILT + this.midY() - this.heightAt(x, y) * LIFT * this.zoom;
+    return (y - this.camY) * this.zoom * this.tilt + this.midY() - this.heightAt(x, y) * this.lift * this.zoom;
   }
 
   protected sy(y: number): number {
@@ -296,8 +306,8 @@ export class RangeScene {
     if (!this.shaded) return { x, y: this.camY + (ay - this.midY()) / this.zoom };
     // In 2.5D, the ground under a pixel may have risen into it from nearer the viewer:
     // march back from the furthest that could, the same way the shader does.
-    const base = this.camY + (ay - this.midY()) / (this.zoom * TILT);
-    const span = (LIFT * 1.05) / TILT;
+    const base = this.camY + (ay - this.midY()) / (this.zoom * this.tilt);
+    const span = (this.lift * 1.05) / this.tilt;
     for (let i = 0; i <= 60; i++) {
       const y = base + span - (i * span) / 60;
       if (this.py(x, y) <= ay) {
@@ -323,7 +333,7 @@ export class RangeScene {
     const at = this.toWorld(ax, ay);
     this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom * factor));
     this.camX = at.x - (ax - this.W / 2) / this.zoom;
-    if (this.shaded) this.camY = at.y - (ay - this.midY() + this.heightAt(at.x, at.y) * LIFT * this.zoom) / (this.zoom * TILT);
+    if (this.shaded) this.camY = at.y - (ay - this.midY() + this.heightAt(at.x, at.y) * this.lift * this.zoom) / (this.zoom * this.tilt);
     else this.camY = at.y - (ay - this.midY()) / this.zoom;
     this.auto = false;
     this.clamp();
@@ -332,7 +342,7 @@ export class RangeScene {
   pan(dx: number, dy: number): void {
     // In 2.5D a tile of depth is squashed on screen, so a drag moves further over the ground.
     this.camX -= dx / this.zoom;
-    this.camY -= dy / (this.zoom * (this.shaded ? TILT : 1));
+    this.camY -= dy / (this.zoom * (this.shaded ? this.tilt : 1));
     this.auto = false;
     this.clamp();
   }
@@ -453,6 +463,15 @@ export class RangeScene {
   // ---- The ground and the fog ----
 
   protected paintGround(is: Island, si: number): HTMLCanvasElement {
+    const job = this.paintGroundSteps(is, si);
+    for (;;) {
+      const r = job.next();
+      if (r.done) return r.value;
+    }
+  }
+
+  /** The same, a few rows at a time (a big island's season is painted over several frames). */
+  protected *paintGroundSteps(is: Island, si: number): Generator<void, HTMLCanvasElement> {
     const N = is.n;
     const cv = document.createElement('canvas');
     cv.width = N;
@@ -485,6 +504,7 @@ export class RangeScene {
     };
     const H = is.height;
     for (let y = 0; y < N; y++) {
+      if (y % 48 === 47) yield;
       for (let x = 0; x < N; x++) {
         const i = y * N + x;
         const bi = is.biome[i];
@@ -787,6 +807,195 @@ export class RangeScene {
     });
   }
 
+  /** The weather, as the seasons turn: now and then (never in winter) a storm, the ground wet
+   * after it, mist in the hollows at dawn, winter's ice. */
+  protected stepWeather(dt: number, si: number, next: number, turn: number, dayT: number): void {
+    this.stormTimer -= dt;
+    if (this.stormTimer <= 0 && !this.stormLeft && si !== 3) {
+      this.stormLeft = 35 + Math.random() * 25;
+      this.stormTimer = 200 + Math.random() * 220;
+    }
+    this.stormLeft = Math.max(0, this.stormLeft - dt);
+    this.storm += ((this.stormLeft > 0 ? 1 : 0) - this.storm) * Math.min(1, dt / 5);
+    this.wet = this.stormLeft > 0 ? Math.min(1, this.wet + dt / 8) : Math.max(0, this.wet - dt / 70);
+    const mistW = (si === 0 || si === 2 ? 1 : 0.5) * Math.max(0, 1 - Math.abs(dayT - 0.05) / 0.12);
+    this.weather = [this.storm, mistW, weight3(si, next, turn), this.wet];
+  }
+
+  /** What's in the air over the view: the seasons' petals, pollen, leaves and snow, a storm's
+   * rain and lightning, and the sun breaking through after. */
+  protected drawAir(f: Frame, si: number, next: number, turn: number, night: number, dayT: number): void {
+    const { b, W, H, t, dt } = f;
+    // The air through the year (screen space), easing from one season's to the next: blossom
+    // petals in spring, slow pollen motes in summer, falling leaves in autumn, snow in winter.
+    const weight = (n: number) => (si === n ? 1 - turn : 0) + (next === n ? turn : 0);
+    // Petals, pollen and leaves are small things: from far up only a few are seen (else,
+    // zoomed out, they read as snow). Snow is weather, and falls at any height.
+    const near = Math.max(0.15, Math.min(1, (this.zoom - 0.6) / 2));
+    const mix: [Mote, number][] = [
+      ['petal', 16 * weight(0) * near],
+      ['pollen', 10 * weight(1)],
+      ['leaf', 16 * weight(2) * near],
+      ['snow', 45 * weight(3)],
+    ];
+    const want = Math.round(mix.reduce((a, [, n]) => a + n, 0));
+    const pick = (): Mote => {
+      let r = Math.random() * Math.max(0.01, want);
+      for (const [k, n] of mix) if ((r -= n) < 0) return k;
+      return mix[0][0];
+    };
+    const lift = (q: { x: number; y: number; z: number }) => this.py(q.x, q.y) - q.z * this.zoom;
+    // Seasonal bits in the air are a layer over the view (not on the map, so they never look
+    // like something to tap), drifting on the wind and sliding a little as the view moves, as
+    // the air between you and the land would. Each is drawn as what it is: a tumbling petal,
+    // a seed on its fluff, a leaf with its stalk, a snowflake.
+    const camDX = (this.camX - this.airCam.x) * this.zoom;
+    const camDY = (this.camY - this.airCam.y) * this.zoom * (this.shaded ? this.tilt : 1);
+    this.airCam = { x: this.camX, y: this.camY };
+    while (this.flakes.length < want) this.flakes.push({ x: Math.random() * W, y: Math.random() * H, z: 0, v: 4 + Math.random() * 6, kind: pick(), ph: Math.random() * 10 });
+    this.flakes.length = want;
+    for (const q of this.flakes) {
+      if (Math.abs(camDX) < W && Math.abs(camDY) < H) {
+        q.x -= camDX * 0.3;
+        q.y -= camDY * 0.3;
+      }
+      if (q.kind === 'pollen') {
+        // Seed fluff floats on the breeze, bobbing, hardly falling.
+        q.x += (3 + Math.sin(t * 0.5 + q.ph) * 2) * dt;
+        q.y += Math.sin(t * 1.3 + q.ph) * 2 * dt + 0.6 * dt;
+      } else {
+        q.y += q.v * (q.kind === 'snow' ? 1 : 0.7) * dt;
+        q.x += Math.sin(t * (q.kind === 'snow' ? 1 : 2) + q.ph) * (q.kind === 'snow' ? 3 : 6) * dt + (q.kind === 'snow' ? 0 : 5 * dt);
+      }
+      if (q.y > H + 4 || q.y < -4 || q.x > W + 4 || q.x < -4) {
+        q.kind = pick();
+        if (q.x > W + 4) {
+          q.x = -3;
+          q.y = Math.random() * H;
+        } else if (q.x < -4) {
+          q.x = W + 3;
+          q.y = Math.random() * H;
+        } else {
+          q.y = q.y < -4 ? H + 3 : -3;
+          q.x = Math.random() * W;
+        }
+      }
+      // Fluff is a thing of warm days, not nights.
+      if (q.kind === 'pollen' && night > 0.5) continue;
+      const turn = Math.floor(t * 3 + q.ph) % 4;
+      const px = Math.round(q.x);
+      const py = Math.round(q.y);
+      switch (q.kind) {
+        case 'snow':
+          // A little six-armed flake, or a single bright speck far off.
+          b.fillStyle = PAL.w;
+          if (q.v > 7.5) {
+            b.fillRect(px, py - 1, 1, 3);
+            b.fillRect(px - 1, py, 3, 1);
+          } else b.fillRect(px, py, 1, 1);
+          break;
+        case 'leaf': {
+          // A leaf with its stalk, turning over as it falls.
+          b.fillStyle = q.v > 7 ? PAL.o : q.v > 5.5 ? '#c8702e' : PAL.O;
+          if (turn % 2) b.fillRect(px, py, 3, 2);
+          else b.fillRect(px, py, 2, 3);
+          b.fillStyle = '#6a3a1a';
+          b.fillRect(turn % 2 ? px + 3 : px + 1, turn % 2 ? py + 1 : py + 3, 1, 1);
+          break;
+        }
+        case 'petal':
+          // A petal: a pale tip and a deeper base, flipping.
+          b.fillStyle = '#f6c6d8';
+          b.fillRect(px, py, turn % 2 ? 2 : 1, 1);
+          b.fillStyle = '#e07aa6';
+          b.fillRect(turn % 2 ? px + 2 : px, turn % 2 ? py : py + 1, 1, 1);
+          break;
+        case 'pollen':
+          // A seed on its fluff: a soft white puff with a dark seed hanging under it.
+          b.fillStyle = 'rgba(250, 248, 236, 0.9)';
+          b.fillRect(px - 1, py, 3, 1);
+          b.fillRect(px, py - 1, 1, 3);
+          b.fillStyle = 'rgba(250, 248, 236, 0.5)';
+          b.fillRect(px - 1, py - 1, 1, 1);
+          b.fillRect(px + 1, py - 1, 1, 1);
+          b.fillStyle = '#5a4a30';
+          b.fillRect(px, py + 2, 1, 1);
+          break;
+      }
+    }
+
+    // Rain, lightning, and the rainbow after.
+    // Rain falls over the land around the view (twice its size each way), not just what's on
+    // screen, so scrolling or zooming out never shows an empty patch of sky.
+    const hw = W / this.zoom;
+    const hh = H / (this.zoom * (this.shaded ? this.tilt : 1));
+    const drop = <Q extends { x: number; y: number; z: number }>(q: Q, z: number): Q => {
+      q.x = this.camX + (Math.random() * 2 - 1) * hw;
+      q.y = this.camY + (Math.random() * 2 - 1) * hh;
+      q.z = z;
+      return q;
+    };
+    const want2 = Math.min(600, Math.round(this.storm * 90 * 4));
+    while (this.rain.length < want2) this.rain.push(drop({ x: 0, y: 0, z: 0, v: 20 + Math.random() * 10 }, Math.random() * 14));
+    this.rain.length = want2;
+    b.fillStyle = 'rgba(190, 210, 230, 0.75)';
+    for (const r of this.rain) {
+      r.z -= r.v * dt;
+      r.x -= r.v * 0.08 * dt;
+      if (r.z <= 0 || Math.abs(r.x - this.camX) > hw * 1.2 || Math.abs(r.y - this.camY) > hh * 1.2) drop(r, 8 + Math.random() * 6);
+      const X = this.sx(r.x);
+      const Y = lift(r);
+      if (X > -2 && X < W + 2 && Y > -3 && Y < H + 2) b.fillRect(Math.round(X), Math.round(Y), 1, 2);
+    }
+    if (this.storm > 0.7 && Math.random() < dt * 0.12) {
+      // (Seconds since the flash: it plays out over about a second.)
+      this.flash = 0.0001;
+      // The thunder after it, from somewhere off across the island.
+      thunder({ level: 0.6 + Math.random() * 0.4, delay: 0.4 + Math.random() * 1.6 });
+    }
+    // Lightning, gently: the sky brightens a little, flickers once more, and fades over a second
+    // (never a white-out).
+    if (this.flash > 0) {
+      const f = this.flash;
+      const glow = f < 0.06 ? f / 0.06 : f < 0.14 ? 1 - ((f - 0.06) / 0.08) * 0.6 : f < 0.22 ? 0.4 + ((f - 0.14) / 0.08) * 0.35 : 0.75 * Math.max(0, 1 - (f - 0.22) / 0.85) ** 2;
+      b.fillStyle = `rgba(215, 225, 255, ${0.17 * glow})`;
+      b.fillRect(0, 0, W, H);
+      this.flash = f + dt > 1.1 ? 0 : f + dt;
+    }
+    // After rain by day, the sun breaks through: soft rays of light across the view and a
+    // fresher, brighter day (the shader draws it), easing in as the rain stops and out as the
+    // ground dries or evening comes.
+    const bowWant = this.stormLeft <= 0 && this.wet > 0.2 && night < 0.2 ? Math.min(1, (this.wet - 0.2) * 3) * Math.max(0, Math.min(1, (0.75 - dayT) * 8)) : 0;
+    this.bow += (bowWant - this.bow) * Math.min(1, dt / (bowWant > this.bow ? 8 : 14));
+    this.bowView = [0, 0, 0, this.bow];
+
+    // Summer nights: fireflies in the air over everything (a layer over the view, like the
+    // seasons' motes, so they never look like something to tap). Each is a little dark body
+    // whose tail lights up, glows and goes out, drifting in lazy loops.
+    const flyWant = Math.round(14 * weight(1) * Math.max(0, (night - 0.3) / 0.7));
+    while (this.flies.length < flyWant) this.flies.push({ x: Math.random() * W, y: H * 0.2 + Math.random() * H * 0.7, ph: Math.random() * 20 });
+    this.flies.length = flyWant;
+    for (const f of this.flies) {
+      f.x += Math.sin(t * 0.6 + f.ph) * 4 * dt + (Math.abs(camDX) < W ? -camDX * 0.3 : 0);
+      f.y += Math.cos(t * 0.5 + f.ph * 1.3) * 3 * dt + (Math.abs(camDY) < H ? -camDY * 0.3 : 0);
+      if (f.x < -3) f.x += W + 6;
+      if (f.x > W + 3) f.x -= W + 6;
+      if (f.y < -3) f.y += H + 6;
+      if (f.y > H + 3) f.y -= H + 6;
+      const px = Math.round(f.x);
+      const py = Math.round(f.y);
+      const lit = Math.sin(t * 1.6 + f.ph) > 0.35;
+      // Dark between flashes (a firefly in the dark is only its light).
+      if (!lit) continue;
+      b.fillStyle = 'rgba(214, 240, 120, 0.28)';
+      b.fillRect(px - 1, py - 1, 3, 3);
+      b.fillStyle = GLOW_LIME;
+      b.fillRect(px, py, 1, 1);
+      b.fillStyle = '#2a2a1e';
+      b.fillRect(px - 1, py, 1, 1);
+    }
+  }
+
   /** A creature at the right size for the zoom: a dot from far away, a full sprite up close. */
   protected drawBeing(b: CanvasRenderingContext2D, look: CreatureLook, x: number, y: number, o: { left?: boolean; frame?: number; sleeping?: boolean; hero?: boolean; hop?: number }): void {
     const z = this.zoom;
@@ -838,7 +1047,7 @@ export class RangeScene {
     if (this.auto) {
       const k = this.snap ? 1 : Math.min(1, dt * 3);
       // In 2.5D the creature stands raised by the land; aim so it's raised into the middle.
-      const ty = this.shaded ? me.y - (this.heightAt(me.x, me.y) * LIFT) / TILT : me.y;
+      const ty = this.shaded ? me.y - (this.heightAt(me.x, me.y) * this.lift) / this.tilt : me.y;
       this.camX += (me.x - this.camX) * k;
       this.camY += (ty - this.camY) * k;
       this.snap = false;
@@ -882,7 +1091,7 @@ export class RangeScene {
     // Home: nests (with the egg) and burrow mounds, in tile units.
     const tile = (x: number, y: number, w: number, h: number, col: string) => {
       b.fillStyle = col;
-      b.fillRect(Math.round(this.sx(x)), Math.round(this.py(x + w / 2, y)), Math.max(1, Math.round(w * this.zoom)), Math.max(1, Math.round(h * this.zoom * (this.shaded ? TILT : 1))));
+      b.fillRect(Math.round(this.sx(x)), Math.round(this.py(x + w / 2, y)), Math.max(1, Math.round(w * this.zoom)), Math.max(1, Math.round(h * this.zoom * (this.shaded ? this.tilt : 1))));
     };
     const nests = this.nestSpots(home, Math.min(9, Math.max(1, gens.nest)));
     for (const n of nests) {
@@ -962,16 +1171,7 @@ export class RangeScene {
     // down, lightning flickers, and the herd huddles at home. After, the ground stays wet a
     // while, with puddles, and if the sun's up, a rainbow. Mist lies in the hollows at dawn;
     // in winter the shallows freeze.
-    this.stormTimer -= dt;
-    if (this.stormTimer <= 0 && !this.stormLeft && si !== 3) {
-      this.stormLeft = 35 + Math.random() * 25;
-      this.stormTimer = 200 + Math.random() * 220;
-    }
-    this.stormLeft = Math.max(0, this.stormLeft - dt);
-    this.storm += ((this.stormLeft > 0 ? 1 : 0) - this.storm) * Math.min(1, dt / 5);
-    this.wet = this.stormLeft > 0 ? Math.min(1, this.wet + dt / 8) : Math.max(0, this.wet - dt / 70);
-    const mistW = (si === 0 || si === 2 ? 1 : 0.5) * Math.max(0, 1 - Math.abs(dayT - 0.05) / 0.12);
-    this.weather = [this.storm, mistW, weight3(si, next, turn), this.wet];
+    this.stepWeather(dt, si, next, turn, dayT);
     const huddle = asleep || winter || this.storm > 0.4;
     const center = huddle ? home : this.graze;
     // Room enough that, zoomed right in, you can pick out each one and see what it's up to.
@@ -1378,149 +1578,6 @@ export class RangeScene {
     // The fog, over everything on the ground (the shader draws its own, softer).
     if (!this.shaded) this.blitWorld(b, this.fog!);
 
-    // The air through the year (screen space), easing from one season's to the next: blossom
-    // petals in spring, slow pollen motes in summer, falling leaves in autumn, snow in winter.
-    const weight = (n: number) => (si === n ? 1 - turn : 0) + (next === n ? turn : 0);
-    // Petals, pollen and leaves are small things: from far up only a few are seen (else,
-    // zoomed out, they read as snow). Snow is weather, and falls at any height.
-    const near = Math.max(0.15, Math.min(1, (this.zoom - 0.6) / 2));
-    const mix: [Mote, number][] = [
-      ['petal', 16 * weight(0) * near],
-      ['pollen', 10 * weight(1)],
-      ['leaf', 16 * weight(2) * near],
-      ['snow', 45 * weight(3)],
-    ];
-    const want = Math.round(mix.reduce((a, [, n]) => a + n, 0));
-    const pick = (): Mote => {
-      let r = Math.random() * Math.max(0.01, want);
-      for (const [k, n] of mix) if ((r -= n) < 0) return k;
-      return mix[0][0];
-    };
-    const lift = (q: { x: number; y: number; z: number }) => this.py(q.x, q.y) - q.z * this.zoom;
-    // Seasonal bits in the air are a layer over the view (not on the map, so they never look
-    // like something to tap), drifting on the wind and sliding a little as the view moves, as
-    // the air between you and the land would. Each is drawn as what it is: a tumbling petal,
-    // a seed on its fluff, a leaf with its stalk, a snowflake.
-    const camDX = (this.camX - this.airCam.x) * this.zoom;
-    const camDY = (this.camY - this.airCam.y) * this.zoom * (this.shaded ? TILT : 1);
-    this.airCam = { x: this.camX, y: this.camY };
-    while (this.flakes.length < want) this.flakes.push({ x: Math.random() * W, y: Math.random() * H, z: 0, v: 4 + Math.random() * 6, kind: pick(), ph: Math.random() * 10 });
-    this.flakes.length = want;
-    for (const q of this.flakes) {
-      if (Math.abs(camDX) < W && Math.abs(camDY) < H) {
-        q.x -= camDX * 0.3;
-        q.y -= camDY * 0.3;
-      }
-      if (q.kind === 'pollen') {
-        // Seed fluff floats on the breeze, bobbing, hardly falling.
-        q.x += (3 + Math.sin(t * 0.5 + q.ph) * 2) * dt;
-        q.y += Math.sin(t * 1.3 + q.ph) * 2 * dt + 0.6 * dt;
-      } else {
-        q.y += q.v * (q.kind === 'snow' ? 1 : 0.7) * dt;
-        q.x += Math.sin(t * (q.kind === 'snow' ? 1 : 2) + q.ph) * (q.kind === 'snow' ? 3 : 6) * dt + (q.kind === 'snow' ? 0 : 5 * dt);
-      }
-      if (q.y > H + 4 || q.y < -4 || q.x > W + 4 || q.x < -4) {
-        q.kind = pick();
-        if (q.x > W + 4) {
-          q.x = -3;
-          q.y = Math.random() * H;
-        } else if (q.x < -4) {
-          q.x = W + 3;
-          q.y = Math.random() * H;
-        } else {
-          q.y = q.y < -4 ? H + 3 : -3;
-          q.x = Math.random() * W;
-        }
-      }
-      // Fluff is a thing of warm days, not nights.
-      if (q.kind === 'pollen' && night > 0.5) continue;
-      const turn = Math.floor(t * 3 + q.ph) % 4;
-      const px = Math.round(q.x);
-      const py = Math.round(q.y);
-      switch (q.kind) {
-        case 'snow':
-          // A little six-armed flake, or a single bright speck far off.
-          b.fillStyle = PAL.w;
-          if (q.v > 7.5) {
-            b.fillRect(px, py - 1, 1, 3);
-            b.fillRect(px - 1, py, 3, 1);
-          } else b.fillRect(px, py, 1, 1);
-          break;
-        case 'leaf': {
-          // A leaf with its stalk, turning over as it falls.
-          b.fillStyle = q.v > 7 ? PAL.o : q.v > 5.5 ? '#c8702e' : PAL.O;
-          if (turn % 2) b.fillRect(px, py, 3, 2);
-          else b.fillRect(px, py, 2, 3);
-          b.fillStyle = '#6a3a1a';
-          b.fillRect(turn % 2 ? px + 3 : px + 1, turn % 2 ? py + 1 : py + 3, 1, 1);
-          break;
-        }
-        case 'petal':
-          // A petal: a pale tip and a deeper base, flipping.
-          b.fillStyle = '#f6c6d8';
-          b.fillRect(px, py, turn % 2 ? 2 : 1, 1);
-          b.fillStyle = '#e07aa6';
-          b.fillRect(turn % 2 ? px + 2 : px, turn % 2 ? py : py + 1, 1, 1);
-          break;
-        case 'pollen':
-          // A seed on its fluff: a soft white puff with a dark seed hanging under it.
-          b.fillStyle = 'rgba(250, 248, 236, 0.9)';
-          b.fillRect(px - 1, py, 3, 1);
-          b.fillRect(px, py - 1, 1, 3);
-          b.fillStyle = 'rgba(250, 248, 236, 0.5)';
-          b.fillRect(px - 1, py - 1, 1, 1);
-          b.fillRect(px + 1, py - 1, 1, 1);
-          b.fillStyle = '#5a4a30';
-          b.fillRect(px, py + 2, 1, 1);
-          break;
-      }
-    }
-
-    // Rain, lightning, and the rainbow after.
-    // Rain falls over the land around the view (twice its size each way), not just what's on
-    // screen, so scrolling or zooming out never shows an empty patch of sky.
-    const hw = W / this.zoom;
-    const hh = H / (this.zoom * (this.shaded ? TILT : 1));
-    const drop = <Q extends { x: number; y: number; z: number }>(q: Q, z: number): Q => {
-      q.x = this.camX + (Math.random() * 2 - 1) * hw;
-      q.y = this.camY + (Math.random() * 2 - 1) * hh;
-      q.z = z;
-      return q;
-    };
-    const want2 = Math.min(600, Math.round(this.storm * 90 * 4));
-    while (this.rain.length < want2) this.rain.push(drop({ x: 0, y: 0, z: 0, v: 20 + Math.random() * 10 }, Math.random() * 14));
-    this.rain.length = want2;
-    b.fillStyle = 'rgba(190, 210, 230, 0.75)';
-    for (const r of this.rain) {
-      r.z -= r.v * dt;
-      r.x -= r.v * 0.08 * dt;
-      if (r.z <= 0 || Math.abs(r.x - this.camX) > hw * 1.2 || Math.abs(r.y - this.camY) > hh * 1.2) drop(r, 8 + Math.random() * 6);
-      const X = this.sx(r.x);
-      const Y = lift(r);
-      if (X > -2 && X < W + 2 && Y > -3 && Y < H + 2) b.fillRect(Math.round(X), Math.round(Y), 1, 2);
-    }
-    if (this.storm > 0.7 && Math.random() < dt * 0.12) {
-      // (Seconds since the flash: it plays out over about a second.)
-      this.flash = 0.0001;
-      // The thunder after it, from somewhere off across the island.
-      thunder({ level: 0.6 + Math.random() * 0.4, delay: 0.4 + Math.random() * 1.6 });
-    }
-    // Lightning, gently: the sky brightens a little, flickers once more, and fades over a second
-    // (never a white-out).
-    if (this.flash > 0) {
-      const f = this.flash;
-      const glow = f < 0.06 ? f / 0.06 : f < 0.14 ? 1 - ((f - 0.06) / 0.08) * 0.6 : f < 0.22 ? 0.4 + ((f - 0.14) / 0.08) * 0.35 : 0.75 * Math.max(0, 1 - (f - 0.22) / 0.85) ** 2;
-      b.fillStyle = `rgba(215, 225, 255, ${0.17 * glow})`;
-      b.fillRect(0, 0, W, H);
-      this.flash = f + dt > 1.1 ? 0 : f + dt;
-    }
-    // After rain by day, the sun breaks through: soft rays of light across the view and a
-    // fresher, brighter day (the shader draws it), easing in as the rain stops and out as the
-    // ground dries or evening comes.
-    const bowWant = this.stormLeft <= 0 && this.wet > 0.2 && night < 0.2 ? Math.min(1, (this.wet - 0.2) * 3) * Math.max(0, Math.min(1, (0.75 - dayT) * 8)) : 0;
-    this.bow += (bowWant - this.bow) * Math.min(1, dt / (bowWant > this.bow ? 8 : 14));
-    this.bowView = [0, 0, 0, this.bow];
-
     // Night falls over everything; in summer, fireflies around home.
     if (night > 0) {
       if (!this.shaded) {
@@ -1528,32 +1585,7 @@ export class RangeScene {
         b.fillRect(0, 0, W, H);
       }
     }
-    // Summer nights: fireflies in the air over everything (a layer over the view, like the
-    // seasons' motes, so they never look like something to tap). Each is a little dark body
-    // whose tail lights up, glows and goes out, drifting in lazy loops.
-    const flyWant = Math.round(14 * weight(1) * Math.max(0, (night - 0.3) / 0.7));
-    while (this.flies.length < flyWant) this.flies.push({ x: Math.random() * W, y: H * 0.2 + Math.random() * H * 0.7, ph: Math.random() * 20 });
-    this.flies.length = flyWant;
-    for (const f of this.flies) {
-      f.x += Math.sin(t * 0.6 + f.ph) * 4 * dt + (Math.abs(camDX) < W ? -camDX * 0.3 : 0);
-      f.y += Math.cos(t * 0.5 + f.ph * 1.3) * 3 * dt + (Math.abs(camDY) < H ? -camDY * 0.3 : 0);
-      if (f.x < -3) f.x += W + 6;
-      if (f.x > W + 3) f.x -= W + 6;
-      if (f.y < -3) f.y += H + 6;
-      if (f.y > H + 3) f.y -= H + 6;
-      const px = Math.round(f.x);
-      const py = Math.round(f.y);
-      const lit = Math.sin(t * 1.6 + f.ph) > 0.35;
-      // Dark between flashes (a firefly in the dark is only its light).
-      if (!lit) continue;
-      b.fillStyle = 'rgba(214, 240, 120, 0.28)';
-      b.fillRect(px - 1, py - 1, 3, 3);
-      b.fillStyle = GLOW_LIME;
-      b.fillRect(px, py, 1, 1);
-      b.fillStyle = '#2a2a1e';
-      b.fillRect(px - 1, py, 1, 1);
-    }
-
+    this.drawAir(f, si, next, turn, night, dayT);
     this.fx.run(f);
   }
 }
