@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { answerJoin, boosts, build, setTax, takeRaft, workPlan, buildCost, buildsOpen, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { answerJoin, boosts, build, setTax, shoreIsland, takeRaft, walkChief, workPlan, buildCost, buildsOpen, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import type { TribeState } from '../src/economy/types';
 
@@ -248,5 +249,38 @@ describe('Won over with no room', () => {
     s.food = 0;
     shoreTick(state, DAY_SEC * 4);
     expect(s.people.length).toBeLessThan(100);
+  });
+});
+
+describe('Finding the way', () => {
+  it('walks round a lake rather than stopping at its shore', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    const is = shoreIsland(s.seed);
+    const N = is.n;
+    // A lake, and a point on its far side.
+    let lakeAt = -1;
+    for (let i = 0; i < N * N && lakeAt < 0; i += 7) if (is.biome[i] === Biome.Lake) lakeAt = i;
+    expect(lakeAt).toBeGreaterThan(-1);
+    const lx = lakeAt % N;
+    const ly = Math.floor(lakeAt / N);
+    let a: { x: number; y: number } | null = null;
+    let b: { x: number; y: number } | null = null;
+    for (let r = 1; r < 200 && !(a && b); r++) {
+      if (!a && isLand(is, lx - r, ly)) a = { x: lx - r, y: ly };
+      if (!b && isLand(is, lx + r + 40, ly)) b = { x: lx + r + 40, y: ly };
+    }
+    s.chiefAt = a!;
+    walkChief(state, b!);
+    for (let i = 0; i < 3000 && s.chiefTo; i++) shoreTick(state, 1);
+    expect(Math.hypot(s.chiefAt.x - b!.x, s.chiefAt.y - b!.y)).toBeLessThan(2);
+  });
+  it('sent into the water, goes to the nearest shore', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    walkChief(state, { x: 5, y: 5 });
+    for (let i = 0; i < 3000 && s.chiefTo; i++) shoreTick(state, 1);
+    expect(s.chiefTo).toBeNull();
+    expect(isLand(shoreIsland(s.seed), s.chiefAt.x, s.chiefAt.y)).toBe(true);
   });
 });

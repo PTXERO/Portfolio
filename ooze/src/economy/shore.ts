@@ -11,6 +11,7 @@ import { BUILDS, buildName, POIS, RELICS, SHORE_STORY, type Boosts, type BuildId
 import { record } from './chronicle';
 import { Biome, CELL, isLand, islandOf, reveal, type Island, type Pt } from './island';
 import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
+import { findPath } from './paths';
 import type { CreatureLook } from '../scene/creatureLook';
 import type { GameState, TribeState } from './types';
 
@@ -107,6 +108,8 @@ export type JoinAnswer = 'crowd' | 'vassal' | 'wait' | 'away';
 export interface Scout {
   at: Pt;
   to: Pt | null;
+  /** The way there (round water), the next point first. */
+  path?: Pt[];
   /** Seconds before giving up on where they're headed (stuck behind water, say). */
   left: number;
 }
@@ -155,6 +158,8 @@ export interface ShoreState {
   chief: number;
   chiefAt: Pt;
   chiefTo: Pt | null;
+  /** The way there (round lakes and along shores), the next point first. */
+  chiefPath?: Pt[];
   /** The look and diet the line carries, and whether they eat their own. */
   look: CreatureLook;
   cannibal: boolean;
@@ -776,8 +781,40 @@ const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 /** The chief walks somewhere (on the island). */
 export function walkChief(state: GameState, to: Pt): void {
   const s = shoreOf(state);
-  if (!s) return;
-  s.chiefTo = { x: Math.max(2, Math.min(SHORE_N - 3, to.x)), y: Math.max(2, Math.min(SHORE_N - 3, to.y)) };
+  if (s) walkTo(s, to);
+}
+
+/** Sends the chief somewhere: the way is found round any water (and if it's in the water or out
+ * of reach, they go as near as they can). */
+export function walkTo(s: ShoreState, to: Pt): void {
+  const want = { x: Math.max(2, Math.min(SHORE_N - 3, to.x)), y: Math.max(2, Math.min(SHORE_N - 3, to.y)) };
+  const path = findPath(shoreIsland(s.seed), s.chiefAt, want);
+  s.chiefPath = path;
+  s.chiefTo = path.length ? path[path.length - 1] : null;
+}
+
+/** Times in a row the chief's walk has been blocked (not saved). */
+const stuck = new WeakMap<ShoreState, number>();
+
+/** One step along a way (the next point first): where they are now, and whether they're there. */
+function along(is: Island, at: Pt, path: Pt[], speed: number, dt: number): { at: Pt; done: boolean; stuck: boolean } {
+  let left = speed * dt;
+  let here = at;
+  while (path.length && left > 0) {
+    const p = path[0];
+    const d = Math.hypot(p.x - here.x, p.y - here.y);
+    if (d <= left) {
+      here = { ...p };
+      left -= d;
+      path.shift();
+      continue;
+    }
+    const next = stepToward(is, here, p, left / dt, dt);
+    if (!next) return { at: here, done: false, stuck: true };
+    here = next;
+    left = 0;
+  }
+  return { at: here, done: !path.length, stuck: false };
 }
 
 export function chiefOf(s: ShoreState): ShorePerson | undefined {
@@ -965,9 +1002,25 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
   const seen = state.stages.shore.seen;
   const bo = boosts(s);
   if (s.chiefTo) {
-    const next = stepToward(is, s.chiefAt, s.chiefTo, CHIEF_SPEED * (1 + bo.speed), dt);
-    if (!next || Math.hypot(next.x - s.chiefTo.x, next.y - s.chiefTo.y) < 0.3) s.chiefTo = null;
-    if (next) s.chiefAt = next;
+    // (A walk from before ways were found, or one knocked off its line: the way, found now.)
+    if (!s.chiefPath?.length) walkTo(s, s.chiefTo);
+    if (s.chiefTo && s.chiefPath) {
+      const r = along(is, s.chiefAt, s.chiefPath, CHIEF_SPEED * (1 + bo.speed), dt);
+      s.chiefAt = r.at;
+      if (r.done) {
+        s.chiefTo = null;
+        s.chiefPath = undefined;
+      } else if (r.stuck) {
+        // Knocked off the line (a narrow spit, say): the way's found again; if that doesn't
+        // help either, they stop where they are.
+        s.chiefPath = undefined;
+        stuck.set(s, (stuck.get(s) ?? 0) + 1);
+        if ((stuck.get(s) ?? 0) > 2) {
+          s.chiefTo = null;
+          stuck.set(s, 0);
+        }
+      } else stuck.set(s, 0);
+    }
   }
   if (seen.length !== SHORE_CELLS * SHORE_CELLS) return;
   reveal(is, seen, s.chiefAt.x, s.chiefAt.y, CHIEF_SIGHT + bo.sight);
@@ -983,14 +1036,18 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
   if (s.scouts.length > huts) s.scouts.length = huts;
   while (s.scouts.length < huts) s.scouts.push({ at: { ...s.hearth }, to: null, left: 0 });
   s.scouts.forEach((sc, k) => {
-    if (!sc.to || sc.left <= 0) {
+    if (!sc.to || sc.left <= 0 || !sc.path) {
       sc.to = scoutGoal(s, seen, is, sc, k);
-      sc.left = Math.hypot(sc.to.x - sc.at.x, sc.to.y - sc.at.y) / SCOUT_SPEED * 2 + 5;
+      sc.path = findPath(is, sc.at, sc.to);
+      sc.left = sc.path.reduce((a, p, i) => a + Math.hypot(p.x - (i ? sc.path![i - 1].x : sc.at.x), p.y - (i ? sc.path![i - 1].y : sc.at.y)), 0) / SCOUT_SPEED * 1.5 + 5;
     }
     sc.left -= dt;
-    const next = stepToward(is, sc.at, sc.to, SCOUT_SPEED * (1 + bo.speed), dt);
-    if (!next || Math.hypot(next.x - sc.to.x, next.y - sc.to.y) < 0.5) sc.to = null;
-    if (next) sc.at = next;
+    const r = along(is, sc.at, sc.path, SCOUT_SPEED * (1 + bo.speed), dt);
+    sc.at = r.at;
+    if (r.done || r.stuck) {
+      sc.to = null;
+      sc.path = undefined;
+    }
     reveal(is, seen, sc.at.x, sc.at.y, SCOUT_SIGHT + bo.sight);
   });
   for (const v of s.villages) {

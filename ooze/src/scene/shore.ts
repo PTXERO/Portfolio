@@ -5,7 +5,7 @@
 
 import { PAL } from '../art/sprites';
 import { Biome, CELL, isLand, type Pt } from '../economy/island';
-import { DAY_SEC, terrainReady, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
+import { DAY_SEC, terrainReady, walkTo, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
 import type { GameState } from '../economy/types';
 import type { BuildId } from '../content/shore';
 import { RangeScene } from './range';
@@ -135,8 +135,9 @@ export class ShoreScene extends RangeScene {
     }
     // Anywhere else on land: the chief walks there (and the camera goes with them).
     const at = this.toWorld(ax, ay);
-    if (isLand(this.island, at.x, at.y)) {
-      s.chiefTo = { x: at.x, y: at.y };
+    // (Water too: they go round to the nearest shore.)
+    {
+      walkTo(s, at);
       this.follow();
     }
   }
@@ -346,7 +347,7 @@ export class ShoreScene extends RangeScene {
       const Y = this.py(x, y);
       if (!onScreen(X, Y)) continue;
       if (moving && Y > this.viewTop && Y < (this.viewBottom || H)) this.movers.push({ x: X, voice: p.kind !== undefined ? voiceOf(s.villages.find((v) => v.id === p.kind)) : OURS });
-      const left = moving ? (isChief ? (s.chiefTo?.x ?? x) < x : (w.goal?.x ?? x) < x) : hash(w.id, Math.floor(t / 5)) < 0.5;
+      const left = moving ? (isChief ? (s.chiefPath?.[0]?.x ?? s.chiefTo?.x ?? x) < x : (w.goal?.x ?? x) < x) : hash(w.id, Math.floor(t / 5)) < 0.5;
       const sleeping = night > 0.5 && !moving && !isChief;
       const kin = p.kind !== undefined ? s.villages.find((v) => v.id === p.kind)?.look ?? look : look;
       sprites.push({ y, draw: () => this.drawBeing(b, kin, x, y, { left, frame: moving ? Math.floor(t * 7 + w.ph) % 2 : 0, sleeping, hero: isChief, hop: moving ? Math.abs(Math.sin(t * 7 + w.ph)) * 1.5 : 0 }) });
