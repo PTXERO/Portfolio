@@ -360,7 +360,8 @@ Built in slices, each tested live (balance sims after).
    them in crowded; let them keep their village as a **vassal** (tribute at a tax you set, growth
    slower the more you take, loyalty falling under a heavy hand until they throw you off); ask
    them to wait for room (they come when there's room, or give up after ten days, trusting you
-   less); or turn them away (they quietly walk off and swell an enemy camp). Unanswered, they wait.
+   less); or turn them away (they quietly walk off and swell an enemy camp). Unanswered, they
+   keep asking (nothing's decided while you're away).
    **The land feeds only so many gatherers** (14, +6 a camp, +8 a weir; past that each brings in
    little), so a village that outgrows its land starves, worse the shorter it is. A People tab
    lists everyone, by kind and age.

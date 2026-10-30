@@ -194,13 +194,15 @@ describe('Won over with no room', () => {
     s.food = 1000;
     return { state, s, v };
   };
-  it('asks what to do; unanswered, they wait, and come once there is room', () => {
+  it('asks what to do, and waits for the answer however long; asked to wait, they come once there is room', () => {
     const { state, s, v } = setup();
     gift(state, v.id);
     expect(v.joined).toBeFalsy();
     expect(v.asking).toBeDefined();
-    shoreTick(state, DAY_SEC * 1.5);
-    expect(v.asking).toBeUndefined();
+    // Away a long while: nothing's decided for you.
+    shoreTick(state, DAY_SEC * 20);
+    expect(v.asking).toBeDefined();
+    answerJoin(state, v.id, 'wait');
     expect(v.waiting).toBeDefined();
     s.wood = 10000;
     now(state, 'hearth');

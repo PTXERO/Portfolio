@@ -786,8 +786,8 @@ function addTrust(state: GameState, s: ShoreState, v: Village, n: number): void 
   }
 }
 
-/** Patience: days they'll wait for an answer (then they wait for room), and for room. */
-const ASK_DAYS = 1;
+/** Patience: days they'll wait for room, once asked to. (For your answer they wait as long as
+ * it takes: nothing's decided for you while you're away.) */
 const WAIT_DAYS = 10;
 
 /** Your answer to a village won over when there isn't room for them. */
@@ -965,11 +965,10 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
   walk(state, s, dt);
   stepVassals(state, s, k);
   stepResources(s, k);
-  // Won over and waiting: with no answer, they wait for room; once there's room, they come; kept
-  // waiting too long, they give up on you.
+  // Won over and asked to wait: once there's room, they come; kept waiting too long, they give
+  // up on you.
   const today = s.day + s.clock / DAY_SEC;
   for (const v of s.villages) {
-    if (v.asking !== undefined && today - v.asking > ASK_DAYS) answerJoin(state, v.id, 'wait');
     if (v.waiting === undefined) continue;
     if (roomLeft(s) >= v.pop) {
       v.waiting = undefined;
