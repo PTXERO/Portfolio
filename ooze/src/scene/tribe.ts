@@ -29,8 +29,10 @@ interface Person {
   lit: number;
 }
 
-/** Seconds the spear gathers itself once touched, before it lets go. */
-const CHARGE = 2.6;
+/** Seconds the spear gathers itself once touched, before it lets go (on the blast in its sound),
+ * and when, partway, it holds its breath. */
+const CHARGE = 8.0;
+const BREATH: [number, number] = [4.85, 5.3];
 /** Every cell seen: there is no fog on what's left (they know every step of it). */
 const ALL_SEEN = new Uint8Array(CELLS * CELLS).fill(1);
 const DAY_SEC = 120;
@@ -179,7 +181,7 @@ export class TribeScene extends RangeScene {
       // Touched: it gathers itself first (then lets go, and they wake).
       if (this.charge < 0 && this.wave < 0) {
         this.charge = 0;
-        cue('charge');
+        cue('awaken');
       }
       return;
     }
@@ -1509,7 +1511,10 @@ export class TribeScene extends RangeScene {
     // brighter, the world dimming about it; then it lets go (the shockwave below).
     if (this.charge >= 0) {
       this.charge += dt;
-      const k = Math.min(1, this.charge / CHARGE);
+      // (Holding its breath for a moment before the last rise: the light stalls and dims.)
+      const c = this.charge;
+      const held = c > BREATH[0] && c < BREATH[1] ? 0.35 + 0.65 * Math.abs((c - (BREATH[0] + BREATH[1]) / 2) / ((BREATH[1] - BREATH[0]) / 2)) : 1;
+      const k = Math.min(1, this.charge / CHARGE) * held;
       // (Where the spear's tip is now: the camera may still be settling.)
       const tip = { x: sx, y: sy - this.spearHeight() };
       b.fillStyle = `rgba(12, 4, 22, ${0.45 * k * k})`;
@@ -1541,7 +1546,6 @@ export class TribeScene extends RangeScene {
         this.charge = -1;
         this.wave = 0;
         this.events.push({ type: 'spear', x: tip.x, y: tip.y });
-        cue('kick');
       }
     }
 
