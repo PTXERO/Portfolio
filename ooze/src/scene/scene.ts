@@ -122,6 +122,17 @@ export class Scene {
     return this.stage === 'creature' || this.stage === 'tribal' || this.stage === 'shore';
   }
 
+  /** The camera's angle over the islands (null: each island's own). */
+  setTilt(v: number | null): void {
+    for (const m of [this.range, this.tribe, this.village]) m.setTilt(v);
+  }
+  /** Tilts the view on show by `d` (two fingers dragged up or down); the new angle. */
+  tiltBy(d: number): number {
+    const t = this.map.tiltNow + d;
+    this.setTilt(t);
+    return this.map.tiltNow;
+  }
+
   get shoreScene(): ShoreScene {
     return this.village;
   }

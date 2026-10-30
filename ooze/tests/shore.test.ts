@@ -135,7 +135,7 @@ describe('Scouts', () => {
     now(state, 'hut');
     expect(now(state, 'scout')).toBe(true);
     const seen0 = state.stages.shore.seen.reduce((a, b) => a + b, 0);
-    for (let i = 0; i < 1800; i++) shoreTick(state, 2);
+    for (let i = 0; i < 5400; i++) shoreTick(state, 2);
     const seen1 = state.stages.shore.seen.reduce((a, b) => a + b, 0);
     console.log('seen cells', seen0, '->', seen1, 'found', s.villages.filter((v) => v.found).length, 'of', s.villages.length);
     expect(seen1).toBeGreaterThan(seen0 * 5);

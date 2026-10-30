@@ -94,9 +94,9 @@ let state: GameState = loadFromStorage() ?? createState();
 (window as unknown as { ooze: () => GameState }).ooze = () => state;
 const ui = (() => {
   try {
-    return { tab: 'grow' as Tab, open: true, full: false, scale: 1, watching: false, ...JSON.parse(localStorage.getItem(UI_KEY) ?? '{}') };
+    return { tab: 'grow' as Tab, open: true, full: false, scale: 1, watching: false, tilt: null as number | null, ...JSON.parse(localStorage.getItem(UI_KEY) ?? '{}') };
   } catch {
-    return { tab: 'grow' as Tab, open: true, full: false, scale: 1, watching: false };
+    return { tab: 'grow' as Tab, open: true, full: false, scale: 1, watching: false, tilt: null as number | null };
   }
 })();
 const saveUi = () => {
@@ -108,6 +108,7 @@ const saveUi = () => {
 };
 
 const scene = new Scene($<HTMLCanvasElement>('scene'));
+scene.setTilt(ui.tilt);
 const expandBtn = $('expand');
 
 /** A wide screen (a laptop or desktop): the menu is a sidebar beside the world, always open. */
@@ -1251,6 +1252,7 @@ function render(): void {
   scene.setVisibleBottom(isWide() ? stageEl.clientHeight : (ui.open ? panel : sheet).getBoundingClientRect().top - stageEl.getBoundingClientRect().top);
   renderPanel();
   for (const b of document.querySelectorAll<HTMLElement>('[data-uiscale]')) b.classList.toggle('on', Number(b.dataset.uiscale) === ui.scale);
+  for (const b of document.querySelectorAll<HTMLElement>('[data-tilt]')) b.classList.toggle('on', ui.tilt === null ? b.dataset.tilt === '0' : Math.abs(Number(b.dataset.tilt) - ui.tilt) < 0.02);
   renderHint();
   showDiscovery();
 }
@@ -1487,6 +1489,9 @@ let swirlSpin = 0;
 
 /** Fingers on the Creature's map: one taps (or drags, when zoomed in), two pinch to zoom. */
 const fingers = new Map<number, { x: number; y: number; sx: number; sy: number }>();
+/** What two fingers are doing (decided once they've moved): tilting the view, or pinching. */
+let twoMode: 'none' | 'tilt' | 'pinch' = 'none';
+let twoStart: { spread: number; midY: number } | null = null;
 let mapDragged = false;
 
 // Keys, on a computer: Esc lets go of a miracle being drawn, or closes a card.
@@ -1581,6 +1586,8 @@ stageEl.addEventListener('pointerdown', (e) => {
   if (onMap()) {
     // The tap itself happens on release, so a drag or a pinch doesn't send the creature off.
     fingers.set(e.pointerId, { x, y, sx: x, sy: y });
+    twoMode = 'none';
+    twoStart = null;
     if (fingers.size === 1) mapDragged = false;
     else mapDragged = true;
     return;
@@ -1609,7 +1616,6 @@ stageEl.addEventListener('pointermove', (e) => {
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
     if (fingers.size >= 2) {
-      // Pinch: zoom by the change in spread, about the middle, and pan with the middle.
       const [a, b] = [...fingers.values()];
       const before = Math.hypot(a.x - b.x, a.y - b.y);
       const midX = (a.x + b.x) / 2;
@@ -1617,6 +1623,21 @@ stageEl.addEventListener('pointermove', (e) => {
       f.x = x;
       f.y = y;
       const after = Math.hypot(a.x - b.x, a.y - b.y);
+      // Which it is, decided once the fingers have moved a little: two fingers side by side
+      // dragged up or down together tilt the view; anything else pinches and pans.
+      if (twoMode === 'none') {
+        twoStart ??= { spread: before, midY };
+        const dy = (a.y + b.y) / 2 - twoStart.midY;
+        const ds = Math.abs(after - twoStart.spread);
+        if (Math.abs(dy) > 14 && ds < twoStart.spread * 0.15 && Math.abs(a.y - b.y) < Math.abs(a.x - b.x) * 0.7) twoMode = 'tilt';
+        else if (Math.abs(dy) > 14 || ds > 14 || Math.abs((a.x + b.x) / 2 - midX) > 14) twoMode = 'pinch';
+      }
+      if (twoMode === 'tilt') {
+        // Up looks out toward the horizon (lower, more side-on); down looks straight down.
+        ui.tilt = scene.tiltBy(((a.y + b.y) / 2 - midY) * 0.004);
+        return;
+      }
+      // Pinch: zoom by the change in spread, about the middle, and pan with the middle.
       if (before > 10) scene.zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, after / before);
       scene.panBy((a.x + b.x) / 2 - midX, (a.y + b.y) / 2 - midY);
       return;
@@ -1654,6 +1675,9 @@ const endFinger = (e: PointerEvent) => {
   const f = fingers.get(e.pointerId);
   if (!f) return;
   fingers.delete(e.pointerId);
+  if (twoMode === 'tilt' && fingers.size < 2) saveUi();
+  twoMode = 'none';
+  twoStart = null;
   if (e.type === 'pointerup' && !mapDragged && fingers.size === 0 && onMap()) {
     scene.ripple(f.x, f.y);
     scene.shoreTap(state, f.x, f.y);
@@ -1794,6 +1818,11 @@ function act(el: HTMLElement): void {
     if (k === 'explore') c.autoRoam = !c.autoRoam;
     else if (k === 'breed') c.keepBreeding = !c.keepBreeding;
     else if (k === 'places' || k === 'settle' || k === 'mandatory') c.roamOpts[k] = !c.roamOpts[k];
+  } else if (el.dataset.tilt) {
+    const v = Number(el.dataset.tilt);
+    ui.tilt = v || null;
+    scene.setTilt(ui.tilt);
+    saveUi();
   } else if (el.dataset.uiscale) {
     ui.scale = Number(el.dataset.uiscale);
     saveUi();

@@ -38,7 +38,8 @@ const WOOD_CAP = 50;
 const BASE_ROOM = 4;
 /** How far the chief sees, and walks in a second (tiles). */
 export const CHIEF_SIGHT = 16;
-const CHIEF_SPEED = 5;
+/** A steady walk for a creature their size (about a body length a second). */
+const CHIEF_SPEED = 2;
 /** The village's own ground: seen from the start. */
 const HOME_SIGHT = 22;
 /** Winning a village over: trust a gift brings (twice as much brought by the chief in person),

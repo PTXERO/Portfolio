@@ -422,6 +422,9 @@ export function layout(state: GameState, tab: Tab): string {
       <p class="note" data-t="offline"></p>
     <div class="panel-head"><h2>Sound</h2></div>
     <div class="sound">${CHANNELS.map((c) => `<label><span>${c.label}</span><input type="range" min="0" max="100" step="1" value="${Math.round(volumes[c.id] * 100)}" data-vol="${c.id}"></label>`).join('')}</div>
+    <div class="panel-head"><h2>Camera angle</h2></div>
+    <div class="warp">${[0.5, 0.65, 0.85, 0].map((k, i) => `<button class="px-btn" data-tilt="${k}">${['Low', 'Mid', 'High', 'Era default'][i]}</button>`).join('')}</div>
+    <p class="note">On the islands, drag two fingers up or down to tilt the view.</p>
     <div class="panel-head"><h2>Interface size</h2></div>
     <div class="warp">${[0.9, 1, 1.15, 1.3].map((k, i) => `<button class="px-btn" data-uiscale="${k}">${['Small', 'Normal', 'Large', 'Huge'][i]}</button>`).join('')}</div>
     <div class="panel-head"><h2>Save</h2></div>

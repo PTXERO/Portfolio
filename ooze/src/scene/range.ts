@@ -208,6 +208,17 @@ export class RangeScene {
    * slant squashes depth: each era's island can stand up more (New Shore's is the most 3D). */
   protected lift = LIFT;
   protected tilt = TILT;
+  /** The island's own slant, before any you've chosen. */
+  private defaultTilt: number | undefined;
+  /** Looks down at another angle (null: the island's own). Lower is more side-on and 3D; the
+   * shader marches far enough for anything down to about 0.45. */
+  setTilt(v: number | null): void {
+    this.defaultTilt ??= this.tilt;
+    this.tilt = v === null ? this.defaultTilt : Math.max(0.45, Math.min(0.95, v));
+  }
+  get tiltNow(): number {
+    return this.tilt;
+  }
   /** Haze over the far (top) side of the view, 0 to 1: depth in the air. */
   depth = 0;
   get liftTilt(): [number, number, number] {
