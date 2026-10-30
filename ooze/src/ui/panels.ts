@@ -67,8 +67,8 @@ export function tabsFor(state: GameState): Tab[] {
     roots: hasRoots(state) && (!creature || cst.generation > 0),
     ideas: !!def.tribal && !!cst.tribe?.ex,
     miracles: !!def.tribal && !!cst.tribe?.ex,
-    // The Chronicle, once there's something in it.
-    chronicle: (state.chronicle?.length ?? 0) > 0,
+    // The Chronicle: from the Extinction on (once there's something in it).
+    chronicle: !!def.tribal && (state.chronicle?.length ?? 0) > 0,
     menu: true,
   };
   return TABS.map((t) => t.id).filter((t) => has[t]);
