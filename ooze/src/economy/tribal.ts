@@ -12,8 +12,10 @@ import type { GameState, StageId, TribeState } from './types';
 const TRIBAL: StageId = 'tribal';
 /** Share of the herd that lives through the strike. */
 export const SURVIVE = 0.25;
-/** Never fewer than this many (a tribe needs a few). */
+/** Never fewer than this many (a tribe needs a few), and never more than the Extinction is
+ * made for (it's balanced, and drawn, for about a hundred: a great herd doesn't make it easier). */
 const MIN_SURVIVORS = 6;
+export const MAX_SURVIVORS = 100;
 /** Food a person gathers a second, by hand: before waking (huddled, scared) and after. */
 const FORAGE_ASLEEP = 0.15;
 const FORAGE_AWAKE = 0.6;
@@ -37,7 +39,7 @@ export function heritageOf(state: GameState): number {
 /** The tribe as the strike leaves it, from the herd that was. */
 export function startTribe(state: GameState): TribeState {
   const c = state.stages.creature;
-  const survivors = Math.max(MIN_SURVIVORS, Math.round(c.pop * SURVIVE));
+  const survivors = Math.min(MAX_SURVIVORS, Math.max(MIN_SURVIVORS, Math.round(c.pop * SURVIVE)));
   return {
     awake: false,
     pop: survivors,

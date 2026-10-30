@@ -180,3 +180,20 @@ describe('the Extinction', () => {
     expect(ideaCost(s, 'warmth')).toBe(Math.ceil(NODE_COST.minor / 2));
   });
 });
+
+describe('a great herd', () => {
+  it('is cut down to the hundred the Extinction is made for, and an old save with more is too', async () => {
+    const { startTribe, MAX_SURVIVORS } = await import('../src/economy/tribal');
+    const { exportSave, importSave } = await import('../src/economy/save');
+    const s = game('omnivore');
+    s.stages.creature.pop = 2400;
+    expect(startTribe(s).survivors).toBe(MAX_SURVIVORS);
+    const big = game('omnivore', 593);
+    expect(big.stages.tribal.tribe!.ex!.people.length).toBe(593);
+    const back = importSave(exportSave(big));
+    const ex = back.stages.tribal.tribe!.ex!;
+    expect(ex.people.length).toBe(MAX_SURVIVORS);
+    const ids = new Set(ex.people.map((p) => p.id));
+    expect(ex.people.every((p) => (p.bonds ?? []).every((b) => ids.has(b.id)))).toBe(true);
+  });
+});

@@ -1,5 +1,6 @@
 import { STAGES, STAGE_ORDER } from '../content/stages';
 import { settleHabitat } from './actions';
+import { MAX_SURVIVORS } from './tribal';
 import { createStageState, createState } from './state';
 import { D } from './num';
 import { packSeen, unpackSeen } from './island';
@@ -91,7 +92,29 @@ export function deserialize(text: string): GameState {
   }
   const state: GameState = { ...base, ...saved, stages, started, swirl: 0, news: [], made: [], reports: saved.reports ?? [] };
   settleHabitat(state);
+  capTribe(state);
   return state;
+}
+
+/** A tribe from before there was a limit (a great herd's quarter) is brought down to it: more
+ * than the Extinction is made for, it was slow to run and to draw. Those let go take their
+ * bonds with them; the leader and the raft's four stay if they can. */
+function capTribe(state: GameState): void {
+  const t = state.stages.tribal.tribe;
+  if (!t) return;
+  t.survivors = Math.min(t.survivors, MAX_SURVIVORS);
+  t.pop = Math.min(t.pop, MAX_SURVIVORS);
+  const ex = t.ex;
+  if (!ex || ex.people.length <= MAX_SURVIVORS) return;
+  const keep = new Set([ex.leader, ...(ex.family ?? [])]);
+  const first = ex.people.filter((p) => keep.has(p.id));
+  ex.people = [...first, ...ex.people.filter((p) => !keep.has(p.id))].slice(0, MAX_SURVIVORS);
+  const ids = new Set(ex.people.map((p) => p.id));
+  for (const p of ex.people) p.bonds = (p.bonds ?? []).filter((b) => ids.has(b.id));
+  ex.family = (ex.family ?? []).filter((id) => ids.has(id));
+  if (ex.leader !== undefined && !ids.has(ex.leader)) ex.leader = undefined;
+  if (ex.whisper && ex.whisper.who.some((id) => !ids.has(id))) ex.whisper = undefined;
+  if (ex.crisis?.who !== undefined && !ids.has(ex.crisis.who)) ex.crisis = undefined;
 }
 
 /** Save as a copyable text string, for backups (iOS can clear web storage). */
