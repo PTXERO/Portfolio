@@ -78,6 +78,12 @@ export class Scene {
   worldAt(x: number, y: number): { x: number; y: number } {
     return this.tribe.worldAt(x / this.px, y / this.px);
   }
+  /** The four leaving the spear's island: where each one's name goes, in CSS pixels. */
+  leavingLabels(): { id: number; x: number; y: number }[] {
+    if (this.stage !== 'tribal') return [];
+    return this.tribe.leavingLabels().map((l) => ({ id: l.id, x: l.x * this.px, y: l.y * this.px }));
+  }
+
   /** The Creature's weather, for the sound (null in other stages). */
   get skies(): { rain: number; snow: number; zoom: number } | null {
     return this.stage === 'creature' ? this.shore.skies : null;

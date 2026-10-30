@@ -25,6 +25,17 @@ export const STORY = {
   /** Setting off on the raft, and the crossing. */
   launch: '[STORY] Four of them pushed the raft out past the breakers. The others watched from the ash.',
   crossing: '[STORY] Forty days they drifted, where the sea took them. On the fortieth, a bird landed on the raft with something green in its beak.',
+  /** Leaving: the last look back at the spear's island as it goes small. */
+  lookBack: '[STORY] They looked back once. The spear was a red spark on the dark, and then it was gone.',
+  /** The crossing, as it goes: the first days, a storm, a calm, one of them sick, the food
+   * running low, and stars they'd never seen. */
+  crossFirst: '[STORY] The first days. The island behind them went small, then went.',
+  crossStorm: '[STORY] A storm, the ninth night. They held on to the raft and to each other.',
+  crossCalm: '[STORY] Then nothing. No wind, no wave, the sea flat as stone for days.',
+  crossSick: '[STORY] One of them fell sick. The others kept them warm between them.',
+  crossHunger: '[STORY] The food ran low, then lower. They ate less, and said less.',
+  crossStars: '[STORY] There were stars they had never seen. They were far from home now.',
+  crossBird: '[STORY] On the fortieth day, a bird came down onto the raft with something green in its beak.',
   /** Coming ashore on the new island. */
   landing: '[STORY] There was smoke on the far hill. Someone was already here.',
   /** When there's no one left. */

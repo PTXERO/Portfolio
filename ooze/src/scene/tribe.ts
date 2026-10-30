@@ -29,6 +29,8 @@ interface Person {
   lit: number;
 }
 
+/** Seconds into the leaving when the camera turns back to the spear. */
+const LOOK_BACK = 19;
 /** Seconds the spear gathers itself once touched, before it lets go (on the blast in its sound:
  * the deep swell, not the sharp hit just before it), when partway it holds its breath, and when
  * that first hit comes (a flare, as if it almost let go). */
@@ -127,6 +129,8 @@ export class TribeScene extends RangeScene {
   private wave = -1;
   /** Before it: the spear gathering itself once touched (seconds in, -1 when not). */
   private charge = -1;
+  /** Seconds since the leaving began, as of the last frame (-1 when not leaving). */
+  private leftAge = -1;
   /** How many of them are moving in view this frame (and where), and until the next squeak. */
   private wandering = 0;
   private wanderX = 0;
@@ -833,6 +837,13 @@ export class TribeScene extends RangeScene {
     this.leaving = [];
   }
 
+  /** The four leaving, and where each is on screen (art pixels, over their heads), while they
+   * go down to the raft and push off (for their names). */
+  leavingLabels(): { id: number; x: number; y: number }[] {
+    if (this.departT < 0 || !this.leaving.length || this.leftAge >= LOOK_BACK - 2) return [];
+    return this.leaving.map((q, k) => ({ id: this.leavingIds[k], x: this.sx(q.x), y: this.py(q.x, q.y) - Math.max(8, 2.6 * this.zoom) }));
+  }
+
   /** Seconds into the leaving (or -1 when there isn't one). */
   private departAge(t: number): number {
     if (this.departT === -2) return -1;
@@ -847,9 +858,9 @@ export class TribeScene extends RangeScene {
     const dx = this.raftAt.x - c.x;
     const dy = this.raftAt.y - c.y;
     const l = Math.hypot(dx, dy) || 1;
-    const k = Math.max(0, Math.min(1, (age - 9) / 11));
+    const k = Math.max(0, Math.min(1, (age - 9) / 17));
     const e = k * k;
-    return { x: this.raftAt.x + (dx / l) * 30 * e, y: this.raftAt.y + (dy / l) * 30 * e };
+    return { x: this.raftAt.x + (dx / l) * 60 * e, y: this.raftAt.y + (dy / l) * 60 * e };
   }
 
   /** The new island: green, unburnt, the four come ashore on its beach, and on a rise inland
@@ -910,13 +921,23 @@ export class TribeScene extends RangeScene {
       this.camX += (tx - this.camX) * k;
       this.camY += (ty - 3 - this.camY) * k;
       this.zoom += (3.4 - this.zoom) * Math.min(1, dt * 1.5);
-      if (ta < 7.5) this.family.forEach((q, i) => {
+      // They step off one at a time, onto the sand.
+      this.family.forEach((q, i) => {
+        if (ta >= 7.5 + i * 0.9) return;
         q.x = raft.x - 1.5 + i;
         q.y = raft.y - 0.2;
         q.goal = { x: is.home.x + (i - 1.5) * 1.2, y: is.home.y + 0.5 };
+        q.wait = 4;
       });
     }
     for (const q of this.family) if (this.landSeen) reveal(is, this.landSeen, q.x, q.y, 8);
+    // As they look inland, the fog draws back up the beach, toward the smoke.
+    if (this.landSeen && ta < 99) {
+      const up = Math.max(0, Math.min(1, (ta - 8) / 8)) * 0.55;
+      reveal(is, this.landSeen, is.home.x + (this.localCamp.x - is.home.x) * up, is.home.y + (this.localCamp.y - is.home.y) * up, 7);
+    }
+    // (And the smoke, seen properly now, rises thicker and higher.)
+    const smokeK = ta >= 99 ? 1 : Math.max(0.35, Math.min(1, (ta - 6) / 7));
     this.paintFog(this.landSeen ?? ALL_SEEN);
     b.imageSmoothingEnabled = false;
     if (this.shaded) b.clearRect(0, 0, W, H);
@@ -970,10 +991,12 @@ export class TribeScene extends RangeScene {
           b.fillStyle = 'rgba(255, 150, 60, 0.996)';
           b.fillRect(FX - 1, FY - 3 - (fl % 2), 2, 2 + (fl % 2));
         }
-        const sz = Math.max(2, Math.round(this.zoom * 0.8));
-        for (let k = 0; k < 16; k++) {
-          const h = (t * 5 + k * 6) % 90;
-          b.fillStyle = `rgba(215, 215, 220, ${0.5 * (1 - h / 90)})`;
+        const sz = Math.max(2, Math.round(this.zoom * 0.8 * (0.7 + smokeK * 0.5)));
+        const tall = 50 + 70 * smokeK;
+        const puffs = Math.round(10 + 16 * smokeK);
+        for (let k = 0; k < puffs; k++) {
+          const h = (t * 5 + k * (tall / puffs)) % tall;
+          b.fillStyle = `rgba(215, 215, 220, ${(0.35 + 0.25 * smokeK) * (1 - h / tall)})`;
           b.fillRect(FX + Math.round(Math.sin(h * 0.08 + k) * 3 + h * 0.25), FY - 8 - Math.round(h), sz + Math.round(h / 20), sz + Math.round(h / 20));
         }
       },
@@ -1342,7 +1365,9 @@ export class TribeScene extends RangeScene {
       const left = moving ? p.vx < 0 : frag.spear.x < p.x;
       const x = p.x;
       const yy = p.y;
-      const hop = moving ? Math.abs(Math.sin(t * 7 + p.ph * 3)) * 2 : 0;
+      // Seeing the four off: once they're aboard, the crowd on the beach bobs and waves.
+      const waving = !moving && this.departT >= 0 && t - this.departT > 7 && t - this.departT < 22;
+      const hop = moving ? Math.abs(Math.sin(t * 7 + p.ph * 3)) * 2 : waving ? Math.abs(Math.sin(t * (4 + (p.ph % 3)) + p.ph * 5)) * 2.5 : 0;
       const lit = p.lit >= 0 ? t - p.lit : -1;
       sprites.push({
         y: yy,
@@ -1486,10 +1511,16 @@ export class TribeScene extends RangeScene {
     if (age >= 0 && this.raftAt) {
       const raft = this.raftWhileLeaving(age)!;
       if (!this.leaving.length) this.leaving = this.leavingIds.map((_, k) => ({ x: frag.camp.x + k - 1.5, y: frag.camp.y + 1, vx: 0, vy: 0, ph: k * 2, goal: null, wait: 0, lit: -100 }));
-      const kc = Math.min(1, dt * 1.8);
-      this.camX += (raft.x - this.camX) * kc;
-      this.camY += (raft.y - 3 - this.camY) * kc;
-      this.zoom += (3.6 - this.zoom) * Math.min(1, dt * 1.2);
+      // The camera: in close on the four as they go down and board; out a little to follow the
+      // raft off; then, as it goes small, turning back to look at the spear one last time, the
+      // whole island in view and the night coming down over it.
+      const back = age >= LOOK_BACK;
+      const kc = Math.min(1, dt * (back ? 0.9 : 1.8));
+      const aim = back ? frag.spear : age < 8 ? { x: (this.raftAt.x + frag.camp.x) / 2 * 0.3 + this.raftAt.x * 0.7, y: (this.raftAt.y + frag.camp.y) / 2 * 0.3 + this.raftAt.y * 0.7 } : raft;
+      this.camX += (aim.x - this.camX) * kc;
+      this.camY += (aim.y - (back ? 0 : 3) - this.camY) * kc;
+      const zoomTo = back ? 0.9 : age < 8 ? 5.2 : 3.4;
+      this.zoom += (zoomTo - this.zoom) * Math.min(1, dt * (back ? 0.45 : 1.2));
       this.leaving.forEach((q, k) => {
         const walk = Math.min(1, age / 7);
         const from = { x: frag.camp.x + k - 1.5, y: frag.camp.y + 1 };
@@ -1513,6 +1544,19 @@ export class TribeScene extends RangeScene {
 
     sprites.sort((a, c) => a.y - c.y);
     for (const s of sprites) s.draw();
+    // The look back: the spear's red glow over the island, fading as night comes down.
+    const leftAge = this.departT >= 0 ? t - this.departT : -1;
+    this.leftAge = leftAge;
+    if (leftAge >= LOOK_BACK) {
+      const k = Math.min(1, (leftAge - LOOK_BACK) / 8);
+      const glow = b.createRadialGradient(sx, sy, 0, sx, sy, Math.max(20, 60 * this.zoom));
+      glow.addColorStop(0, `rgba(230, 50, 60, ${0.55 * (1 - k)})`);
+      glow.addColorStop(1, 'rgba(230, 50, 60, 0)');
+      b.fillStyle = glow;
+      b.fillRect(0, 0, W, H);
+      b.fillStyle = `rgba(6, 8, 22, ${0.7 * k})`;
+      b.fillRect(0, 0, W, H);
+    }
     for (const m of this.smoke) {
       if (this.zoom < 1.2) break;
       const X = Math.round(this.sx(m.x));

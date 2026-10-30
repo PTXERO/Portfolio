@@ -738,3 +738,10 @@ body.wide.tab-ideas #sheet { width: clamp(420px, 42vw, 820px); }
 /* Body tab: what each stat is doing for the herd. */
 .stat-fx { list-style: none; margin: 4px 6px 14px; padding: 0; font-size: 13px; color: var(--dim); line-height: 1.4; }
 .stat-fx li { padding: 2px 0 2px 10px; border-left: 2px solid var(--panel-hi); margin-bottom: 4px; }
+
+/* The four leaving on the raft: their names over their heads. */
+.leaving-name { position: absolute; left: 0; top: 0; z-index: 62; pointer-events: none; font-size: 13px; color: var(--cream); text-shadow: 0 1px 0 var(--ink), 0 -1px 0 var(--ink), 1px 0 0 var(--ink), -1px 0 0 var(--ink); white-space: nowrap; animation: leaving-in 1.2s ease-out; }
+@keyframes leaving-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* The crossing's count of days: small, at the top, out of the story's way. */
+.crossing-day { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 18px); left: 0; right: 0; z-index: 61; text-align: center; font-size: 14px; letter-spacing: 1px; color: var(--cream); opacity: 0.8; text-shadow: 0 1px 0 var(--ink), 0 -1px 0 var(--ink), 1px 0 0 var(--ink), -1px 0 0 var(--ink); pointer-events: none; transition: opacity 400ms; }

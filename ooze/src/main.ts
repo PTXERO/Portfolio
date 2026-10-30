@@ -758,6 +758,8 @@ function showEscape(fresh = false): void {
     [13000, `“Don't forget us!” ${pick(0)} shouted from the shore.`],
     [15500, `“Tell them who we were!” called ${pick(1)}.`],
     [18000, `“We will,” ${four[0] ?? 'they'} called back, and then they were too far to hear.`],
+    // (The camera turns back to the spear here, and night comes down over the island.)
+    [21500, STORY.lookBack],
   ];
   for (const [at, line] of lines) window.setTimeout(() => storyLine(line), at);
   window.setTimeout(() => {
@@ -765,10 +767,11 @@ function showEscape(fresh = false): void {
     playCrossing({ body: '#4aa7b0', belly: '#9ad8d4' }, () => {
       scene.tribeScene.holdOld = false;
       scene.tribeScene.arrive();
-      window.setTimeout(() => storyLine(STORY.landing), 7500);
-      window.setTimeout(screen, 14000);
+      // Ashore one by one; then they look inland, the fog drawing back, the smoke rising.
+      window.setTimeout(() => storyLine(STORY.landing), 10000);
+      window.setTimeout(screen, 19000);
     });
-  }, 21000);
+  }, 28500);
 }
 
 /** No one left: the last of them looks round, alone. Then how long they lasted, and again. */
@@ -1845,6 +1848,33 @@ new ResizeObserver(() => {
 
 let last = performance.now();
 let acc = 0;
+/** The four leaving on the raft: their names over their heads, till the raft is far out. */
+const leavingNames = new Map<number, HTMLElement>();
+function nameLeaving(): void {
+  const labels = scene.leavingLabels();
+  const ex = state.stages.tribal.tribe?.ex;
+  const seen = new Set<number>();
+  for (const l of labels) {
+    const p = ex?.people.find((q) => q.id === l.id);
+    if (!p) continue;
+    seen.add(l.id);
+    let el = leavingNames.get(l.id);
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'leaving-name';
+      el.textContent = p.name;
+      stageEl.appendChild(el);
+      leavingNames.set(l.id, el);
+    }
+    el.style.transform = `translate(${Math.round(l.x)}px, ${Math.round(l.y)}px) translate(-50%, -100%)`;
+  }
+  for (const [id, el] of leavingNames) {
+    if (seen.has(id)) continue;
+    el.remove();
+    leavingNames.delete(id);
+  }
+}
+
 /** A habitat newly open (Depths, Vents): a rising chime, and its name. */
 let openSeen = '';
 function habitatsOpened(): void {
@@ -1870,6 +1900,7 @@ function frame(now: number): void {
   const dt = Math.min(acc, 100) / 1000;
   acc %= FRAME_MS;
   scene.draw(state, dt);
+  nameLeaving();
   // The Extinction's countdown, worked on a little each frame (about 4 ms at most).
   if (guessJob) {
     const t0 = performance.now();
