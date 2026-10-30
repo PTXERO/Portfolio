@@ -248,6 +248,21 @@ export class RangeScene {
     this.kept = all[key] = { storm: this.storm, left: this.stormLeft, timer: this.stormTimer, wet: this.wet, bow: this.bow };
   }
 
+  /** How high the clouds float over this island: a little over its highest peak (worked out
+   * once an island). */
+  private cloudFor = { key: '', h: 1.4 };
+  get cloudH(): number {
+    const is = this.island;
+    if (!is) return 1.4;
+    const key = `${is.seed}/${is.n}`;
+    if (this.cloudFor.key !== key) {
+      let top = 0;
+      for (let i = 0; i < is.height.length; i += 7) if (is.height[i] > top) top = is.height[i];
+      this.cloudFor = { key, h: Math.max(0.9, top * 1.15 + 0.3) };
+    }
+    return this.cloudFor.h;
+  }
+
   /** Which way the clouds drift over this island (its prevailing wind), tiles a second. */
   get wind(): [number, number] {
     const a = ((this.island?.seed ?? 0) % 628) / 100;

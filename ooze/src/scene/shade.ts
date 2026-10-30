@@ -119,7 +119,8 @@ float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 // Clouds: a layer high over the island, drifting with the wind (thicker in a storm). How much
 // cloud there is over a point (0 to 1).
 uniform vec2 uWind; // which way the clouds drift, tiles a second
-const float CLOUD_H = 1.6; // how high they float (in the land's height units)
+uniform float uCloudH; // how high they float, over this island's highest peak (land height units)
+#define CLOUD_H uCloudH
 float cloudAt(vec2 c) {
   vec2 p = (c - uWind * uTime) * 0.016;
   float n = fbm(p) * 0.72 + fbm(p * 2.3 + 7.0) * 0.28;
@@ -402,6 +403,8 @@ export interface ShadeParams {
   bow: [number, number, number, number];
   /** How deep in an ash winter the world is (0 to 1). */
   ash?: number;
+  /** How high the clouds float (land height units: over the island's highest peak). */
+  cloudH?: number;
   /** Which way the clouds drift (tiles a second). */
   wind?: [number, number];
   /** How far the land rises, the slant, and the haze over the far side (see RangeScene). */
@@ -631,6 +634,7 @@ export class MapShader {
     gl.uniform4fv(this.u('uBow'), p.bow);
     gl.uniform1f(this.u('uBlend'), p.blend);
     gl.uniform1f(this.u('uN'), this.n);
+    gl.uniform1f(this.u('uCloudH'), p.cloudH ?? 1.4);
     gl.uniform2f(this.u('uWind'), p.wind?.[0] ?? 1.2, p.wind?.[1] ?? 0.4);
     gl.uniform1f(this.u('uK'), p.lift ?? LIFT);
     gl.uniform1f(this.u('uTY'), p.tilt ?? TILT);
