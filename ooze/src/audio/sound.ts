@@ -1,4 +1,4 @@
-// Sound: the underwater hum of the Soup and the Cell (a seamless loop; the Depths add faint music), a water drop for every tap in the Soup
+// Sound: the underwater hum of the Soup and the Cell (a seamless loop; the Depths have faint music now and then), a water drop for every tap in the Soup
 // and the Cell (one of many, never the same twice running), and the rush of the whirlpool,
 // as loud as it's strong (silent when there isn't one). The drops and the rush are heard as
 // if from under the water: muffled, and ringing on in a long reverb. The Menu has a volume
@@ -270,14 +270,73 @@ function loopTo(name: Loop, level: number, out: GainNode, fade: number): void {
 }
 
 /** Each frame: the hum in the Soup, the rush while a whirlpool turns. */
+// ---- Music: now and then, not always ----
+// Like Minecraft's: a while after you arrive somewhere with music, it fades in slowly, plays
+// its piece through, and fades away; then there's quiet, for minutes, before it may come again.
+// Each place has its piece (only the Cell's Depths, so far).
+
+/** The music of where the game is now, or null. */
+function musicFor(state: GameState): { track: Loop; level: number } | null {
+  if (state.current === 'cell' && state.stages.cell.habitat === 'depths') return { track: 'depths', level: 0.08 };
+  return null;
+}
+/** Seconds: before the first piece in a place, fading in, fading out, and the quiet between. */
+const MUSIC_FIRST: [number, number] = [20, 70];
+const MUSIC_IN = 12;
+const MUSIC_OUT = 14;
+const MUSIC_REST: [number, number] = [150, 420];
+const between = ([a, b]: [number, number]) => a + Math.random() * (b - a);
+let music: { track: Loop; src: AudioBufferSourceNode; gain: GainNode; ends: number } | null = null;
+let musicNext = -1;
+let musicWhere: Loop | null = null;
+
+function fadeMusicOut(sec: number): void {
+  if (!ctx || !music) return;
+  const now = ctx.currentTime;
+  music.gain.gain.cancelScheduledValues(now);
+  music.gain.gain.setValueAtTime(music.gain.gain.value, now);
+  music.gain.gain.linearRampToValueAtTime(0, now + sec);
+  music.src.stop(now + sec + 0.1);
+  music = null;
+}
+
+function musicFrame(state: GameState): void {
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const want = musicFor(state);
+  // Somewhere new (or somewhere without music): what's playing fades away, and a new place
+  // waits a little before its first piece.
+  if ((want?.track ?? null) !== musicWhere) {
+    if (music) fadeMusicOut(3);
+    musicWhere = want?.track ?? null;
+    if (want) musicNext = Math.max(musicNext, now + between(MUSIC_FIRST));
+  }
+  if (!want) return;
+  if (music && now >= music.ends) {
+    fadeMusicOut(MUSIC_OUT);
+    musicNext = now + MUSIC_OUT + between(MUSIC_REST);
+  }
+  const buf = buffers[want.track];
+  if (!music && buf && now >= musicNext) {
+    // From the top of the piece, rising out of nothing.
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(want.level, now + MUSIC_IN);
+    gain.connect(bus.music);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(gain);
+    src.start(now, LOOPS[want.track].pad);
+    music = { track: want.track, src, gain, ends: now + LOOPS[want.track].len - MUSIC_OUT };
+  }
+}
+
 export function soundFrame(state: GameState): void {
   if (!ctx) return;
   const soup = state.current === 'soup';
-  // The hum under all the water; in the Cell's Depths, faint music too, far off in the dark,
-  // barely there (fading in and out over a couple of seconds as you come and go).
-  const depths = state.current === 'cell' && state.stages.cell.habitat === 'depths';
+  // The hum under all the water; music now and then.
   loopTo('underwater', soup || state.current === 'cell' ? 1 : 0, bus.ambience, 0.8);
-  loopTo('depths', depths ? 0.08 : 0, bus.music, 0.8);
+  musicFrame(state);
   const swirl = soup && state.swirl > 0.02 ? Math.min(1, state.swirl) : 0;
   loopTo('river', swirl * 0.8, bus.effects, swirl > 0 ? 0.15 : 0.3);
 }
