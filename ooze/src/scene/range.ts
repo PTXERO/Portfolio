@@ -126,6 +126,15 @@ function charred(p: number[], bi: number, scar: number, n: number, x: number, y:
   }
 }
 
+/** A storm's state, kept in the save. */
+export interface WeatherKeep {
+  storm: number;
+  left: number;
+  timer: number;
+  wet: number;
+  bow: number;
+}
+
 export class RangeScene {
   protected fx = new Effects();
   protected wild = new Wild();
@@ -205,6 +214,29 @@ export class RangeScene {
     return [this.lift, this.tilt, this.depth];
   }
 
+  /** Where in the day it is (0 sunrise, 0.75 sunset), when the island keeps its own clock (so a
+   * reload doesn't make it morning again); null to go by the scene's. */
+  dayAt: number | null = null;
+  /** The weather as it was (kept in the save, so a storm is still on after a reload). */
+  private kept: WeatherKeep | null = null;
+  private keptKey = '';
+
+  /** Picks the weather up where it was left (for this island), and keeps it as it changes. */
+  protected keepWeather(state: GameState, key: string): void {
+    const all = (state.weather ??= {});
+    if (this.keptKey === key && this.kept === all[key]) return;
+    this.keptKey = key;
+    const k = all[key];
+    if (k) {
+      this.storm = k.storm;
+      this.stormLeft = k.left;
+      this.stormTimer = k.timer;
+      this.wet = k.wet;
+      this.bow = k.bow;
+    }
+    this.kept = all[key] = { storm: this.storm, left: this.stormLeft, timer: this.stormTimer, wet: this.wet, bow: this.bow };
+  }
+
   /** Tiles across the island on show, and fog cells across. */
   protected get n(): number {
     return this.island?.n ?? ISLAND;
@@ -215,6 +247,8 @@ export class RangeScene {
 
   reset(): void {
     this.fx.clear();
+    this.keptKey = '';
+    this.kept = null;
     this.members = [];
     this.beast = null;
     this.visitor = null;
@@ -819,6 +853,7 @@ export class RangeScene {
     this.storm += ((this.stormLeft > 0 ? 1 : 0) - this.storm) * Math.min(1, dt / 5);
     this.wet = this.stormLeft > 0 ? Math.min(1, this.wet + dt / 8) : Math.max(0, this.wet - dt / 70);
     const mistW = (si === 0 || si === 2 ? 1 : 0.5) * Math.max(0, 1 - Math.abs(dayT - 0.05) / 0.12);
+    if (this.kept) Object.assign(this.kept, { storm: this.storm, left: this.stormLeft, timer: this.stormTimer, wet: this.wet, bow: this.bow });
     this.weather = [this.storm, mistW, weight3(si, next, turn), this.wet];
   }
 
@@ -1023,6 +1058,7 @@ export class RangeScene {
     const is = islandFor(state);
     this.island = is;
     const st = state.stages.creature;
+    this.keepWeather(state, 'creature');
     const gens = st.generators;
     const look = creatureLookOf(state);
     const { season } = seasonOf(state);
@@ -1036,7 +1072,9 @@ export class RangeScene {
     const next = (si + 1) % 4;
     this.seasonBlend = turn;
     this.seasonPair = [si, next];
-    const dayT = (t % DAY_SEC) / DAY_SEC;
+    // The day goes by the island's own clock (it carries on from where it was after a reload).
+    this.dayAt = (st.year % DAY_SEC) / DAY_SEC;
+    const dayT = this.dayAt;
     const night = Math.max(0, Math.min(1, (0.125 - Math.abs(dayT - 0.875)) * 40));
     const asleep = night > 0.5;
     const home = is.home;

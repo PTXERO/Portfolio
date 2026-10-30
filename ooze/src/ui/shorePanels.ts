@@ -2,7 +2,7 @@
 // villages found out on the island.
 
 import { BUILDS, buildName, type BuildId } from '../content/shore';
-import { buildCost, buildsOpen, canWin, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { buildCost, buildsOpen, canWin, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { miniIcon } from '../scene/creatureLook';
 import type { GameState } from '../economy/types';
 
@@ -23,7 +23,7 @@ export function shoreKey(state: GameState): string {
   if (!s) return '';
   const plan = workPlan(s);
   const can = buildsOpen(s).map((b) => [b.id, s.wood >= buildCost(s, b.id)]);
-  return JSON.stringify([shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, can, s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief, s.people.filter((p) => isAdult(s, p)).length]);
+  return JSON.stringify([s.raftTaken, shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, can, s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief, s.people.filter((p) => isAdult(s, p)).length]);
 }
 
 export function shoreUpdate(root: HTMLElement, state: GameState): void {
@@ -100,7 +100,11 @@ function buildCard(s: ShoreState): string {
     })
     .join('');
   const locked = BUILDS.filter((b) => !open.includes(b) && !(b.max !== undefined && count(s, b.id) >= b.max)).length;
-  return `<div class="panel-head"><h2>Build</h2><span class="dim">laid out round the hearth</span></div>${rows}${locked ? `<p class="dim tiny">More to build once there's a ${count(s, 'hearth') ? 'hut' : 'hearth'}.</p>` : ''}`;
+  const raft = s.raftTaken
+    ? ''
+    : `<div class="card px-box build"><div class="info"><div class="name">The raft</div><div class="sub">Pulled up on the beach where it landed. Its logs would make good wood.</div></div>
+      <button class="px-btn buy gold" data-act="take-raft">Break it up<br><span class="tiny">+${RAFT_WOOD} wood</span></button></div>`;
+  return `<div class="panel-head"><h2>Build</h2><span class="dim">laid out round the hearth</span></div>${raft}${rows}${locked ? `<p class="dim tiny">More to build once there's a ${count(s, 'hearth') ? 'hut' : 'hearth'}.</p>` : ''}`;
 }
 
 function peopleCard(s: ShoreState): string {

@@ -102,7 +102,9 @@ function applyVolumes(): void {
 /** Called from the first taps: makes the sound (browsers only allow it from a tap). */
 export function unlockSound(): void {
   if (ctx) {
-    if (ctx.state === 'suspended' && !document.hidden) void ctx.resume();
+    // (Coming back to the page, iPhone leaves the sound 'interrupted', not just suspended: any
+    // touch wakes it again.)
+    if (ctx.state !== 'running' && !document.hidden) void ctx.resume();
     return;
   }
   const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -263,13 +265,14 @@ export function squeak(level: number, pan = 0, pitch = 1): void {
   src.start(0, at, len);
 }
 
-/** A button pressed: a pop, a touch higher or lower each time. */
-export function popSound(): void {
+/** A button pressed: a pop, a touch higher or lower each time (`pitch` below 1 for a deeper
+ * one: building something, say). */
+export function popSound(pitch = 1): void {
   const buf = buffers.pop;
   if (!ctx || !buf || ctx.state !== 'running') return;
   const src = ctx.createBufferSource();
   src.buffer = buf;
-  src.playbackRate.value = 0.94 + Math.random() * 0.12;
+  src.playbackRate.value = pitch * (0.94 + Math.random() * 0.12);
   const g = ctx.createGain();
   g.gain.value = 0.6;
   src.connect(g).connect(sky);
@@ -421,5 +424,8 @@ export function soundFrame(state: GameState, skies: { rain: number; snow: number
 export function soundHidden(hidden: boolean): void {
   if (!ctx) return;
   if (hidden) void ctx.suspend();
-  else void ctx.resume();
+  else {
+    void ctx.resume();
+    // (If it didn't take, as on iPhone after the screen's been off, the next touch does it.)
+  }
 }

@@ -454,4 +454,7 @@ export interface GameState {
   made: string[];
   /** Expeditions and hatchings finished since the interface last looked. */
   reports: Report[];
+  /** Each island's weather as it was (a storm on, the ground wet), so it carries on after a
+   * reload. */
+  weather?: Record<string, import('../scene/range').WeatherKeep>;
 }

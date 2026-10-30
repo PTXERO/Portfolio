@@ -128,6 +128,8 @@ export interface ShoreState {
   look: CreatureLook;
   cannibal: boolean;
   villages: Village[];
+  /** Whether the raft they came on has been broken up for its wood. */
+  raftTaken?: boolean;
   /** Scouts out exploring (one per scout's hut). */
   scouts?: Scout[];
   /** Things the interface should show (and clear): births, deaths, finds. */
@@ -281,9 +283,10 @@ export function newShore(tribe: TribeState): ShoreState {
     seed,
     day: 0,
     clock: 0,
-    // What they kept from the crossing, and the raft broken up for wood.
+    // What they kept from the crossing (the raft itself is still on the beach: its wood is
+    // there to be taken).
     food: 12,
-    wood: 14,
+    wood: 8,
     people,
     nextId: people.length,
     births: 0,
@@ -406,6 +409,20 @@ export function build(state: GameState, id: BuildId): boolean {
     record(state, 'The hearth was lit.', 'shore', shoreWhen(s));
   }
   return true;
+}
+
+/** Wood the raft gives, broken up. */
+export const RAFT_WOOD = 20;
+
+/** The raft they came on, broken up for its wood (there's no going back now). */
+export function takeRaft(state: GameState): number {
+  const s = shoreOf(state);
+  if (!s || s.raftTaken) return 0;
+  s.raftTaken = true;
+  const got = Math.min(RAFT_WOOD, Math.max(0, woodCap(s) + RAFT_WOOD - s.wood));
+  s.wood += got;
+  record(state, 'They broke up the raft that had carried them over the sea, for its wood.', 'shore', shoreWhen(s));
+  return got;
 }
 
 export function setLean(state: GameState, lean: Lean): void {

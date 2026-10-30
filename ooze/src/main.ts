@@ -14,7 +14,7 @@ import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
-import { build, gift, isAdult, setLean, shoreOf, shoreSeason, startShore, walkChief, type Lean } from './economy/shore';
+import { build, gift, isAdult, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
 import { villageCard } from './ui/shorePanels';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
@@ -1632,7 +1632,8 @@ stageEl.addEventListener('pointercancel', endSwirl);
 
 function act(el: HTMLElement): void {
   const id = state.current;
-  popSound();
+  // (Building has its own, deeper pop.)
+  if (!el.dataset.build) popSound();
   if (el.dataset.gen) {
     if (buyGenerator(state, id, el.dataset.gen, buyCount(state, id, el.dataset.gen, state.buyAmount))) scene.purchase(state, el.dataset.gen);
   } else if (el.dataset.up) {
@@ -1659,7 +1660,7 @@ function act(el: HTMLElement): void {
   else if (el.dataset.cast) startCast(el.dataset.cast as SpellId);
   else if (el.dataset.build) {
     if (build(state, el.dataset.build as BuildId)) {
-      tapSound();
+      popSound(0.72);
       save();
     }
   } else if (el.dataset.lean) setLean(state, el.dataset.lean as Lean);
@@ -1795,6 +1796,16 @@ function act(el: HTMLElement): void {
         panelKey = '';
         save();
         break;
+      case 'take-raft': {
+        const got = takeRaft(state);
+        if (got) {
+          popSound(0.72);
+          const r = el.getBoundingClientRect();
+          scene.float(r.left + r.width / 2, r.top, `+${got} wood`, '#c8a878');
+          save();
+        }
+        break;
+      }
       case 'look-landed':
         // Ashore: New Shore begins.
         extinctEl.classList.remove('in');
@@ -2017,6 +2028,10 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 window.addEventListener('pagehide', save);
+// Back from another app or tab (or the page restored from the back button): the sound picks up
+// again (on iPhone, if it can't yet, the first touch does it).
+window.addEventListener('pageshow', () => soundHidden(false));
+window.addEventListener('focus', () => soundHidden(false));
 // Also look for a newer build on opening, and now and then while playing.
 if (!import.meta.env.DEV) {
   void checkForUpdate();

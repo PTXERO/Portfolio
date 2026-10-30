@@ -5,7 +5,7 @@
 
 import { PAL } from '../art/sprites';
 import { Biome, CELL, isLand, type Pt } from '../economy/island';
-import { isAdult, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
+import { DAY_SEC, isAdult, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
 import type { GameState } from '../economy/types';
 import type { BuildId } from '../content/shore';
 import { RangeScene } from './range';
@@ -21,6 +21,22 @@ interface Walker {
   ph: number;
   /** What they're out at: food, wood, or round the village. */
   job: 'food' | 'wood' | 'home';
+}
+
+/** How a kind squeaks: higher or lower, and quicker or slower (your own line is 1 and 1). */
+interface Voice {
+  pitch: number;
+  pace: number;
+}
+const OURS: Voice = { pitch: 1, pace: 1 };
+/** Each other kind's voice, from its village (the same every time). */
+function voiceOf(v: Village | undefined): Voice {
+  if (!v) return OURS;
+  const a = hash(v.id * 13 + v.x, 71);
+  const b = hash(v.id * 17 + v.y, 73);
+  // Away from your own: never quite the same as yours.
+  const pitch = a < 0.5 ? 0.62 + a * 0.6 : 1.18 + (a - 0.5) * 0.7;
+  return { pitch, pace: 0.6 + b * 1.1 };
 }
 
 /** Flag colours for what another village is to yours. */
@@ -43,6 +59,8 @@ export class ShoreScene extends RangeScene {
   private placed = -1;
   private lastT = 0;
   private chatter = 1;
+  /** Who's hopping about on screen this frame: where, and their kind's voice. */
+  private movers: { x: number; voice: Voice }[] = [];
   /** Looking at somewhere you chose (a village): the camera stays there, even as the sheet
    * opens or closes, until you send the chief somewhere. */
   private looking = false;
@@ -136,6 +154,7 @@ export class ShoreScene extends RangeScene {
     if (!this.viewBottom) this.viewTop = f.top;
     const s = shoreOf(state);
     if (!s) return;
+    this.keepWeather(state, 'shore');
     const is = shoreIsland(s.seed);
     this.island = is;
     this.ash = 0;
@@ -189,7 +208,9 @@ export class ShoreScene extends RangeScene {
       this.blitWorld(b, this.ground.get(si)!);
     }
 
-    const dayT = (t % 120) / 120;
+    // The day goes by the village's own clock (carrying on where it was after a reload).
+    this.dayAt = s.clock / DAY_SEC;
+    const dayT = this.dayAt;
     const night = Math.max(0, Math.min(1, (0.125 - Math.abs(dayT - 0.875)) * 40));
     this.stepWeather(dt, si, next, turn, dayT);
     // In a storm (or a winter night) they keep to the village.
@@ -246,8 +267,7 @@ export class ShoreScene extends RangeScene {
     const plan = workPlan(s);
     const woods = this.woodsNear(s);
     let foodLeft = plan.food;
-    let hopping = 0;
-    let hopX = 0;
+    this.movers = [];
     const look = s.look;
     for (const w of this.walkers) {
       const p = s.people.find((q) => q.id === w.id);
@@ -290,17 +310,14 @@ export class ShoreScene extends RangeScene {
       const X = this.sx(x);
       const Y = this.py(x, y);
       if (!onScreen(X, Y)) continue;
-      if (moving && Y > this.viewTop && Y < (this.viewBottom || H)) {
-        hopping++;
-        hopX += X;
-      }
+      if (moving && Y > this.viewTop && Y < (this.viewBottom || H)) this.movers.push({ x: X, voice: p.kind !== undefined ? voiceOf(s.villages.find((v) => v.id === p.kind)) : OURS });
       const left = moving ? (isChief ? (s.chiefTo?.x ?? x) < x : (w.goal?.x ?? x) < x) : hash(w.id, Math.floor(t / 5)) < 0.5;
       const sleeping = night > 0.5 && !moving && !isChief;
       const kin = p.kind !== undefined ? s.villages.find((v) => v.id === p.kind)?.look ?? look : look;
       sprites.push({ y, draw: () => this.drawBeing(b, kin, x, y, { left, frame: moving ? Math.floor(t * 7 + w.ph) % 2 : 0, sleeping, hero: isChief, hop: moving ? Math.abs(Math.sin(t * 7 + w.ph)) * 1.5 : 0 }) });
     }
-    // The raft they came on, pulled up on the beach where it landed.
-    {
+    // The raft they came on, pulled up on the beach where it landed (until it's broken up).
+    if (!s.raftTaken) {
       const r = { x: s.beach.x - 2, y: s.beach.y + 1 };
       const X = Math.round(this.sx(r.x));
       const Y = Math.round(this.py(r.x, r.y));
@@ -325,25 +342,12 @@ export class ShoreScene extends RangeScene {
       const X = this.sx(x);
       const Y = this.py(x, y);
       if (!onScreen(X, Y)) continue;
-      if (moving && Y > this.viewTop && Y < (this.viewBottom || H)) {
-        hopping++;
-        hopX += X;
-      }
+      if (moving && Y > this.viewTop && Y < (this.viewBottom || H)) this.movers.push({ x: X, voice: OURS });
       const left = (sc.to?.x ?? x) < x;
       sprites.push({
         y,
         draw: () => this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 7) % 2 : 0, hop: moving ? Math.abs(Math.sin(t * 7)) * 1.5 : 0 }),
       });
-    }
-    // Out and about, they squeak (heard up close, quieter as the view pulls back).
-    herdInView(hopping > 0);
-    if (hopping) {
-      this.chatter -= dt * Math.min(3, 0.6 + hopping * 0.3);
-      if (this.chatter <= 0) {
-        this.chatter = 0.5 + Math.random() * 1.4;
-        const near = Math.max(0, Math.min(1, (this.zoom - 1.2) / 6.8));
-        squeak(0.45 * near ** 1.2, (hopX / hopping / W) * 2 - 1);
-      }
     }
     // Where the chief is going: a small marker on the ground.
     if (s.chiefTo) {
@@ -359,6 +363,19 @@ export class ShoreScene extends RangeScene {
 
     // ---- The island's other villages ----
     for (const v of s.villages) this.drawVillage(b, sprites, s, v, t, dt, z, close, fogged);
+    // Out and about, they squeak, each kind in its own voice: higher or lower, chattier or
+    // slower (heard up close, quieter as the view pulls back).
+    const n = this.movers.length;
+    herdInView(n > 0);
+    if (n) {
+      this.chatter -= dt * Math.min(3, 0.6 + n * 0.3);
+      if (this.chatter <= 0) {
+        const m = this.movers[Math.floor(Math.random() * n)];
+        this.chatter = (0.5 + Math.random() * 1.4) / m.voice.pace;
+        const near = Math.max(0, Math.min(1, (this.zoom - 1.2) / 6.8));
+        squeak(0.45 * near ** 1.2, (m.x / W) * 2 - 1, m.voice.pitch);
+      }
+    }
 
     this.wild.update(this.wildView, is, sprites, { b, t, dt, nests: [s.hearth], season: si, night, feet: this.walkers, me: s.chiefAt });
     this.trails.update(is.seed, this.walkers.filter((w) => w.goal && Math.hypot(w.goal.x - w.x, w.goal.y - w.y) > 0.3), dt, is.n);
@@ -609,6 +626,9 @@ export class ShoreScene extends RangeScene {
         }
         const x = w.x;
         const y = w.y;
+        const LX = this.sx(x);
+        const LY = this.py(x, y);
+        if (moving && LX > 0 && LX < this.W && LY > this.viewTop && LY < (this.viewBottom || this.H)) this.movers.push({ x: LX, voice: voiceOf(v) });
         sprites.push({ y, draw: () => this.drawBeing(b, v.look, x, y, { left: moving ? dx < 0 : hash(w.id, Math.floor(t / 5)) < 0.5, frame: moving ? Math.floor(t * 7 + w.ph) % 2 : 0, hop: moving ? Math.abs(Math.sin(t * 7 + w.ph)) * 1.5 : 0 }) });
       }
     }
