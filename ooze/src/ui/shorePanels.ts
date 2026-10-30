@@ -91,7 +91,7 @@ export function shoreLayout(state: GameState, tab: string): string {
   if (!s) return '';
   if (tab === 'build') return buildLayout(s);
   if (tab === 'island') return islandLayout(s);
-  const views = `<div class="seg build-cats"><button class="px-btn${villageView === 'village' ? ' on' : ''}" data-villageview="village">The village</button><button class="px-btn${villageView === 'people' ? ' on' : ''}" data-villageview="people">People · ${s.people.length}</button></div>`;
+  const views = `<div class="seg build-cats"><button class="px-btn${villageView === 'village' ? ' on' : ''}" data-villageview="village">The village</button><button class="px-btn${villageView === 'people' ? ' on' : ''}" data-villageview="people">People · ${s.people.length}</button><span class="seg-gap"></span><button class="px-btn" data-camera="home">Home</button><button class="px-btn" data-camera="chief">Chief</button></div>`;
   if (villageView === 'people') return views + peopleLayout(s);
   return views + storesCard(s) + workCard(s) + peopleCard(s);
 }

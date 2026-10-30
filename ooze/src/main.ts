@@ -1741,6 +1741,15 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.lean) setLean(state, el.dataset.lean as Lean);
   else if (el.dataset.buildcat) setBuildCat(el.dataset.buildcat);
   else if (el.dataset.villageview) setVillageView(el.dataset.villageview);
+  else if (el.dataset.camera) {
+    // Back to the village (and the camera stays there), or back with the chief.
+    const s = shoreOf(state);
+    if (s) {
+      if (el.dataset.camera === 'home') scene.shoreScene.lookAt(s.hearth, 3);
+      else scene.shoreScene.follow();
+      if (!isWide()) ui.open = false;
+    }
+  }
   else if (el.dataset.deck) {
     // Flip to the next (or last) card in the deck.
     const cards = el.closest('.deck')?.querySelector<HTMLElement>('.deck-cards');
