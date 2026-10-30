@@ -12,7 +12,7 @@ import { icon } from './art/sprites';
 import { STAGES } from './content/stages';
 import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
-import { awaken, sealed } from './economy/tribal';
+import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, say, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
@@ -1795,9 +1795,14 @@ async function checkForUpdate(manual = false): Promise<void> {
 async function startFromLink(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const where = params.get('start');
-  if (where !== 'creature' && where !== 'tribal') return;
+  if (where !== 'creature' && where !== 'tribal' && where !== 'escape') return;
   history.replaceState(null, '', location.pathname);
-  const what = where === 'tribal' ? 'at the end of the Creature stage (to see the strike and the Extinction)' : 'at the beginning of the Creature stage';
+  const what =
+    where === 'escape'
+      ? 'in the Extinction, the raft built and the night about to fall (to see them set off)'
+      : where === 'tribal'
+        ? 'at the end of the Creature stage (to see the strike and the Extinction)'
+        : 'at the beginning of the Creature stage';
   if (!confirm(`Start a fresh game ${what}? This replaces your current save (export it from the Menu first if you want to keep it).`)) return;
   try {
     const code = (await (await fetch('./creature-start.txt', { cache: 'no-store' })).text()).trim();
@@ -1812,6 +1817,22 @@ async function startFromLink(): Promise<void> {
       c.generators.territory = 8;
       c.pop = 400;
       if (c.seen) c.seen.fill(1);
+    }
+    if (where === 'escape') {
+      // Into the Extinction, awake, with the raft done and the crossing's food put by: at
+      // nightfall (a few seconds off) they set out.
+      if (!state.unlocked.includes('tribal')) state.unlocked.push('tribal');
+      state.current = 'tribal';
+      const t = startTribe(state);
+      t.awake = true;
+      state.stages.tribal.tribe = t;
+      startExtinction(state);
+      const ex = t.ex!;
+      for (const id of ['rope', 'hollow']) if (!ex.ideas.includes(id)) ex.ideas.push(id);
+      ex.raft = { frame: 30, lashing: 20, hull: 45 };
+      ex.voyage = 40;
+      ex.sendRule = 'family';
+      ex.clock = DAY_SEC - 6;
     }
     scene.reload();
     save();
