@@ -89,9 +89,9 @@ let state: GameState = loadFromStorage() ?? createState();
 (window as unknown as { ooze: () => GameState }).ooze = () => state;
 const ui = (() => {
   try {
-    return { tab: 'grow' as Tab, open: true, full: false, scale: 1, ...JSON.parse(localStorage.getItem(UI_KEY) ?? '{}') };
+    return { tab: 'grow' as Tab, open: true, full: false, scale: 1, watching: false, ...JSON.parse(localStorage.getItem(UI_KEY) ?? '{}') };
   } catch {
-    return { tab: 'grow' as Tab, open: true, full: false, scale: 1 };
+    return { tab: 'grow' as Tab, open: true, full: false, scale: 1, watching: false };
   }
 })();
 const saveUi = () => {
@@ -909,6 +909,16 @@ function renderGoal(): void {
     return;
   }
   const rs = reactions(state.current);
+  // The Creature's end, stayed to watch: the strip waits with the way on (the strike).
+  if (def.next === 'tribal' && canEvolve(state) && ending.hidden && !striking) {
+    if (goalKey !== 'waiting') {
+      goalKey = 'waiting';
+      evolveEl.hidden = false;
+      evolveEl.innerHTML = `<div class="evolve-row"><span class="label">Something is coming</span></div>
+        <button class="px-btn gold pulse" data-act="look">Look up</button>`;
+    }
+    return;
+  }
   // Once every page of the book is found, the strip has nothing left to say.
   const shown = goalShown(state) && !(rs.length > 0 && rs.every((r) => state.stages[state.current].discovered.includes(r.id)));
   const finale = finaleReady(state);
@@ -1112,9 +1122,11 @@ function playEnding(): void {
   if (state.current === 'soup') scene.finale();
   else scene.evolveFlash();
   // With nothing built after this stage yet, the ending says so instead of going on.
+  // (Before the strike, there's no hurry: they can stay and watch the island a while, and
+  // look up when they're ready.)
   const after = def.next
     ? `<p class="stir">…but something is still moving.</p>
-      <button class="px-btn gold pulse" data-act="look">Look closer</button>`
+      <button class="px-btn gold pulse" data-act="look">Look closer</button>${def.next === 'tribal' ? '<button class="px-btn" data-act="keep">Keep watching</button>' : ''}`
     : `<p class="stir">The story continues in a future update.</p>
       <button class="px-btn gold" data-act="keep">Keep watching</button>`;
   ending.innerHTML = `<div class="ending-inner">
@@ -1586,6 +1598,12 @@ function act(el: HTMLElement): void {
       case 'keep':
         ending.classList.remove('in');
         setTimeout(() => (ending.hidden = true), 600);
+        // At the Creature's end, staying to watch: the strike waits for them (the strip says so).
+        if (STAGES[state.current].next === 'tribal') {
+          ui.watching = true;
+          saveUi();
+        }
+        goalKey = '';
         break;
       case 'evolve': {
         const was = state.current;
@@ -1840,7 +1858,7 @@ function frame(now: number): void {
 
 // A save made mid-ending (closed during the credits) picks up at the reveal. This also
 // carries on a Cell finished before the Creature existed: its ending now leads somewhere.
-if (canEvolve(state)) playEnding();
+if (canEvolve(state) && !(STAGES[state.current].next === 'tribal' && ui.watching)) playEnding();
 catchUp();
 render();
 document.fonts?.ready.then(() => render());
