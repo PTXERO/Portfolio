@@ -468,6 +468,7 @@ function finishCast(): void {
   const answers = !!c && c.spell === id && (c.kind === 'trapped' ? !!people?.some((i) => ex.people[i]?.id === c.who) : c.kind === 'cold' ? true : at.some(near) || W.some(near));
   const r = cast(ex, id, { people, power: answers && c!.kind !== 'trapped' && c!.kind !== 'cold' ? 2 : 1 });
   if (!r.ok) return fizzle(r.text);
+  cue('spell', 0.8);
   tribe.wonder(id, at);
   scene.float(end.x, end.y - 12, answers ? `${crisisAnswered(ex)} · ${r.text}` : r.text, '#e8b0ff');
   endCast();

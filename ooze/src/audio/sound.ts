@@ -19,7 +19,7 @@ export const CHANNELS: { id: Channel; label: string }[] = [
 
 const KEY = 'ooze-to-orbit/sound';
 /** Bumped when a sound file changes, so phones don't keep the old one. */
-const SFX_V = 11;
+const SFX_V = 12;
 const DEFAULTS: Record<Channel, number> = { master: 0.8, music: 0.6, ambience: 0.6, effects: 0.7 };
 
 /** The loops are padded either side (so the mp3's own gaps fall outside them): where each
@@ -59,10 +59,10 @@ type Sound = Loop | 'drops' | 'pop' | 'thunder0' | 'thunder1' | 'thunder2' | 'th
 /** One-off sounds for moments: an organelle found, a rare microbe gulped down (three glugs),
  * one turning up, a new habitat opening, the boom from the Soup into the Cell, and the meteor's
  * approach (a rumble swelling to the moment it strikes, timed to the cutscene), its impact, and
- * the spear,
+ * a miracle cast, the spear,
  * touched, charging up and letting go. */
-export type Cue = 'shine' | 'glug0' | 'glug1' | 'glug2' | 'chime' | 'ascend' | 'boom' | 'meteor' | 'charge' | 'kick' | 'impact';
-const CUES: Cue[] = ['shine', 'glug0', 'glug1', 'glug2', 'chime', 'ascend', 'boom', 'meteor', 'charge', 'kick', 'impact'];
+export type Cue = 'shine' | 'glug0' | 'glug1' | 'glug2' | 'chime' | 'ascend' | 'boom' | 'meteor' | 'charge' | 'kick' | 'impact' | 'spell';
+const CUES: Cue[] = ['shine', 'glug0', 'glug1', 'glug2', 'chime', 'ascend', 'boom', 'meteor', 'charge', 'kick', 'impact', 'spell'];
 const buffers: Partial<Record<Sound, AudioBuffer>> = {};
 /** The thunders, evened out (they were recorded at very different loudness). */
 const THUNDER_GAIN = [1, 1, 1.3, 1];
