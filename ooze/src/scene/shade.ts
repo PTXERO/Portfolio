@@ -264,6 +264,38 @@ void main() {
   if (o.a > 0.01) lit = mix(lit, o.rgb * (uAmb * 1.1 + uSunCol * 0.95), o.a);
   lit *= 1.0 - cloudShade;
 
+  // The fog of war in the round: banks of fog standing over the unseen land, billowing and
+  // drifting, their tops rising and falling. Looked through along the line of sight (the
+  // nearest, highest part first), so a bank in front hides what's behind it, and its edge is a
+  // soft rolling wall rather than a step of white tiles. It rises from the land under it.
+  {
+    float acc = 0.0;
+    vec3 fc = vec3(0.0);
+    vec3 fogLit = (0.32 + bright * 0.72) * mix(vec3(1.0), vec3(1.0, 0.86, 0.74), clamp(length(uHaze) * 3.0, 0.0, 1.0));
+    fogLit = mix(fogLit, vec3(0.42, 0.38, 0.35) * (0.45 + bright * 0.4), uAsh * 0.9);
+    for (int i = 0; i < 10; i++) {
+      float hh = 1.15 * (1.0 - (float(i) + 0.5) / 10.0);
+      vec2 p = vec2(wx, uCam.y + (art.y - uCam.w + hh * K * uCam.z) / (uCam.z * TY));
+      float ground = hTop(p);
+      // (Below the land here: the line of sight has met the ground.)
+      if (hh < ground) break;
+      vec2 q = p - uWind * uTime * 0.25;
+      float e = min(min(p.x, p.y), min(N - p.x, N - p.y));
+      float un = max(p.x >= 0.0 && p.y >= 0.0 && p.x < N && p.y < N ? texture2D(uFog, (p + (vec2(noise(q * 0.08), noise(q * 0.08 + 9.0)) - 0.5) * 8.0) / N).a : 1.0, 1.0 - smoothstep(4.0, 34.0, e));
+      if (un < 0.02) continue;
+      // The bank's top: some way over the land, rising and falling in billows.
+      float top = ground + 0.1 + 0.32 * (noise(q * 0.035) * 0.65 + noise(q * 0.11) * 0.35);
+      float d = un * smoothstep(top, top - 0.09, hh);
+      if (d <= 0.0) continue;
+      // Lit from above: bright at the top of a bank, greyer down in it.
+      float shade = 0.78 + 0.22 * smoothstep(top - 0.25, top, hh);
+      float a = d * 0.38;
+      fc += (1.0 - acc) * a * fogLit * shade;
+      acc += (1.0 - acc) * a;
+    }
+    if (acc > 0.0) lit = lit * (1.0 - acc) + fc;
+  }
+
   // The clouds themselves, where the line of sight meets their layer: soft and thin, over
   // everything, lit by the time of day (thinning away as the view comes right down close).
   float cloudY = uCam.y + (art.y - uCam.w + CLOUD_H * K * uCam.z) / (uCam.z * TY);
