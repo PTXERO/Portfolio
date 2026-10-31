@@ -406,7 +406,7 @@ function vassalRow(v: Village): string {
   const mood = loy > 70 ? 'content' : loy > 40 ? 'grumbling' : loy > 15 ? 'restless' : 'on the edge of revolt';
   return `<div class="card px-box village vassal"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-vassal">Yours</span></div>
     <div class="sub">${Math.floor(v.pop)} of them, ${mood}. They send ${n0(d.food)} food and ${n0(d.wood)} wood a day${d.growth > 0.05 ? ', and are growing' : d.growth < -0.05 ? ', and are dwindling' : ''}.</div>
-    <div class="trust"><span class="tiny dim">Loyal</span><div class="making-bar on loyal"><i style="width: ${loy}%"></i></div><span class="tiny num">${loy}</span></div>
+    <div class="trust"><span class="tiny dim">Loyal</span><div class="making-bar on loyal"><i style="width: ${loy}%"></i></div></div>
     <div class="seg tax"><span class="tiny dim">Take</span>${TAXES.map((t) => `<button class="px-btn${Math.abs(v.vassal!.tax - t) < 0.01 ? ' on' : ''}" data-tax="${v.id}:${t}">${Math.round(t * 100)}%</button>`).join('')}</div></div>
     <div class="col"><button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
 }
