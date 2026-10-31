@@ -732,6 +732,8 @@ export const ELDERS_OFF = { pick: null, why: 'off' as ElderWhy, text: '"The chie
 /** The elders' thinking: what they'd build next and why, or why they're waiting, in their words. */
 export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy; text: string } {
   const name = (id: BuildId) => buildName(id, s.look.diet).toLowerCase();
+  const an = (id: BuildId) => `${/^[aeiou]/.test(name(id)) ? 'an' : 'a'} ${name(id)}`;
+  const An = (id: BuildId) => an(id).charAt(0).toUpperCase() + an(id).slice(1);
   if (s.building) return { pick: null, why: 'busy', text: `"The ${name(s.building.id)} is going up. Nothing more until it stands."` };
   const open = new Set(buildsOpen(s).map((b) => b.id));
   if (open.has('hearth')) return { pick: 'hearth', why: 'hearth', text: '"First, a fire."' };
@@ -751,7 +753,7 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
   const short = (id: BuildId) => !canPay(s, id) || s.wood + 0.5 - buildCost(s, id) < (id === 'forester' || id === 'woodpile' ? 0 : reserve);
   const go = (id: BuildId, why: ElderWhy, text: string) => {
     if (!short(id)) return { pick: id, why, text };
-    if (canPay(s, id)) return { pick: null, why: 'winter' as ElderWhy, text: `"${text.slice(1, -1)} But winter is coming, and the fires come first: we keep back ${Math.ceil(reserve)} wood for them."` };
+    if (canPay(s, id)) return { pick: null, why: 'winter' as ElderWhy, text: `"${text.slice(1, -1)} But ${si === 3 ? 'it is winter' : 'winter is coming'}, and the fires come first: we keep back ${Math.ceil(reserve)} wood for them."` };
     const needs = BUILDS.find((d) => d.id === id)!.needs;
     const lacking = needs && !hasNeeds(s, id) ? Object.keys(needs).map((r) => RES_NAME[r as Res].toLowerCase()).join(' and ') : '';
     return { pick: null, why: 'saving' as ElderWhy, text: `"${text.slice(1, -1)} ${lacking ? `We have not the ${lacking} for it.` : `We are saving wood for it: ${Math.floor(s.wood)} of ${buildCost(s, id)}.`}"` };
@@ -759,15 +761,15 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
   // The woods thinning: a forester, before anything else.
   if (open.has('forester') && forestShare(s) < 0.5 && count(s, 'forester') < 1 + s.people.length / 30) return go('forester', 'forest', '"The woods round the village are thinning. Someone must plant, or our children will have nothing to burn."');
   const SAY: Partial<Record<ElderWhy, (id: BuildId) => string>> = {
-    homes: (id) => `"There are not beds enough for children to come. A ${name(id)}."`,
-    food: (id) => `"The land near the hearth feeds only so many gatherers. A ${name(id)}, to feed more."`,
-    stores: (id) => `"Food spoils with nowhere to keep it. A ${name(id)}."`,
+    homes: (id) => `"There are not beds enough for children to come. ${An(id)}."`,
+    food: (id) => `"The land near the hearth feeds only so many gatherers. ${An(id)}, to feed more."`,
+    stores: (id) => `"Food spoils with nowhere to keep it. ${An(id)}."`,
   };
   for (const [why, w] of wants) {
     const need = w();
     if (!need) continue;
     // More than the woodpiles hold: a woodpile first.
-    if (buildCost(s, need) + reserve > woodCap(s) && open.has('woodpile')) return go('woodpile', 'woodpile', `"We need a ${name(need)}, but the woodpiles cannot hold the wood for it. Another woodpile first."`);
+    if (buildCost(s, need) + reserve > woodCap(s) && open.has('woodpile')) return go('woodpile', 'woodpile', `"We need ${an(need)}, but the woodpiles cannot hold the wood for it. Another woodpile first."`);
     return go(need, why, SAY[why]!(need));
   }
   // Nothing pressing: something useful, if the wood's piling up. By use, not by cheapness (and
@@ -786,10 +788,18 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
     ['lookout', true],
     ['trails', true],
   ];
-  const pick = useful.find(([id, worth]) => worth && open.has(id) && hasNeeds(s, id) && !short(id))?.[0];
-  if (pick && s.wood > woodCap(s) * 0.6) return { pick, why: 'spare', text: `"Nothing presses, and the wood piles up. A ${name(pick)} would serve us."` };
-  if (reserve > 0 && s.wood < reserve * 1.5) return { pick: null, why: 'winter', text: '"Nothing presses. Winter is coming: the wood is for the fires."' };
-  return { pick: null, why: 'content', text: '"All is well. There are beds, and food, and wood. We wait, and watch."' };
+  // Spare: what's left after it would still keep a fair stock by (a quarter of what the
+  // woodpiles hold, at least 20), and the winter's fires.
+  const keep = Math.max(20, woodCap(s) * 0.25) + reserve;
+  const next = useful.find(([id, worth]) => worth && open.has(id) && hasNeeds(s, id))?.[0];
+  if (next && s.wood + 0.5 - buildCost(s, next) >= keep) return { pick: next, why: 'spare', text: `"Nothing presses, and there's wood to spare. ${An(next)} would serve us."` };
+  // What they'd see to next, and when.
+  const soon: string[] = [];
+  if (open.has('hut') || open.has('longhouse')) soon.push(free > 2 ? `when only two beds are left (${free} free now), ${an(homes() ?? 'hut')}` : '');
+  if (next) soon.push(`with ${Math.ceil(buildCost(s, next) + keep)} wood put by, ${an(next)}`);
+  const then = soon.filter(Boolean).join('; ');
+  if (reserve > 0 && s.wood < reserve * 1.5) return { pick: null, why: 'winter', text: `"Nothing presses. ${si === 3 ? 'It is winter' : 'Winter is coming'}: the wood is for the fires.${then ? ` After, ${then}.` : ''}"` };
+  return { pick: null, why: 'content', text: `"All is well. There are beds, and food, and wood.${then ? ` Next, ${then}.` : ' We wait, and watch.'}"` };
 }
 
 /** The elders' thoughts, kept when they change (what they're waiting on, mostly); the Chronicle
