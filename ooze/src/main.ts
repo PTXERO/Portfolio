@@ -16,8 +16,8 @@ import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
 import { setSteward, type StewardPlan } from './economy/shore';
-import { answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
-import { battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
+import { dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
+import { danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
 import { lineTree, shoreTree } from './ui/familyTree';
 import { choose, setFocus, type ForkId, type Lane } from './economy/culture';
 import { canStepIn, rally, sendBand, setStance, setWarRule, stepIn, type Stance, type WarRule } from './economy/war';
@@ -1080,6 +1080,75 @@ function showTree(at: TreeAt): void {
   if (wrap && me) wrap.scrollLeft = Math.max(0, me.offsetLeft + me.offsetWidth / 2 - wrap.clientWidth / 2);
 }
 
+/** The dance: a marker swinging across the bar, a gold zone to step in; faster and narrower
+ * the longer the streak. */
+const dancing = { streak: 0, zone: 0.5, width: 0.3, speed: 2.2, t0: 0, raf: 0 };
+function danceAt(): number {
+  return (Math.sin((performance.now() - dancing.t0) / 1000 * dancing.speed) + 1) / 2;
+}
+function newZone(): void {
+  dancing.width = Math.max(0.1, 0.3 - dancing.streak * 0.035);
+  dancing.speed = 2.2 + Math.min(8, dancing.streak) * 0.25;
+  dancing.zone = dancing.width / 2 + Math.random() * (1 - dancing.width);
+  const z = modal.querySelector<HTMLElement>('.dance-zone');
+  if (z) {
+    z.style.left = `${(dancing.zone - dancing.width / 2) * 100}%`;
+    z.style.width = `${dancing.width * 100}%`;
+  }
+}
+function startDance(): void {
+  dancing.streak = 0;
+  dancing.t0 = performance.now();
+  newZone();
+  danceInfo();
+  cancelAnimationFrame(dancing.raf);
+  const loop = () => {
+    const mark = modal.querySelector<HTMLElement>('.dance-mark');
+    if (!mark || modal.hidden) return;
+    mark.style.left = `${danceAt() * 100}%`;
+    dancing.raf = requestAnimationFrame(loop);
+  };
+  loop();
+}
+function danceInfo(): void {
+  const s = shoreOf(state);
+  const box = modal.querySelector<HTMLElement>('.dance');
+  const v = s?.villages.find((x) => x.id === Number(box?.dataset.dancev));
+  if (!s || !v || !box) return;
+  const left = danceLeft(s, v);
+  box.querySelector('.dance-streak')!.textContent = dancing.streak ? `Streak ${dancing.streak}` : 'Streak 0';
+  box.querySelector('.dance-left')!.textContent = left > 0 ? `${Math.ceil(left)} trust left in them today` : 'They\'re worn out for today.';
+  const bar = box.querySelector<HTMLElement>('.trust .making-bar i');
+  if (bar) bar.style.width = `${Math.floor(v.trust ?? 0)}%`;
+  const btn = modal.querySelector<HTMLButtonElement>('.dance-step');
+  if (btn) btn.disabled = left <= 0 || !!v.joined || v.asking !== undefined;
+}
+function stepDance(id: number, el: HTMLElement): void {
+  const s = shoreOf(state);
+  if (!s) return;
+  const hit = Math.abs(danceAt() - dancing.zone) <= dancing.width / 2;
+  const r = el.getBoundingClientRect();
+  if (hit) {
+    const got = dance(state, id, dancing.streak);
+    if (got > 0) {
+      dancing.streak++;
+      popSound(0.8 + Math.min(10, dancing.streak) * 0.08);
+      scene.float(r.left + r.width / 2, r.top, `+${got.toFixed(1)} trust`, '#8acf6a');
+      modal.querySelector('.dance')?.classList.remove('good');
+      void (modal.querySelector('.dance') as HTMLElement | null)?.offsetWidth;
+      modal.querySelector('.dance')?.classList.add('good');
+      newZone();
+    }
+  } else {
+    dancing.streak = 0;
+    popSound(0.5);
+    scene.float(r.left + r.width / 2, r.top, 'missed the step', '#f2ead7');
+    newZone();
+  }
+  danceInfo();
+  save();
+}
+
 const stanceAsked = new Set<string>();
 const forkAsked = new Set<string>();
 let liveFight: number | undefined;
@@ -2071,6 +2140,15 @@ function act(el: HTMLElement): void {
       popSound(0.8);
       save();
     }
+  } else if (el.dataset.dance) {
+    const s = shoreOf(state);
+    const v = s?.villages.find((x) => x.id === Number(el.dataset.dance));
+    if (s && v) {
+      showModal(danceCard(s, v));
+      startDance();
+    }
+  } else if (el.dataset.step) {
+    stepDance(Number(el.dataset.step), el);
   } else if (el.dataset.stance) {
     const s = shoreOf(state);
     if (s && setStance(s, el.dataset.stance as Stance)) {

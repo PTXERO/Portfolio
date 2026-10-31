@@ -103,6 +103,8 @@ export interface Village {
   found: boolean;
   /** Kin only: how far they've been won over (0 to 100), and whether they've joined you. */
   trust?: number;
+  /** Danced with today: the day, and the trust it's won so far that day. */
+  danced?: { day: number; got: number };
   joined?: boolean;
   /** Won over, but there wasn't room: waiting for your answer (since this day), or waiting for
    * room (since this day; they lose patience). */
@@ -1095,6 +1097,30 @@ export function gift(state: GameState, id: number, amount?: number): number {
   }
   addTrust(state, s, v, gain);
   return Math.round(gain);
+}
+
+/** Trust a day's dancing can win with a village (they tire); and each good step's worth. */
+export const DANCE_DAY = 12;
+const DANCE_STEP = 0.6;
+
+/** What's left of today's dancing with them. */
+export function danceLeft(s: ShoreState, v: Village): number {
+  return v.danced?.day === s.day ? Math.max(0, DANCE_DAY - v.danced.got) : DANCE_DAY;
+}
+
+/** A step danced well with them, the chief there: trust, more the longer the streak (to five);
+ * nothing once they're worn out for the day. Returns the trust won. */
+export function dance(state: GameState, id: number, streak: number): number {
+  const s = shoreOf(state);
+  const v = s?.villages.find((x) => x.id === id);
+  if (!s || !v || !canWin(s, v) || !chiefNear(s, v)) return 0;
+  const left = danceLeft(s, v);
+  if (left <= 0) return 0;
+  const gain = Math.min(left, DANCE_STEP * (1 + Math.min(5, streak) * 0.4) * (1 + boosts(s).gift));
+  if (!v.danced) record(state, `${s.people.find((p) => p.id === s.chief)?.name ?? 'The chief'} danced with ${v.name}, and they warmed to us.`, 'shore', shoreWhen(s));
+  v.danced = { day: s.day, got: (v.danced?.day === s.day ? v.danced.got : 0) + gain };
+  addTrust(state, s, v, gain);
+  return gain;
 }
 
 function addTrust(state: GameState, s: ShoreState, v: Village, n: number): void {

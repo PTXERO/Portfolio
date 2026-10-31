@@ -914,3 +914,13 @@ div.chart-node.other { cursor: default; }
 .battle .side.flee .line img:nth-child(2n):not(.down) { animation-delay: 0.15s; }
 @keyframes b-flee { 0% { transform: scaleX(calc(var(--face) * -1)) translateX(0); opacity: 1; } 100% { transform: scaleX(calc(var(--face) * -1)) translateX(70px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .battle .line img, .battle.lunge .line, .battle .side.win .line img, .battle .side.flee .line img { animation: none !important; } }
+
+/* The dance: a marker swinging across a bar; step as it crosses the gold. */
+.dance { margin: 10px 0; }
+.dance-bar { position: relative; height: 22px; background: rgba(42, 52, 80, 0.9); box-shadow: 0 0 0 2px rgba(10, 13, 22, 0.8); overflow: hidden; }
+.dance-zone { position: absolute; top: 0; bottom: 0; background: rgba(232, 192, 80, 0.55); transition: left 0.2s, width 0.2s; }
+.dance-mark { position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px; background: #f2ead7; box-shadow: 0 0 4px #fff; }
+.dance-info { display: flex; justify-content: space-between; margin: 4px 0; }
+.dance.good .dance-bar { animation: dance-good 0.3s; }
+@keyframes dance-good { 50% { box-shadow: 0 0 0 2px #8acf6a, 0 0 10px #8acf6a; } }
+.dance-step { font-size: 18px; padding: 14px; }

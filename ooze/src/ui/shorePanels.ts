@@ -2,7 +2,7 @@
 // homes, stores, work, exploring) and the Island (the villages found out there, and the scouts).
 
 import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
-import { buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { danceLeft, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import { FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
@@ -459,7 +459,7 @@ export function villageCard(s: ShoreState, v: Village): string {
       <p class="dim tiny">${near ? `${chief} is with them: gifts count twice, and every day there they trust you more.` : `Gifts count twice brought by ${chief} in person, and the longer ${chief} stays, the more they trust you.`} At full trust they join you.</p>
       <div class="choices">
         <button class="px-btn${s.food >= giftCost(v) ? ' gold' : ''}" data-gift="${v.id}"${s.food >= giftCost(v) ? '' : ' disabled'}>Send a gift · ${giftCost(v)} food${near ? ' (×2)' : ''}</button>
-        ${near ? '' : `<button class="px-btn" data-visit="${v.id}">${chief} visits them</button>`}
+        ${near ? `<button class="px-btn gold" data-dance="${v.id}"${danceLeft(s, v) > 0 ? '' : ' disabled'}>${danceLeft(s, v) > 0 ? 'Dance with them' : 'Danced out for today'}</button>` : `<button class="px-btn" data-visit="${v.id}">${chief} visits them</button>`}
         <button class="px-btn" data-act="dismiss">Later</button>
       </div>`
     : raidable(s, v)
@@ -553,6 +553,17 @@ export function forkCard(s: ShoreState, fork: ForkId): string {
   const def = FORKS[fork];
   return `<p class="label dim">A choice for your critters</p><h3>${def.name}</h3><p>${def.ask}</p><p class="dim tiny">Once chosen, it's for good. The road not taken stays on the Long Road, greyed.</p>
     ${deck(forkOptions(s, fork).map((o) => ({ act: `${fork}:${o.id}`, title: o.name, line: o.line, good: [o.lane ? `${LANES.find((l) => l.id === o.lane)!.name} ideas come a quarter faster` : o.fx?.food ? 'Food comes in 5% faster' : ''].filter(Boolean), bad: [] })), 'fork')}`;
+}
+
+/** Dancing with a village: tap Step! as the marker crosses the gold. */
+export function danceCard(s: ShoreState, v: Village): string {
+  const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
+  return `<p class="label dim">${cap(v.name)}</p><h3>${chief} dances with them</h3>
+    <p class="dim tiny">Step as the marker crosses the gold. A streak wins more; a miss breaks it. They tire after a while.</p>
+    <div class="dance" data-dancev="${v.id}"><div class="dance-bar"><i class="dance-zone"></i><b class="dance-mark"></b></div>
+      <div class="dance-info"><span class="dance-streak tiny">Streak 0</span><span class="dance-left tiny dim"></span></div>
+      ${trustBar(v)}</div>
+    <div class="choices"><button class="px-btn gold dance-step" data-step="${v.id}">Step!</button><button class="px-btn" data-act="dismiss">Rest</button></div>`;
 }
 
 /** Raiders seen coming: how the chief means to meet them (a card each, like the join choices). */

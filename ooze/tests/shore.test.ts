@@ -548,3 +548,24 @@ describe('Families, not too close', () => {
     }
   }, 60_000);
 });
+
+describe('Dancing', () => {
+  it('wins trust with the chief there, more on a streak, and tires out for the day', async () => {
+    const { dance, DANCE_DAY } = await import('../src/economy/shore');
+    const state = fresh();
+    const s = shoreOf(state)!;
+    const v = s.villages.find((x) => relation(s, x) === 'kin')!;
+    v.found = true;
+    v.trust = 10;
+    expect(dance(state, v.id, 0)).toBe(0);
+    s.chiefAt = { x: v.x + 2, y: v.y + 2 };
+    const one = dance(state, v.id, 0);
+    const five = dance(state, v.id, 5);
+    expect(one).toBeGreaterThan(0);
+    expect(five).toBeGreaterThan(one);
+    let total = one + five;
+    for (let i = 0; i < 100; i++) total += dance(state, v.id, 5);
+    expect(total).toBeCloseTo(DANCE_DAY, 5);
+    expect(dance(state, v.id, 5)).toBe(0);
+  });
+});
