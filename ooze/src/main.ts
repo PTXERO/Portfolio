@@ -1074,6 +1074,10 @@ function showTree(at: TreeAt): void {
   showModal(html);
   modal.dataset.kind = 'tree';
   treeAt = at;
+  // A wide family: scrolled so the one whose tree it is starts in the middle.
+  const wrap = modal.querySelector<HTMLElement>('.chart-wrap');
+  const me = wrap?.querySelector<HTMLElement>('.chart-node.me');
+  if (wrap && me) wrap.scrollLeft = Math.max(0, me.offsetLeft + me.offsetWidth / 2 - wrap.clientWidth / 2);
 }
 
 const stanceAsked = new Set<string>();

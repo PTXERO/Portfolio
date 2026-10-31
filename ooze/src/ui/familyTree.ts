@@ -47,7 +47,10 @@ const SG = 12;
 const ROW = 96;
 
 type Box = { x: number; y: number; html: string };
-type Line = [number, number, number, number];
+type Line = [number, number, number, number, string, boolean];
+/** Each partnership its own colour (its line, its ring, and the lines down to its children). */
+const PAIR_COLS = ['#e8c050', '#7fc8e0', '#e68ab8', '#9fd08a', '#f2906c'];
+const PLAIN_COL = '#c8bfa8';
 
 /**
  * The tree round one villager, drawn as a chart: grandparents (as couples) over the parents,
@@ -71,25 +74,32 @@ export function shoreTree(state: GameState, s: ShoreState, id: number, back = fa
 
   const boxes: Box[] = [];
   const lines: Line[] = [];
-  const rings: [number, number][] = [];
+  const rings: [number, number, string][] = [];
+  // The pen lines are drawn with: a colour, and dashed (half brothers and sisters).
+  let pen = { col: PLAIN_COL, dash: false };
+  const line = (...ls: [number, number, number, number][]) => {
+    for (const l of ls) lines.push([...l, pen.col, pen.dash]);
+  };
+  // Half brothers and sisters: only one parent in common.
+  const half = new Set(me.parents?.length === 2 ? sibs.filter((o) => !me.parents!.every((i) => o.parents?.includes(i!))).map((o) => o.id) : []);
   const person = (p: ShorePerson, x: number, y: number) => {
     const dead = p.died !== undefined;
-    const sub = dead ? `† ${when(p.died!).replace('Year ', 'Y').replace(', ', ' ')}` : p.id === s.chief ? 'chief' : p.founder ? 'crossed' : '';
+    const sub = dead ? `† ${when(p.died!).replace('Year ', 'Y').replace(', ', ' ')}` : half.has(p.id) ? 'half' : p.id === s.chief ? 'chief' : p.founder ? 'crossed' : '';
     boxes.push({ x, y, html: `<button class="chart-node${dead ? ' ghost' : ''}${p.id === me.id ? ' me' : ''}" data-tree="${p.id}" style="left:${x}px;top:${y}px">${miniIcon(lookOf(s, p), 2)}<b>${p.name}</b><i>${sub}</i></button>` });
   };
   const other = (html: string, x: number, y: number, attr = '') => boxes.push({ x, y, html: `<${attr ? 'button' : 'div'} class="chart-node other" ${attr} style="left:${x}px;top:${y}px">${html}</${attr ? 'button' : 'div'}>` });
   const couple = (x1: number, x2: number, y: number) => {
-    lines.push([x1 + NW, y + NH / 2, x2, y + NH / 2]);
-    rings.push([(x1 + NW + x2) / 2, y + NH / 2]);
+    line([x1 + NW, y + NH / 2, x2, y + NH / 2]);
+    rings.push([(x1 + NW + x2) / 2, y + NH / 2, pen.col]);
   };
   // From a couple (or one parent) down to their children's tops.
-  const descend = (fromX: number, fromY: number, childXs: number[], childY: number) => {
+  const descend = (fromX: number, fromY: number, childXs: number[], childY: number, barUp = 0) => {
     if (!childXs.length) return;
-    const bar = childY - 16;
+    const bar = childY - 16 - barUp;
     const cx = childXs.map((x) => x + NW / 2);
-    lines.push([fromX, fromY, fromX, bar]);
-    lines.push([Math.min(fromX, ...cx), bar, Math.max(fromX, ...cx), bar]);
-    for (const x of cx) lines.push([x, bar, x, childY]);
+    line([fromX, fromY, fromX, bar]);
+    line([Math.min(fromX, ...cx), bar, Math.max(fromX, ...cx), bar]);
+    for (const x of cx) line([x, bar, x, childY]);
   };
 
   // Rows: grandparents (0), parents (1), this one's generation (2), their children (3).
@@ -98,7 +108,11 @@ export function shoreTree(state: GameState, s: ShoreState, id: number, back = fa
   const sy = ROW * 2;
   const ky = ROW * 3;
   // This one's generation: brothers and sisters by age, then this one, partners beside them.
-  const gen = [...sibs.sort((a, b) => a.born - b.born || a.id - b.id), me];
+  const byAge = (a: ShorePerson, b: ShorePerson) => a.born - b.born || a.id - b.id;
+  const halfOf = (i: number) => sibs.filter((o) => me.parents?.length === 2 && o.parents?.includes(me.parents[i]!) && !o.parents?.includes(me.parents[1 - i]!)).sort(byAge);
+  const fullSibs = sibs.filter((o) => !halfOf(0).includes(o) && !halfOf(1).includes(o)).sort(byAge);
+  // (Half brothers and sisters on the side of the parent they share; this one last of the full.)
+  const gen = [...halfOf(0), ...fullSibs, me, ...halfOf(1)];
   const xs = new Map<number, number>();
   let x = 0;
   for (const p of gen) {
@@ -111,19 +125,54 @@ export function shoreTree(state: GameState, s: ShoreState, id: number, back = fa
       }
   }
   for (const p of gen) person(p, xs.get(p.id)!, sy);
-  for (const q of partners) {
-    person(q, xs.get(q.id)!, sy);
-    couple(xs.get(me.id)!, xs.get(q.id)!, sy);
-  }
-  // Their children, under this one and the first partner.
   const meX = xs.get(me.id)!;
-  const pairMid = partners.length ? (meX + NW + xs.get(partners[0].id)!) / 2 : meX + NW / 2;
-  const kx0 = pairMid - (kids.length * (NW + SG) - SG) / 2;
-  kids.forEach((k, i) => person(k, kx0 + i * (NW + SG), ky));
-  descend(pairMid, partners.length ? sy + NH / 2 : sy + NH, kids.map((_, i) => kx0 + i * (NW + SG)), ky);
+  // Partners: the first joined beside them; any more by a line under the row (each lower, so
+  // none runs through another), with its own ring. Each couple's children hang from its ring.
+  const joins: { x: number; y: number }[] = [];
+  partners.forEach((q, k) => {
+    pen = { col: partners.length > 1 ? PAIR_COLS[k % PAIR_COLS.length] : PLAIN_COL, dash: false };
+    person(q, xs.get(q.id)!, sy);
+    if (k === 0) {
+      couple(meX, xs.get(q.id)!, sy);
+      joins.push({ x: (meX + NW + xs.get(q.id)!) / 2, y: sy + NH / 2 });
+    } else {
+      // (Over the top of the row, each a little higher; their children hang from the partner.)
+      const over = sy - 5 - (k - 1) * 4;
+      const a = meX + NW / 2 + (k - 1) * 5;
+      const b2 = xs.get(q.id)! + NW / 2;
+      line([a, sy, a, over], [a, over, b2, over], [b2, over, b2, sy]);
+      rings.push([(a + b2) / 2, over, pen.col]);
+      joins.push({ x: b2, y: sy + NH });
+    }
+  });
+  // Their children, grouped by whom they had them with, under the middle of it all.
+  const groups = partners.length ? partners.map((q) => kids.filter((c) => c.parents?.includes(q.id))) : [kids];
+  const loose = partners.length ? kids.filter((c) => !partners.some((q) => c.parents?.includes(q.id))) : [];
+  if (loose.length) groups.push(loose);
+  // Each couple's children together, under its ring as near as they'll go, left to right in
+  // the same order as the couples (so no line crosses another).
+  const kxs = new Map<number, number>();
+  let right = -Infinity;
+  groups.forEach((g, k) => {
+    const j = joins[k] ?? { x: meX + NW / 2, y: sy + NH };
+    const w = g.length * (NW + SG) - SG;
+    const left = Math.max(j.x - w / 2, right + SG * 2);
+    g.forEach((c, i) => kxs.set(c.id, left + i * (NW + SG)));
+    right = left + w;
+  });
+  groups.forEach((g, k) => {
+    for (const c of g) person(c, kxs.get(c.id)!, ky);
+    pen = { col: groups.length > 1 && k < partners.length ? PAIR_COLS[k % PAIR_COLS.length] : PLAIN_COL, dash: false };
+    const j = joins[k] ?? { x: meX + NW / 2, y: sy + NH };
+    descend(j.x, j.y, g.map((c) => kxs.get(c.id)!), ky);
+  });
+  pen = { col: PLAIN_COL, dash: false };
   // The parents, centred over their children (wide apart if both have parents of their own).
   const genXs = gen.map((p) => xs.get(p.id)!);
-  const genMid = (Math.min(...genXs) + Math.max(...genXs) + NW) / 2;
+  // (Over the full brothers and sisters: the half ones hang off to the side, from the parent
+  // they share, so no line crosses another.)
+  const fullXs = gen.filter((p) => !half.has(p.id)).map((p) => xs.get(p.id)!);
+  const genMid = (Math.min(...fullXs) + Math.max(...fullXs) + NW) / 2;
   const upper = !!parents.length;
   if (parents.length) {
     const wide = parents.length === 2 && parents.every((p) => parentsOf(p).length || p.founder);
@@ -131,13 +180,22 @@ export function shoreTree(state: GameState, s: ShoreState, id: number, back = fa
     const px = parents.length === 2 ? [genMid - gap / 2 - NW, genMid + gap / 2] : [genMid - NW / 2];
     parents.forEach((p, i) => person(p, px[i], py));
     if (parents.length === 2) couple(px[0], px[1], py);
-    descend(genMid, parents.length === 2 ? py + NH / 2 : py + NH, genXs, sy);
+    // Full brothers and sisters from the couple; half ones, dashed, from the parent they share.
+    const full = gen.filter((p) => !half.has(p.id));
+    descend(genMid, parents.length === 2 ? py + NH / 2 : py + NH, full.map((p) => xs.get(p.id)!), sy);
+    parents.forEach((par, i) => {
+      const hs = gen.filter((p) => half.has(p.id) && p.parents?.includes(par.id));
+      if (!hs.length) return;
+      pen = { col: PLAIN_COL, dash: true };
+      descend(px[i] + NW / 2, py + NH, hs.map((p) => xs.get(p.id)!), sy, 7 + i * 5);
+      pen = { col: PLAIN_COL, dash: false };
+    });
     // Grandparents: each parent's couple over them (or, for the four, the line: once, over
     // both if both crossed).
     const bothCrossed = parents.length === 2 && parents.every((p) => p.founder);
     if (bothCrossed) {
       other(`${miniIcon(s.look, 2)}<b>The line</b><i>${state.stages.creature.generation} gens</i>`, genMid - NW / 2, gy, 'data-treeline="1"');
-      lines.push([genMid, gy + NH, genMid, py + NH / 2]);
+      line([genMid, gy + NH, genMid, py + NH / 2]);
     }
     parents.forEach((p, i) => {
       if (bothCrossed) return;
@@ -167,11 +225,12 @@ export function shoreTree(state: GameState, s: ShoreState, id: number, back = fa
   const w = maxX - minX;
   const h = maxY - top;
   const shift = (html: string, b: Box) => html.replace(`left:${b.x}px;top:${b.y}px`, `left:${b.x - minX}px;top:${b.y - top}px`);
-  const svg = `<svg class="chart-lines" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${lines.map(([a, b2, c, d]) => `<line x1="${a - minX}" y1="${b2 - top}" x2="${c - minX}" y2="${d - top}"/>`).join('')}${rings.map(([cx, cy]) => `<circle cx="${cx - minX}" cy="${cy - top}" r="3.5"/>`).join('')}</svg>`;
+  const svg = `<svg class="chart-lines" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${lines.map(([a, b2, c, d, col, dash]) => `<line x1="${a - minX}" y1="${b2 - top}" x2="${c - minX}" y2="${d - top}" style="stroke:${col}"${dash ? ' stroke-dasharray="4 3"' : ''}/>`).join('')}${rings.map(([cx, cy, col]) => `<circle cx="${cx - minX}" cy="${cy - top}" r="3.5" style="stroke:${col === PLAIN_COL ? '#e8c050' : col}"/>`).join('')}</svg>`;
   const role = me.id === s.chief ? 'Chief' : me.founder ? 'One of the four who crossed' : kind ? `Of ${kind}` : me.died !== undefined ? 'Remembered' : 'Born on New Shore';
   return `<p class="label dim">Family tree</p>
     <div class="tree-me">${miniIcon(lookOf(s, me), 5)}<div><h3>${me.name}</h3><p class="tiny">${role} · ${describe(me.genes)}</p><p class="tiny dim">${life(me)}</p></div></div>
     <div class="chart-wrap"><div class="chart" style="width:${w}px;height:${h}px">${svg}${boxes.map((b) => shift(b.html, b)).join('')}</div></div>
+    ${partners.length > 1 || half.size ? `<p class="tiny dim">${partners.length > 1 ? 'Each colour is one couple and the children they had. ' : ''}${half.size ? 'Dashed: half brothers and sisters (one parent in common).' : ''}</p>` : ''}
     <p class="tiny dim">Tap anyone to see their tree. ${kids.length ? '' : me.died === undefined ? 'No children yet.' : ''}</p>
     <div class="choices">${back ? '<button class="px-btn" data-treeback="1">‹ Back</button>' : ''}<button class="px-btn gold" data-act="dismiss">Close</button></div>`;
 }
