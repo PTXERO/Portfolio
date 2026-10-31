@@ -21,7 +21,7 @@ export const SHORE_STORY = {
   found: '[STORY] Smoke, and huts, and others like them. Not like them.',
 };
 
-export type BuildId = 'forester' | 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails' | 'council' | 'envoy' | 'pottery' | 'thatcher' | 'salter' | 'healer' | 'toolmaker' | 'watch' | 'palisade' | 'spears' | 'greathearth' | 'warcamp';
+export type BuildId = 'forester' | 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails' | 'council' | 'envoy' | 'pottery' | 'thatcher' | 'salter' | 'healer' | 'toolmaker' | 'watch' | 'palisade' | 'spears' | 'greathearth' | 'warcamp' | 'square' | 'market' | 'kiln' | 'shrine' | 'workshop';
 
 /** What the land gives beyond food and wood: each only where it's found (see HABITATS). */
 export type Res = 'fish' | 'clay' | 'reeds' | 'salt' | 'herbs' | 'timber' | 'flint' | 'stone';
@@ -59,6 +59,10 @@ export interface BuildDef {
   fx?: Partial<Boosts>;
   /** What else it takes, beyond wood (only to be had from a village where it's found). */
   needs?: Partial<Record<Res, number>>;
+  /** Only from this Age of the culture on. */
+  age?: number;
+  /** Only once the culture has this idea. */
+  idea?: string;
 }
 
 /** Everything buildings and relics can add to: shares (0.15 is +15%) except room, the stores
@@ -88,6 +92,30 @@ export interface Boosts {
   arms: number;
   /** Days sooner raiders are seen coming. */
   warn: number;
+  /** Share more the settlements and vassals send. */
+  tribute: number;
+  /** Higher a vassal's loyalty settles. */
+  loyalty: number;
+  /** Share more standing a gift wins. */
+  standing: number;
+  /** Share quicker building goes. */
+  build: number;
+  /** More of each of the land's goods kept. */
+  resCap: number;
+  /** Share more a caravan brings back. */
+  trade: number;
+  /** Share off what a road costs in wood. */
+  roadCost: number;
+  /** Share quicker roads are laid. */
+  crew: number;
+  /** Share more of each vassal called up with a war band. */
+  levy: number;
+  /** How much more often wanderers come at the waystations. */
+  wander: number;
+  /** Share off what a feast costs. */
+  feast: number;
+  /** Share quicker the settlements grow. */
+  settleGrow: number;
 }
 
 export const BUILDS: BuildDef[] = [
@@ -113,6 +141,12 @@ export const BUILDS: BuildDef[] = [
   { id: 'healer', cat: 'homes', name: 'Healer\'s hut', does: 'Herbs and the knowing of them: half as many die when food runs short, and children come 5% more often.', wood: 45, growth: 1, max: 1, after: 'hut', needs: { herbs: 20 }, fx: { mend: 0.5, births: 0.05 }, burn: 0.3 },
   { id: 'toolmaker', cat: 'work', name: 'Toolmaker', does: 'Flint knapped sharp: food and wood come in 10% faster.', wood: 50, growth: 1, max: 1, after: 'hut', needs: { flint: 20 }, fx: { food: 0.1, wood: 0.1 } },
   { id: 'greathearth', cat: 'homes', name: 'The Great Hearth', does: 'A fire for all of them at once, the first of the Great Works: it closes the Hearth Age, and the village round it holds 300, not 150. Burns 2 wood a day.', wood: 220, growth: 1, max: 1, after: 'hearth', needs: { stone: 20 }, burn: 2 },
+  // The Village Age: what the hearth builds once it holds villages (and their land's goods).
+  { id: 'square', cat: 'homes', name: 'The Town Square', does: 'Flagstones round a standing stone, the second Great Work: it closes the Village Age, and the village round it holds 600. Paved roads become known.', wood: 300, growth: 1, max: 1, after: 'greathearth', needs: { stone: 40, timber: 30 }, age: 2 },
+  { id: 'market', cat: 'work', name: 'Market', does: 'Stalls for market days: caravans bring back a quarter more, and settlements and vassals send 5% more.', wood: 60, growth: 1, max: 1, after: 'hearth', needs: { salt: 10, timber: 20 }, age: 2, idea: 'markets', fx: { trade: 0.25, tribute: 0.05 } },
+  { id: 'kiln', cat: 'stores', name: 'Kiln', does: 'Pots fired hard: room for 100 more food, and 20 more of each of the land\'s goods.', wood: 50, growth: 1, max: 2, after: 'hearth', needs: { clay: 20, stone: 10 }, age: 2, idea: 'kilns', fx: { foodCap: 100, resCap: 20 } },
+  { id: 'shrine', cat: 'homes', name: 'Shrine', does: 'A flame kept in stone: fewer die of hunger, and vassals\' loyalty settles 5 higher.', wood: 40, growth: 1, max: 1, after: 'hearth', needs: { herbs: 15, stone: 10 }, age: 2, idea: 'faith', fx: { mend: 0.15, loyalty: 5 } },
+  { id: 'workshop', cat: 'work', name: 'Workshop', does: 'Benches and tools hung up: building goes 15% faster, and roads cost a fifth less wood.', wood: 50, growth: 1, max: 1, after: 'hearth', needs: { timber: 20, flint: 10 }, age: 2, idea: 'roadcraft', fx: { build: 0.15, roadCost: 0.2 } },
   { id: 'watch', cat: 'war', name: 'Watch post', does: 'Someone always watching the paths in: raiders are seen a day sooner, and the village fights 10% harder at home.', wood: 25, growth: 1, max: 1, after: 'hut', fx: { warn: 1, guard: 0.1 } },
   { id: 'palisade', cat: 'war', name: 'Palisade', does: 'A ring of sharpened stakes on a stone footing round the village: it fights half again as hard at home.', wood: 60, growth: 1, max: 1, after: 'watch', needs: { stone: 30 }, fx: { guard: 0.5 } },
   { id: 'warcamp', cat: 'war', name: 'War chief\'s hut', does: 'One of them made war chief: while you\'re away they rally the defenders (and hold the palisade, if there is one), and raid by the rule you give them.', wood: 50, growth: 1, max: 1, after: 'watch' },

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createState } from '../src/economy/state';
-import { build, buildsOpen, DAY_SEC, shoreOf, shoreTick, startShore } from '../src/economy/shore';
-import { lanesDone, LANES, practiceRate, setFocus, TURN_AT, workReady } from '../src/economy/culture';
+import { boosts, build, buildsOpen, DAY_SEC, hearthMost, resCap, roadCost, roadUpgrade, shoreOf, shoreTick, startShore, vassalDay } from '../src/economy/shore';
+import { ageName, greatWork, IDEAS, lanesDone, LANES, nextIdea, practiceRate, setFocus, TURN_AT, workReady } from '../src/economy/culture';
 import type { TribeState } from '../src/economy/types';
 
 function village(n: number) {
@@ -73,5 +73,91 @@ describe('Culture', () => {
     s.building!.left = 0;
     shoreTick(state, 0.01);
     expect(c.age).toBe(2);
+  });
+});
+
+describe('The Village Age', () => {
+  /** A village with the Great Hearth just lit: the Village Age begun. */
+  function villageAge() {
+    const { state, s } = village(120);
+    s.culture = { since: 0, age: 1, practice: {}, done: IDEAS.filter((i) => i.age === 1).map((i) => i.id), forks: { dead: 'bury' } };
+    s.res = { stone: 60, timber: 60, salt: 60, clay: 60, herbs: 60, flint: 60 };
+    expect(workReady(s)).toBe(true);
+    s.wood = 1e4;
+    s.building = undefined;
+    expect(build(state, 'greathearth')).toBe(true);
+    s.building!.left = 0;
+    shoreTick(state, 0.01);
+    return { state, s };
+  }
+  it('the Great Hearth closes the Hearth Age: the Village Age begins, with ideas of its own, and the hearth holds 300', () => {
+    const { s } = villageAge();
+    expect(s.culture!.age).toBe(2);
+    expect(ageName(2)).toBe('The Village Age');
+    expect(s.agesNew).toEqual([2]);
+    expect(LANES.every((l) => nextIdea(s.culture!, l.id)?.age === 2)).toBe(true);
+    expect(hearthMost(s)).toBe(300);
+    expect(workReady(s)).toBe(false);
+  });
+  it('its buildings come with its ideas, and spend the land\'s goods', () => {
+    const { state, s } = villageAge();
+    const open = () => buildsOpen(s).map((b) => b.id);
+    expect(open()).not.toContain('kiln');
+    s.culture!.done.push('kilns', 'roadcraft');
+    expect(open()).toContain('kiln');
+    expect(open()).toContain('workshop');
+    s.wood = 1e4;
+    s.building = undefined;
+    const before = s.res!.timber!;
+    expect(build(state, 'workshop')).toBe(true);
+    expect(s.res!.timber).toBe(before - 20);
+    s.building!.left = 0;
+    shoreTick(state, 0.01);
+    expect(boosts(s).build).toBeCloseTo(0.15);
+  });
+  it('its ideas do what they say: a tithe, oaths, roadcraft, room for goods', () => {
+    const { s } = villageAge();
+    const v = s.villages[0];
+    v.vassal = { tax: 0.25, loyalty: 50 };
+    v.pop = 20;
+    const before = vassalDay(v, s);
+    const cap0 = resCap(s);
+    const road0 = roadCost(s, v).wood;
+    s.culture!.done.push('tithe', 'oaths', 'roadcraft', 'kilns');
+    expect(vassalDay(v, s).food).toBeCloseTo(before.food * 1.1);
+    expect(vassalDay(v, s).loyalty).toBe(before.loyalty + 10);
+    expect(resCap(s)).toBe(cap0 + 20);
+    expect(roadCost(s, v).wood).toBeLessThan(road0);
+  });
+  it('four lanes done, the Town Square: it closes the Village Age, holds 600, and paved roads are known', () => {
+    const { state, s } = villageAge();
+    s.culture!.done.push(...IDEAS.filter((i) => i.age === 2 && ['food', 'crafts', 'war', 'rule'].includes(i.lane)).map((i) => i.id));
+    expect(workReady(s)).toBe(true);
+    expect(greatWork(s)).toBe('square');
+    s.wood = 1e4;
+    s.building = undefined;
+    expect(build(state, 'square')).toBe(true);
+    s.building!.left = 0;
+    shoreTick(state, 0.01);
+    expect(s.culture!.age).toBe(3);
+    expect(hearthMost(s)).toBe(600);
+    const v = s.villages[0];
+    v.vassal = { tax: 0.1, loyalty: 80 };
+    v.road = { done: 1, need: 1, tier: 1 };
+    expect(roadUpgrade(s, v)?.missing ?? '').not.toMatch(/Age/);
+  });
+  it('the new choices offer their roads, and the elders answer if left', () => {
+    const { state, s } = villageAge();
+    s.culture!.practice.words = 1e6;
+    s.culture!.done.push('tallies');
+    s.culture!.done.push('tithe');
+    // (Law: in the rule lane.)
+    s.culture!.practice.rule = 1e6;
+    s.culture!.done.push('oaths');
+    shoreTick(state, DAY_SEC * 1.01);
+    expect(s.culture!.done).toContain('law');
+    expect(s.culture!.asking?.fork).toBe('law');
+    shoreTick(state, DAY_SEC * 10);
+    expect(['council', 'chief']).toContain(s.culture!.forks.law);
   });
 });

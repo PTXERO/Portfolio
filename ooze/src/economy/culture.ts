@@ -5,7 +5,7 @@
 // that makes your people yours (left too long, the elders choose). Each Age closes with a Great
 // Work. This is the first Age, the Hearth; the road goes on later.
 
-import type { Boosts } from '../content/shore';
+import type { BuildId, Boosts } from '../content/shore';
 import { record } from './chronicle';
 import { networkBonus, count, DAY_SEC, isAdult, poisOf, poiDef, shoreWhen, totalCritters, type ShoreState } from './shore';
 import type { GameState } from './types';
@@ -23,7 +23,7 @@ export const LANES: { id: Lane; name: string; from: string }[] = [
   { id: 'words', name: 'Words', from: 'the scouts and lookout, and the size of the village' },
 ];
 
-export type ForkId = 'dead';
+export type ForkId = 'dead' | 'law' | 'trade' | 'faith';
 
 export interface Idea {
   id: string;
@@ -54,6 +54,24 @@ export const IDEAS: Idea[] = [
   { id: 'farspear', lane: 'stories', age: 1, name: 'The spear far off', does: 'The chief and the scouts see 2 tiles further.', fx: { sight: 2 } },
   { id: 'names', lane: 'words', age: 1, name: 'Names for everything', does: 'The chief and the scouts walk 5% faster.', fx: { speed: 0.05 } },
   { id: 'fingers', lane: 'words', age: 1, name: 'Finger-counting', does: 'Room for 40 more wood.', fx: { woodCap: 40 } },
+
+  // The Village Age: the hearth's ways carried out to the villages it holds, along the roads.
+  { id: 'salting', lane: 'food', age: 2, name: 'Salted stores', does: 'Food keeps through the cold: winter\'s lean a quarter less.', fx: { winter: 0.25 } },
+  { id: 'markets', lane: 'food', age: 2, name: 'Market days', does: 'How the villages trade with the hearth: a choice.', fork: 'trade' },
+  { id: 'kilns', lane: 'crafts', age: 2, name: 'Fired clay', does: 'Room for 20 more of each of the land\'s goods; and the kiln can be built.', fx: { resCap: 20 } },
+  { id: 'roadcraft', lane: 'crafts', age: 2, name: 'Roadcraft', does: 'Roads cost a quarter less wood, and are laid a quarter faster.', fx: { roadCost: 0.25, crew: 0.25 } },
+  { id: 'levies', lane: 'war', age: 2, name: 'Sworn levies', does: 'A vassal called up sends a third of its fighters, not a quarter.', fx: { levy: 0.08 } },
+  { id: 'shields', lane: 'war', age: 2, name: 'Hide shields', does: 'They hold 15% harder at home.', fx: { guard: 0.15 } },
+  { id: 'oaths', lane: 'rule', age: 2, name: 'Oaths of fealty', does: 'Vassals\' loyalty settles 10 higher.', fx: { loyalty: 10 } },
+  { id: 'law', lane: 'rule', age: 2, name: 'The spoken law', does: 'Whose word is law: a choice.', fork: 'law' },
+  { id: 'marriages', lane: 'kin', age: 2, name: 'Marriages between villages', does: 'Gifts win a quarter more standing with villages not your kin.', fx: { standing: 0.25 } },
+  { id: 'guests', lane: 'kin', age: 2, name: 'Guest-right', does: 'Wanderers come to the waystations twice as often.', fx: { wander: 1 } },
+  { id: 'faith', lane: 'rites', age: 2, name: 'What the fire is', does: 'What they keep faith with: a choice. And the shrine can be built.', fork: 'faith' },
+  { id: 'feastdays', lane: 'rites', age: 2, name: 'Feast days', does: 'A feast to bring a vassal into the fold costs half.', fx: { feast: 0.5 } },
+  { id: 'founding', lane: 'stories', age: 2, name: 'The foundings told', does: 'The settlements grow a fifth faster.', fx: { settleGrow: 0.2 } },
+  { id: 'hidemaps', lane: 'stories', age: 2, name: 'Maps on hide', does: 'The chief and the scouts see 2 tiles further, and walk 5% faster.', fx: { sight: 2, speed: 0.05 } },
+  { id: 'tallies', lane: 'words', age: 2, name: 'Tally sticks', does: 'Building goes a tenth faster.', fx: { build: 0.1 } },
+  { id: 'tithe', lane: 'words', age: 2, name: 'The tithe counted', does: 'Settlements and vassals send a tenth more.', fx: { tribute: 0.1 } },
 ];
 
 export const FORKS: Record<ForkId, { name: string; ask: string; options: { id: string; name: string; line: string; fx?: Partial<Boosts>; lane?: Lane; cannibal?: boolean }[] }> = {
@@ -64,6 +82,30 @@ export const FORKS: Record<ForkId, { name: string; ask: string; options: { id: s
       { id: 'bury', name: 'Bury them', line: 'Laid in the earth near the hearth, and remembered there.', lane: 'stories' },
       { id: 'burn', name: 'Burn them', line: 'Given to the fire, and gone up with the smoke.', lane: 'rites' },
       { id: 'eat', name: 'Eat them', line: 'Nothing is wasted. Not even them.', fx: { food: 0.05 }, cannibal: true },
+    ],
+  },
+  law: {
+    name: 'The spoken law',
+    ask: 'Whose word is law, in the hearth and the villages it holds?',
+    options: [
+      { id: 'council', name: 'The council\'s', line: 'The elders sit, and talk it through, and their word holds everywhere.', lane: 'rule', fx: { loyalty: 5 } },
+      { id: 'chief', name: 'The chief\'s', line: 'One voice, quick and sure, and the spears behind it.', lane: 'war', fx: { arms: 0.1 } },
+    ],
+  },
+  trade: {
+    name: 'Market days',
+    ask: 'How do the villages and the hearth deal with each other?',
+    options: [
+      { id: 'barter', name: 'Barter', line: 'Goods for goods, on market days: everyone comes away with something.', lane: 'food', fx: { trade: 0.5 } },
+      { id: 'tribute', name: 'Tribute', line: 'What\'s owed the hearth is brought to it, and counted.', lane: 'rule', fx: { tribute: 0.15 } },
+    ],
+  },
+  faith: {
+    name: 'What the fire is',
+    ask: 'What do they keep faith with?',
+    options: [
+      { id: 'hearthfire', name: 'The hearth-fire', line: 'The fire that never goes out: it warms the living, and new life comes to it.', lane: 'rites', fx: { births: 0.05, winter: 0.1 } },
+      { id: 'ancestors', name: 'The ancestors', line: 'The four who crossed, and all who came after: they watch, and they keep the hungry alive.', lane: 'stories', fx: { mend: 0.15 } },
     ],
   },
 };
@@ -219,20 +261,47 @@ export function lanesDone(c: Culture): number {
   return LANES.filter((l) => !nextIdea(c, l.id)).length;
 }
 
-/** Whether the Age's Great Work can be begun. */
-export function workReady(s: ShoreState): boolean {
-  return !!s.culture && s.culture.age === 1 && lanesDone(s.culture) >= LANES_FOR_WORK;
+/** The Ages, and the Great Work that closes each. */
+export const AGES: { name: string; work?: BuildId; workName?: string }[] = [
+  { name: '' },
+  { name: 'The Hearth Age', work: 'greathearth', workName: 'the Great Hearth' },
+  { name: 'The Village Age', work: 'square', workName: 'the Town Square' },
+  { name: 'The Town Age' },
+];
+export function ageName(age: number): string {
+  return AGES[age]?.name ?? 'The Long Road';
+}
+/** The Great Work of the Age now (none: the road goes on in a future update). */
+export function greatWork(s: ShoreState): BuildId | undefined {
+  return s.culture ? AGES[s.culture.age]?.work : undefined;
+}
+export function isGreatWork(id: BuildId): boolean {
+  return AGES.some((a) => a.work === id);
+}
+/** Whether this Age has ideas of its own to come by (later Ages, not yet). */
+export function ageHasIdeas(age: number): boolean {
+  return IDEAS.some((i) => i.age === age);
 }
 
-/** The Great Hearth stands: the Hearth Age is over. */
+/** Whether the Age's Great Work can be begun. */
+export function workReady(s: ShoreState): boolean {
+  const work = greatWork(s);
+  return !!s.culture && !!work && !count(s, work) && lanesDone(s.culture) >= LANES_FOR_WORK;
+}
+
+/** The Age's Great Work stands: the Age is over, and the next begins. */
 export function ageOver(state: GameState, s: ShoreState): void {
   const c = s.culture;
-  if (!c || c.age !== 1) return;
-  c.age = 2;
+  if (!c) return;
+  const was = AGES[c.age];
+  if (!was?.work || !count(s, was.work)) return;
+  c.age++;
   c.focus = undefined;
-  s.news.push('The Hearth Age is over.');
-  record(state, 'The Great Hearth was lit, and the Hearth Age was over. [STORY]', 'shore', shoreWhen(s));
+  s.news.push(`${was.name} is over. ${ageName(c.age)} begins.`);
+  record(state, `${cap(was.workName ?? 'The Great Work')} was finished, and ${was.name.toLowerCase()} was over. ${ageName(c.age)} began. [STORY]`, 'shore', shoreWhen(s));
+  (s.agesNew ??= []).push(c.age);
 }
+const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 
 /** How far a lane is toward its next idea (0 to 1). */
 export function laneShare(c: Culture, lane: Lane): number {

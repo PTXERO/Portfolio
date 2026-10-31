@@ -19,6 +19,7 @@ import { demandSubmit, giftForeign } from './economy/diplomacy';
 import { decideConquest, type Mercy } from './economy/war';
 import { joinCrew, leaveCrew, annex, upgradeRoad, setTrade, answerAsk, setSettleFocus, type SettleFocus, chiefNear, setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
 import { WARM_MAX, dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
+import { AGES, ageName } from './economy/culture';
 import { setIslandView, toggleVillage, mercyCard, danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
 import { startFireDance, type FireDance } from './ui/fireDance';
 import { lineTree, shoreTree } from './ui/familyTree';
@@ -1011,6 +1012,17 @@ function shoreFrame(): void {
   }
   joinedReady = true;
   // The turn: a hundred, at the great fire. Phase 2 begins.
+  // A new Age begun: told once.
+  if (s.agesNew?.length && modal.hidden && !cine()) {
+    const age = s.agesNew.shift()!;
+    cue('ascend', 0.6);
+    const work = AGES[age]?.workName;
+    showModal(`<p class="label dim">The Long Road</p><h3>${ageName(age)}</h3>
+      <p>[STORY] ${ageName(age - 1)} is over. Something has changed in how they live, and in how they see the island.</p>
+      <p class="dim">${work ? `New ideas to come by, new choices, new buildings; and a new Great Work: ${work}. See the Culture tab.` : 'The road goes on in a future update.'}</p>
+      <button class="px-btn gold" data-act="dismiss">Onward</button>`);
+    save();
+  }
   if (s.turned && modal.hidden && !cine()) {
     s.turned = false;
     cue('ascend', 0.6);

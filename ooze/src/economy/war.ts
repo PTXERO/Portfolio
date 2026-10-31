@@ -12,7 +12,7 @@
 import type { GameState } from './types';
 import { record } from './chronicle';
 import { alliesFor, foreign, nudge, PEACE, standingOf, struck } from './diplomacy';
-import { boosts, DAY_SEC, foodCap, GROW_DAYS, isAdult, killed, loyaltyOf, nameFrom, RES_CAP, RES_OF, relation, ruled, shoreSeason, shoreWhen, travelDays, woodCap, type ShoreState, type Village } from './shore';
+import { boosts, DAY_SEC, foodCap, GROW_DAYS, isAdult, killed, loyaltyOf, nameFrom, resCap, RES_OF, relation, ruled, shoreSeason, shoreWhen, travelDays, woodCap, type ShoreState, type Village } from './shore';
 import { personal } from './genes';
 
 /** How hard each diet fights (a fighter's worth). */
@@ -599,7 +599,7 @@ export function decideConquest(state: GameState, s: ShoreState, choice: Mercy): 
     const wood = Math.min(Math.round(v.pop * 1.5), Math.floor(Math.max(0, woodCap(s) - s.wood)));
     s.food += food;
     s.wood += wood;
-    for (const r of RES_OF[v.habitat ?? 'meadow']) if (r !== 'fish') (s.res ??= {})[r] = Math.min(RES_CAP, (s.res[r] ?? 0) + 6);
+    for (const r of RES_OF[v.habitat ?? 'meadow']) if (r !== 'fish') (s.res ??= {})[r] = Math.min(resCap(s), (s.res[r] ?? 0) + 6);
     v.pop = Math.max(4, v.pop * 0.7);
     v.beaten = (v.beaten ?? 0) + 1;
     nudge(s, v, -30);
@@ -651,7 +651,7 @@ export function levyFor(s: ShoreState, v: Village): { from: number; n: number }[
   const days = walkDays(s.hearth, v);
   return s.villages
     .filter((x) => x.vassal && !x.gone && x.id !== v.id && x.vassal.loyalty >= LEVY_LOYALTY && walkDays(x, v) <= days + 1)
-    .map((x) => ({ from: x.id, n: Math.floor(x.pop * 0.25) }))
+    .map((x) => ({ from: x.id, n: Math.floor(x.pop * (0.25 + boosts(s).levy)) }))
     .filter((a) => a.n >= 1);
 }
 

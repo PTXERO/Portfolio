@@ -1,13 +1,13 @@
 // New Shore's panels: the Village (stores, who's working at what, the people), Build (by sort:
 // homes, stores, work, exploring) and the Island (the villages found out there, and the scouts).
 
-import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
+import { type Boosts, BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
 import { ANNEX_LOYALTY, annexCost, annexWhy } from '../economy/shore';
 import { canDemand, demandOdds, foreign, PEACE, STANCE_NAME, stanceOf, standingOf } from '../economy/diplomacy';
-import { networkBonus, roadPerks, viaName, chiefWithCrew, ROAD_TIERS, roadTier, roadUpgrade, tradesWith, tradeWord, waystations, askWords, canAnswer, FOCI, landGoods, stageOf, STAGES, centre, hearthMost, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { networkBonus, roadPerks, viaName, chiefWithCrew, ROAD_TIERS, roadTier, roadUpgrade, tradesWith, tradeWord, waystations, askWords, canAnswer, FOCI, landGoods, stageOf, STAGES, centre, hearthMost, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, resCap, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
-import { FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
+import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
 import { levyFor, canHelp, helpSize, canStepIn, fighters, hasWalls, hasWarChief, type WarRule, holders, hostile, odds, ourStrength, payCost, raidable, theirStrength, type Battle, type Fight } from '../economy/war';
 import type { GameState } from '../economy/types';
 import { danceStyle } from './fireDance';
@@ -63,7 +63,7 @@ export function shoreKey(state: GameState, tab: string): string {
   if (!s) return '';
   if (tab === 'culture') {
     const c = s.culture;
-    return JSON.stringify(['culture', c?.age, c?.done, c?.focus, c?.forks, c?.asking?.fork, LANES.map((l) => Math.floor((c ? laneShare(c, l.id) : 0) * 20)), s.building?.id === 'greathearth', count(s, 'greathearth')]);
+    return JSON.stringify(['culture', c?.age, c?.done, c?.focus, c?.forks, c?.asking?.fork, LANES.map((l) => Math.floor((c ? laneShare(c, l.id) : 0) * 20)), s.building?.id, greatWork(s), greatWork(s) && count(s, greatWork(s)!)]);
   }
   if (tab === 'build') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor((v ?? 0) / 5)), s.building?.id, s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, canPay(s, b.id)])]);
   const war = JSON.stringify([s.raid?.help, s.raid?.allies?.length, s.raid?.seen !== undefined && [s.raid.from, s.raid.rallied, Math.ceil(((s.raid.arrives ?? 0) - s.day - s.clock / DAY_SEC) * 4)], s.warband && [s.warband.to, Math.ceil((s.warband.arrives - s.day - s.clock / DAY_SEC) * 4)], fighters(s), s.warRule, hasWarChief(s)]);
@@ -230,7 +230,7 @@ function whereRes(r: Res): string {
 function resourcesCard(s: ShoreState): string {
   const rows = (Object.keys(RES_NAME) as Res[]).map((r) => {
     const from = sourcesOf(s, r);
-    const have = r === 'fish' ? '' : `<b class="num">${Math.floor(s.res?.[r] ?? 0)}</b><span class="dim">/${RES_CAP}</span> `;
+    const have = r === 'fish' ? '' : `<b class="num">${Math.floor(s.res?.[r] ?? 0)}</b><span class="dim">/${resCap(s)}</span> `;
     const line = from.length ? `${have}from ${from.map((v) => cap(v.name)).join(', ')}${r === 'fish' ? ' (into the food)' : ''}` : `<span class="dim">None yet: found ${whereRes(r)}.</span>`;
     return `<div class="relic"><b>${RES_NAME[r]}</b> ${line}</div>`;
   });
@@ -272,7 +272,7 @@ function villageGist(s: ShoreState, v: Village): { tag: string; tagCls: string; 
   if (v.joined) return { tag: 'Joined', tagCls: 'rel-kin', gist: 'They live by your hearth now.' };
   if (v.outpost !== undefined) return { tag: 'Outpost', tagCls: 'rel-vassal', gist: 'Their land, worked for you.' };
   if (v.settled !== undefined) {
-    const d = settledDay(v, now);
+    const d = settledDay(v, now, s);
     return { tag: cap(STAGES[stageOf(v)]), tagCls: 'rel-kin', gist: `${Math.floor(v.pop)} · ${n0(d.food)} food, ${n0(d.wood)} wood a day` };
   }
   if (v.vassal) return { tag: 'Vassal', tagCls: 'rel-vassal', gist: `${Math.floor(v.pop)} · loyal ${Math.round(v.vassal.loyalty)}% · taking ${Math.round(v.vassal.tax * 100)}%` };
@@ -561,7 +561,7 @@ function askBits(s: ShoreState, v: Village, near: boolean): { ask: string; askBt
 
 function settledRow(s: ShoreState, v: Village): string {
   const now = s.day + s.clock / DAY_SEC;
-  const d = settledDay(v, now);
+  const d = settledDay(v, now, s);
   const road = roadLine(s, v);
   const near = chiefNear(s, v);
   const st = stageOf(v);
@@ -579,7 +579,7 @@ function settledRow(s: ShoreState, v: Village): string {
 }
 
 function vassalRow(s: ShoreState, v: Village): string {
-  const d = vassalDay(v);
+  const d = vassalDay(v, s);
   const loy = Math.round(v.vassal!.loyalty);
   const mood = loy > 70 ? 'content' : loy > 40 ? 'grumbling' : loy > 15 ? '<b class="starving">restless</b>' : '<b class="starving">on the edge of revolt</b>';
   const near = chiefNear(s, v);
@@ -592,7 +592,7 @@ function vassalRow(s: ShoreState, v: Village): string {
     <div class="seg tax"><span class="tiny dim">Take</span>${TAXES.map((t) => `<button class="px-btn${Math.abs(v.vassal!.tax - t) < 0.01 ? ' on' : ''}" data-tax="${v.id}:${t}">${Math.round(t * 100)}%</button>`).join('')}</div>
     ${ask}
     <div class="sub dim tiny">The less you take, the more loyal they grow; and the chief's visits and dancing warm them.</div>${roadLine(s, v).line}${annexLine}</div>
-    <div class="col">${askBtn}${why ? '' : `<button class="px-btn gold" data-annex="${v.id}">Feast · ${annexCost(v)} food</button>`}${roadLine(s, v).button}${near ? `<button class="px-btn gold" data-dance="${v.id}"${danceLeft(s, v) > 0.5 ? '' : ' disabled'}>${danceLeft(s, v) > 0.5 ? 'Dance' : 'Worn out'}</button>` : `<button class="px-btn" data-visit="${v.id}">Visit</button>`}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
+    <div class="col">${askBtn}${why ? '' : `<button class="px-btn gold" data-annex="${v.id}">Feast · ${annexCost(v, s)} food</button>`}${roadLine(s, v).button}${near ? `<button class="px-btn gold" data-dance="${v.id}"${danceLeft(s, v) > 0.5 ? '' : ' disabled'}>${danceLeft(s, v) > 0.5 ? 'Dance' : 'Worn out'}</button>` : `<button class="px-btn" data-visit="${v.id}">Visit</button>`}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
 }
 
 /** Won over, but there's no room: what's to be done with them? */
@@ -715,10 +715,12 @@ function warCard(s: ShoreState): string {
 function cultureLayout(s: ShoreState): string {
   const c = s.culture;
   if (!c) return '';
-  const ageName = c.age === 1 ? 'The Hearth Age' : 'Beyond the Hearth';
+  const name = ageName(c.age);
+  const work = greatWork(s);
+  const workName = AGES[c.age]?.workName ?? '';
   const done = lanesDone(c);
   const lanes = LANES.map((l) => {
-    const ideas = IDEAS.filter((i) => i.lane === l.id && i.age === 1);
+    const ideas = IDEAS.filter((i) => i.lane === l.id && i.age === c.age);
     const next = nextIdea(c, l.id);
     const share = laneShare(c, l.id);
     const steps = ideas
@@ -728,25 +730,46 @@ function cultureLayout(s: ShoreState): string {
       <div class="road-steps">${steps}</div><div class="sub tiny dim">From ${l.from}.</div></div>
       <div class="col">${next ? `<button class="px-btn${c.focus === l.id ? ' on' : ''}" data-focus="${c.focus === l.id ? '' : l.id}">${c.focus === l.id ? 'Focused' : 'Focus'}</button>` : ''}</div></div>`;
   }).join('');
+  const asking = c.asking ? `<div class="card px-box raid"><div class="info"><div class="name">${FORKS[c.asking.fork].name}</div><div class="sub">${FORKS[c.asking.fork].ask} Left too long, the elders will choose.</div></div><div class="col"><button class="px-btn gold" data-forkcard="${c.asking.fork}">Decide</button></div></div>` : '';
+  const W = workName ? workName[0].toUpperCase() + workName.slice(1) : '';
+  const workCard = !work
+    ? `<div class="card px-box"><div class="info"><div class="name">${name}</div><div class="sub">${ageName(c.age - 1)} is over. The road goes on in a future update.</div></div></div>`
+    : `<div class="card px-box"><div class="info"><div class="name">The Age's Great Work: ${workName}</div><div class="sub">${workReady(s) ? (s.building?.id === work ? `${W} is going up.` : `${W} can be built now (Build, Homes).`) : `Once ${LANES_FOR_WORK} lanes have this Age's ideas (${done} so far), ${workName} can be built.`}</div></div></div>`;
+  if (!ageHasIdeas(c.age)) return `<div class="panel-head"><h2>The Long Road</h2><span class="dim">${name}</span></div>${workCard}${forksCard(s)}`;
+  return `<div class="panel-head"><h2>The Long Road</h2><span class="dim">${name}</span></div>
+    <p class="tiny dim">Ideas come by themselves, from what the village does. Focus a lane to hurry it.</p>
+    ${asking}${workCard}${lanes}${forksCard(s)}`;
+}
+
+/** The forks taken (the roads not taken, greyed). */
+function forksCard(s: ShoreState): string {
+  const c = s.culture;
+  if (!c) return '';
   const forks = Object.entries(c.forks).map(([f, o]) => {
     const def = FORKS[f as ForkId];
     return `<div class="sub">${def.name}: ${forkOptions(s, f as ForkId).map((x) => (x.id === o ? `<b>${x.name}</b>` : `<span class="road-not">${x.name}</span>`)).join(' · ')}</div>`;
   }).join('');
-  const asking = c.asking ? `<div class="card px-box raid"><div class="info"><div class="name">${FORKS[c.asking.fork].name}</div><div class="sub">${FORKS[c.asking.fork].ask} Left too long, the elders will choose.</div></div><div class="col"><button class="px-btn gold" data-forkcard="${c.asking.fork}">Decide</button></div></div>` : '';
-  const work =
-    c.age > 1
-      ? '<div class="card px-box"><div class="info"><div class="name">The Great Hearth stands</div><div class="sub">The Hearth Age is over. The road goes on in a future update.</div></div></div>'
-      : `<div class="card px-box"><div class="info"><div class="name">The Age's Great Work</div><div class="sub">${workReady(s) ? (s.building?.id === 'greathearth' ? 'The Great Hearth is going up.' : count(s, 'greathearth') ? '' : 'The Great Hearth can be built now (Build, Homes).') : `Once ${LANES_FOR_WORK} lanes have this Age's ideas (${done} so far), the Great Hearth can be built.`}</div></div></div>`;
-  return `<div class="panel-head"><h2>The Long Road</h2><span class="dim">${ageName}</span></div>
-    <p class="tiny dim">Ideas come by themselves, from what the village does. Focus a lane to hurry it.</p>
-    ${asking}${work}${lanes}${forks ? `<div class="panel-head"><h2>Chosen</h2></div><div class="card px-box"><div class="info">${forks}</div></div>` : ''}`;
+  return forks ? `<div class="panel-head"><h2>Chosen</h2></div><div class="card px-box"><div class="info">${forks}</div></div>` : '';
+}
+
+/** What a boost does, in words. */
+const FX_WORDS: Partial<Record<keyof Boosts, (n: number) => string>> = {
+  food: (n) => `Food comes in ${pc(n)} faster`, wood: (n) => `Wood comes in ${pc(n)} faster`, births: (n) => `Children born ${pc(n)} more often`, grow: (n) => `Children grow up ${pc(n)} faster`,
+  speed: (n) => `The chief and scouts walk ${pc(n)} faster`, sight: (n) => `They see ${n} tiles further`, gift: (n) => `Gifts win ${pc(n)} more trust`, foodCap: (n) => `Room for ${n} more food`, woodCap: (n) => `Room for ${n} more wood`,
+  winter: (n) => `Winter's lean ${pc(n)} less`, mend: (n) => `${pc(n)} fewer die of hunger`, guard: (n) => `${pc(n)} harder at home`, arms: (n) => `They fight ${pc(n)} harder`, warn: (n) => `Raiders seen ${n} day${n === 1 ? '' : 's'} sooner`,
+  tribute: (n) => `Settlements and vassals send ${pc(n)} more`, loyalty: (n) => `Vassals' loyalty settles ${n} higher`, standing: (n) => `Gifts win ${pc(n)} more standing`, build: (n) => `Building goes ${pc(n)} faster`, resCap: (n) => `Room for ${n} more of each good`,
+  trade: (n) => `Caravans bring back ${pc(n)} more`, roadCost: (n) => `Roads cost ${pc(n)} less`, crew: (n) => `Roads laid ${pc(n)} faster`, levy: () => `Vassals called up send more`, wander: (n) => `Wanderers come ${n >= 1 ? 'twice as' : 'more'} often`, feast: (n) => `Feasts cost ${pc(n)} less`, settleGrow: (n) => `Settlements grow ${pc(n)} faster`,
+};
+const pc = (n: number) => `${Math.round(n * 100)}%`;
+function fxWords(fx?: Partial<Boosts>): string[] {
+  return Object.entries(fx ?? {}).map(([k, n]) => FX_WORDS[k as keyof Boosts]?.(n as number)).filter((x): x is string => !!x);
 }
 
 /** A fork, as cards to choose between. */
 export function forkCard(s: ShoreState, fork: ForkId): string {
   const def = FORKS[fork];
   return `<p class="label dim">A choice for your critters</p><h3>${def.name}</h3><p>${def.ask}</p><p class="dim tiny">Once chosen, it's for good. The road not taken stays on the Long Road, greyed.</p>
-    ${deck(forkOptions(s, fork).map((o) => ({ act: `${fork}:${o.id}`, title: o.name, line: o.line, good: [o.lane ? `${LANES.find((l) => l.id === o.lane)!.name} ideas come a quarter faster` : o.fx?.food ? 'Food comes in 5% faster' : ''].filter(Boolean), bad: [] })), 'fork')}`;
+    ${deck(forkOptions(s, fork).map((o) => ({ act: `${fork}:${o.id}`, title: o.name, line: o.line, good: [...(o.lane ? [`${LANES.find((l) => l.id === o.lane)!.name} ideas come a quarter faster`] : []), ...fxWords(o.fx)], bad: [] })), 'fork')}`;
 }
 
 /** Dancing with a village: circles drawn round their fire, their way. */

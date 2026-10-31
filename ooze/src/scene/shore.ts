@@ -10,7 +10,7 @@ import { findPath } from '../economy/paths';
 import { DAY_SEC, terrainReady, walkTo, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, roadFront, roadPath, roadTier, roadWalk, shoreIsland, stageOf, waystations, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
 import type { GameState, Genes } from '../economy/types';
 import type { CreatureLook } from './creatureLook';
-import type { BuildId } from '../content/shore';
+import { BUILDS, type BuildId } from '../content/shore';
 import { RangeScene } from './range';
 import type { Sprite } from './wild';
 import { herdInView, squeak } from '../audio/sound';
@@ -739,7 +739,7 @@ export class ShoreScene extends RangeScene {
   /** Buildings that don't move, drawn once (each kind, each size) and stamped from then on: a
    * village of hundreds of huts is hundreds of stamps, not thousands of little rectangles. */
   private stamps = new Map<string, HTMLCanvasElement>();
-  private static readonly STILL = new Set<BuildId>(['hut', 'rack', 'woodpile', 'camp', 'cutter']);
+  private static readonly STILL = new Set<BuildId>(BUILDS.map((d) => d.id).filter((id) => !['hearth', 'scout', 'greathearth', 'kiln', 'shrine'].includes(id)));
 
   private drawBuild(b: CanvasRenderingContext2D, id: BuildId, X: number, Y: number, z: number, close: boolean, up: number, t: number, s: ShoreState): void {
     if (!close) {
@@ -855,6 +855,87 @@ export class ShoreScene extends RangeScene {
         r(1, -4, 2, 1, '#9aa6ad');
         r(-5, -1, 3, 1, '#c8a878');
         r(3, -1, 2, 1, '#c8a878');
+        break;
+      }
+      case 'greathearth': {
+        // A great ring of stones, a fire for everyone at once, its smoke going up high.
+        r(-7, -1, 14, 1, '#6a6460');
+        r(-6, -2, 12, 1, '#8a847c');
+        r(-4, -3, 8, 1, '#3a2a20');
+        const f = Math.floor(t * 8) % 3;
+        r(-4, -6, 8, 3, 'rgba(255, 110, 40, 0.996)');
+        r(-2, -8 - (f % 2), 4, 3 + (f % 2), 'rgba(255, 160, 60, 0.996)');
+        r(f === 2 ? 2 : -3, -9 - (f % 2), 1, 2, 'rgba(255, 160, 60, 0.996)');
+        r(-1, -6, 2, 1, 'rgba(255, 235, 160, 0.996)');
+        for (let k = 0; k < 8; k++) {
+          const h = (t * 4 + k * 5) % 40;
+          b.fillStyle = `rgba(90, 86, 82, ${0.35 * (1 - h / 40)})`;
+          b.fillRect(X + Math.round(Math.sin(h * 0.15 + k) * 3), Y - 11 * z - Math.round(h * z), 2 * z, 2 * z);
+        }
+        break;
+      }
+      case 'square': {
+        // Flagstones round a standing stone, the village's heart.
+        r(-8, -1, 16, 1, '#8a847c');
+        r(-7, -2, 14, 1, '#a8a296');
+        r(-1, -9, 2, 7, '#7a766e');
+        r(-1, -9, 2, 1, '#c8c2b4');
+        r(-6, -3, 1, 1, '#e8c86a');
+        r(5, -3, 1, 1, '#e8c86a');
+        break;
+      }
+      case 'market': {
+        // Two stalls under awnings, goods laid out.
+        r(-7, -4, 6, 1, '#c84a3a');
+        r(1, -4, 6, 1, '#e8c86a');
+        r(-7, -3, 1, 3, '#5a4030');
+        r(-2, -3, 1, 3, '#5a4030');
+        r(1, -3, 1, 3, '#5a4030');
+        r(6, -3, 1, 3, '#5a4030');
+        r(-6, -2, 4, 1, '#c8a878');
+        r(2, -2, 4, 1, '#8acf6a');
+        break;
+      }
+      case 'kiln': {
+        // A dome of clay with a glowing mouth.
+        r(-4, -2, 8, 2, '#a8643a');
+        r(-3, -4, 6, 2, '#b8744a');
+        r(-2, -5, 4, 1, '#c8845a');
+        r(-1, -2, 2, 2, Math.floor(t * 3) % 2 ? '#ff9a40' : '#e86a2a');
+        r(2, -7, 1, 2, '#6a6460');
+        break;
+      }
+      case 'shrine': {
+        // A small stone shelter, a flame kept in it.
+        r(-3, -1, 6, 1, '#8a847c');
+        r(-3, -5, 1, 4, '#9a948a');
+        r(2, -5, 1, 4, '#9a948a');
+        r(-4, -6, 8, 1, '#7a766e');
+        r(-1, -3 - (Math.floor(t * 6) % 2), 2, 2, 'rgba(255, 180, 70, 0.996)');
+        break;
+      }
+      case 'workshop': {
+        // An open shed: a bench, tools hung up.
+        r(-5, -6, 10, 1, '#7a5a3a');
+        r(-5, -5, 1, 5, '#5a4030');
+        r(4, -5, 1, 5, '#5a4030');
+        r(-3, -2, 6, 1, '#8a6a3a');
+        r(-2, -4, 1, 2, '#9aa6ad');
+        r(1, -4, 1, 1, '#9aa6ad');
+        break;
+      }
+      default: {
+        // Anything else: a building in its kind's way (homes thatched, stores shuttered, work
+        // open-fronted, war spiked), so nothing that stands goes unseen.
+        const cat = BUILDS.find((d) => d.id === id)?.cat ?? 'homes';
+        const roof = cat === 'homes' ? '#b08a4a' : cat === 'stores' ? '#8a6a3a' : cat === 'war' ? '#6a5040' : cat === 'explore' ? '#9a8a5a' : '#7a6a4a';
+        r(-5, -3, 10, 3, '#6a4a30');
+        r(-6, -4, 12, 1, roof);
+        r(-5, -5, 10, 1, roof);
+        r(-3, -6, 6, 1, roof);
+        r(-1, -2, 2, 2, '#2a1e18');
+        if (cat === 'war') for (let k = -6; k <= 6; k += 3) r(k, -8, 1, 2, '#5a4030');
+        if (cat === 'explore') r(5, -10, 1, 6, '#5a4030');
         break;
       }
     }

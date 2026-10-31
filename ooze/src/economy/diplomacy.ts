@@ -5,7 +5,7 @@
 
 import type { GameState } from './types';
 import { record } from './chronicle';
-import { chiefNear, DAY_SEC, giftCost, relation, rng, ruled, SEASON_DAYS, shoreOf, shoreWhen, type ShoreState, type Village } from './shore';
+import { boosts, chiefNear, DAY_SEC, giftCost, relation, rng, ruled, SEASON_DAYS, shoreOf, shoreWhen, type ShoreState, type Village } from './shore';
 import { fighters, holders, ourStrength, theirStrength } from './war';
 
 /** Where they start (and drift back to), by what they are to you. */
@@ -48,7 +48,7 @@ export function giftForeign(state: GameState, id: number): number {
   if (s.food < cost) return 0;
   s.food -= cost;
   const before = standingOf(s, v);
-  const gain = 10 * (chiefNear(s, v) ? 2 : 1) * Math.max(0.2, 1 - Math.max(0, before) / 120);
+  const gain = 10 * (chiefNear(s, v) ? 2 : 1) * Math.max(0.2, 1 - Math.max(0, before) / 120) * (1 + boosts(s).standing);
   nudge(s, v, gain);
   const won = Math.round((standingOf(s, v) - before) * 10) / 10;
   const now = stanceOf(s, v);

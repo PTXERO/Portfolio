@@ -14,7 +14,7 @@ import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath, findRoute } from './paths';
 import { inherit, personal } from './genes';
 import { diplomacyDawn } from './diplomacy';
-import { IDEAS, ageOver, cultureDay, cultureFx, maybeTurn, workReady, type Culture } from './culture';
+import { greatWork, isGreatWork, IDEAS, ageOver, cultureDay, cultureFx, maybeTurn, workReady, type Culture } from './culture';
 import { away, stepWar, warDawn, type Battle, type Fight, type Raid, type WarBand, type WarRule } from './war';
 import type { CreatureLook } from '../scene/creatureLook';
 import type { GameState, Genes, TribeState } from './types';
@@ -44,7 +44,7 @@ export const HEARTH_MOST = 150;
 export const CENTRES: { id: BuildId | null; name: string; most: number; age: number }[] = [
   { id: 'hearth', name: 'The Hearth', most: HEARTH_MOST, age: 1 },
   { id: 'greathearth', name: 'The Great Hearth', most: 300, age: 1 },
-  { id: null, name: 'The Town Square', most: 600, age: 2 },
+  { id: 'square', name: 'The Town Square', most: 600, age: 2 },
   { id: null, name: 'The City Centre', most: 1200, age: 3 },
 ];
 
@@ -285,6 +285,8 @@ export interface ShoreState {
   retreat?: { from: number; n: number; left: number; arrives: number; sx?: number; sy?: number };
   /** The road whose crew the chief's working with (they keep up with it). */
   crewWith?: number;
+  /** A new Age begun, not yet shown (its card). */
+  agesNew?: number[];
   /** A village beaten and at your mercy, waiting on what's to be done with them. */
   conquest?: { id: number; since: number };
   /** Goods on the road from the settlements to the hearth. */
@@ -664,7 +666,7 @@ export function grownCount(s: ShoreState): number {
   return grown;
 }
 
-const NO_BOOSTS: Boosts = { food: 0, wood: 0, births: 0, grow: 0, speed: 0, sight: 0, gift: 0, room: 0, foodCap: 0, woodCap: 0, winter: 0, watch: 0, cheap: 0, mend: 0, guard: 0, arms: 0, warn: 0 };
+const NO_BOOSTS: Boosts = { food: 0, wood: 0, births: 0, grow: 0, speed: 0, sight: 0, gift: 0, room: 0, foodCap: 0, woodCap: 0, winter: 0, watch: 0, cheap: 0, mend: 0, guard: 0, arms: 0, warn: 0, tribute: 0, loyalty: 0, standing: 0, build: 0, resCap: 0, trade: 0, roadCost: 0, crew: 0, levy: 0, wander: 0, feast: 0, settleGrow: 0 };
 const boostCache = new WeakMap<ShoreState, { k: [number, number, number, number]; b: Boosts }>();
 
 /** What the buildings and relics add up to (worked out again only when either changes). */
@@ -733,6 +735,10 @@ export const RES_OF: Record<Habitat, Res[]> = {
 };
 /** Kept of each at most; a day's from each village that gives it; food a day from each with fish. */
 export const RES_CAP = 60;
+/** Kept of each of the land's goods now (more with kilns and the like). */
+export function resCap(s: ShoreState): number {
+  return RES_CAP + boosts(s).resCap;
+}
 const RES_DAY = 2;
 const FISH_FOOD = 5;
 
@@ -764,7 +770,7 @@ export function totalCritters(s: ShoreState): number {
 export const ROAD_TIERS: { name: string; faster: number; walk: number; idea?: string; needs?: Partial<Record<Res, number>>; age?: number }[] = [
   { name: 'Dirt road', faster: 0.5, walk: 2 },
   { name: 'Stone road', faster: 0.35, walk: 2.5, idea: 'blades', needs: { stone: 20 } },
-  { name: 'Paved road', faster: 0.25, walk: 3, age: 2 },
+  { name: 'Paved road', faster: 0.25, walk: 3, age: 3 },
 ];
 export function roadTier(v: { road?: Village['road'] }): number {
   return v.road?.tier ?? 0;
@@ -877,7 +883,7 @@ export function viaName(s: ShoreState, id: number): string {
 export function roadCost(s: ShoreState, v: Village): { wood: number; days: number; via: number } {
   const via = roadVia(s, v);
   const days = legDays(s, nodeAt(s, via), v);
-  return { wood: Math.round(20 + days * 30), days: Math.round(days * 1.5 * 10) / 10, via };
+  return { wood: Math.round((20 + days * 30) * (1 - boosts(s).roadCost)), days: Math.round(days * 1.5 * 10) / 10, via };
 }
 
 /** A road being laid (or relaid, better), anywhere: one at a time. */
@@ -1066,7 +1072,7 @@ function stepRoads(state: GameState, s: ShoreState, k: number): void {
     const w = v.road.up ?? (roadDone(v) ? null : v.road);
     if (!w) continue;
     // (The chief among the crew: twice the work.)
-    w.done = Math.min(w.need, w.done + k * (chiefWithCrew(s, v) ? 2 : 1));
+    w.done = Math.min(w.need, w.done + k * (chiefWithCrew(s, v) ? 2 : 1) * (1 + boosts(s).crew));
     if (w.done < w.need) continue;
     if (v.road.up) {
       v.road.up = undefined;
@@ -1116,7 +1122,8 @@ function roadDawn(state: GameState, s: ShoreState, eat: number): void {
       if (have - tr.n >= keep) {
         if (tr.give === 'food') s.food -= tr.n;
         else s.wood -= tr.n;
-        const back = tr.get === 'food' || tr.get === 'wood' ? { food: tr.get === 'food' ? tr.m : 0, wood: tr.get === 'wood' ? tr.m : 0 } : { food: 0, wood: 0, res: { [tr.get]: tr.m } };
+        const m = Math.round(tr.m * (1 + boosts(s).trade) * 10) / 10;
+        const back = tr.get === 'food' || tr.get === 'wood' ? { food: tr.get === 'food' ? m : 0, wood: tr.get === 'wood' ? m : 0 } : { food: 0, wood: 0, res: { [tr.get]: m } };
         (s.convoys ??= []).push({ from: v.id, ...back, left: now, arrives: now + travelDays(s, v) * 2, caravan: true });
       }
     }
@@ -1124,17 +1131,17 @@ function roadDawn(state: GameState, s: ShoreState, eat: number): void {
     const roll = rand();
     const at = `the waystation on the road to ${v.name}`;
     const raiders = s.villages.some((x) => !x.gone && (relation(s, x) === 'predator' || relation(s, x) === 'enemy') && !x.vassal && x.settled === undefined && (x.beaten ?? 0) < 3);
-    if (roll < 0.08 && roomLeft(s) > 0) {
+    if (roll < 0.08 * (1 + boosts(s).wander) && roomLeft(s) > 0) {
       const id = s.nextId++;
       const name = nameFrom(rand);
       s.people.push({ id, name, born: now - GROW_DAYS - rand() * 10, dies: now + 50 + rand() * 30, kind: v.id, joined: now, genes: personal(undefined, id * 31 + v.id) });
       s.news.push(`A wanderer at ${at} asked to join you: ${name}.`);
       record(state, `${name}, a wanderer met at ${at}, came to live by the hearth.`, 'shore', shoreWhen(s));
-    } else if (roll < 0.18) {
+    } else if (roll < 0.08 * (1 + boosts(s).wander) + 0.1) {
       const food = Math.round(8 + rand() * 12);
       s.food = Math.min(foodCap(s), s.food + food);
       s.news.push(`Travellers left ${food} food at ${at}, for the hearth.`);
-    } else if (roll < 0.24 && raiders && !count(s, 'watch')) {
+    } else if (roll < 0.08 * (1 + boosts(s).wander) + 0.16 && raiders && !count(s, 'watch')) {
       const lost = s.convoys?.find((c) => c.from === v.id && c.arrives > now);
       if (lost) {
         s.convoys = s.convoys!.filter((c) => c !== lost);
@@ -1170,16 +1177,17 @@ export function landGoods(v: Village): Res[] {
 
 /** A settlement's day: what it sends to the hearth, and how it grows. (More, thriving, or a
  * town; less, sulking. A town holds more of them.) */
-export function settledDay(v: Village, now = 0): { food: number; wood: number; res: Partial<Record<Res, number>>; growth: number } {
+export function settledDay(v: Village, now = 0, s?: ShoreState): { food: number; wood: number; res: Partial<Record<Res, number>>; growth: number } {
   const f = FOCI.find((x) => x.id === (v.focus ?? 'mixed')) ?? FOCI[0];
   const thriving = (v.thrive ?? -1) > now;
   const sulking = (v.sulk ?? -1) > now;
   const road = roadPerks(v);
-  const k = (thriving ? 1.5 : 1) * (sulking ? 0.5 : 1) * (stageOf(v) === 2 ? 1.25 : 1) * road.output;
+  const b = s ? boosts(s) : undefined;
+  const k = (thriving ? 1.5 : 1) * (sulking ? 0.5 : 1) * (stageOf(v) === 2 ? 1.25 : 1) * road.output * (1 + (b?.tribute ?? 0));
   const res: Partial<Record<Res, number>> = {};
   if (f.goods) for (const r of landGoods(v)) res[r] = v.pop * f.goods * k;
   const most = stageOf(v) === 2 ? 100 : 70;
-  return { food: v.pop * f.food * k, wood: v.pop * f.wood * k, res, growth: sulking ? 0 : v.pop * 0.05 * (thriving ? 2 : 1) * road.growth * Math.max(0, 1 - v.pop / most) };
+  return { food: v.pop * f.food * k, wood: v.pop * f.wood * k, res, growth: sulking ? 0 : v.pop * 0.05 * (thriving ? 2 : 1) * road.growth * (1 + (b?.settleGrow ?? 0)) * Math.max(0, 1 - v.pop / most) };
 }
 
 /** The chief, there in person, sets a settlement's trade. */
@@ -1278,7 +1286,7 @@ export function answerAsk(state: GameState, id: number): boolean {
 function stepSettled(state: GameState, s: ShoreState, k: number): void {
   for (const v of s.villages) {
     if (v.settled === undefined || v.gone) continue;
-    const d = settledDay(v, s.day + s.clock / DAY_SEC);
+    const d = settledDay(v, s.day + s.clock / DAY_SEC, s);
     v.pop += d.growth * k;
     const load = (v.load ??= { food: 0, wood: 0 });
     load.food += d.food * k;
@@ -1307,7 +1315,7 @@ function stepConvoys(s: ShoreState): void {
     if (c.arrives > now) continue;
     s.food = Math.min(foodCap(s), s.food + c.food);
     s.wood = Math.min(woodCap(s), s.wood + c.wood);
-    for (const [r, n] of Object.entries(c.res ?? {}) as [Res, number][]) (s.res ??= {})[r] = Math.min(RES_CAP, (s.res[r] ?? 0) + n);
+    for (const [r, n] of Object.entries(c.res ?? {}) as [Res, number][]) (s.res ??= {})[r] = Math.min(resCap(s), (s.res[r] ?? 0) + n);
   }
   s.convoys = s.convoys.filter((c) => c.arrives > now);
 }
@@ -1329,14 +1337,14 @@ function stepResources(s: ShoreState, k: number): void {
     const share = v.vassal ? 0.5 + v.vassal.tax : 1;
     for (const r of RES_OF[v.habitat!]) {
       if (r === 'fish') s.food = Math.min(foodCap(s), s.food + FISH_FOOD * share * k);
-      else (s.res ??= {})[r] = Math.min(RES_CAP, (s.res?.[r] ?? 0) + RES_DAY * share * k);
+      else (s.res ??= {})[r] = Math.min(resCap(s), (s.res?.[r] ?? 0) + RES_DAY * share * k);
     }
   }
 }
 
 /** Builds on offer now: unlocked, and not at their limit. */
 export function buildsOpen(s: ShoreState): typeof BUILDS {
-  return BUILDS.filter((b) => (b.id !== 'greathearth' || workReady(s)) && (!b.after || count(s, b.after) > 0) && (!b.learn || learned(s, b.id)) && (b.max === undefined || count(s, b.id) + (s.building?.id === b.id ? 1 : 0) < b.max));
+  return BUILDS.filter((b) => (!isGreatWork(b.id) || (workReady(s) && greatWork(s) === b.id)) && (!b.age || (s.culture?.age ?? 0) >= b.age) && (!b.idea || !!s.culture?.done.includes(b.idea)) && (!b.after || count(s, b.after) > 0) && (!b.learn || learned(s, b.id)) && (b.max === undefined || count(s, b.id) + (s.building?.id === b.id ? 1 : 0) < b.max));
 }
 
 /** Whether a building that's learned out on the island has been. */
@@ -1389,7 +1397,7 @@ function buildWork(s: ShoreState, id: BuildId, at: Pt): number {
 
 /** Seconds left on what's going up, at the pace the builders are going. */
 export function buildLeftSec(s: ShoreState): number {
-  return s.building ? s.building.left / Math.max(0.01, builders(s) * BUILD_RATE * (1 + networkBonus(s))) : 0;
+  return s.building ? s.building.left / Math.max(0.01, builders(s) * BUILD_RATE * (1 + networkBonus(s) + boosts(s).build)) : 0;
 }
 
 // ---- Firewood and the woods ----
@@ -1520,6 +1528,12 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
     ['lookout', true],
     ['trails', true],
     ['longhouse', free <= 6 && room(s) < hearthMost(s)],
+    // (The Village Age's: the workshop and the shrine whenever there's what they need; the
+    // market once there are caravans or villages sending; a kiln when the stores are filling.)
+    ['workshop', true],
+    ['shrine', s.villages.some((v) => v.vassal && !v.gone)],
+    ['market', s.villages.some((v) => ruled(v))],
+    ['kiln', !enough || Object.values(s.res ?? {}).some((n) => (n ?? 0) >= resCap(s) - 5)],
   ];
   // Spare: what's left after a few days' firewood (and, come autumn, the winter's).
   const keep = Math.max(5, burnPerDay(s) * WOOD_KEEP_DAYS) + reserve;
@@ -1565,7 +1579,7 @@ function finishBuilding(state: GameState, s: ShoreState): void {
   s.building = undefined;
   s.built.push({ id: b.id, x: b.x, y: b.y, day: s.day + s.clock / DAY_SEC });
   if (b.id === 'council') s.steward ??= { on: true, plan: 'balanced' };
-  if (b.id === 'greathearth') ageOver(state, s);
+  if (isGreatWork(b.id)) ageOver(state, s);
   if (b.id === 'hearth') {
     s.news.push(SHORE_STORY.hearth);
     record(state, 'The hearth was lit.', 'shore', shoreWhen(s));
@@ -1794,21 +1808,21 @@ function addTrust(state: GameState, s: ShoreState, v: Village, n: number): void 
 /** A vassal loyal enough (and past any grudge) can be brought into the hearth's fold: a
  * settlement, tribute no more, theirs and yours alike. It takes a feast. */
 export const ANNEX_LOYALTY = 85;
-export function annexCost(v: Village): number {
-  return Math.round(20 + v.pop);
+export function annexCost(v: Village, s?: ShoreState): number {
+  return Math.round((20 + v.pop) * (1 - (s ? boosts(s).feast : 0)));
 }
 export function annexWhy(s: ShoreState, v: Village): string | null {
   if (!v.vassal || v.gone) return 'not a vassal';
   if (v.vassal.conquered !== undefined && s.day - v.vassal.conquered < SEASON_DAYS * 6) return 'they still remember being beaten';
   if (v.vassal.loyalty < ANNEX_LOYALTY) return `loyalty of ${ANNEX_LOYALTY}`;
-  if (s.food < annexCost(v)) return `${annexCost(v)} food for the feast`;
+  if (s.food < annexCost(v, s)) return `${annexCost(v, s)} food for the feast`;
   return null;
 }
 export function annex(state: GameState, id: number): boolean {
   const s = shoreOf(state);
   const v = s?.villages.find((x) => x.id === id);
   if (!s || !v || annexWhy(s, v)) return false;
-  s.food -= annexCost(v);
+  s.food -= annexCost(v, s);
   record(state, `A feast was held with ${v.name}, and they were brought into the hearth's fold: tribute no more, but kin of the hearth.`, 'shore', shoreWhen(s));
   v.road = v.road && roadDone(v) ? v.road : undefined;
   v.trade = undefined;
@@ -1871,22 +1885,24 @@ export function setTax(state: GameState, id: number, tax: number): void {
 /** A vassal village's day: what they send you, how they grow (less, the more you take, and less
  * as they fill their land), and how loyal they are (they'll bear a light hand for ever, a heavy
  * one only so long). */
-export function vassalDay(v: Village): { food: number; wood: number; growth: number; loyalty: number } {
+export function vassalDay(v: Village, s?: ShoreState): { food: number; wood: number; growth: number; loyalty: number } {
   const t = v.vassal?.tax ?? 0;
   const cap = 70;
   const road = roadPerks(v);
+  const b = s ? boosts(s) : undefined;
+  const more = road.output * (1 + (b?.tribute ?? 0));
   return {
-    food: v.pop * 0.9 * t * road.output,
-    wood: v.pop * 0.45 * t * road.output,
+    food: v.pop * 0.9 * t * more,
+    wood: v.pop * 0.45 * t * more,
     growth: v.pop * 0.05 * (1 - t * 1.8) * Math.max(0, 1 - v.pop / cap),
-    loyalty: 100 - t * 170 + road.loyalty,
+    loyalty: 100 - t * 170 + road.loyalty + (b?.loyalty ?? 0),
   };
 }
 
 function stepVassals(state: GameState, s: ShoreState, k: number): void {
   for (const v of s.villages) {
     if (!v.vassal) continue;
-    const d = vassalDay(v);
+    const d = vassalDay(v, s);
     // (What they send is carried to the hearth: days on foot, less by road.)
     const load = (v.load ??= { food: 0, wood: 0 });
     load.food += d.food * k;
@@ -2105,7 +2121,7 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
     }
   }
   if (s.building) {
-    s.building.left -= builders(s) * BUILD_RATE * (1 + networkBonus(s)) * dt;
+    s.building.left -= builders(s) * BUILD_RATE * (1 + networkBonus(s) + boosts(s).build) * dt;
     if (s.building.left <= 0) finishBuilding(state, s);
   }
   // The elders build, when they're asked to and nothing's going up.
