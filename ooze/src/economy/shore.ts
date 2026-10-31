@@ -770,10 +770,24 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
     if (buildCost(s, need) + reserve > woodCap(s) && open.has('woodpile')) return go('woodpile', 'woodpile', `"We need a ${name(need)}, but the woodpiles cannot hold the wood for it. Another woodpile first."`);
     return go(need, why, SAY[why]!(need));
   }
-  // Nothing pressing: something useful, if the wood's piling up.
-  const extras: BuildId[] = ['elders', 'pool', 'granary', 'rack', 'cutter', 'lookout', 'woodpile', 'camp', 'hut', 'pottery', 'thatcher', 'salter', 'healer', 'toolmaker'];
-  const pick = extras.filter((id) => open.has(id) && hasNeeds(s, id)).sort((a, b) => buildCost(s, a) - buildCost(s, b))[0];
-  if (pick && s.wood > woodCap(s) * 0.6 && !short(pick)) return { pick, why: 'spare', text: `"Nothing presses, and the wood piles up. A ${name(pick)} would serve us."` };
+  // Nothing pressing: something useful, if the wood's piling up. By use, not by cheapness (and
+  // never another woodpile just to hold more: that's only for a build that won't fit).
+  const useful: [BuildId, boolean][] = [
+    ['elders', true],
+    ['pool', true],
+    ['healer', true],
+    ['toolmaker', true],
+    ['granary', s.food >= foodCap(s) * 0.7],
+    ['pottery', s.food >= foodCap(s) * 0.7],
+    ['salter', true],
+    ['thatcher', true],
+    ['cutter', plan.wood >= 3 && count(s, 'cutter') < 1 + s.people.length / 30],
+    ['camp', plan.food > plan.land - 3],
+    ['lookout', true],
+    ['trails', true],
+  ];
+  const pick = useful.find(([id, worth]) => worth && open.has(id) && hasNeeds(s, id) && !short(id))?.[0];
+  if (pick && s.wood > woodCap(s) * 0.6) return { pick, why: 'spare', text: `"Nothing presses, and the wood piles up. A ${name(pick)} would serve us."` };
   if (reserve > 0 && s.wood < reserve * 1.5) return { pick: null, why: 'winter', text: '"Nothing presses. Winter is coming: the wood is for the fires."' };
   return { pick: null, why: 'content', text: '"All is well. There are beds, and food, and wood. We wait, and watch."' };
 }
