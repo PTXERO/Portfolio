@@ -111,7 +111,7 @@ export interface Village {
   /** Told already that the rest would come, if there were room. */
   wouldCome?: boolean;
   /** Danced with: when last, and how worn out they were then (they rest it off over a season). */
-  danced?: { day: number; got: number };
+  danced?: { day: number; got: number; worn?: boolean };
   joined?: boolean;
   /** Won over, but there wasn't room: waiting for your answer (since this day), or waiting for
    * room (since this day; they lose patience). */
@@ -1120,6 +1120,8 @@ const DANCE_REST = SEASON_DAYS;
 export function danceLeft(s: ShoreState, v: Village): number {
   if (!v.danced) return DANCE_DAY;
   const now = s.day + s.clock / DAY_SEC;
+  // (Worn right out, they won't dance again till they've rested the whole season.)
+  if (v.danced.worn) return now - v.danced.day >= DANCE_REST ? DANCE_DAY : 0;
   const worn = Math.max(0, v.danced.got - ((now - v.danced.day) * DANCE_DAY) / DANCE_REST);
   return Math.max(0, DANCE_DAY - worn);
 }
@@ -1135,7 +1137,7 @@ export function dance(state: GameState, id: number, streak: number): number {
   const gain = Math.min(left, DANCE_STEP * (1 + Math.min(5, streak) * 0.4) * (1 + boosts(s).gift));
   if (!v.danced) record(state, `${s.people.find((p) => p.id === s.chief)?.name ?? 'The chief'} danced with ${v.name}, and they warmed to us.`, 'shore', shoreWhen(s));
   const now = s.day + s.clock / DAY_SEC;
-  v.danced = { day: now, got: DANCE_DAY - left + gain };
+  v.danced = { day: now, got: DANCE_DAY - left + gain, worn: left - gain < 0.5 };
   // (With a vassal, it's their loyalty that warms: twice what it'd be in trust.)
   if (v.vassal) v.vassal.warm = Math.min(WARM_MAX, (v.vassal.warm ?? 0) + gain * 2);
   else addTrust(state, s, v, gain);

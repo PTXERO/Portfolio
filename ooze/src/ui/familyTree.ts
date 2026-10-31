@@ -119,7 +119,7 @@ export function shoreTree(state: GameState, s: ShoreState, id: number, back = fa
   for (const p of gen) {
     xs.set(p.id, x);
     x += NW + SG;
-    if (p === me && partners.length === 1)
+    if (p === me)
       for (const q of partners) {
         xs.set(q.id, x - SG + CG);
         x += NW + CG;
@@ -127,47 +127,46 @@ export function shoreTree(state: GameState, s: ShoreState, id: number, back = fa
   }
   for (const p of gen) person(p, xs.get(p.id)!, sy);
   const meX = xs.get(me.id)!;
-  if (partners.length <= 1) {
-    // One partner (or none): beside them, joined, their children hanging from the couple.
-    const q = partners[0];
-    let jx = meX + NW / 2;
-    let jy = sy + NH;
-    if (q) {
-      person(q, xs.get(q.id)!, sy);
+  // Partners: the first joined beside them; any more by a line under the row (each lower, so
+  // none runs through another), with its own ring. Each couple's children hang from its ring.
+  const joins: { x: number; y: number }[] = [];
+  partners.forEach((q, k) => {
+    pen = { col: partners.length > 1 ? PAIR_COLS[k % PAIR_COLS.length] : PLAIN_COL, dash: false };
+    person(q, xs.get(q.id)!, sy);
+    if (k === 0) {
       couple(meX, xs.get(q.id)!, sy);
-      jx = (meX + NW + xs.get(q.id)!) / 2;
-      jy = sy + NH / 2;
+      joins.push({ x: (meX + NW + xs.get(q.id)!) / 2, y: sy + NH / 2 });
+    } else {
+      // (Over the top of the row, each a little higher; their children hang from the partner.)
+      const over = sy - 5 - (k - 1) * 4;
+      const a = meX + NW / 2 + (k - 1) * 5;
+      const b2 = xs.get(q.id)! + NW / 2;
+      line([a, sy, a, over], [a, over, b2, over], [b2, over, b2, sy]);
+      rings.push([(a + b2) / 2, over, pen.col]);
+      joins.push({ x: b2, y: sy + NH });
     }
-    const kx0 = jx - (kids.length * (NW + SG) - SG) / 2;
-    kids.forEach((c, i) => person(c, kx0 + i * (NW + SG), ky));
-    descend(jx, jy, kids.map((_, i) => kx0 + i * (NW + SG)), ky);
-  } else {
-    // Several partners: each couple a row of its own below them, the partner first and the
-    // children they had beside, in that couple's colour; a line down from this one to each, so
-    // none crosses another.
-    const groups: { q?: ShorePerson; kids: ShorePerson[] }[] = partners.map((q) => ({ q, kids: kids.filter((c) => c.parents?.includes(q.id)) }));
-    const loose = kids.filter((c) => !partners.some((q) => c.parents?.includes(q.id)));
-    if (loose.length) groups.push({ kids: loose });
-    const trunk = meX + NW / 2;
-    const x0 = trunk + 16;
-    let lastY = sy + NH;
-    groups.forEach((g, k) => {
-      const y = ky + k * ROW;
-      pen = { col: g.q ? PAIR_COLS[k % PAIR_COLS.length] : PLAIN_COL, dash: false };
-      if (g.q) person(g.q, x0, y);
-      const cx0 = g.q ? x0 + NW + SG + 10 : x0;
-      g.kids.forEach((c, i) => person(c, cx0 + i * (NW + SG), y));
-      // From the trunk to the partner (a ring where they join), and on from the partner to
-      // their children.
-      line([trunk, lastY, trunk, y + NH / 2], [trunk, y + NH / 2, x0, y + NH / 2]);
-      rings.push([trunk, y + NH / 2, pen.col]);
-      if (g.kids.length) {
-        const from = g.q ? x0 + NW : trunk;
-        line([from, y + NH / 2, cx0 + (g.kids.length - 1) * (NW + SG), y + NH / 2]);
-      }
-      lastY = y + NH / 2;
-    });
-  }
+  });
+  // Their children, grouped by whom they had them with, under the middle of it all.
+  const groups = partners.length ? partners.map((q) => kids.filter((c) => c.parents?.includes(q.id))) : [kids];
+  const loose = partners.length ? kids.filter((c) => !partners.some((q) => c.parents?.includes(q.id))) : [];
+  if (loose.length) groups.push(loose);
+  // Each couple's children together, under its ring as near as they'll go, left to right in
+  // the same order as the couples (so no line crosses another).
+  const kxs = new Map<number, number>();
+  let right = -Infinity;
+  groups.forEach((g, k) => {
+    const j = joins[k] ?? { x: meX + NW / 2, y: sy + NH };
+    const w = g.length * (NW + SG) - SG;
+    const left = Math.max(j.x - w / 2, right + SG * 2);
+    g.forEach((c, i) => kxs.set(c.id, left + i * (NW + SG)));
+    right = left + w;
+  });
+  groups.forEach((g, k) => {
+    for (const c of g) person(c, kxs.get(c.id)!, ky);
+    pen = { col: groups.length > 1 && k < partners.length ? PAIR_COLS[k % PAIR_COLS.length] : PLAIN_COL, dash: false };
+    const j = joins[k] ?? { x: meX + NW / 2, y: sy + NH };
+    descend(j.x, j.y, g.map((c) => kxs.get(c.id)!), ky);
+  });
   pen = { col: PLAIN_COL, dash: false };
   // The parents, centred over their children (wide apart if both have parents of their own).
   const genXs = gen.map((p) => xs.get(p.id)!);

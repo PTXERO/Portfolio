@@ -718,9 +718,10 @@ describe('Dancing tires them for a season; vassals warm to it', () => {
     s.chiefAt = { x: v.x + 2, y: v.y + 2 };
     for (let i = 0; i < 100; i++) dance(state, v.id, 5);
     expect(danceLeft(s, v)).toBeLessThan(0.5);
+    // (Worn out, they stay so: leaving and coming back doesn't rest them.)
     shoreTick(state, DAY_SEC);
-    expect(danceLeft(s, v)).toBeLessThan(DANCE_DAY / 2);
-    shoreTick(state, DAY_SEC * 4);
+    expect(danceLeft(s, v)).toBe(0);
+    shoreTick(state, DAY_SEC * 3);
     expect(danceLeft(s, v)).toBeCloseTo(DANCE_DAY, 3);
   });
   it('dancing with a vassal and visiting it raise where its loyalty settles', async () => {
