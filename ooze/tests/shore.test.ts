@@ -3,7 +3,7 @@ import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
 import { answerJoin, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
-import { hostile, raidable, sendBand, fighters } from '../src/economy/war';
+import { hostile, raidable, sendBand, fighters, setStance, stepIn, payCost } from '../src/economy/war';
 import type { TribeState } from '../src/economy/types';
 
 function fresh(diet = 'grazer', cannibal = false) {
@@ -389,10 +389,49 @@ describe('Raids', () => {
     const before = fighters(s);
     expect(sendBand(state, s, prey.id, 30)).toBe(true);
     expect(fighters(s)).toBe(before - 30);
-    for (let i = 0; i < 20000 && s.warband; i++) shoreTick(state, 2);
+    for (let i = 0; i < 20000 && (s.warband || s.fight); i++) shoreTick(state, 2);
     expect(s.warband).toBeUndefined();
     expect(s.battles?.some((b) => b.attack === 'us' && b.won)).toBe(true);
     expect(prey.vassal?.conquered !== undefined || !!prey.gone).toBe(true);
+  });
+  /** A raid seen coming, here in a moment. */
+  function coming(s: ReturnType<typeof shoreOf> & object) {
+    const v = s.villages.find((x) => hostile(s, x))!;
+    const now = s.day + s.clock / DAY_SEC;
+    s.raid = { from: v.id, watched: now - 1, seen: now, arrives: now + 0.01, fighters: 8 };
+    s.nextRaid = now + 100;
+    return v;
+  }
+  it('paying them off: no fight, the stores pay, and they ask more next time', () => {
+    const { state, s } = grown('grazer', 30);
+    s.food = 200;
+    s.wood = 100;
+    const v = coming(s);
+    const cost = payCost(v, 8);
+    expect(setStance(s, 'pay')).toBe(true);
+    for (let i = 0; i < 30; i++) shoreTick(state, 2);
+    expect(s.fight).toBeUndefined();
+    expect(s.battles ?? []).toHaveLength(0);
+    expect(v.paid).toBe(1);
+    expect(payCost(v, 8).food).toBeGreaterThan(cost.food);
+  });
+  it('the walls need a palisade', () => {
+    const { s } = grown('grazer', 30);
+    coming(s);
+    expect(setStance(s, 'walls')).toBe(false);
+  });
+  it('a fight is fought a round at a time, and the chief can step in once', () => {
+    const { state, s } = grown('grazer', 30);
+    coming(s);
+    for (let i = 0; i < 5 && !s.fight; i++) shoreTick(state, 2);
+    expect(s.fight).toBeDefined();
+    expect(s.fight!.rounds.length).toBeLessThan(3);
+    s.chiefAt = { ...s.hearth };
+    expect(stepIn(s)).toBe(true);
+    expect(stepIn(s)).toBe(false);
+    for (let i = 0; i < 100 && s.fight; i++) shoreTick(state, 2);
+    expect(s.fight).toBeUndefined();
+    expect(s.battles?.[0].chief).toBeDefined();
   });
   it('a raid in progress survives a save', () => {
     const { state, s } = grown('grazer', 30);

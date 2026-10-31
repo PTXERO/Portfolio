@@ -30,8 +30,21 @@ const LEAD = 0.25;
 const RALLY = 0.2;
 /** How fast a war band walks (tiles a second). */
 const BAND_SPEED = 1.2;
+/** Seconds a round of blows takes (a fight's over in half a minute or so). */
+const ROUND_SEC = 3;
+/** The chief in the front line: that round they hit this much harder; and the chance they're
+ * hurt doing it (then they walk slowly a few days). */
+const CHIEF_HIT = 2.5;
+const CHIEF_HURT = 0.3;
+const HURT_DAYS = 3;
+/** Behind the palisade: they fight this much harder again, and fewer of those who fall die; but
+ * the fields outside are theirs to strip while it lasts. */
+const WALLS = 0.5;
+const FIELDS = 0.1;
 
 export interface Battle {
+  /** Which fight it was (when it began, in days): the one on screen live, or one to replay. */
+  id: number;
   village: number;
   /** Who fell on whom. */
   attack: 'us' | 'them';
@@ -47,7 +60,39 @@ export interface Battle {
   took?: { food: number; wood: number };
   led?: boolean;
   rallied?: boolean;
+  /** Held behind the walls. */
+  walls?: boolean;
+  /** The round the chief stepped into the line, and whether they were hurt doing it. */
+  chief?: number;
+  hurt?: boolean;
   when: string;
+}
+
+/** How to meet a raid: stand and fight, hold behind the palisade, or pay them to go away. */
+export type Stance = 'fight' | 'walls' | 'pay';
+
+/** A fight going on now: a round every few seconds, till one side breaks. */
+export interface Fight {
+  id: number;
+  village: number;
+  attack: 'us' | 'them';
+  ours: number;
+  theirs: number;
+  /** Still standing. */
+  x: number;
+  y: number;
+  /** What each fighter's worth on each side. */
+  aEach: number;
+  bEach: number;
+  rounds: [number, number][];
+  /** Seconds to the next round. */
+  next: number;
+  rallied?: boolean;
+  led?: boolean;
+  walls?: boolean;
+  /** The round the chief steps in (the next, once asked), and whether they were hurt. */
+  chief?: number;
+  hurt?: boolean;
 }
 
 export interface Raid {
@@ -58,6 +103,8 @@ export interface Raid {
   arrives?: number;
   fighters: number;
   rallied?: boolean;
+  /** How the chief means to meet them (unset: stand and fight). */
+  stance?: Stance;
 }
 
 export interface WarBand {
@@ -112,21 +159,25 @@ export function odds(us: number, them: number): string {
   return r > 1.8 ? 'They\'d be no match for us.' : r > 1.2 ? 'We\'re the stronger.' : r > 0.85 ? 'It could go either way.' : r > 0.55 ? 'They\'re the stronger.' : 'We\'d be cut to pieces.';
 }
 
-/** Two lines trade blows until one breaks (down to under half of what it started with) or,
- * after eight rounds, the one with fewer standing gives way. */
-function fight(rand: () => number, a: number, aEach: number, b: number, bEach: number): { rounds: [number, number][]; aWon: boolean } {
-  let x = a;
-  let y = b;
-  const rounds: [number, number][] = [];
-  for (let i = 0; i < 8; i++) {
-    const hitB = x * aEach * 0.18 * (0.75 + rand() * 0.5);
-    const hitA = y * bEach * 0.18 * (0.75 + rand() * 0.5);
-    x = Math.max(0, x - hitA);
-    y = Math.max(0, y - hitB);
-    rounds.push([Math.round(x), Math.round(y)]);
-    if (x < a * 0.5 || y < b * 0.5) break;
+/** One round of blows. (The chief, stepping in, makes their side's round count for more.) */
+function blows(s: ShoreState, f: Fight): void {
+  const rand = rngFor(s, f.rounds.length + 7);
+  const k = f.chief === f.rounds.length ? CHIEF_HIT : 1;
+  const hitB = f.x * f.aEach * 0.18 * k * (0.75 + rand() * 0.5);
+  const hitA = f.y * f.bEach * 0.18 * (0.75 + rand() * 0.5);
+  f.x = Math.max(0, f.x - hitA);
+  f.y = Math.max(0, f.y - hitB);
+  f.rounds.push([Math.round(f.x), Math.round(f.y)]);
+  if (k > 1 && rand() < CHIEF_HURT) {
+    f.hurt = true;
+    s.chiefHurt = today(s) + HURT_DAYS;
   }
-  return { rounds, aWon: x / a >= y / b };
+}
+
+/** Over: one side down to under half of what it started with, or eight rounds fought (the side
+ * with fewer standing gives way). */
+function over(f: Fight): boolean {
+  return f.rounds.length >= 8 || f.x < f.ours * 0.5 || f.y < f.theirs * 0.5;
 }
 
 function rngFor(s: ShoreState, salt: number): () => number {
@@ -174,69 +225,133 @@ export function warDawn(state: GameState, s: ShoreState): void {
   }
 }
 
-/** Through the day: raids arriving, the war band arriving. */
-export function stepWar(state: GameState, s: ShoreState): void {
+/** Through the day: raids arriving, the war band arriving, and a fight going on, a round at a
+ * time. */
+export function stepWar(state: GameState, s: ShoreState, dt: number): void {
   const now = today(s);
+  const f = s.fight;
+  if (f) {
+    f.next -= dt;
+    while (s.fight && f.next <= 0) {
+      f.next += ROUND_SEC;
+      blows(s, f);
+      if (over(f)) finish(state, s, f);
+    }
+    return;
+  }
   const r = s.raid;
   if (r?.arrives !== undefined && now >= r.arrives) {
     s.raid = undefined;
     const v = s.villages.find((x) => x.id === r.from);
-    if (v && hostile(s, v)) defend(state, s, v, r);
+    if (v && hostile(s, v)) meet(state, s, v, r);
+    return;
   }
   const w = s.warband;
   if (w && now >= w.arrives) {
     s.warband = undefined;
     const v = s.villages.find((x) => x.id === w.to);
-    if (v && raidable(s, v)) attack(state, s, v, w);
-    else record(state, 'The war band found no one to fight, and came home.', 'shore', shoreWhen(s));
+    if (!v || !raidable(s, v)) {
+      record(state, 'The war band found no one to fight, and came home.', 'shore', shoreWhen(s));
+      return;
+    }
+    const led = chiefLeads(s, v);
+    s.fight = { id: now, village: v.id, attack: 'us', ours: w.fighters, theirs: holders(v), x: w.fighters, y: holders(v), aEach: ourStrength(s, 1, false, led ? LEAD : 0), bEach: theirStrength(v, 1), rounds: [], next: ROUND_SEC, led };
+    s.news.push(`The war band falls on ${v.name}!`);
   }
 }
 
-function defend(state: GameState, s: ShoreState, v: Village, r: Raid): void {
-  const rand = rngFor(s, 2);
-  const ours = fighters(s);
-  const theirs = r.fighters;
-  const aEach = ourStrength(s, 1, true, r.rallied ? RALLY : 0);
-  const bEach = theirStrength(v, 1);
-  const f = fight(rand, ours, aEach, theirs, bEach);
-  const last = f.rounds[f.rounds.length - 1];
-  const fell = ours - last[0];
-  const theirDead = theirs - last[1];
-  // Of ours who fell, a third die; beaten, they take what they can carry.
-  const dead = bury(state, s, Math.round(fell / 3), true);
-  v.pop = Math.max(0, v.pop - Math.round(theirDead * 0.6));
-  const b: Battle = { village: v.id, attack: 'them', ours, theirs, rounds: f.rounds, won: f.aWon, dead, theirDead, rallied: r.rallied, when: shoreWhen(s) };
-  if (f.aWon) {
-    v.beaten = (v.beaten ?? 0) + 1;
-    s.news.push(`${cap(v.name)} were driven off.`);
-    record(state, `${cap(v.name)} fell on the village, and were driven off${dead ? `. ${dead} of ours died in the fighting` : ''}.${v.beaten >= COWED ? ' They will not come again.' : ''}`, 'shore', shoreWhen(s));
-  } else {
-    const food = Math.floor(s.food * 0.25);
-    const wood = Math.floor(s.wood * 0.25);
-    s.food -= food;
-    s.wood -= wood;
-    b.took = { food, wood };
-    s.news.push(`${cap(v.name)} broke through, and took what they could carry.`);
-    record(state, `${cap(v.name)} fell on the village and broke through. They carried off ${food} food and ${wood} wood${dead ? `, and ${dead} of ours died` : ''}.`, 'shore', shoreWhen(s));
-  }
-  flee(state, s, v);
-  (s.battles ??= []).push(b);
-  s.raids = (s.raids ?? 0) + 1;
+/** What paying them off would cost (more each time: they learn you pay). */
+export function payCost(v: Village, n: number): { food: number; wood: number } {
+  const k = 1.5 ** (v.paid ?? 0);
+  return { food: Math.ceil(n * 3 * k), wood: Math.ceil(n * 2 * k) };
 }
 
-function attack(state: GameState, s: ShoreState, v: Village, w: WarBand): void {
-  const rand = rngFor(s, 3);
-  const led = Math.hypot(s.chiefAt.x - v.x, s.chiefAt.y - v.y) < 14;
-  const ours = w.fighters;
-  const theirs = holders(v);
-  const f = fight(rand, ours, ourStrength(s, 1, false, led ? LEAD : 0), theirs, theirStrength(v, 1));
-  const last = f.rounds[f.rounds.length - 1];
-  const fell = ours - last[0];
-  const theirDead = theirs - last[1];
-  const dead = bury(state, s, Math.round(fell / 3), false);
+/** Whether the palisade's there to hold behind. */
+export function hasWalls(s: ShoreState): boolean {
+  return s.built.some((b) => b.id === 'palisade');
+}
+
+/** The raiders are here: met as the chief said (paid, if there's still the food and wood for it;
+ * else fought, from behind the walls if there are walls and that's what was said). */
+function meet(state: GameState, s: ShoreState, v: Village, r: Raid): void {
+  const now = today(s);
+  const cost = payCost(v, r.fighters);
+  if (r.stance === 'pay' && s.food >= cost.food && s.wood >= cost.wood) {
+    s.food -= cost.food;
+    s.wood -= cost.wood;
+    v.paid = (v.paid ?? 0) + 1;
+    // (They'll be back the sooner for it.)
+    s.nextRaid = Math.min(s.nextRaid ?? now, now + RAID_GAP * 0.5);
+    s.raids = (s.raids ?? 0) + 1;
+    s.news.push(`${cap(v.name)} took the tribute, and went away.`);
+    record(state, `${cap(v.name)} came, and were paid ${cost.food} food and ${cost.wood} wood to go away. They went.`, 'shore', shoreWhen(s));
+    return;
+  }
+  const walls = r.stance === 'walls' && hasWalls(s);
+  if (walls) {
+    const fields = Math.floor(s.food * FIELDS);
+    s.food -= fields;
+  }
+  const n = fighters(s);
+  s.fight = { id: now, village: v.id, attack: 'them', ours: n, theirs: r.fighters, x: n, y: r.fighters, aEach: ourStrength(s, 1, true, (r.rallied ? RALLY : 0) + (walls ? WALLS : 0)), bEach: theirStrength(v, 1), rounds: [], next: ROUND_SEC, rallied: r.rallied, walls };
+  s.news.push(`${cap(v.name)} fall on the village!`);
+}
+
+/** Whether the chief's there to lead (with the war band at their village, or at home). */
+export function chiefLeads(s: ShoreState, v: Village): boolean {
+  return Math.hypot(s.chiefAt.x - v.x, s.chiefAt.y - v.y) < 14;
+}
+export function chiefHome(s: ShoreState): boolean {
+  return Math.hypot(s.chiefAt.x - s.hearth.x, s.chiefAt.y - s.hearth.y) < 24;
+}
+
+/** Whether the chief can step into the line now (there, and not done it yet this fight). */
+export function canStepIn(s: ShoreState): boolean {
+  const f = s.fight;
+  if (!f || f.chief !== undefined) return false;
+  const v = s.villages.find((x) => x.id === f.village);
+  return f.attack === 'them' ? chiefHome(s) : !!v && chiefLeads(s, v);
+}
+
+/** The chief steps into the front line: the next round is theirs. */
+export function stepIn(s: ShoreState): boolean {
+  if (!canStepIn(s)) return false;
+  s.fight!.chief = s.fight!.rounds.length;
+  return true;
+}
+
+/** A fight over: the dead buried, what was taken taken, and the Chronicle told. */
+function finish(state: GameState, s: ShoreState, f: Fight): void {
+  s.fight = undefined;
+  const v = s.villages.find((x) => x.id === f.village);
+  if (!v) return;
+  const won = f.x / f.ours >= f.y / f.theirs;
+  const fell = f.ours - Math.round(f.x);
+  const theirDead = f.theirs - Math.round(f.y);
+  const home = f.attack === 'them';
+  // Of ours who fell, a third die (a sixth, behind walls); the rest are hurt, and mend.
+  const dead = bury(state, s, Math.round(fell / (f.walls ? 6 : 3)), home);
   v.pop = Math.max(0, v.pop - Math.round(theirDead * 0.6));
-  const b: Battle = { village: v.id, attack: 'us', ours, theirs, rounds: f.rounds, won: f.aWon, dead, theirDead, led, when: shoreWhen(s) };
-  if (f.aWon) {
+  const b: Battle = { id: f.id, village: v.id, attack: f.attack, ours: f.ours, theirs: f.theirs, rounds: f.rounds, won, dead, theirDead, rallied: f.rallied, led: f.led, walls: f.walls, chief: f.chief, hurt: f.hurt, when: shoreWhen(s) };
+  const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
+  const front = f.chief !== undefined ? ` ${chief} fought in the front line${f.hurt ? ', and was hurt' : ''}.` : '';
+  if (home) {
+    if (won) {
+      v.beaten = (v.beaten ?? 0) + 1;
+      s.news.push(`${cap(v.name)} were driven off.`);
+      record(state, `${cap(v.name)} fell on the village${f.walls ? ', and broke on the palisade' : ', and were driven off'}.${front}${dead ? ` ${dead} of ours died in the fighting.` : ''}${v.beaten >= COWED ? ' They will not come again.' : ''}`, 'shore', shoreWhen(s));
+    } else {
+      const food = Math.floor(s.food * 0.25);
+      const wood = Math.floor(s.wood * 0.25);
+      s.food -= food;
+      s.wood -= wood;
+      b.took = { food, wood };
+      s.news.push(`${cap(v.name)} broke through, and took what they could carry.`);
+      record(state, `${cap(v.name)} fell on the village and broke through. ${food || wood ? `They carried off ${food} food and ${wood} wood.` : 'They found nothing to carry off.'}${front}${dead ? ` ${dead} of ours died.` : ''}`, 'shore', shoreWhen(s));
+    }
+    flee(state, s, v);
+    s.raids = (s.raids ?? 0) + 1;
+  } else if (won) {
     const food = Math.min(Math.round(v.pop * 2), Math.max(0, foodCap(s) - s.food));
     const wood = Math.min(Math.round(v.pop), Math.max(0, woodCap(s) - s.wood));
     s.food += food;
@@ -246,11 +361,11 @@ function attack(state: GameState, s: ShoreState, v: Village, w: WarBand): void {
       // Theirs now: they work their land for you, grudgingly at first.
       v.vassal = { tax: 0.25, loyalty: 45, conquered: today(s) };
       s.news.push(`${cap(v.name)} are beaten. Their village is yours.`);
-      record(state, `The war band fell on ${v.name}${led ? ', the chief at its head,' : ''} and beat them. Their village pays tribute to the hearth now.${dead ? ` ${dead} of ours died.` : ''}`, 'shore', shoreWhen(s));
+      record(state, `The war band fell on ${v.name}${f.led ? ', the chief at its head,' : ''} and beat them. Their village pays tribute to the hearth now.${front}${dead ? ` ${dead} of ours died.` : ''}`, 'shore', shoreWhen(s));
     } else flee(state, s, v);
   } else {
     s.news.push(`The war band was beaten at ${v.name}.`);
-    record(state, `The war band fell on ${v.name}${led ? ', the chief at its head,' : ''} and was beaten back.${dead ? ` ${dead} of ours died.` : ''}`, 'shore', shoreWhen(s));
+    record(state, `The war band fell on ${v.name}${f.led ? ', the chief at its head,' : ''} and was beaten back.${front}${dead ? ` ${dead} of ours died.` : ''}`, 'shore', shoreWhen(s));
   }
   (s.battles ??= []).push(b);
 }
@@ -275,9 +390,17 @@ export function sendBand(state: GameState, s: ShoreState, id: number, n: number)
   return true;
 }
 
+/** How the chief means to meet the raid coming. */
+export function setStance(s: ShoreState, stance: Stance): boolean {
+  if (s.raid?.seen === undefined) return false;
+  if (stance === 'walls' && !hasWalls(s)) return false;
+  s.raid.stance = stance;
+  return true;
+}
+
 /** Rallying the defenders before the raiders arrive (once, while you're there). */
 export function rally(s: ShoreState): boolean {
-  if (!s.raid?.seen || s.raid.rallied) return false;
+  if (s.raid?.seen === undefined || s.raid.rallied) return false;
   s.raid.rallied = true;
   return true;
 }

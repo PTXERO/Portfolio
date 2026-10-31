@@ -12,7 +12,7 @@ import { record } from './chronicle';
 import { Biome, CELL, isLand, islandOf, reveal, type Island, type Pt } from './island';
 import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
-import { away, stepWar, warDawn, type Battle, type Raid, type WarBand } from './war';
+import { away, stepWar, warDawn, type Battle, type Fight, type Raid, type WarBand } from './war';
 import type { CreatureLook } from '../scene/creatureLook';
 import type { GameState, TribeState } from './types';
 
@@ -102,8 +102,9 @@ export interface Village {
   /** Kept their own village, as yours: what you take of what they make (0 to 0.6), and how loyal
    * they are (0 to 100; at nothing, they throw you off). */
   vassal?: { tax: number; loyalty: number; conquered?: number };
-  /** Times they've come raiding and been driven off. */
+  /** Times they've come raiding and been driven off; and been paid to go away. */
   beaten?: number;
+  paid?: number;
   /** Turned away: gone from the island's map (to the village they went to, that day). */
   gone?: { to: number; day: number };
 }
@@ -206,6 +207,10 @@ export interface ShoreState {
    * when the next is thought of. */
   raid?: Raid;
   warband?: WarBand;
+  /** A fight going on now (a round every few seconds). */
+  fight?: Fight;
+  /** Hurt in the fighting: the chief walks slowly till then (days since landfall). */
+  chiefHurt?: number;
   battles?: Battle[];
   raids?: number;
   nextRaid?: number;
@@ -1186,7 +1191,7 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
     else noteElders(state, s, think);
   }
   walk(state, s, dt);
-  stepWar(state, s);
+  stepWar(state, s, dt);
   stepVassals(state, s, k);
   stepResources(s, k);
   // Won over and asked to wait: once there's room, they come; kept waiting too long, they give
@@ -1380,7 +1385,7 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
     // (A walk from before ways were found, or one knocked off its line: the way, found now.)
     if (!s.chiefPath?.length) walkTo(s, s.chiefTo);
     if (s.chiefTo && s.chiefPath) {
-      const r = along(is, s.chiefAt, s.chiefPath, CHIEF_SPEED * (1 + bo.speed), dt);
+      const r = along(is, s.chiefAt, s.chiefPath, CHIEF_SPEED * (1 + bo.speed) * ((s.chiefHurt ?? 0) > s.day + s.clock / DAY_SEC ? 0.5 : 1), dt);
       s.chiefAt = r.at;
       if (r.done) {
         s.chiefTo = null;

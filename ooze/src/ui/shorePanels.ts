@@ -5,7 +5,7 @@ import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, ty
 import { buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
-import { fighters, holders, hostile, odds, ourStrength, raidable, theirStrength, type Battle } from '../economy/war';
+import { canStepIn, fighters, hasWalls, holders, hostile, odds, ourStrength, payCost, raidable, theirStrength, type Battle, type Fight } from '../economy/war';
 import type { GameState } from '../economy/types';
 
 const n0 = (v: number) => String(Math.floor(v + 1e-6));
@@ -409,7 +409,7 @@ export function joinCard(s: ShoreState, v: Village): string {
 
 /** A deck of choices to flip through (swipe, or the arrows), each a card with what it gives and
  * what it costs, and a check to choose it. */
-export function deck(cards: { act: string; title: string; line: string; good: string[]; bad: string[] }[]): string {
+export function deck(cards: { act: string; title: string; line: string; good: string[]; bad: string[]; off?: string }[], attr = 'join'): string {
   return `<div class="deck" data-i="0" data-n="${cards.length}">
     <div class="deck-cards"><div class="deck-track">${cards
       .map(
@@ -418,7 +418,7 @@ export function deck(cards: { act: string; title: string; line: string; good: st
           <h4>${c.title}</h4>
           <p>${c.line}</p>
           <ul>${c.good.map((g) => `<li class="good">${g}</li>`).join('')}${c.bad.map((b) => `<li class="bad">${b}</li>`).join('')}</ul>
-          <button class="px-btn gold deck-pick" data-join="${c.act}"><i class="check"></i>Choose this</button>
+          ${c.off ? `<p class="dim tiny">${c.off}</p>` : `<button class="px-btn gold deck-pick" data-${attr}="${c.act}"><i class="check"></i>Choose this</button>`}
         </div>`,
       )
       .join('')}</div></div>
@@ -471,9 +471,9 @@ function warCard(s: ShoreState): string {
     const us = ourStrength(s, fighters(s), true, r.rallied ? 0.2 : 0);
     const them = theirStrength(v, r.fighters);
     out += `<div class="card px-box raid"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">Raiders!</div>
-      <div class="sub">${cap(v.name)} are coming, about ${r.fighters} of them: here ${soon((r.arrives ?? now) - now)}. All ${fighters(s)} grown will fight. ${odds(us, them)}</div>
-      ${r.rallied ? '<div class="sub dim">Rallied: spears out, the young behind the fire.</div>' : ''}</div>
-      <div class="col">${r.rallied ? '' : '<button class="px-btn gold" data-rally="1">Rally them</button>'}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
+      <div class="sub">${cap(v.name)} are coming, about ${r.fighters} of them: here ${soon((r.arrives ?? now) - now)}. ${r.stance === 'pay' ? `They'll be paid ${payCost(v, r.fighters).food} food and ${payCost(v, r.fighters).wood} wood to go away.` : `${r.stance === 'walls' ? 'Behind the palisade, all' : 'All'} ${fighters(s)} grown will fight. ${odds(us, them)}`}</div>
+      ${r.rallied && r.stance !== 'pay' ? '<div class="sub dim">Rallied: spears out, the young behind the fire.</div>' : ''}</div>
+      <div class="col">${r.rallied || r.stance === 'pay' ? '' : '<button class="px-btn gold" data-rally="1">Rally them</button>'}<button class="px-btn" data-stancecard="1">${r.stance === 'pay' ? 'Pay' : r.stance === 'walls' ? 'Walls' : 'Fight'} ›</button></div></div>`;
   }
   const w = s.warband;
   const to = w && s.villages.find((x) => x.id === w.to);
@@ -484,6 +484,54 @@ function warCard(s: ShoreState): string {
       <div class="col">${led ? '' : `<button class="px-btn" data-visit="${to.id}">Go</button>`}</div></div>`;
   }
   return out;
+}
+
+/** Raiders seen coming: how the chief means to meet them (a card each, like the join choices). */
+export function stanceCard(s: ShoreState): string {
+  const r = s.raid;
+  const v = r && s.villages.find((x) => x.id === r.from);
+  if (!r || !v) return '';
+  const now = s.day + s.clock / DAY_SEC;
+  const n = fighters(s);
+  const pay = payCost(v, r.fighters);
+  const canPay = s.food >= pay.food && s.wood >= pay.wood;
+  const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
+  return `<p class="label dim">Raiders</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)} are coming</h3></div>
+    <p>About ${r.fighters} of them, armed, here ${soon((r.arrives ?? now) - now)}. How will ${chief} meet them?</p>
+    ${deck(
+      [
+        { act: 'fight', title: 'Stand and fight', line: `All ${n} grown meet them outside the village.`, good: [odds(ourStrength(s, n, true, r.rallied ? 0.2 : 0), theirStrength(v, r.fighters)), `${chief} can step into the line while it's fought`], bad: ['Beaten, they take a quarter of the stores', 'A third of those who fall die'] },
+        { act: 'walls', title: 'Behind the palisade', line: 'Everyone in, and hold the walls.', good: ['They fight half again as hard', 'Fewer of those who fall die'], bad: ['The fields outside are stripped: a tenth of the food'], off: hasWalls(s) ? undefined : 'There\'s no palisade to hold behind (build one under Defence).' },
+        { act: 'pay', title: 'Pay them off', line: `Food and wood, left out for them: ${pay.food} food and ${pay.wood} wood.`, good: ['No one fights; no one dies'], bad: ['They learn that you pay: back the sooner, and asking more'], off: canPay ? undefined : `There isn't ${pay.food} food and ${pay.wood} wood to give.` },
+      ],
+      'stance',
+    )}`;
+}
+
+/** The fight going on now, live: the lines thinning as the rounds are fought, and the chief's
+ * one move in it. */
+export function fightCard(s: ShoreState, f: Fight): string {
+  const v = s.villages.find((x) => x.id === f.village);
+  if (!v) return '';
+  const head = f.attack === 'them' ? `${cap(v.name)} fall on the village` : `The war band falls on ${v.name}`;
+  const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
+  return `<p class="label dim">${f.walls ? 'Behind the palisade' : f.attack === 'them' ? 'Raid' : 'War band'}</p><h3>${head}</h3>
+    <div class="battle live" data-fight="${f.id}">${line(s.look, f.ours, 'us')}<span class="vs">vs</span>${line(v.look, f.theirs, 'them')}</div>
+    <p class="dim tiny fight-note"></p>
+    <div class="choices"><button class="px-btn gold" data-stepin="1">${chief} steps into the line</button><button class="px-btn" data-act="dismiss">Leave them to it</button></div>`;
+}
+
+/** A line of fighters, up to ten shown, with their bar and count. */
+function line(look: ShoreState['look'], n: number, side: string): string {
+  return `<div class="side ${side}"><div class="line">${Array.from({ length: Math.min(10, Math.max(1, n)) }, () => miniIcon(look, 2)).join('')}</div><div class="making-bar on"><i style="width: 100%"></i></div><span class="tiny num">${n}</span></div>`;
+}
+
+/** What the live fight's note says now (who's in it, whether the chief can step in). */
+export function fightNote(s: ShoreState, f: Fight): string {
+  const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
+  if (f.chief !== undefined) return f.chief >= f.rounds.length ? `${chief} pushes to the front…` : f.hurt ? `${chief} fought in the front line, and was hurt.` : `${chief} fought in the front line.`;
+  if (canStepIn(s)) return `Once a fight, ${chief} can lead one round from the front: it hits far harder, but ${chief} may be hurt.`;
+  return f.attack === 'them' ? `${chief} is too far from the village to join the fight.` : `${chief} isn't with the war band.`;
 }
 
 /** Raiding a village (the chief's call): how many to send, and how the odds look. */
@@ -506,17 +554,16 @@ export function raidChoices(s: ShoreState, v: Village): string {
 export function battleCard(s: ShoreState, b: Battle): string {
   const v = s.villages.find((x) => x.id === b.village);
   if (!v) return '';
-  const line = (look: typeof s.look, n: number, side: string) => `<div class="side ${side}"><div class="line">${Array.from({ length: Math.min(10, Math.max(1, n)) }, () => miniIcon(look, 2)).join('')}</div><div class="making-bar on"><i style="width: 100%"></i></div><span class="tiny num">${n}</span></div>`;
   const head = b.attack === 'them' ? `${cap(v.name)} fall on the village` : `The war band falls on ${v.name}`;
   const result =
     b.attack === 'them'
       ? b.won
         ? `Driven off!${b.dead ? ` ${b.dead} of ours died.` : ' None of ours died.'}`
-        : `They broke through, and carried off ${b.took?.food ?? 0} food and ${b.took?.wood ?? 0} wood.${b.dead ? ` ${b.dead} of ours died.` : ''}`
+        : `They broke through${b.took?.food || b.took?.wood ? `, and carried off ${b.took.food} food and ${b.took.wood} wood` : ', but found nothing to carry off'}.${b.dead ? ` ${b.dead} of ours died.` : ''}`
       : b.won
         ? `They're beaten.${v.vassal ? ' Their village is yours.' : ' What\'s left of them flee.'} ${b.took ? `The band brings back ${b.took.food} food and ${b.took.wood} wood.` : ''}${b.dead ? ` ${b.dead} of ours died.` : ''}`
         : `Beaten back.${b.dead ? ` ${b.dead} of ours died.` : ''}`;
-  return `<p class="label dim">${b.when}</p><h3>${head}</h3>${b.led ? '<p class="dim tiny">The chief leads them.</p>' : ''}${b.rallied ? '<p class="dim tiny">Rallied.</p>' : ''}
+  return `<p class="label dim">${b.when}</p><h3>${head}</h3>${b.led ? '<p class="dim tiny">The chief leads them.</p>' : ''}${b.rallied ? '<p class="dim tiny">Rallied.</p>' : ''}${b.walls ? '<p class="dim tiny">Behind the palisade.</p>' : ''}${b.chief !== undefined ? `<p class="dim tiny">The chief fought in the front line${b.hurt ? ', and was hurt' : ''}.</p>` : ''}
     <div class="battle" data-rounds='${JSON.stringify(b.rounds)}' data-ours="${b.ours}" data-theirs="${b.theirs}">${line(s.look, b.ours, 'us')}<span class="vs">vs</span>${line(v.look, b.theirs, 'them')}</div>
     <p class="battle-result" hidden>${result}</p>
     <button class="px-btn gold" data-act="dismiss">${b.won ? 'Good' : 'So be it'}</button>`;

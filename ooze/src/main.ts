@@ -17,8 +17,8 @@ import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants,
 import { prepareShoreIsland } from './economy/terrainStore';
 import { setSteward, type StewardPlan } from './economy/shore';
 import { answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
-import { battleCard, findCard, joinCard, poiCard, setBuildCat, setVillageView, villageCard } from './ui/shorePanels';
-import { rally, sendBand } from './economy/war';
+import { battleCard, fightCard, fightNote, findCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
+import { canStepIn, rally, sendBand, setStance, stepIn, type Stance } from './economy/war';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, say, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
@@ -997,23 +997,85 @@ function shoreFrame(): void {
       <button class="px-btn gold" data-act="dismiss">Welcome them</button>`);
   }
   joinedReady = true;
-  // A battle fought: played out, round by round.
-  if (s.battles?.length && modal.hidden && !cine()) {
-    const b = s.battles.shift()!;
-    const html = battleCard(s, b);
-    if (html) {
+  // Raiders seen coming: how to meet them, asked once.
+  const r = s.raid;
+  if (r?.seen !== undefined && r.stance === undefined && !stanceAsked.has(`${r.from}:${r.seen}`) && modal.hidden && !cine()) {
+    stanceAsked.add(`${r.from}:${r.seen}`);
+    cue('impact', 0.4);
+    showModal(stanceCard(s));
+  }
+  // A fight going on: shown live, a round at a time.
+  const f = s.fight;
+  if (f) {
+    const live = modal.querySelector<HTMLElement>(`.battle.live[data-fight="${f.id}"]`);
+    // (Shown once: closed, it's left to play out; the result still comes.)
+    if (!live && modal.hidden && !cine() && liveFight !== f.id) {
       cue('impact', 0.5);
-      showModal(html);
-      playBattle();
+      showModal(fightCard(s, f));
+      liveFight = f.id;
+      liveRounds = 0;
+    }
+    if (live || !modal.hidden) showFight(s);
+  }
+  // A battle fought: the one watched live ends where it stands; one fought while away is played
+  // out, round by round.
+  if (s.battles?.length && !cine()) {
+    const b = s.battles[0];
+    const watching = b.id !== undefined && b.id === liveFight && !!modal.querySelector(`.battle.live[data-fight="${b.id}"]`);
+    if (watching || modal.hidden) {
+      s.battles.shift();
+      const html = battleCard(s, b);
+      if (html) {
+        if (!watching) cue('impact', 0.5);
+        showModal(html);
+        playBattle(watching);
+      }
+      liveFight = undefined;
     }
   }
 }
 
+const stanceAsked = new Set<string>();
+let liveFight: number | undefined;
+let liveRounds = 0;
+
+/** The live fight on screen: bars, counts, the fallen, the chief's note and button. */
+function showFight(s: NonNullable<ReturnType<typeof shoreOf>>): void {
+  const f = s.fight;
+  const el = f && modal.querySelector<HTMLElement>(`.battle.live[data-fight="${f.id}"]`);
+  if (!f || !el) return;
+  const now = [f.x, f.y];
+  const start = [f.ours, f.theirs];
+  el.querySelectorAll<HTMLElement>('.side').forEach((side, k) => {
+    side.querySelector<HTMLElement>('.making-bar i')!.style.width = `${Math.round((now[k] / Math.max(1, start[k])) * 100)}%`;
+    side.querySelector<HTMLElement>('.num')!.textContent = String(Math.round(now[k]));
+    const icons = side.querySelectorAll<HTMLElement>('.line img');
+    const stand = Math.ceil((now[k] / Math.max(1, start[k])) * icons.length);
+    icons.forEach((ic, j) => ic.classList.toggle('down', j >= stand));
+    if (f.rounds.length !== liveRounds) {
+      side.classList.remove('hit');
+      void side.offsetWidth;
+      side.classList.add('hit');
+    }
+  });
+  if (f.rounds.length !== liveRounds) {
+    liveRounds = f.rounds.length;
+    if (liveRounds) popSound(0.7 + Math.random() * 0.3);
+  }
+  const note = modal.querySelector<HTMLElement>('.fight-note');
+  const say = fightNote(s, f);
+  if (note && note.textContent !== say) note.textContent = say;
+  const btn = modal.querySelector<HTMLButtonElement>('[data-stepin]');
+  if (btn) btn.hidden = !canStepIn(s);
+}
+
 /** The battle on show: the two lines thin round by round, then the result. */
-function playBattle(): void {
+function playBattle(done = false): void {
   const el = modal.querySelector<HTMLElement>('.battle');
   if (!el) return;
-  const rounds: [number, number][] = JSON.parse(el.dataset.rounds ?? '[]');
+  const all: [number, number][] = JSON.parse(el.dataset.rounds ?? '[]');
+  // (Watched live: only the last round left to show.)
+  const rounds = done ? all.slice(-1) : all;
   const start = [Number(el.dataset.ours), Number(el.dataset.theirs)];
   const sides = [el.querySelector<HTMLElement>('.side.us')!, el.querySelector<HTMLElement>('.side.them')!];
   let i = 0;
@@ -1039,7 +1101,7 @@ function playBattle(): void {
     popSound(0.7 + Math.random() * 0.3);
     setTimeout(step, 750);
   };
-  setTimeout(step, 600);
+  setTimeout(step, done ? 0 : 600);
 }
 
 /** The strip under the top bar: this stage's own goal. It never names what comes next. */
@@ -1868,6 +1930,24 @@ function act(el: HTMLElement): void {
     if (s && sendBand(state, s, id, n)) {
       cue('impact', 0.3);
       modal.hidden = true;
+      save();
+    }
+  } else if (el.dataset.stance) {
+    const s = shoreOf(state);
+    if (s && setStance(s, el.dataset.stance as Stance)) {
+      popSound(0.8);
+      modal.hidden = true;
+      save();
+    }
+  } else if (el.dataset.stancecard) {
+    const s = shoreOf(state);
+    if (s?.raid?.seen !== undefined) showModal(stanceCard(s));
+  } else if (el.dataset.stepin) {
+    const s = shoreOf(state);
+    if (s && stepIn(s)) {
+      cue('ascend', 0.5);
+      const r = el.getBoundingClientRect();
+      scene.float(r.left + r.width / 2, r.top, 'To the front!', '#e8c050');
       save();
     }
   } else if (el.dataset.rally) {
