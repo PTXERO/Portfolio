@@ -32,3 +32,20 @@ describe('Genes', () => {
     expect(whatsNew({ hue: 0, light: 0 }, { hue: 1, light: 0 })).toBeUndefined();
   });
 });
+
+import { createState } from '../src/economy/state';
+import { deserialize, serialize } from '../src/economy/save';
+
+describe('The line, saved', () => {
+  it('keeps its looks and their history; mates met before looks were kept get theirs', () => {
+    const state = createState(0);
+    const c = state.stages.creature;
+    c.genes = { hue: 12, light: 0.05, pattern: 'stripes' };
+    c.line = [{ generation: 1, mate: 'Pell', mateGenes: { hue: 20, light: 0, pattern: 'stripes' }, before: { hue: 0, light: 0 }, genes: c.genes, parts: [], year: 3 }];
+    c.mates = [{ id: 1, name: 'Old', parts: {} }];
+    const back = deserialize(serialize(state)).stages.creature;
+    expect(back.genes).toEqual(c.genes);
+    expect(back.line?.[0].mate).toBe('Pell');
+    expect(back.mates[0].genes).toBeDefined();
+  });
+});

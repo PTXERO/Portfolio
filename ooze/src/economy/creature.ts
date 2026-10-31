@@ -562,7 +562,7 @@ function hatch(state: GameState): void {
   const before = s.genes;
   const genes = inherit(before, mate.genes ?? randomGenes(Math.random), Math.random, 0.6);
   s.genes = genes;
-  (s.line ??= []).push({ generation: s.generation, mate: mate.name, mateGenes: mate.genes, genes, year: s.year });
+  (s.line ??= []).push({ generation: s.generation, mate: mate.name, mateGenes: mate.genes, mateParts: { ...mate.parts }, before, genes, parts, year: s.year });
   state.reports.push({ kind: 'hatch', success: true, earned: '0', parts, mate: mate.name, generation: s.generation, looks: whatsNew(before, genes) });
 }
 

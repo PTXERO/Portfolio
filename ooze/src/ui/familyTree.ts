@@ -3,7 +3,9 @@
 // their children below; tap anyone to stand in their place. The four who crossed lead back to the
 // Creature's line: generation on generation, and the mate each one was bred with.
 
-import { describe } from '../economy/genes';
+import { describe, PLAIN } from '../economy/genes';
+import { dietOf } from '../economy/rates';
+import { PARTS } from '../content/creature';
 import { SEASON_DAYS, SEASON_NAMES, type ShorePerson, type ShoreState } from '../economy/shore';
 import type { GameState, Genes } from '../economy/types';
 import { creatureIcon, miniIcon, type CreatureLook } from '../scene/creatureLook';
@@ -80,25 +82,46 @@ export function shoreTree(state: GameState, s: ShoreState, id: number): string {
     <div class="choices"><button class="px-btn" data-treeback="1">‹ Back</button><button class="px-btn gold" data-act="dismiss">Close</button></div>`;
 }
 
-/** The Creature's line: each generation, and the mate it was bred with (newest first). */
+/** Where a generation's looks came from: the line, the mate, both, or nowhere (new). */
+function whence(l: NonNullable<GameState['stages']['creature']['line']>[number]): string[] {
+  const before = l.before ?? PLAIN;
+  const mate = l.mateGenes ?? PLAIN;
+  const g = l.genes;
+  const out: string[] = [];
+  const from = (line: boolean, them: boolean) => (line && them ? 'from both sides' : line ? 'kept from the line' : them ? `from ${l.mate}` : 'new: born with it');
+  if (g.morph) out.push(`${cap(MORPH_WORD[g.morph])} colouring: ${from(before.morph === g.morph, mate.morph === g.morph)}`);
+  else if (before.morph) out.push(`Lost the ${MORPH_WORD[before.morph]} colouring (${l.mate} didn't carry it)`);
+  if (g.pattern) out.push(`${cap(PATTERN_WORD[g.pattern])}: ${from(before.pattern === g.pattern, mate.pattern === g.pattern)}`);
+  else if (before.pattern) out.push(`Lost the ${PATTERN_WORD[before.pattern]}`);
+  if (Math.abs(g.hue - before.hue) > 6 || Math.abs(g.light - before.light) > 0.04) out.push(`Coat shade: between the line's and ${l.mate}'s`);
+  for (const id of l.parts ?? []) out.push(`${PARTS.find((p) => p.id === id)?.name ?? id}: from ${l.mate}`);
+  return out.length ? out : ['Looks much as the line did'];
+}
+
+const PATTERN_WORD: Record<string, string> = { stripes: 'stripes', spots: 'spots', saddle: 'saddle markings', mask: 'face mask', socks: 'white feet' };
+const MORPH_WORD: Record<string, string> = { albino: 'white', melanistic: 'black', piebald: 'piebald' };
+
+/** The Creature's line: each generation (newest first), what it was bred with, and where each of
+ * its looks came from, so a sudden change of look has its reason. */
 export function lineTree(state: GameState): string {
   const c = state.stages.creature;
-  const base: CreatureLook = { parts: { ...c.equipped }, diet: state.stages.tribal.tribe?.look.diet ?? 'none' };
-  const at = (g?: Genes) => ({ ...base, genes: g });
+  const diet = state.stages.tribal.tribe?.look.diet ?? (dietOf(state, 'creature') ?? 'none');
+  const base: CreatureLook = { parts: { ...c.equipped }, diet };
+  const at = (g?: Genes, parts?: CreatureLook['parts']) => ({ ...base, parts: { ...base.parts, ...(parts ?? {}) }, genes: g });
   const line = c.line ?? [];
   const rows = [...line]
     .reverse()
     .map(
-      (l) => `<div class="line-gen"><span class="tiny dim">Gen ${l.generation}</span>${miniIcon(at(l.genes), 2)}<span class="tiny">${describe(l.genes)}</span>
-        <span class="line-mate tiny dim">of the line × ${l.mate} ${miniIcon(at(l.mateGenes), 2)}</span></div>`,
+      (l) => `<div class="line-gen"><div class="line-head"><span class="tiny dim">Generation ${l.generation}</span></div>
+        <div class="line-cross">${miniIcon(at(l.before), 2)}<span class="tiny dim">the line</span><span class="dim">×</span>${miniIcon(at(l.mateGenes, l.mateParts), 2)}<span class="tiny dim">${l.mate}</span><span class="dim">→</span>${miniIcon(at(l.genes), 2)}<span class="tiny">${describe(l.genes)}</span></div>
+        <ul class="line-why">${whence(l).map((w) => `<li class="tiny">${w}</li>`).join('')}</ul></div>`,
     )
     .join('');
   const four = state.stages.tribal.tribe?.family ?? [];
   return `<p class="label dim">Family tree</p><h3>The line</h3>
-    <p class="tiny dim">Generation on generation, and the mate each was bred with. ${line.length < c.generation ? `(The ${c.generation - line.length} oldest generations, before their looks were kept, are lost.)` : ''}</p>
+    <p class="tiny dim">Each generation: the line, bred with a mate, and the young that became the line, with where each of their looks came from.${line.length < c.generation ? ` (The ${c.generation - line.length} oldest, from before looks were kept, are lost.)` : ''}</p>
     ${four.length ? `<div class="tree-row"><span class="tree-label tiny dim">The four who crossed</span><div class="tree-nodes">${four.map((f) => `<div class="tree-node">${miniIcon(at(f.genes), 2)}<b>${f.name}</b></div>`).join('')}</div></div>` : ''}
-    <div class="line-list">${rows || '<p class="tiny dim">No young bred yet: breed with a mate (the Family tab).</p>'}
-      <div class="line-gen"><span class="tiny dim">Gen 0</span>${miniIcon(at(undefined), 2)}<span class="tiny">came up out of the sea</span></div></div>
+    <div class="line-list">${rows || '<p class="tiny dim">No young bred yet: breed with a mate.</p>'}
+      <div class="line-gen"><div class="line-cross">${miniIcon(at(undefined), 2)}<span class="tiny">Generation 0: came up out of the sea</span></div></div></div>
     <div class="choices"><button class="px-btn" data-treeback="1">‹ Back</button><button class="px-btn gold" data-act="dismiss">Close</button></div>`;
 }
-

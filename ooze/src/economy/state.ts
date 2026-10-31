@@ -102,6 +102,8 @@ export function cloneState(s: GameState): GameState {
       mates: st.mates.map((m) => ({ ...m, parts: { ...m.parts } })),
       egg: st.egg && { ...st.egg, mate: { ...st.egg.mate, parts: { ...st.egg.mate.parts } } },
       generation: st.generation,
+      genes: st.genes && { ...st.genes },
+      line: st.line?.map((l) => ({ ...l })),
       keepBreeding: st.keepBreeding,
       pop: st.pop,
       roles: { ...st.roles },

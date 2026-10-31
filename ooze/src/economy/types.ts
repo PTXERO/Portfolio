@@ -445,7 +445,19 @@ export interface StageState {
   /** The line's looks, as bred so far (unset: as it came out of the sea). */
   genes?: Genes;
   /** The line, generation by generation: whose young, and how they looked (the family tree). */
-  line?: { generation: number; mate: string; mateGenes?: Genes; genes: Genes; year: number }[];
+  line?: {
+    generation: number;
+    mate: string;
+    mateGenes?: Genes;
+    /** The parts the mate wore. */
+    mateParts?: Partial<Record<Slot, string>>;
+    /** The line's looks before, and the young's after. */
+    before?: Genes;
+    genes: Genes;
+    /** Parts new to the line, from the mate. */
+    parts?: string[];
+    year: number;
+  }[];
   /** Whether a new egg is laid by itself whenever there's a mate and no egg (Family tab). */
   keepBreeding: boolean;
 }

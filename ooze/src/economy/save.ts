@@ -1,4 +1,5 @@
 import { STAGES, STAGE_ORDER } from '../content/stages';
+import { randomGenes } from './genes';
 import { settleHabitat } from './actions';
 import { MAX_SURVIVORS } from './tribal';
 import { SHORE_CELLS } from './shore';
@@ -65,8 +66,11 @@ export function deserialize(text: string): GameState {
           nests: s.seed !== undefined ? [...(s.nests ?? [])] : [],
           nestSettle: s.seed !== undefined ? { ...(s.nestSettle ?? {}) } : {},
           trips: s.seed !== undefined ? { ...(s.trips ?? {}) } : {},
-          mates: s.mates ?? [],
-          egg: s.egg ?? null,
+          // (Mates met before looks were kept get theirs now.)
+          mates: (s.mates ?? []).map((m) => (m.genes ? m : { ...m, genes: randomGenes(Math.random) })),
+          egg: s.egg ? { ...s.egg, mate: s.egg.mate.genes ? s.egg.mate : { ...s.egg.mate, genes: randomGenes(Math.random) } } : null,
+          genes: s.genes,
+          line: s.line,
           generation: s.generation ?? 0,
           keepBreeding: s.keepBreeding ?? true,
           pop: s.pop ?? fresh.pop,
