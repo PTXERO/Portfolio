@@ -1013,6 +1013,9 @@ function addTrust(state: GameState, s: ShoreState, v: Village, n: number): void 
 const FOOD_KEEP_DAYS = 3;
 const WOOD_KEEP_DAYS = 4;
 
+/** A rare colouring out of nowhere, in a child born on New Shore: one birth in a thousand. */
+const SHORE_MUTATE = 0.001;
+
 /** Patience: days they'll wait for room, once asked to. (For your answer they wait as long as
  * it takes: nothing's decided for you while you're away.) */
 const WAIT_DAYS = 10;
@@ -1242,8 +1245,14 @@ function born(state: GameState, s: ShoreState): void {
   const same = others.filter((p) => p.kind === parent?.kind);
   const pool = same.length ? same : others;
   const other = pool[Math.floor(rand() * pool.length)];
-  s.people.push({ id: s.nextId++, name, born: today, dies: today + 70 + rand() * 30, kind: parent?.kind, parents: parent ? [parent.id, other?.id] : undefined, genes: inherit(parent?.genes, other?.genes ?? parent?.genes, rand) });
+  s.people.push({ id: s.nextId++, name, born: today, dies: today + 70 + rand() * 30, kind: parent?.kind, parents: parent ? [parent.id, other?.id] : undefined, genes: inherit(parent?.genes, other?.genes ?? parent?.genes, rand, 0.5, SHORE_MUTATE) });
   s.births++;
+  // A rare colouring from nowhere: told of, it's so seldom.
+  const child = s.people[s.people.length - 1];
+  if (child.genes?.morph && child.genes.morph !== parent?.genes?.morph && child.genes.morph !== other?.genes?.morph) {
+    const word = child.genes.morph === 'albino' ? 'white as bone' : child.genes.morph === 'melanistic' ? 'black all over' : 'patched with white';
+    record(state, `${name} was born ${word}, like none before.`, 'shore', shoreWhen(s));
+  }
   if (s.firstBirth === undefined) {
     s.firstBirth = s.day;
     s.news.push(SHORE_STORY.firstBorn);

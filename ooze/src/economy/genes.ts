@@ -31,7 +31,7 @@ export function randomGenes(rand: () => number): Genes {
  * one or the other (a parent's markings more often than not show); a rare colouring shows when
  * both carry it, often when one does, and now and then from nowhere.
  */
-export function inherit(a: Genes = PLAIN, b: Genes = PLAIN, rand: () => number, lean = 0.5): Genes {
+export function inherit(a: Genes = PLAIN, b: Genes = PLAIN, rand: () => number, lean = 0.5, mutate = MUTATE): Genes {
   const g: Genes = {
     hue: round(a.hue * lean + b.hue * (1 - lean) + (rand() - 0.5) * 8),
     light: round(clamp(a.light * lean + b.light * (1 - lean) + (rand() - 0.5) * 0.04, -0.2, 0.2), 100),
@@ -41,7 +41,7 @@ export function inherit(a: Genes = PLAIN, b: Genes = PLAIN, rand: () => number, 
   const rare = [a.morph, b.morph].filter((m): m is Morph => !!m);
   if (rare.length === 2 && a.morph === b.morph) g.morph = a.morph;
   else if (rare.length && rand() < 0.35) g.morph = rare[Math.floor(rand() * rare.length)];
-  else if (rand() < MUTATE) g.morph = MORPHS[Math.floor(rand() * MORPHS.length)];
+  else if (rand() < mutate) g.morph = MORPHS[Math.floor(rand() * MORPHS.length)];
   return g;
 }
 
