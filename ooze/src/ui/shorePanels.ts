@@ -260,8 +260,8 @@ function alerts(s: ShoreState, v: Village): { text: string; cls: string; urgent?
   if (s.raid?.target === v.id && s.raid.seen !== undefined) out.push({ text: 'Raided!', cls: 'warn', urgent: true });
   if (v.road && (!roadDone(v) || v.road.up)) {
     const w = v.road.up ?? v.road;
-    out.push({ text: `Road ${Math.floor((w.done / w.need) * 100)}%`, cls: 'road' });
-  }
+    out.push({ text: `${v.road.up ? 'Relaying road' : 'Road'} ${Math.floor((w.done / w.need) * 100)}%`, cls: 'road' });
+  } else if (roadDone(v)) out.push({ text: `${ROAD_TIERS[roadTier(v)].name} ✓`, cls: 'road' });
   if (chiefNear(s, v)) out.push({ text: 'Chief here', cls: 'here' });
   return out;
 }
@@ -536,7 +536,7 @@ function roadLine(s: ShoreState, v: Village): { line: string; button: string } {
     const stations = waystations(s, v).length;
     return {
       line: `<div class="sub dim tiny">${tier.name}: ${walk} from the hearth, and the chief walks it quickly. ${stations === 1 ? 'A waystation' : `${stations} waystations`} on the way: wanderers, things left for the hearth${count(s, 'watch') ? '' : ', and, with no watch post, raiders lying in wait'}.</div>${up}${trade}`,
-      button: u && !u.missing ? `<button class="px-btn gold" data-roadup="${v.id}">${ROAD_TIERS[u.tier].name} · ${u.wood} wood${Object.entries(u.needs).map(([r, n]) => `, ${n} ${RES_NAME[r as keyof typeof RES_NAME].toLowerCase()}`).join('')}</button>` : '',
+      button: u && !u.missing ? `<button class="px-btn gold" data-roadup="${v.id}">Upgrade to ${ROAD_TIERS[u.tier].name.toLowerCase()} · ${u.wood} wood${Object.entries(u.needs).map(([r, n]) => `, ${n} ${RES_NAME[r as keyof typeof RES_NAME].toLowerCase()}`).join('')}</button>` : '',
     };
   }
   const c = roadCost(s, v);

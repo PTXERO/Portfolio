@@ -357,6 +357,8 @@ describe('Raids', () => {
   it('predators come raiding: watched, seen coming, then a battle', () => {
     const { state, s } = grown('grazer', 30);
     expect(s.villages.some((v) => hostile(s, v))).toBe(true);
+    // (Big enough to fancy their chances.)
+    for (const v of s.villages) if (hostile(s, v)) v.pop = Math.max(v.pop, 40);
     let watched = false;
     let seen = false;
     for (let i = 0; i < 6000 && !(s.raids ?? 0); i++) {
@@ -627,7 +629,8 @@ describe('Settlements and roads', () => {
     s.wood = 10000;
     now(state, 'hearth');
     for (let i = 0; i < 4; i++) now(state, 'hut');
-    const v = s.villages.slice().sort((a, b) => Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y) - Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y))[0];
+    // (The farthest of their kin.)
+    const v = s.villages.filter((x) => relation(s, x) === 'kin').sort((a, b) => Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y) - Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y))[0];
     v.found = true;
     v.trust = 99;
     v.pop = 20;

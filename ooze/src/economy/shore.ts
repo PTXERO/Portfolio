@@ -515,19 +515,25 @@ export function shoreWorld(seed: number, look: CreatureLook, cannibal: boolean):
     let best: { q: Pt; h: Habitat } | null = null;
     let bestScore = -Infinity;
     let valid = 0;
-    for (let tries = 0; tries < 1500 && valid < 40; tries++) {
+    for (let tries = 0; tries < 3000 && valid < 60; tries++) {
       const a = rand() * Math.PI * 2;
+      // (The first near the beach, the smoke they saw; the rest anywhere on the island, every
+      // spot as likely as any other, out to the far coasts.)
       const q =
         i === 0
           ? { x: Math.round(hearth.x + Math.cos(a) * (50 + rand() * 25)), y: Math.round(hearth.y + Math.sin(a) * (50 + rand() * 25)) }
-          : { x: Math.round(N / 2 + Math.cos(a) * rand() * N * 0.42), y: Math.round(N / 2 + Math.sin(a) * rand() * N * 0.42) };
+          : { x: Math.round(12 + rand() * (N - 24)), y: Math.round(12 + rand() * (N - 24)) };
       if (q.x < 12 || q.y < 12 || q.x > N - 12 || q.y > N - 12 || !fine(q.x, q.y)) continue;
       const gap = i === 0 ? 30 : Math.max(60, 140 - tries / 12);
       if (taken.some((t) => Math.hypot(t.x - q.x, t.y - q.y) < gap)) continue;
       valid++;
       const h = habitatAt(is, q.x, q.y);
       // (A place already settled by another village is less likely again: the island's kinds vary.)
-      const score = (HABITATS[h].likes[p.diet] ?? 1) - 1.3 * villages.filter((v) => v.habitat === h).length + rand() * 1.2;
+      // (And the further from everyone else the better: spread over the whole island, not
+      // huddled in the middle.)
+      const apart = Math.min(...taken.map((t) => Math.hypot(t.x - q.x, t.y - q.y)));
+      const spread = i === 0 ? 0 : Math.min(6, (apart / (N * 0.2)) * 4);
+      const score = (HABITATS[h].likes[p.diet] ?? 1) - 1.3 * villages.filter((v) => v.habitat === h).length + rand() * 1.2 + spread;
       if (score > bestScore) {
         bestScore = score;
         best = { q, h };

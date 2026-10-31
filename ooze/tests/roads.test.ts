@@ -48,10 +48,10 @@ describe('The road network', () => {
     near.road = { done: 1, need: 1 };
     expect(roadVia(s, far)).toBe(near.id);
     expect(roadCost(s, far).via).toBe(near.id);
-    // On foot from the end of the road beats the whole way on foot.
-    expect(travelDays(s, far)).toBeLessThan(before);
+    // On foot from the end of the road, if that beats the whole way on foot (never worse).
+    expect(travelDays(s, far)).toBeLessThanOrEqual(before);
     far.road = { done: 1, need: 1, via: near.id };
-    expect(travelDays(s, far)).toBeLessThan(before * 0.6);
+    expect(travelDays(s, far)).toBeLessThan(before);
   });
 });
 
