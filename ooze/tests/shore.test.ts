@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { poiHere, answerJoin, answerAsk, setSettleFocus, settledDay, stageOf, onRoad, roadCells, elderThink, HEARTH_MOST, hearthMost, roomLeft, woodCap, roadCost, roadDone, startRoad, totalCritters, travelDays, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { poiHere, answerJoin, chiefWithCrew, roadFront, roadTier, roadUpgrade, setTrade, tradesWith, upgradeRoad, answerAsk, setSettleFocus, settledDay, stageOf, onRoad, roadCells, elderThink, HEARTH_MOST, hearthMost, roomLeft, woodCap, roadCost, roadDone, startRoad, totalCritters, travelDays, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import { hostile, raidable, sendBand, fighters, setStance, stepIn, payCost, setWarRule } from '../src/economy/war';
 import type { TribeState } from '../src/economy/types';
@@ -662,7 +662,7 @@ describe('Settlements and roads', () => {
     expect(roadDone(v)).toBe(false);
     shoreTick(state, DAY_SEC * cost.days * 0.6);
     expect(roadDone(v)).toBe(true);
-    expect(travelDays(s, v)).toBeCloseTo(walk * 0.35, 3);
+    expect(travelDays(s, v)).toBeCloseTo(walk * 0.5, 3);
     // And the chief walks it quicker than the land beside it.
     const mid = { x: (s.hearth.x * 2 + v.x) / 3, y: (s.hearth.y * 2 + v.y) / 3 };
     expect(roadCells(s).size).toBeGreaterThan(20);
@@ -714,6 +714,53 @@ describe('Settlements and roads', () => {
     v.pop = 35;
     expect(stageOf(v)).toBe(2);
     expect(settledDay(v).food / v.pop).toBeGreaterThan(at34);
+  });
+  it('the chief working with the road crew doubles the work; a finished road is relaid in stone once its idea is known', () => {
+    const { state, s, v } = setup();
+    v.settled = undefined;
+    v.vassal = { tax: 0.1, loyalty: 90 };
+    const cost = roadCost(s, v);
+    s.wood = cost.wood;
+    expect(startRoad(state, v.id)).toBe(true);
+    const front = roadFront(s, v)!;
+    s.chiefAt = { ...front };
+    s.chiefTo = null;
+    expect(chiefWithCrew(s, v)).toBe(true);
+    shoreTick(state, 2);
+    const done = v.road!.done;
+    expect(done).toBeCloseTo((2 / DAY_SEC) * 2, 5);
+    v.road!.done = v.road!.need;
+    const dirt = travelDays(s, v);
+    // Stone: needs the idea, the stone, the wood.
+    s.wood = 10000;
+    expect(roadUpgrade(s, v)!.missing).toMatch(/Stone blades/);
+    s.culture = { since: 0, age: 1, practice: {}, done: ['blades'], forks: {} } as never;
+    expect(roadUpgrade(s, v)!.missing).toMatch(/stone/);
+    (s.res ??= {}).stone = 30;
+    expect(roadUpgrade(s, v)!.missing).toBeUndefined();
+    expect(upgradeRoad(state, v.id)).toBe(true);
+    v.road!.up!.done = v.road!.up!.need;
+    shoreTick(state, 2);
+    expect(roadTier(v)).toBe(1);
+    expect(travelDays(s, v)).toBeLessThan(dirt);
+    // Paved: an Age to come.
+    expect(roadUpgrade(s, v)!.missing).toMatch(/Age/);
+  });
+  it('a caravan along a finished road takes food out and brings their goods back', () => {
+    const { state, s, v } = setup();
+    v.settled = undefined;
+    v.vassal = { tax: 0, loyalty: 90 };
+    v.habitat = 'mountain';
+    v.road = { done: 1, need: 1 };
+    const k = tradesWith(v).findIndex((x) => x.get === 'stone');
+    expect(setTrade(state, v.id, k)).toBe(true);
+    s.food = 400;
+    s.res = {};
+    shoreTick(state, DAY_SEC * 1.05);
+    const c = s.convoys!.find((x) => x.caravan)!;
+    expect(c.res?.stone).toBe(3);
+    shoreTick(state, DAY_SEC * (c.arrives - c.left + 0.1));
+    expect(s.res.stone ?? 0).toBeGreaterThanOrEqual(3);
   });
   it('a settlement counts toward your critters, and is no one to raid or be raided by', async () => {
     const war = await import('../src/economy/war');

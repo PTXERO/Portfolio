@@ -40,7 +40,7 @@ export interface Idea {
 export const IDEAS: Idea[] = [
   { id: 'dried', lane: 'food', age: 1, name: 'Dried meat and fruit', does: 'Room for 40 more food.', fx: { foodCap: 40 } },
   { id: 'grounds', lane: 'food', age: 1, name: 'Known grounds', does: 'Food comes in 5% faster.', fx: { food: 0.05 } },
-  { id: 'blades', lane: 'crafts', age: 1, name: 'Stone blades', does: 'Wood comes in 5% faster.', fx: { wood: 0.05 } },
+  { id: 'blades', lane: 'crafts', age: 1, name: 'Stone blades', does: 'Wood comes in 5% faster; and roads can be relaid in stone.', fx: { wood: 0.05 } },
   { id: 'baskets', lane: 'crafts', age: 1, name: 'Baskets', does: 'Room for 30 more food and 30 more wood.', fx: { foodCap: 30, woodCap: 30 } },
   { id: 'watchers', lane: 'war', age: 1, name: 'Watchers', does: 'Raiders are seen a day sooner.', fx: { warn: 1 } },
   { id: 'clubs', lane: 'war', age: 1, name: 'Clubs', does: 'They fight 10% harder.', fx: { arms: 0.1 } },

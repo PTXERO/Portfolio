@@ -2,7 +2,7 @@
 // homes, stores, work, exploring) and the Island (the villages found out there, and the scouts).
 
 import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
-import { askWords, canAnswer, FOCI, landGoods, stageOf, STAGES, centre, hearthMost, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { chiefWithCrew, ROAD_TIERS, roadTier, roadUpgrade, tradesWith, tradeWord, waystations, askWords, canAnswer, FOCI, landGoods, stageOf, STAGES, centre, hearthMost, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import { FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
@@ -54,7 +54,7 @@ export function shoreKey(state: GameState, tab: string): string {
   }
   if (tab === 'build') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor((v ?? 0) / 5)), s.building?.id, s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, canPay(s, b.id)])]);
   const war = JSON.stringify([s.raid?.help, s.raid?.allies?.length, s.raid?.seen !== undefined && [s.raid.from, s.raid.rallied, Math.ceil(((s.raid.arrives ?? 0) - s.day - s.clock / DAY_SEC) * 4)], s.warband && [s.warband.to, Math.ceil((s.warband.arrives - s.day - s.clock / DAY_SEC) * 4)], fighters(s), s.warRule, hasWarChief(s)]);
-  if (tab === 'island') return war + JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor(v ?? 0)), s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop)], v.settled !== undefined && [Math.floor(v.pop), v.focus, v.ask && [v.ask.kind, Math.ceil(v.ask.until - s.day - s.clock / DAY_SEC), canAnswer(s, v)], (v.thrive ?? 0) > s.day, (v.sulk ?? 0) > s.day, chiefNear(s, v)], v.road && Math.floor((v.road.done / v.road.need) * 20), ruled(v) && canRoad(s, v), Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
+  if (tab === 'island') return war + JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor(v ?? 0)), s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop)], v.settled !== undefined && [Math.floor(v.pop), v.focus, v.ask && [v.ask.kind, Math.ceil(v.ask.until - s.day - s.clock / DAY_SEC), canAnswer(s, v)], (v.thrive ?? 0) > s.day, (v.sulk ?? 0) > s.day, chiefNear(s, v)], v.road && [Math.floor((v.road.done / v.road.need) * 20), v.road.tier, v.road.up && Math.floor((v.road.up.done / v.road.up.need) * 20), chiefWithCrew(s, v), roadUpgrade(s, v)?.missing, v.trade && [v.trade.give, v.trade.get]], ruled(v) && canRoad(s, v), Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
   const plan = workPlan(s);
   if (villageView === 'elders' && count(s, 'council')) return JSON.stringify(['elders', s.steward, (s.steward?.on ? elderThink(s) : ELDERS_OFF).text, s.elders?.length, s.elders?.[s.elders.length - 1]?.text, s.building?.id]);
   if (villageView === 'people') return JSON.stringify(['people', s.people.length, s.chief, Math.floor(s.day / 2), s.hungry]);
@@ -409,17 +409,43 @@ const TAXES = [0, 0.1, 0.25, 0.4, 0.6];
 /** Days, said plainly. */
 const days = (d: number) => (d < 0.6 ? 'under a day' : `${Math.round(d)} day${Math.round(d) === 1 ? '' : 's'}`);
 
-/** The road to a village of yours: laid, being laid, or to be begun (wood, and the days). */
+/** The road to a village of yours: to be begun, being laid (the chief can work with the crew),
+ * or done (relaid better, as the Ages allow; caravans along it). */
 function roadLine(s: ShoreState, v: Village): { line: string; button: string } {
   const walk = days(travelDays(s, v));
-  if (roadDone(v)) return { line: `<div class="sub dim tiny">By road: ${walk} from the hearth, and the chief walks it quickly.</div>`, button: '' };
   // (Settlements keep to themselves: no roads to them.)
   if (!v.vassal && !v.road) return { line: `<div class="sub dim tiny">${walk} from the hearth.</div>`, button: '' };
-  if (v.road) return { line: `<div class="trust"><span class="tiny dim">Road</span><div class="making-bar on"><i style="width: ${Math.round((v.road.done / v.road.need) * 100)}%"></i></div></div><div class="sub dim tiny">${walk} from the hearth; the road's ${days(v.road.need - v.road.done)} from done.</div>`, button: '' };
+  const crew = (w: { done: number; need: number }, what: string) => {
+    const withCrew = chiefWithCrew(s, v);
+    return {
+      line: `<div class="trust"><span class="tiny dim">${what}</span><div class="making-bar on"><i style="width: ${Math.round((w.done / w.need) * 100)}%"></i></div></div><div class="sub dim tiny">${days(w.need - w.done)} from done${withCrew ? ': the chief is working with the crew, twice as fast.' : '. With the chief working among the crew, it goes twice as fast.'}</div>`,
+      button: withCrew ? '' : `<button class="px-btn gold" data-crew="${v.id}">Join the crew</button>`,
+    };
+  };
+  if (v.road && !roadDone(v)) return crew(v.road, 'Road');
+  if (v.road) {
+    const tier = ROAD_TIERS[roadTier(v)];
+    if (v.road.up) {
+      const c = crew(v.road.up, `To ${ROAD_TIERS[roadTier(v) + 1].name.toLowerCase()}`);
+      return { line: `<div class="sub dim tiny">${tier.name}: ${walk} from the hearth.</div>${c.line}`, button: c.button };
+    }
+    const u = roadUpgrade(s, v);
+    const trades = tradesWith(v);
+    const now = v.trade ? trades.findIndex((x) => x.give === v.trade!.give && x.get === v.trade!.get) : -1;
+    const trade = v.vassal
+      ? `<div class="seg tax trade"><span class="tiny dim">Caravan</span><button class="px-btn${now < 0 ? ' on' : ''}" data-trade="${v.id}:-1">None</button>${trades.map((x, k) => `<button class="px-btn${k === now ? ' on' : ''}" data-trade="${v.id}:${k}">${x.n} ${x.give} → ${x.m} ${tradeWord(x.get)}</button>`).join('')}</div>`
+      : '';
+    const up = u ? `<div class="sub dim tiny">Relaid as a ${ROAD_TIERS[u.tier].name.toLowerCase()} it'd be quicker still${u.missing ? `: needs ${u.missing}.` : '.'}</div>` : '';
+    const stations = waystations(s, v).length;
+    return {
+      line: `<div class="sub dim tiny">${tier.name}: ${walk} from the hearth, and the chief walks it quickly. ${stations === 1 ? 'A waystation' : `${stations} waystations`} on the way: wanderers, things left for the hearth${count(s, 'watch') ? '' : ', and, with no watch post, raiders lying in wait'}.</div>${up}${trade}`,
+      button: u && !u.missing ? `<button class="px-btn gold" data-roadup="${v.id}">${ROAD_TIERS[u.tier].name} · ${u.wood} wood${Object.entries(u.needs).map(([r, n]) => `, ${n} ${RES_NAME[r as keyof typeof RES_NAME].toLowerCase()}`).join('')}</button>` : '',
+    };
+  }
   const c = roadCost(s, v);
-  const busy = s.villages.some((x) => x.road && !roadDone(x));
+  const busy = s.villages.some((x) => (x.road && !roadDone(x)) || x.road?.up);
   return {
-    line: `<div class="sub dim tiny">${walk} from the hearth. A road would take ${days(c.days)} to lay${busy ? ' (once the one being laid is done)' : ''}: goods, help and the chief would all get there far quicker.</div>`,
+    line: `<div class="sub dim tiny">${walk} from the hearth. A road would take ${days(c.days)} to lay${busy ? ' (once the one being laid is done)' : ''}: tribute, help and the chief would all get there in half the time, and caravans could trade along it.</div>`,
     button: `<button class="px-btn${canRoad(s, v) ? ' gold' : ''}" data-road="${v.id}"${canRoad(s, v) ? '' : ' disabled'}>Road · ${c.wood} wood</button>`,
   };
 }

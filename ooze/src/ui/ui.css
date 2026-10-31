@@ -784,6 +784,7 @@ body.wide.tab-ideas #sheet { width: clamp(420px, 42vw, 820px); }
 .seg.tax .px-btn { padding: 2px 6px calc(2px + var(--depth)); font-size: 12px; }
 .starving { color: #ff6a5a; }
 .sub .good { color: #8acf6a; }
+.seg.trade { flex-wrap: wrap; row-gap: 4px; }
 .sub.ask b { color: #e8c86a; }
 .people-list .person { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 1px 0; }
 .people-list .person .px-icon { flex: none; }

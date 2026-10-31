@@ -15,7 +15,7 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
-import { answerAsk, setSettleFocus, type SettleFocus, chiefNear, setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
+import { roadFront, upgradeRoad, setTrade, answerAsk, setSettleFocus, type SettleFocus, chiefNear, setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
 import { WARM_MAX, dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
 import { danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
 import { startFireDance, type FireDance } from './ui/fireDance';
@@ -2097,6 +2097,25 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.answer) {
     if (answerAsk(state, Number(el.dataset.answer))) {
       cue('chime', 0.4);
+      save();
+    }
+  } else if (el.dataset.crew) {
+    const s = shoreOf(state);
+    const v = s?.villages.find((x) => x.id === Number(el.dataset.crew));
+    const f = s && v ? roadFront(s, v) : null;
+    if (f) {
+      walkChief(state, f);
+      scene.shoreScene.follow();
+    }
+  } else if (el.dataset.roadup) {
+    if (upgradeRoad(state, Number(el.dataset.roadup))) {
+      cue('chime', 0.35);
+      save();
+    }
+  } else if (el.dataset.trade) {
+    const [id, k] = el.dataset.trade.split(':').map(Number);
+    if (setTrade(state, id, k)) {
+      popSound(0.8);
       save();
     }
   } else if (el.dataset.road) {

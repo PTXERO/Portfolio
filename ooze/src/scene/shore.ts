@@ -7,7 +7,7 @@ import { PAL } from '../art/sprites';
 import { Biome, CELL, isLand, type Island, type Pt } from '../economy/island';
 import { raidTarget } from '../economy/war';
 import { findPath } from '../economy/paths';
-import { DAY_SEC, terrainReady, walkTo, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, stageOf, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
+import { DAY_SEC, terrainReady, walkTo, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, roadFront, roadTier, shoreIsland, stageOf, waystations, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
 import type { GameState, Genes } from '../economy/types';
 import type { CreatureLook } from './creatureLook';
 import type { BuildId } from '../content/shore';
@@ -494,43 +494,91 @@ export class ShoreScene extends RangeScene {
         }
       }
     }
-    // Roads to the villages that are yours: packed earth, as far as it's been laid.
+    // Roads to the villages that are yours: packed earth (then stone, then paving), as far as
+    // it's been laid; the crew at work at its front; waystations along a finished one.
+    const ROAD_COL = ['rgba(122, 92, 58, 0.75)', 'rgba(140, 140, 136, 0.85)', 'rgba(196, 184, 160, 0.9)'];
     for (const v of s.villages) {
       if (!v.road || v.gone) continue;
       const r = this.route(is, s.hearth, v);
-      const upto = Math.min(1, v.road.done / Math.max(0.01, v.road.need)) * r.total;
-      const pts: { X: number; Y: number }[] = [];
+      const tier = roadTier(v);
+      const laid = Math.min(1, v.road.done / Math.max(0.01, v.road.need)) * r.total;
+      const better = v.road.up ? Math.min(1, v.road.up.done / Math.max(0.01, v.road.up.need)) * r.total : 0;
+      const pts: { X: number; Y: number; c: number }[] = [];
       for (let j = 1; j < r.pts.length; j++) {
         const a = r.pts[j - 1];
         const c = r.pts[j];
         const seg = r.cum[j] - r.cum[j - 1];
         for (let u = 0; u < seg; u += 0.7) {
-          if (r.cum[j - 1] + u > upto) break;
+          const along = r.cum[j - 1] + u;
+          if (along > laid) break;
           const x = a.x + ((c.x - a.x) * u) / (seg || 1);
           const y = a.y + ((c.y - a.y) * u) / (seg || 1);
           if (fogged(x, y)) continue;
           const X = Math.round(this.sx(x));
           const Y = Math.round(this.py(x, y));
-          if (onScreen(X, Y)) pts.push({ X, Y });
+          if (onScreen(X, Y)) pts.push({ X, Y, c: along < better ? tier + 1 : tier });
         }
       }
-      if (!pts.length) continue;
-      const w = Math.max(1, Math.round(z * 0.6));
-      sprites.push({
-        y: -1e6,
-        draw: () => {
-          b.fillStyle = 'rgba(122, 92, 58, 0.75)';
-          for (const p of pts) b.fillRect(p.X - w, p.Y - Math.ceil(w / 2), w * 2, w);
-        },
-      });
+      if (pts.length) {
+        const w = Math.max(1, Math.round(z * 0.6));
+        sprites.push({
+          y: -1e6,
+          draw: () => {
+            for (const p of pts) {
+              b.fillStyle = ROAD_COL[Math.min(2, p.c)];
+              b.fillRect(p.X - w, p.Y - Math.ceil(w / 2), w * 2, w);
+            }
+          },
+        });
+      }
+      // The crew: three of yours, hard at it where the road's being laid.
+      const front = roadFront(s, v);
+      if (front && !fogged(front.x, front.y)) {
+        for (let k = 0; k < 3; k++) {
+          const x = front.x + (k - 1) * 1.3;
+          const y = front.y + (k % 2) * 0.8;
+          const ph = k * 2.1;
+          if (onScreen(this.sx(x), this.py(x, y))) sprites.push({ y, draw: () => this.drawBeing(b, look, x, y, { left: k === 2, frame: Math.floor(t * 5 + ph) % 2, hop: Math.abs(Math.sin(t * 5 + ph)) * 2 }) });
+        }
+      }
+      for (const st of waystations(s, v)) {
+        if (fogged(st.x, st.y)) continue;
+        const sx = st.x + 2;
+        const sy = st.y + 1;
+        const X = Math.round(this.sx(sx));
+        const Y = Math.round(this.py(sx, sy));
+        if (!close || !onScreen(X, Y)) continue;
+        sprites.push({
+          y: sy,
+          at: { x: sx, y: sy },
+          draw: () => {
+            // A little roofed shelter, a lantern on a post (lit at night).
+            const k = z;
+            b.fillStyle = '#6a4a30';
+            b.fillRect(X - 3 * k, Y - 3 * k, 6 * k, 3 * k);
+            b.fillStyle = '#9a7a4a';
+            b.fillRect(X - 4 * k, Y - 4 * k, 8 * k, k);
+            b.fillStyle = '#2a1e18';
+            b.fillRect(X - k, Y - 2 * k, 2 * k, 2 * k);
+            b.fillStyle = '#5a4030';
+            b.fillRect(X + 5 * k, Y - 6 * k, k, 6 * k);
+            b.fillStyle = night > 0.3 ? '#ffd27a' : '#c8a060';
+            b.fillRect(X + 4 * k, Y - 7 * k, 3 * k, 2 * k);
+          },
+        });
+      }
     }
-    // Goods on the road from the settlements: a couple of theirs, carrying it home.
+    // Goods on the road from the settlements and vassals: a couple of theirs, carrying it home;
+    // and the caravans, a couple of yours, there and back.
     for (const c of s.convoys ?? []) {
       const v = s.villages.find((x) => x.id === c.from);
       if (!v) continue;
       const k = (now - c.left) / Math.max(0.01, c.arrives - c.left);
       if (k < 0 || k > 1) continue;
-      band(v.look, v, s.hearth, k, 2, v.id * 17 + Math.floor(c.left), 6);
+      if (c.caravan) {
+        if (k < 0.5) band(look, s.hearth, v, k * 2, 2, v.id * 23 + Math.floor(c.left), 6);
+        else band(look, v, s.hearth, (k - 0.5) * 2, 2, v.id * 23 + Math.floor(c.left), 6);
+      } else band(v.look, v, s.hearth, k, 2, v.id * 17 + Math.floor(c.left), 6);
     }
     // The fight at the edge of the village: what's left of them, at it.
     const fight = s.fight;

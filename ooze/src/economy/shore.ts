@@ -13,7 +13,7 @@ import { Biome, CELL, isLand, islandOf, reveal, type Island, type Pt } from './i
 import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
 import { inherit, personal } from './genes';
-import { ageOver, cultureDay, cultureFx, maybeTurn, workReady, type Culture } from './culture';
+import { IDEAS, ageOver, cultureDay, cultureFx, maybeTurn, workReady, type Culture } from './culture';
 import { away, stepWar, warDawn, type Battle, type Fight, type Raid, type WarBand, type WarRule } from './war';
 import type { CreatureLook } from '../scene/creatureLook';
 import type { GameState, Genes, TribeState } from './types';
@@ -142,7 +142,9 @@ export interface Village {
   settled?: number;
   /** A road to the hearth: work done on it and work it takes (in days); travel along it, done,
    * is quicker by far. */
-  road?: { done: number; need: number };
+  road?: { done: number; need: number; tier?: number; up?: { done: number; need: number } };
+  /** A caravan each day along a finished road to a vassal. */
+  trade?: Trade;
   /** What a settlement's gathered today, to send to the hearth at dawn. */
   load?: { food: number; wood: number; res?: Partial<Record<Res, number>> };
   /** A settlement's work (chosen by the chief, there in person): its trade. */
@@ -275,7 +277,7 @@ export interface ShoreState {
   /** Raiders running home after a fight; and what their fallen left lying (for a while). */
   retreat?: { from: number; n: number; left: number; arrives: number; sx?: number; sy?: number };
   /** Goods on the road from the settlements to the hearth. */
-  convoys?: { from: number; food: number; wood: number; res?: Partial<Record<Res, number>>; left: number; arrives: number }[];
+  convoys?: { from: number; food: number; wood: number; res?: Partial<Record<Res, number>>; left: number; arrives: number; caravan?: boolean }[];
   loot?: { x: number; y: number; n: number; until: number };
   /** A fight going on now (a round every few seconds). */
   fight?: Fight;
@@ -740,12 +742,22 @@ export function totalCritters(s: ShoreState): number {
   return n;
 }
 
+/** Roads, as the Ages go on: dirt, then stone (once "Stone blades" is known, with stone from
+ * the land), then paved (an Age to come). Each quicker to travel than the one before. */
+export const ROAD_TIERS: { name: string; faster: number; walk: number; idea?: string; needs?: Partial<Record<Res, number>>; age?: number }[] = [
+  { name: 'Dirt road', faster: 0.5, walk: 2 },
+  { name: 'Stone road', faster: 0.35, walk: 2.5, idea: 'blades', needs: { stone: 20 } },
+  { name: 'Paved road', faster: 0.25, walk: 3, age: 2 },
+];
+export function roadTier(v: { road?: Village['road'] }): number {
+  return v.road?.tier ?? 0;
+}
+
 /** Days to walk between the hearth and a village (a band's pace), and quicker by road. */
 export const WALK_SPEED = 1.2;
-export const ROAD_FASTER = 0.35;
 export function travelDays(s: ShoreState, v: Pt & { road?: Village['road'] }): number {
   const d = (Math.hypot(v.x - s.hearth.x, v.y - s.hearth.y) * 1.3) / WALK_SPEED / DAY_SEC;
-  return roadDone(v) ? d * ROAD_FASTER : d;
+  return roadDone(v) ? d * ROAD_TIERS[roadTier(v)].faster : d;
 }
 export function roadDone(v: { road?: Village['road'] }): boolean {
   return !!v.road && v.road.done >= v.road.need;
@@ -758,10 +770,15 @@ export function roadCost(s: ShoreState, v: Village): { wood: number; days: numbe
   return { wood: Math.round(20 + days * 30), days: Math.round(days * 1.5 * 10) / 10 };
 }
 
+/** A road being laid (or relaid, better), anywhere: one at a time. */
+function roadBusy(s: ShoreState): boolean {
+  return s.villages.some((x) => (x.road && !roadDone(x)) || x.road?.up);
+}
+
 /** Whether a road can be started to a vassal (one at a time; wood in hand). Settlements keep
  * to themselves: no roads to them. */
 export function canRoad(s: ShoreState, v: Village): boolean {
-  return !!v.vassal && !v.gone && !v.road && !s.villages.some((x) => x.road && !roadDone(x)) && s.wood >= roadCost(s, v).wood;
+  return !!v.vassal && !v.gone && !v.road && !roadBusy(s) && s.wood >= roadCost(s, v).wood;
 }
 
 /** Start a road to a village of yours: the wood's paid now, the road's laid a little each day. */
@@ -777,29 +794,113 @@ export function startRoad(state: GameState, id: number): boolean {
   return true;
 }
 
-/** How much quicker the chief walks on a finished road. */
-export const ROAD_WALK = 2.5;
+/** The next road a finished one could be relaid as, what it costs, and what's missing (if
+ * anything). */
+export function roadUpgrade(s: ShoreState, v: Village): { tier: number; wood: number; needs: Partial<Record<Res, number>>; days: number; missing?: string } | null {
+  if (!roadDone(v) || v.road!.up) return null;
+  const tier = roadTier(v) + 1;
+  const def = ROAD_TIERS[tier];
+  if (!def) return null;
+  const c = roadCost(s, v);
+  const days = Math.round(c.days * 0.8 * 10) / 10;
+  const wood = Math.round(c.wood * (0.8 + tier * 0.4));
+  let missing: string | undefined;
+  if (def.age && (s.culture?.age ?? 1) < def.age) missing = 'an Age to come';
+  else if (def.idea && !s.culture?.done.includes(def.idea)) missing = `the idea "${IDEAS.find((x) => x.id === def.idea)?.name ?? def.idea}"`;
+  else if (def.needs && !Object.entries(def.needs).every(([r, n]) => (s.res?.[r as Res] ?? 0) >= (n ?? 0))) missing = Object.entries(def.needs).map(([r, n]) => `${n} ${RES_NAME[r as Res].toLowerCase()}`).join(', ');
+  else if (s.wood < wood) missing = `${wood} wood`;
+  else if (roadBusy(s)) missing = 'the road being laid to be done';
+  return { tier, wood, needs: def.needs ?? {}, days, missing };
+}
 
-/** The tiles the finished roads run over (worked out once for each set of roads). */
-const roadCache = new WeakMap<ShoreState, { sig: string; cells: Set<number> }>();
-export function roadCells(s: ShoreState): Set<number> {
+/** Relay a finished road, better: it's used as it was, meanwhile. */
+export function upgradeRoad(state: GameState, id: number): boolean {
+  const s = shoreOf(state);
+  const v = s?.villages.find((x) => x.id === id);
+  if (!s || !v) return false;
+  const u = roadUpgrade(s, v);
+  if (!u || u.missing) return false;
+  s.wood -= u.wood;
+  for (const [r, n] of Object.entries(u.needs) as [Res, number][]) s.res![r] = (s.res![r] ?? 0) - n;
+  v.road!.up = { done: 0, need: u.days };
+  s.news.push(`The road to ${v.name} is being relaid as a ${ROAD_TIERS[u.tier].name.toLowerCase()}.`);
+  record(state, `They began to relay the road to ${v.name} as a ${ROAD_TIERS[u.tier].name.toLowerCase()}.`, 'shore', shoreWhen(s));
+  return true;
+}
+
+/** The way a road runs, hearth to village (the same way the map draws it), with how far along
+ * each point is. */
+const pathCache = new WeakMap<Village, { key: string; pts: Pt[]; cum: number[]; total: number }>();
+export function roadPath(s: ShoreState, v: Village): { pts: Pt[]; cum: number[]; total: number } {
+  const key = `${s.seed}:${s.hearth.x},${s.hearth.y}`;
+  const hit = pathCache.get(v);
+  if (hit && hit.key === key) return hit;
+  const pts = [{ ...s.hearth }, ...findPath(shoreIsland(s.seed), s.hearth, v, 60000)];
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+  const out = { key, pts, cum, total: cum[cum.length - 1] || 1 };
+  pathCache.set(v, out);
+  return out;
+}
+/** The point a fraction of the way along a road. */
+export function roadAt(s: ShoreState, v: Village, k: number): Pt {
+  const r = roadPath(s, v);
+  const at = Math.max(0, Math.min(1, k)) * r.total;
+  let j = 1;
+  while (j < r.pts.length - 1 && r.cum[j] < at) j++;
+  const a = r.pts[j - 1];
+  const b = r.pts[j];
+  const u = Math.max(0, Math.min(1, (at - r.cum[j - 1]) / Math.max(1e-6, r.cum[j] - r.cum[j - 1])));
+  return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u };
+}
+
+/** Where the crew's working on a road: its front (laying it, or relaying it). */
+export function roadFront(s: ShoreState, v: Village): Pt | null {
+  if (!v.road) return null;
+  const w = v.road.up ?? (roadDone(v) ? null : v.road);
+  return w ? roadAt(s, v, w.done / Math.max(0.01, w.need)) : null;
+}
+/** With the chief there among them, the crew lays twice as much. */
+export const CREW_NEAR = 6;
+export function chiefWithCrew(s: ShoreState, v: Village): boolean {
+  const f = roadFront(s, v);
+  return !!f && Math.hypot(s.chiefAt.x - f.x, s.chiefAt.y - f.y) < CREW_NEAR;
+}
+
+/** The waystations on a finished road: one halfway, or two on a long one. */
+export function waystations(s: ShoreState, v: Village): Pt[] {
+  if (!roadDone(v)) return [];
+  const long = roadCost(s, v).days >= 4;
+  return (long ? [1 / 3, 2 / 3] : [0.5]).map((k) => roadAt(s, v, k));
+}
+
+/** The tiles the finished roads run over, and how much quicker the chief walks each (worked out
+ * once for each set of roads). */
+const roadCache = new WeakMap<ShoreState, { sig: string; cells: Map<number, number> }>();
+export function roadCells(s: ShoreState): Map<number, number> {
   const done = s.villages.filter((v) => roadDone(v) && !v.gone);
-  const sig = done.map((v) => v.id).join(',');
+  const sig = done.map((v) => `${v.id}.${roadTier(v)}`).join(',');
   const hit = roadCache.get(s);
   if (hit && hit.sig === sig) return hit.cells;
-  const cells = new Set<number>();
+  const cells = new Map<number, number>();
   if (done.length) {
-    const is = shoreIsland(s.seed);
+    const n = shoreIsland(s.seed).n;
     for (const v of done) {
-      const pts = [{ ...s.hearth }, ...findPath(is, s.hearth, v, 60000)];
+      const walkK = ROAD_TIERS[roadTier(v)].walk;
+      const { pts } = roadPath(s, v);
       for (let i = 1; i < pts.length; i++) {
         const a = pts[i - 1];
         const b = pts[i];
-        const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 2));
-        for (let j = 0; j <= n; j++) {
-          const x = Math.floor(a.x + ((b.x - a.x) * j) / n);
-          const y = Math.floor(a.y + ((b.y - a.y) * j) / n);
-          for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) cells.add((y + dy) * is.n + x + dx);
+        const m = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 2));
+        for (let j = 0; j <= m; j++) {
+          const x = Math.floor(a.x + ((b.x - a.x) * j) / m);
+          const y = Math.floor(a.y + ((b.y - a.y) * j) / m);
+          for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+              const c = (y + dy) * n + x + dx;
+              cells.set(c, Math.max(cells.get(c) ?? 1, walkK));
+            }
+          }
         }
       }
     }
@@ -808,20 +909,97 @@ export function roadCells(s: ShoreState): Set<number> {
   return cells;
 }
 
+/** How much quicker the chief walks where they are (1 off the roads). */
+export function roadWalk(s: ShoreState, p: Pt): number {
+  const cells = roadCells(s);
+  return cells.size ? cells.get(Math.floor(p.y) * shoreIsland(s.seed).n + Math.floor(p.x)) ?? 1 : 1;
+}
 /** Whether a point's on a finished road. */
 export function onRoad(s: ShoreState, p: Pt): boolean {
-  const cells = roadCells(s);
-  return cells.size > 0 && cells.has(Math.floor(p.y) * shoreIsland(s.seed).n + Math.floor(p.x));
+  return roadWalk(s, p) > 1;
 }
 
 function stepRoads(state: GameState, s: ShoreState, k: number): void {
   for (const v of s.villages) {
-    if (!v.road || roadDone(v)) continue;
-    if (!ruled(v)) continue;
-    v.road.done = Math.min(v.road.need, v.road.done + k);
-    if (roadDone(v)) {
+    if (!v.road || !ruled(v)) continue;
+    const w = v.road.up ?? (roadDone(v) ? null : v.road);
+    if (!w) continue;
+    // (The chief among the crew: twice the work.)
+    w.done = Math.min(w.need, w.done + k * (chiefWithCrew(s, v) ? 2 : 1));
+    if (w.done < w.need) continue;
+    if (v.road.up) {
+      v.road.up = undefined;
+      v.road.tier = roadTier(v) + 1;
+      s.news.push(`The road to ${v.name} is a ${ROAD_TIERS[v.road.tier].name.toLowerCase()} now.`);
+      record(state, `The road to ${v.name} was relaid as a ${ROAD_TIERS[v.road.tier].name.toLowerCase()}, and quicker for it.`, 'shore', shoreWhen(s));
+    } else {
       s.news.push(`The road to ${v.name} is done.`);
-      record(state, `The road to ${v.name} was finished. What took days to walk now takes a fraction of them.`, 'shore', shoreWhen(s));
+      record(state, `The road to ${v.name} was finished. What took days to walk now takes half of them.`, 'shore', shoreWhen(s));
+    }
+  }
+}
+
+/** A trade along a finished road: what goes out each day, and what comes back. */
+export type Trade = { give: 'food' | 'wood'; n: number; get: 'food' | 'wood' | Res; m: number };
+export function tradesWith(v: Village): Trade[] {
+  return [
+    ...landGoods(v).map((r): Trade => ({ give: 'food', n: 8, get: r, m: 3 })),
+    { give: 'food', n: 10, get: 'wood', m: 8 },
+    { give: 'wood', n: 8, get: 'food', m: 10 },
+  ];
+}
+export function setTrade(state: GameState, id: number, i: number): boolean {
+  const s = shoreOf(state);
+  const v = s?.villages.find((x) => x.id === id);
+  if (!s || !v || !v.vassal || !roadDone(v)) return false;
+  const tr = i < 0 ? undefined : tradesWith(v)[i];
+  v.trade = tr;
+  if (tr) record(state, `A caravan began to go to ${v.name} each day, ${tr.n} ${tr.give} out, ${tr.m} ${tradeWord(tr.get)} back.`, 'shore', shoreWhen(s));
+  return true;
+}
+export function tradeWord(r: Trade['get']): string {
+  return r === 'food' || r === 'wood' ? r : RES_NAME[r].toLowerCase();
+}
+
+/** Each dawn on the roads: the caravans set out (if there's enough to spare), and things happen
+ * at the waystations: wanderers, things left by the way, and (with no watch post, and raiders
+ * about) ambushes. */
+function roadDawn(state: GameState, s: ShoreState, eat: number): void {
+  const now = s.day + s.clock / DAY_SEC;
+  for (const v of s.villages) {
+    if (!v.vassal || v.gone || !roadDone(v)) continue;
+    const tr = v.trade;
+    if (tr) {
+      const have = tr.give === 'food' ? s.food : s.wood;
+      const keep = tr.give === 'food' ? eat * 3 : burnPerDay(s) * 3;
+      if (have - tr.n >= keep) {
+        if (tr.give === 'food') s.food -= tr.n;
+        else s.wood -= tr.n;
+        const back = tr.get === 'food' || tr.get === 'wood' ? { food: tr.get === 'food' ? tr.m : 0, wood: tr.get === 'wood' ? tr.m : 0 } : { food: 0, wood: 0, res: { [tr.get]: tr.m } };
+        (s.convoys ??= []).push({ from: v.id, ...back, left: now, arrives: now + travelDays(s, v) * 2, caravan: true });
+      }
+    }
+    const rand = rng(s.seed * 59 + s.day * 17 + v.id * 5);
+    const roll = rand();
+    const at = `the waystation on the road to ${v.name}`;
+    const raiders = s.villages.some((x) => !x.gone && (relation(s, x) === 'predator' || relation(s, x) === 'enemy') && !x.vassal && x.settled === undefined && (x.beaten ?? 0) < 3);
+    if (roll < 0.08 && roomLeft(s) > 0) {
+      const id = s.nextId++;
+      const name = nameFrom(rand);
+      s.people.push({ id, name, born: now - GROW_DAYS - rand() * 10, dies: now + 50 + rand() * 30, kind: v.id, joined: now, genes: personal(undefined, id * 31 + v.id) });
+      s.news.push(`A wanderer at ${at} asked to join you: ${name}.`);
+      record(state, `${name}, a wanderer met at ${at}, came to live by the hearth.`, 'shore', shoreWhen(s));
+    } else if (roll < 0.18) {
+      const food = Math.round(8 + rand() * 12);
+      s.food = Math.min(foodCap(s), s.food + food);
+      s.news.push(`Travellers left ${food} food at ${at}, for the hearth.`);
+    } else if (roll < 0.24 && raiders && !count(s, 'watch')) {
+      const lost = s.convoys?.find((c) => c.from === v.id && c.arrives > now);
+      if (lost) {
+        s.convoys = s.convoys!.filter((c) => c !== lost);
+        s.news.push(`Raiders fell on the road to ${v.name}, and took what was on it.`);
+        record(state, `Raiders lay in wait on the road to ${v.name} and took what was being carried. A watch post would have seen them.`, 'shore', shoreWhen(s));
+      }
     }
   }
 }
@@ -1533,8 +1711,10 @@ function stepVassals(state: GameState, s: ShoreState, k: number): void {
   for (const v of s.villages) {
     if (!v.vassal) continue;
     const d = vassalDay(v);
-    s.food = Math.min(foodCap(s), s.food + d.food * k);
-    s.wood = Math.min(woodCap(s), s.wood + d.wood * k);
+    // (What they send is carried to the hearth: days on foot, less by road.)
+    const load = (v.load ??= { food: 0, wood: 0 });
+    load.food += d.food * k;
+    load.wood += d.wood * k;
     v.pop = Math.max(4, v.pop + d.growth * k);
     // Loyalty settles toward what the tax makes it (5 a day), and a starving lord is no lord.
     // (Taken by force, they're grudging for a season or two.)
@@ -1799,6 +1979,7 @@ function born(state: GameState, s: ShoreState): void {
 function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>): void {
   warDawn(state, s);
   sendConvoys(s);
+  roadDawn(state, s, plan.eat);
   settledAsks(state, s);
   vassalMoves(state, s);
   pruneDead(s);
@@ -1983,7 +2164,7 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
     // (A walk from before ways were found, or one knocked off its line: the way, found now.)
     if (!s.chiefPath?.length) walkTo(s, s.chiefTo);
     if (s.chiefTo && s.chiefPath) {
-      const r = along(is, s.chiefAt, s.chiefPath, CHIEF_SPEED * (1 + bo.speed) * ((s.chiefHurt ?? 0) > s.day + s.clock / DAY_SEC ? 0.5 : 1) * (onRoad(s, s.chiefAt) ? ROAD_WALK : 1), dt);
+      const r = along(is, s.chiefAt, s.chiefPath, CHIEF_SPEED * (1 + bo.speed) * ((s.chiefHurt ?? 0) > s.day + s.clock / DAY_SEC ? 0.5 : 1) * roadWalk(s, s.chiefAt), dt);
       s.chiefAt = r.at;
       if (r.done) {
         s.chiefTo = null;
