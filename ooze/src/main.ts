@@ -1432,8 +1432,8 @@ function lastLookCard(): string {
   const look = creatureLookOf(state);
   return `<p class="label dim">Before you look up</p>
     <div class="tree-me">${miniIcon(look, 5)}<div><h3>Your line</h3><p class="tiny">Generation ${c.generation} · ${describe(c.genes)}</p><p class="tiny dim">A herd of ${Math.floor(c.pop)}</p></div></div>
-    <p><b>There's no going back.</b> What comes next ends the Creature's island for good: no more breeding, no more mates, no more parts.</p>
-    <p class="dim">The line goes on exactly as it is now: these looks, these parts, these generations. Its survivors carry them into what comes after, and their children after them.</p>
+    <p><b>There's no going back.</b> Once you look up, there's no more breeding, no more mates, no more parts.</p>
+    <p class="dim">Your line goes forward exactly as it is now: these looks, these parts, these generations.</p>
     <p class="dim tiny">If you'd still like another generation, a new mate's markings, or a different look, stay a while longer.</p>
     <div class="choices"><button class="px-btn gold" data-act="look-sure">I'm happy with my line: go on</button><button class="px-btn" data-act="dismiss">Not yet</button></div>`;
 }
