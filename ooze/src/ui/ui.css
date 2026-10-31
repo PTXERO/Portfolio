@@ -854,3 +854,18 @@ body.wide.tab-ideas #sheet { width: clamp(420px, 42vw, 820px); }
 .line-cross { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .line-why { margin: 2px 0 0 14px; padding: 0; }
 .line-why li { margin: 1px 0; }
+
+/* The family tree as a chart: generations in rows, couples joined, lines down to children. */
+.chart-wrap { overflow-x: auto; overflow-y: hidden; margin: 6px 0 8px; padding-bottom: 4px; max-width: 100%; }
+.chart { position: relative; margin: 0 auto; }
+.chart-lines { position: absolute; left: 0; top: 0; pointer-events: none; }
+.chart-lines line { stroke: #c8bfa8; stroke-width: 2; }
+.chart-lines circle { fill: #10141f; stroke: #e8c050; stroke-width: 1.5; }
+.chart-node { position: absolute; width: 60px; height: 58px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 2px; background: rgba(42, 52, 80, 0.95); border: 0; color: #f2ead7; font: inherit; cursor: pointer; box-shadow: 0 0 0 2px rgba(10, 13, 22, 0.8); }
+.chart-node b { font-size: 10px; max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chart-node i { font-style: normal; font-size: 8px; color: #a8a090; white-space: nowrap; }
+.chart-node.me { box-shadow: 0 0 0 2px #e8c050; background: rgba(70, 64, 40, 0.95); }
+.chart-node.ghost { opacity: 0.4; filter: grayscale(0.85); }
+.chart-node.other { background: rgba(80, 64, 30, 0.85); }
+div.chart-node.other { cursor: default; }
+#modal > .px-box:has(.chart) { max-width: min(560px, 94vw); }
