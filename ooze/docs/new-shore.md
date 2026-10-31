@@ -372,6 +372,15 @@ Built in slices, each tested live (balance sims after).
    100 in 5½ hours (it levels off near 80 on room): the sims will set the real pace. People is a
    view inside the Village tab.
 3. **Raids and defense**: the grace period, scouts, announced raids, Kairosoft-style battles.
+   *First slice built* (`src/economy/war.ts`): predators (and, for cannibals, everyone) raid after
+   two years ashore and 20 people, about every 14 days: watched from the trees a day, then seen
+   coming (a day's warning, two with a watch post), then the battle. Everyone grown defends
+   (Rally: +20%). Lost: a quarter of the stores taken. Beaten off three times, a clan leaves you
+   be. You raid prey with a war band (half or most of the grown; the chief there leads, +25%);
+   win and the village is yours (a grudging vassal for a while). Watch post, spear-maker (flint)
+   and palisade (stone) under Defence; the elders put them first once raided. Battles are worked
+   out in full when they happen (offline too) and played back as two lines thinning.
+   *Still to come*: War chief (raids by policy while away), stone huts, kinds' own strengths.
 4. **Taking people and ideas**: diet leaning and shifts; cannibals' Dread.
 5. **The Far Voice**: whispers and the few powers.
 6. **Delegation** *(Scout, Steward and Envoy live)*: the Scout's hut (up to 2 scouts explore the fog

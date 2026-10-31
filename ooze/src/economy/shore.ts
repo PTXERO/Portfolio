@@ -12,6 +12,7 @@ import { record } from './chronicle';
 import { Biome, CELL, isLand, islandOf, reveal, type Island, type Pt } from './island';
 import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
+import { away, stepWar, threatened, warDawn, type Battle, type Raid, type WarBand } from './war';
 import type { CreatureLook } from '../scene/creatureLook';
 import type { GameState, TribeState } from './types';
 
@@ -100,7 +101,9 @@ export interface Village {
   waiting?: number;
   /** Kept their own village, as yours: what you take of what they make (0 to 0.6), and how loyal
    * they are (0 to 100; at nothing, they throw you off). */
-  vassal?: { tax: number; loyalty: number };
+  vassal?: { tax: number; loyalty: number; conquered?: number };
+  /** Times they've come raiding and been driven off. */
+  beaten?: number;
   /** Turned away: gone from the island's map (to the village they went to, that day). */
   gone?: { to: number; day: number };
 }
@@ -109,7 +112,7 @@ export type JoinAnswer = 'crowd' | 'vassal' | 'wait' | 'away';
 export type StewardPlan = 'balanced' | 'homes' | 'food' | 'stores';
 
 /** Why the elders do what they do (or wait). */
-export type ElderWhy = 'hearth' | 'busy' | 'homes' | 'food' | 'stores' | 'woodpile' | 'forest' | 'winter' | 'spare' | 'saving' | 'content' | 'off';
+export type ElderWhy = 'hearth' | 'busy' | 'homes' | 'food' | 'stores' | 'woodpile' | 'forest' | 'winter' | 'spare' | 'saving' | 'content' | 'off' | 'defence';
 
 /** How the Chronicle tells of a building the elders chose: "The elders <saw…>: the hut was raised." */
 const ELDER_SAW: Record<ElderWhy, string> = {
@@ -125,6 +128,7 @@ const ELDER_SAW: Record<ElderWhy, string> = {
   saving: 'were saving wood',
   content: 'were content',
   off: 'left the building to the chief',
+  defence: 'feared the raiders',
 };
 
 /** What the chief tells the elders, in the Chronicle. */
@@ -198,6 +202,13 @@ export interface ShoreState {
   building?: { id: BuildId; x: number; y: number; left: number; total: number; why?: ElderWhy };
   /** What the elders have been thinking, newest last (a few dozen kept). */
   elders?: { when: string; why: ElderWhy; text: string }[];
+  /** A raid on the way, the war band out, battles not yet shown, raids fought off or not, and
+   * when the next is thought of. */
+  raid?: Raid;
+  warband?: WarBand;
+  battles?: Battle[];
+  raids?: number;
+  nextRaid?: number;
   /** Lakes seen across (by their number): seen from any shore, the whole lake is. */
   lakes?: number[];
   /** Things the Chronicle has already told of, so it tells them once (the woods thinning…). */
@@ -529,7 +540,7 @@ export function isAdult(s: ShoreState, p: ShorePerson): boolean {
   return s.day + s.clock / DAY_SEC - p.born >= GROW_DAYS / (1 + boosts(s).grow);
 }
 
-const NO_BOOSTS: Boosts = { food: 0, wood: 0, births: 0, grow: 0, speed: 0, sight: 0, gift: 0, room: 0, foodCap: 0, woodCap: 0, winter: 0, watch: 0, cheap: 0, mend: 0 };
+const NO_BOOSTS: Boosts = { food: 0, wood: 0, births: 0, grow: 0, speed: 0, sight: 0, gift: 0, room: 0, foodCap: 0, woodCap: 0, winter: 0, watch: 0, cheap: 0, mend: 0, guard: 0, arms: 0, warn: 0 };
 const boostCache = new WeakMap<ShoreState, { key: string; b: Boosts }>();
 
 /** What the buildings and relics add up to (worked out again only when either changes). */
@@ -763,6 +774,11 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
     const lacking = needs && !hasNeeds(s, id) ? Object.keys(needs).map((r) => RES_NAME[r as Res].toLowerCase()).join(' and ') : '';
     return { pick: null, why: 'saving' as ElderWhy, text: `"${text.slice(1, -1)} ${lacking ? `We have not the ${lacking} for it.` : `We are saving wood for it: ${Math.floor(s.wood)} of ${buildCost(s, id)}.`}"` };
   };
+  // Raided, or raiders coming: a watch post, then arms and a palisade, before all but the woods.
+  if ((s.raids ?? 0) > 0 || s.raid?.seen !== undefined) {
+    const guard = (['watch', 'spears', 'palisade'] as BuildId[]).find((id) => open.has(id) && hasNeeds(s, id));
+    if (guard) return go(guard, 'defence', guard === 'watch' ? '"They will come again. Someone must always be watching the paths in."' : guard === 'spears' ? '"We have flint. Put it on long shafts, and they will think twice."' : '"A wall of stakes, on a footing of stone. Let them break on it."');
+  }
   // The woods thinning: a forester, before anything else.
   if (open.has('forester') && forestShare(s) < 0.5 && count(s, 'forester') < 1 + s.people.length / 30) return go('forester', 'forest', '"The woods round the village are thinning. Someone must plant, or our children will have nothing to burn."');
   const SAY: Partial<Record<ElderWhy, (id: BuildId) => string>> = {
@@ -784,6 +800,9 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
   const unseen = s.villages.some((v) => !v.found) || poisOf(s).some((q) => !q.found);
   const useful: [BuildId, boolean][] = [
     ['council', true],
+    ['watch', threatened(s)],
+    ['spears', threatened(s)],
+    ['palisade', threatened(s)],
     ['envoy', s.villages.some((v) => canWin(s, v))],
     ['elders', true],
     ['thatcher', true],
@@ -903,7 +922,7 @@ export function workPlan(s: ShoreState): { food: number; wood: number; eat: numb
   const kids = s.people.length - grown;
   const eat = grown * EAT + kids * EAT_CHILD;
   // (Those building aren't gathering.)
-  const adults = grown - builders(s);
+  const adults = Math.max(0, grown - builders(s) - away(s));
   const bo = boosts(s);
   const foodEach = FOOD_PER * (1 + 0.1 * count(s, 'camp') + bo.food) * seasonFood(s);
   // Cutting's slower as the woods round the village thin out.
@@ -1046,7 +1065,9 @@ function stepVassals(state: GameState, s: ShoreState, k: number): void {
     s.wood = Math.min(woodCap(s), s.wood + d.wood * k);
     v.pop = Math.max(4, v.pop + d.growth * k);
     // Loyalty settles toward what the tax makes it (5 a day), and a starving lord is no lord.
-    const target = s.hungry > 1 ? Math.min(d.loyalty, 30) : d.loyalty;
+    // (Taken by force, they're grudging for a season or two.)
+    const grudge = v.vassal.conquered !== undefined && s.day - v.vassal.conquered < SEASON_DAYS * 6 ? 30 : 0;
+    const target = s.hungry > 1 ? Math.min(d.loyalty, 30) : d.loyalty - grudge;
     v.vassal.loyalty += Math.sign(target - v.vassal.loyalty) * Math.min(Math.abs(target - v.vassal.loyalty), 5 * k);
     if (v.vassal.loyalty <= 0) {
       v.vassal = undefined;
@@ -1172,6 +1193,7 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
     else noteElders(state, s, think);
   }
   walk(state, s, dt);
+  stepWar(state, s);
   stepVassals(state, s, k);
   stepResources(s, k);
   // Won over and asked to wait: once there's room, they come; kept waiting too long, they give
@@ -1221,6 +1243,7 @@ function born(state: GameState, s: ShoreState): void {
 }
 
 function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>): void {
+  warDawn(state, s);
   // The envoy's day: a gift to the nearest kin being won over, if there's food to spare.
   if (count(s, 'envoy') && s.envoyDay !== s.day) {
     const v = s.villages.filter((x) => canWin(s, x)).sort((a, b) => Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y) - Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y))[0];
@@ -1275,14 +1298,23 @@ function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>
   }
 }
 
-function die(state: GameState, s: ShoreState, p: ShorePerson, why: 'old age' | 'hunger' | 'cold'): void {
+/** Fallen in a fight (the battle's own Chronicle line counts them). */
+export function killed(state: GameState, s: ShoreState, p: ShorePerson): void {
+  die(state, s, p, 'battle');
+}
+
+function die(state: GameState, s: ShoreState, p: ShorePerson, why: 'old age' | 'hunger' | 'cold' | 'battle'): void {
   s.people = s.people.filter((q) => q !== p);
   s.deaths++;
   // Buried a little way out from the hearth, together.
   const n = s.graves.length;
   const a = 2.4 + (n % 7) * 0.18;
   s.graves.push({ x: s.hearth.x + Math.cos(a) * (13 + Math.floor(n / 7) * 1.6) + (n % 7) * 1.1, y: s.hearth.y + Math.sin(a) * 9 + Math.floor(n / 7) * 1.4 });
-  if (p.founder) {
+  if (p.founder && why === 'battle') {
+    s.news.push(`${p.name}, one of the four who crossed, fell in the fighting.`);
+    record(state, `${p.name}, one of the four who crossed, fell in the fighting.`, 'shore', shoreWhen(s));
+  } else if (why === 'battle') s.news.push(`${p.name} fell in the fighting.`);
+  else if (p.founder) {
     const left = s.people.filter((q) => q.founder).length;
     const line = left ? SHORE_STORY.founderDies.replace('{name}', p.name) : SHORE_STORY.lastFounder;
     s.news.push(line);
@@ -1552,7 +1584,7 @@ function explore(state: GameState, s: ShoreState, dt: number): void {
     if (f.wood) s.wood = Math.min(woodCap(s), s.wood + f.wood);
   }
   (s.finds ??= []).push({ poi: p.id, find: f, dup: !!dup });
-  record(state, `At the ${poiName(p).toLowerCase()}: ${f.text.replace('[STORY] ', '')}`, 'shore', shoreWhen(s));
+  record(state, `At the ${poiName(p).toLowerCase().replace(/^(the|a) /, '')}: ${f.text.replace('[STORY] ', '')}`, 'shore', shoreWhen(s));
 }
 
 export function relicName(id: RelicId): string {

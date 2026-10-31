@@ -5,6 +5,7 @@ import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, ty
 import { buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
+import { fighters, holders, hostile, odds, ourStrength, raidable, theirStrength, type Battle } from '../economy/war';
 import type { GameState } from '../economy/types';
 
 const n0 = (v: number) => String(Math.floor(v + 1e-6));
@@ -46,11 +47,12 @@ export function shoreKey(state: GameState, tab: string): string {
   const s = shoreOf(state);
   if (!s) return '';
   if (tab === 'build') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor((v ?? 0) / 5)), s.building?.id, s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, canPay(s, b.id)])]);
-  if (tab === 'island') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor(v ?? 0)), s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop)], Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
+  const war = JSON.stringify([s.raid?.seen !== undefined && [s.raid.from, s.raid.rallied, Math.ceil(((s.raid.arrives ?? 0) - s.day - s.clock / DAY_SEC) * 4)], s.warband && [s.warband.to, Math.ceil((s.warband.arrives - s.day - s.clock / DAY_SEC) * 4)], fighters(s)]);
+  if (tab === 'island') return war + JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor(v ?? 0)), s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop)], Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
   const plan = workPlan(s);
   if (villageView === 'elders' && count(s, 'council')) return JSON.stringify(['elders', s.steward, (s.steward?.on ? elderThink(s) : ELDERS_OFF).text, s.elders?.length, s.elders?.[s.elders.length - 1]?.text, s.building?.id]);
   if (villageView === 'people') return JSON.stringify(['people', s.people.length, s.chief, Math.floor(s.day / 2), s.hungry]);
-  return JSON.stringify([s.cold, Math.round(forestShare(s) * 20), Math.round(burnPerDay(s) * 2), s.steward, s.hungry, shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, s.chief, s.people.filter((p) => isAdult(s, p)).length, s.people.filter((p) => p.founder).length]);
+  return war + JSON.stringify([s.cold, Math.round(forestShare(s) * 20), Math.round(burnPerDay(s) * 2), s.steward, s.hungry, shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, s.chief, s.people.filter((p) => isAdult(s, p)).length, s.people.filter((p) => p.founder).length]);
 }
 
 export function shoreUpdate(root: HTMLElement, state: GameState): void {
@@ -97,7 +99,7 @@ export function shoreLayout(state: GameState, tab: string): string {
   const views = `<div class="seg build-cats"><button class="px-btn${view === 'village' ? ' on' : ''}" data-villageview="village">The village</button><button class="px-btn${view === 'people' ? ' on' : ''}" data-villageview="people">People · ${s.people.length}</button>${council ? `<button class="px-btn${view === 'elders' ? ' on' : ''}" data-villageview="elders">Elders</button>` : ''}<span class="seg-gap"></span><button class="px-btn" data-camera="home">Home</button><button class="px-btn" data-camera="chief">Chief</button></div>`;
   if (view === 'people') return views + peopleLayout(s);
   if (view === 'elders') return views + eldersLayout(s);
-  return views + storesCard(s) + workCard(s) + peopleCard(s);
+  return views + warCard(s) + storesCard(s) + workCard(s) + peopleCard(s);
 }
 
 /** Whether a sort of building has anything in it yet (built, or to build). */
@@ -375,7 +377,7 @@ function villageRow(s: ShoreState, v: Village): string {
   const win = canWin(s, v);
   return `<div class="card px-box village">${icon}<div class="info"><div class="name">${cap(v.name)} <span class="rel rel-${rel}">${REL_NAME[rel]}</span></div>
     <div class="sub">${v.pop} ${v.cannibal ? 'eaters of their own' : DIET_NAME[v.diet] ?? v.diet}. ${win ? '' : REL_LINE[rel]}</div>${win ? trustBar(v) : ''}</div>
-    <div class="col">${win ? `<button class="px-btn${s.food >= giftCost(v) ? ' gold' : ''}" data-gift="${v.id}"${s.food >= giftCost(v) ? '' : ' disabled'}>Gift ${giftCost(v)}</button>` : ''}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
+    <div class="col">${win ? `<button class="px-btn${s.food >= giftCost(v) ? ' gold' : ''}" data-gift="${v.id}"${s.food >= giftCost(v) ? '' : ' disabled'}>Gift ${giftCost(v)}</button>` : ''}${raidable(s, v) ? `<button class="px-btn" data-raid="${v.id}"${s.warband ? ' disabled' : ''}>Raid</button>` : ''}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
 }
 
 const TAXES = [0, 0.1, 0.25, 0.4, 0.6];
@@ -442,7 +444,9 @@ export function villageCard(s: ShoreState, v: Village): string {
         ${near ? '' : `<button class="px-btn" data-visit="${v.id}">${chief} visits them</button>`}
         <button class="px-btn" data-act="dismiss">Later</button>
       </div>`
-    : `<p class="dim tiny">${v.joined ? 'They live by your hearth now; a few stay on at their old village, working its land for you.' : v.vassal ? 'Yours: they pay tribute (set what you take on the Island tab).' : '(Raiding and defending come next.)'}</p><button class="px-btn gold" data-act="dismiss">OK</button>`;
+    : raidable(s, v)
+      ? `${raidChoices(s, v)}`
+      : `<p class="dim tiny">${v.joined ? 'They live by your hearth now; a few stay on at their old village, working its land for you.' : v.vassal ? 'Yours: they pay tribute (set what you take on the Island tab).' : hostile(s, v) ? `They'll come raiding, when they think you're worth it.${v.beaten ? ` Driven off ${v.beaten} time${v.beaten > 1 ? 's' : ''} so far.` : ''}` : (v.beaten ?? 0) >= 3 ? 'Driven off too many times: they leave you be now.' : ''}</p><button class="px-btn gold" data-act="dismiss">OK</button>`;
   return `<p class="label dim">${REL_NAME[rel]}</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)}</h3></div>
     <p>${v.pop} of them, ${v.cannibal ? 'eaters of their own kind' : `${(DIET_NAME[v.diet] ?? v.diet).toLowerCase()}`}, another kind altogether.${v.habitat ? ` ${WHERE[v.habitat]}` : ''}</p>
     <p class="dim">${REL_LINE[rel]}</p>
@@ -451,5 +455,71 @@ export function villageCard(s: ShoreState, v: Village): string {
 }
 
 const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
+
+/** How long till then, in words (days of the island's own). */
+function soon(days: number): string {
+  return days <= 0.3 ? 'any moment now' : days <= 1 ? 'before the day is out' : days <= 2 ? 'tomorrow' : `in ${Math.ceil(days)} days`;
+}
+
+/** Raiders coming, or the war band out: at the top of the Village tab. */
+function warCard(s: ShoreState): string {
+  const now = s.day + s.clock / DAY_SEC;
+  let out = '';
+  const r = s.raid;
+  const v = r && s.villages.find((x) => x.id === r.from);
+  if (r?.seen !== undefined && v) {
+    const us = ourStrength(s, fighters(s), true, r.rallied ? 0.2 : 0);
+    const them = theirStrength(v, r.fighters);
+    out += `<div class="card px-box raid"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">Raiders!</div>
+      <div class="sub">${cap(v.name)} are coming, about ${r.fighters} of them: here ${soon((r.arrives ?? now) - now)}. All ${fighters(s)} grown will fight. ${odds(us, them)}</div>
+      ${r.rallied ? '<div class="sub dim">Rallied: spears out, the young behind the fire.</div>' : ''}</div>
+      <div class="col">${r.rallied ? '' : '<button class="px-btn gold" data-rally="1">Rally them</button>'}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
+  }
+  const w = s.warband;
+  const to = w && s.villages.find((x) => x.id === w.to);
+  if (w && to) {
+    const led = Math.hypot(s.chiefAt.x - to.x, s.chiefAt.y - to.y) < 14;
+    out += `<div class="card px-box raid"><span class="kind">${miniIcon(s.look, 2)}</span><div class="info"><div class="name">The war band</div>
+      <div class="sub">${w.fighters} out against ${to.name}, there ${soon(w.arrives - now)}. ${led ? 'The chief is there to lead them.' : 'Walk the chief there to lead them: they fight harder for it.'}</div></div>
+      <div class="col">${led ? '' : `<button class="px-btn" data-visit="${to.id}">Go</button>`}</div></div>`;
+  }
+  return out;
+}
+
+/** Raiding a village: how many to send, and what the elders make of the odds. */
+export function raidChoices(s: ShoreState, v: Village): string {
+  const n = fighters(s);
+  const def = holders(v);
+  if (s.warband) return `<p class="dim tiny">The war band is already out.</p><button class="px-btn gold" data-act="dismiss">OK</button>`;
+  const opts = [
+    { n: Math.floor(n / 2), name: 'Half' },
+    { n: Math.floor(n * 0.75), name: 'Most' },
+  ].filter((o, i, a) => o.n >= 2 && a.findIndex((x) => x.n === o.n) === i);
+  if (!opts.length) return `<p class="dim tiny">Too few grown to spare for a war band.</p><button class="px-btn gold" data-act="dismiss">OK</button>`;
+  const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
+  return `<p class="dim tiny">About ${def} of them would hold their village. ${chief} can walk out and lead the band (they fight a quarter harder). Win, and the village is yours, paying tribute. Those who go don't work while they're away.</p>
+    <div class="choices">${opts.map((o) => `<button class="px-btn" data-band="${v.id}:${o.n}">${o.name}: send ${o.n}<span class="tiny dim"> · ${odds(ourStrength(s, o.n, false), theirStrength(v, def))}</span></button>`).join('')}
+    <button class="px-btn" data-act="dismiss">Not now</button></div>`;
+}
+
+/** A battle, to watch: two lines trading blows, round by round (played by main). */
+export function battleCard(s: ShoreState, b: Battle): string {
+  const v = s.villages.find((x) => x.id === b.village);
+  if (!v) return '';
+  const line = (look: typeof s.look, n: number, side: string) => `<div class="side ${side}"><div class="line">${Array.from({ length: Math.min(10, Math.max(1, n)) }, () => miniIcon(look, 2)).join('')}</div><div class="making-bar on"><i style="width: 100%"></i></div><span class="tiny num">${n}</span></div>`;
+  const head = b.attack === 'them' ? `${cap(v.name)} fall on the village` : `The war band falls on ${v.name}`;
+  const result =
+    b.attack === 'them'
+      ? b.won
+        ? `Driven off!${b.dead ? ` ${b.dead} of ours died.` : ' None of ours died.'}`
+        : `They broke through, and carried off ${b.took?.food ?? 0} food and ${b.took?.wood ?? 0} wood.${b.dead ? ` ${b.dead} of ours died.` : ''}`
+      : b.won
+        ? `They're beaten.${v.vassal ? ' Their village is yours.' : ' What\'s left of them flee.'} ${b.took ? `The band brings back ${b.took.food} food and ${b.took.wood} wood.` : ''}${b.dead ? ` ${b.dead} of ours died.` : ''}`
+        : `Beaten back.${b.dead ? ` ${b.dead} of ours died.` : ''}`;
+  return `<p class="label dim">${b.when}</p><h3>${head}</h3>${b.led ? '<p class="dim tiny">The chief leads them.</p>' : ''}${b.rallied ? '<p class="dim tiny">Rallied.</p>' : ''}
+    <div class="battle" data-rounds='${JSON.stringify(b.rounds)}' data-ours="${b.ours}" data-theirs="${b.theirs}">${line(s.look, b.ours, 'us')}<span class="vs">vs</span>${line(v.look, b.theirs, 'them')}</div>
+    <p class="battle-result" hidden>${result}</p>
+    <button class="px-btn gold" data-act="dismiss">${b.won ? 'Good' : 'So be it'}</button>`;
+}
 
 export type { BuildId };

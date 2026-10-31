@@ -17,7 +17,8 @@ import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants,
 import { prepareShoreIsland } from './economy/terrainStore';
 import { setSteward, type StewardPlan } from './economy/shore';
 import { answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
-import { findCard, joinCard, poiCard, setBuildCat, setVillageView, villageCard } from './ui/shorePanels';
+import { battleCard, findCard, joinCard, poiCard, setBuildCat, setVillageView, villageCard } from './ui/shorePanels';
+import { rally, sendBand } from './economy/war';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, say, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
@@ -112,8 +113,10 @@ const scene = new Scene($<HTMLCanvasElement>('scene'));
 scene.setTilt(ui.tilt);
 const expandBtn = $('expand');
 
-/** A wide screen (a laptop or desktop): the menu is a sidebar beside the world, always open. */
-const wideQuery = window.matchMedia('(min-width: 900px) and (min-aspect-ratio: 5/4)');
+/** A wide screen (a laptop or desktop): the menu is a sidebar beside the world, always open.
+ * Wide enough for both side by side counts, whatever the shape (a desktop window split in half
+ * stands taller than it's wide, but has room to spare). */
+const wideQuery = window.matchMedia('(min-width: 960px), (min-width: 900px) and (min-aspect-ratio: 5/4)');
 const isWide = () => wideQuery.matches;
 wideQuery.addEventListener('change', () => {
   panelKey = '';
@@ -994,6 +997,49 @@ function shoreFrame(): void {
       <button class="px-btn gold" data-act="dismiss">Welcome them</button>`);
   }
   joinedReady = true;
+  // A battle fought: played out, round by round.
+  if (s.battles?.length && modal.hidden && !cine()) {
+    const b = s.battles.shift()!;
+    const html = battleCard(s, b);
+    if (html) {
+      cue('impact', 0.5);
+      showModal(html);
+      playBattle();
+    }
+  }
+}
+
+/** The battle on show: the two lines thin round by round, then the result. */
+function playBattle(): void {
+  const el = modal.querySelector<HTMLElement>('.battle');
+  if (!el) return;
+  const rounds: [number, number][] = JSON.parse(el.dataset.rounds ?? '[]');
+  const start = [Number(el.dataset.ours), Number(el.dataset.theirs)];
+  const sides = [el.querySelector<HTMLElement>('.side.us')!, el.querySelector<HTMLElement>('.side.them')!];
+  let i = 0;
+  const step = () => {
+    if (!el.isConnected) return;
+    if (i >= rounds.length) {
+      const res = modal.querySelector<HTMLElement>('.battle-result');
+      if (res) res.hidden = false;
+      return;
+    }
+    const r = rounds[i++];
+    sides.forEach((side, k) => {
+      const left = r[k];
+      side.querySelector<HTMLElement>('.making-bar i')!.style.width = `${Math.round((left / Math.max(1, start[k])) * 100)}%`;
+      side.querySelector<HTMLElement>('.num')!.textContent = String(left);
+      const icons = side.querySelectorAll<HTMLElement>('.line img');
+      const stand = Math.ceil((left / Math.max(1, start[k])) * icons.length);
+      icons.forEach((ic, j) => ic.classList.toggle('down', j >= stand));
+      side.classList.remove('hit');
+      void side.offsetWidth;
+      side.classList.add('hit');
+    });
+    popSound(0.7 + Math.random() * 0.3);
+    setTimeout(step, 750);
+  };
+  setTimeout(step, 600);
 }
 
 /** The strip under the top bar: this stage's own goal. It never names what comes next. */
@@ -1807,6 +1853,30 @@ function act(el: HTMLElement): void {
       walkChief(state, { x: v.x + 4, y: v.y + 4 });
       scene.shoreScene.follow();
       modal.hidden = true;
+    }
+  }
+  else if (el.dataset.raid) {
+    const s = shoreOf(state);
+    const v = s?.villages.find((x) => x.id === Number(el.dataset.raid));
+    if (s && v) {
+      showModal(villageCard(s, v));
+      modal.dataset.village = String(v.id);
+    }
+  } else if (el.dataset.band) {
+    const s = shoreOf(state);
+    const [id, n] = el.dataset.band.split(':').map(Number);
+    if (s && sendBand(state, s, id, n)) {
+      cue('impact', 0.3);
+      modal.hidden = true;
+      save();
+    }
+  } else if (el.dataset.rally) {
+    const s = shoreOf(state);
+    if (s && rally(s)) {
+      cue('ascend', 0.4);
+      const r = el.getBoundingClientRect();
+      scene.float(r.left + r.width / 2, r.top, 'Rallied!', '#e8c050');
+      save();
     }
   }
   else if (el.dataset.seevillage) {

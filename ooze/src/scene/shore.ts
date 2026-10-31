@@ -386,6 +386,47 @@ export class ShoreScene extends RangeScene {
         draw: () => this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 7) % 2 : 0, hop: moving ? Math.abs(Math.sin(t * 7)) * 1.5 : 0 }),
       });
     }
+    // War: someone watching from the trees, raiders on the way in, the war band on the way out.
+    // Drawn as they are, a band walking, nothing over their heads.
+    const now = s.day + s.clock / DAY_SEC;
+    const band = (look: typeof s.look, from: Pt, to: Pt, k: number, n: number, seed: number) => {
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const d = Math.hypot(dx, dy) || 1;
+      for (let i = 0; i < Math.min(9, n); i++) {
+        const back = (i % 3) * 1.6 + Math.floor(i / 3) * 0.8;
+        const side = ((i % 3) - 1) * 1.4 + (hash(seed + i, 2) - 0.5);
+        const x = from.x + dx * k - (dx / d) * back - (dy / d) * side;
+        const y = from.y + dy * k - (dy / d) * back + (dx / d) * side;
+        if (!isLand(is, x, y) || fogged(x, y)) continue;
+        const X = this.sx(x);
+        const Y = this.py(x, y);
+        if (!onScreen(X, Y)) continue;
+        const ph = hash(seed + i, 3) * 9;
+        sprites.push({ y, draw: () => this.drawBeing(b, look, x, y, { left: dx < 0, frame: Math.floor(t * 7 + ph) % 2, hop: Math.abs(Math.sin(t * 7 + ph)) * 1.5 }) });
+      }
+    };
+    const raid = s.raid;
+    const from = raid && s.villages.find((v) => v.id === raid.from);
+    if (raid && from) {
+      if (raid.seen === undefined) {
+        // One of them, standing at the edge of the trees, looking in.
+        const a = Math.atan2(from.y - s.hearth.y, from.x - s.hearth.x) + (hash(Math.floor(raid.watched), 4) - 0.5) * 0.8;
+        const x = s.hearth.x + Math.cos(a) * 30;
+        const y = s.hearth.y + Math.sin(a) * 30;
+        if (isLand(is, x, y) && !fogged(x, y) && night < 0.6) {
+          const X = this.sx(x);
+          const Y = this.py(x, y);
+          if (onScreen(X, Y)) sprites.push({ y, draw: () => this.drawBeing(b, from.look, x, y, { left: s.hearth.x < x, frame: 0 }) });
+        }
+      } else if (raid.arrives !== undefined) {
+        const k = Math.max(0, Math.min(1, (now - raid.seen) / Math.max(0.01, raid.arrives - raid.seen)));
+        band(from.look, from, s.hearth, 0.15 + k * 0.83, raid.fighters, from.id * 31);
+      }
+    }
+    const w = s.warband;
+    const to = w && s.villages.find((v) => v.id === w.to);
+    if (w && to) band(s.look, s.hearth, to, Math.max(0, Math.min(1, (now - w.left) / Math.max(0.01, w.arrives - w.left))) * 0.92, w.fighters, 777);
     // Where the chief is going: a small marker on the ground.
     if (s.chiefTo) {
       const X = Math.round(this.sx(s.chiefTo.x));

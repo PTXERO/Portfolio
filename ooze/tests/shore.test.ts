@@ -3,6 +3,7 @@ import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
 import { answerJoin, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
+import { hostile, raidable, sendBand, fighters } from '../src/economy/war';
 import type { TribeState } from '../src/economy/types';
 
 function fresh(diet = 'grazer', cannibal = false) {
@@ -339,5 +340,64 @@ describe('Resources of the land', () => {
     s.wood = 1000;
     s.building = undefined;
     expect(build(state, 'salter')).toBe(false);
+  });
+});
+
+describe('Raids', () => {
+  /** A grown village of n, a while ashore. */
+  function grown(diet: string, n: number) {
+    const state = fresh(diet);
+    const s = shoreOf(state)!;
+    now(state, 'hearth');
+    for (let i = 0; i < 8; i++) now(state, 'hut');
+    s.day = 40;
+    while (s.people.length < n) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: 0, dies: 999 });
+    s.food = 60;
+    s.wood = 40;
+    return { state, s };
+  }
+  it('nobody raids in the first years, or a small village', () => {
+    const { state, s } = grown('grazer', 6);
+    s.day = 0;
+    for (let i = 0; i < 2000; i++) shoreTick(state, 2);
+    expect(s.raid).toBeUndefined();
+    expect(s.raids ?? 0).toBe(0);
+  });
+  it('predators come raiding: watched, seen coming, then a battle', () => {
+    const { state, s } = grown('grazer', 30);
+    expect(s.villages.some((v) => hostile(s, v))).toBe(true);
+    let watched = false;
+    let seen = false;
+    for (let i = 0; i < 6000 && !(s.raids ?? 0); i++) {
+      shoreTick(state, 2);
+      if (s.raid) watched = true;
+      if (s.raid?.seen !== undefined) seen = true;
+      s.food = Math.max(s.food, 30);
+    }
+    expect(watched && seen).toBe(true);
+    expect(s.raids).toBe(1);
+    expect(s.battles?.length).toBe(1);
+    expect(s.battles![0].rounds.length).toBeGreaterThan(0);
+  });
+  it('kin never raid, and prey can be raided and taken', () => {
+    const { state, s } = grown('hunter', 40);
+    expect(s.villages.some((v) => hostile(s, v) && !v.cannibal)).toBe(false);
+    const prey = s.villages.find((v) => !v.cannibal && relation(s, v) === 'prey')!;
+    prey.found = true;
+    prey.pop = 10;
+    expect(raidable(s, prey)).toBe(true);
+    const before = fighters(s);
+    expect(sendBand(state, s, prey.id, 30)).toBe(true);
+    expect(fighters(s)).toBe(before - 30);
+    for (let i = 0; i < 20000 && s.warband; i++) shoreTick(state, 2);
+    expect(s.warband).toBeUndefined();
+    expect(s.battles?.some((b) => b.attack === 'us' && b.won)).toBe(true);
+    expect(prey.vassal?.conquered !== undefined || !!prey.gone).toBe(true);
+  });
+  it('a raid in progress survives a save', () => {
+    const { state, s } = grown('grazer', 30);
+    s.raid = { from: s.villages.find((v) => hostile(s, v))!.id, watched: 40, seen: 41, arrives: 42, fighters: 9 };
+    const back = shoreOf(deserialize(serialize(state)))!;
+    expect(back.raid?.fighters).toBe(9);
   });
 });

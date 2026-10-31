@@ -1,7 +1,7 @@
 // New Shore's pace: how long each kind of player takes to grow the village to a hundred.
 // npm run sim:shore
 import { createState } from '../src/economy/state';
-import { answerJoin, build, canPay, stewardPick, buildsOpen, canWin, chiefNear, foodCap, gift, giftCost, poiDef, poiHere, poisOf, room, shoreOf, shoreTick, startShore, takeRaft, walkChief, woodCap, workPlan } from '../src/economy/shore';
+import { answerJoin, build, canPay, elderThink, stewardPick, buildsOpen, canWin, chiefNear, foodCap, gift, giftCost, poiDef, poiHere, poisOf, room, shoreOf, shoreTick, startShore, takeRaft, walkChief, woodCap, workPlan } from '../src/economy/shore';
 import { isLand } from '../src/economy/island';
 import { shoreIsland } from '../src/economy/shore';
 import type { TribeState } from '../src/economy/types';
@@ -89,7 +89,7 @@ function run(kind: Kind, seed: number, diet: string) {
         if (v) walkChief(state, { x: v.x + 4, y: v.y + 4 });
       }
     }
-    if (process.env.TRACE === kind + diet && t % 1800 === 0) console.log(`${(t / 3600).toFixed(1)}h day ${s.day} people ${s.people.length} room ${room(s)} wood ${s.wood.toFixed(0)}/${woodCap(s)} food ${s.food.toFixed(0)}/${foodCap(s)} forest ${(s.forest ?? 400).toFixed(0)} building ${s.building?.id ?? '-'} plan ${JSON.stringify(workPlan(s))} built ${s.built.map((b) => b.id).join(',')}`);
+    if (process.env.TRACE === kind + diet && t % 1800 === 0) console.log(`${JSON.stringify(elderThink(s))} raids ${s.raids} ${(t / 3600).toFixed(1)}h day ${s.day} people ${s.people.length} room ${room(s)} wood ${s.wood.toFixed(0)}/${woodCap(s)} food ${s.food.toFixed(0)}/${foodCap(s)} forest ${(s.forest ?? 400).toFixed(0)} building ${s.building?.id ?? '-'} plan ${JSON.stringify(workPlan(s))} built ${s.built.map((b) => b.id).join(',')}`);
     for (const m of [25, 50, 75, 100]) if (marks[m] === undefined && s.people.length >= m) marks[m] = t;
     joined = s.villages.filter((v) => v.joined).length;
     if (marks[100] !== undefined) break;

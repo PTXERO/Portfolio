@@ -815,3 +815,21 @@ body.wide.tab-ideas #sheet { width: clamp(420px, 42vw, 820px); }
 #modal .deck-card { background: rgba(52, 64, 95, 0.5); }
 .seg-gap { flex: 1; }
 .card.lean .seg { flex-wrap: wrap; }
+
+/* New Shore: raids. Two lines of fighters facing each other, thinning round by round. */
+.card.raid { border-color: #b8584a; }
+.card.raid .name { color: #f08a6a; }
+.battle { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
+.battle .side { flex: 1; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.battle .line { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; min-height: 28px; }
+.battle .them .line img { transform: scaleX(-1); }
+.battle .line img { transition: opacity 0.4s, transform 0.4s; }
+.battle .line img.down { opacity: 0.18; transform: translateY(4px) rotate(80deg); }
+.battle .them .line img.down { transform: scaleX(-1) translateY(4px) rotate(80deg); }
+.battle .making-bar { width: 100%; }
+.battle .making-bar i { transition: width 0.5s; }
+.battle .them .making-bar i { background: #c05a48; }
+.battle .vs { color: var(--dim, #8a8aa0); font-size: 12px; }
+.battle .side.hit { animation: battle-hit 0.3s; }
+@keyframes battle-hit { 0%, 100% { transform: translateX(0); } 30% { transform: translateX(-3px); } 60% { transform: translateX(3px); } }
+.battle-result { font-weight: bold; }
