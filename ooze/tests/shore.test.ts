@@ -457,6 +457,24 @@ describe('Raids', () => {
     for (let i = 0; i < 5 && !s2.fight; i++) shoreTick(st2, 2);
     expect(s2.fight?.rallied).toBe(true);
   });
+  it('raiders who fall leave loot; those who live run home; none fallen, nothing left', () => {
+    const { state, s } = grown('grazer', 40);
+    s.food = 10;
+    s.wood = 10;
+    coming(s);
+    for (let i = 0; i < 200 && !(s.battles?.length); i++) shoreTick(state, 2);
+    const b = s.battles![0];
+    if (b.theirDead > 0) {
+      expect(b.loot!.food + b.loot!.wood).toBeGreaterThan(0);
+      expect(s.loot).toBeDefined();
+    } else expect(b.loot).toBeUndefined();
+    const left = b.rounds[b.rounds.length - 1][1];
+    if (left > 0) expect(s.retreat?.n).toBe(left);
+    // They get home, and the loot's gathered up.
+    for (let i = 0; i < 4000 && (s.retreat || s.loot); i++) shoreTick(state, 2);
+    expect(s.retreat).toBeUndefined();
+    expect(s.loot).toBeUndefined();
+  });
   it('a raid in progress survives a save', () => {
     const { state, s } = grown('grazer', 30);
     s.raid = { from: s.villages.find((v) => hostile(s, v))!.id, watched: 40, seen: 41, arrives: 42, fighters: 9 };

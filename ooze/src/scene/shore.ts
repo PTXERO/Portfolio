@@ -411,7 +411,7 @@ export class ShoreScene extends RangeScene {
     // War: someone watching from the trees, raiders on the way in, the war band on the way out.
     // Drawn as they are, a band walking, nothing over their heads.
     const now = s.day + s.clock / DAY_SEC;
-    const band = (look: typeof s.look, from: Pt, to: Pt, k: number, n: number, seed: number) => {
+    const band = (look: typeof s.look, from: Pt, to: Pt, k: number, n: number, seed: number, pace = 7, fighting = false) => {
       const dx = to.x - from.x;
       const dy = to.y - from.y;
       const d = Math.hypot(dx, dy) || 1;
@@ -425,7 +425,10 @@ export class ShoreScene extends RangeScene {
         const Y = this.py(x, y);
         if (!onScreen(X, Y)) continue;
         const ph = hash(seed + i, 3) * 9;
-        sprites.push({ y, draw: () => this.drawBeing(b, look, x, y, { left: dx < 0, frame: Math.floor(t * 7 + ph) % 2, hop: Math.abs(Math.sin(t * 7 + ph)) * 1.5 }) });
+        // (Fighting: lunging in and back, not walking.)
+        const jx = fighting ? Math.sin(t * pace + ph) * 0.6 * (dx / d) : 0;
+        const jy = fighting ? Math.sin(t * pace + ph) * 0.6 * (dy / d) : 0;
+        sprites.push({ y, draw: () => this.drawBeing(b, look, x + jx, y + jy, { left: dx < 0, frame: Math.floor(t * pace + ph) % 2, hop: Math.abs(Math.sin(t * pace + ph)) * (fighting ? 2.5 : 1.5) }) });
       }
     };
     const raid = s.raid;
@@ -442,8 +445,49 @@ export class ShoreScene extends RangeScene {
           if (onScreen(X, Y)) sprites.push({ y, draw: () => this.drawBeing(b, from.look, x, y, { left: s.hearth.x < x, frame: 0 }) });
         }
       } else if (raid.arrives !== undefined) {
+        // On their way in: a walk at first, a run at the end.
         const k = Math.max(0, Math.min(1, (now - raid.seen) / Math.max(0.01, raid.arrives - raid.seen)));
-        band(from.look, from, s.hearth, 0.15 + k * 0.83, raid.fighters, from.id * 31);
+        band(from.look, from, s.hearth, 0.15 + (k * k * 0.4 + k * 0.6) * 0.83, raid.fighters, from.id * 31, k > 0.8 ? 11 : 7);
+      }
+    }
+    // The fight at the edge of the village: what's left of them, at it.
+    const fight = s.fight;
+    const foe = fight?.attack === 'them' ? s.villages.find((v) => v.id === fight.village) : undefined;
+    if (fight && foe) band(foe.look, foe, s.hearth, 0.98, Math.round(fight.y), foe.id * 31, 13, true);
+    // Running home, those who lived; and what the fallen dropped, lying where they fell.
+    const ret = s.retreat;
+    const home = ret && s.villages.find((v) => v.id === ret.from);
+    if (ret && home) {
+      const d = Math.hypot(home.x - s.hearth.x, home.y - s.hearth.y) || 1;
+      const k = Math.max(0, Math.min(1, (now - ret.left) / Math.max(0.01, ret.arrives - ret.left)));
+      band(home.look, s.hearth, home, Math.min(1, 2 / d) + k * (1 - 2 / d), ret.n, home.id * 31, 12);
+    }
+    const loot = s.loot;
+    if (loot && !fogged(loot.x, loot.y)) {
+      for (let i = 0; i < loot.n; i++) {
+        const lx = loot.x + (hash(i, 61) - 0.5) * 4;
+        const ly = loot.y + (hash(i, 62) - 0.5) * 3;
+        const X = Math.round(this.sx(lx));
+        const Y = Math.round(this.py(lx, ly));
+        if (!onScreen(X, Y)) continue;
+        sprites.push({
+          y: ly,
+          at: { x: lx, y: ly },
+          draw: () => {
+            // A dropped bundle: a sack tied at the neck, or a bundle of sticks.
+            const k = z >= 6 ? 2 : 1;
+            if (i % 2) {
+              b.fillStyle = '#8a6a3a';
+              b.fillRect(X - 2 * k, Y - 3 * k, 4 * k, 3 * k);
+              b.fillStyle = '#c8a878';
+              b.fillRect(X - k, Y - 4 * k, 2 * k, k);
+            } else {
+              b.fillStyle = '#6a4a30';
+              b.fillRect(X - 3 * k, Y - 2 * k, 6 * k, k);
+              b.fillRect(X - 2 * k, Y - 3 * k, 5 * k, k);
+            }
+          },
+        });
       }
     }
     const w = s.warband;

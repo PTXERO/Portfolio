@@ -30,6 +30,9 @@ const LEAD = 0.25;
 const RALLY = 0.2;
 /** How fast a war band walks (tiles a second). */
 const BAND_SPEED = 1.2;
+/** What each of their fallen leaves behind. */
+const LOOT_FOOD = 3;
+const LOOT_WOOD = 2;
 /** Seconds a round of blows takes (a fight's over in half a minute or so). */
 const ROUND_SEC = 3;
 /** The chief in the front line: that round they hit this much harder; and the chance they're
@@ -58,6 +61,8 @@ export interface Battle {
   /** Of theirs who fell. */
   theirDead: number;
   took?: { food: number; wood: number };
+  /** What their fallen left behind (raids on you). */
+  loot?: { food: number; wood: number };
   led?: boolean;
   rallied?: boolean;
   /** Held behind the walls. */
@@ -265,6 +270,9 @@ export function warDawn(state: GameState, s: ShoreState): void {
  * time. */
 export function stepWar(state: GameState, s: ShoreState, dt: number): void {
   const now = today(s);
+  // (Those who ran home get there; what the fallen left is gathered up.)
+  if (s.retreat && now >= s.retreat.arrives) s.retreat = undefined;
+  if (s.loot && now >= s.loot.until) s.loot = undefined;
   const f = s.fight;
   if (f) {
     f.next -= dt;
@@ -377,10 +385,25 @@ function finish(state: GameState, s: ShoreState, f: Fight): void {
   const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
   const front = f.chief !== undefined ? ` ${chief} fought in the front line${f.hurt ? ', and was hurt' : ''}.` : '';
   if (home) {
+    // Their survivors run for home; their fallen leave behind what they carried (none fallen,
+    // nothing left).
+    const fled = Math.round(f.y);
+    const dist = Math.hypot(v.x - s.hearth.x, v.y - s.hearth.y);
+    if (fled > 0) s.retreat = { from: v.id, n: fled, left: today(s), arrives: today(s) + dist / (BAND_SPEED * 1.6) / DAY_SEC };
+    const fallen = Math.max(0, Math.round(theirDead));
+    if (fallen > 0) {
+      const food = Math.min(fallen * LOOT_FOOD, Math.max(0, Math.floor(foodCap(s) - s.food)));
+      const wood = Math.min(fallen * LOOT_WOOD, Math.max(0, Math.floor(woodCap(s) - s.wood)));
+      s.food += food;
+      s.wood += wood;
+      b.loot = { food, wood };
+      const k = Math.min(1, 6 / Math.max(1, dist));
+      s.loot = { x: s.hearth.x + (v.x - s.hearth.x) * k, y: s.hearth.y + (v.y - s.hearth.y) * k, n: Math.min(6, fallen), until: today(s) + 2 };
+    }
     if (won) {
       v.beaten = (v.beaten ?? 0) + 1;
       s.news.push(`${cap(v.name)} were driven off.`);
-      record(state, `${cap(v.name)} fell on the village${f.walls ? ', and broke on the palisade' : ', and were driven off'}.${front}${dead ? ` ${dead} of ours died in the fighting.` : ''}${v.beaten >= COWED ? ' They will not come again.' : ''}`, 'shore', shoreWhen(s));
+      record(state, `${cap(v.name)} fell on the village${f.walls ? ', and broke on the palisade' : ', and were driven off'}.${front}${dead ? ` ${dead} of ours died in the fighting.` : ''}${b.loot ? ` Their fallen left behind ${b.loot.food} food and ${b.loot.wood} wood.` : ''}${v.beaten >= COWED ? ' They will not come again.' : ''}`, 'shore', shoreWhen(s));
     } else {
       const food = Math.floor(s.food * 0.25);
       const wood = Math.floor(s.wood * 0.25);

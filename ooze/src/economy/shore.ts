@@ -221,6 +221,9 @@ export interface ShoreState {
   /** The war chief's rule, and when the band last went out. */
   warRule?: WarRule;
   lastBand?: number;
+  /** Raiders running home after a fight; and what their fallen left lying (for a while). */
+  retreat?: { from: number; n: number; left: number; arrives: number };
+  loot?: { x: number; y: number; n: number; until: number };
   /** A fight going on now (a round every few seconds). */
   fight?: Fight;
   /** Hurt in the fighting: the chief walks slowly till then (days since landfall). */

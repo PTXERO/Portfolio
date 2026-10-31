@@ -627,8 +627,8 @@ export function battleCard(s: ShoreState, b: Battle): string {
   const result =
     b.attack === 'them'
       ? b.won
-        ? `Driven off!${b.dead ? ` ${b.dead} of ours died.` : ' None of ours died.'}`
-        : `They broke through${b.took?.food || b.took?.wood ? `, and carried off ${b.took.food} food and ${b.took.wood} wood` : ', but found nothing to carry off'}.${b.dead ? ` ${b.dead} of ours died.` : ''}`
+        ? `Driven off!${b.dead ? ` ${b.dead} of ours died.` : ' None of ours died.'}${b.loot && (b.loot.food || b.loot.wood) ? ` Their fallen left ${b.loot.food} food and ${b.loot.wood} wood.` : ''}`
+        : `They broke through${b.took?.food || b.took?.wood ? `, and carried off ${b.took.food} food and ${b.took.wood} wood` : ', but found nothing to carry off'}.${b.dead ? ` ${b.dead} of ours died.` : ''}${b.loot && (b.loot.food || b.loot.wood) ? ` Their fallen left ${b.loot.food} food and ${b.loot.wood} wood.` : ''}`
       : b.won
         ? `They're beaten.${v.vassal ? ' Their village is yours.' : ' What\'s left of them flee.'} ${b.took ? `The band brings back ${b.took.food} food and ${b.took.wood} wood.` : ''}${b.dead ? ` ${b.dead} of ours died.` : ''}`
         : `Beaten back.${b.dead ? ` ${b.dead} of ours died.` : ''}`;
