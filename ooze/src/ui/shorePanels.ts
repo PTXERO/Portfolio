@@ -127,7 +127,10 @@ function storesCard(s: ShoreState): string {
     <div class="card px-box ex-stores shore-stores">
       ${cell('food', 'Food', s.food, foodCap(s), `${net >= 0 ? '+' : ''}${n0(net)} a day`)}
       ${cell('wood', 'Wood', s.wood, woodCap(s), `${plan.woodRate - burnPerDay(s) >= 0 ? '+' : ''}${n0(plan.woodRate - burnPerDay(s))} a day`)}
-      <div class="store"><span class="label dim">People</span><b class="num">${s.people.length}<span class="dim">/${room(s)}</span></b><span class="dim">room</span></div>
+      <div class="store"><span class="label dim">People</span><b class="num">${s.people.length}<span class="dim">/${room(s)}</span></b><span class="dim">${(() => {
+        const free = room(s) - s.people.length;
+        return free > 1 ? `${free} beds free` : free === 1 ? '1 bed free' : free === 0 ? 'No beds free' : `${-free} without a bed`;
+      })()}</span></div>
       <div class="sub diet">${s.cold ? `<b class="starving">Freezing: no wood for the fires. ${s.cold >= 2 ? 'The young and the old are dying.' : 'Soon they will start to die.'}</b> ` : ''}${s.hungry ? `<b class="starving">Starving: not enough food for everyone. ${s.hungry >= 2 ? 'People are dying.' : 'Soon people will die.'}</b> ` : ''}${seasonLine(s)}<span data-t="shore-birth">${birthLine(s)}</span></div>
     </div>`;
 }
