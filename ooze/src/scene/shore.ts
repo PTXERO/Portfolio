@@ -4,8 +4,9 @@
 // fog the island's other villages, their smoke going up.
 
 import { PAL } from '../art/sprites';
-import { Biome, CELL, isLand, type Pt } from '../economy/island';
+import { Biome, CELL, isLand, type Island, type Pt } from '../economy/island';
 import { raidTarget } from '../economy/war';
+import { findPath } from '../economy/paths';
 import { DAY_SEC, terrainReady, walkTo, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
 import type { GameState, Genes } from '../economy/types';
 import type { CreatureLook } from './creatureLook';
@@ -48,6 +49,22 @@ const REL_COL = { kin: '#8acf6a', prey: PAL.y, predator: '#e8615a', enemy: '#9a2
 export class ShoreScene extends RangeScene {
   override get clouds(): boolean {
     return true;
+  }
+
+  /** Ways across the island, worked out once and kept (raiders, helpers, the war band). */
+  private routes = new Map<string, { pts: Pt[]; cum: number[]; total: number }>();
+  private route(is: Island, from: Pt, to: Pt): { pts: Pt[]; cum: number[]; total: number } {
+    const key = `${Math.round(from.x)},${Math.round(from.y)}>${Math.round(to.x)},${Math.round(to.y)}`;
+    let r = this.routes.get(key);
+    if (!r) {
+      if (this.routes.size > 40) this.routes.clear();
+      const pts = [{ ...from }, ...findPath(is, from, to, 60000)];
+      const cum = [0];
+      for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+      r = { pts, cum, total: cum[cum.length - 1] || 1 };
+      this.routes.set(key, r);
+    }
+    return r;
   }
 
   /** A villager's own look: their kind's, in their own coat (kept, not made each frame). */
@@ -413,14 +430,26 @@ export class ShoreScene extends RangeScene {
     // Drawn as they are, a band walking, nothing over their heads.
     const now = s.day + s.clock / DAY_SEC;
     const band = (look: typeof s.look, from: Pt, to: Pt, k: number, n: number, seed: number, pace = 7, fighting = false) => {
-      const dx = to.x - from.x;
-      const dy = to.y - from.y;
+      // Along the way there (round lakes, along shores), as far as they've got; facing the way
+      // they're going.
+      const r = this.route(is, from, to);
+      const at = Math.max(0, Math.min(1, k)) * r.total;
+      let j = 1;
+      while (j < r.pts.length - 1 && r.cum[j] < at) j++;
+      const a = r.pts[j - 1];
+      const c = r.pts[j];
+      const seg = Math.max(1e-6, r.cum[j] - r.cum[j - 1]);
+      const u = Math.max(0, Math.min(1, (at - r.cum[j - 1]) / seg));
+      const hx = a.x + (c.x - a.x) * u;
+      const hy = a.y + (c.y - a.y) * u;
+      const dx = c.x - a.x || to.x - from.x;
+      const dy = c.y - a.y || to.y - from.y;
       const d = Math.hypot(dx, dy) || 1;
       for (let i = 0; i < Math.min(9, n); i++) {
         const back = (i % 3) * 1.6 + Math.floor(i / 3) * 0.8;
         const side = ((i % 3) - 1) * 1.4 + (hash(seed + i, 2) - 0.5);
-        const x = from.x + dx * k - (dx / d) * back - (dy / d) * side;
-        const y = from.y + dy * k - (dy / d) * back + (dx / d) * side;
+        const x = hx - (dx / d) * back - (dy / d) * side;
+        const y = hy - (dy / d) * back + (dx / d) * side;
         if (!isLand(is, x, y) || fogged(x, y)) continue;
         const X = this.sx(x);
         const Y = this.py(x, y);

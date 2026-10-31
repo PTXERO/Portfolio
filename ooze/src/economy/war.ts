@@ -102,6 +102,8 @@ export interface Fight {
   rallied?: boolean;
   led?: boolean;
   walls?: boolean;
+  /** A strike timed well by the player: the next round's blows count this much more. */
+  push?: number;
   /** The round the chief steps in (the next, once asked), and whether they were hurt. */
   chief?: number;
   hurt?: boolean;
@@ -194,7 +196,8 @@ export function odds(us: number, them: number): string {
 /** One round of blows. (The chief, stepping in, makes their side's round count for more.) */
 function blows(s: ShoreState, f: Fight): void {
   const rand = rngFor(s, f.rounds.length + 7);
-  const k = f.chief === f.rounds.length ? CHIEF_HIT : 1;
+  const k = (f.chief === f.rounds.length ? CHIEF_HIT : 1) * (f.push ?? 1);
+  f.push = undefined;
   const hitB = f.x * f.aEach * 0.18 * k * (0.75 + rand() * 0.5);
   const hitA = f.y * f.bEach * 0.18 * (0.75 + rand() * 0.5);
   f.x = Math.max(0, f.x - hitA);
@@ -271,6 +274,8 @@ export function warDawn(state: GameState, s: ShoreState): void {
       r.seen = now;
       r.arrives = now + WARN_DAYS + boosts(s).warn;
       r.fighters = raiders(v);
+      // (Everyone's rallied: spears out, the young behind the fire.)
+      r.rallied = true;
       const at = raidTarget(s, r);
       // (Walking to a vassal takes them as long as it takes.)
       if (at.v) r.arrives = Math.max(r.arrives, now + walkDays(v, at) * 0.5);
@@ -425,6 +430,15 @@ export function canStepIn(s: ShoreState): boolean {
   const v = s.villages.find((x) => x.id === f.village);
   const at = f.at !== undefined ? s.villages.find((x) => x.id === f.at) : undefined;
   return at ? chiefLeads(s, at) : f.attack === 'them' ? chiefHome(s) : !!v && chiefLeads(s, v);
+}
+
+/** A strike, timed (0 to 1, how near the mark): the next round's blows count up to twice as much.
+ * One a round. Returns the strength it gives (0 if there's no fight, or a strike's waiting). */
+export function strike(s: ShoreState, quality: number): number {
+  const f = s.fight;
+  if (!f || f.push !== undefined) return 0;
+  f.push = 1 + Math.max(0, Math.min(1, quality));
+  return f.push;
 }
 
 /** The chief steps into the front line: the next round is theirs. */

@@ -677,3 +677,32 @@ describe('Vassals and the hearth defend each other', () => {
     expect(war.canHelp(s)).toBe(false);
   });
 });
+
+describe('Striking in a fight', () => {
+  it('a strike makes the next round hit harder, once a round; raids are rallied by themselves', async () => {
+    const war = await import('../src/economy/war');
+    const { state, s } = (() => {
+      const state = fresh();
+      const s = shoreOf(state)!;
+      now(state, 'hearth');
+      for (let i = 0; i < 8; i++) now(state, 'hut');
+      while (s.people.length < 30) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30, dies: 9999 });
+      s.food = 300;
+      s.day = 40;
+      return { state, s };
+    })();
+    const foe = s.villages.find((x) => war.hostile(s, x))!;
+    s.raid = { from: foe.id, watched: s.day - 1.01, fighters: 10 };
+    s.nextRaid = s.day + 100;
+    shoreTick(state, DAY_SEC);
+    expect(s.raid?.rallied).toBe(true);
+    for (let i = 0; i < 400 && !s.fight; i++) shoreTick(state, 2);
+    expect(s.fight).toBeDefined();
+    expect(war.strike(s, 1)).toBe(2);
+    expect(war.strike(s, 1)).toBe(0);
+    const y = s.fight!.y;
+    shoreTick(state, 3);
+    expect(s.fight?.push ?? undefined).toBeUndefined();
+    expect((s.fight?.y ?? 0) < y || !s.fight).toBe(true);
+  });
+});

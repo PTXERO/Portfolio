@@ -499,7 +499,7 @@ function warCard(s: ShoreState): string {
       <div class="sub">${cap(v.name)} are coming, about ${r.fighters} of them: here ${soon((r.arrives ?? now) - now)}. ${r.stance === 'pay' ? `They'll be paid ${payCost(v, r.fighters).food} food and ${payCost(v, r.fighters).wood} wood to go away.` : `${r.stance === 'walls' ? 'Behind the palisade, all' : 'All'} ${fighters(s)} grown will fight. ${odds(us, them)}`}</div>
       ${allies.length ? `<div class="sub">Coming to help: ${allies.join(', ')}.</div>` : ''}
       ${r.rallied && r.stance !== 'pay' ? '<div class="sub dim">Rallied: spears out, the young behind the fire.</div>' : ''}</div>
-      <div class="col">${r.rallied || r.stance === 'pay' ? '' : '<button class="px-btn gold" data-rally="1">Rally them</button>'}<button class="px-btn" data-stancecard="1">${r.stance === 'pay' ? 'Pay' : r.stance === 'walls' ? 'Walls' : 'Fight'} ›</button></div></div>`;
+      <div class="col"><button class="px-btn" data-stancecard="1">${r.stance === 'pay' ? 'Pay' : r.stance === 'walls' ? 'Walls' : 'Fight'} ›</button></div></div>`;
   }
   // The war chief, and the rule they raid by while you're away.
   if (hasWarChief(s)) {
@@ -606,6 +606,8 @@ export function fightCard(s: ShoreState, f: Fight): string {
   const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
   return `<p class="label dim">${f.walls ? 'Behind the palisade' : f.attack === 'them' ? 'Raid' : 'War band'}</p><h3>${head}</h3>
     <div class="battle live" data-fight="${f.id}">${line(s.look, f.ours, 'us')}<span class="vs">vs</span>${line(v.look, f.theirs, 'them')}</div>
+    <div class="dance strike"><div class="dance-bar"><i class="dance-zone"></i><b class="dance-mark"></b></div><div class="dance-info"><span class="strike-state tiny">Strike as the marker crosses the gold: the next round hits harder.</span></div></div>
+    <button class="px-btn gold dance-step strike-btn" data-strike="1">Strike!</button>
     <p class="dim tiny fight-note"></p>
     <div class="choices"><button class="px-btn gold" data-stepin="1">${chief} steps into the line</button><button class="px-btn" data-act="dismiss">Leave them to it</button></div>`;
 }

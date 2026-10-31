@@ -20,7 +20,7 @@ import { dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, i
 import { danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
 import { lineTree, shoreTree } from './ui/familyTree';
 import { choose, setFocus, type ForkId, type Lane } from './economy/culture';
-import { answerHelp, canHelp, helpSize, canStepIn, rally, sendBand, setStance, setWarRule, stepIn, type Stance, type WarRule } from './economy/war';
+import { strike, answerHelp, canHelp, helpSize, canStepIn, rally, sendBand, setStance, setWarRule, stepIn, type Stance, type WarRule } from './economy/war';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, say, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
@@ -1050,6 +1050,7 @@ function shoreFrame(): void {
       showModal(fightCard(s, f));
       liveFight = f.id;
       liveRounds = 0;
+      startDance();
     }
     if (live || !modal.hidden) showFight(s);
   }
@@ -1190,6 +1191,19 @@ function showFight(s: NonNullable<ReturnType<typeof shoreOf>>): void {
   if (note && note.textContent !== say) note.textContent = say;
   const btn = modal.querySelector<HTMLButtonElement>('[data-stepin]');
   if (btn) btn.hidden = !canStepIn(s);
+  strikeInfo(s);
+}
+
+/** The strike bar: ready for this round, or struck (and how). */
+function strikeInfo(s: NonNullable<ReturnType<typeof shoreOf>>): void {
+  const f = s.fight;
+  const btn = modal.querySelector<HTMLButtonElement>('.strike-btn');
+  const say = modal.querySelector<HTMLElement>('.strike-state');
+  if (!f || !btn || !say) return;
+  const ready = f.push === undefined;
+  btn.disabled = !ready;
+  const text = ready ? 'Strike as the marker crosses the gold: the next round hits harder.' : f.push! > 1 ? `Struck: the next round hits ${Math.round((f.push! - 1) * 100)}% harder.` : 'Mistimed: wait for the next round.';
+  if (say.textContent !== text) say.textContent = text;
 }
 
 /** A round of blows, shown: the lines lunge at each other and clash; those who took losses
@@ -2158,6 +2172,24 @@ function act(el: HTMLElement): void {
     }
   } else if (el.dataset.step) {
     stepDance(Number(el.dataset.step), el);
+  } else if (el.dataset.strike) {
+    const s = shoreOf(state);
+    if (s?.fight) {
+      const off = Math.abs(danceAt() - dancing.zone);
+      const q = off <= dancing.width / 2 ? 1 - off / (dancing.width / 2) : 0;
+      const r = el.getBoundingClientRect();
+      if (q > 0 && strike(s, q) > 0) {
+        popSound(0.9 + q * 0.6);
+        scene.float(r.left + r.width / 2, r.top, q > 0.7 ? 'Mighty blow!' : 'Good strike!', '#e8c050');
+      } else if (q === 0 && s.fight.push === undefined) {
+        // (A miss: the next round as it would have been.)
+        strike(s, 0);
+        popSound(0.5);
+        scene.float(r.left + r.width / 2, r.top, 'Mistimed', '#f2ead7');
+      }
+      newZone();
+      strikeInfo(s);
+    }
   } else if (el.dataset.help) {
     const s = shoreOf(state);
     if (s && answerHelp(state, s, el.dataset.help === 'send')) {
