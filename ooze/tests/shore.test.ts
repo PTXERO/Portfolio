@@ -3,7 +3,7 @@ import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
 import { poiHere, answerJoin, chiefWithCrew, roadFront, roadTier, roadUpgrade, setTrade, tradesWith, upgradeRoad, answerAsk, setSettleFocus, settledDay, stageOf, onRoad, roadCells, elderThink, HEARTH_MOST, hearthMost, roomLeft, woodCap, roadCost, roadDone, startRoad, totalCritters, travelDays, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
-import { hostile, raidable, sendBand, fighters, setStance, stepIn, payCost, setWarRule } from '../src/economy/war';
+import { decideConquest, hostile, raidable, sendBand, fighters, setStance, stepIn, payCost, setWarRule } from '../src/economy/war';
 import type { TribeState } from '../src/economy/types';
 
 function fresh(diet = 'grazer', cannibal = false) {
@@ -388,6 +388,9 @@ describe('Raids', () => {
     for (let i = 0; i < 20000 && (s.warband || s.fight); i++) shoreTick(state, 2);
     expect(s.warband).toBeUndefined();
     expect(s.battles?.some((b) => b.attack === 'us' && b.won)).toBe(true);
+    // (At your mercy: made vassals.)
+    expect(s.conquest?.id === prey.id || !!prey.gone).toBe(true);
+    if (s.conquest) expect(decideConquest(state, s, 'vassal')).toBe(true);
     expect(prey.vassal?.conquered !== undefined || !!prey.gone).toBe(true);
   });
   /** A raid seen coming, here in a moment. */

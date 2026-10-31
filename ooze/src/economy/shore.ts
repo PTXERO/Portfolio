@@ -172,6 +172,8 @@ export interface Village {
   /** Times they've come raiding and been driven off; and been paid to go away. */
   beaten?: number;
   paid?: number;
+  /** Driven out by the hearth (that day): their land's an outpost of yours, worked for its goods. */
+  outpost?: number;
   /** Turned away: gone from the island's map (to the village they went to, that day). */
   gone?: { to: number; day: number };
 }
@@ -281,6 +283,8 @@ export interface ShoreState {
   lastBand?: number;
   /** Raiders running home after a fight; and what their fallen left lying (for a while). */
   retreat?: { from: number; n: number; left: number; arrives: number; sx?: number; sy?: number };
+  /** A village beaten and at your mercy, waiting on what's to be done with them. */
+  conquest?: { id: number; since: number };
   /** Goods on the road from the settlements to the hearth. */
   convoys?: { from: number; food: number; wood: number; res?: Partial<Record<Res, number>>; left: number; arrives: number; caravan?: boolean }[];
   loot?: { x: number; y: number; n: number; until: number };
@@ -367,7 +371,7 @@ export function shoreIsland(seed: number): Island {
 }
 
 const SYL = ['ka', 'ri', 'mo', 'tu', 'na', 'sa', 'ke', 'lo', 'vi', 'ra', 'en', 'ul', 'ha', 'po', 'mi', 'zu', 'ta', 'ne', 'ok', 'ya', 'bo', 'li', 'fe', 'gu', 'da', 'shi'];
-function nameFrom(rand: () => number): string {
+export function nameFrom(rand: () => number): string {
   const n = 2 + (rand() < 0.25 ? 1 : 0);
   const s = Array.from({ length: n }, () => SYL[Math.floor(rand() * SYL.length)]).join('');
   return s[0].toUpperCase() + s.slice(1);
@@ -727,7 +731,7 @@ const FISH_FOOD = 5;
 /** Whether a village is yours to draw on: joined (their old village kept as an outpost) or a
  * vassal (what their land gives comes as tribute, more the more you take). */
 export function held(v: Village): boolean {
-  return !!v.habitat && !v.gone && (!!v.joined || !!v.vassal || v.settled !== undefined);
+  return !!v.habitat && (v.outpost !== undefined || (!v.gone && (!!v.joined || !!v.vassal || v.settled !== undefined)));
 }
 
 /** Under your rule, living in their own village: a settlement or a vassal. */

@@ -11,8 +11,9 @@
 
 import type { GameState } from './types';
 import { record } from './chronicle';
-import { alliesFor, nudge, PEACE, standingOf, struck } from './diplomacy';
-import { boosts, DAY_SEC, foodCap, isAdult, killed, loyaltyOf, relation, ruled, shoreSeason, shoreWhen, travelDays, woodCap, type ShoreState, type Village } from './shore';
+import { alliesFor, foreign, nudge, PEACE, standingOf, struck } from './diplomacy';
+import { boosts, DAY_SEC, foodCap, GROW_DAYS, isAdult, killed, loyaltyOf, nameFrom, RES_CAP, RES_OF, relation, ruled, shoreSeason, shoreWhen, travelDays, woodCap, type ShoreState, type Village } from './shore';
+import { personal } from './genes';
 
 /** How hard each diet fights (a fighter's worth). */
 const KIND: Record<string, number> = { hunter: 1.3, omnivore: 1.15, grazer: 1 };
@@ -99,6 +100,8 @@ export interface Fight {
    * hearth). The fight's 'ours' is all of them. */
   at?: number;
   side?: { from: number; n: number }[];
+  /** A war band of the war chief's own (what's won is decided for you). */
+  wc?: boolean;
   attack: 'us' | 'them';
   ours: number;
   theirs: number;
@@ -150,6 +153,10 @@ export interface Ally {
 export interface WarBand {
   to: number;
   fighters: number;
+  /** Sent by the war chief (by the rule), not the chief. */
+  wc?: boolean;
+  /** Levied from loyal vassals, marching with the band. */
+  levy?: { from: number; n: number }[];
   /** When it set out and when it gets there (days since landfall). */
   left: number;
   arrives: number;
@@ -281,6 +288,8 @@ function warChiefRaids(state: GameState, s: ShoreState): void {
 /** Each day: raids gathering, coming, arriving; the war band reaching where it's going. */
 export function warDawn(state: GameState, s: ShoreState): void {
   const now = today(s);
+  // (A beaten village left waiting too long: made vassals, as the war chief would.)
+  if (s.conquest && now - s.conquest.since >= MERCY_DAYS) decideConquest(state, s, 'vassal');
   warChiefRaids(state, s);
   // A raid coming: seen watching, then seen coming, then here.
   const r = s.raid;
@@ -364,7 +373,11 @@ export function stepWar(state: GameState, s: ShoreState, dt: number): void {
       return;
     }
     const led = chiefLeads(s, v);
-    s.fight = { id: now, village: v.id, attack: 'us', ours: w.fighters, theirs: holders(v), x: w.fighters, y: holders(v), aEach: ourStrength(s, 1, false, led ? LEAD : 0), bEach: theirStrength(v, 1), rounds: [], next: ROUND_SEC, led, tell: TACTICS[Math.floor(rngFor(s, 9)() * 3)] };
+    // (With whoever was levied from the vassals, each worth what their kind is.)
+    const levy = (w.levy ?? []).filter((a) => s.villages.some((x) => x.id === a.from && x.vassal && !x.gone));
+    const n = w.fighters + levy.reduce((x, a) => x + a.n, 0);
+    const str = ourStrength(s, w.fighters, false, led ? LEAD : 0) + levy.reduce((x, a) => x + theirStrength(s.villages.find((y) => y.id === a.from)!, a.n), 0);
+    s.fight = { id: now, village: v.id, attack: 'us', side: levy.length ? [{ from: -1, n: w.fighters }, ...levy] : undefined, wc: w.wc, ours: n, theirs: holders(v), x: n, y: holders(v), aEach: str / Math.max(1, n), bEach: theirStrength(v, 1), rounds: [], next: ROUND_SEC, led, tell: TACTICS[Math.floor(rngFor(s, 9)() * 3)] };
     s.news.push(`The war band falls on ${v.name}!`);
   }
 }
@@ -547,7 +560,12 @@ function finish(state: GameState, s: ShoreState, f: Fight): void {
     s.food += food;
     s.wood += wood;
     b.took = { food, wood };
-    if (v.pop >= 4) {
+    if (v.pop >= 4 && !f.wc) {
+      // At your mercy: what's to be done with them is the chief's to say.
+      s.conquest = { id: v.id, since: today(s) };
+      s.news.push(`${cap(v.name)} are beaten, and at your mercy.`);
+      record(state, `The war band fell on ${v.name}${f.led ? ', the chief at its head,' : ''} and beat them.${front}${dead ? ` ${dead} of ours died.` : ''}`, 'shore', shoreWhen(s));
+    } else if (v.pop >= 4) {
       // Theirs now: they work their land for you, grudgingly at first.
       v.vassal = { tax: 0.25, loyalty: 45, conquered: today(s) };
       s.news.push(`${cap(v.name)} are beaten. Their village is yours.`);
@@ -560,6 +578,64 @@ function finish(state: GameState, s: ShoreState, f: Fight): void {
   (s.battles ??= []).push(b);
 }
 
+/** What can be done with a village beaten and at your mercy. */
+export type Mercy = 'vassal' | 'plunder' | 'drive' | 'captives';
+/** Days they wait on it (then they're made vassals, as the war chief would). */
+export const MERCY_DAYS = 2;
+
+export function decideConquest(state: GameState, s: ShoreState, choice: Mercy): boolean {
+  const c = s.conquest;
+  const v = c && s.villages.find((x) => x.id === c.id);
+  s.conquest = undefined;
+  if (!c || !v || v.gone || v.vassal) return false;
+  const now = today(s);
+  if (choice === 'vassal') {
+    v.vassal = { tax: 0.25, loyalty: 45, conquered: now };
+    s.news.push(`${cap(v.name)} pay tribute to the hearth now.`);
+    record(state, `${cap(v.name)} were made to pay tribute to the hearth.`, 'shore', shoreWhen(s));
+  } else if (choice === 'plunder') {
+    // Everything they had: and they're left free, fewer, and hating you.
+    const food = Math.min(Math.round(v.pop * 3), Math.max(0, foodCap(s) - s.food));
+    const wood = Math.min(Math.round(v.pop * 1.5), Math.max(0, woodCap(s) - s.wood));
+    s.food += food;
+    s.wood += wood;
+    for (const r of RES_OF[v.habitat ?? 'meadow']) if (r !== 'fish') (s.res ??= {})[r] = Math.min(RES_CAP, (s.res[r] ?? 0) + 6);
+    v.pop = Math.max(4, v.pop * 0.7);
+    v.beaten = (v.beaten ?? 0) + 1;
+    nudge(s, v, -30);
+    s.news.push(`${cap(v.name)} were plundered: ${food} food and ${wood} wood, and more.`);
+    record(state, `The war band stripped ${v.name} of everything they had, ${food} food and ${wood} wood among it, and left them to it.`, 'shore', shoreWhen(s));
+  } else if (choice === 'drive') {
+    // Off their land, to whoever'll have them; the land's an outpost of yours.
+    const to = s.villages.filter((x) => x !== v && !x.gone && !x.vassal && x.settled === undefined && !x.joined).sort((a, b) => Math.hypot(a.x - v.x, a.y - v.y) - Math.hypot(b.x - v.x, b.y - v.y))[0];
+    if (to) to.pop += v.pop * 0.6;
+    v.gone = { to: to?.id ?? -1, day: now };
+    v.outpost = now;
+    for (const x of s.villages) if (x !== v && foreign(s, x)) nudge(s, x, -5);
+    s.news.push(`${cap(v.name)} were driven from their land. It's yours now.`);
+    record(state, `${cap(v.name)} were driven from their land, and it became an outpost of the hearth. The other villages heard of it.`, 'shore', shoreWhen(s));
+  } else {
+    // Half of them brought back to live by the hearth; the rest left, fewer, and bitter.
+    const n = Math.floor(v.pop / 2);
+    const rand = rngFor(s, 23);
+    const names: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const id = s.nextId++;
+      const name = nameFrom(rand);
+      names.push(name);
+      const age = GROW_DAYS + rand() * 20;
+      s.people.push({ id, name, born: now - age, dies: now - age + 70 + rand() * 30, kind: v.id, joined: now, genes: personal(undefined, id * 31 + v.id) });
+    }
+    v.pop -= n;
+    nudge(s, v, -40);
+    for (const x of s.villages) if (x !== v && foreign(s, x)) nudge(s, x, -8);
+    s.news.push(`${n} of ${v.name} were brought back to live by the hearth.`);
+    record(state, `${n} of ${v.name} were taken and brought back to live by the hearth, ${names.slice(0, 3).join(', ')}${n > 3 ? ' and others' : ''} among them. The rest were left, and the island heard of it.`, 'shore', shoreWhen(s));
+    flee(state, s, v);
+  }
+  return true;
+}
+
 /** Too few left to hold their village: they leave the island's map. */
 function flee(state: GameState, s: ShoreState, v: Village): void {
   if (v.pop >= 4 || v.gone || v.vassal) return;
@@ -568,12 +644,29 @@ function flee(state: GameState, s: ShoreState, v: Village): void {
 }
 
 /** Sends a war band (this many of the grown) against a village. */
-export function sendBand(state: GameState, s: ShoreState, id: number, n: number, byWarChief = false): boolean {
+/** Fighters loyal vassals near enough would send with a war band (a quarter of them each, if
+ * loyal enough; it costs them a little loyalty). */
+export const LEVY_LOYALTY = 50;
+export function levyFor(s: ShoreState, v: Village): { from: number; n: number }[] {
+  const days = walkDays(s.hearth, v);
+  return s.villages
+    .filter((x) => x.vassal && !x.gone && x.id !== v.id && x.vassal.loyalty >= LEVY_LOYALTY && walkDays(x, v) <= days + 1)
+    .map((x) => ({ from: x.id, n: Math.floor(x.pop * 0.25) }))
+    .filter((a) => a.n >= 1);
+}
+
+export function sendBand(state: GameState, s: ShoreState, id: number, n: number, byWarChief = false, levy = false): boolean {
   const v = s.villages.find((x) => x.id === id);
   if (!v || !raidable(s, v) || s.warband || n < 2 || n > fighters(s)) return false;
   const d = Math.hypot(v.x - s.hearth.x, v.y - s.hearth.y) * 1.3;
   const now = today(s);
-  s.warband = { to: id, fighters: n, left: now, arrives: now + d / BAND_SPEED / DAY_SEC };
+  const called = levy ? levyFor(s, v) : [];
+  for (const a of called) {
+    const x = s.villages.find((y) => y.id === a.from)!;
+    x.vassal!.loyalty = Math.max(0, x.vassal!.loyalty - 4);
+  }
+  s.warband = { to: id, fighters: n, left: now, arrives: now + d / BAND_SPEED / DAY_SEC, wc: byWarChief || undefined, levy: called.length ? called : undefined };
+  if (called.length) record(state, `${called.map((a) => `${a.n} of ${s.villages.find((x) => x.id === a.from)!.name}`).join(', ')} marched with them, called up by the hearth.`, 'shore', shoreWhen(s));
   struck(state, s, v);
   s.lastBand = now;
   s.news.push(`The war band set out for ${v.name}.`);

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createState } from '../src/economy/state';
 import { build, DAY_SEC, relation, shoreOf, shoreTick, startShore, takeRaft } from '../src/economy/shore';
 import { ALLY, canDemand, demandSubmit, giftForeign, PEACE, stanceOf, standingOf } from '../src/economy/diplomacy';
-import { hostile, sendBand } from '../src/economy/war';
+import { decideConquest, hostile, levyFor, sendBand } from '../src/economy/war';
 import type { TribeState } from '../src/economy/types';
 
 function fresh(diet = 'grazer', cannibal = false) {
@@ -110,5 +110,68 @@ describe('Diplomacy', () => {
     shoreTick(state, DAY_SEC * 1.01);
     expect(s.raid?.allies?.some((a) => a.from === friend.id)).toBe(true);
     void war;
+  });
+});
+
+describe('Conquest', () => {
+  const beaten = (pop = 20) => {
+    const { state, s } = fresh('omnivore');
+    const v = s.villages.find((x) => relation(s, x) === 'prey')!;
+    v.found = true;
+    v.pop = pop;
+    v.habitat = 'mountain';
+    s.conquest = { id: v.id, since: s.day };
+    return { state, s, v };
+  };
+  it('left waiting, a beaten village is made vassals', () => {
+    const { state, s, v } = beaten();
+    shoreTick(state, DAY_SEC * 3);
+    expect(s.conquest).toBeUndefined();
+    expect(v.vassal?.conquered).toBeDefined();
+  });
+  it('plundered: a haul, and they stay free and hate you', () => {
+    const { state, s, v } = beaten();
+    s.food = 0;
+    s.wood = 0;
+    s.res = {};
+    expect(decideConquest(state, s, 'plunder')).toBe(true);
+    expect(s.food).toBeGreaterThan(0);
+    expect(s.res.stone).toBe(6);
+    expect(v.vassal).toBeUndefined();
+    expect(standingOf(s, v)).toBeLessThan(-20);
+  });
+  it('driven out: their land an outpost of yours, giving its goods', () => {
+    const { state, s, v } = beaten();
+    expect(decideConquest(state, s, 'drive')).toBe(true);
+    expect(v.gone).toBeDefined();
+    expect(v.outpost).toBeDefined();
+    s.res = {};
+    shoreTick(state, DAY_SEC);
+    expect(s.res.stone ?? 0).toBeGreaterThan(0);
+  });
+  it('captives: half of them come to live by the hearth', () => {
+    const { state, s, v } = beaten(20);
+    const n = s.people.length;
+    expect(decideConquest(state, s, 'captives')).toBe(true);
+    expect(s.people.length).toBe(n + 10);
+    expect(s.people.filter((p) => p.kind === v.id)).toHaveLength(10);
+    expect(v.pop).toBe(10);
+  });
+  it('loyal vassals near enough are called up to march with the war band', () => {
+    const { state, s } = fresh('omnivore');
+    while (s.people.length < 30) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30, dies: 9999 });
+    const prey = s.villages.filter((x) => relation(s, x) === 'prey');
+    const [target, ours] = prey;
+    target.found = true;
+    ours.vassal = { tax: 0.1, loyalty: 80 };
+    ours.pop = 20;
+    ours.x = target.x + 5;
+    ours.y = target.y;
+    expect(levyFor(s, target)).toEqual([{ from: ours.id, n: 5 }]);
+    expect(sendBand(state, s, target.id, 10, false, true)).toBe(true);
+    expect(s.warband?.levy).toEqual([{ from: ours.id, n: 5 }]);
+    expect(ours.vassal.loyalty).toBe(76);
+    for (let i = 0; i < 20000 && !s.fight; i++) shoreTick(state, 2);
+    expect(s.fight?.ours).toBe(15);
   });
 });

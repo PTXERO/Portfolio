@@ -956,8 +956,8 @@ export class ShoreScene extends RangeScene {
 
   private drawVillage(b: CanvasRenderingContext2D, sprites: Sprite[], s: ShoreState, v: Village, t: number, dt: number, z: number, close: boolean, fogged: (x: number, y: number) => boolean): void {
     // Joined: their old village is an outpost now, a few still working its land for you (a
-    // couple of their huts, a small fire, your gold flag).
-    if (v.joined) {
+    // couple of their huts, a small fire, your gold flag). (Driven out: the same, theirs empty.)
+    if (v.joined || v.outpost !== undefined) {
       if (fogged(v.x, v.y)) return;
       const X = Math.round(this.sx(v.x));
       const Y = Math.round(this.py(v.x, v.y));

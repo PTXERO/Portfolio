@@ -7,7 +7,7 @@ import { chiefWithCrew, ROAD_TIERS, roadTier, roadUpgrade, tradesWith, tradeWord
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import { FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
-import { canHelp, helpSize, canStepIn, fighters, hasWalls, hasWarChief, type WarRule, holders, hostile, odds, ourStrength, payCost, raidable, theirStrength, type Battle, type Fight } from '../economy/war';
+import { levyFor, canHelp, helpSize, canStepIn, fighters, hasWalls, hasWarChief, type WarRule, holders, hostile, odds, ourStrength, payCost, raidable, theirStrength, type Battle, type Fight } from '../economy/war';
 import type { GameState } from '../economy/types';
 import { danceStyle } from './fireDance';
 
@@ -385,6 +385,11 @@ function villageRow(s: ShoreState, v: Village): string {
     return `<div class="card px-box village"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">Joined</span></div>
       <div class="sub">They live by your hearth now.</div></div></div>`;
   }
+  if (v.outpost !== undefined) {
+    const goods = RES_OF[v.habitat ?? 'meadow'].filter((r) => r !== 'fish').map((r) => RES_NAME[r].toLowerCase());
+    return `<div class="card px-box village"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">${cap(v.name)}'s land <span class="rel rel-vassal">Outpost</span></div>
+      <div class="sub">Driven out; their land is yours${goods.length ? `, its ${goods.join(' and ')} brought in` : ''}.</div></div></div>`;
+  }
   if (v.gone) return '';
   const icon = `<span class="kind">${miniIcon(v.look, 2)}</span>`;
   if (v.vassal) return vassalRow(s, v);
@@ -735,9 +740,27 @@ export function raidChoices(s: ShoreState, v: Village): string {
   ].filter((o, i, a) => o.n >= 2 && a.findIndex((x) => x.n === o.n) === i);
   if (!opts.length) return `<p class="dim tiny">Too few grown to spare for a war band.</p><button class="px-btn gold" data-act="dismiss">OK</button>`;
   const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
+  const levy = levyFor(s, v);
+  const levyN = levy.reduce((x, a) => x + a.n, 0);
+  const levyStr = levy.reduce((x, a) => x + theirStrength(s.villages.find((y) => y.id === a.from)!, a.n), 0);
+  const most = opts[opts.length - 1];
   return `<p class="dim tiny">About ${def} of them would hold their village. ${chief} can walk out and lead the band (they fight a quarter harder). Win, and the village is yours, paying tribute. Those who go don't work while they're away.</p>
-    <div class="choices">${opts.map((o) => `<button class="px-btn" data-band="${v.id}:${o.n}">${o.name}: send ${o.n}<span class="tiny dim"> · ${odds(ourStrength(s, o.n, false), theirStrength(v, def))}</span></button>`).join('')}
+    <div class="choices">${opts.map((o) => `<button class="px-btn" data-band="${v.id}:${o.n}">${o.name}: send ${o.n}<span class="tiny dim"> · ${odds(ourStrength(s, o.n, false), theirStrength(v, def))}</span></button>`).join('')}${levyN ? `<button class="px-btn" data-band="${v.id}:${most.n}:1">${most.name}, and call up ${levyN} from your vassals<span class="tiny dim"> · ${odds(ourStrength(s, most.n, false) + levyStr, theirStrength(v, def))}</span></button>` : ''}
     <button class="px-btn" data-act="dismiss">Not now</button></div>`;
+}
+
+/** A village beaten and at the hearth's mercy: what's to be done with them (as cards). */
+export function mercyCard(_s: ShoreState, v: Village): string {
+  const n = Math.round(v.pop);
+  const goods = RES_OF[v.habitat ?? 'meadow'].filter((r) => r !== 'fish').map((r) => RES_NAME[r].toLowerCase());
+  return `<p class="label dim">At your mercy</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)}</h3></div>
+    <p>Beaten, ${n} of them left. What's to be done with them is yours to say. (Left too long, they'll be made to pay tribute.)</p>
+    ${deck([
+      { act: 'vassal', title: 'Make them vassals', line: 'They keep their village and pay tribute to the hearth, grudging at first.', good: ['Tribute every day', 'Their land\'s goods'], bad: ['Loyalty to win'] },
+      { act: 'plunder', title: 'Plunder them', line: 'Take everything they have, and leave them to it.', good: [`About ${n * 3} food and ${Math.round(n * 1.5)} wood${goods.length ? `, and ${goods.join(', ')}` : ''}`], bad: ['They stay free, and hate you'] },
+      { act: 'drive', title: 'Drive them out', line: 'Off their land, to whoever will have them. Their land becomes an outpost of yours.', good: [goods.length ? `Their ${goods.join(' and ')}, for good` : 'Their land, for good'], bad: ['Their kin grow stronger', 'The island hears of it'] },
+      { act: 'captives', title: 'Take captives', line: 'Half of them brought back to live by the hearth, another kind among you.', good: [`${Math.floor(n / 2)} more critters`], bad: ['The rest, bitter', 'The island hears of it'] },
+    ], 'mercy')}`;
 }
 
 /** A battle, to watch: two lines trading blows, round by round (played by main). */

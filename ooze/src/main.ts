@@ -16,9 +16,10 @@ import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
 import { demandSubmit, giftForeign } from './economy/diplomacy';
+import { decideConquest, type Mercy } from './economy/war';
 import { roadFront, upgradeRoad, setTrade, answerAsk, setSettleFocus, type SettleFocus, chiefNear, setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
 import { WARM_MAX, dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
-import { danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
+import { mercyCard, danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
 import { startFireDance, type FireDance } from './ui/fireDance';
 import { lineTree, shoreTree } from './ui/familyTree';
 import { choose, setFocus, type ForkId, type Lane } from './economy/culture';
@@ -1019,6 +1020,16 @@ function shoreFrame(): void {
       <button class="px-btn gold" data-act="dismiss">The long road</button>`);
     save();
   }
+  // A village beaten and at your mercy: what's to be done with them, asked once.
+  const cq = s.conquest;
+  if (cq && !mercyAsked.has(`${cq.id}:${cq.since}`) && modal.hidden && !cine()) {
+    mercyAsked.add(`${cq.id}:${cq.since}`);
+    const v = s.villages.find((x) => x.id === cq.id);
+    if (v) {
+      cue('impact', 0.4);
+      showModal(mercyCard(s, v));
+    }
+  }
   // A fork waiting on the chief: the cards, once.
   const asked = s.culture?.asking;
   if (asked && !forkAsked.has(`${asked.fork}:${asked.since}`) && modal.hidden && !cine()) {
@@ -1129,6 +1140,7 @@ function danceInfo(): void {
 
 
 const stanceAsked = new Set<string>();
+const mercyAsked = new Set<string>();
 const forkAsked = new Set<string>();
 let liveFight: number | undefined;
 let liveRounds = 0;
@@ -2100,6 +2112,13 @@ function act(el: HTMLElement): void {
       cue('chime', 0.4);
       save();
     }
+  } else if (el.dataset.mercy) {
+    const s = shoreOf(state);
+    if (s && decideConquest(state, s, el.dataset.mercy as Mercy)) {
+      cue('chime', 0.4);
+      modal.hidden = true;
+      save();
+    }
   } else if (el.dataset.giftf) {
     const s = shoreOf(state);
     const id = Number(el.dataset.giftf);
@@ -2160,8 +2179,8 @@ function act(el: HTMLElement): void {
     }
   } else if (el.dataset.band) {
     const s = shoreOf(state);
-    const [id, n] = el.dataset.band.split(':').map(Number);
-    if (s && sendBand(state, s, id, n)) {
+    const [id, n, levy] = el.dataset.band.split(':').map(Number);
+    if (s && sendBand(state, s, id, n, false, !!levy)) {
       cue('impact', 0.3);
       modal.hidden = true;
       save();
