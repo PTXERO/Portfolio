@@ -201,7 +201,7 @@ export const creature: StageDef = {
   // Not producers: the herd forages (see economy/creature.ts). These are where it
   // lives and feeds, dug or found or spread into: births, room, food and shelter.
   generators: [
-    { id: 'nest', name: 'Nests', flavor: 'Scraped hollows in the warm sand. More births.', baseCost: 1e3, growth: 1.15, baseRate: 0 },
+    { id: 'nest', name: 'Nests', flavor: 'Scraped hollows in the warm sand. More births, and room for one more.', baseCost: 1e3, growth: 1.15, baseRate: 0 },
     { id: 'burrow', name: 'Burrows', flavor: 'Holes dug into the bank: room for three more.', baseCost: 5.7e5, growth: 1.15, baseRate: 0 },
     { id: 'waterhole', name: 'Marsh Grazing', flavor: 'The herd spreads into the reeds: the same food goes further.', baseCost: 1e6, growth: 1.3, baseRate: 0, unlockedBy: 'marsh' },
     { id: 'den', name: 'Caves', flavor: 'Out of the wind: room for fifteen, and shelter from winter.', baseCost: 1.5e7, growth: 1.2, baseRate: 0, unlockedBy: 'caves' },

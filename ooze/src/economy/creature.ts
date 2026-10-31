@@ -40,11 +40,12 @@ function effectProduct(state: GameState, kind: 'upkeepMult' | 'winterMult' | 'eg
   return m;
 }
 
-/** How many the herd has room for: burrows, caves, its range, and what the burrowers dig. */
+/** How many the herd has room for: nests (one each), burrows, caves, its range, and what the
+ * burrowers dig. */
 export function housing(state: GameState): number {
   const s = st(state);
   const g = s.generators;
-  return Math.floor((BASE_HOUSING + 3 * g.burrow + 15 * g.den + 50 * g.territory + 0.5 * s.roles.digger) * (1 + 0.5 * settledNests(state).length));
+  return Math.floor((BASE_HOUSING + g.nest + 3 * g.burrow + 15 * g.den + 50 * g.territory + 0.5 * s.roles.digger) * (1 + 0.5 * settledNests(state).length));
 }
 
 /** Births per second: a trickle, more with nests and nesters, a boom in spring. */

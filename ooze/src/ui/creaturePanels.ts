@@ -119,7 +119,7 @@ const ROLE_INFO: Record<Role, { name: string; text: string }> = {
 };
 
 const PLACE_TEXT: Record<string, string> = {
-  nest: 'More births (each new nest adds a little less)',
+  nest: 'More births (each new nest adds a little less), and room for one more',
   burrow: 'Room for 3 more',
   waterhole: 'The herd eats 4% less each (down to half)',
   den: 'Room for 15 more, and shelter from winter',
