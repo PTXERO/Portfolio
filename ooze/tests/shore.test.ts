@@ -377,6 +377,11 @@ describe('Raids', () => {
     prey.found = true;
     prey.pop = 10;
     expect(raidable(s, prey)).toBe(true);
+    const hunters = s.villages.find((x) => relation(s, x) === 'predator');
+    if (hunters) {
+      hunters.found = true;
+      expect(raidable(s, hunters)).toBe(true);
+    }
     const before = fighters(s);
     expect(sendBand(state, s, prey.id, 30)).toBe(true);
     expect(fighters(s)).toBe(before - 30);

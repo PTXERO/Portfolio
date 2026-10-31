@@ -164,10 +164,11 @@ export function hostile(s: ShoreState, v: Village): boolean {
   return (r === 'predator' || r === 'enemy') && !v.gone && !v.vassal && !v.joined && v.settled === undefined && (v.beaten ?? 0) < COWED;
 }
 
-/** Whether you can raid them: prey (or, for cannibals, anyone not yours), found, still there. */
+/** Whether you can raid them: prey, predators (strike first: harder, they fight like hunters),
+ * or, for cannibals, anyone not yours; found, still there. */
 export function raidable(s: ShoreState, v: Village): boolean {
   const r = relation(s, v);
-  return v.found && (r === 'prey' || r === 'enemy') && !v.gone && !v.vassal && !v.joined && v.settled === undefined;
+  return v.found && (r === 'prey' || r === 'predator' || r === 'enemy') && !v.gone && !v.vassal && !v.joined && v.settled === undefined;
 }
 
 /** The grown, who fight (less any out with the war band). */

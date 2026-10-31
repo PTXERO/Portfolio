@@ -15,7 +15,7 @@ const n0 = (v: number) => String(Math.floor(v + 1e-6));
 const REL_LINE = {
   kin: 'Your own diet: they could be won over.',
   prey: 'They eat what you hunt, or are what you hunt: yours to raid.',
-  predator: 'They hunt your kind. Expect them to come.',
+  predator: 'They hunt your kind. Expect them to come, or strike first: beaten, their village is yours.',
   enemy: 'Enemies. Nothing will ever change that.',
 } as const;
 const REL_NAME = { kin: 'Kin', prey: 'Prey', predator: 'Predators', enemy: 'Enemies' } as const;
