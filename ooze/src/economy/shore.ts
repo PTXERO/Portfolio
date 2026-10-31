@@ -283,6 +283,8 @@ export interface ShoreState {
   lastBand?: number;
   /** Raiders running home after a fight; and what their fallen left lying (for a while). */
   retreat?: { from: number; n: number; left: number; arrives: number; sx?: number; sy?: number };
+  /** The road whose crew the chief's working with (they keep up with it). */
+  crewWith?: number;
   /** A village beaten and at your mercy, waiting on what's to be done with them. */
   conquest?: { id: number; since: number };
   /** Goods on the road from the settlements to the hearth. */
@@ -937,6 +939,23 @@ export function roadFront(s: ShoreState, v: Village): Pt | null {
   const w = v.road.up ?? (roadDone(v) ? null : v.road);
   return w ? roadAt(s, v, w.done / Math.max(0.01, w.need)) : null;
 }
+/** The chief goes to work with a road's crew, and stays with them as the road goes on. */
+export function joinCrew(state: GameState, id: number): boolean {
+  const s = shoreOf(state);
+  const v = s?.villages.find((x) => x.id === id);
+  const f = s && v ? roadFront(s, v) : null;
+  if (!s || !v || !f) return false;
+  goTo(s, { x: f.x, y: f.y + 1.2 });
+  if (!s.crewWith) record(state, `${s.people.find((p) => p.id === s.chief)?.name ?? 'The chief'} went to work on the road to ${v.name} with the crew.`, 'shore', shoreWhen(s));
+  s.crewWith = id;
+  return true;
+}
+/** The chief leaves the crew to it (stays where they are). */
+export function leaveCrew(state: GameState): void {
+  const s = shoreOf(state);
+  if (s) s.crewWith = undefined;
+}
+
 /** With the chief there among them, the crew lays twice as much. */
 export const CREW_NEAR = 6;
 export function chiefWithCrew(s: ShoreState, v: Village): boolean {
@@ -1958,7 +1977,12 @@ export function walkChief(state: GameState, to: Pt): void {
 
 /** Sends the chief somewhere: the way is found round any water (and if it's in the water or out
  * of reach, they go as near as they can). */
+/** The chief sent somewhere (by you): off whatever they were at, the road crew included. */
 export function walkTo(s: ShoreState, to: Pt): void {
+  s.crewWith = undefined;
+  goTo(s, to);
+}
+function goTo(s: ShoreState, to: Pt): void {
   const want = { x: Math.max(2, Math.min(SHORE_N - 3, to.x)), y: Math.max(2, Math.min(SHORE_N - 3, to.y)) };
   const path = findPath(shoreIsland(s.seed), s.chiefAt, want);
   s.chiefPath = path;
@@ -2284,9 +2308,21 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
   const is = shoreIsland(s.seed);
   const seen = state.stages.shore.seen;
   const bo = boosts(s);
+  // With the road crew: the chief keeps up with them as the road goes on (till it's done, or
+  // you send the chief elsewhere).
+  if (s.crewWith !== undefined) {
+    const cv = s.villages.find((x) => x.id === s.crewWith);
+    const f = cv ? roadFront(s, cv) : null;
+    if (!f) s.crewWith = undefined;
+    else {
+      const spot = { x: f.x, y: f.y + 1.2 };
+      const aim = s.chiefTo ?? s.chiefAt;
+      if (Math.hypot(aim.x - spot.x, aim.y - spot.y) > 1.5) goTo(s, spot);
+    }
+  }
   if (s.chiefTo) {
     // (A walk from before ways were found, or one knocked off its line: the way, found now.)
-    if (!s.chiefPath?.length) walkTo(s, s.chiefTo);
+    if (!s.chiefPath?.length) goTo(s, s.chiefTo);
     if (s.chiefTo && s.chiefPath) {
       const r = along(is, s.chiefAt, s.chiefPath, CHIEF_SPEED * (1 + bo.speed) * ((s.chiefHurt ?? 0) > s.day + s.clock / DAY_SEC ? 0.5 : 1) * roadWalk(s, s.chiefAt), dt);
       s.chiefAt = r.at;

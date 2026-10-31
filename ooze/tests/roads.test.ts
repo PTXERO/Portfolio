@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Biome, type Island } from '../src/economy/island';
 import { findRoute } from '../src/economy/paths';
 import { createState } from '../src/economy/state';
-import { roadCost, roadVia, shoreOf, startShore, takeRaft, travelDays } from '../src/economy/shore';
+import { chiefWithCrew, DAY_SEC, joinCrew, roadCost, roadFront, roadVia, shoreOf, shoreTick, startRoad, startShore, takeRaft, travelDays, walkChief } from '../src/economy/shore';
 import type { TribeState } from '../src/economy/types';
 
 describe('Roads keep to the low ground', () => {
@@ -52,5 +52,44 @@ describe('The road network', () => {
     expect(travelDays(s, far)).toBeLessThan(before);
     far.road = { done: 1, need: 1, via: near.id };
     expect(travelDays(s, far)).toBeLessThan(before * 0.6);
+  });
+});
+
+describe('Working with the road crew', () => {
+  it('the chief keeps up with the crew as the road goes on, till sent elsewhere', () => {
+    const state = createState(0);
+    state.started = true;
+    state.stages.tribal.tribe = { awake: true, pop: 4, survivors: 4, look: { parts: {}, diet: 'grazer' }, stats: {}, generations: 3, heritage: 1, seed: 4242, year: 0, family: [{ name: 'Ka', trait: 'hardy' }, { name: 'Ri', trait: 'keen' }, { name: 'Mo', trait: 'old' }, { name: 'Tu', trait: 'young' }], landed: { seed: 777, day: 60 } } as unknown as TribeState;
+    startShore(state);
+    takeRaft(state);
+    const s = shoreOf(state)!;
+    const v = s.villages.slice().sort((a, b) => Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y) - Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y))[0];
+    v.found = true;
+    v.settled = 0;
+    s.wood = 1e5;
+    expect(startRoad(state, v.id)).toBe(true);
+    expect(joinCrew(state, v.id)).toBe(true);
+    // (A long one, so there's a way to go.)
+    v.road!.need *= 20;
+    // Walk there, then work: checked as the road goes on.
+    for (let i = 0; i < 3000 && !chiefWithCrew(s, v); i++) shoreTick(state, 2);
+    expect(chiefWithCrew(s, v)).toBe(true);
+    const start = { ...roadFront(s, v)! };
+    let with_ = 0;
+    let checks = 0;
+    for (let i = 0; i < 2000; i++) {
+      shoreTick(state, 2);
+      if (i % 50 === 0) {
+        checks++;
+        if (chiefWithCrew(s, v)) with_++;
+      }
+    }
+    const end = roadFront(s, v)!;
+    expect(Math.hypot(end.x - start.x, end.y - start.y)).toBeGreaterThan(8);
+    expect(with_).toBeGreaterThanOrEqual(checks - 1);
+    // Sent elsewhere: off the crew.
+    walkChief(state, { ...s.hearth });
+    expect(s.crewWith).toBeUndefined();
+    void DAY_SEC;
   });
 });

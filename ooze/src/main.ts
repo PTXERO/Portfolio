@@ -17,7 +17,7 @@ import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants,
 import { prepareShoreIsland } from './economy/terrainStore';
 import { demandSubmit, giftForeign } from './economy/diplomacy';
 import { decideConquest, type Mercy } from './economy/war';
-import { annex, roadFront, upgradeRoad, setTrade, answerAsk, setSettleFocus, type SettleFocus, chiefNear, setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
+import { joinCrew, leaveCrew, annex, upgradeRoad, setTrade, answerAsk, setSettleFocus, type SettleFocus, chiefNear, setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
 import { WARM_MAX, dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
 import { mercyCard, danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
 import { startFireDance, type FireDance } from './ui/fireDance';
@@ -2151,13 +2151,13 @@ function act(el: HTMLElement): void {
       save();
     }
   } else if (el.dataset.crew) {
-    const s = shoreOf(state);
-    const v = s?.villages.find((x) => x.id === Number(el.dataset.crew));
-    const f = s && v ? roadFront(s, v) : null;
-    if (f) {
-      walkChief(state, f);
+    if (joinCrew(state, Number(el.dataset.crew))) {
       scene.shoreScene.follow();
+      save();
     }
+  } else if (el.dataset.leavecrew) {
+    leaveCrew(state);
+    save();
   } else if (el.dataset.roadup) {
     if (upgradeRoad(state, Number(el.dataset.roadup))) {
       cue('chime', 0.35);
