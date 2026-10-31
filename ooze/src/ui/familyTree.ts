@@ -68,7 +68,7 @@ export function shoreTree(state: GameState, s: ShoreState, id: number): string {
       ? (parents.some((p) => p?.founder)
           ? `<div class="tree-row"><span class="tree-label tiny dim">Grandparents</span><div class="tree-nodes">${grand.length ? grand.map((p) => node(s, p)).join('') : ''}<button class="tree-node line" data-treeline="1">${miniIcon(s.look, 2)}<b>The line</b><span class="tiny dim">through the four</span></button></div></div>`
           : row('Grandparents', grand, 'Not known')) + row('Parents', parents)
-      : `<div class="tree-row"><span class="tree-label tiny dim">Came from</span><div class="tree-nodes"><span class="tiny">${kind ? cap(kind) : 'Before the crossing'}</span></div></div>`;
+      : `<div class="tree-row"><span class="tree-label tiny dim">Came from</span><div class="tree-nodes"><span class="tiny">${kind ? cap(kind) : 'Not recorded (born before the trees were kept)'}</span></div></div>`;
   return `<p class="label dim">Family tree</p>
     <div class="tree-me">${creatureIcon(lookOf(s, me), 3)}<div><h3>${me.name}</h3><p class="tiny">${role} · ${describe(me.genes)}</p><p class="tiny dim">${life(me)}</p></div></div>
     <div class="tree">
