@@ -7,7 +7,7 @@ import { PAL } from '../art/sprites';
 import { Biome, CELL, isLand, type Island, type Pt } from '../economy/island';
 import { raidTarget } from '../economy/war';
 import { findPath } from '../economy/paths';
-import { DAY_SEC, terrainReady, walkTo, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, roadFront, roadPath, roadTier, shoreIsland, stageOf, waystations, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
+import { DAY_SEC, terrainReady, walkTo, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, roadFront, roadPath, roadTier, roadWalk, shoreIsland, stageOf, waystations, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
 import type { GameState, Genes } from '../economy/types';
 import type { CreatureLook } from './creatureLook';
 import type { BuildId } from '../content/shore';
@@ -378,7 +378,8 @@ export class ShoreScene extends RangeScene {
         const dy = w.goal.y - w.y;
         const d = Math.hypot(dx, dy);
         if (d > 0.3) {
-          const sp = (grown ? 1.6 : 1.1) * dt;
+          // (Quicker along a road.)
+          const sp = (grown ? 1.6 : 1.1) * dt * roadWalk(s, w);
           w.x += (dx / d) * Math.min(d, sp);
           w.y += (dy / d) * Math.min(d, sp);
         }
@@ -1117,8 +1118,9 @@ export class ShoreScene extends RangeScene {
         const d = Math.hypot(dx, dy);
         const moving = d > 0.3;
         if (moving) {
-          w.x += (dx / d) * Math.min(d, 1.3 * dt);
-          w.y += (dy / d) * Math.min(d, 1.3 * dt);
+          const sp = 1.3 * dt * roadWalk(s, w);
+          w.x += (dx / d) * Math.min(d, sp);
+          w.y += (dy / d) * Math.min(d, sp);
         }
         const x = w.x;
         const y = w.y;

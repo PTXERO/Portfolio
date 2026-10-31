@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Biome, type Island } from '../src/economy/island';
 import { findRoute } from '../src/economy/paths';
 import { createState } from '../src/economy/state';
-import { chiefWithCrew, DAY_SEC, joinCrew, roadCost, roadFront, roadVia, shoreOf, shoreTick, startRoad, startShore, takeRaft, travelDays, walkChief } from '../src/economy/shore';
+import { chiefNear, onRoad, chiefWithCrew, DAY_SEC, joinCrew, roadCost, roadFront, roadVia, shoreOf, shoreTick, startRoad, startShore, takeRaft, travelDays, walkChief } from '../src/economy/shore';
 import type { TribeState } from '../src/economy/types';
 
 describe('Roads keep to the low ground', () => {
@@ -91,5 +91,41 @@ describe('Working with the road crew', () => {
     walkChief(state, { ...s.hearth });
     expect(s.crewWith).toBeUndefined();
     void DAY_SEC;
+  });
+});
+
+describe('Walking the roads', () => {
+  const world = () => {
+    const state = createState(0);
+    state.started = true;
+    state.stages.tribal.tribe = { awake: true, pop: 4, survivors: 4, look: { parts: {}, diet: 'grazer' }, stats: {}, generations: 3, heritage: 1, seed: 4242, year: 0, family: [{ name: 'Ka', trait: 'hardy' }, { name: 'Ri', trait: 'keen' }, { name: 'Mo', trait: 'old' }, { name: 'Tu', trait: 'young' }], landed: { seed: 777, day: 60 } } as unknown as TribeState;
+    startShore(state);
+    takeRaft(state);
+    const s = shoreOf(state)!;
+    const v = s.villages.slice().sort((a, b) => Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y) - Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y))[0];
+    v.found = true;
+    v.settled = 0;
+    s.chiefAt = { ...s.hearth };
+    s.chiefTo = null;
+    return { state, s, v };
+  };
+  const trip = (road: boolean) => {
+    const { state, s, v } = world();
+    if (road) v.road = { done: 1, need: 1 };
+    walkChief(state, { x: v.x + 3, y: v.y + 3 });
+    // (A copy: the walk uses the way up as it goes.)
+    const path = [...(s.chiefPath ?? [])];
+    let t = 0;
+    while (!chiefNear(s, v) && t < DAY_SEC * 20) {
+      shoreTick(state, 2);
+      t += 2;
+    }
+    return { t, onRoad: path.filter((p) => onRoad(s, p)).length / Math.max(1, path.length) };
+  };
+  it('the chief takes the road where there is one, and gets there sooner for it', () => {
+    const off = trip(false);
+    const on = trip(true);
+    expect(on.onRoad).toBeGreaterThan(0.6);
+    expect(on.t).toBeLessThan(off.t * 0.75);
   });
 });

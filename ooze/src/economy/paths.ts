@@ -69,8 +69,19 @@ export function clearLine(is: Island, a: Pt, b: Pt): boolean {
  * they're going, or, if that's in the water or can't be reached, the nearest they can get).
  * Empty if they're there already.
  */
-export function findPath(is: Island, from: Pt, to: Pt, limit = 120000): Pt[] {
-  if (clearLine(is, from, to)) return [{ ...to }];
+export function findPath(is: Island, from: Pt, to: Pt, limit = 120000, speedAt?: (x: number, y: number) => number): Pt[] {
+  // (With roads about, the way's weighed by how quick each stretch is: the roads favoured.)
+  const fast = speedAt ? (c: number) => speedAt((c % G) * PC + PC / 2, Math.floor(c / G) * PC + PC / 2) : null;
+  // (Hopeful about the roads, but not too: the way found quickly, and near enough the best.)
+  const top = fast ? 2 : 1;
+  /** Whether a straight walk between two points keeps off the roads the whole way. */
+  function offRoad(a: Pt, b: Pt): boolean {
+    const d = Math.hypot(b.x - a.x, b.y - a.y);
+    const n = Math.max(1, Math.ceil(d / 1.5));
+    for (let i = 0; i <= n; i++) if (speedAt!(a.x + ((b.x - a.x) * i) / n, a.y + ((b.y - a.y) * i) / n) > 1) return false;
+    return true;
+  }
+  if (clearLine(is, from, to) && (!speedAt || offRoad(from, to))) return [{ ...to }];
   const G = Math.floor(is.n / PC);
   const cell = (p: Pt) => Math.max(0, Math.min(G - 1, Math.floor(p.y / PC))) * G + Math.max(0, Math.min(G - 1, Math.floor(p.x / PC)));
   const mid = (c: number): Pt => ({ x: (c % G) * PC + PC / 2, y: Math.floor(c / G) * PC + PC / 2 });
@@ -85,7 +96,7 @@ export function findPath(is: Island, from: Pt, to: Pt, limit = 120000): Pt[] {
   const h = (c: number) => {
     const dx = Math.abs((c % G) - gx);
     const dy = Math.abs(Math.floor(c / G) - gy);
-    return Math.max(dx, dy) + 0.414 * Math.min(dx, dy);
+    return (Math.max(dx, dy) + 0.414 * Math.min(dx, dy)) / top;
   };
   const cost = new Float32Array(G * G).fill(Infinity);
   const from_ = new Int32Array(G * G).fill(-1);
@@ -120,7 +131,7 @@ export function findPath(is: Island, from: Pt, to: Pt, limit = 120000): Pt[] {
         if (closed[n] || !walkable(n)) continue;
         // (No cutting a corner between two water cells.)
         if (dx && dy && (!walkable(cy * G + nx) || !walkable(ny * G + cx))) continue;
-        const nc = cost[c] + (dx && dy ? 1.414 : 1);
+        const nc = cost[c] + (dx && dy ? 1.414 : 1) * (fast ? 2 / (fast(c) + fast(n)) : 1);
         if (nc >= cost[n]) continue;
         cost[n] = nc;
         from_[n] = c;
@@ -142,7 +153,8 @@ export function findPath(is: Island, from: Pt, to: Pt, limit = 120000): Pt[] {
   while (i < cells.length) {
     // (Looking a fair way ahead, not the whole way: long walks stay quick to work out.)
     let j = Math.min(cells.length - 1, i + 50);
-    while (j > i && !clearLine(is, at, cells[j])) j--;
+    // (Straightened only off the roads: on them, the way keeps to the road.)
+    while (j > i && !(clearLine(is, at, cells[j]) && (!speedAt || offRoad(at, cells[j])))) j--;
     out.push(cells[j]);
     at = cells[j];
     i = j + 1;

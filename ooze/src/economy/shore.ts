@@ -972,12 +972,18 @@ export function waystations(s: ShoreState, v: Village): Pt[] {
 
 /** The tiles the finished roads run over, and how much quicker the chief walks each (worked out
  * once for each set of roads). */
-const roadCache = new WeakMap<ShoreState, { sig: string; cells: Map<number, number> }>();
+const roadCache = new WeakMap<ShoreState, { sig: string; at: number; cells: Map<number, number> }>();
 export function roadCells(s: ShoreState): Map<number, number> {
+  // (Asked a thousand times a frame: the same moment, the same roads.)
+  const at = s.day * DAY_SEC + s.clock;
+  const hit = roadCache.get(s);
+  if (hit && hit.at === at) return hit.cells;
   const done = s.villages.filter((v) => roadDone(v) && !v.gone);
   const sig = done.map((v) => `${v.id}.${roadTier(v)}`).join(',');
-  const hit = roadCache.get(s);
-  if (hit && hit.sig === sig) return hit.cells;
+  if (hit && hit.sig === sig) {
+    hit.at = at;
+    return hit.cells;
+  }
   const cells = new Map<number, number>();
   if (done.length) {
     const n = shoreIsland(s.seed).n;
@@ -1001,7 +1007,7 @@ export function roadCells(s: ShoreState): Map<number, number> {
       }
     }
   }
-  roadCache.set(s, { sig, cells });
+  roadCache.set(s, { sig, at, cells });
   return cells;
 }
 
@@ -1010,6 +1016,24 @@ export function roadWalk(s: ShoreState, p: Pt): number {
   const cells = roadCells(s);
   return cells.size ? cells.get(Math.floor(p.y) * shoreIsland(s.seed).n + Math.floor(p.x)) ?? 1 : 1;
 }
+/** How quick going is at each point, for finding the way (none, with no roads yet: the way's
+ * found as it always was). */
+const speedGrids = new WeakMap<Map<number, number>, Uint8Array>();
+export function roadSpeed(s: ShoreState): ((x: number, y: number) => number) | undefined {
+  const cells = roadCells(s);
+  if (!cells.size) return undefined;
+  const n = shoreIsland(s.seed).n;
+  // (As a flat grid, made once for each set of roads: a way's found in a blink.)
+  let grid = speedGrids.get(cells);
+  if (!grid) {
+    grid = new Uint8Array(n * n);
+    for (const [c, k] of cells) if (c >= 0 && c < grid.length) grid[c] = Math.round(k * 10);
+    speedGrids.set(cells, grid);
+  }
+  const g = grid;
+  return (x, y) => g[Math.floor(y) * n + Math.floor(x)] / 10 || 1;
+}
+
 /** Whether a point's on a finished road. */
 export function onRoad(s: ShoreState, p: Pt): boolean {
   return roadWalk(s, p) > 1;
@@ -1984,7 +2008,7 @@ export function walkTo(s: ShoreState, to: Pt): void {
 }
 function goTo(s: ShoreState, to: Pt): void {
   const want = { x: Math.max(2, Math.min(SHORE_N - 3, to.x)), y: Math.max(2, Math.min(SHORE_N - 3, to.y)) };
-  const path = findPath(shoreIsland(s.seed), s.chiefAt, want);
+  const path = findPath(shoreIsland(s.seed), s.chiefAt, want, 120000, roadSpeed(s));
   s.chiefPath = path;
   s.chiefTo = path.length ? path[path.length - 1] : null;
 }
@@ -2363,11 +2387,11 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
     }
     if (!sc.to || sc.left <= 0 || !sc.path) {
       sc.to = scoutGoal(s, seen, is, sc, k);
-      sc.path = findPath(is, sc.at, sc.to, 30000);
+      sc.path = findPath(is, sc.at, sc.to, 30000, roadSpeed(s));
       sc.left = sc.path.reduce((a, p, i) => a + Math.hypot(p.x - (i ? sc.path![i - 1].x : sc.at.x), p.y - (i ? sc.path![i - 1].y : sc.at.y)), 0) / SCOUT_SPEED * 1.5 + 5;
     }
     sc.left -= dt;
-    const r = along(is, sc.at, sc.path, SCOUT_SPEED * (1 + bo.speed), dt);
+    const r = along(is, sc.at, sc.path, SCOUT_SPEED * (1 + bo.speed) * roadWalk(s, sc.at), dt);
     sc.at = r.at;
     if (r.done || r.stuck) {
       sc.rest = r.stuck || Math.hypot(sc.to!.x - sc.at.x, sc.to!.y - sc.at.y) > 6 ? 20 : 3;
