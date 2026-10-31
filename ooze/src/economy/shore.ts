@@ -1239,15 +1239,16 @@ export function danceLeft(s: ShoreState, v: Village): number {
   return Math.max(0, DANCE_DAY - worn);
 }
 
-/** A step danced well with them, the chief there: trust, more the longer the streak (to five);
- * nothing once they're worn out for the day. Returns the trust won. */
-export function dance(state: GameState, id: number, streak: number): number {
+/** A turn round their fire with them, the chief there: trust, more the longer the streak (to
+ * five), times how well it was danced (`mult`: twice, danced their way; less, ragged); nothing
+ * once they're worn out. Returns the trust won. */
+export function dance(state: GameState, id: number, streak: number, mult = 1): number {
   const s = shoreOf(state);
   const v = s?.villages.find((x) => x.id === id);
   if (!s || !v || !(canWin(s, v) || (v.vassal && !v.gone)) || !chiefNear(s, v)) return 0;
   const left = danceLeft(s, v);
   if (left <= 0) return 0;
-  const gain = Math.min(left, DANCE_STEP * (1 + Math.min(5, streak) * 0.4) * (1 + boosts(s).gift));
+  const gain = Math.min(left, DANCE_STEP * (1 + Math.min(5, streak) * 0.4) * mult * (1 + boosts(s).gift));
   if (!v.danced) record(state, `${s.people.find((p) => p.id === s.chief)?.name ?? 'The chief'} danced with ${v.name}, and they warmed to us.`, 'shore', shoreWhen(s));
   const now = s.day + s.clock / DAY_SEC;
   v.danced = { day: now, got: DANCE_DAY - left + gain, worn: left - gain < 0.5 };

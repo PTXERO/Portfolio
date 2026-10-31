@@ -8,6 +8,7 @@ import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import { FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
 import { canHelp, helpSize, canStepIn, fighters, hasWalls, hasWarChief, type WarRule, holders, hostile, odds, ourStrength, payCost, raidable, theirStrength, type Battle, type Fight } from '../economy/war';
 import type { GameState } from '../economy/types';
+import { danceStyle } from './fireDance';
 
 const n0 = (v: number) => String(Math.floor(v + 1e-6));
 
@@ -590,15 +591,15 @@ export function forkCard(s: ShoreState, fork: ForkId): string {
     ${deck(forkOptions(s, fork).map((o) => ({ act: `${fork}:${o.id}`, title: o.name, line: o.line, good: [o.lane ? `${LANES.find((l) => l.id === o.lane)!.name} ideas come a quarter faster` : o.fx?.food ? 'Food comes in 5% faster' : ''].filter(Boolean), bad: [] })), 'fork')}`;
 }
 
-/** Dancing with a village: tap Step! as the marker crosses the gold. */
+/** Dancing with a village: circles drawn round their fire, their way. */
 export function danceCard(s: ShoreState, v: Village): string {
   const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
-  return `<p class="label dim">${cap(v.name)}</p><h3>${chief} dances with them</h3>
-    <p class="dim tiny">Step as the marker crosses the gold. A streak wins more; a miss breaks it. They tire after a while.</p>
-    <div class="dance" data-dancev="${v.id}"><div class="dance-bar"><i class="dance-zone"></i><b class="dance-mark"></b></div>
-      <div class="dance-info"><span class="dance-streak tiny">Streak 0</span><span class="dance-left tiny dim"></span></div>
+  return `<p class="label dim">${cap(v.name)}</p><h3>${chief} dances round their fire</h3>
+    <p class="dim tiny">Draw circles round the fire. ${danceStyle(v.habitat).line} Dance it their way and it counts twice; round and steady, the fire roars and more of them join in. They tire after a while.</p>
+    <div class="dance" data-dancev="${v.id}"><canvas class="fire-dance"></canvas>
+      <div class="dance-info"><span class="dance-streak tiny">Round the fire</span><span class="dance-left tiny dim"></span></div>
       ${v.vassal ? `<div class="trust"><span class="tiny dim">Goodwill</span><div class="making-bar on loyal"><i style="width: ${Math.round(((v.vassal.warm ?? 0) / WARM_MAX) * 100)}%"></i></div></div>` : trustBar(v)}</div>
-    <div class="choices"><button class="px-btn gold dance-step" data-step="${v.id}">Step!</button><button class="px-btn" data-act="dismiss">Rest</button></div>`;
+    <div class="choices"><button class="px-btn" data-act="dismiss">Rest</button></div>`;
 }
 
 /** Raiders seen coming: how the chief means to meet them (a card each, like the join choices). */
