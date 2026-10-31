@@ -200,6 +200,7 @@ export class RangeScene {
   protected heightDataSeed = '';
   /** Bumped whenever the fog changes, so the shader re-sends it only then. */
   protected fogVersion = 0;
+  private fogCursor = 0;
   /** This season's ground and the next one's, and how far the change has got (0 to 1). */
   protected groundPair: [HTMLCanvasElement, HTMLCanvasElement] | null = null;
   protected seasonBlend = 0;
@@ -648,6 +649,7 @@ export class RangeScene {
   /** Clears the fog wherever new cells have been seen since last time. */
   protected paintFog(seen: Uint8Array): void {
     const N = this.n;
+    const fresh = !this.fog || !this.fogKnown;
     if (!this.fog || !this.fogKnown) {
       this.fog = document.createElement('canvas');
       this.fog.width = N;
@@ -671,7 +673,14 @@ export class RangeScene {
     }
     const known = this.fogKnown;
     const b = this.fog.getContext('2d')!;
-    for (let i = 0; i < this.cells * this.cells; i++) {
+    // (Newly made, all of it at once; after that a sixth of the map a frame, round and round:
+    // what's newly seen clears within a few frames, without going over every cell every frame.)
+    const all = this.cells * this.cells;
+    const part = Math.ceil(all / 6);
+    const from = fresh ? 0 : this.fogCursor;
+    const to = fresh ? all : Math.min(all, from + part);
+    this.fogCursor = to >= all ? 0 : to;
+    for (let i = from; i < to; i++) {
       if (!seen[i] || known[i]) continue;
       known[i] = 1;
       b.clearRect((i % this.cells) * CELL, Math.floor(i / this.cells) * CELL, CELL, CELL);
@@ -1132,16 +1141,38 @@ export class RangeScene {
    * stands on the land is drawn over it, and would show through a mountain without this. */
   protected ridgeRow(x: number, y: number): number | null {
     if (!this.shaded || !this.island) return null;
-    const foot = this.py(x, y);
-    // Ground further toward the camera than this can't rise into the way.
-    const span = (this.lift * 1.05) / this.tilt;
-    let top = Infinity;
-    for (let d = 0.75; d <= span; d += 0.75) {
-      const r = this.py(x, y + d);
-      if (r < top) top = r;
+    // How far above a point (in screen rows, per unit of zoom) the ground in front of it rises:
+    // the same wherever the camera is (the screen's an affine view of the land), so worked out
+    // once for each spot (to a quarter of a tile) and kept.
+    const lt = this.lift * 1000 + this.tilt;
+    if (this.ridgeOf !== this.island || this.ridgeLT !== lt || this.ridgeM.size > 80000) {
+      this.ridgeM.clear();
+      this.ridgeOf = this.island;
+      this.ridgeLT = lt;
     }
-    return top < foot - 0.5 ? top : null;
+    const qx = Math.round(x * 4);
+    const qy = Math.round(y * 4);
+    const key = qx * 16384 + qy;
+    let m = this.ridgeM.get(key);
+    if (m === undefined) {
+      const px = qx / 4;
+      const py = qy / 4;
+      const h0 = this.heightAt(px, py);
+      // Ground further toward the camera than this can't rise into the way.
+      const span = (this.lift * 1.05) / this.tilt;
+      m = Infinity;
+      for (let d = 0.75; d <= span; d += 0.75) {
+        const v = this.tilt * d - this.lift * (this.heightAt(px, py + d) - h0);
+        if (v < m) m = v;
+      }
+      this.ridgeM.set(key, m);
+    }
+    const rise = m * this.zoom;
+    return rise < -0.5 ? this.py(x, y) + rise : null;
   }
+  private ridgeM = new Map<number, number>();
+  private ridgeOf: unknown = null;
+  private ridgeLT = 0;
 
   /** Draws something standing at a point, hidden wherever the land in front rises over it. */
   protected behind(b: CanvasRenderingContext2D, x: number, y: number, draw: () => void): void {

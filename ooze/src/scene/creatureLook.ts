@@ -421,6 +421,8 @@ function bakeMini(look: CreatureLook, frame: number, sleeping: boolean): { c: HT
  * herd are plainly the same animal at any zoom. Drawn standing on (x, groundY), on its
  * shadow, at a whole-number scale; `hop` lifts it (but not its shadow) off the ground.
  */
+const lookKeys = new WeakMap<CreatureLook, string>();
+
 export function drawMini(
   b: CanvasRenderingContext2D,
   look: CreatureLook,
@@ -429,7 +431,13 @@ export function drawMini(
   opts: { left?: boolean; frame?: number; sleeping?: boolean; scale?: number; hop?: number } = {},
 ): void {
   const k = Math.max(1, Math.round(opts.scale ?? 1));
-  const key = `${look.diet}|${look.hue ?? ''}|${genesKey(look.genes)}|${Object.values(look.parts).join('.')}|${opts.frame ? 1 : 0}|${opts.sleeping ? 1 : 0}`;
+  // (A look's own part of the key, made once for it: a thousand of them are drawn a frame.)
+  let base = lookKeys.get(look);
+  if (base === undefined) {
+    base = `${look.diet}|${look.hue ?? ''}|${genesKey(look.genes)}|${Object.values(look.parts).join('.')}`;
+    lookKeys.set(look, base);
+  }
+  const key = `${base}|${opts.frame ? 1 : 0}|${opts.sleeping ? 1 : 0}`;
   let m = miniCache.get(key);
   if (!m) {
     if (miniCache.size > 300) miniCache.clear();

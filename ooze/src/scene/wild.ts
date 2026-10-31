@@ -164,7 +164,27 @@ export class Wild {
     if (this.seed !== is.seed) this.setup(is);
     const { t, dt } = o;
     const z = v.zoom;
-    const near = (x: number, y: number, r: number) => o.feet.some((p) => Math.hypot(p.x - x, p.y - y) < r);
+    // (Feet in a grid of 4-tile squares, so asking who's near looks at a few, not all of them.)
+    const grid = new Map<number, Pt[]>();
+    for (const p of o.feet) {
+      const k = Math.floor(p.x / 4) * 4096 + Math.floor(p.y / 4);
+      const list = grid.get(k);
+      if (list) list.push(p);
+      else grid.set(k, [p]);
+    }
+    const nearOne = (x: number, y: number, r: number): Pt | undefined => {
+      const gx = Math.floor(x / 4);
+      const gy = Math.floor(y / 4);
+      const span = Math.ceil(r / 4);
+      for (let i = gx - span; i <= gx + span; i++) {
+        for (let j = gy - span; j <= gy + span; j++) {
+          const list = grid.get(i * 4096 + j);
+          if (list) for (const p of list) if (Math.hypot(p.x - x, p.y - y) < r) return p;
+        }
+      }
+      return undefined;
+    };
+    const near = (x: number, y: number, r: number) => !!nearOne(x, y, r);
     const on = (X: number, Y: number) => X > -8 && X < v.W + 8 && Y > -8 && Y < v.H + 8;
 
     // Bushes and fruit trees: ripen, and show what's on them.
@@ -218,7 +238,7 @@ export class Wild {
     for (const f of this.flocks) {
       if (f.up < 0) {
         f.stay -= dt;
-        const close = o.feet.find((p) => Math.hypot(p.x - f.x, p.y - f.y) < 3.5);
+        const close = nearOne(f.x, f.y, 3.5);
         if (close || f.stay <= 0 || o.night > 0.5) {
           f.up = 0;
           f.dir = close ? (close.x < f.x ? 1 : -1) : Math.random() < 0.5 ? 1 : -1;

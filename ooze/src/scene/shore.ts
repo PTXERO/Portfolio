@@ -341,8 +341,12 @@ export class ShoreScene extends RangeScene {
     const look = s.look;
     // (Those out with the war band are with it, not here.)
     let awayLeft = s.warband?.fighters ?? 0;
+    // (Looked up once a frame, not once a walker: there may be a thousand of them.)
+    const byId = new Map(s.people.map((q) => [q.id, q]));
+    const villageById = new Map(s.villages.map((v) => [v.id, v]));
+    const seenFeet: Pt[] = [s.chiefAt];
     for (const w of this.walkers) {
-      const p = s.people.find((q) => q.id === w.id);
+      const p = byId.get(w.id);
       if (!p) continue;
       const grown = isAdult(s, p);
       const isChief = p.id === s.chief;
@@ -386,10 +390,11 @@ export class ShoreScene extends RangeScene {
       const X = this.sx(x);
       const Y = this.py(x, y);
       if (!onScreen(X, Y)) continue;
-      if (moving && Y > this.viewTop && Y < (this.viewBottom || H)) this.movers.push({ x: X, voice: p.kind !== undefined ? voiceOf(s.villages.find((v) => v.id === p.kind)) : OURS });
+      seenFeet.push(w);
+      if (moving && Y > this.viewTop && Y < (this.viewBottom || H)) this.movers.push({ x: X, voice: p.kind !== undefined ? voiceOf(villageById.get(p.kind)) : OURS });
       const left = moving ? (isChief ? (s.chiefPath?.[0]?.x ?? s.chiefTo?.x ?? x) < x : (w.goal?.x ?? x) < x) : hash(w.id, Math.floor(t / 5)) < 0.5;
       const sleeping = night > 0.5 && !moving && !isChief;
-      const kin = this.lookOf(p, p.kind !== undefined ? s.villages.find((v) => v.id === p.kind)?.look ?? look : look);
+      const kin = this.lookOf(p, p.kind !== undefined ? villageById.get(p.kind)?.look ?? look : look);
       sprites.push({ y, draw: () => this.drawBeing(b, kin, x, y, { left, frame: moving ? Math.floor(t * 7 + w.ph) % 2 : 0, sleeping, hero: isChief, hop: moving ? Math.abs(Math.sin(t * 7 + w.ph)) * 1.5 : 0 }) });
     }
     // The raft they came on, pulled up on the beach where it landed (until it's broken up).
@@ -614,7 +619,7 @@ export class ShoreScene extends RangeScene {
       }
     }
 
-    this.wild.update(this.wildView, is, sprites, { b, t, dt, nests: [s.hearth], season: si, night, feet: this.walkers, me: s.chiefAt });
+    this.wild.update(this.wildView, is, sprites, { b, t, dt, nests: [s.hearth], season: si, night, feet: seenFeet, me: s.chiefAt });
     this.trails.update(is.seed, this.walkers.filter((w) => w.goal && Math.hypot(w.goal.x - w.x, w.goal.y - w.y) > 0.3), dt, is.n);
     sprites.sort((a, c) => a.y - c.y);
     // (Each hidden behind any ridge between it and the camera.)
@@ -652,9 +657,10 @@ export class ShoreScene extends RangeScene {
   /** One figure on screen for each of the village's people, kept in step with who's alive. */
   private syncWalkers(s: ShoreState, t: number): void {
     const ids = new Set(s.people.map((p) => p.id));
-    this.walkers = this.walkers.filter((w) => ids.has(w.id));
+    if (this.walkers.length !== ids.size || this.walkers.some((w) => !ids.has(w.id))) this.walkers = this.walkers.filter((w) => ids.has(w.id));
+    const have = new Set(this.walkers.map((w) => w.id));
     for (const p of s.people) {
-      if (this.walkers.some((w) => w.id === p.id)) continue;
+      if (have.has(p.id)) continue;
       // The newborn come from the huts; the four (at first) come up from the beach with the chief;
       // those who've just joined walk in from their old village.
       const old = p.kind !== undefined && p.joined !== undefined && s.day - p.joined < 1 ? s.villages.find((v) => v.id === p.kind) : undefined;
@@ -680,12 +686,34 @@ export class ShoreScene extends RangeScene {
     }
   }
 
+  /** Buildings that don't move, drawn once (each kind, each size) and stamped from then on: a
+   * village of hundreds of huts is hundreds of stamps, not thousands of little rectangles. */
+  private stamps = new Map<string, HTMLCanvasElement>();
+  private static readonly STILL = new Set<BuildId>(['hut', 'rack', 'woodpile', 'camp', 'cutter']);
+
   private drawBuild(b: CanvasRenderingContext2D, id: BuildId, X: number, Y: number, z: number, close: boolean, up: number, t: number, s: ShoreState): void {
     if (!close) {
       b.fillStyle = id === 'hearth' ? 'rgba(255, 150, 60, 0.996)' : '#7a5a3a';
       b.fillRect(X, Y - 1, 1, 1);
       return;
     }
+    if (up >= 1 && ShoreScene.STILL.has(id)) {
+      const key = `${id}|${z}|${s.look.diet}`;
+      let c = this.stamps.get(key);
+      if (!c) {
+        c = document.createElement('canvas');
+        c.width = 16 * z;
+        c.height = 13 * z;
+        this.drawShape(c.getContext('2d')!, id, 8 * z, 12 * z, z, 1, t, s);
+        this.stamps.set(key, c);
+      }
+      b.drawImage(c, X - 8 * z, Y - 12 * z);
+      return;
+    }
+    this.drawShape(b, id, X, Y, z, up, t, s);
+  }
+
+  private drawShape(b: CanvasRenderingContext2D, id: BuildId, X: number, Y: number, z: number, up: number, t: number, s: ShoreState): void {
     // Rising: drawn clipped from the ground up.
     const tall = 9 * z;
     b.save();
