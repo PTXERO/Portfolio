@@ -19,7 +19,7 @@ import { demandSubmit, giftForeign } from './economy/diplomacy';
 import { decideConquest, type Mercy } from './economy/war';
 import { joinCrew, leaveCrew, annex, upgradeRoad, setTrade, answerAsk, setSettleFocus, type SettleFocus, chiefNear, setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
 import { WARM_MAX, dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
-import { mercyCard, danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
+import { setIslandView, toggleVillage, mercyCard, danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
 import { startFireDance, type FireDance } from './ui/fireDance';
 import { lineTree, shoreTree } from './ui/familyTree';
 import { choose, setFocus, type ForkId, type Lane } from './economy/culture';
@@ -2035,6 +2035,8 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.lean) setLean(state, el.dataset.lean as Lean);
   else if (el.dataset.buildcat) setBuildCat(el.dataset.buildcat);
   else if (el.dataset.villageview) setVillageView(el.dataset.villageview);
+  else if (el.dataset.islandview) setIslandView(el.dataset.islandview);
+  else if (el.dataset.openv) toggleVillage(Number(el.dataset.openv));
   else if (el.dataset.steward) setSteward(state, el.dataset.steward === 'on');
   else if (el.dataset.stewardplan) setSteward(state, true, el.dataset.stewardplan as StewardPlan);
   else if (el.dataset.camera) {

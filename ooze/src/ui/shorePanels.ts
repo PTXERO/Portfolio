@@ -40,6 +40,17 @@ export function setVillageView(v: string): void {
   villageView = v === 'people' || v === 'elders' ? v : 'village';
 }
 
+/** The Island tab: the villages, the landmarks, or what's been found; and the one village opened
+ * out (the rest are a line each). */
+let islandView: 'villages' | 'landmarks' | 'finds' = 'villages';
+export function setIslandView(v: string): void {
+  islandView = v === 'landmarks' || v === 'finds' ? v : 'villages';
+}
+let openVillage: number | null = null;
+export function toggleVillage(id: number): void {
+  openVillage = openVillage === id ? null : id;
+}
+
 /** The Build tab's sort on show (kept while you're in the stage). */
 let buildCat: BuildCat = 'homes';
 export function setBuildCat(c: string): void {
@@ -56,7 +67,7 @@ export function shoreKey(state: GameState, tab: string): string {
   }
   if (tab === 'build') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor((v ?? 0) / 5)), s.building?.id, s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, canPay(s, b.id)])]);
   const war = JSON.stringify([s.raid?.help, s.raid?.allies?.length, s.raid?.seen !== undefined && [s.raid.from, s.raid.rallied, Math.ceil(((s.raid.arrives ?? 0) - s.day - s.clock / DAY_SEC) * 4)], s.warband && [s.warband.to, Math.ceil((s.warband.arrives - s.day - s.clock / DAY_SEC) * 4)], fighters(s), s.warRule, hasWarChief(s)]);
-  if (tab === 'island') return war + JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor(v ?? 0)), s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop), v.ask && [v.ask.kind, Math.ceil(v.ask.until - s.day - s.clock / DAY_SEC), canAnswer(s, v)], annexWhy(s, v), chiefNear(s, v)], v.settled !== undefined && [Math.floor(v.pop), v.focus, v.ask && [v.ask.kind, Math.ceil(v.ask.until - s.day - s.clock / DAY_SEC), canAnswer(s, v)], (v.thrive ?? 0) > s.day, (v.sulk ?? 0) > s.day, chiefNear(s, v)], v.road && [Math.floor((v.road.done / v.road.need) * 20), v.road.tier, v.road.up && Math.floor((v.road.up.done / v.road.up.need) * 20), chiefWithCrew(s, v), roadUpgrade(s, v)?.missing, v.trade && [v.trade.give, v.trade.get]], ruled(v) && canRoad(s, v), Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v), Math.floor(standingOf(s, v) / 5)]), s.chief, s.crewWith]);
+  if (tab === 'island') return war + JSON.stringify([islandView, openVillage, Object.values(s.res ?? {}).map((v) => Math.floor(v ?? 0)), s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop), v.ask && [v.ask.kind, Math.ceil(v.ask.until - s.day - s.clock / DAY_SEC), canAnswer(s, v)], annexWhy(s, v), chiefNear(s, v)], v.settled !== undefined && [Math.floor(v.pop), v.focus, v.ask && [v.ask.kind, Math.ceil(v.ask.until - s.day - s.clock / DAY_SEC), canAnswer(s, v)], (v.thrive ?? 0) > s.day, (v.sulk ?? 0) > s.day, chiefNear(s, v)], v.road && [Math.floor((v.road.done / v.road.need) * 20), v.road.tier, v.road.up && Math.floor((v.road.up.done / v.road.up.need) * 20), chiefWithCrew(s, v), roadUpgrade(s, v)?.missing, v.trade && [v.trade.give, v.trade.get]], ruled(v) && canRoad(s, v), Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v), Math.floor(standingOf(s, v) / 5)]), s.chief, s.crewWith]);
   const plan = workPlan(s);
   if (villageView === 'elders' && count(s, 'council')) return JSON.stringify(['elders', s.steward, (s.steward?.on ? elderThink(s) : ELDERS_OFF).text, s.elders?.length, s.elders?.[s.elders.length - 1]?.text, s.building?.id]);
   if (villageView === 'people') return JSON.stringify(['people', s.people.length, s.chief, Math.floor(s.day / 2), s.hungry]);
@@ -228,7 +239,47 @@ function resourcesCard(s: ShoreState): string {
 
 
 function islandLayout(s: ShoreState): string {
-  return villagesCard(s) + resourcesCard(s) + landmarksCard(s) + relicsCard(s) + scoutsCard(s);
+  const found = s.villages.filter((v) => v.found && (!v.gone || v.outpost !== undefined)).length;
+  const marks = poisOf(s).filter((p) => p.found && p.known && p.done < poiDef(p).layers.length).length;
+  const needs = s.villages.filter((v) => v.found && alerts(s, v).some((a) => a.urgent)).length;
+  const tab = (id: typeof islandView, name: string) => `<button class="px-btn${islandView === id ? ' on' : ''}" data-islandview="${id}">${name}</button>`;
+  const views = `<div class="seg build-cats">${tab('villages', `Villages · ${found}${needs ? ` <b class="badge">${needs}</b>` : ''}`)}${tab('landmarks', `Landmarks · ${marks}`)}${tab('finds', 'Finds')}</div>`;
+  if (islandView === 'landmarks') return views + landmarksCard(s);
+  if (islandView === 'finds') return views + resourcesCard(s) + relicsCard(s) + scoutsCard(s);
+  return views + villagesCard(s);
+}
+
+/** What wants the chief's attention at a village: asked for something, restless, a road going
+ * on, the chief there. (Urgent ones count on the tab.) */
+function alerts(s: ShoreState, v: Village): { text: string; cls: string; urgent?: boolean }[] {
+  const out: { text: string; cls: string; urgent?: boolean }[] = [];
+  if (s.conquest?.id === v.id) out.push({ text: 'At your mercy', cls: 'warn', urgent: true });
+  if (v.ask) out.push({ text: `Asks: ${askWords(v.ask)}`, cls: 'ask', urgent: true });
+  if (v.vassal && v.vassal.loyalty < 20) out.push({ text: 'Restless', cls: 'warn', urgent: true });
+  if (v.asking !== undefined) out.push({ text: 'Won over', cls: 'ask', urgent: true });
+  if (s.raid?.target === v.id && s.raid.seen !== undefined) out.push({ text: 'Raided!', cls: 'warn', urgent: true });
+  if (v.road && (!roadDone(v) || v.road.up)) {
+    const w = v.road.up ?? v.road;
+    out.push({ text: `Road ${Math.floor((w.done / w.need) * 100)}%`, cls: 'road' });
+  }
+  if (chiefNear(s, v)) out.push({ text: 'Chief here', cls: 'here' });
+  return out;
+}
+
+/** A village's line: who they are, what they are to you, and the gist. */
+function villageGist(s: ShoreState, v: Village): { tag: string; tagCls: string; gist: string } {
+  const now = s.day + s.clock / DAY_SEC;
+  if (v.joined) return { tag: 'Joined', tagCls: 'rel-kin', gist: 'They live by your hearth now.' };
+  if (v.outpost !== undefined) return { tag: 'Outpost', tagCls: 'rel-vassal', gist: 'Their land, worked for you.' };
+  if (v.settled !== undefined) {
+    const d = settledDay(v, now);
+    return { tag: cap(STAGES[stageOf(v)]), tagCls: 'rel-kin', gist: `${Math.floor(v.pop)} · ${n0(d.food)} food, ${n0(d.wood)} wood a day` };
+  }
+  if (v.vassal) return { tag: 'Vassal', tagCls: 'rel-vassal', gist: `${Math.floor(v.pop)} · loyal ${Math.round(v.vassal.loyalty)}% · taking ${Math.round(v.vassal.tax * 100)}%` };
+  const rel = relation(s, v);
+  if (canWin(s, v)) return { tag: REL_NAME[rel], tagCls: `rel-${rel}`, gist: `${Math.round(v.pop)} · trust ${Math.floor(v.trust ?? 0)}%` };
+  if (foreign(s, v)) return { tag: REL_NAME[rel], tagCls: `rel-${rel}`, gist: `${Math.round(v.pop)} · ${STANCE_NAME[stanceOf(s, v)].toLowerCase()}` };
+  return { tag: REL_NAME[rel], tagCls: `rel-${rel}`, gist: `${Math.round(v.pop)}` };
 }
 
 function landmarksCard(s: ShoreState): string {
@@ -375,9 +426,28 @@ function peopleCard(s: ShoreState): string {
 }
 
 function villagesCard(s: ShoreState): string {
-  const found = s.villages.filter((v) => v.found);
+  const found = s.villages.filter((v) => v.found && (!v.gone || v.outpost !== undefined));
   if (!found.length) return `<div class="panel-head"><h2>The island</h2></div><div class="card px-box"><div class="info"><div class="sub">There's smoke inland. Someone else is here. Walk out and find them.</div></div></div>`;
-  return `<div class="panel-head"><h2>The island</h2><span class="dim">${found.length} of ${s.villages.length}${found.length < s.villages.length ? '+' : ''} found</span></div>${found.map((v) => villageRow(s, v)).join('')}`;
+  // Yours first (what wants you first, then the biggest), then the rest (what wants you, then the
+  // nearest).
+  const mine = (v: Village) => v.joined || v.outpost !== undefined || ruled(v);
+  const urgent = (v: Village) => Number(alerts(s, v).some((a) => a.urgent));
+  const d = (v: Village) => Math.hypot(v.x - s.hearth.x, v.y - s.hearth.y);
+  const yours = found.filter(mine).sort((a, b) => urgent(b) - urgent(a) || b.pop - a.pop);
+  const others = found.filter((v) => !mine(v)).sort((a, b) => urgent(b) - urgent(a) || d(a) - d(b));
+  const group = (name: string, list: Village[]) => (list.length ? `<div class="panel-head sub-head"><h3>${name}</h3><span class="dim">${list.length}</span></div>${list.map((v) => villageLine(s, v)).join('')}` : '');
+  return `<div class="panel-head"><h2>The island</h2><span class="dim">${found.length} of ${s.villages.length}${found.length < s.villages.length ? '+' : ''} found · tap one to open it</span></div>${group('Yours', yours)}${group('Others', others)}`;
+}
+
+/** A village as a line (tap to open it out to all there is to do with them). */
+function villageLine(s: ShoreState, v: Village): string {
+  const open = openVillage === v.id;
+  const g = villageGist(s, v);
+  const al = alerts(s, v);
+  return `<div class="vline${open ? ' open' : ''}">
+    <button class="vline-head px-box" data-openv="${v.id}"><span class="kind">${miniIcon(v.look, 2)}</span><span class="vline-text"><span class="name">${cap(v.name)} <span class="rel ${g.tagCls}">${g.tag}</span></span><span class="sub dim">${g.gist}</span>${al.length ? `<span class="vline-alerts">${al.map((a) => `<i class="al-${a.cls}">${a.text}</i>`).join('')}</span>` : ''}</span><span class="vline-caret">${open ? '▾' : '▸'}</span></button>
+    ${open ? `<div class="vline-body">${villageRow(s, v)}</div>` : ''}
+  </div>`;
 }
 
 function villageRow(s: ShoreState, v: Village): string {

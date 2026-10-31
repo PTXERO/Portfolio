@@ -930,3 +930,30 @@ div.chart-node.other { cursor: default; }
 .fire-dance:active { cursor: grabbing; }
 .dance-info { display: flex; justify-content: space-between; margin: 4px 0; }
 .chart-node.away { opacity: 0.7; }
+
+/* The Island tab's villages: a line each, one opened out at a time. */
+.panel-head.sub-head { margin-top: 8px; }
+.panel-head.sub-head h3 { margin: 0; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+.vline { margin-bottom: 6px; }
+.vline-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; text-align: left; color: var(--cream); font: inherit; cursor: pointer; background: var(--panel); border: 0; }
+.vline-head:hover { background: var(--panel-hi); }
+.vline.open .vline-head { background: var(--panel-hi); }
+.vline-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.vline-text .name { font-weight: 700; font-size: 15px; }
+.vline-text .sub { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vline-caret { color: var(--dim); font-size: 14px; }
+.vline-alerts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.vline-alerts i { font-style: normal; font-size: 11px; padding: 0 5px; background: var(--slot); color: var(--dim); }
+.vline-alerts .al-ask { color: var(--gold); }
+.vline-alerts .al-warn { color: var(--red); }
+.vline-alerts .al-road { color: #c8a878; }
+.vline-alerts .al-here { color: var(--mint); }
+.vline-body { margin-top: 2px; }
+.vline-body .card { margin-bottom: 0; }
+/* (Opened out, the card doesn't say again who they are: the line above does.) */
+.vline-body .card.village > .kind, .vline-body .card.village > .info > .name { display: none; }
+.badge { display: inline-block; min-width: 14px; padding: 0 3px; margin-left: 2px; background: var(--red); color: var(--cream); font-size: 11px; text-align: center; }
+/* (Opened out, the text has the full width; the buttons go in a row beneath it.) */
+.vline-body .card { flex-direction: column; align-items: stretch; }
+.vline-body .card > .col { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; }
+.vline-body .card > .col .px-btn { flex: 1 1 40%; }
