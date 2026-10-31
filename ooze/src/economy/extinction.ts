@@ -13,6 +13,7 @@
 // spear remembers what it taught, so those ideas come cheaper).
 
 import { planCrisis } from './crises';
+import { personal } from './genes';
 import { madnessNight, planWhisper } from './whispers';
 import { discover, ordainedNeeds, say, tribeLaunches, tribeThinks, type SpellId } from './miracles';
 import { ensureSociety, flushNotes, hopeOf, mourn, nightTheft, remember, sharing, socialNight, spirit, type Bond, type Quirk } from './society';
@@ -711,7 +712,8 @@ export function launch(state: GameState): boolean {
   if (!t || !ex || ex.over || ex.escaped || launchBlockers(ex).length) return false;
   ex.escaped = true;
   t.best = Math.max(t.best ?? 0, ex.day);
-  t.family = ex.people.filter((p) => ex.family!.includes(p.id)).map((p) => ({ name: p.name, trait: p.trait }));
+  // (Each with their own coat, within the line's: as they're drawn, and as their children will be.)
+  t.family = ex.people.filter((p) => ex.family!.includes(p.id)).map((p) => ({ name: p.name, trait: p.trait, genes: personal(t.look.genes, p.id), id: p.id }));
   t.cannibal = ex.diet === 'cannibal';
   // The spear's island is remembered as they left it; forty days adrift, they come ashore on
   // another.

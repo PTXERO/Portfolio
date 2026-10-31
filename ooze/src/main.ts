@@ -18,6 +18,7 @@ import { prepareShoreIsland } from './economy/terrainStore';
 import { setSteward, type StewardPlan } from './economy/shore';
 import { answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
 import { battleCard, fightCard, fightNote, findCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
+import { lineTree, shoreTree } from './ui/familyTree';
 import { canStepIn, rally, sendBand, setStance, stepIn, type Stance } from './economy/war';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
@@ -201,6 +202,7 @@ function showTripReport(): boolean {
       <h3>An egg hatched!</h3>
       <p>The young one is yours and ${r.mate}'s. The whole line grows stronger.</p>
       ${parts.length ? `<p class="fx">Inherited: ${parts.join(', ')}</p>` : ''}
+      ${r.looks ? `<p class="fx">${r.looks}</p>` : ''}
       <button class="px-btn gold" data-act="dismiss">Welcome</button>`, 8);
     return true;
   }
@@ -1035,6 +1037,19 @@ function shoreFrame(): void {
   }
 }
 
+/** The family tree on show, and the way back through it. */
+type TreeAt = { id?: number; line?: boolean };
+let treeAt: TreeAt | null = null;
+let treeTrail: TreeAt[] = [];
+function showTree(at: TreeAt): void {
+  const s = shoreOf(state);
+  const html = at.line ? lineTree(state) : s && at.id !== undefined ? shoreTree(state, s, at.id) : '';
+  if (!html) return;
+  showModal(html);
+  modal.dataset.kind = 'tree';
+  treeAt = at;
+}
+
 const stanceAsked = new Set<string>();
 let liveFight: number | undefined;
 let liveRounds = 0;
@@ -1520,7 +1535,11 @@ function pondEvents(): void {
     } else if (e.type === 'villager') {
       const s = shoreOf(state);
       const p = s?.people.find((x) => x.id === e.id);
-      if (s && p) scene.float(e.x, e.y, `${p.name}${p.id === s.chief ? ', chief' : p.founder ? ', one of the four' : isAdult(s, p) ? '' : ', a child'}`, '#f2ead7');
+      if (s && p) {
+        scene.float(e.x, e.y, `${p.name}${p.id === s.chief ? ', chief' : p.founder ? ', one of the four' : isAdult(s, p) ? '' : ', a child'}`, '#f2ead7');
+        treeTrail = [];
+        showTree({ id: p.id });
+      }
     }
     else if (e.type === 'spear' && awaken(state)) {
       // The waking: it touches the spear, and they know that they are. A flash, the
@@ -1932,6 +1951,13 @@ function act(el: HTMLElement): void {
       modal.hidden = true;
       save();
     }
+  } else if (el.dataset.tree || el.dataset.treeline) {
+    if (treeAt) treeTrail.push(treeAt);
+    showTree(el.dataset.treeline ? { line: true } : { id: Number(el.dataset.tree) });
+  } else if (el.dataset.treeback) {
+    const back = treeTrail.pop();
+    if (back) showTree(back);
+    else modal.hidden = true;
   } else if (el.dataset.stance) {
     const s = shoreOf(state);
     if (s && setStance(s, el.dataset.stance as Stance)) {

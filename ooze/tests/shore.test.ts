@@ -440,3 +440,30 @@ describe('Raids', () => {
     expect(back.raid?.fighters).toBe(9);
   });
 });
+
+describe('Families', () => {
+  it('the four carry coats; children have two parents and a coat from them; the dead are remembered', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    expect(s.people.every((p) => p.genes)).toBe(true);
+    now(state, 'hearth');
+    for (let i = 0; i < 4; i++) now(state, 'hut');
+    s.food = 200;
+    for (let i = 0; i < 3000 && s.births < 3; i++) {
+      shoreTick(state, 2);
+      s.food = Math.max(s.food, 100);
+    }
+    const kids = s.people.filter((p) => p.parents);
+    expect(kids.length).toBeGreaterThan(0);
+    for (const k of kids) {
+      expect(k.genes).toBeDefined();
+      expect(k.parents![0]).not.toBe(k.parents![1]);
+    }
+    for (let i = 0; i < 40000 && s.deaths < 1; i++) {
+      shoreTick(state, 2);
+      s.food = Math.max(s.food, 100);
+    }
+    expect(s.dead?.length).toBe(s.deaths);
+    expect(s.dead![0].died).toBeDefined();
+  });
+});

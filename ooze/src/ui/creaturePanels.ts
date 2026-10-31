@@ -3,6 +3,7 @@
 // Laid out once per layout key, then patched in place like the other panels.
 
 import { icon } from '../art/sprites';
+import { describe } from '../economy/genes';
 import { STAGES } from '../content/stages';
 import {
   birthRate,
@@ -304,12 +305,13 @@ export function exploreLayout(state: GameState, upgradeCard: (u: (typeof STAGES)
 export function familyLayout(state: GameState, upgradeCard: (u: UpgradeDef) => string): string {
   const s = state.stages[CREATURE];
   const look = creatureLookOf(state);
+  const tree = s.generation ? `<button class="px-btn" data-treeline="1">The line's family tree</button>` : '';
   const egg = `<div class="card px-box egg"><div class="slot">${icon('family', 3)}</div><div class="info"><div class="name" data-t="egg-title"></div><div class="sub" data-t="egg-sub"></div><div class="making-bar on" data-bar="egg"><i></i></div></div></div>`;
   const mates = s.mates
     .map(
       (m) => `<div class="card px-box mate">
-        <div class="portrait-sm">${creatureIcon({ ...look, parts: { ...look.parts, ...m.parts } }, 2)}</div>
-        <div class="info"><div class="name">${esc(m.name)}</div>
+        <div class="portrait-sm">${creatureIcon({ ...look, parts: { ...look.parts, ...m.parts }, genes: m.genes }, 2)}</div>
+        <div class="info"><div class="name">${esc(m.name)} <span class="tiny dim">${describe(m.genes)}</span></div>
           <div class="sub">${Object.values(m.parts).map((id) => esc(partDef(id!).name)).join(' · ')}</div></div>
         <div class="mate-btns"><button class="px-btn buy" data-breed="${m.id}">Breed</button><button class="px-btn small" data-release="${m.id}">Let go</button></div>
       </div>`,
@@ -321,7 +323,7 @@ export function familyLayout(state: GameState, upgradeCard: (u: UpgradeDef) => s
       .map(upgradeCard)
       .join('') + nextHint(state, (u) => u.branch === 'Family');
   return `<div class="panel-head"><h2>Generation ${s.generation}</h2><span class="label dim">Line ×${(GENERATION_MULT ** s.generation).toFixed(2)}</span></div>
-    ${egg}
+    ${egg}${tree}
     <div class="opts"><button class="px-btn opt${s.keepBreeding ? ' on' : ''}" data-roamopt="breed"><span class="tick">${s.keepBreeding ? '✓' : ''}</span><span><b>Keep breeding</b><span class="dim">Whenever there's no egg, a new one is laid with the mate who brings the most new parts, even while you're away</span></span></button></div>
     ${nursery}
     <div class="panel-head"><h2>Mates</h2><span class="label dim">${s.mates.length} / ${MAX_MATES}</span></div>

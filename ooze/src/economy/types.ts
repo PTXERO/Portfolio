@@ -148,6 +148,27 @@ export interface Mate {
   id: number;
   name: string;
   parts: Partial<Record<Slot, string>>;
+  /** How they look beyond their parts: their coat, its markings, a rare colouring. */
+  genes?: Genes;
+}
+
+/** A coat's markings, passed down (from a mate, and on to the young). */
+export type Pattern = 'stripes' | 'spots' | 'saddle' | 'mask' | 'socks';
+/** A rare colouring: white, black, or patched with white. */
+export type Morph = 'albino' | 'melanistic' | 'piebald';
+/**
+ * The line's looks, inherited, with no bearing on its stats: the coat's shade (shifted round the
+ * colour wheel from its diet's colours, and lighter or darker), its markings, and now and then a
+ * rare colouring. Bred in the Creature, carried through the Extinction by the four, and down
+ * the generations on New Shore.
+ */
+export interface Genes {
+  /** Degrees round the colour wheel. */
+  hue: number;
+  /** Lighter (up to 0.2) or darker (down to -0.2). */
+  light: number;
+  pattern?: Pattern;
+  morph?: Morph;
 }
 
 /** What came back from an expedition or a hatching, for the interface to show. */
@@ -159,6 +180,8 @@ export interface Report {
   earned: string;
   parts: string[];
   mate?: string;
+  /** What the young look like, if it's new (a hatching). */
+  looks?: string;
   /** Book page found on this trip. */
   found?: string;
   /** What happened on the way, and how the choice turned out. */
@@ -313,8 +336,8 @@ export interface TribeState {
   pop: number;
   /** How many lived through the strike. */
   survivors: number;
-  /** The look they carry from the Creature (parts worn and diet), for drawing them. */
-  look: { parts: Partial<Record<Slot, string>>; diet: string };
+  /** The look they carry from the Creature (parts worn, diet and the line's genes). */
+  look: { parts: Partial<Record<Slot, string>>; diet: string; genes?: Genes };
   /** Their body's stats, carried from the Creature. */
   stats: Record<Stat, number>;
   /** Generations bred before the strike (they become the line's traits later). */
@@ -333,7 +356,8 @@ export interface TribeState {
   best?: number;
   remembered?: string[];
   /** Once the Extinction is survived: the four who set off, and whether they ate their dead. */
-  family?: { name: string; trait: string }[];
+  /** The four who crossed: their names, traits, coats and who they were in the Extinction. */
+  family?: { name: string; trait: string; genes?: Genes; id?: number }[];
   cannibal?: boolean;
   /** Where the raft came ashore: a new island, already lived on (from its seed), and the day. */
   landed?: { seed: number; day: number };
@@ -418,6 +442,10 @@ export interface StageState {
   egg: { mate: Mate; left: number; total: number } | null;
   /** How many generations the line has bred. */
   generation: number;
+  /** The line's looks, as bred so far (unset: as it came out of the sea). */
+  genes?: Genes;
+  /** The line, generation by generation: whose young, and how they looked (the family tree). */
+  line?: { generation: number; mate: string; mateGenes?: Genes; genes: Genes; year: number }[];
   /** Whether a new egg is laid by itself whenever there's a mate and no egg (Family tab). */
   keepBreeding: boolean;
 }

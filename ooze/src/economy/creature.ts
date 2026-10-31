@@ -8,6 +8,7 @@ import { herdMult, seasonOf, stageEffects, stageRate } from './rates';
 import type { GameState, Mate, PartDef, PlaceDef, Role, Slot, Stat, StageId, StageState } from './types';
 import { ROLES, SLOTS, STATS } from './types';
 import { EVENTS } from '../content/creature';
+import { inherit, randomGenes, whatsNew } from './genes';
 import { CELL, CELLS, cellOf, ISLAND, islandOf, isLand, reveal, seenShare, type Island, type Pt } from './island';
 
 export const CREATURE: StageId = 'creature';
@@ -258,7 +259,7 @@ function randomMate(state: GameState, p: PlaceDef): Mate {
     const options = pool.filter((id) => partDef(id).slot === slot);
     if (options.length) parts[slot] = options[Math.floor(Math.random() * options.length)];
   }
-  return { id: Date.now() + Math.floor(Math.random() * 1e6), name: NAMES[Math.floor(Math.random() * NAMES.length)], parts };
+  return { id: Date.now() + Math.floor(Math.random() * 1e6), name: NAMES[Math.floor(Math.random() * NAMES.length)], parts, genes: randomGenes(Math.random) };
 }
 
 /** The place nearest to where it is (what's around shapes what it finds). */
@@ -556,7 +557,13 @@ function hatch(state: GameState): void {
     .filter((id): id is string => !!id && !s.parts.includes(id))
     .slice(0, 1);
   s.parts.push(...parts);
-  state.reports.push({ kind: 'hatch', success: true, earned: '0', parts, mate: mate.name, generation: s.generation });
+  // Their looks: the line's and the mate's, mixed (a mate met before genes were kept brings its
+  // own, made up now).
+  const before = s.genes;
+  const genes = inherit(before, mate.genes ?? randomGenes(Math.random), Math.random, 0.6);
+  s.genes = genes;
+  (s.line ??= []).push({ generation: s.generation, mate: mate.name, mateGenes: mate.genes, genes, year: s.year });
+  state.reports.push({ kind: 'hatch', success: true, earned: '0', parts, mate: mate.name, generation: s.generation, looks: whatsNew(before, genes) });
 }
 
 export function buyPart(state: GameState, id: string): boolean {

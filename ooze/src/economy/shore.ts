@@ -12,9 +12,10 @@ import { record } from './chronicle';
 import { Biome, CELL, isLand, islandOf, reveal, type Island, type Pt } from './island';
 import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
+import { inherit, personal } from './genes';
 import { away, stepWar, warDawn, type Battle, type Fight, type Raid, type WarBand } from './war';
 import type { CreatureLook } from '../scene/creatureLook';
-import type { GameState, TribeState } from './types';
+import type { GameState, Genes, TribeState } from './types';
 
 /** Tiles across New Shore's island: eight times the area of the spear's. */
 export const SHORE_N = 1020;
@@ -73,6 +74,13 @@ export interface ShorePerson {
   /** Of another kind: the village they came from (its id), and the day they joined. */
   kind?: number;
   joined?: number;
+  /** Their coat: from their parents (the four, from the line). */
+  genes?: Genes;
+  /** Their mother and father (ids), if born here. */
+  parents?: [number, number?];
+  /** Dead: the day they died, and of what. */
+  died?: number;
+  cause?: string;
 }
 
 export interface Village {
@@ -214,6 +222,8 @@ export interface ShoreState {
   battles?: Battle[];
   raids?: number;
   nextRaid?: number;
+  /** Everyone who's died, remembered (for the family trees). */
+  dead?: ShorePerson[];
   /** Lakes seen across (by their number): seen from any shore, the whole lake is. */
   lakes?: number[];
   /** Things the Chronicle has already told of, so it tells them once (the woods thinning…). */
@@ -473,12 +483,12 @@ export function shoreWorld(seed: number, look: CreatureLook, cannibal: boolean):
 /** New Shore as it begins: the four, come up from the beach. */
 export function newShore(tribe: TribeState): ShoreState {
   const seed = tribe.landed?.seed ?? tribe.seed + 1;
-  const look: CreatureLook = { parts: { ...tribe.look.parts }, diet: tribe.look.diet };
+  const look: CreatureLook = { parts: { ...tribe.look.parts }, diet: tribe.look.diet, ...(tribe.look.genes ? { genes: tribe.look.genes } : {}) };
   const cannibal = !!tribe.cannibal;
   const w = shoreWorld(seed, look, cannibal);
   const rand = rng(seed + 99);
   const four = (tribe.family?.length ? tribe.family : [0, 1, 2, 3].map(() => ({ name: nameFrom(rand), trait: 'hardy' }))).slice(0, 4);
-  const people: ShorePerson[] = four.map((p, i) => ({ id: i, name: p.name, trait: p.trait, born: -20, founder: true }));
+  const people: ShorePerson[] = four.map((p, i) => ({ id: i, name: p.name, trait: p.trait, born: -20, founder: true, genes: ('genes' in p ? (p.genes as Genes | undefined) : undefined) ?? personal(tribe.look.genes, i + 1) }));
   return {
     seed,
     terrain: TERRAIN_V,
@@ -1089,7 +1099,8 @@ function join(state: GameState, s: ShoreState, v: Village): void {
     used.add(name);
     // Mostly grown, some children; each with their years ahead of them.
     const age = rand() < 0.25 ? rand() * GROW_DAYS : GROW_DAYS + rand() * 40;
-    s.people.push({ id: s.nextId++, name, born: today - age, dies: today - age + 70 + rand() * 30, kind: v.id, joined: today });
+    const id = s.nextId++;
+    s.people.push({ id, name, born: today - age, dies: today - age + 70 + rand() * 30, kind: v.id, joined: today, genes: personal(undefined, id * 31 + v.id) });
   }
   s.news.push(`${cap(v.name)} have joined you: ${v.pop} of them.`);
   record(state, `${cap(v.name)} joined them: ${v.pop} people of another kind, come to live by their hearth.`, 'shore', shoreWhen(s));
@@ -1226,7 +1237,12 @@ function born(state: GameState, s: ShoreState): void {
   // The child is of one of the grown ones' kinds (as the village mixes, so do its children).
   const grown = s.people.filter((p) => isAdult(s, p));
   const parent = grown[Math.floor(rand() * grown.length)];
-  s.people.push({ id: s.nextId++, name, born: today, dies: today + 70 + rand() * 30, kind: parent?.kind });
+  // The other parent: one of the same kind if there's one (else anyone grown).
+  const others = grown.filter((p) => p !== parent);
+  const same = others.filter((p) => p.kind === parent?.kind);
+  const pool = same.length ? same : others;
+  const other = pool[Math.floor(rand() * pool.length)];
+  s.people.push({ id: s.nextId++, name, born: today, dies: today + 70 + rand() * 30, kind: parent?.kind, parents: parent ? [parent.id, other?.id] : undefined, genes: inherit(parent?.genes, other?.genes ?? parent?.genes, rand) });
   s.births++;
   if (s.firstBirth === undefined) {
     s.firstBirth = s.day;
@@ -1303,6 +1319,8 @@ export function killed(state: GameState, s: ShoreState, p: ShorePerson): void {
 
 function die(state: GameState, s: ShoreState, p: ShorePerson, why: 'old age' | 'hunger' | 'cold' | 'battle'): void {
   s.people = s.people.filter((q) => q !== p);
+  // Remembered (for the family trees).
+  (s.dead ??= []).push({ ...p, died: s.day + s.clock / DAY_SEC, cause: why === 'battle' ? 'fell in the fighting' : why === 'old age' ? 'old age' : why });
   s.deaths++;
   // Buried a little way out from the hearth, together.
   const n = s.graves.length;

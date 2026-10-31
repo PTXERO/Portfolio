@@ -46,7 +46,7 @@ export function startTribe(state: GameState): TribeState {
     awake: false,
     pop: survivors,
     survivors,
-    look: { parts: { ...c.equipped }, diet: state.stages.cell.upgrades.includes('hunter') ? 'hunter' : state.stages.cell.upgrades.includes('grazer') ? 'grazer' : 'omnivore' },
+    look: { genes: c.genes, parts: { ...c.equipped }, diet: state.stages.cell.upgrades.includes('hunter') ? 'hunter' : state.stages.cell.upgrades.includes('grazer') ? 'grazer' : 'omnivore' },
     stats: statsOf(state),
     generations: c.generation,
     heritage: heritageOf(state),

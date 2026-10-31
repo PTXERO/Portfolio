@@ -4,7 +4,7 @@
 
 import { PAL } from '../art/sprites';
 import { dietOf } from '../economy/rates';
-import type { GameState, Slot } from '../economy/types';
+import type { GameState, Genes, Slot } from '../economy/types';
 import { DIET_COLORS } from './cellLook';
 import { PARTS } from '../content/creature';
 
@@ -28,10 +28,58 @@ export interface CreatureLook {
   diet: string;
   /** Another kind's own colours (body, edge), in place of their diet's. */
   hue?: [string, string];
+  /** The line's (or one animal's) coat, markings and colouring. */
+  genes?: Genes;
 }
 
+/** A colour turned round the wheel and made lighter or darker. */
+function shift(hex: string, deg: number, light: number): string {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const mx = Math.max(r, g, b);
+  const mn = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  let l = (mx + mn) / 2;
+  if (mx !== mn) {
+    const d = mx - mn;
+    s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h *= 60;
+  }
+  h = (((h + deg) % 360) + 360) % 360;
+  l = Math.max(0.06, Math.min(0.94, l + light));
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  const [R, G, B] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return '#' + [R, G, B].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('');
+}
+
+/** The coat: body and edge colours (its diet's, or its kind's, as the genes have them), and the
+ * colour its markings are drawn in. */
+function coat(look: CreatureLook): [string, string, string] {
+  let [fill, edge] = look.hue ?? DIET_COLORS[look.diet] ?? DIET_COLORS.none;
+  const g = look.genes;
+  if (g) {
+    fill = shift(fill, g.hue, g.light);
+    edge = shift(edge, g.hue, g.light);
+    if (g.morph === 'albino') [fill, edge] = ['#eee6de', '#d8c4be'];
+    else if (g.morph === 'melanistic') [fill, edge] = [mixHex(fill, '#14171f', 0.72), mixHex(edge, '#0b0d13', 0.6)];
+  }
+  const mark = g?.morph === 'albino' ? '#e2bcbc' : g?.morph === 'melanistic' ? mixHex(fill, '#000000', 0.5) : mixHex(fill, '#10141f', 0.42);
+  return [fill, edge, mark];
+}
+
+/** A short key for the genes (for the drawing caches). */
+export function genesKey(g?: Genes): string {
+  return g ? `${Math.round(g.hue)}.${Math.round(g.light * 100)}.${g.pattern ?? ''}.${g.morph ?? ''}` : '';
+}
+
+/** Cream: socks, and a piebald's patches. */
+const CREAM = '#f2ead7';
+
 export function creatureLookOf(state: GameState): CreatureLook {
-  return { parts: { ...state.stages.creature.equipped }, diet: dietOf(state, 'creature') ?? 'none' };
+  return { parts: { ...state.stages.creature.equipped }, diet: dietOf(state, 'creature') ?? 'none', genes: state.stages.creature.genes };
 }
 
 const W = 30;
@@ -46,7 +94,8 @@ function bake(look: CreatureLook, frame: number): HTMLCanvasElement {
   c.width = W;
   c.height = H;
   const b = c.getContext('2d')!;
-  const [fill, edge] = look.hue ?? DIET_COLORS[look.diet] ?? DIET_COLORS.none;
+  const [fill, edge, mark] = coat(look);
+  const g = look.genes;
   const px = (x: number, y: number, col: string) => {
     b.fillStyle = col;
     b.fillRect(Math.round(x), Math.round(y), 1, 1);
@@ -92,7 +141,7 @@ function bake(look: CreatureLook, frame: number): HTMLCanvasElement {
   const footY = CY + ry;
   const legsAt = [CX - 4, CX + 3];
   const legs = shapeOf(p.legs);
-  const lE = legs.tint ?? edge;
+  const lE = g?.pattern === 'socks' ? CREAM : legs.tint ?? edge;
   legsAt.forEach((lx, i) => {
     const s = i % 2 ? step : -step;
     const edge = lE;
@@ -124,6 +173,15 @@ function bake(look: CreatureLook, frame: number): HTMLCanvasElement {
   }
   // A paler belly.
   for (let x = CX - 4; x <= CX + 4; x++) px(x, CY + 2, edge);
+  // Markings, and a piebald's white patches.
+  const on = (x: number, y: number, col: string) => {
+    if (inside(x, y) && inside(x - 1, y) && inside(x + 1, y) && inside(x, y - 1) && inside(x, y + 1)) px(x, y, col);
+  };
+  if (g?.pattern === 'stripes') for (const sx of [CX - 4, CX - 1, CX + 2]) for (let y = CY - ry; y <= CY + 1; y++) on(sx + (y < CY - 1 ? 1 : 0), y, mark);
+  else if (g?.pattern === 'spots') for (const [dx, dy] of [[-4, -1], [-1, -2], [2, -2], [3, 0], [-2, 1], [0, 0], [5, -1]]) on(CX + dx, CY + dy, mark);
+  else if (g?.pattern === 'saddle') for (let y = CY - ry; y <= CY - 1; y++) for (let x = CX - 3; x <= CX + 2; x++) on(x, y, mark);
+  else if (g?.pattern === 'mask') for (let y = CY - 2; y <= CY; y++) for (let x = CX + 4; x <= CX + 6; x++) on(x, y, mark);
+  if (g?.morph === 'piebald') for (const [dx, dy] of [[-5, 0], [-4, 0], [-4, 1], [-1, -2], [0, -2], [0, -1], [3, 1], [4, 1], [4, 0]]) on(CX + dx, CY + dy, CREAM);
 
   // Back.
   const back = shapeOf(p.back);
@@ -208,7 +266,7 @@ function bake(look: CreatureLook, frame: number): HTMLCanvasElement {
  */
 export function drawCreature(b: CanvasRenderingContext2D, look: CreatureLook, x: number, groundY: number, opts: { left?: boolean; frame?: number; scale?: number } = {}): void {
   const frame = opts.frame ?? 0;
-  const key = `${look.diet}|${look.hue ?? ''}|${Object.values(look.parts).join('.')}|${frame}`;
+  const key = `${look.diet}|${look.hue ?? ''}|${genesKey(look.genes)}|${Object.values(look.parts).join('.')}|${frame}`;
   let c = cache.get(key);
   if (!c) {
     if (cache.size > 200) cache.clear();
@@ -250,7 +308,8 @@ function bakeMini(look: CreatureLook, frame: number, sleeping: boolean): { c: HT
   c.width = MW;
   c.height = MH;
   const b = c.getContext('2d')!;
-  const [fill, edge] = look.hue ?? DIET_COLORS[look.diet] ?? DIET_COLORS.none;
+  const [fill, edge, mark] = coat(look);
+  const g = look.genes;
   const dark = mix(fill, '#10141f', 0.45);
   const px = (x: number, y: number, col: string) => {
     b.fillStyle = col;
@@ -286,6 +345,11 @@ function bakeMini(look: CreatureLook, frame: number, sleeping: boolean): { c: HT
     for (let x = x0; x <= x1; x++) px(x, by + j, col);
   });
   px(3, by + 1, edge);
+  // Markings, and a piebald's white patches.
+  if (g?.pattern === 'stripes') for (const x of [5, 7, 9]) for (let y = by; y <= by + 2; y++) px(x, y, mark);
+  else if (g?.pattern === 'spots') for (const [x, y] of [[5, by + 1], [8, by], [9, by + 2], [6, by + 2], [7, by + 1]]) px(x, y, mark);
+  else if (g?.pattern === 'saddle') for (let x = 5; x <= 8; x++) for (let y = by; y <= by + 1; y++) px(x, y, mark);
+  if (g?.morph === 'piebald') for (const [x, y] of [[4, by + 1], [5, by + 1], [8, by + 2], [9, by + 1], [9, by + 2]]) px(x, y, CREAM);
   // Head, at the front.
   px(11, by + 1, fill);
   px(11, by + 2, fill);
@@ -308,6 +372,10 @@ function bakeMini(look: CreatureLook, frame: number, sleeping: boolean): { c: HT
       if (eyes.tint) px(11, by + 1, eyes.tint);
     }
   } else px(12, by + 1, dark);
+  if (g?.pattern === 'mask') {
+    px(11, by + 1, mark);
+    px(12, by + 2, mark);
+  }
   // Mouth.
   if (mouth.shape === 'jaws') px(13, by + 2, mouth.tint ?? PAL.w);
   else if (mouth.shape === 'beak') px(13, by + 2, mouth.tint ?? PAL.o);
@@ -337,7 +405,7 @@ function bakeMini(look: CreatureLook, frame: number, sleeping: boolean): { c: HT
   if (!sleeping) {
     const step = frame ? 1 : 0;
     const long = legs.shape === 'runner' || legs.shape === 'climber' ? 2 : 1;
-    const col = legs.tint ?? (legs.shape === 'stubby' ? dark : PAL.k);
+    const col = g?.pattern === 'socks' ? CREAM : legs.tint ?? (legs.shape === 'stubby' ? dark : PAL.k);
     for (const lx of [5 - step, 9 + step]) {
       for (let k = 0; k < long; k++) px(lx, by + 4 + k, col);
       if (legs.shape === 'climber') px(lx + 1, by + 4 + long - 1, PAL.w);
@@ -361,7 +429,7 @@ export function drawMini(
   opts: { left?: boolean; frame?: number; sleeping?: boolean; scale?: number; hop?: number } = {},
 ): void {
   const k = Math.max(1, Math.round(opts.scale ?? 1));
-  const key = `${look.diet}|${look.hue ?? ''}|${Object.values(look.parts).join('.')}|${opts.frame ? 1 : 0}|${opts.sleeping ? 1 : 0}`;
+  const key = `${look.diet}|${look.hue ?? ''}|${genesKey(look.genes)}|${Object.values(look.parts).join('.')}|${opts.frame ? 1 : 0}|${opts.sleeping ? 1 : 0}`;
   let m = miniCache.get(key);
   if (!m) {
     if (miniCache.size > 300) miniCache.clear();

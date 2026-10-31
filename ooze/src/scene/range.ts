@@ -16,7 +16,8 @@ import { SEASON_SEC, seasonOf } from '../economy/rates';
 import { H_LO, H_SPAN, LIFT, TILT } from './shade';
 import type { GameState, Role } from '../economy/types';
 import { drawBlob, type BlobStyle } from './blob';
-import { creatureLookOf, drawMini, type CreatureLook } from './creatureLook';
+import { creatureLookOf, drawMini, genesKey, type CreatureLook } from './creatureLook';
+import { personal } from '../economy/genes';
 import { Effects, hash, mixColor, visibleCount, type Frame } from './paint';
 import { Sightings } from './sightings';
 import { Trails } from './trails';
@@ -1093,6 +1094,19 @@ export class RangeScene {
   }
 
   /** A creature at the right size for the zoom: a dot from far away, a full sprite up close. */
+  /** One of the herd: the line's look, the shade a touch its own (the same one each time). */
+  private oneLooks = new Map<string, CreatureLook>();
+  protected oneOf(look: CreatureLook, seed: number): CreatureLook {
+    const key = `${genesKey(look.genes)}|${Object.values(look.parts).join('.')}|${seed}`;
+    let l = this.oneLooks.get(key);
+    if (!l) {
+      if (this.oneLooks.size > 400) this.oneLooks.clear();
+      l = { ...look, genes: personal(look.genes, seed) };
+      this.oneLooks.set(key, l);
+    }
+    return l;
+  }
+
   protected drawBeing(b: CanvasRenderingContext2D, look: CreatureLook, x: number, y: number, o: { left?: boolean; frame?: number; sleeping?: boolean; hero?: boolean; hop?: number }): void {
     const z = this.zoom;
     const X = this.sx(x);
@@ -1490,7 +1504,7 @@ export class RangeScene {
       sprites.push({
         y,
         draw: () => {
-          this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 8 + m.phase) % 2 : bob, sleeping: lying, hop });
+          this.drawBeing(b, this.oneOf(look, Math.round(m.phase * 1000)), x, y, { left, frame: moving ? Math.floor(t * 8 + m.phase) % 2 : bob, sleeping: lying, hop });
           if (hearts && (t + m.phase) % 2 < 1.2) this.heart(b, x + 0.5, y, (t + m.phase) % 2);
         },
       });
@@ -1680,7 +1694,7 @@ export class RangeScene {
       draw: () => {
         st.mates.forEach((mate, k) => {
           const ox = me.x + (left ? 1.6 : -1.6) * (k + 1);
-          this.drawBeing(b, { ...look, parts: { ...look.parts, ...mate.parts } }, ox, me.y + 0.3 * (k + 1), { left, frame: walking ? Math.floor(t * 8 + k) % 2 : 0, hop: walking ? Math.abs(Math.sin(t * 7 + k * 1.3)) * 2 : 0 });
+          this.drawBeing(b, { ...look, parts: { ...look.parts, ...mate.parts }, genes: mate.genes }, ox, me.y + 0.3 * (k + 1), { left, frame: walking ? Math.floor(t * 8 + k) % 2 : 0, hop: walking ? Math.abs(Math.sin(t * 7 + k * 1.3)) * 2 : 0 });
         });
         this.drawBeing(b, look, me.x, me.y, { left, frame: walking ? Math.floor(t * 8) % 2 : 0, hero: true, hop: walking ? Math.abs(Math.sin(t * 7)) * 2 : 0 });
         // A blinking "!" when something's stopped it on the road.

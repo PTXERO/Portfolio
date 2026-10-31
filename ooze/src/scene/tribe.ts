@@ -982,7 +982,8 @@ export class TribeScene extends RangeScene {
         if (fogged(x, y)) return;
         // The family keeps looking toward the smoke; the locals, at first, toward the beach.
         const left = moving ? dx < 0 : wary ? this.localCamp.x < x : is.home.x < x;
-        sprites.push({ y, draw: () => this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 7 + q.ph) % 2 : 0, sleeping: false, hop: moving ? Math.abs(Math.sin(t * 7 + q.ph)) * 1.5 : 0 }) });
+        const one = wary && tribe.family?.[i]?.genes ? { ...(look as object), genes: tribe.family[i].genes } : look;
+        sprites.push({ y, draw: () => this.drawBeing(b, one as never, x, y, { left, frame: moving ? Math.floor(t * 7 + q.ph) % 2 : 0, sleeping: false, hop: moving ? Math.abs(Math.sin(t * 7 + q.ph)) * 1.5 : 0 }) });
       });
     move(this.family, is.home, 4, ours, true);
     move(this.locals, this.localCamp, 8, theirs, false);
@@ -1383,7 +1384,7 @@ export class TribeScene extends RangeScene {
         draw: () => {
           // (The four who are leaving are drawn walking down and on the raft instead.)
           if (this.departT !== -2 && this.leavingIds.includes(tribe.ex?.people[i]?.id ?? -1)) return;
-          this.drawBeing(b, look, x, yy, { left, frame: moving ? Math.floor(t * 8 + p.ph) % 2 : 0, sleeping: sleeping && !struck, hop });
+          this.drawBeing(b, this.oneOf(look, tribe.ex?.people[i]?.id ?? i), x, yy, { left, frame: moving ? Math.floor(t * 8 + p.ph) % 2 : 0, sleeping: sleeping && !struck, hop });
           // The spark as it reaches them: a point of light over each head, fading.
           if (lit >= 0 && lit < 3) this.spark(b, x, yy, lit);
           if (i === this.chosen) {
@@ -1555,7 +1556,7 @@ export class TribeScene extends RangeScene {
         q.x = p.x;
         q.y = p.y;
         const moving = age < 7;
-        sprites.push({ y: q.y + 0.6, draw: () => this.drawBeing(b, look, q.x, q.y, { left: moving ? from.x > this.raftAt!.x : raft.x < frag.camp.x, frame: moving ? Math.floor(t * 8 + k) % 2 : 0, sleeping: false, hop: moving ? Math.abs(Math.sin(t * 8 + k)) * 1.5 : Math.abs(Math.sin(t * 2.5 + k)) }) });
+        sprites.push({ y: q.y + 0.6, draw: () => this.drawBeing(b, this.oneOf(look, this.leavingIds[k] ?? k), q.x, q.y, { left: moving ? from.x > this.raftAt!.x : raft.x < frag.camp.x, frame: moving ? Math.floor(t * 8 + k) % 2 : 0, sleeping: false, hop: moving ? Math.abs(Math.sin(t * 8 + k)) * 1.5 : Math.abs(Math.sin(t * 2.5 + k)) }) });
       });
     }
     if (tribe.ex) {

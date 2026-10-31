@@ -3,7 +3,7 @@
 
 import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
 import { buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
-import { miniIcon } from '../scene/creatureLook';
+import { genesKey, miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import { canStepIn, fighters, hasWalls, holders, hostile, odds, ourStrength, payCost, raidable, theirStrength, type Battle, type Fight } from '../economy/war';
 import type { GameState } from '../economy/types';
@@ -279,9 +279,13 @@ export function findCard(p: Poi, f: Find, dup: boolean): string {
 function peopleLayout(s: ShoreState): string {
   const today = s.day + s.clock / DAY_SEC;
   const icons = new Map<string, string>();
-  const iconOf = (k: number | undefined) => {
-    const key = String(k ?? 'ours');
-    if (!icons.has(key)) icons.set(key, miniIcon(k === undefined ? s.look : s.villages.find((v) => v.id === k)?.look ?? s.look, 2));
+  // (Each in their own coat.)
+  const iconOf = (p: ShorePerson) => {
+    const key = `${p.kind ?? 'ours'}|${genesKey(p.genes)}`;
+    if (!icons.has(key)) {
+      const base = p.kind === undefined ? s.look : s.villages.find((v) => v.id === p.kind)?.look ?? s.look;
+      icons.set(key, miniIcon(p.genes ? { ...base, genes: p.genes } : base, 2));
+    }
     return icons.get(key)!;
   };
   const age = (p: ShorePerson) => {
@@ -301,8 +305,9 @@ function peopleLayout(s: ShoreState): string {
   return `<div class="panel-head"><h2>The People</h2><span class="dim">${s.people.length}</span></div>
     <div class="card px-box"><div class="info"><div class="sub">${[...kinds].map(([k, n]) => `${n} ${k}`).join(' · ')}</div>
     <div class="sub">${fed ? `Fed: ${n0(plan.foodRate)} food a day comes in, ${n0(plan.eat)} is eaten.` : `<b class="starving">Hungry: ${n0(plan.eat)} food a day is needed, only ${n0(plan.foodRate)} comes in.</b>`}</div></div></div>
+    <p class="tiny dim">Tap anyone for their family tree.</p>
     <div class="card px-box people-list"><div class="info">${list
-      .map((p) => `<div class="person">${iconOf(p.kind)}<b>${p.name}</b><span class="dim">${p.id === s.chief ? 'chief' : p.founder ? 'one of the four' : age(p)}</span></div>`)
+      .map((p) => `<button class="person" data-tree="${p.id}">${iconOf(p)}<b>${p.name}</b><span class="dim">${p.id === s.chief ? 'chief' : p.founder ? 'one of the four' : age(p)}</span></button>`)
       .join('')}</div></div>`;
 }
 

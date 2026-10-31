@@ -6,7 +6,8 @@
 import { PAL } from '../art/sprites';
 import { Biome, CELL, isLand, type Pt } from '../economy/island';
 import { DAY_SEC, terrainReady, walkTo, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
-import type { GameState } from '../economy/types';
+import type { GameState, Genes } from '../economy/types';
+import type { CreatureLook } from './creatureLook';
 import type { BuildId } from '../content/shore';
 import { RangeScene } from './range';
 import type { Sprite } from './wild';
@@ -46,6 +47,17 @@ const REL_COL = { kin: '#8acf6a', prey: PAL.y, predator: '#e8615a', enemy: '#9a2
 export class ShoreScene extends RangeScene {
   override get clouds(): boolean {
     return true;
+  }
+
+  /** A villager's own look: their kind's, in their own coat (kept, not made each frame). */
+  private looks = new Map<number, { base: CreatureLook; look: CreatureLook }>();
+  private lookOf(p: { id: number; genes?: Genes }, base: CreatureLook): CreatureLook {
+    if (!p.genes) return base;
+    const hit = this.looks.get(p.id);
+    if (hit && hit.base === base) return hit.look;
+    const look = { ...base, genes: p.genes };
+    this.looks.set(p.id, { base, look });
+    return look;
   }
 
   // A new era, a new game: the land stands up more, seen from lower down, with the far side
@@ -353,7 +365,7 @@ export class ShoreScene extends RangeScene {
       if (moving && Y > this.viewTop && Y < (this.viewBottom || H)) this.movers.push({ x: X, voice: p.kind !== undefined ? voiceOf(s.villages.find((v) => v.id === p.kind)) : OURS });
       const left = moving ? (isChief ? (s.chiefPath?.[0]?.x ?? s.chiefTo?.x ?? x) < x : (w.goal?.x ?? x) < x) : hash(w.id, Math.floor(t / 5)) < 0.5;
       const sleeping = night > 0.5 && !moving && !isChief;
-      const kin = p.kind !== undefined ? s.villages.find((v) => v.id === p.kind)?.look ?? look : look;
+      const kin = this.lookOf(p, p.kind !== undefined ? s.villages.find((v) => v.id === p.kind)?.look ?? look : look);
       sprites.push({ y, draw: () => this.drawBeing(b, kin, x, y, { left, frame: moving ? Math.floor(t * 7 + w.ph) % 2 : 0, sleeping, hero: isChief, hop: moving ? Math.abs(Math.sin(t * 7 + w.ph)) * 1.5 : 0 }) });
     }
     // The raft they came on, pulled up on the beach where it landed (until it's broken up).
