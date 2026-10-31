@@ -2778,3 +2778,26 @@ requestAnimationFrame(frame);
 setInterval(step, TICK_SEC * 1000);
 setInterval(render, 250);
 setInterval(save, 10_000);
+
+// A newer build out than the one running (the browser kept an old copy of the page): the page
+// asked for afresh, and if it names other scripts than ours, the game saved and reloaded on
+// the new one (by a fresh address, so no cache stands in the way).
+void (async () => {
+  try {
+    const mine = document.querySelector<HTMLScriptElement>('script[type="module"][src]')?.src;
+    if (!mine || location.protocol === 'file:') return;
+    const html = await (await fetch(`${location.pathname}?fresh=${Date.now()}`, { cache: 'no-store' })).text();
+    const live = html.match(/src="([^"]*assets\/index-[^"]+\.js)"/)?.[1];
+    if (!live || new URL(live, location.href).pathname === new URL(mine).pathname) return;
+    // (Once: never round and round, should something keep the old one about.)
+    if (sessionStorage.getItem('ooze-updated') === live) return;
+    sessionStorage.setItem('ooze-updated', live);
+    save();
+    const q = new URLSearchParams(location.search);
+    q.delete('start');
+    q.set('v', live.replace(/^.*index-|\.js$/g, ''));
+    location.replace(`${location.pathname}?${q}`);
+  } catch {
+    // (Offline, or the page can't be had: carry on with what's here.)
+  }
+})();

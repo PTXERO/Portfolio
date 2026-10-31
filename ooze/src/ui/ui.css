@@ -957,3 +957,8 @@ div.chart-node.other { cursor: default; }
 .vline-body .card { flex-direction: column; align-items: stretch; }
 .vline-body .card > .col { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; }
 .vline-body .card > .col .px-btn { flex: 1 1 40%; }
+/* (Anywhere a village's card shows, its buttons go beneath the words: never a squeezed column.) */
+.card.village { flex-wrap: wrap; }
+.card.village > .info { flex: 1 1 calc(100% - 60px); }
+.card.village > .col { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; flex: 1 1 100%; }
+.card.village > .col .px-btn { flex: 1 1 40%; }
