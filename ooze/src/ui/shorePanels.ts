@@ -412,12 +412,14 @@ const days = (d: number) => (d < 0.6 ? 'under a day' : `${Math.round(d)} day${Ma
 /** The road to a village of yours: laid, being laid, or to be begun (wood, and the days). */
 function roadLine(s: ShoreState, v: Village): { line: string; button: string } {
   const walk = days(travelDays(s, v));
-  if (roadDone(v)) return { line: `<div class="sub dim tiny">By road: ${walk} from the hearth.</div>`, button: '' };
+  if (roadDone(v)) return { line: `<div class="sub dim tiny">By road: ${walk} from the hearth, and the chief walks it quickly.</div>`, button: '' };
+  // (Settlements keep to themselves: no roads to them.)
+  if (!v.vassal && !v.road) return { line: `<div class="sub dim tiny">${walk} from the hearth.</div>`, button: '' };
   if (v.road) return { line: `<div class="trust"><span class="tiny dim">Road</span><div class="making-bar on"><i style="width: ${Math.round((v.road.done / v.road.need) * 100)}%"></i></div></div><div class="sub dim tiny">${walk} from the hearth; the road's ${days(v.road.need - v.road.done)} from done.</div>`, button: '' };
   const c = roadCost(s, v);
   const busy = s.villages.some((x) => x.road && !roadDone(x));
   return {
-    line: `<div class="sub dim tiny">${walk} from the hearth. A road would take ${days(c.days)} to lay${busy ? ' (once the one being laid is done)' : ''}.</div>`,
+    line: `<div class="sub dim tiny">${walk} from the hearth. A road would take ${days(c.days)} to lay${busy ? ' (once the one being laid is done)' : ''}: goods, help and the chief would all get there far quicker.</div>`,
     button: `<button class="px-btn${canRoad(s, v) ? ' gold' : ''}" data-road="${v.id}"${canRoad(s, v) ? '' : ' disabled'}>Road · ${c.wood} wood</button>`,
   };
 }

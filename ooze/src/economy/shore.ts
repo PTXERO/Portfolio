@@ -748,9 +748,10 @@ export function roadCost(s: ShoreState, v: Village): { wood: number; days: numbe
   return { wood: Math.round(20 + days * 30), days: Math.round(days * 1.5 * 10) / 10 };
 }
 
-/** Whether a road can be started to a village of yours (one at a time; wood in hand). */
+/** Whether a road can be started to a vassal (one at a time; wood in hand). Settlements keep
+ * to themselves: no roads to them. */
 export function canRoad(s: ShoreState, v: Village): boolean {
-  return ruled(v) && !v.road && !s.villages.some((x) => x.road && !roadDone(x)) && s.wood >= roadCost(s, v).wood;
+  return !!v.vassal && !v.gone && !v.road && !s.villages.some((x) => x.road && !roadDone(x)) && s.wood >= roadCost(s, v).wood;
 }
 
 /** Start a road to a village of yours: the wood's paid now, the road's laid a little each day. */
@@ -764,6 +765,43 @@ export function startRoad(state: GameState, id: number): boolean {
   s.news.push(`A road to ${v.name} was begun.`);
   record(state, `They began a road to ${v.name}, ${c.wood} wood of it, to be laid over ${Math.ceil(c.days)} days.`, 'shore', shoreWhen(s));
   return true;
+}
+
+/** How much quicker the chief walks on a finished road. */
+export const ROAD_WALK = 2.5;
+
+/** The tiles the finished roads run over (worked out once for each set of roads). */
+const roadCache = new WeakMap<ShoreState, { sig: string; cells: Set<number> }>();
+export function roadCells(s: ShoreState): Set<number> {
+  const done = s.villages.filter((v) => roadDone(v) && !v.gone);
+  const sig = done.map((v) => v.id).join(',');
+  const hit = roadCache.get(s);
+  if (hit && hit.sig === sig) return hit.cells;
+  const cells = new Set<number>();
+  if (done.length) {
+    const is = shoreIsland(s.seed);
+    for (const v of done) {
+      const pts = [{ ...s.hearth }, ...findPath(is, s.hearth, v, 60000)];
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1];
+        const b = pts[i];
+        const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 2));
+        for (let j = 0; j <= n; j++) {
+          const x = Math.floor(a.x + ((b.x - a.x) * j) / n);
+          const y = Math.floor(a.y + ((b.y - a.y) * j) / n);
+          for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) cells.add((y + dy) * is.n + x + dx);
+        }
+      }
+    }
+  }
+  roadCache.set(s, { sig, cells });
+  return cells;
+}
+
+/** Whether a point's on a finished road. */
+export function onRoad(s: ShoreState, p: Pt): boolean {
+  const cells = roadCells(s);
+  return cells.size > 0 && cells.has(Math.floor(p.y) * shoreIsland(s.seed).n + Math.floor(p.x));
 }
 
 function stepRoads(state: GameState, s: ShoreState, k: number): void {
@@ -1814,7 +1852,7 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
     // (A walk from before ways were found, or one knocked off its line: the way, found now.)
     if (!s.chiefPath?.length) walkTo(s, s.chiefTo);
     if (s.chiefTo && s.chiefPath) {
-      const r = along(is, s.chiefAt, s.chiefPath, CHIEF_SPEED * (1 + bo.speed) * ((s.chiefHurt ?? 0) > s.day + s.clock / DAY_SEC ? 0.5 : 1), dt);
+      const r = along(is, s.chiefAt, s.chiefPath, CHIEF_SPEED * (1 + bo.speed) * ((s.chiefHurt ?? 0) > s.day + s.clock / DAY_SEC ? 0.5 : 1) * (onRoad(s, s.chiefAt) ? ROAD_WALK : 1), dt);
       s.chiefAt = r.at;
       if (r.done) {
         s.chiefTo = null;

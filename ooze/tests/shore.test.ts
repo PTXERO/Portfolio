@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { poiHere, answerJoin, elderThink, HEARTH_MOST, hearthMost, roomLeft, woodCap, roadCost, roadDone, startRoad, totalCritters, travelDays, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { poiHere, answerJoin, onRoad, roadCells, elderThink, HEARTH_MOST, hearthMost, roomLeft, woodCap, roadCost, roadDone, startRoad, totalCritters, travelDays, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import { hostile, raidable, sendBand, fighters, setStance, stepIn, payCost, setWarRule } from '../src/economy/war';
 import type { TribeState } from '../src/economy/types';
@@ -644,11 +644,16 @@ describe('Settlements and roads', () => {
     expect(s.food).toBeGreaterThan(food + c.food * 0.9);
     expect(s.convoys!.every((x) => x !== c)).toBe(true);
   });
-  it('a road takes the walk times one and a half to lay, and then the way is far quicker', () => {
+  it('a road (to a vassal; never a settlement) takes the walk times one and a half to lay, and then the way is far quicker', () => {
     const { state, s, v } = setup();
     const walk = travelDays(s, v);
     const cost = roadCost(s, v);
     expect(cost.days).toBeCloseTo(walk * 1.5, 0);
+    s.wood = cost.wood;
+    expect(startRoad(state, v.id)).toBe(false);
+    v.settled = undefined;
+    v.vassal = { tax: 0.1, loyalty: 90 };
+    s.wood = 0;
     expect(startRoad(state, v.id)).toBe(false);
     s.wood = cost.wood;
     expect(startRoad(state, v.id)).toBe(true);
@@ -658,6 +663,11 @@ describe('Settlements and roads', () => {
     shoreTick(state, DAY_SEC * cost.days * 0.6);
     expect(roadDone(v)).toBe(true);
     expect(travelDays(s, v)).toBeCloseTo(walk * 0.35, 3);
+    // And the chief walks it quicker than the land beside it.
+    const mid = { x: (s.hearth.x * 2 + v.x) / 3, y: (s.hearth.y * 2 + v.y) / 3 };
+    expect(roadCells(s).size).toBeGreaterThan(20);
+    expect(onRoad(s, s.hearth)).toBe(true);
+    expect(onRoad(s, { x: mid.x + 80, y: mid.y + 80 })).toBe(false);
   });
   it('a settlement counts toward your critters, and is no one to raid or be raided by', async () => {
     const war = await import('../src/economy/war');
