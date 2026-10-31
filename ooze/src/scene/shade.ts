@@ -308,8 +308,11 @@ void main() {
     for (int i = 0; i <= 22; i++) {
       float hh = hiH - float(i) * stepH;
       vec2 p = vec2(wx, uCam.y + (art.y - uCam.w + hh * K * uCam.z) / (uCam.z * TY));
-      if (hh < hTop(p)) break;
+      // (Under the fog's top first: a step can pass right through a thin bank into the hillside,
+      // and that's still the bank, found between it and the step above. Else the bank came and
+      // went in contour lines, wherever the steps happened to miss it.)
       if (hh <= fogTop(p)) { found = hh; break; }
+      if (hh < hTop(p)) break;
     }
     if (found >= 0.0) {
       // Narrowed down between that step and the one above.
