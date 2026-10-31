@@ -899,7 +899,8 @@ export class ShoreScene extends RangeScene {
     if (X < -150 || X > this.W + 150 || Y < -200 || Y > this.H + 200) return;
     const hidden = fogged(v.x, v.y);
     // Every camp's smoke goes up over the fog: a column to walk toward, all over the island.
-    {
+    // (Not over villages that are yours already: they're no mystery.)
+    if (!v.vassal && !v.joined) {
       sprites.push({
         y: v.y + 0.1,
         at: v,

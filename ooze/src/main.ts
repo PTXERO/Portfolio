@@ -16,11 +16,11 @@ import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
 import { setSteward, type StewardPlan } from './economy/shore';
-import { dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
+import { WARM_MAX, dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
 import { danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
 import { lineTree, shoreTree } from './ui/familyTree';
 import { choose, setFocus, type ForkId, type Lane } from './economy/culture';
-import { strike, answerHelp, canHelp, helpSize, canStepIn, rally, sendBand, setStance, setWarRule, stepIn, type Stance, type WarRule } from './economy/war';
+import { clash, order, type Tactic, answerHelp, canHelp, helpSize, canStepIn, rally, sendBand, setStance, setWarRule, stepIn, type Stance, type WarRule } from './economy/war';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, say, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
@@ -1050,7 +1050,6 @@ function shoreFrame(): void {
       showModal(fightCard(s, f));
       liveFight = f.id;
       liveRounds = 0;
-      startDance();
     }
     if (live || !modal.hidden) showFight(s);
   }
@@ -1127,11 +1126,11 @@ function danceInfo(): void {
   if (!s || !v || !box) return;
   const left = danceLeft(s, v);
   box.querySelector('.dance-streak')!.textContent = dancing.streak ? `Streak ${dancing.streak}` : 'Streak 0';
-  box.querySelector('.dance-left')!.textContent = left > 0 ? `${Math.ceil(left)} trust left in them today` : 'They\'re worn out for today.';
+  box.querySelector('.dance-left')!.textContent = left > 0.5 ? (left > 8 ? 'Fresh' : left > 4 ? 'Tiring' : 'Nearly worn out') : 'Worn out: they\'ll rest it off over a season.';
   const bar = box.querySelector<HTMLElement>('.trust .making-bar i');
-  if (bar) bar.style.width = `${Math.floor(v.trust ?? 0)}%`;
+  if (bar) bar.style.width = `${Math.floor(v.vassal ? ((v.vassal.warm ?? 0) / WARM_MAX) * 100 : v.trust ?? 0)}%`;
   const btn = modal.querySelector<HTMLButtonElement>('.dance-step');
-  if (btn) btn.disabled = left <= 0 || !!v.joined || v.asking !== undefined;
+  if (btn) btn.disabled = left <= 0.5 || !!v.joined || v.asking !== undefined;
 }
 function stepDance(id: number, el: HTMLElement): void {
   const s = shoreOf(state);
@@ -1191,19 +1190,27 @@ function showFight(s: NonNullable<ReturnType<typeof shoreOf>>): void {
   if (note && note.textContent !== say) note.textContent = say;
   const btn = modal.querySelector<HTMLButtonElement>('[data-stepin]');
   if (btn) btn.hidden = !canStepIn(s);
-  strikeInfo(s);
+  tacticInfo(s);
 }
 
-/** The strike bar: ready for this round, or struck (and how). */
-function strikeInfo(s: NonNullable<ReturnType<typeof shoreOf>>): void {
+/** What they show they're about to do, and your answer (if you've given one) for the round. */
+const TELLS: Record<Tactic, string> = { charge: 'They\'re gathering to charge!', hold: 'They\'re bracing behind their shields.', flank: 'They\'re spreading out to go round you.' };
+function tacticInfo(s: NonNullable<ReturnType<typeof shoreOf>>): void {
   const f = s.fight;
-  const btn = modal.querySelector<HTMLButtonElement>('.strike-btn');
-  const say = modal.querySelector<HTMLElement>('.strike-state');
-  if (!f || !btn || !say) return;
-  const ready = f.push === undefined;
-  btn.disabled = !ready;
-  const text = ready ? 'Strike as the marker crosses the gold: the next round hits harder.' : f.push! > 1 ? `Struck: the next round hits ${Math.round((f.push! - 1) * 100)}% harder.` : 'Mistimed: wait for the next round.';
-  if (say.textContent !== text) say.textContent = text;
+  const tell = modal.querySelector<HTMLElement>('.tell');
+  if (!f || !tell) return;
+  const say = f.tell ? TELLS[f.tell] : '';
+  if (tell.textContent !== say) tell.textContent = say;
+  modal.querySelectorAll<HTMLButtonElement>('[data-tactic]').forEach((b) => {
+    b.disabled = !!f.order && f.order !== b.dataset.tactic;
+    b.classList.toggle('on', f.order === b.dataset.tactic);
+  });
+  const note = modal.querySelector<HTMLElement>('.tactic-note');
+  if (note) {
+    const [us] = clash(f.order, f.tell);
+    const text = !f.order ? 'Read what they\'re about to do. Hold breaks a charge; a charge smashes a thin, spread line; flanking goes round a braced one.' : us > 1 ? 'Right read: this round, yours hit hard and theirs fall short.' : us < 1 ? 'Wrong read: this round goes their way.' : 'Even: this round is fought as it comes.';
+    if (note.textContent !== text) note.textContent = text;
+  }
 }
 
 /** A round of blows, shown: the lines lunge at each other and clash; those who took losses
@@ -2172,23 +2179,11 @@ function act(el: HTMLElement): void {
     }
   } else if (el.dataset.step) {
     stepDance(Number(el.dataset.step), el);
-  } else if (el.dataset.strike) {
+  } else if (el.dataset.tactic) {
     const s = shoreOf(state);
-    if (s?.fight) {
-      const off = Math.abs(danceAt() - dancing.zone);
-      const q = off <= dancing.width / 2 ? 1 - off / (dancing.width / 2) : 0;
-      const r = el.getBoundingClientRect();
-      if (q > 0 && strike(s, q) > 0) {
-        popSound(0.9 + q * 0.6);
-        scene.float(r.left + r.width / 2, r.top, q > 0.7 ? 'Mighty blow!' : 'Good strike!', '#e8c050');
-      } else if (q === 0 && s.fight.push === undefined) {
-        // (A miss: the next round as it would have been.)
-        strike(s, 0);
-        popSound(0.5);
-        scene.float(r.left + r.width / 2, r.top, 'Mistimed', '#f2ead7');
-      }
-      newZone();
-      strikeInfo(s);
+    if (s && order(s, el.dataset.tactic as Tactic)) {
+      popSound(0.9);
+      tacticInfo(s);
     }
   } else if (el.dataset.help) {
     const s = shoreOf(state);

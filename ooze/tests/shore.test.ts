@@ -678,31 +678,64 @@ describe('Vassals and the hearth defend each other', () => {
   });
 });
 
-describe('Striking in a fight', () => {
-  it('a strike makes the next round hit harder, once a round; raids are rallied by themselves', async () => {
+describe('Reading the enemy in a fight', () => {
+  it('a right read hits harder and blunts theirs; one order a round; raids rallied by themselves', async () => {
     const war = await import('../src/economy/war');
-    const { state, s } = (() => {
-      const state = fresh();
-      const s = shoreOf(state)!;
-      now(state, 'hearth');
-      for (let i = 0; i < 8; i++) now(state, 'hut');
-      while (s.people.length < 30) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30, dies: 9999 });
-      s.food = 300;
-      s.day = 40;
-      return { state, s };
-    })();
+    expect(war.clash('hold', 'charge')).toEqual([1.8, 0.6]);
+    expect(war.clash('charge', 'flank')).toEqual([1.8, 0.6]);
+    expect(war.clash('flank', 'hold')).toEqual([1.8, 0.6]);
+    expect(war.clash('charge', 'hold')).toEqual([0.6, 1.4]);
+    expect(war.clash(undefined, 'hold')).toEqual([1, 1]);
+    const state = fresh();
+    const s = shoreOf(state)!;
+    now(state, 'hearth');
+    for (let i = 0; i < 8; i++) now(state, 'hut');
+    while (s.people.length < 30) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30, dies: 9999 });
+    s.food = 300;
+    s.day = 40;
     const foe = s.villages.find((x) => war.hostile(s, x))!;
     s.raid = { from: foe.id, watched: s.day - 1.01, fighters: 10 };
     s.nextRaid = s.day + 100;
     shoreTick(state, DAY_SEC);
     expect(s.raid?.rallied).toBe(true);
     for (let i = 0; i < 400 && !s.fight; i++) shoreTick(state, 2);
-    expect(s.fight).toBeDefined();
-    expect(war.strike(s, 1)).toBe(2);
-    expect(war.strike(s, 1)).toBe(0);
-    const y = s.fight!.y;
+    expect(s.fight?.tell).toBeDefined();
+    expect(war.order(s, 'hold')).toBe(true);
+    expect(war.order(s, 'flank')).toBe(false);
     shoreTick(state, 3);
-    expect(s.fight?.push ?? undefined).toBeUndefined();
-    expect((s.fight?.y ?? 0) < y || !s.fight).toBe(true);
+    expect(s.fight?.order).toBeUndefined();
+  });
+});
+
+describe('Dancing tires them for a season; vassals warm to it', () => {
+  it('worn out, they rest it off over a season, not a day', async () => {
+    const { dance, danceLeft, DANCE_DAY } = await import('../src/economy/shore');
+    const state = fresh();
+    const s = shoreOf(state)!;
+    const v = s.villages.find((x) => relation(s, x) === 'kin')!;
+    v.found = true;
+    v.trust = 5;
+    s.chiefAt = { x: v.x + 2, y: v.y + 2 };
+    for (let i = 0; i < 100; i++) dance(state, v.id, 5);
+    expect(danceLeft(s, v)).toBeLessThan(0.5);
+    shoreTick(state, DAY_SEC);
+    expect(danceLeft(s, v)).toBeLessThan(DANCE_DAY / 2);
+    shoreTick(state, DAY_SEC * 4);
+    expect(danceLeft(s, v)).toBeCloseTo(DANCE_DAY, 3);
+  });
+  it('dancing with a vassal and visiting it raise where its loyalty settles', async () => {
+    const { dance } = await import('../src/economy/shore');
+    const state = fresh();
+    const s = shoreOf(state)!;
+    const v = s.villages.find((x) => relation(s, x) === 'kin')!;
+    v.found = true;
+    v.vassal = { tax: 0.6, loyalty: 0 + 0.5 };
+    s.chiefAt = { x: v.x + 2, y: v.y + 2 };
+    s.chiefTo = null;
+    for (let i = 0; i < 30; i++) dance(state, v.id, 5);
+    expect(v.vassal!.warm).toBeGreaterThan(10);
+    const before = v.vassal!.loyalty;
+    shoreTick(state, DAY_SEC);
+    expect(v.vassal!.loyalty).toBeGreaterThan(before);
   });
 });

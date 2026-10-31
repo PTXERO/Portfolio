@@ -2,7 +2,7 @@
 // homes, stores, work, exploring) and the Island (the villages found out there, and the scouts).
 
 import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
-import { danceLeft, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { WARM_MAX, danceLeft, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import { FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
@@ -381,7 +381,7 @@ function villageRow(s: ShoreState, v: Village): string {
   }
   if (v.gone) return '';
   const icon = `<span class="kind">${miniIcon(v.look, 2)}</span>`;
-  if (v.vassal) return vassalRow(v);
+  if (v.vassal) return vassalRow(s, v);
   if (v.asking !== undefined) {
     return `<div class="card px-box village">${icon}<div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">Won over</span></div>
       <div class="sub">They'd join you, but there's no room for all ${Math.round(v.pop)} of them.</div></div>
@@ -400,7 +400,7 @@ function villageRow(s: ShoreState, v: Village): string {
 
 const TAXES = [0, 0.1, 0.25, 0.4, 0.6];
 
-function vassalRow(v: Village): string {
+function vassalRow(s: ShoreState, v: Village): string {
   const d = vassalDay(v);
   const loy = Math.round(v.vassal!.loyalty);
   const mood = loy > 70 ? 'content' : loy > 40 ? 'grumbling' : loy > 15 ? 'restless' : 'on the edge of revolt';
@@ -408,7 +408,8 @@ function vassalRow(v: Village): string {
     <div class="sub">${Math.floor(v.pop)} of them, ${mood}. They send ${n0(d.food)} food and ${n0(d.wood)} wood a day${d.growth > 0.05 ? ', and are growing' : d.growth < -0.05 ? ', and are dwindling' : ''}.</div>
     <div class="trust"><span class="tiny dim">Loyal</span><div class="making-bar on loyal"><i style="width: ${loy}%"></i></div></div>
     <div class="seg tax"><span class="tiny dim">Take</span>${TAXES.map((t) => `<button class="px-btn${Math.abs(v.vassal!.tax - t) < 0.01 ? ' on' : ''}" data-tax="${v.id}:${t}">${Math.round(t * 100)}%</button>`).join('')}</div></div>
-    <div class="col"><button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
+    <div class="sub dim tiny">The less you take, the more loyal they grow; and the chief's visits and dancing warm them.</div></div>
+    <div class="col">${chiefNear(s, v) ? `<button class="px-btn gold" data-dance="${v.id}"${danceLeft(s, v) > 0.5 ? '' : ' disabled'}>${danceLeft(s, v) > 0.5 ? 'Dance' : 'Worn out'}</button>` : `<button class="px-btn" data-visit="${v.id}">Visit</button>`}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
 }
 
 /** Won over, but there's no room: what's to be done with them? */
@@ -459,7 +460,7 @@ export function villageCard(s: ShoreState, v: Village): string {
       <p class="dim tiny">${near ? `${chief} is with them: gifts count twice, and every day there they trust you more.` : `Gifts count twice brought by ${chief} in person, and the longer ${chief} stays, the more they trust you.`} At full trust they join you.</p>
       <div class="choices">
         <button class="px-btn${s.food >= giftCost(v) ? ' gold' : ''}" data-gift="${v.id}"${s.food >= giftCost(v) ? '' : ' disabled'}>Send a gift · ${giftCost(v)} food${near ? ' (×2)' : ''}</button>
-        ${near ? `<button class="px-btn gold" data-dance="${v.id}"${danceLeft(s, v) > 0 ? '' : ' disabled'}>${danceLeft(s, v) > 0 ? 'Dance with them' : 'Danced out for today'}</button>` : `<button class="px-btn" data-visit="${v.id}">${chief} visits them</button>`}
+        ${near ? `<button class="px-btn gold" data-dance="${v.id}"${danceLeft(s, v) > 0.5 ? '' : ' disabled'}>${danceLeft(s, v) > 0.5 ? 'Dance with them' : 'Worn out from dancing'}</button>` : `<button class="px-btn" data-visit="${v.id}">${chief} visits them</button>`}
         <button class="px-btn" data-act="dismiss">Later</button>
       </div>`
     : raidable(s, v)
@@ -570,7 +571,7 @@ export function danceCard(s: ShoreState, v: Village): string {
     <p class="dim tiny">Step as the marker crosses the gold. A streak wins more; a miss breaks it. They tire after a while.</p>
     <div class="dance" data-dancev="${v.id}"><div class="dance-bar"><i class="dance-zone"></i><b class="dance-mark"></b></div>
       <div class="dance-info"><span class="dance-streak tiny">Streak 0</span><span class="dance-left tiny dim"></span></div>
-      ${trustBar(v)}</div>
+      ${v.vassal ? `<div class="trust"><span class="tiny dim">Goodwill</span><div class="making-bar on loyal"><i style="width: ${Math.round(((v.vassal.warm ?? 0) / WARM_MAX) * 100)}%"></i></div></div>` : trustBar(v)}</div>
     <div class="choices"><button class="px-btn gold dance-step" data-step="${v.id}">Step!</button><button class="px-btn" data-act="dismiss">Rest</button></div>`;
 }
 
@@ -606,8 +607,9 @@ export function fightCard(s: ShoreState, f: Fight): string {
   const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
   return `<p class="label dim">${f.walls ? 'Behind the palisade' : f.attack === 'them' ? 'Raid' : 'War band'}</p><h3>${head}</h3>
     <div class="battle live" data-fight="${f.id}">${line(s.look, f.ours, 'us')}<span class="vs">vs</span>${line(v.look, f.theirs, 'them')}</div>
-    <div class="dance strike"><div class="dance-bar"><i class="dance-zone"></i><b class="dance-mark"></b></div><div class="dance-info"><span class="strike-state tiny">Strike as the marker crosses the gold: the next round hits harder.</span></div></div>
-    <button class="px-btn gold dance-step strike-btn" data-strike="1">Strike!</button>
+    <div class="tactics"><p class="tell"></p>
+      <div class="seg tactic-btns"><button class="px-btn" data-tactic="charge">Charge</button><button class="px-btn" data-tactic="hold">Hold</button><button class="px-btn" data-tactic="flank">Flank</button></div>
+      <p class="dim tiny tactic-note">Read what they're about to do. Hold breaks a charge; a charge smashes a thin, spread line; flanking goes round a braced one.</p></div>
     <p class="dim tiny fight-note"></p>
     <div class="choices"><button class="px-btn gold" data-stepin="1">${chief} steps into the line</button><button class="px-btn" data-act="dismiss">Leave them to it</button></div>`;
 }

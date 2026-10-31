@@ -76,6 +76,17 @@ export interface Battle {
   when: string;
 }
 
+/** A round's move: charge in, hold (shields up, braced), or flank (spread out to go round).
+ * Hold breaks a charge; a charge smashes a thin spread line; flanking goes round a braced one. */
+export type Tactic = 'charge' | 'hold' | 'flank';
+export const TACTICS: Tactic[] = ['charge', 'hold', 'flank'];
+const BEATS: Record<Tactic, Tactic> = { hold: 'charge', charge: 'flank', flank: 'hold' };
+/** What a round's moves do to each side's blows: [ours, theirs]. */
+export function clash(ours?: Tactic, theirs?: Tactic): [number, number] {
+  if (!ours || !theirs || ours === theirs) return [1, 1];
+  return BEATS[ours] === theirs ? [1.8, 0.6] : [0.6, 1.4];
+}
+
 /** How to meet a raid: stand and fight, hold behind the palisade, or pay them to go away. */
 export type Stance = 'fight' | 'walls' | 'pay';
 
@@ -102,8 +113,9 @@ export interface Fight {
   rallied?: boolean;
   led?: boolean;
   walls?: boolean;
-  /** A strike timed well by the player: the next round's blows count this much more. */
-  push?: number;
+  /** What they're about to do next round (they show it), and what you've told yours to do. */
+  tell?: Tactic;
+  order?: Tactic;
   /** The round the chief steps in (the next, once asked), and whether they were hurt. */
   chief?: number;
   hurt?: boolean;
@@ -196,10 +208,13 @@ export function odds(us: number, them: number): string {
 /** One round of blows. (The chief, stepping in, makes their side's round count for more.) */
 function blows(s: ShoreState, f: Fight): void {
   const rand = rngFor(s, f.rounds.length + 7);
-  const k = (f.chief === f.rounds.length ? CHIEF_HIT : 1) * (f.push ?? 1);
-  f.push = undefined;
+  // Read them right and yours hit hard while theirs are blunted; wrong, the other way about.
+  const [ours, theirs] = clash(f.order, f.tell);
+  const k = (f.chief === f.rounds.length ? CHIEF_HIT : 1) * ours;
+  f.order = undefined;
   const hitB = f.x * f.aEach * 0.18 * k * (0.75 + rand() * 0.5);
-  const hitA = f.y * f.bEach * 0.18 * (0.75 + rand() * 0.5);
+  const hitA = f.y * f.bEach * 0.18 * theirs * (0.75 + rand() * 0.5);
+  f.tell = TACTICS[Math.floor(rand() * 3)];
   f.x = Math.max(0, f.x - hitA);
   f.y = Math.max(0, f.y - hitB);
   f.rounds.push([Math.round(f.x), Math.round(f.y)]);
@@ -347,7 +362,7 @@ export function stepWar(state: GameState, s: ShoreState, dt: number): void {
       return;
     }
     const led = chiefLeads(s, v);
-    s.fight = { id: now, village: v.id, attack: 'us', ours: w.fighters, theirs: holders(v), x: w.fighters, y: holders(v), aEach: ourStrength(s, 1, false, led ? LEAD : 0), bEach: theirStrength(v, 1), rounds: [], next: ROUND_SEC, led };
+    s.fight = { id: now, village: v.id, attack: 'us', ours: w.fighters, theirs: holders(v), x: w.fighters, y: holders(v), aEach: ourStrength(s, 1, false, led ? LEAD : 0), bEach: theirStrength(v, 1), rounds: [], next: ROUND_SEC, led, tell: TACTICS[Math.floor(rngFor(s, 9)() * 3)] };
     s.news.push(`The war band falls on ${v.name}!`);
   }
 }
@@ -380,7 +395,7 @@ function meet(state: GameState, s: ShoreState, v: Village, r: Raid): void {
     const side = [{ from: at.v.id, n: own }, ...came.map((a) => ({ from: a.from, n: a.n }))];
     const n = side.reduce((x, a) => x + a.n, 0);
     const str = side.reduce((x, a) => x + (a.from === at.v!.id ? theirStrength(at.v!, a.n) : allyStrength(a)), 0);
-    s.fight = { id: now, village: v.id, at: at.v.id, side, attack: 'them', ours: n, theirs: r.fighters, x: n, y: r.fighters, aEach: str / Math.max(1, n), bEach: theirStrength(v, 1), rounds: [], next: ROUND_SEC };
+    s.fight = { id: now, village: v.id, at: at.v.id, side, attack: 'them', ours: n, theirs: r.fighters, x: n, y: r.fighters, aEach: str / Math.max(1, n), bEach: theirStrength(v, 1), rounds: [], next: ROUND_SEC, tell: TACTICS[Math.floor(rngFor(s, 9)() * 3)] };
     s.news.push(`${cap(v.name)} fall on ${at.v.name}!`);
     return;
   }
@@ -411,7 +426,7 @@ function meet(state: GameState, s: ShoreState, v: Village, r: Raid): void {
   const n = side.reduce((x, a) => x + a.n, 0);
   const ownEach = ourStrength(s, 1, true, (r.rallied ? RALLY : 0) + (walls ? WALLS : 0));
   const str = own * ownEach + came.reduce((x, a) => x + allyStrength(a), 0);
-  s.fight = { id: now, village: v.id, side: came.length ? side : undefined, attack: 'them', ours: n, theirs: r.fighters, x: n, y: r.fighters, aEach: str / Math.max(1, n), bEach: theirStrength(v, 1), rounds: [], next: ROUND_SEC, rallied: r.rallied, walls };
+  s.fight = { id: now, village: v.id, side: came.length ? side : undefined, attack: 'them', ours: n, theirs: r.fighters, x: n, y: r.fighters, aEach: str / Math.max(1, n), bEach: theirStrength(v, 1), rounds: [], next: ROUND_SEC, rallied: r.rallied, walls, tell: TACTICS[Math.floor(rngFor(s, 9)() * 3)] };
   s.news.push(`${cap(v.name)} fall on the village!`);
 }
 
@@ -432,13 +447,12 @@ export function canStepIn(s: ShoreState): boolean {
   return at ? chiefLeads(s, at) : f.attack === 'them' ? chiefHome(s) : !!v && chiefLeads(s, v);
 }
 
-/** A strike, timed (0 to 1, how near the mark): the next round's blows count up to twice as much.
- * One a round. Returns the strength it gives (0 if there's no fight, or a strike's waiting). */
-export function strike(s: ShoreState, quality: number): number {
+/** Your answer to what they're about to do (one a round): charge, hold or flank. */
+export function order(s: ShoreState, t: Tactic): boolean {
   const f = s.fight;
-  if (!f || f.push !== undefined) return 0;
-  f.push = 1 + Math.max(0, Math.min(1, quality));
-  return f.push;
+  if (!f || f.order) return false;
+  f.order = t;
+  return true;
 }
 
 /** The chief steps into the front line: the next round is theirs. */

@@ -110,7 +110,7 @@ export interface Village {
   ties?: number;
   /** Told already that the rest would come, if there were room. */
   wouldCome?: boolean;
-  /** Danced with today: the day, and the trust it's won so far that day. */
+  /** Danced with: when last, and how worn out they were then (they rest it off over a season). */
   danced?: { day: number; got: number };
   joined?: boolean;
   /** Won over, but there wasn't room: waiting for your answer (since this day), or waiting for
@@ -119,7 +119,7 @@ export interface Village {
   waiting?: number;
   /** Kept their own village, as yours: what you take of what they make (0 to 0.6), and how loyal
    * they are (0 to 100; at nothing, they throw you off). */
-  vassal?: { tax: number; loyalty: number; conquered?: number };
+  vassal?: { tax: number; loyalty: number; conquered?: number; warm?: number };
   /** Times they've come raiding and been driven off; and been paid to go away. */
   beaten?: number;
   paid?: number;
@@ -1110,9 +1110,18 @@ export function gift(state: GameState, id: number, amount?: number): number {
 export const DANCE_DAY = 12;
 const DANCE_STEP = 0.6;
 
-/** What's left of today's dancing with them. */
+/** Most goodwill a vassal holds (raising where its loyalty settles). */
+export const WARM_MAX = 40;
+
+/** Days for a village to rest off a full day's dancing. */
+const DANCE_REST = SEASON_DAYS;
+
+/** How much dancing's left in them: worn out by dancing, rested again over a season. */
 export function danceLeft(s: ShoreState, v: Village): number {
-  return v.danced?.day === s.day ? Math.max(0, DANCE_DAY - v.danced.got) : DANCE_DAY;
+  if (!v.danced) return DANCE_DAY;
+  const now = s.day + s.clock / DAY_SEC;
+  const worn = Math.max(0, v.danced.got - ((now - v.danced.day) * DANCE_DAY) / DANCE_REST);
+  return Math.max(0, DANCE_DAY - worn);
 }
 
 /** A step danced well with them, the chief there: trust, more the longer the streak (to five);
@@ -1120,13 +1129,16 @@ export function danceLeft(s: ShoreState, v: Village): number {
 export function dance(state: GameState, id: number, streak: number): number {
   const s = shoreOf(state);
   const v = s?.villages.find((x) => x.id === id);
-  if (!s || !v || !canWin(s, v) || !chiefNear(s, v)) return 0;
+  if (!s || !v || !(canWin(s, v) || (v.vassal && !v.gone)) || !chiefNear(s, v)) return 0;
   const left = danceLeft(s, v);
   if (left <= 0) return 0;
   const gain = Math.min(left, DANCE_STEP * (1 + Math.min(5, streak) * 0.4) * (1 + boosts(s).gift));
   if (!v.danced) record(state, `${s.people.find((p) => p.id === s.chief)?.name ?? 'The chief'} danced with ${v.name}, and they warmed to us.`, 'shore', shoreWhen(s));
-  v.danced = { day: s.day, got: (v.danced?.day === s.day ? v.danced.got : 0) + gain };
-  addTrust(state, s, v, gain);
+  const now = s.day + s.clock / DAY_SEC;
+  v.danced = { day: now, got: DANCE_DAY - left + gain };
+  // (With a vassal, it's their loyalty that warms: twice what it'd be in trust.)
+  if (v.vassal) v.vassal.warm = Math.min(WARM_MAX, (v.vassal.warm ?? 0) + gain * 2);
+  else addTrust(state, s, v, gain);
   return gain;
 }
 
@@ -1211,7 +1223,11 @@ function stepVassals(state: GameState, s: ShoreState, k: number): void {
     // Loyalty settles toward what the tax makes it (5 a day), and a starving lord is no lord.
     // (Taken by force, they're grudging for a season or two.)
     const grudge = v.vassal.conquered !== undefined && s.day - v.vassal.conquered < SEASON_DAYS * 6 ? 30 : 0;
-    const target = s.hungry > 1 ? Math.min(d.loyalty, 30) : d.loyalty - grudge;
+    // (Goodwill, from the chief's visits and dancing, raises where loyalty settles; it fades
+    // slowly, two a day.)
+    const warm = v.vassal.warm ?? 0;
+    v.vassal.warm = Math.max(0, warm - 2 * k);
+    const target = s.hungry > 1 ? Math.min(d.loyalty, 30) : Math.min(100, d.loyalty - grudge + warm);
     v.vassal.loyalty += Math.sign(target - v.vassal.loyalty) * Math.min(Math.abs(target - v.vassal.loyalty), 5 * k);
     if (v.vassal.loyalty <= 0) {
       v.vassal = undefined;
@@ -1431,6 +1447,8 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
       record(state, `${cap(v.name)} grew tired of waiting for room, and trust you less for it.`, 'shore', shoreWhen(s));
     }
   }
+  // A vassal's loyalty warms while the chief's with them (three a day).
+  for (const v of s.villages) if (v.vassal && !v.gone && chiefNear(s, v)) v.vassal.warm = Math.min(WARM_MAX, (v.vassal.warm ?? 0) + 3 * k);
   // Trust grows by itself where the chief stays a while, and (for grazers) as kin drift in.
   for (const v of s.villages) {
     if (!canWin(s, v)) continue;
