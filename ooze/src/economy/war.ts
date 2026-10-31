@@ -555,8 +555,8 @@ function finish(state: GameState, s: ShoreState, f: Fight): void {
     flee(state, s, v);
     s.raids = (s.raids ?? 0) + 1;
   } else if (won) {
-    const food = Math.min(Math.round(v.pop * 2), Math.max(0, foodCap(s) - s.food));
-    const wood = Math.min(Math.round(v.pop), Math.max(0, woodCap(s) - s.wood));
+    const food = Math.min(Math.round(v.pop * 2), Math.floor(Math.max(0, foodCap(s) - s.food)));
+    const wood = Math.min(Math.round(v.pop), Math.floor(Math.max(0, woodCap(s) - s.wood)));
     s.food += food;
     s.wood += wood;
     b.took = { food, wood };
@@ -595,8 +595,8 @@ export function decideConquest(state: GameState, s: ShoreState, choice: Mercy): 
     record(state, `${cap(v.name)} were made to pay tribute to the hearth.`, 'shore', shoreWhen(s));
   } else if (choice === 'plunder') {
     // Everything they had: and they're left free, fewer, and hating you.
-    const food = Math.min(Math.round(v.pop * 3), Math.max(0, foodCap(s) - s.food));
-    const wood = Math.min(Math.round(v.pop * 1.5), Math.max(0, woodCap(s) - s.wood));
+    const food = Math.min(Math.round(v.pop * 3), Math.floor(Math.max(0, foodCap(s) - s.food)));
+    const wood = Math.min(Math.round(v.pop * 1.5), Math.floor(Math.max(0, woodCap(s) - s.wood)));
     s.food += food;
     s.wood += wood;
     for (const r of RES_OF[v.habitat ?? 'meadow']) if (r !== 'fish') (s.res ??= {})[r] = Math.min(RES_CAP, (s.res[r] ?? 0) + 6);

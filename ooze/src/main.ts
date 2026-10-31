@@ -1259,7 +1259,7 @@ function playBattle(done = false): void {
     sides.forEach((side, k) => {
       const left = r[k];
       side.querySelector<HTMLElement>('.making-bar i')!.style.width = `${Math.round((left / Math.max(1, start[k])) * 100)}%`;
-      side.querySelector<HTMLElement>('.num')!.textContent = String(left);
+      side.querySelector<HTMLElement>('.num')!.textContent = String(Math.round(left));
       const icons = side.querySelectorAll<HTMLElement>('.line img');
       const stand = Math.ceil((left / Math.max(1, start[k])) * icons.length);
       icons.forEach((ic, j) => ic.classList.toggle('down', j >= stand));
