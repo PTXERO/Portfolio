@@ -164,7 +164,7 @@ export interface Village {
   waiting?: number;
   /** Kept their own village, as yours: what you take of what they make (0 to 0.6), and how loyal
    * they are (0 to 100; at nothing, they throw you off). */
-  vassal?: { tax: number; loyalty: number; conquered?: number; warm?: number };
+  vassal?: { tax: number; loyalty: number; conquered?: number; warm?: number; warned?: boolean };
   /** Not kin, not yours: where they stand with you (-100 to 100; unset, where they started), and
    * when the chief last demanded they submit. */
   standing?: number;
@@ -1066,6 +1066,8 @@ export function setSettleFocus(state: GameState, id: number, focus: SettleFocus)
 const ASK_DAYS = 4;
 const THRIVE_DAYS = SEASON_DAYS;
 const SULK_DAYS = 3;
+/** Loyalty a vassal's request answered wins (and, unanswered, loses). */
+const ASK_LOYALTY = 10;
 
 /** What the hearth would hand over, for what's asked. */
 function askHave(s: ShoreState, a: SettleAsk): number {
@@ -1080,16 +1082,18 @@ export function canAnswer(s: ShoreState, v: Village): boolean {
 function settledAsks(state: GameState, s: ShoreState): void {
   const now = s.day + s.clock / DAY_SEC;
   for (const v of s.villages) {
-    if (v.settled === undefined || v.gone) continue;
+    if (!ruled(v)) continue;
     // Grown into a village, a town: worth telling.
     const st = stageOf(v);
-    if (st > (v.stage ?? 0)) {
+    if (v.settled !== undefined && st > (v.stage ?? 0)) {
       s.news.push(`${cap(v.name)} have grown into a ${STAGES[st]}.`);
       record(state, `${cap(v.name)} grew into a ${STAGES[st]}${st === 2 ? ', with a fence round it and more to give' : ''}.`, 'shore', shoreWhen(s));
     }
-    v.stage = Math.max(v.stage ?? 0, st);
+    if (v.settled !== undefined) v.stage = Math.max(v.stage ?? 0, st);
     if (v.ask && now > v.ask.until) {
-      v.sulk = now + SULK_DAYS;
+      // (A settlement sulks; a vassal's loyalty suffers.)
+      if (v.vassal) v.vassal.loyalty = Math.max(0, v.vassal.loyalty - ASK_LOYALTY);
+      else v.sulk = now + SULK_DAYS;
       s.news.push(`${cap(v.name)} are sore that no one came.`);
       record(state, `${cap(v.name)} asked the hearth for ${askWords(v.ask)}, and no one came. They were sore about it.`, 'shore', shoreWhen(s));
       v.ask = undefined;
@@ -1097,7 +1101,7 @@ function settledAsks(state: GameState, s: ShoreState): void {
       continue;
     }
     const rand = rng(s.seed * 41 + s.day * 13 + v.id * 3);
-    v.askNext ??= v.settled + 3 + rand() * 4;
+    v.askNext ??= now + 3 + rand() * 4;
     if (v.ask || now < v.askNext) continue;
     const kinds: SettleAsk['kind'][] = ['food', 'wood', 'visit'];
     for (const r of Object.keys(s.res ?? {}) as Res[]) if ((s.res?.[r] ?? 0) >= 6 && !landGoods(v).includes(r) && r !== 'fish') kinds.push(r);
@@ -1126,10 +1130,14 @@ export function answerAsk(state: GameState, id: number): boolean {
   const now = s.day + s.clock / DAY_SEC;
   v.ask = undefined;
   v.sulk = undefined;
-  v.thrive = now + THRIVE_DAYS;
+  // (A settlement thrives for it; a vassal grows the more loyal.)
+  if (v.vassal) {
+    v.vassal.loyalty = Math.min(100, v.vassal.loyalty + ASK_LOYALTY);
+    v.vassal.warm = Math.min(WARM_MAX, (v.vassal.warm ?? 0) + 10);
+  } else v.thrive = now + THRIVE_DAYS;
   v.askNext = now + 5 + rng(s.seed + v.id * 7 + s.day)() * 5;
   s.news.push(`${cap(v.name)} are glad of it, and thriving.`);
-  record(state, `${a.kind === 'visit' ? `${s.people.find((p) => p.id === s.chief)?.name ?? 'The chief'} came to ${v.name} when they asked` : `The hearth sent ${v.name} ${askWords(a)} when they asked`}, and they thrived for it.`, 'shore', shoreWhen(s));
+  record(state, `${a.kind === 'visit' ? `${s.people.find((p) => p.id === s.chief)?.name ?? 'The chief'} came to ${v.name} when they asked` : `The hearth sent ${v.name} ${askWords(a)} when they asked`}, and ${v.vassal ? 'were the more loyal' : 'they thrived'} for it.`, 'shore', shoreWhen(s));
   return true;
 }
 
@@ -1650,6 +1658,31 @@ function addTrust(state: GameState, s: ShoreState, v: Village, n: number): void 
   settle(state, s, v);
 }
 
+/** A vassal loyal enough (and past any grudge) can be brought into the hearth's fold: a
+ * settlement, tribute no more, theirs and yours alike. It takes a feast. */
+export const ANNEX_LOYALTY = 85;
+export function annexCost(v: Village): number {
+  return Math.round(20 + v.pop);
+}
+export function annexWhy(s: ShoreState, v: Village): string | null {
+  if (!v.vassal || v.gone) return 'not a vassal';
+  if (v.vassal.conquered !== undefined && s.day - v.vassal.conquered < SEASON_DAYS * 6) return 'they still remember being beaten';
+  if (v.vassal.loyalty < ANNEX_LOYALTY) return `loyalty of ${ANNEX_LOYALTY}`;
+  if (s.food < annexCost(v)) return `${annexCost(v)} food for the feast`;
+  return null;
+}
+export function annex(state: GameState, id: number): boolean {
+  const s = shoreOf(state);
+  const v = s?.villages.find((x) => x.id === id);
+  if (!s || !v || annexWhy(s, v)) return false;
+  s.food -= annexCost(v);
+  record(state, `A feast was held with ${v.name}, and they were brought into the hearth's fold: tribute no more, but kin of the hearth.`, 'shore', shoreWhen(s));
+  v.road = v.road && roadDone(v) ? v.road : undefined;
+  v.trade = undefined;
+  settle(state, s, v);
+  return true;
+}
+
 /** Won over: they keep their village, as yours. */
 function settle(state: GameState, s: ShoreState, v: Village): void {
   if (v.joined || v.settled !== undefined) return;
@@ -1734,11 +1767,24 @@ function stepVassals(state: GameState, s: ShoreState, k: number): void {
     v.vassal.warm = Math.max(0, warm - 2 * k);
     const target = s.hungry > 1 ? Math.min(d.loyalty, 30) : Math.min(100, d.loyalty - grudge + warm);
     v.vassal.loyalty += Math.sign(target - v.vassal.loyalty) * Math.min(Math.abs(target - v.vassal.loyalty), 5 * k);
-    if (v.vassal.loyalty <= 0) {
+    // Restless: a warning, once, while it can still be mended.
+    if (v.vassal.loyalty < 20 && !v.vassal.warned) {
+      v.vassal.warned = true;
+      s.news.push(`${cap(v.name)} are restless. Take less, or go to them, or they'll throw off your rule.`);
+      record(state, `There was talk in ${v.name} of paying the hearth no more.`, 'shore', shoreWhen(s));
+    } else if (v.vassal.loyalty >= 40) v.vassal.warned = undefined;
+    // (Asked for the chief: the chief's being there is the answer.)
+    if (v.ask?.kind === 'visit' && chiefNear(s, v)) answerAsk(state, v.id);
+    if (v.vassal && v.vassal.loyalty <= 0) {
+      // Thrown off: those taken by force rise against you, enemies now; the rest just go
+      // their own way.
+      const forced = v.vassal.conquered !== undefined;
       v.vassal = undefined;
+      v.ask = undefined;
       v.trust = 30;
-      s.news.push(`${cap(v.name)} have thrown off your rule.`);
-      record(state, `${cap(v.name)} would pay no more, and threw off the hearth's rule.`, 'shore', shoreWhen(s));
+      v.standing = forced ? -70 : -20;
+      s.news.push(forced ? `${cap(v.name)} have risen against you!` : `${cap(v.name)} have thrown off your rule.`);
+      record(state, forced ? `${cap(v.name)} rose against the hearth that had beaten them, threw off its rule, and swore to have their own back.` : `${cap(v.name)} would pay no more, and threw off the hearth's rule.`, 'shore', shoreWhen(s));
     }
   }
 }

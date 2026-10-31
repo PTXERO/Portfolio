@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createState } from '../src/economy/state';
-import { build, DAY_SEC, relation, shoreOf, shoreTick, startShore, takeRaft } from '../src/economy/shore';
+import { annex, annexWhy, answerAsk, build, DAY_SEC, relation, shoreOf, shoreTick, startShore, takeRaft } from '../src/economy/shore';
 import { ALLY, canDemand, demandSubmit, giftForeign, PEACE, stanceOf, standingOf } from '../src/economy/diplomacy';
 import { decideConquest, hostile, levyFor, sendBand } from '../src/economy/war';
 import type { TribeState } from '../src/economy/types';
@@ -175,3 +175,49 @@ describe('Conquest', () => {
     expect(s.fight?.ours).toBe(15);
   });
 });
+
+describe('Vassals', () => {
+  const vassal = (loyalty = 60, conquered?: number) => {
+    const { state, s } = fresh('omnivore');
+    const v = s.villages.find((x) => relation(s, x) === 'prey')!;
+    v.found = true;
+    v.pop = 20;
+    v.vassal = { tax: 0.1, loyalty, conquered };
+    return { state, s, v };
+  };
+  it('a vassal asks things of the hearth: answered, more loyal; ignored, less', () => {
+    const { state, s, v } = vassal(60);
+    s.food = 1000;
+    s.wood = 1000;
+    for (let i = 0; i < 12 && !v.ask; i++) shoreTick(state, DAY_SEC);
+    expect(v.ask).toBeDefined();
+    if (v.ask!.kind === 'visit') v.ask!.kind = 'wood';
+    const before = v.vassal!.loyalty;
+    expect(answerAsk(state, v.id)).toBe(true);
+    expect(v.vassal!.loyalty).toBeGreaterThan(before);
+    expect(v.thrive).toBeUndefined();
+  });
+  it('a loyal vassal, past its grudge, can be brought into the fold with a feast: a settlement', () => {
+    const { state, s, v } = vassal(90, 0);
+    s.food = 1000;
+    expect(annexWhy(s, v)).toMatch(/remember/);
+    s.day = 40;
+    expect(annexWhy(s, v)).toBeNull();
+    expect(annex(state, v.id)).toBe(true);
+    expect(v.vassal).toBeUndefined();
+    expect(v.settled).toBeDefined();
+    expect(s.food).toBe(1000 - 40);
+  });
+  it('a conquered vassal pushed too far rises against you, an enemy; warned first', () => {
+    const { state, s, v } = vassal(22, 0);
+    v.vassal!.tax = 0.6;
+    shoreTick(state, DAY_SEC * 0.3);
+    shoreTick(state, DAY_SEC * 0.3);
+    expect(v.vassal?.warned).toBe(true);
+    expect(s.news.some((n) => /restless/.test(n))).toBe(true);
+    for (let i = 0; i < 20 && v.vassal; i++) shoreTick(state, DAY_SEC);
+    expect(v.vassal).toBeUndefined();
+    expect(standingOf(s, v)).toBe(-70);
+  });
+});
+

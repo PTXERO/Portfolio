@@ -17,7 +17,7 @@ import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants,
 import { prepareShoreIsland } from './economy/terrainStore';
 import { demandSubmit, giftForeign } from './economy/diplomacy';
 import { decideConquest, type Mercy } from './economy/war';
-import { roadFront, upgradeRoad, setTrade, answerAsk, setSettleFocus, type SettleFocus, chiefNear, setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
+import { annex, roadFront, upgradeRoad, setTrade, answerAsk, setSettleFocus, type SettleFocus, chiefNear, setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
 import { WARM_MAX, dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
 import { mercyCard, danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
 import { startFireDance, type FireDance } from './ui/fireDance';
@@ -2110,6 +2110,11 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.answer) {
     if (answerAsk(state, Number(el.dataset.answer))) {
       cue('chime', 0.4);
+      save();
+    }
+  } else if (el.dataset.annex) {
+    if (annex(state, Number(el.dataset.annex))) {
+      cue('ascend', 0.5);
       save();
     }
   } else if (el.dataset.mercy) {
