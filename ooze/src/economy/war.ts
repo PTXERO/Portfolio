@@ -11,7 +11,7 @@
 
 import type { GameState } from './types';
 import { record } from './chronicle';
-import { boosts, DAY_SEC, foodCap, isAdult, killed, relation, shoreWhen, woodCap, type ShoreState, type Village } from './shore';
+import { boosts, DAY_SEC, foodCap, isAdult, killed, relation, shoreSeason, shoreWhen, woodCap, type ShoreState, type Village } from './shore';
 
 /** How hard each diet fights (a fighter's worth). */
 const KIND: Record<string, number> = { hunter: 1.3, omnivore: 1.15, grazer: 1 };
@@ -209,7 +209,12 @@ function warChiefRaids(state: GameState, s: ShoreState): void {
   const rule = s.warRule ?? 'off';
   if (rule === 'off' || !hasWarChief(s) || s.warband || s.fight || s.raid || s.hungry > 0) return;
   if (today(s) - (s.lastBand ?? -99) < BAND_REST || s.food < Math.min(foodCap(s) * 0.4, s.people.length * 2)) return;
-  const n = Math.floor(fighters(s) / 2);
+  // Not in winter (the fires need every hand); and enough kept home to hold off the strongest
+  // that might come raiding while the band's away.
+  if (shoreSeason(s).si === 3) return;
+  const threat = Math.max(0, ...s.villages.filter((x) => hostile(s, x)).map((x) => theirStrength(x, raiders(x))));
+  const home = Math.ceil((threat * 1.1) / Math.max(0.1, ourStrength(s, 1, true)));
+  const n = Math.min(Math.floor(fighters(s) / 2), fighters(s) - home);
   if (n < 4) return;
   const need = rule === 'weaker' ? 1.5 : 0.95;
   const v = s.villages
@@ -244,7 +249,9 @@ export function warDawn(state: GameState, s: ShoreState): void {
     const them = s.villages.filter((v) => hostile(s, v)).sort((a, b) => Math.hypot(a.x - hearth.x, a.y - hearth.y) - Math.hypot(b.x - hearth.x, b.y - hearth.y));
     const rand = rngFor(s, 1);
     // The nearest that think they'd win (they don't raid a fight they'd lose).
-    const v = them.find((x) => theirStrength(x, raiders(x)) > ourStrength(s, fighters(s), true) * 0.45 * (0.8 + rand() * 0.4));
+    // (Bolder in winter, when they're hungry too; and bolder against a village that's paid them.)
+    const bold = (x: Village) => (shoreSeason(s).si === 3 ? 0.85 : 1) * (1 - 0.12 * Math.min(3, x.paid ?? 0));
+    const v = them.find((x) => theirStrength(x, raiders(x)) > ourStrength(s, fighters(s), true) * 0.45 * bold(x) * (0.8 + rand() * 0.4));
     s.nextRaid = now + RAID_GAP * (0.7 + rand() * 0.6);
     if (v) {
       s.raid = { from: v.id, watched: now, fighters: raiders(v) };

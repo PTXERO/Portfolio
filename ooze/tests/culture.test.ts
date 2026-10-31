@@ -55,7 +55,9 @@ describe('Culture', () => {
     const c = s.culture!;
     console.log(`first idea after ${firstIdeaDay} days (${(firstIdeaDay / 30).toFixed(1)}h); 4 lanes done at ${s.day} days (${(s.day / 30).toFixed(1)}h); ${c.done.length} ideas; ${lanesDone(c)} lanes done; rates ${LANES.map((l) => `${l.id} ${practiceRate(s, l.id, plan).toFixed(2)}`).join(', ')}`);
     expect(c.done.length).toBeGreaterThan(0);
-    expect(c.forks.dead).toBe('bury');
+    // (Left to the elders, they follow the culture's leaning: the lane it's taken further.)
+    const ahead = (lane: string) => c.done.filter((id) => ['dried', 'grounds', 'blades', 'baskets', 'watchers', 'clubs', 'fourword', 'circle', 'hearths', 'songs', 'dead', 'feast', 'crossing', 'farspear', 'names', 'fingers'].indexOf(id) >= 0 && (lane === 'stories' ? ['crossing', 'farspear'] : ['dead', 'feast']).includes(id)).length;
+    expect(c.forks.dead).toBe(ahead('stories') > ahead('rites') ? 'bury' : 'burn');
   }, 60_000);
   it('the Great Hearth, once four lanes are done, closes the Hearth Age', () => {
     const { state, s } = village(TURN_AT);

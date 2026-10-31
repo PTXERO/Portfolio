@@ -156,6 +156,8 @@ export interface Scout {
   path?: Pt[];
   /** Seconds before giving up on where they're headed (stuck behind water, say). */
   left: number;
+  /** Seconds resting before setting out again. */
+  rest?: number;
 }
 
 /** A landmark out on the island: where, found yet, and how many of its layers are explored
@@ -559,17 +561,47 @@ export function count(s: ShoreState, id: BuildId): number {
 }
 
 export function isAdult(s: ShoreState, p: ShorePerson): boolean {
-  return s.day + s.clock / DAY_SEC - p.born >= GROW_DAYS / (1 + boosts(s).grow);
+  return p.born <= adultCut(s);
+}
+
+/** Born on or before this day, they're grown (worked out once a moment, not once a person). */
+const cutCache = new WeakMap<ShoreState, { t: number; g: number; cut: number }>();
+function adultCut(s: ShoreState): number {
+  const t = s.day * DAY_SEC + s.clock;
+  const g = boosts(s).grow;
+  const hit = cutCache.get(s);
+  if (hit && hit.t === t && hit.g === g) return hit.cut;
+  const cut = t / DAY_SEC - GROW_DAYS / (1 + g);
+  cutCache.set(s, { t, g, cut });
+  return cut;
+}
+
+/** How many are grown (counted once a moment). */
+const grownCache = new WeakMap<ShoreState, { t: number; n: number; people: ShorePerson[]; grown: number }>();
+export function grownCount(s: ShoreState): number {
+  const t = s.day * DAY_SEC + s.clock;
+  const hit = grownCache.get(s);
+  if (hit && hit.t === t && hit.n === s.people.length && hit.people === s.people) return hit.grown;
+  const cut = adultCut(s);
+  let grown = 0;
+  for (const p of s.people) if (p.born <= cut) grown++;
+  grownCache.set(s, { t, n: s.people.length, people: s.people, grown });
+  return grown;
 }
 
 const NO_BOOSTS: Boosts = { food: 0, wood: 0, births: 0, grow: 0, speed: 0, sight: 0, gift: 0, room: 0, foodCap: 0, woodCap: 0, winter: 0, watch: 0, cheap: 0, mend: 0, guard: 0, arms: 0, warn: 0 };
-const boostCache = new WeakMap<ShoreState, { key: string; b: Boosts }>();
+const boostCache = new WeakMap<ShoreState, { k: [number, number, number, number]; b: Boosts }>();
 
 /** What the buildings and relics add up to (worked out again only when either changes). */
 export function boosts(s: ShoreState): Boosts {
-  const key = `${s.built.length}|${s.relics?.length ?? 0}|${s.culture?.done.length ?? 0}|${Object.keys(s.culture?.forks ?? {}).length}`;
+  // (Checked by counts, not a key built each call: it's asked for many times a step.)
+  const built = s.built.length;
+  const relics = s.relics?.length ?? 0;
+  const ideas = s.culture?.done.length ?? 0;
+  const forks = s.culture ? Object.keys(s.culture.forks).length : 0;
   const hit = boostCache.get(s);
-  if (hit && hit.key === key) return hit.b;
+  if (hit && hit.k[0] === built && hit.k[1] === relics && hit.k[2] === ideas && hit.k[3] === forks) return hit.b;
+  const key: [number, number, number, number] = [built, relics, ideas, forks];
   const b = { ...NO_BOOSTS };
   const add = (fx: Partial<Boosts> | undefined, n = 1) => {
     for (const k of Object.keys(fx ?? {}) as (keyof Boosts)[]) b[k] += (fx![k] ?? 0) * n;
@@ -578,7 +610,7 @@ export function boosts(s: ShoreState): Boosts {
   for (const r of s.relics ?? []) add(RELICS.find((x) => x.id === r)?.fx);
   for (const fx of cultureFx(s)) add(fx);
   b.winter = Math.min(1, b.winter);
-  boostCache.set(s, { key, b });
+  boostCache.set(s, { k: key, b });
   return b;
 }
 
@@ -699,7 +731,7 @@ const BUILD_RATE = 0.28;
  * bigger village. */
 export function builders(s: ShoreState): number {
   if (!s.building) return 0;
-  const adults = s.people.filter((p) => isAdult(s, p)).length;
+  const adults = grownCount(s);
   return Math.max(Math.min(1, adults), Math.min(6, Math.round(adults * 0.2)));
 }
 
@@ -779,13 +811,18 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
   const food = (): BuildId | null => (open.has('weir') && buildCost(s, 'weir') < buildCost(s, 'camp') ? 'weir' : open.has('camp') ? 'camp' : null);
   // Stores: whichever holds the most food for its wood (that they have what it needs for).
   const HOLDS: [BuildId, number][] = [['rack', 40], ['granary', 120], ['pottery', 100], ['salter', 40]];
+  // (Stores: when the food's near full, or the stock the season asks for won't fit.)
+  const want = stockTargets(s, plan.eat).want;
   const stores = (): BuildId | null =>
-    s.food >= foodCap(s) * 0.9 ? HOLDS.filter(([id]) => open.has(id) && hasNeeds(s, id)).sort((a, b) => buildCost(s, a[0]) / a[1] - buildCost(s, b[0]) / b[1])[0]?.[0] ?? null : null;
+    s.food >= foodCap(s) * 0.9 || (foodCap(s) < want && s.food >= foodCap(s) * 0.7) ? HOLDS.filter(([id]) => open.has(id) && hasNeeds(s, id)).sort((a, b) => buildCost(s, a[0]) / a[1] - buildCost(s, b[0]) / b[1])[0]?.[0] ?? null : null;
   const p = s.steward?.plan ?? 'balanced';
   const homesW: [ElderWhy, () => BuildId | null] = ['homes', () => (free <= (p === 'homes' ? 4 : 2) ? homes() : null)];
   const foodW: [ElderWhy, () => BuildId | null] = ['food', () => (plan.food > plan.land - (p === 'food' ? 2 : 0) ? food() : null)];
   const storesW: [ElderWhy, () => BuildId | null] = ['stores', stores];
-  const wants = p === 'homes' ? [homesW, foodW] : p === 'food' ? [foodW, homesW, storesW] : p === 'stores' ? [storesW, homesW, foodW] : [homesW, foodW, storesW];
+  // Going hungry (not just winter's lean), more gathering ground comes before anything.
+  const starving = s.hungry > 0 || (plan.foodRate < plan.eat && s.food < plan.eat * 3);
+  const hungerW: [ElderWhy, () => BuildId | null] = ['food', () => (starving ? food() : null)];
+  const wants = [hungerW, ...(p === 'homes' ? [homesW, foodW] : p === 'food' ? [foodW, homesW, storesW] : p === 'stores' ? [storesW, homesW, foodW] : [homesW, foodW, storesW])];
   // Come autumn they keep wood back for the winter's fires (six days of it).
   const si = shoreSeason(s).si;
   const reserve = si >= 2 ? burnPerDay(s) * (si === 3 ? 1 : 2) * 6 : 0;
@@ -839,7 +876,8 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
   ];
   // Spare: what's left after a few days' firewood (and, come autumn, the winter's).
   const keep = Math.max(5, burnPerDay(s) * WOOD_KEEP_DAYS) + reserve;
-  const next = useful.find(([id, worth]) => worth && open.has(id) && hasNeeds(s, id))?.[0];
+  // (Nothing for comfort while they're hungry.)
+  const next = starving ? undefined : useful.find(([id, worth]) => worth && open.has(id) && hasNeeds(s, id))?.[0];
   if (next && s.wood + 0.5 - buildCost(s, next) >= keep) return { pick: next, why: 'spare', text: `"Nothing presses, and there's wood to spare. ${An(next)} would serve us."` };
   // (More than the woodpiles will ever hold, with what's kept back: a woodpile first.)
   if (next && buildCost(s, next) + keep > woodCap(s) && open.has('woodpile')) return go('woodpile', 'woodpile', `"${An(next)} would serve us, but the woodpiles cannot hold the wood for it. Another woodpile first."`);
@@ -935,9 +973,34 @@ function untell(s: ShoreState, key: string): void {
   if (s.told?.includes(key)) s.told = s.told.filter((k) => k !== key);
 }
 
+/** What the village means to keep in store (the work's planned toward it, the elders make room
+ * for it, the envoy and the war chief leave it be): food, a few days' eating (ten come autumn,
+ * against the winter; four in it); wood, the fires' (at winter's rate from autumn) and enough to
+ * build with. `want` is the food the season asks for, whether or not the stores hold it. */
+export function stockTargets(s: ShoreState, eat?: number): { food: number; wood: number; burn: number; want: number } {
+  const si = shoreSeason(s).si;
+  const e = eat ?? s.people.reduce((a, p) => a + (isAdult(s, p) ? EAT : EAT_CHILD), 0);
+  const burn = burnPerDay(s) * (si === 2 ? 2 : 1);
+  const want = e * (si === 2 ? 10 : si === 3 ? 4 : 6);
+  return { food: Math.min(foodCap(s) * 0.95, want), wood: Math.min(woodCap(s) * 0.95, Math.max(burn * 8, woodCap(s) * 0.6)), burn, want };
+}
+
 /** The village's day: how many work at food and at wood, and what that brings in. */
-export function workPlan(s: ShoreState): { food: number; wood: number; eat: number; foodRate: number; woodRate: number; land: number } {
-  const grown = s.people.filter((p) => isAdult(s, p)).length;
+type Plan = { food: number; wood: number; eat: number; foodRate: number; woodRate: number; land: number };
+/** The plan, kept for the moment it was made in (it's asked for several times a step; anything
+ * it depends on changing makes it again). */
+const planCache = new WeakMap<ShoreState, { k: unknown[]; plan: Plan }>();
+export function workPlan(s: ShoreState): Plan {
+  const k = [s.day * DAY_SEC + s.clock, s.food, s.wood, s.people.length, s.built.length, s.building?.id, s.warband?.fighters, s.lean, s.forest, s.culture?.done.length, s.relics?.length];
+  const hit = planCache.get(s);
+  if (hit && hit.k.every((v, i) => v === k[i])) return hit.plan;
+  const plan = makePlan(s);
+  planCache.set(s, { k, plan });
+  return plan;
+}
+
+function makePlan(s: ShoreState): Plan {
+  const grown = grownCount(s);
   const kids = s.people.length - grown;
   const eat = grown * EAT + kids * EAT_CHILD;
   // (Those building aren't gathering.)
@@ -950,13 +1013,10 @@ export function workPlan(s: ShoreState): { food: number; wood: number; eat: numb
   // (more come autumn, against the winter; less in it, when gathering's poor). Wood: the fires
   // (from autumn, at winter's doubled rate), and the woodpiles kept well stocked for building.
   // Each stock is refilled over a few days, not all at once. Then the lean tips it.
-  const si = shoreSeason(s).si;
   const land = landFor(s);
-  const burn = burnPerDay(s) * (si === 2 ? 2 : 1);
   const fCap = foodCap(s);
   const wCap = woodCap(s);
-  const foodTarget = Math.min(fCap * 0.95, eat * (si === 2 ? 10 : si === 3 ? 4 : 6));
-  const woodTarget = Math.min(wCap * 0.95, Math.max(burn * 8, wCap * 0.6));
+  const { food: foodTarget, wood: woodTarget, burn } = stockTargets(s, eat);
   const tip = s.lean === 'food' ? [1.35, 0.75] : s.lean === 'wood' ? [0.8, 1.35] : [1, 1];
   let needF = ((eat + Math.max(0, foodTarget - s.food) / 3) / foodEach) * tip[0];
   let needW = ((burn + Math.max(0, woodTarget - s.wood) / 3) / woodEach) * tip[1];
@@ -1311,7 +1371,11 @@ function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>
     const v = s.villages.filter((x) => canWin(s, x)).sort((a, b) => Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y) - Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y))[0];
     // What's spare: the food past three days' eating. A full gift if there's that much; else
     // what there is, if it's half a gift or more.
-    const spare = s.food - plan.eat * FOOD_KEEP_DAYS;
+    // (Never the season's stock: past three days' eating, or what autumn and winter ask; nothing
+    // while they're hungry or raiders are coming.)
+    const si = shoreSeason(s).si;
+    const keep = Math.max(plan.eat * FOOD_KEEP_DAYS, si >= 2 ? stockTargets(s, plan.eat).food : 0);
+    const spare = s.hungry > 0 || s.raid?.seen !== undefined ? 0 : s.food - keep;
     if (v && spare >= giftCost(v) * 0.5) {
       s.envoyDay = s.day;
       gift(state, v.id, spare);
@@ -1482,15 +1546,22 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
   if (s.scouts.length > huts) s.scouts.length = huts;
   while (s.scouts.length < huts) s.scouts.push({ at: { ...s.hearth }, to: null, left: 0 });
   s.scouts.forEach((sc, k) => {
+    // (A breather between one walk and the next: longer if they got nowhere, so a scout who's
+    // stuck, or has nowhere left to go, isn't finding a new way every step.)
+    if ((sc.rest ?? 0) > 0) {
+      sc.rest = (sc.rest ?? 0) - dt;
+      return;
+    }
     if (!sc.to || sc.left <= 0 || !sc.path) {
       sc.to = scoutGoal(s, seen, is, sc, k);
-      sc.path = findPath(is, sc.at, sc.to);
+      sc.path = findPath(is, sc.at, sc.to, 30000);
       sc.left = sc.path.reduce((a, p, i) => a + Math.hypot(p.x - (i ? sc.path![i - 1].x : sc.at.x), p.y - (i ? sc.path![i - 1].y : sc.at.y)), 0) / SCOUT_SPEED * 1.5 + 5;
     }
     sc.left -= dt;
     const r = along(is, sc.at, sc.path, SCOUT_SPEED * (1 + bo.speed), dt);
     sc.at = r.at;
     if (r.done || r.stuck) {
+      sc.rest = r.stuck || Math.hypot(sc.to!.x - sc.at.x, sc.to!.y - sc.at.y) > 6 ? 20 : 3;
       sc.to = null;
       sc.path = undefined;
     }

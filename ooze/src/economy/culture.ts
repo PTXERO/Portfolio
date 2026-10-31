@@ -186,7 +186,9 @@ export function cultureDay(state: GameState, s: ShoreState, plan: { food: number
     if (c.focus === l.id && !nextIdea(c, l.id)) c.focus = undefined;
   }
   if (c.asking && today(s) - c.asking.since > FORK_DAYS) {
-    const opts = forkOptions(s, c.asking.fork);
+    // (By the culture's leaning: the road whose lane it has taken furthest.)
+    const lean = (o: ReturnType<typeof forkOptions>[number]) => (o.lane ? IDEAS.filter((i) => i.lane === o.lane && c.done.includes(i.id)).length * 1000 + (c.practice[o.lane] ?? 0) : o.cannibal ? 500 : 0);
+    const opts = [...forkOptions(s, c.asking.fork)].sort((a, b) => lean(b) - lean(a));
     choose(state, s, c.asking.fork, opts[0].id, true);
   }
 }

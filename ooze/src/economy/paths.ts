@@ -69,7 +69,7 @@ export function clearLine(is: Island, a: Pt, b: Pt): boolean {
  * they're going, or, if that's in the water or can't be reached, the nearest they can get).
  * Empty if they're there already.
  */
-export function findPath(is: Island, from: Pt, to: Pt): Pt[] {
+export function findPath(is: Island, from: Pt, to: Pt, limit = 120000): Pt[] {
   if (clearLine(is, from, to)) return [{ ...to }];
   const G = Math.floor(is.n / PC);
   const cell = (p: Pt) => Math.max(0, Math.min(G - 1, Math.floor(p.y / PC))) * G + Math.max(0, Math.min(G - 1, Math.floor(p.x / PC)));
@@ -97,7 +97,7 @@ export function findPath(is: Island, from: Pt, to: Pt): Pt[] {
   let best = start;
   let bestH = h(start);
   let expanded = 0;
-  while (open.size && expanded < 120000) {
+  while (open.size && expanded < limit) {
     const c = open.pop();
     if (closed[c]) continue;
     closed[c] = 1;
