@@ -11,6 +11,7 @@
 
 import type { GameState } from './types';
 import { record } from './chronicle';
+import { alliesFor, nudge, PEACE, standingOf, struck } from './diplomacy';
 import { boosts, DAY_SEC, foodCap, isAdult, killed, loyaltyOf, relation, ruled, shoreSeason, shoreWhen, travelDays, woodCap, type ShoreState, type Village } from './shore';
 
 /** How hard each diet fights (a fighter's worth). */
@@ -161,7 +162,7 @@ const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
  * there, not yours, not yet beaten off for good. */
 export function hostile(s: ShoreState, v: Village): boolean {
   const r = relation(s, v);
-  return (r === 'predator' || r === 'enemy') && !v.gone && !v.vassal && !v.joined && v.settled === undefined && (v.beaten ?? 0) < COWED;
+  return (r === 'predator' || r === 'enemy') && !v.gone && !v.vassal && !v.joined && v.settled === undefined && (v.beaten ?? 0) < COWED && standingOf(s, v) < PEACE;
 }
 
 /** Whether you can raid them: prey, predators (strike first: harder, they fight like hunters),
@@ -269,7 +270,7 @@ function warChiefRaids(state: GameState, s: ShoreState): void {
   if (n < 4) return;
   const need = rule === 'weaker' ? 1.5 : 0.95;
   const v = s.villages
-    .filter((x) => raidable(s, x))
+    .filter((x) => raidable(s, x) && standingOf(s, x) < PEACE)
     .map((x) => ({ x, r: ourStrength(s, n, false) / Math.max(0.1, theirStrength(x, holders(x))) }))
     .filter((o) => o.r >= need)
     .sort((a, b) => b.r - a.r)[0]?.x;
@@ -405,6 +406,7 @@ function meet(state: GameState, s: ShoreState, v: Village, r: Raid): void {
     s.food -= cost.food;
     s.wood -= cost.wood;
     v.paid = (v.paid ?? 0) + 1;
+    nudge(s, v, 8);
     // (They'll be back the sooner for it.)
     s.nextRaid = Math.min(s.nextRaid ?? now, now + RAID_GAP * 0.5);
     s.raids = (s.raids ?? 0) + 1;
@@ -572,6 +574,7 @@ export function sendBand(state: GameState, s: ShoreState, id: number, n: number,
   const d = Math.hypot(v.x - s.hearth.x, v.y - s.hearth.y) * 1.3;
   const now = today(s);
   s.warband = { to: id, fighters: n, left: now, arrives: now + d / BAND_SPEED / DAY_SEC };
+  struck(state, s, v);
   s.lastBand = now;
   s.news.push(`The war band set out for ${v.name}.`);
   if (byWarChief) return true;
@@ -626,6 +629,13 @@ function vassalHelp(s: ShoreState, r: Raid, now: number): Ally[] {
     // (By road, quick, when it's the hearth they're coming to.)
     const arrives = now + (at.v ? walkDays(v, at) : travelDays(s, v));
     const n = Math.floor(v.pop * 0.25);
+    if (n >= 1 && arrives <= (r.arrives ?? now)) out.push({ from: v.id, n, arrives });
+  }
+  // (And allies, who come for friendship: a fifth of them, if they're near enough.)
+  for (const v of alliesFor(s)) {
+    if (v.id === r.from) continue;
+    const arrives = now + walkDays(v, at);
+    const n = Math.floor(v.pop * 0.2);
     if (n >= 1 && arrives <= (r.arrives ?? now)) out.push({ from: v.id, n, arrives });
   }
   return out;

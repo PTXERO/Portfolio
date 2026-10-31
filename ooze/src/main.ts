@@ -15,6 +15,7 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
+import { demandSubmit, giftForeign } from './economy/diplomacy';
 import { roadFront, upgradeRoad, setTrade, answerAsk, setSettleFocus, type SettleFocus, chiefNear, setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
 import { WARM_MAX, dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
 import { danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
@@ -2097,6 +2098,32 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.answer) {
     if (answerAsk(state, Number(el.dataset.answer))) {
       cue('chime', 0.4);
+      save();
+    }
+  } else if (el.dataset.giftf) {
+    const s = shoreOf(state);
+    const id = Number(el.dataset.giftf);
+    const got = giftForeign(state, id);
+    if (got && s) {
+      cue('chime', 0.35);
+      const r = el.getBoundingClientRect();
+      scene.float(r.left + r.width / 2, r.top, `+${got} standing`, '#8acf6a');
+      const v = s.villages.find((x) => x.id === id);
+      if (!modal.hidden && modal.dataset.village === String(id) && v) {
+        showModal(villageCard(s, v));
+        modal.dataset.village = String(id);
+      }
+      save();
+    }
+  } else if (el.dataset.demand) {
+    const s = shoreOf(state);
+    const id = Number(el.dataset.demand);
+    const got = demandSubmit(state, id);
+    const v = s?.villages.find((x) => x.id === id);
+    if (got && s && v) {
+      cue(got === 'yes' ? 'ascend' : 'chime', 0.5);
+      showModal(`<p class="label dim">${got === 'yes' ? 'They submit' : 'Refused'}</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${v.name[0].toUpperCase() + v.name.slice(1)}</h3></div>
+        <p>${got === 'yes' ? 'Seeing the strength behind the chief, they gave in without a blow. Their village is yours: a vassal, and not a grudging one.' : 'They laughed, and sent the chief away. They\'ll remember being asked.'}</p><button class="px-btn gold" data-act="dismiss">OK</button>`);
       save();
     }
   } else if (el.dataset.crew) {

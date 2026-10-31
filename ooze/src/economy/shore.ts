@@ -13,6 +13,7 @@ import { Biome, CELL, isLand, islandOf, reveal, type Island, type Pt } from './i
 import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
 import { inherit, personal } from './genes';
+import { diplomacyDawn } from './diplomacy';
 import { IDEAS, ageOver, cultureDay, cultureFx, maybeTurn, workReady, type Culture } from './culture';
 import { away, stepWar, warDawn, type Battle, type Fight, type Raid, type WarBand, type WarRule } from './war';
 import type { CreatureLook } from '../scene/creatureLook';
@@ -164,6 +165,10 @@ export interface Village {
   /** Kept their own village, as yours: what you take of what they make (0 to 0.6), and how loyal
    * they are (0 to 100; at nothing, they throw you off). */
   vassal?: { tax: number; loyalty: number; conquered?: number; warm?: number };
+  /** Not kin, not yours: where they stand with you (-100 to 100; unset, where they started), and
+   * when the chief last demanded they submit. */
+  standing?: number;
+  demanded?: number;
   /** Times they've come raiding and been driven off; and been paid to go away. */
   beaten?: number;
   paid?: number;
@@ -325,7 +330,7 @@ export interface ShoreState {
 
 // ---- The world ----
 
-function rng(seed: number): () => number {
+export function rng(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) | 0;
@@ -1979,6 +1984,7 @@ function born(state: GameState, s: ShoreState): void {
 function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>): void {
   warDawn(state, s);
   sendConvoys(s);
+  diplomacyDawn(s);
   roadDawn(state, s, plan.eat);
   settledAsks(state, s);
   vassalMoves(state, s);
