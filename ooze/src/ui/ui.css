@@ -868,7 +868,10 @@ body.wide.tab-ideas #sheet { width: clamp(420px, 42vw, 820px); }
 .chart-node.ghost { opacity: 0.4; filter: grayscale(0.85); }
 .chart-node.other { background: rgba(80, 64, 30, 0.85); }
 div.chart-node.other { cursor: default; }
-#modal > .px-box:has(.chart) { max-width: min(560px, 94vw); }
+/* (The popup stays within the screen; only the chart scrolls sideways inside it.) */
+#modal > .px-box:has(.chart) { width: 100%; max-width: 560px; min-width: 0; box-sizing: border-box; }
+#modal:has(.chart) { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+.chart-wrap { width: 100%; min-width: 0; }
 
 /* The Long Road: each lane's ideas in a row, done, coming (with how near) and fogged. */
 .road-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 4px 0; }
