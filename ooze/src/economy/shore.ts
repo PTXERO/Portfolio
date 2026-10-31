@@ -838,6 +838,8 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
   const keep = Math.max(5, burnPerDay(s) * WOOD_KEEP_DAYS) + reserve;
   const next = useful.find(([id, worth]) => worth && open.has(id) && hasNeeds(s, id))?.[0];
   if (next && s.wood + 0.5 - buildCost(s, next) >= keep) return { pick: next, why: 'spare', text: `"Nothing presses, and there's wood to spare. ${An(next)} would serve us."` };
+  // (More than the woodpiles will ever hold, with what's kept back: a woodpile first.)
+  if (next && buildCost(s, next) + keep > woodCap(s) && open.has('woodpile')) return go('woodpile', 'woodpile', `"${An(next)} would serve us, but the woodpiles cannot hold the wood for it. Another woodpile first."`);
   // What they'd see to next, and when.
   const soon: string[] = [];
   if (open.has('hut') || open.has('longhouse')) soon.push(free > 2 ? `when only two beds are left (${free} free now), ${an(homes() ?? 'hut')}` : '');
@@ -941,17 +943,43 @@ export function workPlan(s: ShoreState): { food: number; wood: number; eat: numb
   const foodEach = FOOD_PER * (1 + 0.1 * count(s, 'camp') + bo.food) * seasonFood(s);
   // Cutting's slower as the woods round the village thin out.
   const woodEach = WOOD_PER * (1 + 0.1 * count(s, 'cutter') + bo.wood) * Math.max(0.25, Math.min(1, forestShare(s) * 2));
-  // Leaning one way or the other; with the stores full, hands go to the other.
-  let share = s.lean === 'food' ? 0.75 : s.lean === 'wood' ? Math.min(1, (eat * 1.05) / Math.max(1, adults) / foodEach) : Math.min(1, (eat * 1.5) / Math.max(1, adults) / foodEach + 0.15);
-  if (s.food >= foodCap(s) - 0.01) share = Math.min(share, (eat * 1.0) / Math.max(1, adults) / foodEach);
-  if (s.wood >= woodCap(s) - 0.5) share = 1;
-  let food = Math.round(adults * Math.max(0, Math.min(1, share)));
-  // Enough on wood to keep the fires going (unless there's hardly food to eat, or the woodpile's
-  // full).
-  if (s.wood < woodCap(s) - 0.5 && s.food > eat * 2) food = Math.min(food, adults - Math.min(adults, Math.ceil((burnPerDay(s) * 1.25) / woodEach)));
+  // Planned by need. Food: enough to eat, and the stores brought up toward a few days' eating
+  // (more come autumn, against the winter; less in it, when gathering's poor). Wood: the fires
+  // (from autumn, at winter's doubled rate), and the woodpiles kept well stocked for building.
+  // Each stock is refilled over a few days, not all at once. Then the lean tips it.
+  const si = shoreSeason(s).si;
+  const land = landFor(s);
+  const burn = burnPerDay(s) * (si === 2 ? 2 : 1);
+  const fCap = foodCap(s);
+  const wCap = woodCap(s);
+  const foodTarget = Math.min(fCap * 0.95, eat * (si === 2 ? 10 : si === 3 ? 4 : 6));
+  const woodTarget = Math.min(wCap * 0.95, Math.max(burn * 8, wCap * 0.6));
+  const tip = s.lean === 'food' ? [1.35, 0.75] : s.lean === 'wood' ? [0.8, 1.35] : [1, 1];
+  let needF = ((eat + Math.max(0, foodTarget - s.food) / 3) / foodEach) * tip[0];
+  let needW = ((burn + Math.max(0, woodTarget - s.wood) / 3) / woodEach) * tip[1];
+  // (Past what the land feeds, gatherers bring in little: unless they're hungry, no more than
+  // the land takes.)
+  if (s.food > eat * 2) needF = Math.min(needF, land);
+  if (s.wood >= wCap - 0.5) needW = Math.min(needW, burn / woodEach);
+  let food: number;
+  if (needF + needW <= adults) {
+    // Hands to spare: where they'll count (food while the land and the stores have room, else
+    // wood; with both full, they gather a little and rest).
+    food = Math.ceil(needF);
+    const spare = adults - food - Math.ceil(needW);
+    if (spare > 0 && s.food < fCap - 0.5 && food < land) food += Math.min(spare, Math.max(0, land - food));
+  } else {
+    // Short-handed: eating first, then the fires, then the rest by need.
+    const eatHands = Math.min(adults, Math.ceil(eat / foodEach));
+    const fireHands = s.food > eat * 2 ? Math.min(adults - eatHands, Math.ceil(burn / woodEach)) : 0;
+    const left = adults - eatHands - fireHands;
+    const extraF = Math.max(0, needF - eatHands);
+    const extraW = Math.max(0, needW - fireHands);
+    food = eatHands + Math.round(left * (extraF + extraW > 0 ? extraF / (extraF + extraW) : 0.5));
+  }
+  food = Math.max(0, Math.min(adults, food));
   const wood = adults - food;
   // The land round the village feeds only so many: past that, each more brings in less.
-  const land = landFor(s);
   const working = food <= land ? food : land + (food - land) * 0.15;
   // Before there's a hearth there's no village yet: no one gathers, and no one goes hungry
   // (they're still living on what the crossing left them).
