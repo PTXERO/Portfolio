@@ -1524,7 +1524,7 @@ function pondEvents(): void {
     }
     else if (e.type === 'hit') scene.float(e.x, e.y - 10, ['thwack', 'ow!', 'scram!'][Math.floor(Math.random() * 3)], '#f2ead7');
     else if (e.type === 'court') {
-      const name = court(state);
+      const name = court(state, Math.random, { parts: e.parts, genes: e.genes });
       scene.float(e.x, e.y, name ? `${name} joins you!` : 'not interested…', name ? '#e68ab8' : '#f2ead7');
     } else if (e.type === 'fend') scene.float(e.x, e.y - 10, `driven off! +${format(fendOff(state))}`, '#f5c45e');
     else if (e.type === 'forage') {

@@ -6,7 +6,7 @@
 import { PAL } from '../art/sprites';
 import { canEat, engulfable } from '../economy/actions';
 import { acclimOf, autopilot, defenseOf, guardLevel, habitatOf, heroSpeed, spawnMult, upgradeLevel } from '../economy/rates';
-import type { FoodKind, GameState } from '../economy/types';
+import type { FoodKind, GameState, Genes, Slot } from '../economy/types';
 import { drawBlob, type BlobStyle, type Core } from './blob';
 import { drawCellLook, lookOf, ORGANELLE_COLORS, type Look } from './cellLook';
 import { ring, type Frame } from './paint';
@@ -19,7 +19,7 @@ export type PondEvent =
   | { type: 'fend'; x: number; y: number }
   | { type: 'hit'; x: number; y: number }
   /** A visiting creature on the shore was courted (Creature stage). */
-  | { type: 'court'; x: number; y: number }
+  | { type: 'court'; x: number; y: number; parts?: Partial<Record<Slot, string>>; genes?: Genes }
   /** Creature stage: a found place was foraged again (by your creature, or a party home). */
   | { type: 'forage'; party: boolean; x: number; y: number }
   /** Creature stage: a place's flag was tapped. */

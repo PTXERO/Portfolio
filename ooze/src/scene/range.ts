@@ -17,7 +17,7 @@ import { H_LO, H_SPAN, LIFT, TILT } from './shade';
 import type { GameState, Role } from '../economy/types';
 import { drawBlob, type BlobStyle } from './blob';
 import { creatureLookOf, drawMini, genesKey, type CreatureLook } from './creatureLook';
-import { personal } from '../economy/genes';
+import { personal, randomGenes } from '../economy/genes';
 import { Effects, hash, mixColor, visibleCount, type Frame } from './paint';
 import { Sightings } from './sightings';
 import { Trails } from './trails';
@@ -492,7 +492,7 @@ export class RangeScene {
     }
     const v = this.visitor;
     if (v && near(v.x, v.y)) {
-      this.events.push({ type: 'court', x: this.sx(v.x), y: this.py(v.x, v.y) - 12 });
+      this.events.push({ type: 'court', x: this.sx(v.x), y: this.py(v.x, v.y) - 12, parts: v.look.parts, genes: v.look.genes });
       this.visitor = null;
       return;
     }
@@ -1587,13 +1587,13 @@ export class RangeScene {
     if (!this.visitor && this.visitorTimer <= 0 && st.mates.length < 3 && !asleep) {
       const parts = { ...look.parts };
       const pool = st.parts.concat(['shell', 'sail', 'runner']);
-      for (const slot of ['back', 'tail', 'legs'] as const) {
+      for (const slot of ['back', 'tail', 'legs', 'eyes', 'mouth'] as const) {
         const opts = pool.filter((id) => STAGES.creature.parts!.find((p) => p.id === id)?.slot === slot);
         if (opts.length) parts[slot] = opts[Math.floor(Math.random() * opts.length)];
       }
       const a = Math.random() * Math.PI * 2;
       const g = this.pickGraze(is, state);
-      this.visitor = { x: home.x + Math.cos(a) * 16, y: home.y + Math.sin(a) * 16, tx: g.x, ty: g.y, life: 40, look: { parts, diet: look.diet === 'grazer' ? 'omnivore' : look.diet === 'hunter' ? 'grazer' : 'hunter' } };
+      this.visitor = { x: home.x + Math.cos(a) * 16, y: home.y + Math.sin(a) * 16, tx: g.x, ty: g.y, life: 40, look: { parts, diet: look.diet, genes: randomGenes(Math.random) } };
       this.visitorTimer = 90 + Math.random() * 60;
     }
     const v = this.visitor;

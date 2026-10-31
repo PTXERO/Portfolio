@@ -501,11 +501,14 @@ export function courtChance(state: GameState): number {
   return Math.min(1, 0.35 + 0.04 * statsOf(state).charm);
 }
 
-/** A tap on a visiting creature on the shore: it may join as a mate. Returns its name, or null. */
-export function court(state: GameState, rand: () => number = Math.random): string | null {
+/** A tap on a visiting creature on the shore: it may join as a mate (just as it looked, if it's
+ * said how). Returns its name, or null. */
+export function court(state: GameState, rand: () => number = Math.random, looks?: { parts?: Mate['parts']; genes?: Mate['genes'] }): string | null {
   const s = st(state);
   if (s.mates.length >= MAX_MATES || rand() >= courtChance(state)) return null;
   const m = randomMate(state, placeDef('shore'));
+  if (looks?.parts) m.parts = { ...looks.parts };
+  if (looks?.genes) m.genes = { ...looks.genes };
   s.mates.push(m);
   return m.name;
 }
