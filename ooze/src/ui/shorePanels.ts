@@ -6,7 +6,7 @@ import { danceLeft, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, bui
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import { FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
-import { canStepIn, fighters, hasWalls, hasWarChief, type WarRule, holders, hostile, odds, ourStrength, payCost, raidable, theirStrength, type Battle, type Fight } from '../economy/war';
+import { canHelp, helpSize, canStepIn, fighters, hasWalls, hasWarChief, type WarRule, holders, hostile, odds, ourStrength, payCost, raidable, theirStrength, type Battle, type Fight } from '../economy/war';
 import type { GameState } from '../economy/types';
 
 const n0 = (v: number) => String(Math.floor(v + 1e-6));
@@ -52,7 +52,7 @@ export function shoreKey(state: GameState, tab: string): string {
     return JSON.stringify(['culture', c?.age, c?.done, c?.focus, c?.forks, c?.asking?.fork, LANES.map((l) => Math.floor((c ? laneShare(c, l.id) : 0) * 20)), s.building?.id === 'greathearth', count(s, 'greathearth')]);
   }
   if (tab === 'build') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor((v ?? 0) / 5)), s.building?.id, s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, canPay(s, b.id)])]);
-  const war = JSON.stringify([s.raid?.seen !== undefined && [s.raid.from, s.raid.rallied, Math.ceil(((s.raid.arrives ?? 0) - s.day - s.clock / DAY_SEC) * 4)], s.warband && [s.warband.to, Math.ceil((s.warband.arrives - s.day - s.clock / DAY_SEC) * 4)], fighters(s), s.warRule, hasWarChief(s)]);
+  const war = JSON.stringify([s.raid?.help, s.raid?.allies?.length, s.raid?.seen !== undefined && [s.raid.from, s.raid.rallied, Math.ceil(((s.raid.arrives ?? 0) - s.day - s.clock / DAY_SEC) * 4)], s.warband && [s.warband.to, Math.ceil((s.warband.arrives - s.day - s.clock / DAY_SEC) * 4)], fighters(s), s.warRule, hasWarChief(s)]);
   if (tab === 'island') return war + JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor(v ?? 0)), s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop)], Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
   const plan = workPlan(s);
   if (villageView === 'elders' && count(s, 'council')) return JSON.stringify(['elders', s.steward, (s.steward?.on ? elderThink(s) : ELDERS_OFF).text, s.elders?.length, s.elders?.[s.elders.length - 1]?.text, s.building?.id]);
@@ -485,11 +485,19 @@ function warCard(s: ShoreState): string {
   let out = '';
   const r = s.raid;
   const v = r && s.villages.find((x) => x.id === r.from);
-  if (r?.seen !== undefined && v) {
+  const target = r && r.target !== undefined ? s.villages.find((x) => x.id === r.target && x.vassal) : undefined;
+  const allies = (r?.allies ?? []).map((a) => `${a.n} ${a.from === -1 ? 'of yours' : `from ${s.villages.find((x) => x.id === a.from)?.name ?? 'a vassal'}`}${a.arrives > now ? ` (there ${soon(a.arrives - now)})` : ' (there)'}`);
+  if (r?.seen !== undefined && v && target) {
+    out += `<div class="card px-box raid"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">Raiders!</div>
+      <div class="sub">${cap(v.name)} are heading for ${target.name}, about ${r.fighters} of them: there ${soon((r.arrives ?? now) - now)}.${allies.length ? ` Coming to help: ${allies.join(', ')}.` : ''}</div>
+      ${r.help === 'none' ? '<div class="sub dim">You sent no help.</div>' : ''}</div>
+      <div class="col">${canHelp(s) ? `<button class="px-btn gold" data-help="send">Send ${helpSize(s)}</button><button class="px-btn" data-help="none">Leave them</button>` : ''}<button class="px-btn" data-seevillage="${target.id}">Look</button></div></div>`;
+  } else if (r?.seen !== undefined && v) {
     const us = ourStrength(s, fighters(s), true, r.rallied ? 0.2 : 0);
     const them = theirStrength(v, r.fighters);
     out += `<div class="card px-box raid"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">Raiders!</div>
       <div class="sub">${cap(v.name)} are coming, about ${r.fighters} of them: here ${soon((r.arrives ?? now) - now)}. ${r.stance === 'pay' ? `They'll be paid ${payCost(v, r.fighters).food} food and ${payCost(v, r.fighters).wood} wood to go away.` : `${r.stance === 'walls' ? 'Behind the palisade, all' : 'All'} ${fighters(s)} grown will fight. ${odds(us, them)}`}</div>
+      ${allies.length ? `<div class="sub">Coming to help: ${allies.join(', ')}.</div>` : ''}
       ${r.rallied && r.stance !== 'pay' ? '<div class="sub dim">Rallied: spears out, the young behind the fire.</div>' : ''}</div>
       <div class="col">${r.rallied || r.stance === 'pay' ? '' : '<button class="px-btn gold" data-rally="1">Rally them</button>'}<button class="px-btn" data-stancecard="1">${r.stance === 'pay' ? 'Pay' : r.stance === 'walls' ? 'Walls' : 'Fight'} ›</button></div></div>`;
   }
@@ -593,7 +601,8 @@ export function stanceCard(s: ShoreState): string {
 export function fightCard(s: ShoreState, f: Fight): string {
   const v = s.villages.find((x) => x.id === f.village);
   if (!v) return '';
-  const head = f.attack === 'them' ? `${cap(v.name)} fall on the village` : `The war band falls on ${v.name}`;
+  const at = f.at !== undefined ? s.villages.find((x) => x.id === f.at) : undefined;
+  const head = f.attack === 'them' ? `${cap(v.name)} fall on ${at ? at.name : 'the village'}` : `The war band falls on ${v.name}`;
   const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
   return `<p class="label dim">${f.walls ? 'Behind the palisade' : f.attack === 'them' ? 'Raid' : 'War band'}</p><h3>${head}</h3>
     <div class="battle live" data-fight="${f.id}">${line(s.look, f.ours, 'us')}<span class="vs">vs</span>${line(v.look, f.theirs, 'them')}</div>
@@ -634,7 +643,8 @@ export function raidChoices(s: ShoreState, v: Village): string {
 export function battleCard(s: ShoreState, b: Battle): string {
   const v = s.villages.find((x) => x.id === b.village);
   if (!v) return '';
-  const head = b.attack === 'them' ? `${cap(v.name)} fall on the village` : `The war band falls on ${v.name}`;
+  const at = b.at !== undefined ? s.villages.find((x) => x.id === b.at) : undefined;
+  const head = b.attack === 'them' ? `${cap(v.name)} fall on ${at ? at.name : 'the village'}` : `The war band falls on ${v.name}`;
   const result =
     b.attack === 'them'
       ? b.won
@@ -643,7 +653,7 @@ export function battleCard(s: ShoreState, b: Battle): string {
       : b.won
         ? `They're beaten.${v.vassal ? ' Their village is yours.' : ' What\'s left of them flee.'} ${b.took ? `The band brings back ${b.took.food} food and ${b.took.wood} wood.` : ''}${b.dead ? ` ${b.dead} of ours died.` : ''}`
         : `Beaten back.${b.dead ? ` ${b.dead} of ours died.` : ''}`;
-  return `<p class="label dim">${b.when}</p><h3>${head}</h3>${b.led ? '<p class="dim tiny">The chief leads them.</p>' : ''}${b.rallied ? '<p class="dim tiny">Rallied.</p>' : ''}${b.walls ? '<p class="dim tiny">Behind the palisade.</p>' : ''}${b.chief !== undefined ? `<p class="dim tiny">The chief fought in the front line${b.hurt ? ', and was hurt' : ''}.</p>` : ''}
+  return `<p class="label dim">${b.when}</p><h3>${head}</h3>${b.led ? '<p class="dim tiny">The chief leads them.</p>' : ''}${b.rallied ? '<p class="dim tiny">Rallied.</p>' : ''}${b.walls ? '<p class="dim tiny">Behind the palisade.</p>' : ''}${b.helpers ? `<p class="dim tiny">${b.helpers} came from ${at ? 'elsewhere' : 'your vassals'} to help.</p>` : ''}${b.chief !== undefined ? `<p class="dim tiny">The chief fought in the front line${b.hurt ? ', and was hurt' : ''}.</p>` : ''}
     <div class="battle" data-rounds='${JSON.stringify(b.rounds)}' data-ours="${b.ours}" data-theirs="${b.theirs}" data-won="${b.won ? 'us' : 'them'}">${line(s.look, b.ours, 'us')}<span class="vs">vs</span>${line(v.look, b.theirs, 'them')}</div>
     <p class="battle-result" hidden>${result}</p>
     <button class="px-btn gold" data-act="dismiss">${b.won ? 'Good' : 'So be it'}</button>`;

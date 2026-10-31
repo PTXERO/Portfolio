@@ -231,7 +231,7 @@ export interface ShoreState {
   warRule?: WarRule;
   lastBand?: number;
   /** Raiders running home after a fight; and what their fallen left lying (for a while). */
-  retreat?: { from: number; n: number; left: number; arrives: number };
+  retreat?: { from: number; n: number; left: number; arrives: number; sx?: number; sy?: number };
   loot?: { x: number; y: number; n: number; until: number };
   /** A fight going on now (a round every few seconds). */
   fight?: Fight;

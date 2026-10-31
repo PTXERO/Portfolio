@@ -5,6 +5,7 @@
 
 import { PAL } from '../art/sprites';
 import { Biome, CELL, isLand, type Pt } from '../economy/island';
+import { raidTarget } from '../economy/war';
 import { DAY_SEC, terrainReady, walkTo, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
 import type { GameState, Genes } from '../economy/types';
 import type { CreatureLook } from './creatureLook';
@@ -447,20 +448,32 @@ export class ShoreScene extends RangeScene {
       } else if (raid.arrives !== undefined) {
         // On their way in: a walk at first, a run at the end.
         const k = Math.max(0, Math.min(1, (now - raid.seen) / Math.max(0.01, raid.arrives - raid.seen)));
-        band(from.look, from, s.hearth, 0.15 + (k * k * 0.4 + k * 0.6) * 0.83, raid.fighters, from.id * 31, k > 0.8 ? 11 : 7);
+        const goal = raidTarget(s, raid);
+        band(from.look, from, goal, 0.15 + (k * k * 0.4 + k * 0.6) * 0.83, raid.fighters, from.id * 31, k > 0.8 ? 11 : 7);
+        // And those coming to help, from wherever they set out.
+        for (const a of raid.allies ?? []) {
+          const src = a.from === -1 ? s.hearth : s.villages.find((v) => v.id === a.from);
+          const look = a.from === -1 ? s.look : (src as Village | undefined)?.look;
+          if (!src || !look) continue;
+          const ka = Math.max(0, Math.min(1, (now - raid.seen) / Math.max(0.01, a.arrives - raid.seen)));
+          band(look, src, goal, ka * 0.95, a.n, (a.from + 7) * 53, 9);
+        }
       }
     }
     // The fight at the edge of the village: what's left of them, at it.
     const fight = s.fight;
     const foe = fight?.attack === 'them' ? s.villages.find((v) => v.id === fight.village) : undefined;
-    if (fight && foe) band(foe.look, foe, s.hearth, 0.98, Math.round(fight.y), foe.id * 31, 13, true);
+    const fightAt = fight?.at !== undefined ? s.villages.find((v) => v.id === fight.at) : undefined;
+    if (fight && foe) band(foe.look, foe, fightAt ?? s.hearth, 0.98, Math.round(fight.y), foe.id * 31, 13, true);
     // Running home, those who lived; and what the fallen dropped, lying where they fell.
     const ret = s.retreat;
     const home = ret && s.villages.find((v) => v.id === ret.from);
     if (ret && home) {
       const d = Math.hypot(home.x - s.hearth.x, home.y - s.hearth.y) || 1;
       const k = Math.max(0, Math.min(1, (now - ret.left) / Math.max(0.01, ret.arrives - ret.left)));
-      band(home.look, s.hearth, home, Math.min(1, 2 / d) + k * (1 - 2 / d), ret.n, home.id * 31, 12);
+      const start = { x: ret.sx ?? s.hearth.x, y: ret.sy ?? s.hearth.y };
+      const d2 = Math.hypot(home.x - start.x, home.y - start.y) || d;
+      band(home.look, start, home, Math.min(1, 2 / d2) + k * (1 - 2 / d2), ret.n, home.id * 31, 12);
     }
     const loot = s.loot;
     if (loot && !fogged(loot.x, loot.y)) {

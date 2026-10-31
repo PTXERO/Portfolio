@@ -70,6 +70,9 @@ export interface Battle {
   /** The round the chief stepped into the line, and whether they were hurt doing it. */
   chief?: number;
   hurt?: boolean;
+  /** Fought at a vassal's village (its id); and how many came from elsewhere to help. */
+  at?: number;
+  helpers?: number;
   when: string;
 }
 
@@ -80,6 +83,10 @@ export type Stance = 'fight' | 'walls' | 'pay';
 export interface Fight {
   id: number;
   village: number;
+  /** At a vassal's village (its id), not the hearth; and who came to help, from where (-1: the
+   * hearth). The fight's 'ours' is all of them. */
+  at?: number;
+  side?: { from: number; n: number }[];
   attack: 'us' | 'them';
   ours: number;
   theirs: number;
@@ -110,6 +117,19 @@ export interface Raid {
   rallied?: boolean;
   /** How the chief means to meet them (unset: stand and fight). */
   stance?: Stance;
+  /** Where they're headed: a vassal village (its id), or (unset) the hearth. */
+  target?: number;
+  /** Help on its way to whoever's attacked: from a vassal (its id) or the hearth (-1), how many,
+   * and when it gets there. */
+  allies?: Ally[];
+  /** The chief's answer when a vassal's attacked: help sent, or none. */
+  help?: 'send' | 'none';
+}
+
+export interface Ally {
+  from: number;
+  n: number;
+  arrives: number;
 }
 
 export interface WarBand {
@@ -138,7 +158,14 @@ export function raidable(s: ShoreState, v: Village): boolean {
 
 /** The grown, who fight (less any out with the war band). */
 export function fighters(s: ShoreState): number {
-  return Math.max(0, s.people.filter((p) => isAdult(s, p)).length - (s.warband?.fighters ?? 0));
+  return Math.max(0, s.people.filter((p) => isAdult(s, p)).length - away(s));
+}
+
+/** How many of the hearth's are out helping a vassal (on their way, or fighting there). */
+function helping(s: ShoreState): number {
+  const fromHearth = (s.raid?.allies ?? []).filter((a) => a.from === -1).reduce((x, a) => x + a.n, 0);
+  const inFight = (s.fight?.side ?? []).filter((a) => a.from === -1).reduce((x, a) => x + a.n, 0);
+  return fromHearth + inFight;
 }
 
 /** A side's strength: fighters × their kind × arms (× walls, at home). */
@@ -244,8 +271,18 @@ export function warDawn(state: GameState, s: ShoreState): void {
       r.seen = now;
       r.arrives = now + WARN_DAYS + boosts(s).warn;
       r.fighters = raiders(v);
-      s.news.push(`Raiders! ${cap(v.name)} are coming.`);
-      record(state, `${cap(v.name)} were seen coming, armed: about ${r.fighters} of them.`, 'shore', shoreWhen(s));
+      const at = raidTarget(s, r);
+      // (Walking to a vassal takes them as long as it takes.)
+      if (at.v) r.arrives = Math.max(r.arrives, now + walkDays(v, at) * 0.5);
+      r.allies = vassalHelp(s, r, now);
+      s.news.push(at.v ? `Raiders! ${cap(v.name)} are heading for ${at.v.name}.` : `Raiders! ${cap(v.name)} are coming.`);
+      record(state, `${cap(v.name)} were seen coming, armed: about ${r.fighters} of them${at.v ? `, making for ${at.v.name}` : ''}.`, 'shore', shoreWhen(s));
+      for (const a of r.allies) {
+        const from = s.villages.find((x) => x.id === a.from);
+        if (from) record(state, `${cap(from.name)} sent ${a.n} to help${at.v ? ` ${at.v.name}` : ' the hearth'}.`, 'shore', shoreWhen(s));
+      }
+      // (A vassal attacked, and a war chief: they send help if it'll get there in time.)
+      if (at.v && hasWarChief(s) && canHelp(s)) answerHelp(state, s, true);
     }
   }
   // Someone new out there, watching: a raid's being thought of.
@@ -258,10 +295,16 @@ export function warDawn(state: GameState, s: ShoreState): void {
     const bold = (x: Village) => (shoreSeason(s).si === 3 ? 0.85 : 1) * (1 - 0.12 * Math.min(3, x.paid ?? 0));
     const v = them.find((x) => theirStrength(x, raiders(x)) > ourStrength(s, fighters(s), true) * 0.45 * bold(x) * (0.8 + rand() * 0.4));
     s.nextRaid = now + RAID_GAP * (0.7 + rand() * 0.6);
-    if (v) {
-      s.raid = { from: v.id, watched: now, fighters: raiders(v) };
-      s.news.push('Someone was seen watching from the trees.');
-      record(state, `Strangers were seen watching the village from the trees${v.found ? `: ${v.name}, by the look of them` : ''}.`, 'shore', shoreWhen(s));
+    // (Or one of your vassals: the weakest near enough, sometimes, if it's weaker than the hearth.)
+    const raider = v ?? them[0];
+    const soft = raider && s.villages.filter((x) => x.vassal && !x.gone && !x.joined && Math.hypot(x.x - raider.x, x.y - raider.y) < 400).sort((a, b) => a.pop - b.pop)[0];
+    const atVassal = !!soft && rand() < 0.35 && theirStrength(raider, raiders(raider)) > theirStrength(soft, holders(soft)) * 0.6;
+    if (v || atVassal) {
+      s.raid = { from: raider.id, watched: now, fighters: raiders(raider), target: atVassal ? soft!.id : undefined };
+      if (!atVassal) {
+        s.news.push('Someone was seen watching from the trees.');
+        record(state, `Strangers were seen watching the village from the trees${raider.found ? `: ${raider.name}, by the look of them` : ''}.`, 'shore', shoreWhen(s));
+      }
     }
   }
 }
@@ -319,6 +362,23 @@ export function hasWalls(s: ShoreState): boolean {
  * else fought, from behind the walls if there are walls and that's what was said). */
 function meet(state: GameState, s: ShoreState, v: Village, r: Raid): void {
   const now = today(s);
+  // Whoever's come to help, and got there in time.
+  const came = (r.allies ?? []).filter((a) => a.arrives <= now + 1e-6);
+  const allyStrength = (a: { from: number; n: number }) => {
+    const from = s.villages.find((x) => x.id === a.from);
+    return a.from === -1 ? ourStrength(s, a.n, false) : from ? theirStrength(from, a.n) : 0;
+  };
+  const at = raidTarget(s, r);
+  if (at.v) {
+    // At the vassal's village: its own hold it, with whoever came.
+    const own = holders(at.v);
+    const side = [{ from: at.v.id, n: own }, ...came.map((a) => ({ from: a.from, n: a.n }))];
+    const n = side.reduce((x, a) => x + a.n, 0);
+    const str = side.reduce((x, a) => x + (a.from === at.v!.id ? theirStrength(at.v!, a.n) : allyStrength(a)), 0);
+    s.fight = { id: now, village: v.id, at: at.v.id, side, attack: 'them', ours: n, theirs: r.fighters, x: n, y: r.fighters, aEach: str / Math.max(1, n), bEach: theirStrength(v, 1), rounds: [], next: ROUND_SEC };
+    s.news.push(`${cap(v.name)} fall on ${at.v.name}!`);
+    return;
+  }
   const cost = payCost(v, r.fighters);
   if (r.stance === 'pay' && s.food >= cost.food && s.wood >= cost.wood) {
     s.food -= cost.food;
@@ -341,8 +401,12 @@ function meet(state: GameState, s: ShoreState, v: Village, r: Raid): void {
     const fields = Math.floor(s.food * FIELDS);
     s.food -= fields;
   }
-  const n = fighters(s);
-  s.fight = { id: now, village: v.id, attack: 'them', ours: n, theirs: r.fighters, x: n, y: r.fighters, aEach: ourStrength(s, 1, true, (r.rallied ? RALLY : 0) + (walls ? WALLS : 0)), bEach: theirStrength(v, 1), rounds: [], next: ROUND_SEC, rallied: r.rallied, walls };
+  const own = fighters(s);
+  const side = [{ from: -1, n: own }, ...came.map((a) => ({ from: a.from, n: a.n }))];
+  const n = side.reduce((x, a) => x + a.n, 0);
+  const ownEach = ourStrength(s, 1, true, (r.rallied ? RALLY : 0) + (walls ? WALLS : 0));
+  const str = own * ownEach + came.reduce((x, a) => x + allyStrength(a), 0);
+  s.fight = { id: now, village: v.id, side: came.length ? side : undefined, attack: 'them', ours: n, theirs: r.fighters, x: n, y: r.fighters, aEach: str / Math.max(1, n), bEach: theirStrength(v, 1), rounds: [], next: ROUND_SEC, rallied: r.rallied, walls };
   s.news.push(`${cap(v.name)} fall on the village!`);
 }
 
@@ -359,7 +423,8 @@ export function canStepIn(s: ShoreState): boolean {
   const f = s.fight;
   if (!f || f.chief !== undefined) return false;
   const v = s.villages.find((x) => x.id === f.village);
-  return f.attack === 'them' ? chiefHome(s) : !!v && chiefLeads(s, v);
+  const at = f.at !== undefined ? s.villages.find((x) => x.id === f.at) : undefined;
+  return at ? chiefLeads(s, at) : f.attack === 'them' ? chiefHome(s) : !!v && chiefLeads(s, v);
 }
 
 /** The chief steps into the front line: the next round is theirs. */
@@ -378,10 +443,40 @@ function finish(state: GameState, s: ShoreState, f: Fight): void {
   const fell = f.ours - Math.round(f.x);
   const theirDead = f.theirs - Math.round(f.y);
   const home = f.attack === 'them';
-  // Of ours who fell, a third die (a sixth, behind walls); the rest are hurt, and mend.
-  const dead = bury(state, s, Math.round(fell / (f.walls ? 6 : 3)), home);
+  // Of ours who fell, a third die (a sixth, behind walls); the rest are hurt, and mend. With
+  // others fighting alongside, each loses its share.
+  const side = f.side ?? [{ from: -1, n: f.ours }];
+  const mine = side.filter((a) => a.from === -1).reduce((x, a) => x + a.n, 0);
+  const dead = mine ? bury(state, s, Math.round(((fell * mine) / Math.max(1, f.ours)) / (f.walls ? 6 : 3)), home) : 0;
+  for (const a of side) {
+    if (a.from === -1) continue;
+    const ally = s.villages.find((x) => x.id === a.from);
+    if (ally) ally.pop = Math.max(1, ally.pop - Math.round(((fell * a.n) / Math.max(1, f.ours)) / 3));
+  }
   v.pop = Math.max(0, v.pop - Math.round(theirDead * 0.6));
-  const b: Battle = { id: f.id, village: v.id, attack: f.attack, ours: f.ours, theirs: f.theirs, rounds: f.rounds, won, dead, theirDead, rallied: f.rallied, led: f.led, walls: f.walls, chief: f.chief, hurt: f.hurt, when: shoreWhen(s) };
+  const at = f.at !== undefined ? s.villages.find((x) => x.id === f.at) : undefined;
+  const helpers = side.filter((a) => a.from !== (at ? at.id : -1)).reduce((x, a) => x + a.n, 0);
+  if (at?.vassal) {
+    // At a vassal's: won or lost there. Help from the hearth is remembered (and so is none).
+    const sent = mine > 0;
+    const dist = Math.hypot(v.x - at.x, v.y - at.y);
+    const fled = Math.round(f.y);
+    if (fled > 0) s.retreat = { from: v.id, n: fled, left: today(s), arrives: today(s) + dist / (BAND_SPEED * 1.6) / DAY_SEC, sx: at.x, sy: at.y };
+    if (won) {
+      v.beaten = (v.beaten ?? 0) + 1;
+      at.vassal.loyalty = Math.min(100, at.vassal.loyalty + (sent ? 12 : 3));
+    } else {
+      at.pop = Math.max(2, at.pop * 0.85);
+      at.vassal.loyalty = Math.max(0, at.vassal.loyalty - (sent ? 5 : 15));
+    }
+    s.news.push(won ? `${cap(at.name)} drove off ${v.name}.` : `${cap(v.name)} broke into ${at.name}.`);
+    record(state, `${cap(v.name)} fell on ${at.name}${won ? ', and were driven off' : ' and broke through'}.${helpers ? ` ${helpers} had come to help them${sent ? ', some from the hearth' : ''}.` : ' No one came to help them.'}${dead ? ` ${dead} of ours died there.` : ''}`, 'shore', shoreWhen(s));
+    (s.battles ??= []).push({ id: f.id, village: v.id, attack: 'them', ours: f.ours, theirs: f.theirs, rounds: f.rounds, won, dead, theirDead, at: at.id, helpers, when: shoreWhen(s) });
+    flee(state, s, v);
+    s.raids = (s.raids ?? 0) + 1;
+    return;
+  }
+  const b: Battle = { id: f.id, village: v.id, attack: f.attack, ours: f.ours, theirs: f.theirs, rounds: f.rounds, won, dead, theirDead, rallied: f.rallied, led: f.led, walls: f.walls, chief: f.chief, hurt: f.hurt, helpers: helpers || undefined, when: shoreWhen(s) };
   const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
   const front = f.chief !== undefined ? ` ${chief} fought in the front line${f.hurt ? ', and was hurt' : ''}.` : '';
   if (home) {
@@ -389,7 +484,7 @@ function finish(state: GameState, s: ShoreState, f: Fight): void {
     // nothing left).
     const fled = Math.round(f.y);
     const dist = Math.hypot(v.x - s.hearth.x, v.y - s.hearth.y);
-    if (fled > 0) s.retreat = { from: v.id, n: fled, left: today(s), arrives: today(s) + dist / (BAND_SPEED * 1.6) / DAY_SEC };
+    if (fled > 0) s.retreat = { from: v.id, n: fled, left: today(s), arrives: today(s) + dist / (BAND_SPEED * 1.6) / DAY_SEC, sx: s.hearth.x, sy: s.hearth.y };
     const fallen = Math.max(0, Math.round(theirDead));
     if (fallen > 0) {
       const food = Math.min(fallen * LOOT_FOOD, Math.max(0, Math.floor(foodCap(s) - s.food)));
@@ -477,6 +572,63 @@ export function rally(s: ShoreState): boolean {
 
 /** Fighters on the war band don't work while away. */
 export function away(s: ShoreState): number {
-  return s.warband?.fighters ?? 0;
+  return (s.warband?.fighters ?? 0) + helping(s);
+}
+
+/** Where a raid's headed: the vassal's village, or the hearth. */
+export function raidTarget(s: ShoreState, r: Raid): { x: number; y: number; v?: Village } {
+  const v = r.target !== undefined ? s.villages.find((x) => x.id === r.target && x.vassal && !x.gone) : undefined;
+  return v ? { x: v.x, y: v.y, v } : { x: s.hearth.x, y: s.hearth.y };
+}
+
+/** Days for a band to walk from one place to another. */
+function walkDays(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  return (Math.hypot(a.x - b.x, a.y - b.y) * 1.3) / BAND_SPEED / DAY_SEC;
+}
+
+/** Help a loyal vassal can send: a quarter of them, if it's loyal enough and near enough to get
+ * there before the raiders do. */
+const ALLY_LOYALTY = 50;
+function vassalHelp(s: ShoreState, r: Raid, now: number): Ally[] {
+  const at = raidTarget(s, r);
+  const out: Ally[] = [];
+  for (const v of s.villages) {
+    if (!v.vassal || v.gone || v.joined || v.id === r.target || v.vassal.loyalty < ALLY_LOYALTY) continue;
+    const arrives = now + walkDays(v, at);
+    const n = Math.floor(v.pop * 0.25);
+    if (n >= 1 && arrives <= (r.arrives ?? now)) out.push({ from: v.id, n, arrives });
+  }
+  return out;
+}
+
+/** Whether the hearth can still get help to the vassal being raided in time (and hasn't said). */
+export function canHelp(s: ShoreState): boolean {
+  const r = s.raid;
+  if (!r || r.seen === undefined || r.target === undefined || r.help) return false;
+  const at = raidTarget(s, r);
+  return !!at.v && today(s) + walkDays(s.hearth, at) <= (r.arrives ?? 0) && helpSize(s) >= 2;
+}
+export function helpSize(s: ShoreState): number {
+  return Math.max(0, Math.floor(fighters(s) / 3));
+}
+
+/** The chief's answer: send a third of the fighters to the vassal being raided, or leave them. */
+export function answerHelp(state: GameState, s: ShoreState, send: boolean): boolean {
+  const r = s.raid;
+  if (!r || r.target === undefined || r.help) return false;
+  const at = raidTarget(s, r);
+  if (!at.v) return false;
+  if (!send) {
+    r.help = 'none';
+    record(state, `No help was sent to ${at.v.name}.`, 'shore', shoreWhen(s));
+    return true;
+  }
+  if (!canHelp(s)) return false;
+  const n = helpSize(s);
+  r.help = 'send';
+  (r.allies ??= []).push({ from: -1, n, arrives: today(s) + walkDays(s.hearth, at) });
+  s.news.push(`${n} set out to help ${at.v.name}.`);
+  record(state, `${n} set out from the hearth to help ${at.v.name} against the raiders.`, 'shore', shoreWhen(s));
+  return true;
 }
 

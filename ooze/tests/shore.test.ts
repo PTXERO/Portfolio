@@ -619,3 +619,61 @@ describe('Coming and going with vassals', () => {
     expect(v.vassal).toBeUndefined();
   });
 });
+
+describe('Vassals and the hearth defend each other', () => {
+  async function setup() {
+    const war = await import('../src/economy/war');
+    const state = fresh();
+    const s = shoreOf(state)!;
+    now(state, 'hearth');
+    for (let i = 0; i < 8; i++) now(state, 'hut');
+    while (s.people.length < 30) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30, dies: 9999 });
+    s.food = 300;
+    s.day = 40;
+    const kin = s.villages.filter((x) => relation(s, x) === 'kin');
+    const foe = s.villages.find((x) => war.hostile(s, x))!;
+    return { war, state, s, kin, foe };
+  }
+  it('a loyal vassal near enough sends help to the hearth; one too far does not', async () => {
+    const { war, state, s, kin, foe } = await setup();
+    const [near, far] = kin;
+    near.vassal = { tax: 0.1, loyalty: 90 };
+    near.pop = 20;
+    near.x = s.hearth.x + 10;
+    near.y = s.hearth.y;
+    far.vassal = { tax: 0.1, loyalty: 90 };
+    far.pop = 20;
+    far.x = s.hearth.x + 900;
+    s.raid = { from: foe.id, watched: s.day - 1.01, fighters: 8 };
+    s.nextRaid = s.day + 100;
+    shoreTick(state, DAY_SEC);
+    const allies = s.raid?.allies ?? [];
+    expect(allies.some((a) => a.from === near.id)).toBe(true);
+    expect(allies.some((a) => a.from === far.id)).toBe(false);
+    for (let i = 0; i < 400 && !s.fight && !s.battles?.length; i++) shoreTick(state, 2);
+    expect(s.fight?.side?.some((a) => a.from === near.id) ?? s.battles?.[0].helpers).toBeTruthy();
+    void war;
+  });
+  it('raiders on a vassal: help goes only if it gets there in time, and loyalty remembers', async () => {
+    const { war, state, s, kin, foe } = await setup();
+    const v = kin[0];
+    v.vassal = { tax: 0.1, loyalty: 70 };
+    v.pop = 12;
+    v.x = s.hearth.x + 20;
+    v.y = s.hearth.y;
+    const d = s.day + s.clock / DAY_SEC;
+    s.raid = { from: foe.id, watched: d - 1, seen: d, arrives: d + 2, fighters: 6, target: v.id };
+    expect(war.canHelp(s)).toBe(true);
+    expect(war.answerHelp(state, s, true)).toBe(true);
+    expect(s.raid.allies?.some((a) => a.from === -1)).toBe(true);
+    const before = v.vassal.loyalty;
+    for (let i = 0; i < 2000 && !s.battles?.length; i++) shoreTick(state, 2);
+    const b = s.battles![0];
+    expect(b.at).toBe(v.id);
+    expect(v.vassal!.loyalty).not.toBe(before);
+    // Too far to get there in time: no help can be sent.
+    s.raid = { from: foe.id, watched: d, seen: s.day + s.clock / DAY_SEC, arrives: s.day + s.clock / DAY_SEC + 0.01, fighters: 6, target: v.id };
+    v.x = s.hearth.x + 600;
+    expect(war.canHelp(s)).toBe(false);
+  });
+});

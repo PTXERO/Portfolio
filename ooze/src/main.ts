@@ -20,7 +20,7 @@ import { dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, i
 import { danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
 import { lineTree, shoreTree } from './ui/familyTree';
 import { choose, setFocus, type ForkId, type Lane } from './economy/culture';
-import { canStepIn, rally, sendBand, setStance, setWarRule, stepIn, type Stance, type WarRule } from './economy/war';
+import { answerHelp, canHelp, helpSize, canStepIn, rally, sendBand, setStance, setWarRule, stepIn, type Stance, type WarRule } from './economy/war';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, say, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
@@ -1026,7 +1026,16 @@ function shoreFrame(): void {
   }
   // Raiders seen coming: how to meet them, asked once.
   const r = s.raid;
-  if (r?.seen !== undefined && r.stance === undefined && !stanceAsked.has(`${r.from}:${r.seen}`) && modal.hidden && !cine()) {
+  if (r?.seen !== undefined && r.target !== undefined && canHelp(s) && !stanceAsked.has(`${r.from}:${r.seen}`) && modal.hidden && !cine()) {
+    stanceAsked.add(`${r.from}:${r.seen}`);
+    cue('impact', 0.4);
+    const t = s.villages.find((x) => x.id === r.target);
+    const foe = s.villages.find((x) => x.id === r.from);
+    showModal(`<p class="label dim">Raiders</p><h3>${foe ? foe.name[0].toUpperCase() + foe.name.slice(1) : 'Raiders'} are heading for ${t?.name ?? 'a vassal'}</h3>
+      <p>About ${r.fighters} of them. ${t?.name ?? 'They'} pay tribute to the hearth; ${helpSize(s)} of yours could get there in time.</p>
+      <p class="dim tiny">Help sent wins their loyalty, and leaving them to it loses it, more so if they're beaten.</p>
+      <div class="choices"><button class="px-btn gold" data-help="send">Send ${helpSize(s)} to help</button><button class="px-btn" data-help="none">Leave them to it</button></div>`);
+  } else if (r?.seen !== undefined && r.target === undefined && r.stance === undefined && !stanceAsked.has(`${r.from}:${r.seen}`) && modal.hidden && !cine()) {
     stanceAsked.add(`${r.from}:${r.seen}`);
     cue('impact', 0.4);
     showModal(stanceCard(s));
@@ -2149,6 +2158,13 @@ function act(el: HTMLElement): void {
     }
   } else if (el.dataset.step) {
     stepDance(Number(el.dataset.step), el);
+  } else if (el.dataset.help) {
+    const s = shoreOf(state);
+    if (s && answerHelp(state, s, el.dataset.help === 'send')) {
+      popSound(0.8);
+      modal.hidden = true;
+      save();
+    }
   } else if (el.dataset.stance) {
     const s = shoreOf(state);
     if (s && setStance(s, el.dataset.stance as Stance)) {
