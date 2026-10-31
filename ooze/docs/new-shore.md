@@ -390,6 +390,17 @@ Built in slices, each tested live (balance sims after).
    (checking in every half hour) reaches 100 in about 6h20, an engaged one about 3h. War chief
    comes with raids.
 7. **The turn**: at a hundred, into Phase 2 (the Long Road).
+   *First slice built* (`src/economy/culture.ts`, Culture tab): at 100 people the turn (a great
+   fire, `[STORY]`), then the Long Road's Hearth Age: eight lanes, two ideas each, each lane
+   gathering practice a day from what the village does (gatherers → Food, woodcutters and
+   buildings → Crafts, raids and defences → War, the council and size → Rule, other kinds and
+   villages held → Kin, hearth/elders' fire/pool/the dead → Rites, the old and landmarks explored
+   → Stories, scouts/lookout/size → Words). An idea lands on its own when practice fills (100,
+   then 200), giving a small boost; Focus doubles one lane. The first fork, the dead (bury: Stories
+   +25% · burn: Rites +25% · eat, for cannibals: food +5%), as cards; unanswered 8 days, the elders
+   choose. Four lanes done opens the Great Hearth (220 wood, 20 stone), which closes the Age.
+   Pace measured at 100 people: first idea ≈1h after the turn, the Great Hearth ≈9h.
+   *Still to come*: the Ages after; the side-scrolling road; sparks; more forks.
 
 **No cap at a hundred.** The village isn't limited to 100 and the interface doesn't count toward
 it; the turn to Phase 2 comes when the village is big enough, at a size set by the balance sims

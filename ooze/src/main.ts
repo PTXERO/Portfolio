@@ -17,8 +17,9 @@ import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants,
 import { prepareShoreIsland } from './economy/terrainStore';
 import { setSteward, type StewardPlan } from './economy/shore';
 import { answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
-import { battleCard, fightCard, fightNote, findCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
+import { battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
 import { lineTree, shoreTree } from './ui/familyTree';
+import { choose, setFocus, type ForkId, type Lane } from './economy/culture';
 import { canStepIn, rally, sendBand, setStance, stepIn, type Stance } from './economy/war';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
@@ -1006,6 +1007,23 @@ function shoreFrame(): void {
       <button class="px-btn gold" data-act="dismiss">Welcome them</button>`);
   }
   joinedReady = true;
+  // The turn: a hundred, at the great fire. Phase 2 begins.
+  if (s.turned && modal.hidden && !cine()) {
+    s.turned = false;
+    cue('ascend', 0.6);
+    showModal(`<p class="label dim">${s.people.length} of them</p><h3>The great fire</h3>
+      <p>[STORY] They were a hundred. One night they all gathered at one fire, every one of them, and looked at each other, and knew themselves a people.</p>
+      <p class="dim">From now on the village grows a culture of its own: ideas come by themselves, from what the people do. See the Culture tab.</p>
+      <button class="px-btn gold" data-act="dismiss">The long road</button>`);
+    save();
+  }
+  // A fork waiting on the chief: the cards, once.
+  const asked = s.culture?.asking;
+  if (asked && !forkAsked.has(`${asked.fork}:${asked.since}`) && modal.hidden && !cine()) {
+    forkAsked.add(`${asked.fork}:${asked.since}`);
+    cue('chime', 0.5);
+    showModal(forkCard(s, asked.fork));
+  }
   // Raiders seen coming: how to meet them, asked once.
   const r = s.raid;
   if (r?.seen !== undefined && r.stance === undefined && !stanceAsked.has(`${r.from}:${r.seen}`) && modal.hidden && !cine()) {
@@ -1059,6 +1077,7 @@ function showTree(at: TreeAt): void {
 }
 
 const stanceAsked = new Set<string>();
+const forkAsked = new Set<string>();
 let liveFight: number | undefined;
 let liveRounds = 0;
 
@@ -1983,6 +2002,25 @@ function act(el: HTMLElement): void {
     const back = treeTrail.pop();
     if (back) showTree(back);
     else modal.hidden = true;
+  } else if (el.dataset.fork) {
+    const s = shoreOf(state);
+    const [f, o] = el.dataset.fork.split(':');
+    if (s && choose(state, s, f as ForkId, o)) {
+      cue('ascend', 0.5);
+      modal.hidden = true;
+      panelKey = '';
+      save();
+    }
+  } else if (el.dataset.forkcard) {
+    const s = shoreOf(state);
+    if (s?.culture?.asking) showModal(forkCard(s, s.culture.asking.fork));
+  } else if (el.dataset.focus !== undefined) {
+    const s = shoreOf(state);
+    if (s) {
+      setFocus(s, (el.dataset.focus || undefined) as Lane | undefined);
+      popSound(0.8);
+      save();
+    }
   } else if (el.dataset.stance) {
     const s = shoreOf(state);
     if (s && setStance(s, el.dataset.stance as Stance)) {

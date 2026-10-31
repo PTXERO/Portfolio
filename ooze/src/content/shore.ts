@@ -21,7 +21,7 @@ export const SHORE_STORY = {
   found: '[STORY] Smoke, and huts, and others like them. Not like them.',
 };
 
-export type BuildId = 'forester' | 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails' | 'council' | 'envoy' | 'pottery' | 'thatcher' | 'salter' | 'healer' | 'toolmaker' | 'watch' | 'palisade' | 'spears';
+export type BuildId = 'forester' | 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails' | 'council' | 'envoy' | 'pottery' | 'thatcher' | 'salter' | 'healer' | 'toolmaker' | 'watch' | 'palisade' | 'spears' | 'greathearth';
 
 /** What the land gives beyond food and wood: each only where it's found (see HABITATS). */
 export type Res = 'fish' | 'clay' | 'reeds' | 'salt' | 'herbs' | 'timber' | 'flint' | 'stone';
@@ -112,6 +112,7 @@ export const BUILDS: BuildDef[] = [
   { id: 'salter', cat: 'stores', name: 'Salting shed', does: 'Salted food keeps: winter slows the food half as much, and room for 40 more.', wood: 45, growth: 1, max: 1, after: 'rack', needs: { salt: 20 }, fx: { winter: 0.5, foodCap: 40 } },
   { id: 'healer', cat: 'homes', name: 'Healer\'s hut', does: 'Herbs and the knowing of them: half as many die when food runs short, and children come 5% more often.', wood: 45, growth: 1, max: 1, after: 'hut', needs: { herbs: 20 }, fx: { mend: 0.5, births: 0.05 }, burn: 0.3 },
   { id: 'toolmaker', cat: 'work', name: 'Toolmaker', does: 'Flint knapped sharp: food and wood come in 10% faster.', wood: 50, growth: 1, max: 1, after: 'hut', needs: { flint: 20 }, fx: { food: 0.1, wood: 0.1 } },
+  { id: 'greathearth', cat: 'homes', name: 'The Great Hearth', does: 'A fire for all of them at once, the first of the Great Works: it closes the Hearth Age. Burns 2 wood a day.', wood: 220, growth: 1, max: 1, after: 'hearth', needs: { stone: 20 }, burn: 2 },
   { id: 'watch', cat: 'war', name: 'Watch post', does: 'Someone always watching the paths in: raiders are seen a day sooner, and the village fights 10% harder at home.', wood: 25, growth: 1, max: 1, after: 'hut', fx: { warn: 1, guard: 0.1 } },
   { id: 'palisade', cat: 'war', name: 'Palisade', does: 'A ring of sharpened stakes on a stone footing round the village: it fights half again as hard at home.', wood: 60, growth: 1, max: 1, after: 'watch', needs: { stone: 30 }, fx: { guard: 0.5 } },
   { id: 'spears', cat: 'war', name: 'Spear-maker', does: 'Flint heads on long shafts: they fight 20% harder, at home or on a raid.', wood: 35, growth: 1, max: 1, after: 'watch', needs: { flint: 15 }, fx: { arms: 0.2 } },

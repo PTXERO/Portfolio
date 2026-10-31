@@ -869,3 +869,14 @@ body.wide.tab-ideas #sheet { width: clamp(420px, 42vw, 820px); }
 .chart-node.other { background: rgba(80, 64, 30, 0.85); }
 div.chart-node.other { cursor: default; }
 #modal > .px-box:has(.chart) { max-width: min(560px, 94vw); }
+
+/* The Long Road: each lane's ideas in a row, done, coming (with how near) and fogged. */
+.road-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 4px 0; }
+.road-idea { position: relative; padding: 2px 6px; font-size: 11px; background: rgba(42, 52, 80, 0.8); overflow: hidden; }
+.road-idea.done { background: rgba(70, 96, 60, 0.9); color: #f2ead7; }
+.road-idea.next { color: #e8c050; }
+.road-idea.fog { color: #6a6f80; }
+.road-bar { position: absolute; left: 0; bottom: 0; height: 2px; background: #e8c050; }
+.road-step { color: #6a6f80; font-size: 11px; }
+.road-lane.focused { box-shadow: 0 0 0 2px #e8c050; }
+.road-not { color: #6a6f80; text-decoration: line-through; }

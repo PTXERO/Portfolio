@@ -5,6 +5,7 @@ import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, ty
 import { buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
+import { FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
 import { canStepIn, fighters, hasWalls, holders, hostile, odds, ourStrength, payCost, raidable, theirStrength, type Battle, type Fight } from '../economy/war';
 import type { GameState } from '../economy/types';
 
@@ -46,6 +47,10 @@ export function setBuildCat(c: string): void {
 export function shoreKey(state: GameState, tab: string): string {
   const s = shoreOf(state);
   if (!s) return '';
+  if (tab === 'culture') {
+    const c = s.culture;
+    return JSON.stringify(['culture', c?.age, c?.done, c?.focus, c?.forks, c?.asking?.fork, LANES.map((l) => Math.floor((c ? laneShare(c, l.id) : 0) * 20)), s.building?.id === 'greathearth', count(s, 'greathearth')]);
+  }
   if (tab === 'build') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor((v ?? 0) / 5)), s.building?.id, s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, canPay(s, b.id)])]);
   const war = JSON.stringify([s.raid?.seen !== undefined && [s.raid.from, s.raid.rallied, Math.ceil(((s.raid.arrives ?? 0) - s.day - s.clock / DAY_SEC) * 4)], s.warband && [s.warband.to, Math.ceil((s.warband.arrives - s.day - s.clock / DAY_SEC) * 4)], fighters(s)]);
   if (tab === 'island') return war + JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor(v ?? 0)), s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop)], Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
@@ -93,6 +98,7 @@ export function shoreLayout(state: GameState, tab: string): string {
   const s = shoreOf(state);
   if (!s) return '';
   if (tab === 'build') return buildLayout(s);
+  if (tab === 'culture') return cultureLayout(s);
   if (tab === 'island') return islandLayout(s);
   const council = count(s, 'council') > 0;
   const view = villageView === 'elders' && !council ? 'village' : villageView;
@@ -489,6 +495,45 @@ function warCard(s: ShoreState): string {
       <div class="col">${led ? '' : `<button class="px-btn" data-visit="${to.id}">Go</button>`}</div></div>`;
   }
   return out;
+}
+
+/** The Long Road: the Age, its lanes (what each has come to, and how near the next), the forks
+ * taken (and the roads not taken, greyed), and the Age's Great Work. */
+function cultureLayout(s: ShoreState): string {
+  const c = s.culture;
+  if (!c) return '';
+  const ageName = c.age === 1 ? 'The Hearth Age' : 'Beyond the Hearth';
+  const done = lanesDone(c);
+  const lanes = LANES.map((l) => {
+    const ideas = IDEAS.filter((i) => i.lane === l.id && i.age === 1);
+    const next = nextIdea(c, l.id);
+    const share = laneShare(c, l.id);
+    const steps = ideas
+      .map((i) => (c.done.includes(i.id) ? `<span class="road-idea done" title="${i.does}">${i.name}</span>` : i === next ? `<span class="road-idea next">???<i class="road-bar" style="width:${Math.round(share * 100)}%"></i></span>` : '<span class="road-idea fog">???</span>'))
+      .join('<span class="road-step">›</span>');
+    return `<div class="card px-box road-lane${c.focus === l.id ? ' focused' : ''}"><div class="info"><div class="name">${l.name}${next ? '' : ' <span class="tiny dim">· done for this Age</span>'}</div>
+      <div class="road-steps">${steps}</div><div class="sub tiny dim">From ${l.from}.</div></div>
+      <div class="col">${next ? `<button class="px-btn${c.focus === l.id ? ' on' : ''}" data-focus="${c.focus === l.id ? '' : l.id}">${c.focus === l.id ? 'Focused' : 'Focus'}</button>` : ''}</div></div>`;
+  }).join('');
+  const forks = Object.entries(c.forks).map(([f, o]) => {
+    const def = FORKS[f as ForkId];
+    return `<div class="sub">${def.name}: ${forkOptions(s, f as ForkId).map((x) => (x.id === o ? `<b>${x.name}</b>` : `<span class="road-not">${x.name}</span>`)).join(' · ')}</div>`;
+  }).join('');
+  const asking = c.asking ? `<div class="card px-box raid"><div class="info"><div class="name">${FORKS[c.asking.fork].name}</div><div class="sub">${FORKS[c.asking.fork].ask} Left too long, the elders will choose.</div></div><div class="col"><button class="px-btn gold" data-forkcard="${c.asking.fork}">Decide</button></div></div>` : '';
+  const work =
+    c.age > 1
+      ? '<div class="card px-box"><div class="info"><div class="name">The Great Hearth stands</div><div class="sub">The Hearth Age is over. The road goes on in a future update.</div></div></div>'
+      : `<div class="card px-box"><div class="info"><div class="name">The Age's Great Work</div><div class="sub">${workReady(s) ? (s.building?.id === 'greathearth' ? 'The Great Hearth is going up.' : count(s, 'greathearth') ? '' : 'The Great Hearth can be built now (Build, Homes).') : `Once ${LANES_FOR_WORK} lanes have this Age's ideas (${done} so far), the Great Hearth can be built.`}</div></div></div>`;
+  return `<div class="panel-head"><h2>The Long Road</h2><span class="dim">${ageName}</span></div>
+    <p class="tiny dim">Ideas come by themselves, from what the village does. Focus a lane to hurry it.</p>
+    ${asking}${work}${lanes}${forks ? `<div class="panel-head"><h2>Chosen</h2></div><div class="card px-box"><div class="info">${forks}</div></div>` : ''}`;
+}
+
+/** A fork, as cards to choose between. */
+export function forkCard(s: ShoreState, fork: ForkId): string {
+  const def = FORKS[fork];
+  return `<p class="label dim">A choice for your people</p><h3>${def.name}</h3><p>${def.ask}</p><p class="dim tiny">Once chosen, it's for good. The road not taken stays on the Long Road, greyed.</p>
+    ${deck(forkOptions(s, fork).map((o) => ({ act: `${fork}:${o.id}`, title: o.name, line: o.line, good: [o.lane ? `${LANES.find((l) => l.id === o.lane)!.name} ideas come a quarter faster` : o.fx?.food ? 'Food comes in 5% faster' : ''].filter(Boolean), bad: [] })), 'fork')}`;
 }
 
 /** Raiders seen coming: how the chief means to meet them (a card each, like the join choices). */

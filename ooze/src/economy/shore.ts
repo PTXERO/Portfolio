@@ -13,6 +13,7 @@ import { Biome, CELL, isLand, islandOf, reveal, type Island, type Pt } from './i
 import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
 import { inherit, personal } from './genes';
+import { ageOver, cultureDay, cultureFx, maybeTurn, workReady, type Culture } from './culture';
 import { away, stepWar, warDawn, type Battle, type Fight, type Raid, type WarBand } from './war';
 import type { CreatureLook } from '../scene/creatureLook';
 import type { GameState, Genes, TribeState } from './types';
@@ -224,6 +225,9 @@ export interface ShoreState {
   nextRaid?: number;
   /** Everyone who's died, remembered (for the family trees). */
   dead?: ShorePerson[];
+  /** Phase 2: the culture, once the village has turned (and whether the turn's yet to be shown). */
+  culture?: Culture;
+  turned?: boolean;
   /** Lakes seen across (by their number): seen from any shore, the whole lake is. */
   lakes?: number[];
   /** Things the Chronicle has already told of, so it tells them once (the woods thinning…). */
@@ -560,7 +564,7 @@ const boostCache = new WeakMap<ShoreState, { key: string; b: Boosts }>();
 
 /** What the buildings and relics add up to (worked out again only when either changes). */
 export function boosts(s: ShoreState): Boosts {
-  const key = `${s.built.length}|${s.relics?.length ?? 0}`;
+  const key = `${s.built.length}|${s.relics?.length ?? 0}|${s.culture?.done.length ?? 0}|${Object.keys(s.culture?.forks ?? {}).length}`;
   const hit = boostCache.get(s);
   if (hit && hit.key === key) return hit.b;
   const b = { ...NO_BOOSTS };
@@ -569,6 +573,7 @@ export function boosts(s: ShoreState): Boosts {
   };
   for (const def of BUILDS) if (def.fx) add(def.fx, count(s, def.id));
   for (const r of s.relics ?? []) add(RELICS.find((x) => x.id === r)?.fx);
+  for (const fx of cultureFx(s)) add(fx);
   b.winter = Math.min(1, b.winter);
   boostCache.set(s, { key, b });
   return b;
@@ -651,7 +656,7 @@ function stepResources(s: ShoreState, k: number): void {
 
 /** Builds on offer now: unlocked, and not at their limit. */
 export function buildsOpen(s: ShoreState): typeof BUILDS {
-  return BUILDS.filter((b) => (!b.after || count(s, b.after) > 0) && (!b.learn || learned(s, b.id)) && (b.max === undefined || count(s, b.id) + (s.building?.id === b.id ? 1 : 0) < b.max));
+  return BUILDS.filter((b) => (b.id !== 'greathearth' || workReady(s)) && (!b.after || count(s, b.after) > 0) && (!b.learn || learned(s, b.id)) && (b.max === undefined || count(s, b.id) + (s.building?.id === b.id ? 1 : 0) < b.max));
 }
 
 /** Whether a building that's learned out on the island has been. */
@@ -870,6 +875,7 @@ function finishBuilding(state: GameState, s: ShoreState): void {
   s.building = undefined;
   s.built.push({ id: b.id, x: b.x, y: b.y, day: s.day + s.clock / DAY_SEC });
   if (b.id === 'council') s.steward ??= { on: true, plan: 'balanced' };
+  if (b.id === 'greathearth') ageOver(state, s);
   if (b.id === 'hearth') {
     s.news.push(SHORE_STORY.hearth);
     record(state, 'The hearth was lit.', 'shore', shoreWhen(s));
@@ -1267,6 +1273,8 @@ function born(state: GameState, s: ShoreState): void {
 
 function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>): void {
   warDawn(state, s);
+  maybeTurn(state, s);
+  cultureDay(state, s, plan);
   // The envoy's day: a gift to the nearest kin being won over, if there's food to spare.
   if (count(s, 'envoy') && s.envoyDay !== s.day) {
     const v = s.villages.filter((x) => canWin(s, x)).sort((a, b) => Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y) - Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y))[0];
