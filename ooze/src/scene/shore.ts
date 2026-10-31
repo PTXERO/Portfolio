@@ -44,6 +44,10 @@ function voiceOf(v: Village | undefined): Voice {
 const REL_COL = { kin: '#8acf6a', prey: PAL.y, predator: '#e8615a', enemy: '#9a2a2a' } as const;
 
 export class ShoreScene extends RangeScene {
+  override get clouds(): boolean {
+    return true;
+  }
+
   // A new era, a new game: the land stands up more, seen from lower down, with the far side
   // fading into the air.
   protected lift = 30;

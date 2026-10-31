@@ -251,6 +251,11 @@ export class RangeScene {
   /** How high the clouds float over this island: about its highest peaks (worked out
    * once an island). */
   private cloudFor = { key: '', h: 1.4 };
+  /** Real clouds over the land (only New Shore's, for now): else drifting shadows. */
+  get clouds(): boolean {
+    return false;
+  }
+
   get cloudH(): number {
     const is = this.island;
     if (!is) return 1.4;
