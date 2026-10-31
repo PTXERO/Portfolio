@@ -2,7 +2,7 @@
 // homes, stores, work, exploring) and the Island (the villages found out there, and the scouts).
 
 import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
-import { HEARTH_MOST, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { centre, hearthMost, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import { FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
@@ -89,7 +89,10 @@ function seasonLine(s: ShoreState): string {
 
 function birthLine(s: ShoreState): string {
   if (!count(s, 'hearth')) return 'No children are born without a hearth.';
-  if (s.people.length >= HEARTH_MOST) return 'As many as one hearth can hold. New critters grow up in your settlements now.';
+  if (s.people.length >= hearthMost(s)) {
+    const c = centre(s);
+    return `As many as ${c.now.name.toLowerCase()} can hold (${c.now.most}). New critters grow up in your settlements${c.next ? `; ${c.next.name.toLowerCase()} would hold ${c.next.most}${c.next.id ? ' (the Great Work of this Age)' : ', in an Age to come'}` : ''}.`;
+  }
   if (s.people.length >= room(s)) return 'No room for children: build a hut.';
   if (s.food < 8) return 'Not enough food to spare for a child.';
   if (s.people.filter((p) => isAdult(s, p)).length < 2) return 'Waiting for the children to grow up.';

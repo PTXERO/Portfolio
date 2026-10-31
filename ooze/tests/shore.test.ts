@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { poiHere, answerJoin, elderThink, HEARTH_MOST, woodCap, roadCost, roadDone, startRoad, totalCritters, travelDays, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { poiHere, answerJoin, elderThink, HEARTH_MOST, hearthMost, roomLeft, woodCap, roadCost, roadDone, startRoad, totalCritters, travelDays, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import { hostile, raidable, sendBand, fighters, setStance, stepIn, payCost, setWarRule } from '../src/economy/war';
 import type { TribeState } from '../src/economy/types';
@@ -806,5 +806,9 @@ describe('Left alone a long while', () => {
     const plan = workPlan(s);
     expect(plan.rest).toBeGreaterThan(0);
     expect(plan.wood * 10).toBeLessThan(HEARTH_MOST);
+    // The Great Hearth: the heart of the village holds twice as many, and they build homes again.
+    s.built.push({ id: 'greathearth', x: s.hearth.x + 6, y: s.hearth.y } as never);
+    expect(hearthMost(s)).toBe(300);
+    expect(roomLeft(s)).toBeGreaterThan(0);
   });
 });

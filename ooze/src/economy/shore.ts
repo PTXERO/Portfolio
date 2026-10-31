@@ -37,6 +37,27 @@ const BIRTH_FOOD = 12;
 /** The most one hearth holds: past this the land round it feeds no more, and the village grows
  * only in its settlements. */
 export const HEARTH_MOST = 150;
+
+/** The heart of the village, as the Ages go on: each Age's Great Work raises it, and it holds
+ * twice as many. (Those to come are named, to be built in their Ages.) */
+export const CENTRES: { id: BuildId | null; name: string; most: number; age: number }[] = [
+  { id: 'hearth', name: 'The Hearth', most: HEARTH_MOST, age: 1 },
+  { id: 'greathearth', name: 'The Great Hearth', most: 300, age: 1 },
+  { id: null, name: 'The Town Square', most: 600, age: 2 },
+  { id: null, name: 'The City Centre', most: 1200, age: 3 },
+];
+
+/** What the heart of the village is now, and what it'll be next. */
+export function centre(s: ShoreState): { now: (typeof CENTRES)[number]; next?: (typeof CENTRES)[number] } {
+  let i = 0;
+  for (let k = 1; k < CENTRES.length; k++) if (CENTRES[k].id && count(s, CENTRES[k].id!)) i = k;
+  return { now: CENTRES[i], next: CENTRES[i + 1] };
+}
+
+/** The most the village round the hearth holds now. */
+export function hearthMost(s: ShoreState): number {
+  return centre(s).now.most;
+}
 const PAIR_RATE = 0.12;
 /** What's kept with nothing built to keep it in. */
 const FOOD_CAP = 40;
@@ -935,7 +956,7 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
   if (open.has('hearth')) return { pick: 'hearth', why: 'hearth', text: '"First, a fire."' };
   const plan = workPlan(s);
   const free = room(s) - s.people.length;
-  const homes = (): BuildId | null => (room(s) >= HEARTH_MOST ? null : open.has('longhouse') && buildCost(s, 'longhouse') / 12 < buildCost(s, 'hut') / 4 ? 'longhouse' : open.has('hut') ? 'hut' : null);
+  const homes = (): BuildId | null => (room(s) >= hearthMost(s) ? null : open.has('longhouse') && buildCost(s, 'longhouse') / 12 < buildCost(s, 'hut') / 4 ? 'longhouse' : open.has('hut') ? 'hut' : null);
   const food = (): BuildId | null => (open.has('weir') && buildCost(s, 'weir') < buildCost(s, 'camp') ? 'weir' : open.has('camp') ? 'camp' : null);
   // Stores: whichever holds the most food for its wood (that they have what it needs for).
   const HOLDS: [BuildId, number][] = [['rack', 40], ['granary', 120], ['pottery', 100], ['salter', 40]];
@@ -1002,7 +1023,7 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
     ['camp', plan.food > plan.land - 3],
     ['lookout', true],
     ['trails', true],
-    ['longhouse', free <= 6 && room(s) < HEARTH_MOST],
+    ['longhouse', free <= 6 && room(s) < hearthMost(s)],
   ];
   // Spare: what's left after a few days' firewood (and, come autumn, the winter's).
   const keep = Math.max(5, burnPerDay(s) * WOOD_KEEP_DAYS) + reserve;
@@ -1207,7 +1228,7 @@ export function canWin(s: ShoreState, v: Village): boolean {
 
 /** Room left in the village (beds not yet slept in). */
 export function roomLeft(s: ShoreState): number {
-  return Math.min(room(s), HEARTH_MOST) - s.people.length;
+  return Math.min(room(s), hearthMost(s)) - s.people.length;
 }
 
 /** A gift of food: trust, twice as much with the chief there to give it. */
@@ -1533,7 +1554,7 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
   }
   // Children: where there's a fire, room, food to spare, and grown pairs.
   const adults = s.people.filter((p) => isAdult(s, p)).length;
-  if (count(s, 'hearth') && s.people.length < Math.min(room(s), HEARTH_MOST) && s.food >= BIRTH_FOOD && adults >= 2) {
+  if (count(s, 'hearth') && s.people.length < Math.min(room(s), hearthMost(s)) && s.food >= BIRTH_FOOD && adults >= 2) {
     s.birthT += Math.floor(adults / 2) * PAIR_RATE * (1 + boosts(s).births) * k;
     if (s.birthT >= 1) {
       s.birthT = 0;
