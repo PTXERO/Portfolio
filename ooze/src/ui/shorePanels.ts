@@ -394,7 +394,7 @@ function villageRow(s: ShoreState, v: Village): string {
   }
   const win = canWin(s, v);
   return `<div class="card px-box village">${icon}<div class="info"><div class="name">${cap(v.name)} <span class="rel rel-${rel}">${REL_NAME[rel]}</span></div>
-    <div class="sub">${v.pop} ${v.cannibal ? 'eaters of their own' : DIET_NAME[v.diet] ?? v.diet}. ${win ? '' : REL_LINE[rel]}</div>${win ? trustBar(v) : ''}</div>
+    <div class="sub">${Math.round(v.pop)} ${v.cannibal ? 'eaters of their own' : DIET_NAME[v.diet] ?? v.diet}. ${win ? '' : REL_LINE[rel]}</div>${win ? trustBar(v) : ''}</div>
     <div class="col">${win ? `<button class="px-btn${s.food >= giftCost(v) ? ' gold' : ''}" data-gift="${v.id}"${s.food >= giftCost(v) ? '' : ' disabled'}>Gift ${giftCost(v)}</button>` : ''}${raidable(s, v) ? `<button class="px-btn" data-raid="${v.id}"${s.warband ? ' disabled' : ''}>Raid</button>` : ''}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
 }
 
@@ -466,7 +466,7 @@ export function villageCard(s: ShoreState, v: Village): string {
       ? `${raidChoices(s, v)}`
       : `<p class="dim tiny">${v.joined ? 'They live by your hearth now; a few stay on at their old village, working its land for you.' : v.vassal ? 'Yours: they pay tribute (set what you take on the Island tab).' : hostile(s, v) ? `They'll come raiding, when they think you're worth it.${v.beaten ? ` Driven off ${v.beaten} time${v.beaten > 1 ? 's' : ''} so far.` : ''}` : (v.beaten ?? 0) >= 3 ? 'Driven off too many times: they leave you be now.' : ''}</p><button class="px-btn gold" data-act="dismiss">OK</button>`;
   return `<p class="label dim">${REL_NAME[rel]}</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)}</h3></div>
-    <p>${v.pop} of them, ${v.cannibal ? 'eaters of their own kind' : `${(DIET_NAME[v.diet] ?? v.diet).toLowerCase()}`}, another kind altogether.${v.habitat ? ` ${WHERE[v.habitat]}` : ''}</p>
+    <p>${Math.round(v.pop)} of them, ${v.cannibal ? 'eaters of their own kind' : `${(DIET_NAME[v.diet] ?? v.diet).toLowerCase()}`}, another kind altogether.${v.habitat ? ` ${WHERE[v.habitat]}` : ''}</p>
     <p class="dim">${REL_LINE[rel]}</p>
     ${v.habitat ? `<p class="fx">Their land gives: ${RES_OF[v.habitat].map((r) => RES_NAME[r].toLowerCase()).join(', ')}.</p>` : ''}
     ${actions}`;

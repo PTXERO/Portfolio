@@ -1313,8 +1313,8 @@ function join(state: GameState, s: ShoreState, v: Village): void {
     const id = s.nextId++;
     s.people.push({ id, name, born: today - age, dies: today - age + 70 + rand() * 30, kind: v.id, joined: today, genes: personal(undefined, id * 31 + v.id) });
   }
-  s.news.push(`${cap(v.name)} have joined you: ${v.pop} of them.`);
-  record(state, `${cap(v.name)} joined them: ${v.pop} critters of another kind, come to live by their hearth.`, 'shore', shoreWhen(s));
+  s.news.push(`${cap(v.name)} have joined you: ${Math.round(v.pop)} of them.`);
+  record(state, `${cap(v.name)} joined them: ${Math.round(v.pop)} critters of another kind, come to live by their hearth.`, 'shore', shoreWhen(s));
 }
 
 const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
@@ -1721,7 +1721,7 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
     v.found = true;
     if (relation(s, v) === 'kin') v.trust ??= FIRST_TRUST;
     s.newFinds.push(v.id);
-    record(state, `They found ${v.name}: ${v.pop} of them, ${v.cannibal ? 'eaters of their own kind' : `${v.diet}s`}.`, 'shore', shoreWhen(s));
+    record(state, `They found ${v.name}: ${Math.round(v.pop)} of them, ${v.cannibal ? 'eaters of their own kind' : `${v.diet}s`}.`, 'shore', shoreWhen(s));
   }
   // Landmarks come out of the fog as it's seen, by the chief or the scouts; once seen they're
   // known, and on the Island tab's list (so none's left somewhere only a scout has been, and
