@@ -49,3 +49,29 @@ describe('The line, saved', () => {
     expect(back.mates[0].genes).toBeDefined();
   });
 });
+
+import { breed, eggSeconds } from '../src/economy/creature';
+import { tick } from '../src/economy/tick';
+
+describe('Warm Brooding', () => {
+  it('stacks, and speeds up the egg already in the nest', () => {
+    const state = createState(0);
+    state.started = true;
+    state.unlocked.push('creature');
+    state.current = 'creature';
+    const c = state.stages.creature;
+    const base = eggSeconds(state);
+    c.levels = { brooding: 2 };
+    expect(eggSeconds(state)).toBeCloseTo(base * 0.85 ** 2, 3);
+    c.levels = {};
+    c.mates = [{ id: 1, name: 'A', parts: {}, genes: { hue: 0, light: 0 } }];
+    expect(breed(state, 1)).toBe(true);
+    tick(state, 100);
+    const done = 1 - c.egg!.left / c.egg!.total;
+    c.levels = { brooding: 3 };
+    tick(state, 0.001);
+    // As far along as before, and the rest of it quicker.
+    expect(1 - c.egg!.left / c.egg!.total).toBeCloseTo(done, 2);
+    expect(c.egg!.total).toBeCloseTo(eggSeconds(state), 1);
+  });
+});

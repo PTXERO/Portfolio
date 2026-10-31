@@ -828,6 +828,13 @@ export function creatureTick(state: GameState, dt: number, rand: () => number = 
   partyTick(state, dt);
   placeTick(state);
   if (s.egg) {
+    // (Brooding bought, more charm, more nesters: the egg in the nest speeds up too, keeping how
+    // far along it is.)
+    const now = eggSeconds(state);
+    if (Math.abs(now - s.egg.total) > 0.01) {
+      s.egg.left *= now / s.egg.total;
+      s.egg.total = now;
+    }
     s.egg.left -= dt;
     if (s.egg.left <= 0) hatch(state);
   }
