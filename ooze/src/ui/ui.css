@@ -883,3 +883,34 @@ div.chart-node.other { cursor: default; }
 .road-step { color: #6a6f80; font-size: 11px; }
 .road-lane.focused { box-shadow: 0 0 0 2px #e8c050; }
 .road-not { color: #6a6f80; text-decoration: line-through; }
+
+/* Battles, animated: each line bobs ready; every round they lunge and clash, the side that took
+   losses flashes and its losses float up; the fallen topple; at the end the winners hop and the
+   beaten turn and run. (--face: which way they look, so the moves work for both lines.) */
+.battle .side { position: relative; }
+.battle .line img { --face: 1; transform: scaleX(var(--face)); animation: b-bob 0.55s ease-in-out infinite alternate; }
+.battle .them .line img { --face: -1; }
+.battle .line img:nth-child(2n) { animation-delay: -0.2s; }
+.battle .line img:nth-child(3n) { animation-delay: -0.4s; }
+.battle .line img.down, .battle .them .line img.down { animation: b-fall 0.45s ease-in forwards; opacity: 0.25; transform: scaleX(var(--face)) translateY(3px) scaleY(-1); }
+@keyframes b-fall { 0% { transform: scaleX(var(--face)) translateY(0); opacity: 1; } 40% { transform: scaleX(var(--face)) translateY(-5px) rotate(calc(var(--face) * -40deg)); opacity: 1; } 100% { transform: scaleX(var(--face)) translateY(3px) scaleY(-1); opacity: 0.25; } }
+@keyframes b-bob { from { transform: scaleX(var(--face)) translateY(0); } to { transform: scaleX(var(--face)) translateY(-2px); } }
+.battle.lunge .us .line { animation: b-lunge-r 0.4s ease-out; }
+.battle.lunge .them .line { animation: b-lunge-l 0.4s ease-out; }
+@keyframes b-lunge-r { 40% { transform: translateX(10px); } }
+@keyframes b-lunge-l { 40% { transform: translateX(-10px); } }
+.battle .side.hit { animation: none; }
+.battle .side.hit .line img:not(.down) { animation: b-flash 0.3s; }
+@keyframes b-flash { 50% { filter: brightness(2.4) drop-shadow(0 0 2px #fff); transform: scaleX(var(--face)) translateX(calc(var(--face) * -3px)); } }
+.battle .dmg { position: absolute; top: -4px; font-style: normal; font-weight: bold; font-size: 13px; color: #f08a6a; text-shadow: 0 1px 0 #10141f; pointer-events: none; animation: b-dmg 1s ease-out forwards; }
+.battle .them .dmg { color: #e8c050; }
+@keyframes b-dmg { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-22px); opacity: 0; } }
+.battle .vs { position: relative; }
+.battle .clash { position: absolute; left: 50%; top: 50%; font-style: normal; font-size: 20px; color: #f5d070; pointer-events: none; animation: b-clash 0.5s ease-out forwards; }
+@keyframes b-clash { from { transform: translate(-50%, -50%) scale(0.4) rotate(0deg); opacity: 1; } to { transform: translate(-50%, -50%) scale(1.6) rotate(90deg); opacity: 0; } }
+.battle .side.win .line img:not(.down) { animation: b-win 0.32s ease-in-out infinite alternate; }
+@keyframes b-win { from { transform: scaleX(var(--face)) translateY(0); } to { transform: scaleX(var(--face)) translateY(-6px); } }
+.battle .side.flee .line img:not(.down) { animation: b-flee 1.4s ease-in forwards; }
+.battle .side.flee .line img:nth-child(2n):not(.down) { animation-delay: 0.15s; }
+@keyframes b-flee { 0% { transform: scaleX(calc(var(--face) * -1)) translateX(0); opacity: 1; } 100% { transform: scaleX(calc(var(--face) * -1)) translateX(70px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .battle .line img, .battle.lunge .line, .battle .side.win .line img, .battle .side.flee .line img { animation: none !important; } }

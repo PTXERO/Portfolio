@@ -1098,21 +1098,60 @@ function showFight(s: NonNullable<ReturnType<typeof shoreOf>>): void {
     const icons = side.querySelectorAll<HTMLElement>('.line img');
     const stand = Math.ceil((now[k] / Math.max(1, start[k])) * icons.length);
     icons.forEach((ic, j) => ic.classList.toggle('down', j >= stand));
-    if (f.rounds.length !== liveRounds) {
-      side.classList.remove('hit');
-      void side.offsetWidth;
-      side.classList.add('hit');
-    }
   });
   if (f.rounds.length !== liveRounds) {
     liveRounds = f.rounds.length;
-    if (liveRounds) popSound(0.7 + Math.random() * 0.3);
+    if (liveRounds) {
+      const prev = f.rounds[liveRounds - 2] ?? [f.ours, f.theirs];
+      animateRound(el, prev, f.rounds[liveRounds - 1]);
+      popSound(0.7 + Math.random() * 0.3);
+    }
   }
   const note = modal.querySelector<HTMLElement>('.fight-note');
   const say = fightNote(s, f);
   if (note && note.textContent !== say) note.textContent = say;
   const btn = modal.querySelector<HTMLButtonElement>('[data-stepin]');
   if (btn) btn.hidden = !canStepIn(s);
+}
+
+/** A round of blows, shown: the lines lunge at each other and clash; those who took losses
+ * flash, and the losses rise off them. */
+function animateRound(el: HTMLElement, prev: [number, number], next: [number, number]): void {
+  el.classList.remove('lunge');
+  void el.offsetWidth;
+  el.classList.add('lunge');
+  window.setTimeout(() => {
+    if (!el.isConnected) return;
+    const vs = el.querySelector<HTMLElement>('.vs');
+    if (vs) {
+      const c = document.createElement('i');
+      c.className = 'clash';
+      c.textContent = '✶';
+      vs.appendChild(c);
+      window.setTimeout(() => c.remove(), 500);
+    }
+    el.querySelectorAll<HTMLElement>('.side').forEach((side, k) => {
+      const lost = Math.round(prev[k] - next[k]);
+      if (lost <= 0) return;
+      side.classList.remove('hit');
+      void side.offsetWidth;
+      side.classList.add('hit');
+      const d = document.createElement('i');
+      d.className = 'dmg';
+      d.textContent = `−${lost}`;
+      d.style.left = `${30 + Math.random() * 40}%`;
+      side.appendChild(d);
+      window.setTimeout(() => d.remove(), 1000);
+    });
+  }, 180);
+}
+
+/** The battle's over: the winners hop for joy; the beaten turn and run. */
+function endBattle(el: HTMLElement): void {
+  const usWon = el.dataset.won === 'us';
+  el.classList.add('over');
+  el.querySelector('.side.us')?.classList.add(usWon ? 'win' : 'flee');
+  el.querySelector('.side.them')?.classList.add(usWon ? 'flee' : 'win');
 }
 
 /** The battle on show: the two lines thin round by round, then the result. */
@@ -1130,9 +1169,12 @@ function playBattle(done = false): void {
     if (i >= rounds.length) {
       const res = modal.querySelector<HTMLElement>('.battle-result');
       if (res) res.hidden = false;
+      endBattle(el);
       return;
     }
+    const prevR = (done ? all[all.length - 2] : rounds[i - 1]) ?? (start as [number, number]);
     const r = rounds[i++];
+    if (!done) animateRound(el, prevR, r);
     sides.forEach((side, k) => {
       const left = r[k];
       side.querySelector<HTMLElement>('.making-bar i')!.style.width = `${Math.round((left / Math.max(1, start[k])) * 100)}%`;
@@ -1140,12 +1182,9 @@ function playBattle(done = false): void {
       const icons = side.querySelectorAll<HTMLElement>('.line img');
       const stand = Math.ceil((left / Math.max(1, start[k])) * icons.length);
       icons.forEach((ic, j) => ic.classList.toggle('down', j >= stand));
-      side.classList.remove('hit');
-      void side.offsetWidth;
-      side.classList.add('hit');
     });
-    popSound(0.7 + Math.random() * 0.3);
-    setTimeout(step, 750);
+    if (!done) popSound(0.7 + Math.random() * 0.3);
+    setTimeout(step, done ? 300 : 850);
   };
   setTimeout(step, done ? 0 : 600);
 }

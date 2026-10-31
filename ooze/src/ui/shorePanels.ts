@@ -633,7 +633,7 @@ export function battleCard(s: ShoreState, b: Battle): string {
         ? `They're beaten.${v.vassal ? ' Their village is yours.' : ' What\'s left of them flee.'} ${b.took ? `The band brings back ${b.took.food} food and ${b.took.wood} wood.` : ''}${b.dead ? ` ${b.dead} of ours died.` : ''}`
         : `Beaten back.${b.dead ? ` ${b.dead} of ours died.` : ''}`;
   return `<p class="label dim">${b.when}</p><h3>${head}</h3>${b.led ? '<p class="dim tiny">The chief leads them.</p>' : ''}${b.rallied ? '<p class="dim tiny">Rallied.</p>' : ''}${b.walls ? '<p class="dim tiny">Behind the palisade.</p>' : ''}${b.chief !== undefined ? `<p class="dim tiny">The chief fought in the front line${b.hurt ? ', and was hurt' : ''}.</p>` : ''}
-    <div class="battle" data-rounds='${JSON.stringify(b.rounds)}' data-ours="${b.ours}" data-theirs="${b.theirs}">${line(s.look, b.ours, 'us')}<span class="vs">vs</span>${line(v.look, b.theirs, 'them')}</div>
+    <div class="battle" data-rounds='${JSON.stringify(b.rounds)}' data-ours="${b.ours}" data-theirs="${b.theirs}" data-won="${b.won ? 'us' : 'them'}">${line(s.look, b.ours, 'us')}<span class="vs">vs</span>${line(v.look, b.theirs, 'them')}</div>
     <p class="battle-result" hidden>${result}</p>
     <button class="px-btn gold" data-act="dismiss">${b.won ? 'Good' : 'So be it'}</button>`;
 }
