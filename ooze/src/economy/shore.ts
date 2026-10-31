@@ -198,6 +198,8 @@ export interface ShoreState {
   building?: { id: BuildId; x: number; y: number; left: number; total: number; why?: ElderWhy };
   /** What the elders have been thinking, newest last (a few dozen kept). */
   elders?: { when: string; why: ElderWhy; text: string }[];
+  /** Lakes seen across (by their number): seen from any shore, the whole lake is. */
+  lakes?: number[];
   /** Things the Chronicle has already told of, so it tells them once (the woods thinning…). */
   told?: string[];
   /** The elders' council, once built: whether they build while you're away, and what for. */
@@ -1398,6 +1400,7 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
     }
     reveal(is, seen, sc.at.x, sc.at.y, SCOUT_SIGHT + bo.sight);
   });
+  seeAcrossLakes(s, is, seen);
   for (const v of s.villages) {
     if (v.found) continue;
     const c = Math.floor(v.y / CELL) * SHORE_CELLS + Math.floor(v.x / CELL);
@@ -1417,6 +1420,63 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
     }
   }
   explore(state, s, dt);
+}
+
+/** The island's lakes, on the fog's grid: each lake's cells (cells whose middle is lake water). */
+const lakeCache = new Map<number, number[][]>();
+function lakesOf(is: Island, seed: number): number[][] {
+  const hit = lakeCache.get(seed);
+  if (hit) return hit;
+  const G = is.n / CELL;
+  const wet = (c: number) => is.biome[Math.floor((Math.floor(c / G) * CELL + CELL / 2)) * is.n + (c % G) * CELL + Math.floor(CELL / 2)] === Biome.Lake;
+  const done = new Uint8Array(G * G);
+  const lakes: number[][] = [];
+  for (let c0 = 0; c0 < G * G; c0++) {
+    if (done[c0] || !wet(c0)) continue;
+    const cells: number[] = [];
+    const stack = [c0];
+    done[c0] = 1;
+    while (stack.length) {
+      const c = stack.pop()!;
+      cells.push(c);
+      const x = c % G;
+      const y = Math.floor(c / G);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= G || ny >= G) continue;
+        const n = ny * G + nx;
+        if (done[n] || !wet(n)) continue;
+        done[n] = 1;
+        stack.push(n);
+      }
+    }
+    lakes.push(cells);
+  }
+  lakeCache.set(seed, lakes);
+  return lakes;
+}
+
+/** Open water hides nothing: once any of a lake is seen, all of it is (and its shores, a cell
+ * deep). */
+function seeAcrossLakes(s: ShoreState, is: Island, seen: Uint8Array): void {
+  const lakes = lakesOf(is, s.seed);
+  if (!lakes.length) return;
+  const G = is.n / CELL;
+  const known = (s.lakes ??= []);
+  lakes.forEach((cells, i) => {
+    if (known.includes(i) || !cells.some((c) => seen[c])) return;
+    known.push(i);
+    for (const c of cells) {
+      const x = c % G;
+      const y = Math.floor(c / G);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < G && ny < G) seen[ny * G + nx] = 1;
+      }
+    }
+  });
 }
 
 // ---- Landmarks ----
