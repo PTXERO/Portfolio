@@ -69,6 +69,11 @@ export const PRAYER_MAX = 40;
 const prayerFor = (alive: number) => 1.2 + 0.4 * Math.sqrt(alive);
 /** Dread fades each night; past these they cower (work less), then walk into the sea. */
 const DREAD_FADE = 2.5;
+/** The spear's slow madness: dread it adds each night, more each day on the island and with
+ * every miracle worked. */
+const DREAD_CREEP = 0.5;
+const DREAD_PER_DAY = 0.12;
+const DREAD_PER_MIRACLE = 0.3;
 export const DREAD_COWER = 60;
 export const DREAD_FLEE = 85;
 /** Casts before a miracle can be ordained, and what the spear charges to work it unasked. */
@@ -249,7 +254,12 @@ export function tribeThinks(ex: ExtinctionState): void {
   if (!n) return;
   // Prayer, and dread fading (and what too much of it does).
   ex.prayer = Math.min(PRAYER_MAX, (ex.prayer ?? 0) + prayerFor(n));
-  ex.dread = Math.max(0, (ex.dread ?? 0) - DREAD_FADE);
+  // The spear's voice wears at them, night on night: more the longer they've lived beside it,
+  // and more for every miracle it's worked. Early on it fades faster than it grows; later, not.
+  const worked = Object.values(ex.casts ?? {}).reduce((a, k) => a + (k ?? 0), 0);
+  const creep = DREAD_CREEP + ex.day * DREAD_PER_DAY + worked * DREAD_PER_MIRACLE;
+  ex.dread = Math.min(100, Math.max(0, (ex.dread ?? 0) - DREAD_FADE + creep));
+  if (creep > DREAD_FADE && !ex.log?.some((l) => l.text.includes('wearing at them'))) say(ex, 'The voice in the spear is wearing at them, night after night. Every miracle makes it louder.');
   if ((ex.dread ?? 0) >= DREAD_FLEE && n > 2) {
     const p = ex.people.splice(Math.floor(((ex.luck ?? 7) % 997) / 997 * n), 1)[0];
     ex.deaths += 1;
