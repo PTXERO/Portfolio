@@ -34,6 +34,9 @@ const EAT = 1;
 const EAT_CHILD = 0.5;
 /** Food a birth takes, and how often a pair of adults has a child (a day) with all well. */
 const BIRTH_FOOD = 12;
+/** The most one hearth holds: past this the land round it feeds no more, and the village grows
+ * only in its settlements. */
+export const HEARTH_MOST = 150;
 const PAIR_RATE = 0.12;
 /** What's kept with nothing built to keep it in. */
 const FOOD_CAP = 40;
@@ -932,14 +935,16 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
   if (open.has('hearth')) return { pick: 'hearth', why: 'hearth', text: '"First, a fire."' };
   const plan = workPlan(s);
   const free = room(s) - s.people.length;
-  const homes = (): BuildId | null => (open.has('longhouse') && buildCost(s, 'longhouse') / 12 < buildCost(s, 'hut') / 4 ? 'longhouse' : open.has('hut') ? 'hut' : null);
+  const homes = (): BuildId | null => (room(s) >= HEARTH_MOST ? null : open.has('longhouse') && buildCost(s, 'longhouse') / 12 < buildCost(s, 'hut') / 4 ? 'longhouse' : open.has('hut') ? 'hut' : null);
   const food = (): BuildId | null => (open.has('weir') && buildCost(s, 'weir') < buildCost(s, 'camp') ? 'weir' : open.has('camp') ? 'camp' : null);
   // Stores: whichever holds the most food for its wood (that they have what it needs for).
   const HOLDS: [BuildId, number][] = [['rack', 40], ['granary', 120], ['pottery', 100], ['salter', 40]];
   // (Stores: when the food's near full, or the stock the season asks for won't fit.)
   const want = stockTargets(s, plan.eat).want;
+  // (Never past what's worth keeping: twelve days' eating, or the season's stock if more.)
+  const enough = foodCap(s) >= Math.max(want, plan.eat * 12);
   const stores = (): BuildId | null =>
-    s.food >= foodCap(s) * 0.9 || (foodCap(s) < want && s.food >= foodCap(s) * 0.7) ? HOLDS.filter(([id]) => open.has(id) && hasNeeds(s, id)).sort((a, b) => buildCost(s, a[0]) / a[1] - buildCost(s, b[0]) / b[1])[0]?.[0] ?? null : null;
+    !enough && (s.food >= foodCap(s) * 0.9 || (foodCap(s) < want && s.food >= foodCap(s) * 0.7)) ? HOLDS.filter(([id]) => open.has(id) && hasNeeds(s, id)).sort((a, b) => buildCost(s, a[0]) / a[1] - buildCost(s, b[0]) / b[1])[0]?.[0] ?? null : null;
   const p = s.steward?.plan ?? 'balanced';
   const homesW: [ElderWhy, () => BuildId | null] = ['homes', () => (free <= (p === 'homes' ? 4 : 2) ? homes() : null)];
   const foodW: [ElderWhy, () => BuildId | null] = ['food', () => (plan.food > plan.land - (p === 'food' ? 2 : 0) ? food() : null)];
@@ -990,14 +995,14 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
     ['salter', true],
     ['forester', forestShare(s) < 0.8 && count(s, 'forester') < 1 + s.people.length / 30],
     ['scout', unseen && count(s, 'scout') < 2],
-    ['granary', s.food >= foodCap(s) * 0.7],
-    ['pottery', s.food >= foodCap(s) * 0.7],
+    ['granary', !enough && s.food >= foodCap(s) * 0.7],
+    ['pottery', !enough && s.food >= foodCap(s) * 0.7],
     ['cutter', plan.wood >= 3 && count(s, 'cutter') < 1 + s.people.length / 30],
     ['weir', plan.food > plan.land - 3],
     ['camp', plan.food > plan.land - 3],
     ['lookout', true],
     ['trails', true],
-    ['longhouse', free <= 6],
+    ['longhouse', free <= 6 && room(s) < HEARTH_MOST],
   ];
   // Spare: what's left after a few days' firewood (and, come autumn, the winter's).
   const keep = Math.max(5, burnPerDay(s) * WOOD_KEEP_DAYS) + reserve;
@@ -1111,7 +1116,7 @@ export function stockTargets(s: ShoreState, eat?: number): { food: number; wood:
 }
 
 /** The village's day: how many work at food and at wood, and what that brings in. */
-type Plan = { food: number; wood: number; eat: number; foodRate: number; woodRate: number; land: number };
+type Plan = { food: number; wood: number; rest?: number; eat: number; foodRate: number; woodRate: number; land: number };
 /** The plan, kept for the moment it was made in (it's asked for several times a step; anything
  * it depends on changing makes it again). */
 const planCache = new WeakMap<ShoreState, { k: unknown[]; plan: Plan }>();
@@ -1166,13 +1171,17 @@ function makePlan(s: ShoreState): Plan {
     food = eatHands + Math.round(left * (extraF + extraW > 0 ? extraF / (extraF + extraW) : 0.5));
   }
   food = Math.max(0, Math.min(adults, food));
-  const wood = adults - food;
+  // Wood: what's needed; any more only while the woodpiles have room (as many as fill them in a
+  // day). The rest rest.
+  const fill = s.wood < wCap - 0.5 ? Math.ceil((burn + (wCap - s.wood)) / woodEach) : 0;
+  const wood = Math.min(adults - food, Math.max(Math.ceil(needW), fill));
+  const rest = adults - food - wood;
   // The land round the village feeds only so many: past that, each more brings in less.
   const working = food <= land ? food : land + (food - land) * 0.15;
   // Before there's a hearth there's no village yet: no one gathers, and no one goes hungry
   // (they're still living on what the crossing left them).
   if (!count(s, 'hearth')) return { food: 0, wood: 0, eat: 0, foodRate: 0, woodRate: 0, land };
-  return { food, wood, eat, foodRate: working * foodEach, woodRate: wood * woodEach, land };
+  return { food, wood, rest, eat, foodRate: working * foodEach, woodRate: wood * woodEach, land };
 }
 
 /** How many gatherers the land round the village feeds fully (more camps and weirs, more). */
@@ -1198,7 +1207,7 @@ export function canWin(s: ShoreState, v: Village): boolean {
 
 /** Room left in the village (beds not yet slept in). */
 export function roomLeft(s: ShoreState): number {
-  return room(s) - s.people.length;
+  return Math.min(room(s), HEARTH_MOST) - s.people.length;
 }
 
 /** A gift of food: trust, twice as much with the chief there to give it. */
@@ -1524,7 +1533,7 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
   }
   // Children: where there's a fire, room, food to spare, and grown pairs.
   const adults = s.people.filter((p) => isAdult(s, p)).length;
-  if (count(s, 'hearth') && s.people.length < room(s) && s.food >= BIRTH_FOOD && adults >= 2) {
+  if (count(s, 'hearth') && s.people.length < Math.min(room(s), HEARTH_MOST) && s.food >= BIRTH_FOOD && adults >= 2) {
     s.birthT += Math.floor(adults / 2) * PAIR_RATE * (1 + boosts(s).births) * k;
     if (s.birthT >= 1) {
       s.birthT = 0;

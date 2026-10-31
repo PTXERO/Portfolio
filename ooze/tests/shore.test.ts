@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { poiHere, answerJoin, roadCost, roadDone, startRoad, totalCritters, travelDays, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { poiHere, answerJoin, elderThink, HEARTH_MOST, woodCap, roadCost, roadDone, startRoad, totalCritters, travelDays, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import { hostile, raidable, sendBand, fighters, setStance, stepIn, payCost, setWarRule } from '../src/economy/war';
 import type { TribeState } from '../src/economy/types';
@@ -786,5 +786,25 @@ describe('Dancing tires them for a season; vassals warm to it', () => {
     const before = v.vassal!.loyalty;
     shoreTick(state, DAY_SEC);
     expect(v.vassal!.loyalty).toBeGreaterThan(before);
+  });
+});
+
+describe('Left alone a long while', () => {
+  it('one hearth holds so many: no children past it, no more homes, and idle hands rest', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    s.wood = 100000;
+    now(state, 'hearth');
+    for (let i = 0; i < 60; i++) now(state, 'hut');
+    while (s.people.length < HEARTH_MOST) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30, dies: 9999 });
+    s.food = foodCap(s);
+    s.wood = woodCap(s);
+    const n = s.people.length;
+    shoreTick(state, DAY_SEC);
+    expect(s.people.length).toBeLessThanOrEqual(n);
+    expect(elderThink(s).pick).not.toBe('hut');
+    const plan = workPlan(s);
+    expect(plan.rest).toBeGreaterThan(0);
+    expect(plan.wood * 10).toBeLessThan(HEARTH_MOST);
   });
 });

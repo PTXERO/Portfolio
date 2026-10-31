@@ -2,7 +2,7 @@
 // homes, stores, work, exploring) and the Island (the villages found out there, and the scouts).
 
 import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
-import { WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { HEARTH_MOST, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import { FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
@@ -89,6 +89,7 @@ function seasonLine(s: ShoreState): string {
 
 function birthLine(s: ShoreState): string {
   if (!count(s, 'hearth')) return 'No children are born without a hearth.';
+  if (s.people.length >= HEARTH_MOST) return 'As many as one hearth can hold. New critters grow up in your settlements now.';
   if (s.people.length >= room(s)) return 'No room for children: build a hut.';
   if (s.food < 8) return 'Not enough food to spare for a child.';
   if (s.people.filter((p) => isAdult(s, p)).length < 2) return 'Waiting for the children to grow up.';
@@ -145,13 +146,13 @@ const LEANS: { id: Lean; name: string }[] = [
 function workCard(s: ShoreState): string {
   const plan = workPlan(s);
   const b = builders(s);
-  const kids = s.people.length - plan.food - plan.wood - b;
+  const kids = s.people.length - plan.food - plan.wood - (plan.rest ?? 0) - b;
   if (!count(s, 'hearth')) {
     return `<div class="card px-box"><div class="info"><div class="name">No village yet</div>
       <div class="sub">They sit by the raft, living on what the crossing left them. Nothing's gathered until there's a hearth: break up the raft for its wood, and build one.</div></div></div>`;
   }
   return `<div class="card px-box lean"><div class="info"><div class="name">What they work at</div>
-    <div class="sub">${plan.food} gathering food, ${plan.wood} cutting wood${b ? `, ${b} building` : ''}${kids > 0 ? `, ${kids} too young` : ''}. They work it out for themselves; you set what they lean toward.</div>
+    <div class="sub">${plan.food} gathering food, ${plan.wood} cutting wood${b ? `, ${b} building` : ''}${plan.rest ? `, ${plan.rest} resting (nothing wants doing)` : ''}${kids > 0 ? `, ${kids} too young` : ''}. They work it out for themselves; you set what they lean toward.</div>
     <div class="sub dim">Firewood: ${burnPerDay(s).toFixed(1)} a day${shoreSeason(s).si === 3 ? ' (winter: twice as much)' : ''}. The woods round about: ${Math.round(forestShare(s) * 100)}%${forestShare(s) < 0.5 ? ', thinning (a forester would plant more)' : ''}.</div>
     <div class="sub${plan.food > plan.land ? ' starving' : ' dim'}">The land round the village feeds ${plan.land} gatherers${plan.food > plan.land ? `: ${plan.food - plan.land} more than it can, and they find little` : ''}. Gathering camps and weirs let it feed more.</div></div>
     <div class="seg">${LEANS.map((l) => `<button class="px-btn${s.lean === l.id ? ' gold' : ''}" data-lean="${l.id}">${l.name}</button>`).join('')}</div></div>`;
