@@ -128,7 +128,7 @@ export class ShoreScene extends RangeScene {
     }
     for (const p of poisOf(s)) {
       // (Only close enough in to see them.)
-      if (!p.found || this.zoom < 1.6) continue;
+      if (!p.found || p.done >= poiDef(p).layers.length || this.zoom < 1.6) continue;
       const X = this.sx(p.x);
       const Y = this.py(p.x, p.y);
       if (Math.hypot(ax - X, ay - (Y - 4)) < Math.max(7, this.zoom * 3)) {
@@ -464,7 +464,8 @@ export class ShoreScene extends RangeScene {
     // ---- Landmarks ----
     const here = poiHere(s);
     for (const p of poisOf(s)) {
-      if (!p.found) continue;
+      // (Explored to the end, it's gone: nothing more there.)
+      if (!p.found || p.done >= poiDef(p).layers.length) continue;
       const X = Math.round(this.sx(p.x));
       const Y = Math.round(this.py(p.x, p.y));
       if (!onScreen(X, Y, 40)) continue;

@@ -1608,13 +1608,15 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
     s.newFinds.push(v.id);
     record(state, `They found ${v.name}: ${v.pop} of them, ${v.cannibal ? 'eaters of their own kind' : `${v.diet}s`}.`, 'shore', shoreWhen(s));
   }
-  // Landmarks come out of the fog as it's seen (by the chief or the scouts), quietly: nothing
-  // says so. Only once you've noticed one (tapped it, or the chief's been by it) is it known.
+  // Landmarks come out of the fog as it's seen, by the chief or the scouts; once seen they're
+  // known, and on the Island tab's list (so none's left somewhere only a scout has been, and
+  // never found again). No marker on the map: they're there to be noticed.
   for (const p of poisOf(s)) {
     if (!p.found && seen[Math.floor(p.y / CELL) * SHORE_CELLS + Math.floor(p.x / CELL)]) p.found = true;
-    if (p.found && !p.known && Math.hypot(p.x - s.chiefAt.x, p.y - s.chiefAt.y) < 10) {
+    if (p.found && !p.known) {
       p.known = true;
-      record(state, `They came upon something: ${poiDef(p).seen}`, 'shore', shoreWhen(s));
+      const chief = Math.hypot(p.x - s.chiefAt.x, p.y - s.chiefAt.y) < 14;
+      record(state, chief ? `They came upon something: ${poiDef(p).seen}` : `A scout came back with word of something: ${poiDef(p).seen}`, 'shore', shoreWhen(s));
     }
   }
   explore(state, s, dt);

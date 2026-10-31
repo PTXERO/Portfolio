@@ -222,9 +222,13 @@ function islandLayout(s: ShoreState): string {
 }
 
 function landmarksCard(s: ShoreState): string {
-  const found = poisOf(s).filter((p) => p.found && p.known);
-  const head = `<div class="panel-head"><h2>Landmarks</h2><span class="dim">${found.length} known</span></div>`;
-  if (!found.length) return `${head}<div class="card px-box"><div class="info"><div class="sub">None yet. Keep your eyes open out there.</div></div></div>`;
+  // (Explored to the end, a landmark's gone from the list as from the map: what it held is in
+  // the relics, the know-how and the Chronicle.)
+  const all = poisOf(s).filter((p) => p.found && p.known);
+  const found = all.filter((p) => p.done < poiDef(p).layers.length);
+  const gone = all.length - found.length;
+  const head = `<div class="panel-head"><h2>Landmarks</h2><span class="dim">${found.length} to explore${gone ? ` · ${gone} explored` : ''}</span></div>`;
+  if (!found.length) return `${head}<div class="card px-box"><div class="info"><div class="sub">${gone ? 'Nothing left to explore that you know of. There may be more out in the fog.' : 'None yet. Keep your eyes open out there.'}</div></div></div>`;
   const here = poiHere(s);
   // The ones with something still to find first, nearest the chief first.
   const d = (p: Poi) => Math.hypot(p.x - s.chiefAt.x, p.y - s.chiefAt.y);

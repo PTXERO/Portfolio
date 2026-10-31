@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { answerJoin, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { poiHere, answerJoin, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import { hostile, raidable, sendBand, fighters, setStance, stepIn, payCost, setWarRule } from '../src/economy/war';
 import type { TribeState } from '../src/economy/types';
@@ -489,5 +489,24 @@ describe('Families', () => {
     }
     expect(s.dead?.length).toBe(s.deaths);
     expect(s.dead![0].died).toBeDefined();
+  });
+});
+
+describe('Landmarks, found and finished', () => {
+  it('one a scout sees is known (listed) at once; one explored to the end is gone', async () => {
+    const { poiDef } = await import('../src/economy/shore');
+    const state = fresh();
+    const s = shoreOf(state)!;
+    const p = poisOf(s).find((x) => Math.hypot(x.x - s.chiefAt.x, x.y - s.chiefAt.y) > 50)!;
+    const seen = state.stages.shore.seen;
+    seen[Math.floor(p.y / 3) * 340 + Math.floor(p.x / 3)] = 1;
+    shoreTick(state, 2);
+    expect(p.found && p.known).toBe(true);
+    expect(state.chronicle?.some((e) => e.text.startsWith('A scout came back'))).toBe(true);
+    // Explored to the end: nothing left for the chief to explore there.
+    p.done = poiDef(p).layers.length;
+    s.chiefAt = { x: p.x, y: p.y };
+    s.chiefTo = null;
+    expect(poiHere(s)).toBeUndefined();
   });
 });
