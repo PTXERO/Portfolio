@@ -181,9 +181,19 @@ export function importSave(code: string): GameState {
   // A compressed code (from this version on).
   const at = code.indexOf(CODE_MARK);
   if (at >= 0 && at < 8) {
-    const body = code.slice(at + CODE_MARK.length).replace(/[^A-Za-z0-9+/]/g, '');
-    const padded = body + '='.repeat((4 - (body.length % 4)) % 4);
-    return deserialize(strFromU8(inflateSync(Uint8Array.from(atob(padded), (c) => c.charCodeAt(0)))));
+    const all = code.slice(at + CODE_MARK.length).replace(/[^A-Za-z0-9+/]/g, '');
+    // (A character or three too many at the end, as a phone's copy and paste can add, is let go.)
+    let firstError: unknown = null;
+    for (let cut = 0; cut <= 3 && cut < all.length; cut++) {
+      const body = all.slice(0, all.length - cut);
+      try {
+        const padded = body + '='.repeat((4 - (body.length % 4)) % 4);
+        return deserialize(strFromU8(inflateSync(Uint8Array.from(atob(padded), (c) => c.charCodeAt(0)))));
+      } catch (e) {
+        firstError ??= e;
+      }
+    }
+    throw firstError;
   }
   const lz = code.indexOf(CODE_MARK_LZ);
   if (lz >= 0 && lz < 8) {
