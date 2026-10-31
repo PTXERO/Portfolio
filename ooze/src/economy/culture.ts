@@ -7,7 +7,7 @@
 
 import type { Boosts } from '../content/shore';
 import { record } from './chronicle';
-import { count, DAY_SEC, isAdult, poisOf, poiDef, shoreWhen, type ShoreState } from './shore';
+import { count, DAY_SEC, isAdult, poisOf, poiDef, shoreWhen, totalCritters, type ShoreState } from './shore';
 import type { GameState } from './types';
 
 export type Lane = 'food' | 'crafts' | 'war' | 'rule' | 'kin' | 'rites' | 'stories' | 'words';
@@ -126,7 +126,7 @@ export function practiceRate(s: ShoreState, lane: Lane, plan: { food: number; wo
       r += count(s, 'council') * 0.4 + grown * 0.006;
       break;
     case 'kin':
-      r += s.people.filter((p) => p.kind !== undefined).length * 0.02 + s.villages.filter((v) => v.joined || v.vassal).length * 0.25;
+      r += s.people.filter((p) => p.kind !== undefined).length * 0.02 + s.villages.filter((v) => v.joined || v.vassal || v.settled !== undefined).length * 0.25;
       break;
     case 'rites':
       r += count(s, 'hearth') * 0.3 + count(s, 'elders') * 0.3 + count(s, 'pool') * 0.2 + Math.min(1, s.deaths * 0.01);
@@ -161,7 +161,7 @@ export function cultureFx(s: ShoreState): Partial<Boosts>[] {
 
 /** The turn: at a hundred, everyone at a great fire, and the culture begins. */
 export function maybeTurn(state: GameState, s: ShoreState): void {
-  if (s.culture || s.people.length < TURN_AT) return;
+  if (s.culture || totalCritters(s) < TURN_AT) return;
   s.culture = { since: today(s), age: 1, practice: {}, done: [], forks: {} };
   s.turned = true;
   record(state, 'They were a hundred. They gathered at a great fire, all of them at once. [STORY]', 'shore', shoreWhen(s));

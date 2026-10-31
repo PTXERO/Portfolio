@@ -11,7 +11,7 @@
 
 import type { GameState } from './types';
 import { record } from './chronicle';
-import { boosts, DAY_SEC, foodCap, isAdult, killed, relation, shoreSeason, shoreWhen, woodCap, type ShoreState, type Village } from './shore';
+import { boosts, DAY_SEC, foodCap, isAdult, killed, loyaltyOf, relation, ruled, shoreSeason, shoreWhen, travelDays, woodCap, type ShoreState, type Village } from './shore';
 
 /** How hard each diet fights (a fighter's worth). */
 const KIND: Record<string, number> = { hunter: 1.3, omnivore: 1.15, grazer: 1 };
@@ -161,13 +161,13 @@ const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
  * there, not yours, not yet beaten off for good. */
 export function hostile(s: ShoreState, v: Village): boolean {
   const r = relation(s, v);
-  return (r === 'predator' || r === 'enemy') && !v.gone && !v.vassal && !v.joined && (v.beaten ?? 0) < COWED;
+  return (r === 'predator' || r === 'enemy') && !v.gone && !v.vassal && !v.joined && v.settled === undefined && (v.beaten ?? 0) < COWED;
 }
 
 /** Whether you can raid them: prey (or, for cannibals, anyone not yours), found, still there. */
 export function raidable(s: ShoreState, v: Village): boolean {
   const r = relation(s, v);
-  return v.found && (r === 'prey' || r === 'enemy') && !v.gone && !v.vassal && !v.joined;
+  return v.found && (r === 'prey' || r === 'enemy') && !v.gone && !v.vassal && !v.joined && v.settled === undefined;
 }
 
 /** The grown, who fight (less any out with the war band). */
@@ -317,7 +317,7 @@ export function warDawn(state: GameState, s: ShoreState): void {
     s.nextRaid = now + RAID_GAP * (0.7 + rand() * 0.6);
     // (Or one of your vassals: the weakest near enough, sometimes, if it's weaker than the hearth.)
     const raider = v ?? them[0];
-    const soft = raider && s.villages.filter((x) => x.vassal && !x.gone && !x.joined && Math.hypot(x.x - raider.x, x.y - raider.y) < 400).sort((a, b) => a.pop - b.pop)[0];
+    const soft = raider && s.villages.filter((x) => ruled(x) && Math.hypot(x.x - raider.x, x.y - raider.y) < 400).sort((a, b) => a.pop - b.pop)[0];
     const atVassal = !!soft && rand() < 0.35 && theirStrength(raider, raiders(raider)) > theirStrength(soft, holders(soft)) * 0.6;
     if (v || atVassal) {
       s.raid = { from: raider.id, watched: now, fighters: raiders(raider), target: atVassal ? soft!.id : undefined };
@@ -484,18 +484,18 @@ function finish(state: GameState, s: ShoreState, f: Fight): void {
   v.pop = Math.max(0, v.pop - Math.round(theirDead * 0.6));
   const at = f.at !== undefined ? s.villages.find((x) => x.id === f.at) : undefined;
   const helpers = side.filter((a) => a.from !== (at ? at.id : -1)).reduce((x, a) => x + a.n, 0);
-  if (at?.vassal) {
-    // At a vassal's: won or lost there. Help from the hearth is remembered (and so is none).
+  if (at && ruled(at)) {
+    // At a vassal's (or a settlement's): won or lost there. Help from the hearth is remembered (and so is none).
     const sent = mine > 0;
     const dist = Math.hypot(v.x - at.x, v.y - at.y);
     const fled = Math.round(f.y);
     if (fled > 0) s.retreat = { from: v.id, n: fled, left: today(s), arrives: today(s) + dist / (BAND_SPEED * 1.6) / DAY_SEC, sx: at.x, sy: at.y };
     if (won) {
       v.beaten = (v.beaten ?? 0) + 1;
-      at.vassal.loyalty = Math.min(100, at.vassal.loyalty + (sent ? 12 : 3));
+      if (at.vassal) at.vassal.loyalty = Math.min(100, at.vassal.loyalty + (sent ? 12 : 3));
     } else {
       at.pop = Math.max(2, at.pop * 0.85);
-      at.vassal.loyalty = Math.max(0, at.vassal.loyalty - (sent ? 5 : 15));
+      if (at.vassal) at.vassal.loyalty = Math.max(0, at.vassal.loyalty - (sent ? 5 : 15));
     }
     s.news.push(won ? `${cap(at.name)} drove off ${v.name}.` : `${cap(v.name)} broke into ${at.name}.`);
     record(state, `${cap(v.name)} fell on ${at.name}${won ? ', and were driven off' : ' and broke through'}.${helpers ? ` ${helpers} had come to help them${sent ? ', some from the hearth' : ''}.` : ' No one came to help them.'}${dead ? ` ${dead} of ours died there.` : ''}`, 'shore', shoreWhen(s));
@@ -605,7 +605,7 @@ export function away(s: ShoreState): number {
 
 /** Where a raid's headed: the vassal's village, or the hearth. */
 export function raidTarget(s: ShoreState, r: Raid): { x: number; y: number; v?: Village } {
-  const v = r.target !== undefined ? s.villages.find((x) => x.id === r.target && x.vassal && !x.gone) : undefined;
+  const v = r.target !== undefined ? s.villages.find((x) => x.id === r.target && ruled(x)) : undefined;
   return v ? { x: v.x, y: v.y, v } : { x: s.hearth.x, y: s.hearth.y };
 }
 
@@ -621,8 +621,9 @@ function vassalHelp(s: ShoreState, r: Raid, now: number): Ally[] {
   const at = raidTarget(s, r);
   const out: Ally[] = [];
   for (const v of s.villages) {
-    if (!v.vassal || v.gone || v.joined || v.id === r.target || v.vassal.loyalty < ALLY_LOYALTY) continue;
-    const arrives = now + walkDays(v, at);
+    if (!ruled(v) || v.id === r.target || loyaltyOf(v) < ALLY_LOYALTY) continue;
+    // (By road, quick, when it's the hearth they're coming to.)
+    const arrives = now + (at.v ? walkDays(v, at) : travelDays(s, v));
     const n = Math.floor(v.pop * 0.25);
     if (n >= 1 && arrives <= (r.arrives ?? now)) out.push({ from: v.id, n, arrives });
   }
@@ -634,7 +635,7 @@ export function canHelp(s: ShoreState): boolean {
   const r = s.raid;
   if (!r || r.seen === undefined || r.target === undefined || r.help) return false;
   const at = raidTarget(s, r);
-  return !!at.v && today(s) + walkDays(s.hearth, at) <= (r.arrives ?? 0) && helpSize(s) >= 2;
+  return !!at.v && today(s) + travelDays(s, at.v) <= (r.arrives ?? 0) && helpSize(s) >= 2;
 }
 export function helpSize(s: ShoreState): number {
   return Math.max(0, Math.floor(fighters(s) / 3));
@@ -654,7 +655,7 @@ export function answerHelp(state: GameState, s: ShoreState, send: boolean): bool
   if (!canHelp(s)) return false;
   const n = helpSize(s);
   r.help = 'send';
-  (r.allies ??= []).push({ from: -1, n, arrives: today(s) + walkDays(s.hearth, at) });
+  (r.allies ??= []).push({ from: -1, n, arrives: today(s) + travelDays(s, at.v) });
   s.news.push(`${n} set out to help ${at.v.name}.`);
   record(state, `${n} set out from the hearth to help ${at.v.name} against the raiders.`, 'shore', shoreWhen(s));
   return true;

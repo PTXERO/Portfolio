@@ -489,6 +489,44 @@ export class ShoreScene extends RangeScene {
         }
       }
     }
+    // Roads to the villages that are yours: packed earth, as far as it's been laid.
+    for (const v of s.villages) {
+      if (!v.road || v.gone) continue;
+      const r = this.route(is, s.hearth, v);
+      const upto = Math.min(1, v.road.done / Math.max(0.01, v.road.need)) * r.total;
+      const pts: { X: number; Y: number }[] = [];
+      for (let j = 1; j < r.pts.length; j++) {
+        const a = r.pts[j - 1];
+        const c = r.pts[j];
+        const seg = r.cum[j] - r.cum[j - 1];
+        for (let u = 0; u < seg; u += 0.7) {
+          if (r.cum[j - 1] + u > upto) break;
+          const x = a.x + ((c.x - a.x) * u) / (seg || 1);
+          const y = a.y + ((c.y - a.y) * u) / (seg || 1);
+          if (fogged(x, y)) continue;
+          const X = Math.round(this.sx(x));
+          const Y = Math.round(this.py(x, y));
+          if (onScreen(X, Y)) pts.push({ X, Y });
+        }
+      }
+      if (!pts.length) continue;
+      const w = Math.max(1, Math.round(z * 0.6));
+      sprites.push({
+        y: -1e6,
+        draw: () => {
+          b.fillStyle = 'rgba(122, 92, 58, 0.75)';
+          for (const p of pts) b.fillRect(p.X - w, p.Y - Math.ceil(w / 2), w * 2, w);
+        },
+      });
+    }
+    // Goods on the road from the settlements: a couple of theirs, carrying it home.
+    for (const c of s.convoys ?? []) {
+      const v = s.villages.find((x) => x.id === c.from);
+      if (!v) continue;
+      const k = (now - c.left) / Math.max(0.01, c.arrives - c.left);
+      if (k < 0 || k > 1) continue;
+      band(v.look, v, s.hearth, k, 2, v.id * 17 + Math.floor(c.left), 6);
+    }
     // The fight at the edge of the village: what's left of them, at it.
     const fight = s.fight;
     const foe = fight?.attack === 'them' ? s.villages.find((v) => v.id === fight.village) : undefined;
@@ -900,7 +938,7 @@ export class ShoreScene extends RangeScene {
     const hidden = fogged(v.x, v.y);
     // Every camp's smoke goes up over the fog: a column to walk toward, all over the island.
     // (Not over villages that are yours already: they're no mystery.)
-    if (!v.vassal && !v.joined) {
+    if (!v.vassal && !v.joined && v.settled === undefined) {
       sprites.push({
         y: v.y + 0.1,
         at: v,
@@ -986,7 +1024,7 @@ export class ShoreScene extends RangeScene {
         const fy = Y - (close ? 10 * z + 4 : 8);
         b.fillStyle = PAL.k;
         b.fillRect(X, fy, 1, Y - fy);
-        b.fillStyle = v.vassal ? '#e8c86a' : REL_COL[rel];
+        b.fillStyle = v.vassal || v.settled !== undefined ? '#e8c86a' : REL_COL[rel];
         b.fillRect(X + 1, fy, 4, 3);
         b.fillStyle = v.look.hue?.[1] ?? PAL.w;
         b.fillRect(X + 1, fy + 3, 4, 1);

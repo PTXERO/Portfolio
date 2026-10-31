@@ -113,6 +113,14 @@ export interface Village {
   /** Danced with: when last, and how worn out they were then (they rest it off over a season). */
   danced?: { day: number; got: number; worn?: boolean };
   joined?: boolean;
+  /** Won over, and kept their own village (since this day): a settlement of yours, growing on
+   * its own land, sending what it makes to the hearth (days on the road). */
+  settled?: number;
+  /** A road to the hearth: work done on it and work it takes (in days); travel along it, done,
+   * is quicker by far. */
+  road?: { done: number; need: number };
+  /** What a settlement's gathered today, to send to the hearth at dawn. */
+  load?: { food: number; wood: number };
   /** Won over, but there wasn't room: waiting for your answer (since this day), or waiting for
    * room (since this day; they lose patience). */
   asking?: number;
@@ -232,6 +240,8 @@ export interface ShoreState {
   lastBand?: number;
   /** Raiders running home after a fight; and what their fallen left lying (for a while). */
   retreat?: { from: number; n: number; left: number; arrives: number; sx?: number; sy?: number };
+  /** Goods on the road from the settlements to the hearth. */
+  convoys?: { from: number; food: number; wood: number; left: number; arrives: number }[];
   loot?: { x: number; y: number; n: number; until: number };
   /** A fight going on now (a round every few seconds). */
   fight?: Fight;
@@ -676,7 +686,110 @@ const FISH_FOOD = 5;
 /** Whether a village is yours to draw on: joined (their old village kept as an outpost) or a
  * vassal (what their land gives comes as tribute, more the more you take). */
 export function held(v: Village): boolean {
-  return !!v.habitat && !v.gone && (!!v.joined || !!v.vassal);
+  return !!v.habitat && !v.gone && (!!v.joined || !!v.vassal || v.settled !== undefined);
+}
+
+/** Under your rule, living in their own village: a settlement or a vassal. */
+export function ruled(v: Village): boolean {
+  return !v.gone && !v.joined && (!!v.vassal || v.settled !== undefined);
+}
+
+/** How loyal a village of yours is (a settlement is yours entirely). */
+export function loyaltyOf(v: Village): number {
+  return v.settled !== undefined ? 100 : v.vassal?.loyalty ?? 0;
+}
+
+/** Every critter of yours: by the hearth, and in the settlements. */
+export function totalCritters(s: ShoreState): number {
+  let n = s.people.length;
+  for (const v of s.villages) if (v.settled !== undefined && !v.gone) n += Math.round(v.pop);
+  return n;
+}
+
+/** Days to walk between the hearth and a village (a band's pace), and quicker by road. */
+export const WALK_SPEED = 1.2;
+export const ROAD_FASTER = 0.35;
+export function travelDays(s: ShoreState, v: Pt & { road?: Village['road'] }): number {
+  const d = (Math.hypot(v.x - s.hearth.x, v.y - s.hearth.y) * 1.3) / WALK_SPEED / DAY_SEC;
+  return roadDone(v) ? d * ROAD_FASTER : d;
+}
+export function roadDone(v: { road?: Village['road'] }): boolean {
+  return !!v.road && v.road.done >= v.road.need;
+}
+
+/** What a road to a village costs in wood (more the further), and the days it takes to lay:
+ * half again the days it takes to walk there. */
+export function roadCost(s: ShoreState, v: Village): { wood: number; days: number } {
+  const days = travelDays(s, { x: v.x, y: v.y });
+  return { wood: Math.round(20 + days * 30), days: Math.round(days * 1.5 * 10) / 10 };
+}
+
+/** Whether a road can be started to a village of yours (one at a time; wood in hand). */
+export function canRoad(s: ShoreState, v: Village): boolean {
+  return ruled(v) && !v.road && !s.villages.some((x) => x.road && !roadDone(x)) && s.wood >= roadCost(s, v).wood;
+}
+
+/** Start a road to a village of yours: the wood's paid now, the road's laid a little each day. */
+export function startRoad(state: GameState, id: number): boolean {
+  const s = shoreOf(state);
+  const v = s?.villages.find((x) => x.id === id);
+  if (!s || !v || !canRoad(s, v)) return false;
+  const c = roadCost(s, v);
+  s.wood -= c.wood;
+  v.road = { done: 0, need: c.days };
+  s.news.push(`A road to ${v.name} was begun.`);
+  record(state, `They began a road to ${v.name}, ${c.wood} wood of it, to be laid over ${Math.ceil(c.days)} days.`, 'shore', shoreWhen(s));
+  return true;
+}
+
+function stepRoads(state: GameState, s: ShoreState, k: number): void {
+  for (const v of s.villages) {
+    if (!v.road || roadDone(v)) continue;
+    if (!ruled(v)) continue;
+    v.road.done = Math.min(v.road.need, v.road.done + k);
+    if (roadDone(v)) {
+      s.news.push(`The road to ${v.name} is done.`);
+      record(state, `The road to ${v.name} was finished. What took days to walk now takes a fraction of them.`, 'shore', shoreWhen(s));
+    }
+  }
+}
+
+/** A settlement's day: what it sends to the hearth, and how it grows. */
+export function settledDay(v: Village): { food: number; wood: number; growth: number } {
+  return { food: v.pop * 0.45, wood: v.pop * 0.22, growth: v.pop * 0.05 * Math.max(0, 1 - v.pop / 70) };
+}
+
+/** Goods on the road from the settlements (and the vassals) to the hearth. */
+function stepSettled(s: ShoreState, k: number): void {
+  for (const v of s.villages) {
+    if (v.settled === undefined || v.gone) continue;
+    const d = settledDay(v);
+    v.pop += d.growth * k;
+    const load = (v.load ??= { food: 0, wood: 0 });
+    load.food += d.food * k;
+    load.wood += d.wood * k;
+  }
+}
+
+/** Each dawn, what's gathered at each settlement sets out for the hearth, arriving days later. */
+function sendConvoys(s: ShoreState): void {
+  const now = s.day + s.clock / DAY_SEC;
+  for (const v of s.villages) {
+    if (!v.load || (v.load.food < 0.5 && v.load.wood < 0.5)) continue;
+    (s.convoys ??= []).push({ from: v.id, food: Math.round(v.load.food * 10) / 10, wood: Math.round(v.load.wood * 10) / 10, left: now, arrives: now + travelDays(s, v) });
+    v.load = undefined;
+  }
+}
+
+function stepConvoys(s: ShoreState): void {
+  if (!s.convoys?.length) return;
+  const now = s.day + s.clock / DAY_SEC;
+  for (const c of s.convoys) {
+    if (c.arrives > now) continue;
+    s.food = Math.min(foodCap(s), s.food + c.food);
+    s.wood = Math.min(woodCap(s), s.wood + c.wood);
+  }
+  s.convoys = s.convoys.filter((c) => c.arrives > now);
 }
 
 /** Villages you hold that give a resource. */
@@ -1080,7 +1193,7 @@ export function giftCost(v: Village): number {
 
 /** Whether they can be won over now: found, kin, not yet joined. */
 export function canWin(s: ShoreState, v: Village): boolean {
-  return v.found && !v.joined && !v.vassal && !v.gone && v.asking === undefined && v.waiting === undefined && relation(s, v) === 'kin';
+  return v.found && !v.joined && v.settled === undefined && !v.vassal && !v.gone && v.asking === undefined && v.waiting === undefined && relation(s, v) === 'kin';
 }
 
 /** Room left in the village (beds not yet slept in). */
@@ -1147,13 +1260,19 @@ export function dance(state: GameState, id: number, streak: number): number {
 function addTrust(state: GameState, s: ShoreState, v: Village, n: number): void {
   v.trust = Math.min(100, (v.trust ?? FIRST_TRUST) + n);
   if (v.trust < 100) return;
-  // Won over. With room for them they simply come; without, it's for you to say.
-  if (roomLeft(s) >= v.pop) join(state, s, v);
-  else {
-    v.asking = s.day + s.clock / DAY_SEC;
-    s.news.push(`${cap(v.name)} would join you, but there's no room for them.`);
-    record(state, `${cap(v.name)} were won over, and would join them, but there was no room.`, 'shore', shoreWhen(s));
-  }
+  // Won over: they're yours, and stay in their own village, a settlement of the hearth.
+  settle(state, s, v);
+}
+
+/** Won over: they keep their village, as yours. */
+function settle(state: GameState, s: ShoreState, v: Village): void {
+  if (v.joined || v.settled !== undefined) return;
+  v.asking = undefined;
+  v.waiting = undefined;
+  v.vassal = undefined;
+  v.settled = s.day + s.clock / DAY_SEC;
+  s.news.push(`${cap(v.name)} are yours now: ${Math.round(v.pop)} of them, staying in their own village.`);
+  record(state, `${cap(v.name)} were won over. They stayed in their own village, ${Math.round(v.pop)} of them, a settlement of the hearth now, and sent what they gathered home.`, 'shore', shoreWhen(s));
 }
 
 /** Days of eating the envoy leaves in the stores; days of firewood the elders keep back. */
@@ -1162,10 +1281,6 @@ const WOOD_KEEP_DAYS = 4;
 
 /** A rare colouring out of nowhere, in a child born on New Shore: one birth in a thousand. */
 const SHORE_MUTATE = 0.001;
-
-/** Patience: days they'll wait for room, once asked to. (For your answer they wait as long as
- * it takes: nothing's decided for you while you're away.) */
-const WAIT_DAYS = 10;
 
 /** Your answer to a village won over when there isn't room for them. */
 export function answerJoin(state: GameState, id: number, a: JoinAnswer): void {
@@ -1252,18 +1367,20 @@ const VASSAL_CAP = 70;
  * Each day, the coming and going between the hearth and the villages that are yours. With beds
  * free and food enough, a few young of a content vassal come to live by the hearth (another kind
  * among you); crowded or hungry, a few of yours go to live with a vassal that has room. Every move
- * ties them closer (a little loyalty), and once enough have come, the rest of a vassal want to
- * come too, if there's room for them.
+ * ties them closer (a little loyalty), and once enough have, a vassal is of the hearth: a
+ * settlement.
  */
 function vassalMoves(state: GameState, s: ShoreState): void {
   const today = s.day + s.clock / DAY_SEC;
   for (const v of s.villages) {
-    if (!v.vassal || v.gone || v.joined) continue;
+    if (!ruled(v)) continue;
+    const loyal = loyaltyOf(v);
+    const raise = (n: number) => { if (v.vassal) v.vassal.loyalty = Math.min(100, v.vassal.loyalty + n); };
     const rand = rng(s.seed * 13 + s.day * 31 + v.id * 7);
     const free = roomLeft(s);
     const plan = workPlan(s);
     // In: a few young, now and then.
-    if (v.vassal.loyalty >= MOVE_IN_LOYALTY && free > 0 && !s.hungry && s.food >= plan.eat * 2 && v.pop > 6 && rand() < 0.25) {
+    if (loyal >= MOVE_IN_LOYALTY && free > 0 && !s.hungry && s.food >= plan.eat * 2 && v.pop > 6 && rand() < 0.25) {
       const n = Math.min(free, 1 + Math.floor(rand() * 3), Math.floor(v.pop * 0.1));
       if (n > 0) {
         const used = new Set(s.people.map((p) => p.name));
@@ -1279,14 +1396,14 @@ function vassalMoves(state: GameState, s: ShoreState): void {
         }
         v.pop -= n;
         v.ties = (v.ties ?? 0) + n;
-        v.vassal.loyalty = Math.min(100, v.vassal.loyalty + 2 * n);
+        raise(2 * n);
         s.news.push(`${n === 1 ? names[0] : `${n} young`} of ${v.name} came to live by the hearth.`);
         record(state, `${n === 1 ? `${names[0]}, one of the young of ${v.name},` : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}, young of ${v.name},`} came to live by the hearth.`, 'shore', shoreWhen(s));
       }
     }
     // Out: when the village is crowded or hungry, a few go to live with a vassal that has room.
     const crowded = free < 0 || s.hungry > 0;
-    if (crowded && v.vassal.loyalty >= MOVE_OUT_LOYALTY && v.pop < VASSAL_CAP - 2 && rand() < 0.35) {
+    if (crowded && loyal >= MOVE_OUT_LOYALTY && v.pop < VASSAL_CAP - 2 && rand() < 0.35) {
       const can = s.people.filter((p) => isAdult(s, p) && p.id !== s.chief && !p.founder);
       const n = Math.min(can.length, Math.max(1, Math.min(3, -free)), Math.floor(VASSAL_CAP - v.pop));
       if (n > 0) {
@@ -1296,22 +1413,16 @@ function vassalMoves(state: GameState, s: ShoreState): void {
         for (const p of go) (s.dead ??= []).push({ ...p, moved: v.name, movedOn: today });
         v.pop += n;
         v.ties = (v.ties ?? 0) + n;
-        v.vassal.loyalty = Math.min(100, v.vassal.loyalty + n);
+        raise(n);
         s.news.push(`${n === 1 ? go[0].name : `${n} of yours`} went to live with ${v.name}.`);
         record(state, `${go.map((p) => p.name).join(', ')} went to live with ${v.name}${s.hungry ? ', where there was more to eat' : ', where there was room'}.`, 'shore', shoreWhen(s));
       }
     }
-    // Enough ties, and content: the rest want to come too (if there's room; else they'll wait).
-    if (v.vassal.loyalty >= 75 && (v.ties ?? 0) >= Math.max(6, v.pop * 0.6)) {
-      if (roomLeft(s) >= v.pop) {
-        record(state, `So many of ${v.name} had family by the hearth now that the rest came too.`, 'shore', shoreWhen(s));
-        v.vassal = undefined;
-        join(state, s, v);
-      } else if (!v.wouldCome) {
-        v.wouldCome = true;
-        s.news.push(`The rest of ${v.name} would come, if there were room for ${Math.round(v.pop)}.`);
-        record(state, `The rest of ${v.name} would come to the hearth too, if there were room for them all.`, 'shore', shoreWhen(s));
-      }
+    // Enough ties, and content: they're of the hearth now, a vassal no longer (a settlement,
+    // staying where they are).
+    if (v.vassal && v.vassal.loyalty >= 75 && (v.ties ?? 0) >= Math.max(6, v.pop * 0.6)) {
+      record(state, `So many of ${v.name} had family by the hearth now that they paid no tribute any more: they were of the hearth.`, 'shore', shoreWhen(s));
+      settle(state, s, v);
     }
   }
 }
@@ -1434,21 +1545,11 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
   stepWar(state, s, dt);
   stepVassals(state, s, k);
   stepResources(s, k);
-  // Won over and asked to wait: once there's room, they come; kept waiting too long, they give
-  // up on you.
-  const today = s.day + s.clock / DAY_SEC;
-  for (const v of s.villages) {
-    if (v.waiting === undefined) continue;
-    if (roomLeft(s) >= v.pop) {
-      v.waiting = undefined;
-      join(state, s, v);
-    } else if (today - v.waiting > WAIT_DAYS) {
-      v.waiting = undefined;
-      v.trust = 60;
-      s.news.push(`${cap(v.name)} grew tired of waiting.`);
-      record(state, `${cap(v.name)} grew tired of waiting for room, and trust you less for it.`, 'shore', shoreWhen(s));
-    }
-  }
+  // (From older days: won over, and waiting on room or an answer. They needn't now.)
+  for (const v of s.villages) if ((v.waiting !== undefined || v.asking !== undefined) && !v.gone) settle(state, s, v);
+  stepSettled(s, k);
+  stepRoads(state, s, k);
+  stepConvoys(s);
   // A vassal's loyalty warms while the chief's with them (three a day).
   for (const v of s.villages) if (v.vassal && !v.gone && chiefNear(s, v)) v.vassal.warm = Math.min(WARM_MAX, (v.vassal.warm ?? 0) + 3 * k);
   // Trust grows by itself where the chief stays a while, and (for grazers) as kin drift in.
@@ -1498,6 +1599,7 @@ function born(state: GameState, s: ShoreState): void {
 
 function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>): void {
   warDawn(state, s);
+  sendConvoys(s);
   vassalMoves(state, s);
   pruneDead(s);
   // (Undelivered news is only ever the latest few.)

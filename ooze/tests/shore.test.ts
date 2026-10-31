@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { poiHere, answerJoin, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { poiHere, answerJoin, roadCost, roadDone, startRoad, totalCritters, travelDays, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import { hostile, raidable, sendBand, fighters, setStance, stepIn, payCost, setWarRule } from '../src/economy/war';
 import type { TribeState } from '../src/economy/types';
@@ -84,7 +84,7 @@ describe('New Shore', () => {
 });
 
 describe('Winning over', () => {
-  it('gifts and visits raise trust until kin join, bringing their kind', () => {
+  it('gifts and visits raise trust until kin are won over, and stay in their village as yours', () => {
     const state = fresh();
     const s = shoreOf(state)!;
     const v = s.villages[0];
@@ -101,10 +101,11 @@ describe('Winning over', () => {
     s.chiefTo = null;
     expect(gift(state, v.id)).toBe(8);
     const before = s.people.length;
-    for (let i = 0; i < 30 && !v.joined; i++) gift(state, v.id);
-    expect(v.joined).toBe(true);
-    expect(s.people.length).toBe(before + v.pop);
-    expect(s.people.filter((p) => p.kind === v.id).length).toBe(v.pop);
+    for (let i = 0; i < 30 && v.settled === undefined; i++) gift(state, v.id);
+    expect(v.settled).toBeDefined();
+    expect(v.joined).toBeFalsy();
+    expect(s.people.length).toBe(before);
+    expect(totalCritters(s)).toBe(before + v.pop);
     expect(gift(state, v.id)).toBe(0);
   });
   it('the chief staying a while wins them over by itself', () => {
@@ -120,7 +121,7 @@ describe('Winning over', () => {
     s.chiefAt = { x: v.x + 3, y: v.y + 3 };
     s.chiefTo = null;
     shoreTick(state, DAY_SEC * 50);
-    expect(v.joined).toBe(true);
+    expect(v.settled).toBeDefined();
   });
 });
 
@@ -191,35 +192,24 @@ describe('Won over with no room', () => {
     s.food = 1000;
     return { state, s, v };
   };
-  it('asks what to do, and waits for the answer however long; asked to wait, they come once there is room', () => {
+  it('no room needed: won over, they stay in their own village, a settlement', () => {
     const { state, s, v } = setup();
+    const before = s.people.length;
     gift(state, v.id);
-    expect(v.joined).toBeFalsy();
-    expect(v.asking).toBeDefined();
-    // Away a long while: nothing's decided for you.
-    shoreTick(state, DAY_SEC * 20);
-    expect(v.asking).toBeDefined();
-    answerJoin(state, v.id, 'wait');
-    expect(v.waiting).toBeDefined();
-    s.wood = 10000;
-    now(state, 'hearth');
-    for (let i = 0; i < 6; i++) now(state, 'hut');
-    shoreTick(state, 4);
-    expect(v.joined).toBe(true);
+    expect(v.asking).toBeUndefined();
+    expect(v.settled).toBeDefined();
+    expect(s.people.length).toBe(before);
   });
-  it('kept waiting too long, they give up', () => {
+  it('one from an older save, still asking or waiting, is settled', () => {
     const { state, v } = setup();
-    gift(state, v.id);
-    answerJoin(state, v.id, 'wait');
-    shoreTick(state, DAY_SEC * 11);
-    expect(v.waiting).toBeUndefined();
-    expect(v.joined).toBeFalsy();
-    expect(v.trust).toBeGreaterThanOrEqual(60);
-    expect(v.trust).toBeLessThan(65);
+    v.asking = 0;
+    shoreTick(state, 2);
+    expect(v.asking).toBeUndefined();
+    expect(v.settled).toBeDefined();
   });
   it('as a vassal they pay tribute and grow; taxed hard they revolt', () => {
     const { state, s, v } = setup();
-    gift(state, v.id);
+    v.asking = 0;
     answerJoin(state, v.id, 'vassal');
     s.food = 0;
     s.wood = 0;
@@ -232,7 +222,7 @@ describe('Won over with no room', () => {
   });
   it('turned away, they go to swell an enemy camp', () => {
     const { state, s, v } = setup();
-    gift(state, v.id);
+    v.asking = 0;
     const before = s.villages.filter((x) => x !== v).reduce((a, x) => a + x.pop, 0);
     answerJoin(state, v.id, 'away');
     expect(v.gone).toBeDefined();
@@ -316,7 +306,7 @@ describe('The elders and the envoy', () => {
 });
 
 describe('Resources of the land', () => {
-  it('a joined village keeps an outpost that gives its land’s resources; buildings spend them', () => {
+  it('a settlement gives its land’s resources; buildings spend them', () => {
     const state = fresh();
     const s = shoreOf(state)!;
     now(state, 'hearth');
@@ -329,10 +319,11 @@ describe('Resources of the land', () => {
     v.pop = 6;
     s.food = foodCap(s);
     gift(state, v.id);
-    expect(v.joined).toBe(true);
+    expect(v.settled).toBeDefined();
     expect(sourcesOf(s, 'clay').length).toBe(1);
     shoreTick(state, DAY_SEC * 12);
     expect(s.res?.clay ?? 0).toBeGreaterThan(20);
+    s.wood = 1000;
     expect(build(state, 'pottery')).toBe(true);
     expect(s.res!.clay!).toBeLessThan(10);
     // Without a village where there's salt, no salting shed.
@@ -610,13 +601,70 @@ describe('Coming and going with vassals', () => {
     expect(gone[0].died).toBeUndefined();
     expect(s.deaths).toBe(deaths);
   });
-  it('with ties enough and room, the rest of the vassal come too', () => {
+  it('with ties enough, a vassal is of the hearth: a settlement, staying where it is', () => {
     const { state, v } = vassalGame();
     v.pop = 8;
     v.ties = 8;
-    for (let i = 0; i < 120 && !v.joined; i++) shoreTick(state, 2);
-    expect(v.joined).toBe(true);
+    for (let i = 0; i < 120 && v.settled === undefined; i++) shoreTick(state, 2);
+    expect(v.settled).toBeDefined();
+    expect(v.joined).toBeFalsy();
     expect(v.vassal).toBeUndefined();
+  });
+});
+
+describe('Settlements and roads', () => {
+  const setup = () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    s.wood = 10000;
+    now(state, 'hearth');
+    for (let i = 0; i < 4; i++) now(state, 'hut');
+    const v = s.villages.slice().sort((a, b) => Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y) - Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y))[0];
+    v.found = true;
+    v.trust = 99;
+    v.pop = 20;
+    v.beaten = 9;
+    s.food = 1000;
+    gift(state, v.id);
+    s.food = 0;
+    s.wood = 0;
+    return { state, s, v };
+  };
+  it('what a settlement gathers sets out at dawn and reaches the hearth days later', () => {
+    const { state, s, v } = setup();
+    const walk = travelDays(s, v);
+    expect(walk).toBeGreaterThan(1);
+    // Through the night to the next dawn: it sets out.
+    shoreTick(state, DAY_SEC * 1.05);
+    expect(s.convoys?.length).toBe(1);
+    const c = s.convoys![0];
+    expect(c.arrives - c.left).toBeCloseTo(walk, 3);
+    const food = s.food;
+    shoreTick(state, DAY_SEC * (walk + 0.1));
+    expect(s.food).toBeGreaterThan(food + c.food * 0.9);
+    expect(s.convoys!.every((x) => x !== c)).toBe(true);
+  });
+  it('a road takes the walk times one and a half to lay, and then the way is far quicker', () => {
+    const { state, s, v } = setup();
+    const walk = travelDays(s, v);
+    const cost = roadCost(s, v);
+    expect(cost.days).toBeCloseTo(walk * 1.5, 0);
+    expect(startRoad(state, v.id)).toBe(false);
+    s.wood = cost.wood;
+    expect(startRoad(state, v.id)).toBe(true);
+    expect(s.wood).toBe(0);
+    shoreTick(state, DAY_SEC * cost.days * 0.5);
+    expect(roadDone(v)).toBe(false);
+    shoreTick(state, DAY_SEC * cost.days * 0.6);
+    expect(roadDone(v)).toBe(true);
+    expect(travelDays(s, v)).toBeCloseTo(walk * 0.35, 3);
+  });
+  it('a settlement counts toward your critters, and is no one to raid or be raided by', async () => {
+    const war = await import('../src/economy/war');
+    const { s, v } = setup();
+    expect(totalCritters(s)).toBe(s.people.length + Math.round(v.pop));
+    expect(war.hostile(s, v)).toBe(false);
+    expect(war.raidable(s, v)).toBe(false);
   });
 });
 

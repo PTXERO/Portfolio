@@ -15,7 +15,7 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
-import { setSteward, type StewardPlan } from './economy/shore';
+import { setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
 import { WARM_MAX, dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
 import { danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
 import { lineTree, shoreTree } from './ui/familyTree';
@@ -890,7 +890,7 @@ function renderHud(): void {
   if (sh) {
     // New Shore counts people too (no limit: the culture begins when the village is big enough).
     // (One of them is the number's icon: it reads as people.) On the right, what's in store.
-    set('currency', String(sh.people.length));
+    set('currency', String(totalCritters(sh)));
     set('rate', `${Math.floor(sh.food)} food\n${Math.floor(sh.wood)} wood`);
   } else if (ex) {
     // The Extinction counts people, not currency.
@@ -998,12 +998,12 @@ function shoreFrame(): void {
   }
   // A village won over: they come to live by your hearth.
   for (const v of s.villages) {
-    if (!v.joined || joinedSeen.has(v.id) || !modal.hidden || cine()) continue;
+    if (!(v.joined || v.settled !== undefined) || joinedSeen.has(v.id) || !modal.hidden || cine()) continue;
     joinedSeen.add(v.id);
     if (!joinedReady) continue;
     cue('ascend', 0.5);
-    showModal(`<p class="label dim">Joined</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${v.name[0].toUpperCase() + v.name.slice(1)}</h3></div>
-      <p>They've been won over. ${Math.round(v.pop)} of them are coming to live by your hearth: another kind among you, from now on.</p>
+    showModal(`<p class="label dim">${v.joined ? 'Joined' : 'Yours'}</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${v.name[0].toUpperCase() + v.name.slice(1)}</h3></div>
+      ${v.joined ? `<p>They've been won over. ${Math.round(v.pop)} of them are coming to live by your hearth: another kind among you, from now on.</p>` : `<p>They've been won over. All ${Math.round(v.pop)} of them are yours now, and stay in their own village: a settlement of the hearth. What they gather comes to you, days on the road; a road would bring it quicker.</p>`}
       <button class="px-btn gold" data-act="dismiss">Welcome them</button>`);
   }
   joinedReady = true;
@@ -1011,7 +1011,7 @@ function shoreFrame(): void {
   if (s.turned && modal.hidden && !cine()) {
     s.turned = false;
     cue('ascend', 0.6);
-    showModal(`<p class="label dim">${s.people.length} of them</p><h3>The great fire</h3>
+    showModal(`<p class="label dim">${totalCritters(s)} of them</p><h3>The great fire</h3>
       <p>[STORY] They were a hundred. One night they all gathered at one fire, every one of them, and looked at each other, and knew themselves one kind of critter, together.</p>
       <p class="dim">From now on the village grows a culture of its own: ideas come by themselves, from what the critters do. See the Culture tab.</p>
       <button class="px-btn gold" data-act="dismiss">The long road</button>`);
@@ -2106,10 +2106,10 @@ function act(el: HTMLElement): void {
       scene.float(r.left + r.width / 2, r.top, `+${got} trust`, '#8acf6a');
       // (The card, if it's open, shows the new trust.)
       const v = s.villages.find((x) => x.id === id);
-      if (!modal.hidden && modal.dataset.village === String(id) && v && !v.joined) {
+      if (!modal.hidden && modal.dataset.village === String(id) && v && !v.joined && v.settled === undefined) {
         showModal(villageCard(s, v));
         modal.dataset.village = String(id);
-      } else if (v?.joined) modal.hidden = true;
+      } else if (v?.joined || v?.settled !== undefined) modal.hidden = true;
       save();
     }
   } else if (el.dataset.visit) {
@@ -2118,6 +2118,11 @@ function act(el: HTMLElement): void {
       walkChief(state, { x: v.x + 4, y: v.y + 4 });
       scene.shoreScene.follow();
       modal.hidden = true;
+    }
+  } else if (el.dataset.road) {
+    if (startRoad(state, Number(el.dataset.road))) {
+      cue('chime', 0.35);
+      save();
     }
   }
   else if (el.dataset.raid) {
