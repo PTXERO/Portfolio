@@ -75,3 +75,20 @@ describe('Warm Brooding', () => {
     expect(c.egg!.total).toBeCloseTo(eggSeconds(state), 1);
   });
 });
+
+import { exportPlain, exportSave, importSave } from '../src/economy/save';
+
+describe('Save codes', () => {
+  it('compressed codes round-trip, and old plain codes still import', () => {
+    const state = createState(0);
+    state.stages.creature.genes = { hue: 7, light: 0.1, pattern: 'spots' };
+    const code = exportSave(state);
+    expect(code.startsWith('~2')).toBe(true);
+    expect(importSave(code).stages.creature.genes).toEqual(state.stages.creature.genes);
+    // (With a phone's copy-paste mangling: spaces and line breaks.)
+    expect(importSave(code.slice(0, 20) + ' \n' + code.slice(20)).stages.creature.genes).toEqual(state.stages.creature.genes);
+    const old = exportPlain(state);
+    expect(importSave(old).stages.creature.genes).toEqual(state.stages.creature.genes);
+    expect(code.length).toBeLessThan(old.length / 2);
+  });
+});

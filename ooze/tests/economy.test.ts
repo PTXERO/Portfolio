@@ -911,7 +911,9 @@ describe('creature stage', () => {
     expect(c.partyReady[first]).toBeGreaterThan(c.year);
     // Saved and loaded, parties are still out.
     const back = importSave(exportSave(s));
-    expect(back.stages.creature.parties).toEqual(c.parties);
+    // (Saved to four places: as near as makes no difference.)
+    expect(back.stages.creature.parties.map((p) => p.place)).toEqual(c.parties.map((p) => p.place));
+    back.stages.creature.parties.forEach((p, i) => expect(p.t).toBeCloseTo(c.parties[i].t, 3));
   });
 
   it('a walk runs into things on the road, and the choice counts', () => {

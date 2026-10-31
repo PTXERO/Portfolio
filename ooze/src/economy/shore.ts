@@ -1364,6 +1364,9 @@ function born(state: GameState, s: ShoreState): void {
 
 function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>): void {
   warDawn(state, s);
+  pruneDead(s);
+  // (Undelivered news is only ever the latest few.)
+  if (s.news.length > 30) s.news.splice(0, s.news.length - 30);
   maybeTurn(state, s);
   cultureDay(state, s, plan);
   // The envoy's day: a gift to the nearest kin being won over, if there's food to spare.
@@ -1429,6 +1432,31 @@ export function killed(state: GameState, s: ShoreState, p: ShorePerson): void {
   die(state, s, p, 'battle');
 }
 
+/** Graves drawn at most; and the dead remembered beyond those a family tree still reaches. */
+const GRAVES_KEPT = 70;
+const DEAD_RECENT = 60;
+
+/**
+ * The dead the trees can still reach: the four, the parents and grandparents of anyone living,
+ * and the most recent. The rest are let go (a tree shows a forgotten one as not recorded).
+ */
+function pruneDead(s: ShoreState): void {
+  const dead = s.dead;
+  if (!dead || dead.length <= DEAD_RECENT * 2) return;
+  const byId = new Map<number, ShorePerson>();
+  for (const p of dead) byId.set(p.id, p);
+  for (const p of s.people) byId.set(p.id, p);
+  const keep = new Set<number>();
+  for (const p of s.people)
+    for (const a of p.parents ?? []) {
+      if (a === undefined) continue;
+      keep.add(a);
+      for (const g of byId.get(a)?.parents ?? []) if (g !== undefined) keep.add(g);
+    }
+  const recent = new Set(dead.slice(-DEAD_RECENT).map((p) => p.id));
+  s.dead = dead.filter((p) => p.founder || keep.has(p.id) || recent.has(p.id));
+}
+
 function die(state: GameState, s: ShoreState, p: ShorePerson, why: 'old age' | 'hunger' | 'cold' | 'battle'): void {
   s.people = s.people.filter((q) => q !== p);
   // Remembered (for the family trees).
@@ -1438,6 +1466,9 @@ function die(state: GameState, s: ShoreState, p: ShorePerson, why: 'old age' | '
   const n = s.graves.length;
   const a = 2.4 + (n % 7) * 0.18;
   s.graves.push({ x: s.hearth.x + Math.cos(a) * (13 + Math.floor(n / 7) * 1.6) + (n % 7) * 1.1, y: s.hearth.y + Math.sin(a) * 9 + Math.floor(n / 7) * 1.4 });
+  // (The burial ground keeps its first rows, the four among them, and the most recent; the
+  // old ones between are grassed over.)
+  if (s.graves.length > GRAVES_KEPT) s.graves.splice(8, s.graves.length - GRAVES_KEPT);
   if (p.founder && why === 'battle') {
     s.news.push(`${p.name}, one of the four who crossed, fell in the fighting.`);
     record(state, `${p.name}, one of the four who crossed, fell in the fighting.`, 'shore', shoreWhen(s));

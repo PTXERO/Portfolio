@@ -1,5 +1,7 @@
 import { STAGES, STAGE_ORDER } from '../content/stages';
 import { randomGenes } from './genes';
+import LZString from 'lz-string';
+import { deflateSync, inflateSync, strFromU8, strToU8 } from 'fflate';
 import { settleHabitat } from './actions';
 import { MAX_SURVIVORS } from './tribal';
 import { SHORE_CELLS } from './shore';
@@ -123,12 +125,52 @@ function capTribe(state: GameState): void {
   if (ex.crisis?.who !== undefined && !ids.has(ex.crisis.who)) ex.crisis = undefined;
 }
 
+/**
+ * Saves are compressed (lz-string): a few times smaller in the browser's storage, and as a
+ * code to copy. The compressed forms carry a mark at the start, so older saves (plain JSON in
+ * storage, plain base64 codes) are still read as they always were.
+ */
+const STORE_MARK = 'LZ1:';
+/** Export codes: deflated and base64'd (~2); ~1 was lz-string's (read still). */
+const CODE_MARK = '~2';
+const CODE_MARK_LZ = '~1';
+
+/** What a save leaves out: what's only for the moment (news not yet shown), and, past an era,
+ * what only that era needed (the Extinction's long log once they're ashore). */
+function slim(state: GameState): GameState {
+  const shore = state.stages.shore.shore;
+  const ex = state.stages.tribal.tribe?.ex;
+  if (!shore && !(ex && state.current === 'shore')) return state;
+  const copy: GameState = { ...state, stages: { ...state.stages } };
+  if (shore) copy.stages.shore = { ...state.stages.shore, shore: { ...shore, news: shore.news.slice(-10) } };
+  if (ex && state.current === 'shore') {
+    const t = state.stages.tribal.tribe!;
+    copy.stages.tribal = { ...state.stages.tribal, tribe: { ...t, ex: { ...ex, log: (ex.log ?? []).slice(-20), logN: ex.logN ?? ex.log?.length } } };
+  }
+  return copy;
+}
+
+/** The save as stored and exported (compact JSON). */
+export function serializeSlim(state: GameState): string {
+  // (Numbers to four places: no one can tell, and the save's a good deal smaller.)
+  return JSON.stringify(JSON.parse(serialize(slim(state))), (_k, v) => (typeof v === 'number' && !Number.isInteger(v) ? Math.round(v * 1e4) / 1e4 : v));
+}
+
 /** Save as a copyable text string, for backups (iOS can clear web storage). */
 export function exportSave(state: GameState): string {
+  const bytes = deflateSync(strToU8(serializeSlim(state)), { level: 9 });
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return CODE_MARK + btoa(bin);
+}
+
+/** The old kind of code: the save's JSON in plain base64. */
+function exportPlain(state: GameState): string {
   let bin = '';
   for (const b of new TextEncoder().encode(serialize(state))) bin += String.fromCharCode(b);
   return btoa(bin);
 }
+export { exportPlain };
 
 /**
  * Reads a save code. Forgiving about how it was copied: spaces, line breaks and stray
@@ -136,6 +178,19 @@ export function exportSave(state: GameState): string {
  * copy and paste can add, are worked around.
  */
 export function importSave(code: string): GameState {
+  // A compressed code (from this version on).
+  const at = code.indexOf(CODE_MARK);
+  if (at >= 0 && at < 8) {
+    const body = code.slice(at + CODE_MARK.length).replace(/[^A-Za-z0-9+/]/g, '');
+    const padded = body + '='.repeat((4 - (body.length % 4)) % 4);
+    return deserialize(strFromU8(inflateSync(Uint8Array.from(atob(padded), (c) => c.charCodeAt(0)))));
+  }
+  const lz = code.indexOf(CODE_MARK_LZ);
+  if (lz >= 0 && lz < 8) {
+    const text = LZString.decompressFromBase64(code.slice(lz + CODE_MARK_LZ.length).replace(/[^A-Za-z0-9+/=]/g, ''));
+    if (!text) throw new Error('damaged save code');
+    return deserialize(text);
+  }
   const clean = code.replace(/[^A-Za-z0-9+/]/g, '');
   let firstError: unknown = null;
   for (let cut = 0; cut <= 3 && cut < clean.length; cut++) {
@@ -151,12 +206,19 @@ export function importSave(code: string): GameState {
 }
 
 export function saveToStorage(state: GameState): void {
-  localStorage.setItem(STORAGE_KEY, serialize(state));
+  localStorage.setItem(STORAGE_KEY, STORE_MARK + LZString.compressToUTF16(serializeSlim(state)));
 }
 
 export function loadFromStorage(): GameState | null {
   const text = localStorage.getItem(STORAGE_KEY);
-  return text ? deserialize(text) : null;
+  if (!text) return null;
+  // (Older saves are plain JSON.)
+  if (text.startsWith(STORE_MARK)) {
+    const json = LZString.decompressFromUTF16(text.slice(STORE_MARK.length));
+    if (!json) throw new Error('damaged save');
+    return deserialize(json);
+  }
+  return deserialize(text);
 }
 
 export function clearStorage(): void {
