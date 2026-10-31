@@ -924,3 +924,4 @@ div.chart-node.other { cursor: default; }
 .dance.good .dance-bar { animation: dance-good 0.3s; }
 @keyframes dance-good { 50% { box-shadow: 0 0 0 2px #8acf6a, 0 0 10px #8acf6a; } }
 .dance-step { font-size: 18px; padding: 14px; }
+.chart-node.away { opacity: 0.7; }

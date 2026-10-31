@@ -79,6 +79,9 @@ export interface ShorePerson {
   genes?: Genes;
   /** Their mother and father (ids), if born here. */
   parents?: [number, number?];
+  /** Moved away to live in a vassal village (its name), and when. */
+  moved?: string;
+  movedOn?: number;
   /** Dead: the day they died, and of what. */
   died?: number;
   cause?: string;
@@ -103,6 +106,10 @@ export interface Village {
   found: boolean;
   /** Kin only: how far they've been won over (0 to 100), and whether they've joined you. */
   trust?: number;
+  /** Critters who've moved between them and the hearth, either way (ties of family). */
+  ties?: number;
+  /** Told already that the rest would come, if there were room. */
+  wouldCome?: boolean;
   /** Danced with today: the day, and the trust it's won so far that day. */
   danced?: { day: number; got: number };
   joined?: boolean;
@@ -1216,6 +1223,81 @@ function stepVassals(state: GameState, s: ShoreState, k: number): void {
 }
 
 /** Won over: they leave their village and move into yours, another kind among you. */
+/** Loyalty a vassal needs before its young come to live by the hearth; and before any of yours
+ * will go to live there. */
+const MOVE_IN_LOYALTY = 60;
+const MOVE_OUT_LOYALTY = 40;
+/** Most a vassal grows to (and so takes in). */
+const VASSAL_CAP = 70;
+
+/**
+ * Each day, the coming and going between the hearth and the villages that are yours. With beds
+ * free and food enough, a few young of a content vassal come to live by the hearth (another kind
+ * among you); crowded or hungry, a few of yours go to live with a vassal that has room. Every move
+ * ties them closer (a little loyalty), and once enough have come, the rest of a vassal want to
+ * come too, if there's room for them.
+ */
+function vassalMoves(state: GameState, s: ShoreState): void {
+  const today = s.day + s.clock / DAY_SEC;
+  for (const v of s.villages) {
+    if (!v.vassal || v.gone || v.joined) continue;
+    const rand = rng(s.seed * 13 + s.day * 31 + v.id * 7);
+    const free = roomLeft(s);
+    const plan = workPlan(s);
+    // In: a few young, now and then.
+    if (v.vassal.loyalty >= MOVE_IN_LOYALTY && free > 0 && !s.hungry && s.food >= plan.eat * 2 && v.pop > 6 && rand() < 0.25) {
+      const n = Math.min(free, 1 + Math.floor(rand() * 3), Math.floor(v.pop * 0.1));
+      if (n > 0) {
+        const used = new Set(s.people.map((p) => p.name));
+        const names: string[] = [];
+        for (let i = 0; i < n; i++) {
+          let name = nameFrom(rand);
+          for (let k = 0; k < 10 && used.has(name); k++) name = nameFrom(rand);
+          used.add(name);
+          names.push(name);
+          const age = GROW_DAYS + rand() * 8;
+          const id = s.nextId++;
+          s.people.push({ id, name, born: today - age, dies: today - age + 70 + rand() * 30, kind: v.id, joined: today, genes: personal(undefined, id * 31 + v.id) });
+        }
+        v.pop -= n;
+        v.ties = (v.ties ?? 0) + n;
+        v.vassal.loyalty = Math.min(100, v.vassal.loyalty + 2 * n);
+        s.news.push(`${n === 1 ? names[0] : `${n} young`} of ${v.name} came to live by the hearth.`);
+        record(state, `${n === 1 ? `${names[0]}, one of the young of ${v.name},` : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}, young of ${v.name},`} came to live by the hearth.`, 'shore', shoreWhen(s));
+      }
+    }
+    // Out: when the village is crowded or hungry, a few go to live with a vassal that has room.
+    const crowded = free < 0 || s.hungry > 0;
+    if (crowded && v.vassal.loyalty >= MOVE_OUT_LOYALTY && v.pop < VASSAL_CAP - 2 && rand() < 0.35) {
+      const can = s.people.filter((p) => isAdult(s, p) && p.id !== s.chief && !p.founder);
+      const n = Math.min(can.length, Math.max(1, Math.min(3, -free)), Math.floor(VASSAL_CAP - v.pop));
+      if (n > 0) {
+        // (Those of their own kind first: going home, near enough.)
+        const go = can.sort((a, b) => Number(b.kind === v.id) - Number(a.kind === v.id) || b.born - a.born).slice(0, n);
+        s.people = s.people.filter((p) => !go.includes(p));
+        for (const p of go) (s.dead ??= []).push({ ...p, moved: v.name, movedOn: today });
+        v.pop += n;
+        v.ties = (v.ties ?? 0) + n;
+        v.vassal.loyalty = Math.min(100, v.vassal.loyalty + n);
+        s.news.push(`${n === 1 ? go[0].name : `${n} of yours`} went to live with ${v.name}.`);
+        record(state, `${go.map((p) => p.name).join(', ')} went to live with ${v.name}${s.hungry ? ', where there was more to eat' : ', where there was room'}.`, 'shore', shoreWhen(s));
+      }
+    }
+    // Enough ties, and content: the rest want to come too (if there's room; else they'll wait).
+    if (v.vassal.loyalty >= 75 && (v.ties ?? 0) >= Math.max(6, v.pop * 0.6)) {
+      if (roomLeft(s) >= v.pop) {
+        record(state, `So many of ${v.name} had family by the hearth now that the rest came too.`, 'shore', shoreWhen(s));
+        v.vassal = undefined;
+        join(state, s, v);
+      } else if (!v.wouldCome) {
+        v.wouldCome = true;
+        s.news.push(`The rest of ${v.name} would come, if there were room for ${Math.round(v.pop)}.`);
+        record(state, `The rest of ${v.name} would come to the hearth too, if there were room for them all.`, 'shore', shoreWhen(s));
+      }
+    }
+  }
+}
+
 function join(state: GameState, s: ShoreState, v: Village): void {
   if (v.joined) return;
   v.joined = true;
@@ -1396,6 +1478,7 @@ function born(state: GameState, s: ShoreState): void {
 
 function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>): void {
   warDawn(state, s);
+  vassalMoves(state, s);
   pruneDead(s);
   // (Undelivered news is only ever the latest few.)
   if (s.news.length > 30) s.news.splice(0, s.news.length - 30);

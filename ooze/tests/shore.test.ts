@@ -569,3 +569,53 @@ describe('Dancing', () => {
     expect(dance(state, v.id, 5)).toBe(0);
   });
 });
+
+describe('Coming and going with vassals', () => {
+  function vassalGame() {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    now(state, 'hearth');
+    for (let i = 0; i < 8; i++) now(state, 'hut');
+    const v = s.villages.find((x) => relation(s, x) === 'kin')!;
+    v.found = true;
+    v.vassal = { tax: 0.1, loyalty: 90 };
+    v.pop = 30;
+    s.food = 300;
+    return { state, s, v };
+  }
+  it('with beds free, a content vassal\'s young come to live by the hearth, and tie them closer', () => {
+    const { state, s, v } = vassalGame();
+    const before = s.people.length;
+    for (let i = 0; i < 3000 && s.people.length === before; i++) {
+      shoreTick(state, 2);
+      s.food = Math.max(s.food, 300);
+    }
+    const came = s.people.filter((p) => p.kind === v.id);
+    expect(came.length).toBeGreaterThan(0);
+    // (A vassal grows on its own too: fewer than it would have been, not an exact count.)
+    expect(v.pop).toBeLessThan(31);
+    expect(v.ties).toBe(came.length);
+  });
+  it('crowded, some go to live with the vassal (kept in the family trees, not dead)', () => {
+    const { state, s, v } = vassalGame();
+    while (s.people.length < 50) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30, dies: 9999 });
+    const deaths = s.deaths;
+    for (let i = 0; i < 2000 && !s.dead?.some((p) => p.moved); i++) {
+      shoreTick(state, 2);
+      s.food = Math.max(s.food, 300);
+    }
+    const gone = s.dead!.filter((p) => p.moved);
+    expect(gone.length).toBeGreaterThan(0);
+    expect(gone[0].moved).toBe(v.name);
+    expect(gone[0].died).toBeUndefined();
+    expect(s.deaths).toBe(deaths);
+  });
+  it('with ties enough and room, the rest of the vassal come too', () => {
+    const { state, v } = vassalGame();
+    v.pop = 8;
+    v.ties = 8;
+    for (let i = 0; i < 120 && !v.joined; i++) shoreTick(state, 2);
+    expect(v.joined).toBe(true);
+    expect(v.vassal).toBeUndefined();
+  });
+});

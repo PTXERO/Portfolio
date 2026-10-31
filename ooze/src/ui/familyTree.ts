@@ -35,6 +35,7 @@ function lookOf(s: ShoreState, p: ShorePerson): CreatureLook {
 /** Their life in a line: "Year 2, Spring – Year 6, Winter (old age)" or "born Year 4, Summer". */
 function life(p: ShorePerson): string {
   const b = p.founder ? 'crossed the sea' : p.joined !== undefined ? `joined ${when(p.joined)}` : `born ${when(p.born)}`;
+  if (p.moved) return `${b} · went to live with ${p.moved}${p.movedOn !== undefined ? ` (${when(p.movedOn)})` : ''}`;
   return p.died !== undefined ? `${b} · died ${when(p.died)}${p.cause ? `, ${p.cause}` : ''}` : b;
 }
 
@@ -84,8 +85,8 @@ export function shoreTree(state: GameState, s: ShoreState, id: number, back = fa
   const half = new Set(me.parents?.length === 2 ? sibs.filter((o) => !me.parents!.every((i) => o.parents?.includes(i!))).map((o) => o.id) : []);
   const person = (p: ShorePerson, x: number, y: number) => {
     const dead = p.died !== undefined;
-    const sub = dead ? `† ${when(p.died!).replace('Year ', 'Y').replace(', ', ' ')}` : half.has(p.id) ? 'half' : p.id === s.chief ? 'chief' : p.founder ? 'crossed' : '';
-    boxes.push({ x, y, html: `<button class="chart-node${dead ? ' ghost' : ''}${p.id === me.id ? ' me' : ''}" data-tree="${p.id}" style="left:${x}px;top:${y}px">${miniIcon(lookOf(s, p), 2)}<b>${p.name}</b><i>${sub}</i></button>` });
+    const sub = dead ? `† ${when(p.died!).replace('Year ', 'Y').replace(', ', ' ')}` : p.moved ? `→ ${p.moved.replace(/^the /, '')}` : half.has(p.id) ? 'half' : p.id === s.chief ? 'chief' : p.founder ? 'crossed' : '';
+    boxes.push({ x, y, html: `<button class="chart-node${dead ? ' ghost' : p.moved ? ' away' : ''}${p.id === me.id ? ' me' : ''}" data-tree="${p.id}" style="left:${x}px;top:${y}px">${miniIcon(lookOf(s, p), 2)}<b>${p.name}</b><i>${sub}</i></button>` });
   };
   const other = (html: string, x: number, y: number, attr = '') => boxes.push({ x, y, html: `<${attr ? 'button' : 'div'} class="chart-node other" ${attr} style="left:${x}px;top:${y}px">${html}</${attr ? 'button' : 'div'}>` });
   const couple = (x1: number, x2: number, y: number) => {
@@ -226,7 +227,7 @@ export function shoreTree(state: GameState, s: ShoreState, id: number, back = fa
   const h = maxY - top;
   const shift = (html: string, b: Box) => html.replace(`left:${b.x}px;top:${b.y}px`, `left:${b.x - minX}px;top:${b.y - top}px`);
   const svg = `<svg class="chart-lines" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${lines.map(([a, b2, c, d, col, dash]) => `<line x1="${a - minX}" y1="${b2 - top}" x2="${c - minX}" y2="${d - top}" style="stroke:${col}"${dash ? ' stroke-dasharray="4 3"' : ''}/>`).join('')}${rings.map(([cx, cy, col]) => `<circle cx="${cx - minX}" cy="${cy - top}" r="3.5" style="stroke:${col === PLAIN_COL ? '#e8c050' : col}"/>`).join('')}</svg>`;
-  const role = me.id === s.chief ? 'Chief' : me.founder ? 'One of the four who crossed' : kind ? `Of ${kind}` : me.died !== undefined ? 'Remembered' : 'Born on New Shore';
+  const role = me.id === s.chief ? 'Chief' : me.moved ? `Lives with ${me.moved} now` : me.founder ? 'One of the four who crossed' : kind ? `Of ${kind}` : me.died !== undefined ? 'Remembered' : 'Born on New Shore';
   return `<p class="label dim">Family tree</p>
     <div class="tree-me">${miniIcon(lookOf(s, me), 5)}<div><h3>${me.name}</h3><p class="tiny">${role} · ${describe(me.genes)}</p><p class="tiny dim">${life(me)}</p></div></div>
     <div class="chart-wrap"><div class="chart" style="width:${w}px;height:${h}px">${svg}${boxes.map((b) => shift(b.html, b)).join('')}</div></div>
