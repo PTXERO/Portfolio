@@ -4,7 +4,7 @@
 import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
 import { ANNEX_LOYALTY, annexCost, annexWhy } from '../economy/shore';
 import { canDemand, demandOdds, foreign, PEACE, STANCE_NAME, stanceOf, standingOf } from '../economy/diplomacy';
-import { chiefWithCrew, ROAD_TIERS, roadTier, roadUpgrade, tradesWith, tradeWord, waystations, askWords, canAnswer, FOCI, landGoods, stageOf, STAGES, centre, hearthMost, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { viaName, chiefWithCrew, ROAD_TIERS, roadTier, roadUpgrade, tradesWith, tradeWord, waystations, askWords, canAnswer, FOCI, landGoods, stageOf, STAGES, centre, hearthMost, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import { FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
@@ -442,8 +442,6 @@ const days = (d: number) => (d < 0.6 ? 'under a day' : `${Math.round(d)} day${Ma
  * or done (relaid better, as the Ages allow; caravans along it). */
 function roadLine(s: ShoreState, v: Village): { line: string; button: string } {
   const walk = days(travelDays(s, v));
-  // (Settlements keep to themselves: no roads to them.)
-  if (!v.vassal && !v.road) return { line: `<div class="sub dim tiny">${walk} from the hearth.</div>`, button: '' };
   const crew = (w: { done: number; need: number }, what: string) => {
     const withCrew = chiefWithCrew(s, v);
     return {
@@ -474,7 +472,7 @@ function roadLine(s: ShoreState, v: Village): { line: string; button: string } {
   const c = roadCost(s, v);
   const busy = s.villages.some((x) => (x.road && !roadDone(x)) || x.road?.up);
   return {
-    line: `<div class="sub dim tiny">${walk} from the hearth. A road would take ${days(c.days)} to lay${busy ? ' (once the one being laid is done)' : ''}: tribute, help and the chief would all get there in half the time, and caravans could trade along it.</div>`,
+    line: `<div class="sub dim tiny">${walk} from the hearth, the way round the water and the mountains. A road${c.via >= 0 ? ` from ${viaName(s, c.via)}, the nearest the roads reach,` : ''} would take ${days(c.days)} to lay${busy ? ' (once the one being laid is done)' : ''}: ${v.vassal ? 'tribute, help and the chief would all get there in half the time, and caravans could trade along it' : 'what they send, help and the chief would all get there in half the time'}.</div>`,
     button: `<button class="px-btn${canRoad(s, v) ? ' gold' : ''}" data-road="${v.id}"${canRoad(s, v) ? '' : ' disabled'}>Road · ${c.wood} wood</button>`,
   };
 }

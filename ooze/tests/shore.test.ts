@@ -652,15 +652,11 @@ describe('Settlements and roads', () => {
     expect(s.food).toBeGreaterThan(food + c.food * 0.9);
     expect(s.convoys!.every((x) => x !== c)).toBe(true);
   });
-  it('a road (to a vassal; never a settlement) takes the walk times one and a half to lay, and then the way is far quicker', () => {
+  it('a road (to a settlement, or a vassal) takes the walk times one and a half to lay, and then the way is far quicker', () => {
     const { state, s, v } = setup();
     const walk = travelDays(s, v);
     const cost = roadCost(s, v);
     expect(cost.days).toBeCloseTo(walk * 1.5, 0);
-    s.wood = cost.wood;
-    expect(startRoad(state, v.id)).toBe(false);
-    v.settled = undefined;
-    v.vassal = { tax: 0.1, loyalty: 90 };
     s.wood = 0;
     expect(startRoad(state, v.id)).toBe(false);
     s.wood = cost.wood;

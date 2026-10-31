@@ -7,7 +7,7 @@ import { PAL } from '../art/sprites';
 import { Biome, CELL, isLand, type Island, type Pt } from '../economy/island';
 import { raidTarget } from '../economy/war';
 import { findPath } from '../economy/paths';
-import { DAY_SEC, terrainReady, walkTo, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, roadFront, roadTier, shoreIsland, stageOf, waystations, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
+import { DAY_SEC, terrainReady, walkTo, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, roadFront, roadPath, roadTier, shoreIsland, stageOf, waystations, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
 import type { GameState, Genes } from '../economy/types';
 import type { CreatureLook } from './creatureLook';
 import type { BuildId } from '../content/shore';
@@ -499,7 +499,8 @@ export class ShoreScene extends RangeScene {
     const ROAD_COL = ['rgba(122, 92, 58, 0.75)', 'rgba(140, 140, 136, 0.85)', 'rgba(196, 184, 160, 0.9)'];
     for (const v of s.villages) {
       if (!v.road || v.gone) continue;
-      const r = this.route(is, s.hearth, v);
+      // (Along the way it really runs: from where it joins the roads, round the mountains.)
+      const r = roadPath(s, v);
       const tier = roadTier(v);
       const laid = Math.min(1, v.road.done / Math.max(0.01, v.road.need)) * r.total;
       const better = v.road.up ? Math.min(1, v.road.up.done / Math.max(0.01, v.road.up.need)) * r.total : 0;

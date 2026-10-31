@@ -11,7 +11,7 @@ import { BUILDS, buildName, POIS, RELICS, RES_NAME, SHORE_STORY, type Res, type 
 import { record } from './chronicle';
 import { Biome, CELL, isLand, islandOf, reveal, type Island, type Pt } from './island';
 import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
-import { findPath } from './paths';
+import { findPath, findRoute } from './paths';
 import { inherit, personal } from './genes';
 import { diplomacyDawn } from './diplomacy';
 import { IDEAS, ageOver, cultureDay, cultureFx, maybeTurn, workReady, type Culture } from './culture';
@@ -143,7 +143,7 @@ export interface Village {
   settled?: number;
   /** A road to the hearth: work done on it and work it takes (in days); travel along it, done,
    * is quicker by far. */
-  road?: { done: number; need: number; tier?: number; up?: { done: number; need: number } };
+  road?: { done: number; need: number; tier?: number; up?: { done: number; need: number }; via?: number };
   /** A caravan each day along a finished road to a vassal. */
   trade?: Trade;
   /** What a settlement's gathered today, to send to the hearth at dawn. */
@@ -764,19 +764,97 @@ export function roadTier(v: { road?: Village['road'] }): number {
 
 /** Days to walk between the hearth and a village (a band's pace), and quicker by road. */
 export const WALK_SPEED = 1.2;
-export function travelDays(s: ShoreState, v: Pt & { road?: Village['road'] }): number {
-  const d = (Math.hypot(v.x - s.hearth.x, v.y - s.hearth.y) * 1.3) / WALK_SPEED / DAY_SEC;
-  return roadDone(v) ? d * ROAD_TIERS[roadTier(v)].faster : d;
+
+/** A place on the road network: the hearth (-1), or a village. */
+function nodeAt(s: ShoreState, id: number): Pt {
+  if (id < 0) return s.hearth;
+  const v = s.villages.find((x) => x.id === id);
+  return v ? { x: v.x, y: v.y } : s.hearth;
+}
+
+/** The way between two places, round the water and the mountains, and what it costs (kept:
+ * worked out once for each pair of places). */
+const legs = new Map<string, { pts: Pt[]; cost: number; cum: number[]; total: number }>();
+export function leg(s: ShoreState, a: Pt, b: Pt): { pts: Pt[]; cost: number; cum: number[]; total: number } {
+  const key = `${s.seed}|${Math.round(a.x)},${Math.round(a.y)}|${Math.round(b.x)},${Math.round(b.y)}`;
+  let r = legs.get(key);
+  if (!r) {
+    if (legs.size > 400) legs.clear();
+    const { pts, cost } = findRoute(shoreIsland(s.seed), a, b, 120000);
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+    r = { pts, cost, cum, total: cum[cum.length - 1] || 1 };
+    legs.set(key, r);
+  }
+  return r;
+}
+/** Days on foot along a way: three tiles a cell of open ground, more over rough ground and
+ * climbs. */
+export function legDays(s: ShoreState, a: Pt, b: Pt): number {
+  return (leg(s, a, b).cost * 3) / WALK_SPEED / DAY_SEC;
+}
+
+/** The places a road can join: the hearth, and every village of yours a finished road reaches. */
+export function roadNodes(s: ShoreState): number[] {
+  return [-1, ...s.villages.filter((v) => roadDone(v) && ruled(v)).map((v) => v.id)];
+}
+
+/** Days from the hearth to a place along the road network (the hearth itself: none). */
+function netDays(s: ShoreState, id: number, depth = 0): number {
+  if (id < 0 || depth > 12) return 0;
+  const v = s.villages.find((x) => x.id === id);
+  if (!v || !roadDone(v)) return Infinity;
+  const via = v.road!.via ?? -1;
+  return legDays(s, nodeAt(s, via), v) * ROAD_TIERS[roadTier(v)].faster + netDays(s, via, depth + 1);
+}
+
+/** Days to get between the hearth and a village: by its own road if it has one; else on foot
+ * from the hearth, or along the roads to the nearest village they reach and on foot from there,
+ * whichever is quicker. */
+export function travelDays(s: ShoreState, v: Village): number {
+  if (roadDone(v)) return netDays(s, v.id);
+  let best = legDays(s, s.hearth, v);
+  for (const id of roadNodes(s)) {
+    if (id < 0 || id === v.id) continue;
+    const n = nodeAt(s, id);
+    // (Not worth working out the way from somewhere further than the hearth is.)
+    if (Math.hypot(n.x - v.x, n.y - v.y) * 1.2 > Math.hypot(s.hearth.x - v.x, s.hearth.y - v.y)) continue;
+    best = Math.min(best, netDays(s, id) + legDays(s, n, v));
+  }
+  return best;
 }
 export function roadDone(v: { road?: Village['road'] }): boolean {
   return !!v.road && v.road.done >= v.road.need;
 }
 
-/** What a road to a village costs in wood (more the further), and the days it takes to lay:
- * half again the days it takes to walk there. */
-export function roadCost(s: ShoreState, v: Village): { wood: number; days: number } {
-  const days = travelDays(s, { x: v.x, y: v.y });
-  return { wood: Math.round(20 + days * 30), days: Math.round(days * 1.5 * 10) / 10 };
+/** Where a new road to a village would join the network: the place nearest it, by the way. */
+export function roadVia(s: ShoreState, v: Village): number {
+  if (v.road) return v.road.via ?? -1;
+  let best = -1;
+  let days = legDays(s, s.hearth, v);
+  for (const id of roadNodes(s)) {
+    if (id < 0 || id === v.id) continue;
+    const n = nodeAt(s, id);
+    if (Math.hypot(n.x - v.x, n.y - v.y) > Math.hypot(s.hearth.x - v.x, s.hearth.y - v.y)) continue;
+    const d = legDays(s, n, v);
+    if (d < days) {
+      days = d;
+      best = id;
+    }
+  }
+  return best;
+}
+/** The name of where a road joins. */
+export function viaName(s: ShoreState, id: number): string {
+  return id < 0 ? 'the hearth' : s.villages.find((x) => x.id === id)?.name ?? 'the hearth';
+}
+
+/** What a road to a village costs in wood (more the longer and rougher the way), and the days
+ * it takes to lay: half again the days it takes to walk the way. */
+export function roadCost(s: ShoreState, v: Village): { wood: number; days: number; via: number } {
+  const via = roadVia(s, v);
+  const days = legDays(s, nodeAt(s, via), v);
+  return { wood: Math.round(20 + days * 30), days: Math.round(days * 1.5 * 10) / 10, via };
 }
 
 /** A road being laid (or relaid, better), anywhere: one at a time. */
@@ -784,10 +862,9 @@ function roadBusy(s: ShoreState): boolean {
   return s.villages.some((x) => (x.road && !roadDone(x)) || x.road?.up);
 }
 
-/** Whether a road can be started to a vassal (one at a time; wood in hand). Settlements keep
- * to themselves: no roads to them. */
+/** Whether a road can be started to a village of yours (one at a time; wood in hand). */
 export function canRoad(s: ShoreState, v: Village): boolean {
-  return !!v.vassal && !v.gone && !v.road && !roadBusy(s) && s.wood >= roadCost(s, v).wood;
+  return ruled(v) && !v.road && !roadBusy(s) && s.wood >= roadCost(s, v).wood;
 }
 
 /** Start a road to a village of yours: the wood's paid now, the road's laid a little each day. */
@@ -797,9 +874,9 @@ export function startRoad(state: GameState, id: number): boolean {
   if (!s || !v || !canRoad(s, v)) return false;
   const c = roadCost(s, v);
   s.wood -= c.wood;
-  v.road = { done: 0, need: c.days };
-  s.news.push(`A road to ${v.name} was begun.`);
-  record(state, `They began a road to ${v.name}, ${c.wood} wood of it, to be laid over ${Math.ceil(c.days)} days.`, 'shore', shoreWhen(s));
+  v.road = { done: 0, need: c.days, via: c.via >= 0 ? c.via : undefined };
+  s.news.push(`A road to ${v.name} was begun${c.via >= 0 ? `, from ${viaName(s, c.via)}` : ''}.`);
+  record(state, `They began a road to ${v.name}${c.via >= 0 ? ` from ${viaName(s, c.via)}, where the roads already reached` : ''}, ${c.wood} wood of it, to be laid over ${Math.ceil(c.days)} days.`, 'shore', shoreWhen(s));
   return true;
 }
 
@@ -837,19 +914,10 @@ export function upgradeRoad(state: GameState, id: number): boolean {
   return true;
 }
 
-/** The way a road runs, hearth to village (the same way the map draws it), with how far along
- * each point is. */
-const pathCache = new WeakMap<Village, { key: string; pts: Pt[]; cum: number[]; total: number }>();
+/** The way a road runs, from where it joins the network to its village (the way the map draws
+ * it), with how far along each point is. */
 export function roadPath(s: ShoreState, v: Village): { pts: Pt[]; cum: number[]; total: number } {
-  const key = `${s.seed}:${s.hearth.x},${s.hearth.y}`;
-  const hit = pathCache.get(v);
-  if (hit && hit.key === key) return hit;
-  const pts = [{ ...s.hearth }, ...findPath(shoreIsland(s.seed), s.hearth, v, 60000)];
-  const cum = [0];
-  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
-  const out = { key, pts, cum, total: cum[cum.length - 1] || 1 };
-  pathCache.set(v, out);
-  return out;
+  return leg(s, nodeAt(s, v.road?.via ?? roadVia(s, v)), v);
 }
 /** The point a fraction of the way along a road. */
 export function roadAt(s: ShoreState, v: Village, k: number): Pt {
@@ -976,8 +1044,8 @@ export function tradeWord(r: Trade['get']): string {
 function roadDawn(state: GameState, s: ShoreState, eat: number): void {
   const now = s.day + s.clock / DAY_SEC;
   for (const v of s.villages) {
-    if (!v.vassal || v.gone || !roadDone(v)) continue;
-    const tr = v.trade;
+    if (!ruled(v) || !roadDone(v)) continue;
+    const tr = v.vassal ? v.trade : undefined;
     if (tr) {
       const have = tr.give === 'food' ? s.food : s.wood;
       const keep = tr.give === 'food' ? eat * 3 : burnPerDay(s) * 3;

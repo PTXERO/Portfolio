@@ -2,7 +2,7 @@
 // coarse grid (a cell every few tiles), then straightened, so they walk in natural lines rather
 // than from cell to cell. Rivers can be waded (they're land, for walking).
 
-import { isLand, type Island, type Pt } from './island';
+import { Biome, isLand, type Island, type Pt } from './island';
 
 /** Tiles per cell of the walking grid. */
 const PC = 3;
@@ -148,4 +148,86 @@ export function findPath(is: Island, from: Pt, to: Pt, limit = 120000): Pt[] {
     i = j + 1;
   }
   return out;
+}
+
+/** What each kind of ground costs to cross (a road, or a long walk): rock and peaks dear, high
+ * ground and marsh more than the plain; and every climb or drop costs too. */
+const GROUND: Record<number, number> = { [Biome.Peak]: 6, [Biome.Rock]: 3, [Biome.High]: 1.7, [Biome.Marsh]: 1.8, [Biome.River]: 1.5, [Biome.Forest]: 1.2, [Biome.Sand]: 1.1 };
+const CLIMB = 24;
+
+/**
+ * The way a road would go (or a long walk, the sensible way): round the water as `findPath`
+ * does, and round the mountains too, weighing the ground and the climbs. As the cells to pass
+ * through (not straightened: it keeps to the low ground), and what the way costs (one for each
+ * cell of flat open ground).
+ */
+export function findRoute(is: Island, from: Pt, to: Pt, limit = 120000): { pts: Pt[]; cost: number } {
+  const G = Math.floor(is.n / PC);
+  const cell = (p: Pt) => Math.max(0, Math.min(G - 1, Math.floor(p.y / PC))) * G + Math.max(0, Math.min(G - 1, Math.floor(p.x / PC)));
+  const mid = (c: number): Pt => ({ x: (c % G) * PC + PC / 2, y: Math.floor(c / G) * PC + PC / 2 });
+  const tile = (c: number) => {
+    const m = mid(c);
+    return Math.floor(m.y) * is.n + Math.floor(m.x);
+  };
+  const walkable = (c: number) => {
+    const m = mid(c);
+    return isLand(is, m.x, m.y);
+  };
+  const ground = (c: number) => GROUND[is.biome[tile(c)]] ?? 1;
+  const start = cell(from);
+  const goal = cell(to);
+  const gx = goal % G;
+  const gy = Math.floor(goal / G);
+  const h = (c: number) => {
+    const dx = Math.abs((c % G) - gx);
+    const dy = Math.abs(Math.floor(c / G) - gy);
+    return Math.max(dx, dy) + 0.414 * Math.min(dx, dy);
+  };
+  const cost = new Float32Array(G * G).fill(Infinity);
+  const back = new Int32Array(G * G).fill(-1);
+  const closed = new Uint8Array(G * G);
+  const open = new Heap();
+  cost[start] = 0;
+  open.push(start, h(start));
+  let best = start;
+  let bestH = h(start);
+  let expanded = 0;
+  while (open.size && expanded < limit) {
+    const c = open.pop();
+    if (closed[c]) continue;
+    closed[c] = 1;
+    expanded++;
+    const hc = h(c);
+    if (hc < bestH) {
+      bestH = hc;
+      best = c;
+    }
+    if (c === goal) break;
+    const cx = c % G;
+    const cy = Math.floor(c / G);
+    const hgt = is.height[tile(c)];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const nx = cx + dx;
+        const ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= G || ny >= G) continue;
+        const n = ny * G + nx;
+        if (closed[n] || !walkable(n)) continue;
+        if (dx && dy && (!walkable(cy * G + nx) || !walkable(ny * G + cx))) continue;
+        const step = (dx && dy ? 1.414 : 1) * (ground(c) + ground(n)) * 0.5 + Math.abs(is.height[tile(n)] - hgt) * CLIMB;
+        const nc = cost[c] + step;
+        if (nc >= cost[n]) continue;
+        cost[n] = nc;
+        back[n] = c;
+        open.push(n, nc + h(n));
+      }
+    }
+  }
+  const end = closed[goal] ? goal : best;
+  const pts: Pt[] = [];
+  for (let c = end; c !== start && c >= 0; c = back[c]) pts.unshift(mid(c));
+  pts.unshift({ ...from });
+  if (end === goal && isLand(is, to.x, to.y)) pts[pts.length - 1] = { ...to };
+  return { pts, cost: cost[end] === Infinity ? h(start) : cost[end] };
 }
