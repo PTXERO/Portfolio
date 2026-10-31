@@ -75,7 +75,11 @@ export function startFireDance(canvas: HTMLCanvasElement, v: Village, chief: Cre
   };
   const onDown = (e: PointerEvent) => {
     down = true;
-    canvas.setPointerCapture?.(e.pointerId);
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch {
+      // (Not a pointer the browser knows: fine, it's followed anyway.)
+    }
     last = null;
     turn = 0;
     radii = [];
