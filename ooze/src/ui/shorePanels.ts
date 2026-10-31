@@ -4,7 +4,7 @@
 import { type Boosts, BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
 import { ANNEX_LOYALTY, annexCost, annexWhy } from '../economy/shore';
 import { canDemand, demandOdds, foreign, PEACE, STANCE_NAME, stanceOf, standingOf } from '../economy/diplomacy';
-import { networkBonus, roadPerks, viaName, chiefWithCrew, ROAD_TIERS, roadTier, roadUpgrade, tradesWith, tradeWord, waystations, askWords, canAnswer, FOCI, landGoods, stageOf, STAGES, centre, hearthMost, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, resCap, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { gatherHere, RES_GROUND, networkBonus, roadPerks, viaName, chiefWithCrew, ROAD_TIERS, roadTier, roadUpgrade, tradesWith, tradeWord, waystations, askWords, canAnswer, FOCI, landGoods, stageOf, STAGES, centre, hearthMost, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, resCap, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
@@ -213,7 +213,8 @@ function buildRow(s: ShoreState, b: BuildDef, open: boolean): string {
     const have = Math.floor(s.res?.[r] ?? 0);
     if (have >= want) return `<span class="fx">${want} ${RES_NAME[r].toLowerCase()}</span>`;
     if (sourcesOf(s, r).length) return `${want} ${RES_NAME[r].toLowerCase()} (${have} so far)`;
-    return `<span class="starving">Needs ${RES_NAME[r].toLowerCase()}: you have no village ${whereRes(r)} yet.</span>`;
+    const hand = RES_GROUND[r];
+    return `<span class="starving">${want} ${RES_NAME[r].toLowerCase()} (${have} so far): no village of yours ${whereRes(r)} brings it.${hand ? ` The chief can gather it by hand, standing still ${hand.where}.` : ''}</span>`;
   });
   return `<div class="card px-box build"><div class="info"><div class="name">${name}</div><div class="sub">${b.does}</div>${needs.length ? `<div class="sub">${needs.join(' · ')}</div>` : ''}</div>
     <button class="px-btn buy${poor ? '' : ' gold'}" data-build="${b.id}"${poor ? ' disabled' : ''}><span class="num">${cost}</span> wood</button></div>`;
@@ -231,7 +232,11 @@ function resourcesCard(s: ShoreState): string {
   const rows = (Object.keys(RES_NAME) as Res[]).map((r) => {
     const from = sourcesOf(s, r);
     const have = r === 'fish' ? '' : `<b class="num">${Math.floor(s.res?.[r] ?? 0)}</b><span class="dim">/${resCap(s)}</span> `;
-    const line = from.length ? `${have}from ${from.map((v) => cap(v.name)).join(', ')}${r === 'fish' ? ' (into the food)' : ''}` : `<span class="dim">None yet: found ${whereRes(r)}.</span>`;
+    const hand = RES_GROUND[r];
+    const gathering = !from.length && gatherHere(s).includes(r) && !s.chiefTo;
+    const line = from.length
+      ? `${have}from ${from.map((v) => cap(v.name)).join(', ')}${r === 'fish' ? ' (into the food)' : ''}`
+      : `${r === 'fish' ? '' : have}<span class="dim">No village brings it: they live ${whereRes(r)}.${hand ? ` Or the chief can gather it by hand, standing still ${hand.where}.` : ''}</span>${gathering ? ' <b class="green">The chief is gathering it.</b>' : ''}`;
     return `<div class="relic"><b>${RES_NAME[r]}</b> ${line}</div>`;
   });
   return `<div class="panel-head"><h2>Resources</h2><span class="dim">from the villages you hold</span></div><div class="card px-box"><div class="info">${rows.join('')}</div></div>`;

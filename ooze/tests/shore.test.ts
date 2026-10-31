@@ -330,6 +330,8 @@ describe('Resources of the land', () => {
     expect(sourcesOf(s, 'salt').length).toBe(0);
     s.wood = 1000;
     s.building = undefined;
+    // (Nor any gathered by hand.)
+    s.res!.salt = 0;
     expect(build(state, 'salter')).toBe(false);
   });
 });

@@ -285,6 +285,8 @@ export interface ShoreState {
   retreat?: { from: number; n: number; left: number; arrives: number; sx?: number; sy?: number };
   /** The road whose crew the chief's working with (they keep up with it). */
   crewWith?: number;
+  /** The goods the chief's gathered by hand, ever (told once each). */
+  gathered?: Res[];
   /** A new Age begun, not yet shown (its card). */
   agesNew?: number[];
   /** A village beaten and at your mercy, waiting on what's to be done with them. */
@@ -535,7 +537,9 @@ export function shoreWorld(seed: number, look: CreatureLook, cannibal: boolean):
       // huddled in the middle.)
       const apart = Math.min(...taken.map((t) => Math.hypot(t.x - q.x, t.y - q.y)));
       const spread = i === 0 ? 0 : Math.min(6, (apart / (N * 0.2)) * 4);
-      const score = (HABITATS[h].likes[p.diet] ?? 1) - 1.3 * villages.filter((v) => v.habitat === h).length + rand() * 1.2 + spread;
+      // (And a land that gives goods no village gives yet: every good to be had somewhere.)
+      const fresh = RES_OF[h].filter((r) => r !== 'fish' && !villages.some((v) => v.habitat && RES_OF[v.habitat].includes(r))).length;
+      const score = (HABITATS[h].likes[p.diet] ?? 1) - 1.3 * villages.filter((v) => v.habitat === h).length + rand() * 1.2 + spread + fresh * 1.5;
       if (score > bestScore) {
         bestScore = score;
         best = { q, h };
@@ -1318,6 +1322,50 @@ function stepConvoys(s: ShoreState): void {
     for (const [r, n] of Object.entries(c.res ?? {}) as [Res, number][]) (s.res ??= {})[r] = Math.min(resCap(s), (s.res[r] ?? 0) + n);
   }
   s.convoys = s.convoys.filter((c) => c.arrives > now);
+}
+
+/** Where the chief can gather each of the land's goods by hand (slowly), with no village of
+ * yours to bring it: reeds at a lake or marsh, clay by a river, salt on a beach, and so on. So
+ * no island leaves a building out of reach. */
+export const RES_GROUND: Partial<Record<Res, { biomes: number[]; where: string }>> = {
+  reeds: { biomes: [Biome.Lake, Biome.Marsh, Biome.River], where: 'by a lake, marsh or river' },
+  clay: { biomes: [Biome.River, Biome.Marsh], where: 'by a river or in a marsh' },
+  salt: { biomes: [Biome.Sand, Biome.Desert], where: 'on a beach, or in the desert' },
+  herbs: { biomes: [Biome.Marsh, Biome.Scrub], where: 'in a marsh, or in the scrub' },
+  timber: { biomes: [Biome.Forest], where: 'in the woods' },
+  flint: { biomes: [Biome.Rock, Biome.Scrub], where: 'among rocks, or in the scrub' },
+  stone: { biomes: [Biome.Rock, Biome.High, Biome.Peak], where: 'in the hills and rocks' },
+};
+/** Seconds of the chief's gathering for each one gathered. */
+const GATHER_SEC = 5;
+
+/** What the chief could gather standing here: the goods the ground round about gives. */
+export function gatherHere(s: ShoreState): Res[] {
+  const is = shoreIsland(s.seed);
+  const seen = new Set<number>();
+  for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) {
+    const x = Math.round(s.chiefAt.x + i);
+    const y = Math.round(s.chiefAt.y + j);
+    if (x >= 0 && y >= 0 && x < is.n && y < is.n) seen.add(is.biome[y * is.n + x]);
+  }
+  return (Object.keys(RES_GROUND) as Res[]).filter((r) => RES_GROUND[r]!.biomes.some((b) => seen.has(b)));
+}
+
+/** The chief standing still: what the ground round about gives, gathered by hand (the one the
+ * hearth has least of first; not at a landmark being explored, not past what can be kept). */
+function chiefGathers(state: GameState, s: ShoreState, dt: number): void {
+  if (s.chiefTo || poiHere(s) || !count(s, 'hearth')) return;
+  const cap = resCap(s);
+  // (Only what no village of yours brings: they're the way to have it, the chief's hands the stopgap.)
+  const can = gatherHere(s).filter((r) => (s.res?.[r] ?? 0) < cap && !sourcesOf(s, r).length);
+  if (!can.length) return;
+  const r = can.sort((a, b) => (s.res?.[a] ?? 0) - (s.res?.[b] ?? 0))[0];
+  (s.res ??= {})[r] = Math.min(cap, (s.res[r] ?? 0) + dt / GATHER_SEC);
+  if (!s.gathered?.includes(r)) {
+    (s.gathered ??= []).push(r);
+    s.news.push(`${s.people.find((p) => p.id === s.chief)?.name ?? 'The chief'} is gathering ${RES_NAME[r].toLowerCase()} by hand.`);
+    record(state, `${s.people.find((p) => p.id === s.chief)?.name ?? 'The chief'} gathered ${RES_NAME[r].toLowerCase()} by hand, ${RES_GROUND[r]!.where}, with no village to bring it.`, 'shore', shoreWhen(s));
+  }
 }
 
 /** Villages you hold that give a resource. */
@@ -2131,6 +2179,7 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
     else noteElders(state, s, think);
   }
   walk(state, s, dt);
+  chiefGathers(state, s, dt);
   stepWar(state, s, dt);
   stepVassals(state, s, k);
   stepResources(s, k);

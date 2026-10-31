@@ -241,5 +241,8 @@ export function findRoute(is: Island, from: Pt, to: Pt, limit = 120000): { pts: 
   for (let c = end; c !== start && c >= 0; c = back[c]) pts.unshift(mid(c));
   pts.unshift({ ...from });
   if (end === goal && isLand(is, to.x, to.y)) pts[pts.length - 1] = { ...to };
-  return { pts, cost: cost[end] === Infinity ? h(start) : cost[end] };
+  // (Not reached, by water or too far to search: the rest of the way still counts, the long way
+  // round, so somewhere out of reach never looks near.)
+  const rest = end === goal ? 0 : Math.hypot(to.x - mid(end).x, to.y - mid(end).y) / PC * 1.5;
+  return { pts, cost: (cost[end] === Infinity ? h(start) : cost[end]) + rest };
 }

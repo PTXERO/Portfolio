@@ -156,3 +156,39 @@ describe('What roads are worth', () => {
     expect(roadPerks({ road: { done: 0.5, need: 1 } }).output).toBe(1);
   });
 });
+
+describe('Gathering by hand', () => {
+  it('with no village to bring it, the chief standing by a marsh gathers reeds; with one, they leave it to them', async () => {
+    const { shoreIsland, build } = await import('../src/economy/shore');
+    const { Biome } = await import('../src/economy/island');
+    const state = createState(0);
+    state.started = true;
+    state.stages.tribal.tribe = { awake: true, pop: 4, survivors: 4, look: { parts: {}, diet: 'grazer' }, stats: {}, generations: 3, heritage: 1, seed: 4242, year: 0, family: [{ name: 'Ka', trait: 'hardy' }, { name: 'Ri', trait: 'keen' }, { name: 'Mo', trait: 'old' }, { name: 'Tu', trait: 'young' }], landed: { seed: 777, day: 60 } } as unknown as TribeState;
+    startShore(state);
+    takeRaft(state);
+    const s = shoreOf(state)!;
+    s.wood = 1e4;
+    build(state, 'hearth');
+    if (s.building) s.building.left = 0;
+    shoreTick(state, 0.01);
+    const is = shoreIsland(s.seed);
+    let marsh = -1;
+    for (let i = 0; i < is.biome.length && marsh < 0; i++) if (is.biome[i] === Biome.Marsh) marsh = i;
+    expect(marsh).toBeGreaterThan(-1);
+    s.chiefAt = { x: (marsh % is.n) + 0.5, y: Math.floor(marsh / is.n) + 0.5 };
+    s.chiefTo = null;
+    s.res = {};
+    for (let i = 0; i < 30; i++) shoreTick(state, 2);
+    // (Whichever of what the marsh gives they have least of: reeds, clay, herbs.)
+    expect(s.res.reeds ?? 0).toBeGreaterThan(2);
+    expect(Object.values(s.res).reduce((a, n) => a + (n ?? 0), 0)).toBeGreaterThan(10);
+    expect(s.gathered).toContain('reeds');
+    // A marsh village of yours brings it now: the chief's hands are free.
+    const v = s.villages[0];
+    v.habitat = 'marsh';
+    v.settled = 0;
+    const had = s.res.reeds!;
+    for (let i = 0; i < 10; i++) shoreTick(state, 2);
+    expect(s.res.reeds!).toBeLessThan(had + 1.5);
+  });
+});
