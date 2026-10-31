@@ -414,7 +414,8 @@ export function soundFrame(state: GameState, skies: { rain: number; snow: number
   // The wind is loudest high over the island, and dies down as the view comes down near the
   // ground (to almost nothing, right in close).
   const near = skies ? Math.max(0, Math.min(1, Math.log(skies.zoom / 0.3) / Math.log(8 / 0.3))) : 0;
-  loopTo('wind', wind * 0.45 * (1 - 0.95 * near), bus.ambience, fade);
+  // (A breath under everything, not a gale: a quarter of what it was, and falling off fast.)
+  loopTo('wind', wind * 0.12 * (1 - 0.95 * near) ** 1.5, bus.ambience, fade);
   musicFrame(state);
   const swirl = soup && state.swirl > 0.02 ? Math.min(1, state.swirl) : 0;
   loopTo('river', swirl * 0.8, bus.effects, swirl > 0 ? 0.15 : 0.3);
