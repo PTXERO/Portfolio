@@ -4,7 +4,7 @@
 import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
 import { ANNEX_LOYALTY, annexCost, annexWhy } from '../economy/shore';
 import { canDemand, demandOdds, foreign, PEACE, STANCE_NAME, stanceOf, standingOf } from '../economy/diplomacy';
-import { viaName, chiefWithCrew, ROAD_TIERS, roadTier, roadUpgrade, tradesWith, tradeWord, waystations, askWords, canAnswer, FOCI, landGoods, stageOf, STAGES, centre, hearthMost, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { networkBonus, roadPerks, viaName, chiefWithCrew, ROAD_TIERS, roadTier, roadUpgrade, tradesWith, tradeWord, waystations, askWords, canAnswer, FOCI, landGoods, stageOf, STAGES, centre, hearthMost, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import { FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
@@ -534,15 +534,16 @@ function roadLine(s: ShoreState, v: Village): { line: string; button: string } {
       : '';
     const up = u ? `<div class="sub dim tiny">Relaid as a ${ROAD_TIERS[u.tier].name.toLowerCase()} it'd be quicker still${u.missing ? `: needs ${u.missing}.` : '.'}</div>` : '';
     const stations = waystations(s, v).length;
+    const perks = roadPerks(v);
     return {
-      line: `<div class="sub dim tiny">${tier.name}: ${walk} from the hearth, and the chief walks it quickly. ${stations === 1 ? 'A waystation' : `${stations} waystations`} on the way: wanderers, things left for the hearth${count(s, 'watch') ? '' : ', and, with no watch post, raiders lying in wait'}.</div>${up}${trade}`,
+      line: `<div class="sub fx tiny">${tier.name}: they send ${Math.round((perks.output - 1) * 100)}% more${v.vassal ? `, and are the more loyal (+${perks.loyalty})` : `, and grow ${Math.round((perks.growth - 1) * 100)}% quicker`}. All your roads together: building and the culture's practice ${Math.round(networkBonus(s) * 100)}% quicker.</div><div class="sub dim tiny">${walk} from the hearth, and the chief walks it quickly. ${stations === 1 ? 'A waystation' : `${stations} waystations`} on the way: wanderers, things left for the hearth${count(s, 'watch') ? '' : ', and, with no watch post, raiders lying in wait'}.</div>${up}${trade}`,
       button: u && !u.missing ? `<button class="px-btn gold" data-roadup="${v.id}">Upgrade to ${ROAD_TIERS[u.tier].name.toLowerCase()} · ${u.wood} wood${Object.entries(u.needs).map(([r, n]) => `, ${n} ${RES_NAME[r as keyof typeof RES_NAME].toLowerCase()}`).join('')}</button>` : '',
     };
   }
   const c = roadCost(s, v);
   const busy = s.villages.some((x) => (x.road && !roadDone(x)) || x.road?.up);
   return {
-    line: `<div class="sub dim tiny">${walk} from the hearth, the way round the water and the mountains. A road${c.via >= 0 ? ` from ${viaName(s, c.via)}, the nearest the roads reach,` : ''} would take ${days(c.days)} to lay${busy ? ' (once the one being laid is done)' : ''}: ${v.vassal ? 'tribute, help and the chief would all get there in half the time, and caravans could trade along it' : 'what they send, help and the chief would all get there in half the time'}.</div>`,
+    line: `<div class="sub dim tiny">${walk} from the hearth, the way round the water and the mountains. A road${c.via >= 0 ? ` from ${viaName(s, c.via)}, the nearest the roads reach,` : ''} would take ${days(c.days)} to lay${busy ? ' (once the one being laid is done)' : ''}. With it they'd send 15% more${v.vassal ? ', be the more loyal, and trade by caravan' : ', and grow the quicker'}; help and the chief would get there in half the time; and every village the roads reach makes building and the culture's practice a little quicker.</div>`,
     button: `<button class="px-btn${canRoad(s, v) ? ' gold' : ''}" data-road="${v.id}"${canRoad(s, v) ? '' : ' disabled'}>Road · ${c.wood} wood</button>`,
   };
 }

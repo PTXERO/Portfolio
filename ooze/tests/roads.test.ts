@@ -129,3 +129,30 @@ describe('Walking the roads', () => {
     expect(on.t).toBeLessThan(off.t * 0.75);
   });
 });
+
+describe('What roads are worth', () => {
+  it('a village on a road sends more, a vassal is the more loyal, a settlement grows quicker; the roads together speed the hearth', async () => {
+    const { settledDay, vassalDay, networkBonus, roadPerks } = await import('../src/economy/shore');
+    const state = createState(0);
+    state.started = true;
+    state.stages.tribal.tribe = { awake: true, pop: 4, survivors: 4, look: { parts: {}, diet: 'grazer' }, stats: {}, generations: 3, heritage: 1, seed: 4242, year: 0, family: [{ name: 'Ka', trait: 'hardy' }, { name: 'Ri', trait: 'keen' }, { name: 'Mo', trait: 'old' }, { name: 'Tu', trait: 'young' }], landed: { seed: 777, day: 60 } } as unknown as TribeState;
+    startShore(state);
+    const s = shoreOf(state)!;
+    const [a, b] = s.villages;
+    a.settled = 0;
+    a.pop = 20;
+    b.vassal = { tax: 0.25, loyalty: 50 };
+    b.pop = 20;
+    const before = [settledDay(a).food, settledDay(a).growth, vassalDay(b).food, vassalDay(b).loyalty];
+    expect(networkBonus(s)).toBe(0);
+    a.road = { done: 1, need: 1 };
+    b.road = { done: 1, need: 1, tier: 1 };
+    expect(settledDay(a).food).toBeCloseTo(before[0] * 1.15);
+    expect(settledDay(a).growth).toBeCloseTo(before[1] * 1.3);
+    expect(vassalDay(b).food).toBeCloseTo(before[2] * 1.2);
+    expect(vassalDay(b).loyalty).toBe(before[3] + 12);
+    expect(networkBonus(s)).toBeCloseTo(0.06);
+    // (A road still being laid does nothing yet.)
+    expect(roadPerks({ road: { done: 0.5, need: 1 } }).output).toBe(1);
+  });
+});

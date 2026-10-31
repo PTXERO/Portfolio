@@ -7,7 +7,7 @@
 
 import type { Boosts } from '../content/shore';
 import { record } from './chronicle';
-import { count, DAY_SEC, isAdult, poisOf, poiDef, shoreWhen, totalCritters, type ShoreState } from './shore';
+import { networkBonus, count, DAY_SEC, isAdult, poisOf, poiDef, shoreWhen, totalCritters, type ShoreState } from './shore';
 import type { GameState } from './types';
 
 export type Lane = 'food' | 'crafts' | 'war' | 'rule' | 'kin' | 'rites' | 'stories' | 'words';
@@ -140,7 +140,8 @@ export function practiceRate(s: ShoreState, lane: Lane, plan: { food: number; wo
   }
   // The road chosen at a fork: its lane goes a little faster.
   for (const [f, o] of Object.entries(c?.forks ?? {})) if (FORKS[f as ForkId]?.options.find((x) => x.id === o)?.lane === lane) r *= 1.25;
-  return r * (c?.focus === lane ? FOCUS : 1);
+  // (The roads bring the villages' ways to the hearth: a little more of everything.)
+  return r * (c?.focus === lane ? FOCUS : 1) * (1 + networkBonus(s));
 }
 
 /** What the culture's ideas and forks add (folded into the village's boosts). */

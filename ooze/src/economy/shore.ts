@@ -770,6 +770,21 @@ export function roadTier(v: { road?: Village['road'] }): number {
   return v.road?.tier ?? 0;
 }
 
+/** What a finished road does for its village (nothing, without one): goods go both ways, so
+ * they make more; a vassal on the road is the more loyal; a settlement grows the quicker. */
+export function roadPerks(v: { road?: Village['road'] }): { output: number; loyalty: number; growth: number } {
+  if (!roadDone(v)) return { output: 1, loyalty: 0, growth: 1 };
+  const t = roadTier(v);
+  return { output: 1.15 + t * 0.05, loyalty: 8 + t * 4, growth: 1.3 + t * 0.15 };
+}
+
+/** The roads together: every village of yours they reach adds a little to the work at the
+ * hearth (building, and the culture's practice). Three in a hundred each, to thirty. */
+export function networkBonus(s: ShoreState): number {
+  const n = s.villages.filter((v) => roadDone(v) && ruled(v)).length;
+  return Math.min(0.3, n * 0.03);
+}
+
 /** Days to walk between the hearth and a village (a band's pace), and quicker by road. */
 export const WALK_SPEED = 1.2;
 
@@ -1159,11 +1174,12 @@ export function settledDay(v: Village, now = 0): { food: number; wood: number; r
   const f = FOCI.find((x) => x.id === (v.focus ?? 'mixed')) ?? FOCI[0];
   const thriving = (v.thrive ?? -1) > now;
   const sulking = (v.sulk ?? -1) > now;
-  const k = (thriving ? 1.5 : 1) * (sulking ? 0.5 : 1) * (stageOf(v) === 2 ? 1.25 : 1);
+  const road = roadPerks(v);
+  const k = (thriving ? 1.5 : 1) * (sulking ? 0.5 : 1) * (stageOf(v) === 2 ? 1.25 : 1) * road.output;
   const res: Partial<Record<Res, number>> = {};
   if (f.goods) for (const r of landGoods(v)) res[r] = v.pop * f.goods * k;
   const most = stageOf(v) === 2 ? 100 : 70;
-  return { food: v.pop * f.food * k, wood: v.pop * f.wood * k, res, growth: sulking ? 0 : v.pop * 0.05 * (thriving ? 2 : 1) * Math.max(0, 1 - v.pop / most) };
+  return { food: v.pop * f.food * k, wood: v.pop * f.wood * k, res, growth: sulking ? 0 : v.pop * 0.05 * (thriving ? 2 : 1) * road.growth * Math.max(0, 1 - v.pop / most) };
 }
 
 /** The chief, there in person, sets a settlement's trade. */
@@ -1373,7 +1389,7 @@ function buildWork(s: ShoreState, id: BuildId, at: Pt): number {
 
 /** Seconds left on what's going up, at the pace the builders are going. */
 export function buildLeftSec(s: ShoreState): number {
-  return s.building ? s.building.left / Math.max(0.01, builders(s) * BUILD_RATE) : 0;
+  return s.building ? s.building.left / Math.max(0.01, builders(s) * BUILD_RATE * (1 + networkBonus(s))) : 0;
 }
 
 // ---- Firewood and the woods ----
@@ -1858,11 +1874,12 @@ export function setTax(state: GameState, id: number, tax: number): void {
 export function vassalDay(v: Village): { food: number; wood: number; growth: number; loyalty: number } {
   const t = v.vassal?.tax ?? 0;
   const cap = 70;
+  const road = roadPerks(v);
   return {
-    food: v.pop * 0.9 * t,
-    wood: v.pop * 0.45 * t,
+    food: v.pop * 0.9 * t * road.output,
+    wood: v.pop * 0.45 * t * road.output,
     growth: v.pop * 0.05 * (1 - t * 1.8) * Math.max(0, 1 - v.pop / cap),
-    loyalty: 100 - t * 170,
+    loyalty: 100 - t * 170 + road.loyalty,
   };
 }
 
@@ -2088,7 +2105,7 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
     }
   }
   if (s.building) {
-    s.building.left -= builders(s) * BUILD_RATE * dt;
+    s.building.left -= builders(s) * BUILD_RATE * (1 + networkBonus(s)) * dt;
     if (s.building.left <= 0) finishBuilding(state, s);
   }
   // The elders build, when they're asked to and nothing's going up.
