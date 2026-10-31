@@ -741,7 +741,10 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
   const free = room(s) - s.people.length;
   const homes = (): BuildId | null => (open.has('longhouse') && buildCost(s, 'longhouse') / 12 < buildCost(s, 'hut') / 4 ? 'longhouse' : open.has('hut') ? 'hut' : null);
   const food = (): BuildId | null => (open.has('weir') && buildCost(s, 'weir') < buildCost(s, 'camp') ? 'weir' : open.has('camp') ? 'camp' : null);
-  const stores = (): BuildId | null => (s.food >= foodCap(s) * 0.9 ? (open.has('granary') && buildCost(s, 'granary') / 120 < buildCost(s, 'rack') / 40 ? 'granary' : open.has('rack') ? 'rack' : null) : null);
+  // Stores: whichever holds the most food for its wood (that they have what it needs for).
+  const HOLDS: [BuildId, number][] = [['rack', 40], ['granary', 120], ['pottery', 100], ['salter', 40]];
+  const stores = (): BuildId | null =>
+    s.food >= foodCap(s) * 0.9 ? HOLDS.filter(([id]) => open.has(id) && hasNeeds(s, id)).sort((a, b) => buildCost(s, a[0]) / a[1] - buildCost(s, b[0]) / b[1])[0]?.[0] ?? null : null;
   const p = s.steward?.plan ?? 'balanced';
   const homesW: [ElderWhy, () => BuildId | null] = ['homes', () => (free <= (p === 'homes' ? 4 : 2) ? homes() : null)];
   const foodW: [ElderWhy, () => BuildId | null] = ['food', () => (plan.food > plan.land - (p === 'food' ? 2 : 0) ? food() : null)];
@@ -774,20 +777,28 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
   }
   // Nothing pressing: something useful, if the wood's piling up. By use, not by cheapness (and
   // never another woodpile just to hold more: that's only for a build that won't fit).
+  // (Every building they know is weighed here or above: the hearth, homes, food, stores and
+  // woodpiles, and the forester, when they're needed; the rest when there's wood to spare.)
+  const unseen = s.villages.some((v) => !v.found) || poisOf(s).some((q) => !q.found);
   const useful: [BuildId, boolean][] = [
+    ['council', true],
     ['envoy', s.villages.some((v) => canWin(s, v))],
     ['elders', true],
+    ['thatcher', true],
     ['pool', true],
     ['healer', true],
     ['toolmaker', true],
+    ['salter', true],
+    ['forester', forestShare(s) < 0.8 && count(s, 'forester') < 1 + s.people.length / 30],
+    ['scout', unseen && count(s, 'scout') < 2],
     ['granary', s.food >= foodCap(s) * 0.7],
     ['pottery', s.food >= foodCap(s) * 0.7],
-    ['salter', true],
-    ['thatcher', true],
     ['cutter', plan.wood >= 3 && count(s, 'cutter') < 1 + s.people.length / 30],
+    ['weir', plan.food > plan.land - 3],
     ['camp', plan.food > plan.land - 3],
     ['lookout', true],
     ['trails', true],
+    ['longhouse', free <= 6],
   ];
   // Spare: what's left after a few days' firewood (and, come autumn, the winter's).
   const keep = Math.max(5, burnPerDay(s) * WOOD_KEEP_DAYS) + reserve;
