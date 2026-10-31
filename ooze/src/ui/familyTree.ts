@@ -46,7 +46,8 @@ function node(s: ShoreState, p: ShorePerson | undefined, extra = ''): string {
 }
 
 /** The tree round one villager. */
-export function shoreTree(state: GameState, s: ShoreState, id: number): string {
+/** (`back`: there's a tree to go back to, having come here from it.) */
+export function shoreTree(state: GameState, s: ShoreState, id: number, back = false): string {
   const all = folk(s);
   const me = all.get(id);
   if (!me) return '';
@@ -79,7 +80,7 @@ export function shoreTree(state: GameState, s: ShoreState, id: number): string {
       ${row(partners.length > 1 ? 'Had children with' : 'Partner', partners)}
       ${row('Children', kids, me.died === undefined && !kids.length ? 'None yet' : 'None')}
     </div>
-    <div class="choices"><button class="px-btn" data-treeback="1">‹ Back</button><button class="px-btn gold" data-act="dismiss">Close</button></div>`;
+    <div class="choices">${back ? '<button class="px-btn" data-treeback="1">‹ Back</button>' : ''}<button class="px-btn gold" data-act="dismiss">Close</button></div>`;
 }
 
 /** Where a generation's looks came from: the line, the mate, both, or nowhere (new). */
@@ -103,7 +104,7 @@ const MORPH_WORD: Record<string, string> = { albino: 'white', melanistic: 'black
 
 /** The Creature's line: each generation (newest first), what it was bred with, and where each of
  * its looks came from, so a sudden change of look has its reason. */
-export function lineTree(state: GameState): string {
+export function lineTree(state: GameState, back = false): string {
   const c = state.stages.creature;
   const diet = state.stages.tribal.tribe?.look.diet ?? (dietOf(state, 'creature') ?? 'none');
   const base: CreatureLook = { parts: { ...c.equipped }, diet };
@@ -123,5 +124,5 @@ export function lineTree(state: GameState): string {
     ${four.length ? `<div class="tree-row"><span class="tree-label tiny dim">The four who crossed</span><div class="tree-nodes">${four.map((f) => `<div class="tree-node">${miniIcon(at(f.genes), 2)}<b>${f.name}</b></div>`).join('')}</div></div>` : ''}
     <div class="line-list">${rows || `<p class="tiny dim">${c.generation ? 'Breed with a mate, and the next generation is written down here, with where its looks came from.' : 'No young bred yet: breed with a mate.'}</p>`}
       <div class="line-gen"><div class="line-cross">${miniIcon(at(undefined), 2)}<span class="tiny">Generation 0: came up out of the sea</span></div></div></div>
-    <div class="choices"><button class="px-btn" data-treeback="1">‹ Back</button><button class="px-btn gold" data-act="dismiss">Close</button></div>`;
+    <div class="choices">${back ? '<button class="px-btn" data-treeback="1">‹ Back</button>' : ''}<button class="px-btn gold" data-act="dismiss">Close</button></div>`;
 }

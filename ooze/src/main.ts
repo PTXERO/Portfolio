@@ -1043,7 +1043,8 @@ let treeAt: TreeAt | null = null;
 let treeTrail: TreeAt[] = [];
 function showTree(at: TreeAt): void {
   const s = shoreOf(state);
-  const html = at.line ? lineTree(state) : s && at.id !== undefined ? shoreTree(state, s, at.id) : '';
+  const back = treeTrail.length > 0;
+  const html = at.line ? lineTree(state, back) : s && at.id !== undefined ? shoreTree(state, s, at.id, back) : '';
   if (!html) return;
   showModal(html);
   modal.dataset.kind = 'tree';
@@ -1952,7 +1953,9 @@ function act(el: HTMLElement): void {
       save();
     }
   } else if (el.dataset.tree || el.dataset.treeline) {
-    if (treeAt) treeTrail.push(treeAt);
+    // (From a tree on show: Back returns to it. Opened afresh: a new trail.)
+    if (treeAt && !modal.hidden && modal.dataset.kind === 'tree') treeTrail.push(treeAt);
+    else treeTrail = [];
     showTree(el.dataset.treeline ? { line: true } : { id: Number(el.dataset.tree) });
   } else if (el.dataset.treeback) {
     const back = treeTrail.pop();
