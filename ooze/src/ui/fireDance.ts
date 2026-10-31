@@ -35,7 +35,7 @@ export interface FireDance {
 
 /** A turn danced: whether it was their way, how round it was (0.3 to 1), the streak of their-way
  * turns. Returns what it won (0 once they're worn out). */
-type OnTurn = (theirWay: boolean, round: number, streak: number, at: { x: number; y: number }) => number;
+type OnTurn = (theirWay: boolean, round: number, streak: number, at: { x: number; y: number }) => number | string;
 
 /** Pixels of the drawing: the canvas is this, scaled up to fit. */
 const PW = 160;
@@ -126,7 +126,7 @@ export function startFireDance(canvas: HTMLCanvasElement, v: Village, chief: Cre
         heat = Math.min(1, heat + (theirWay ? 0.16 : 0.07) * round);
         const got = onTurn(theirWay, round, streak, { x: p.sx, y: p.sy });
         for (let i = 0; i < (theirWay ? 10 : 4); i++) sparks.push({ x: cx + (Math.random() - 0.5) * 8, y: cy - 6, vy: 20 + Math.random() * 30, life: 1 });
-        hint(got <= 0 ? 'They\'re worn out.' : theirWay ? (streak >= 3 ? 'Their way, and they love it!' : 'Their way!') : pace < style.pace[0] ? 'Too slow for them.' : pace > style.pace[1] ? 'Too fast for them.' : style.dir === 1 ? 'The other way round: sunwise.' : 'The other way round: against the sun.');
+        hint(typeof got === 'string' ? got : theirWay ? (streak >= 3 ? 'Their way, and they love it!' : 'Their way!') : pace < style.pace[0] ? 'Too slow for them.' : pace > style.pace[1] ? 'Too fast for them.' : style.dir === 1 ? 'The other way round: sunwise.' : 'The other way round: against the sun.');
         turn = 0;
         radii = [];
         turnStart = now;

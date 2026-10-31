@@ -15,7 +15,7 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
-import { setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
+import { chiefNear, setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
 import { WARM_MAX, dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
 import { danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
 import { startFireDance, type FireDance } from './ui/fireDance';
@@ -1106,11 +1106,10 @@ function startDance(): void {
   };
   fireDance = startFireDance(canvas, v, s.look, (theirWay, round, streak, at) => {
     const got = dance(state, id, streak, (theirWay ? 1 : 0.5) * round * 0.6);
-    if (got > 0) {
-      popSound(theirWay ? 0.9 + Math.min(8, streak) * 0.07 : 0.6);
-      scene.float(at.x, at.y - 10, `+${got.toFixed(1)} ${v.vassal ? 'goodwill' : 'trust'}`, theirWay ? '#e8c86a' : '#8acf6a');
-      save();
-    }
+    if (got <= 0) return danceLeft(s, v) <= 0.5 ? 'They\'re worn out.' : !chiefNear(s, v) ? 'The chief has wandered off.' : 'They\'ve stopped dancing.';
+    popSound(theirWay ? 0.9 + Math.min(8, streak) * 0.07 : 0.6);
+    scene.float(at.x, at.y - 10, `+${got.toFixed(1)} ${v.vassal ? 'goodwill' : 'trust'}`, theirWay ? '#e8c86a' : '#8acf6a');
+    save();
     danceInfo();
     return got;
   }, say);
