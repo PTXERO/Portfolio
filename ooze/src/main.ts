@@ -589,10 +589,16 @@ function renderSpellbar(): void {
   spellBar.innerHTML = `<span class="prayer num">${prayer}<i>prayer</i></span>${known.map((sp) => `<button class="px-btn spell-btn${prayer >= sp.cost ? '' : ' poor'}" data-cast="${sp.id}"${prayer >= sp.cost ? '' : ' disabled'} aria-label="${sp.name}">${glyph(sp.gesture, 2)}<span>${sp.cost}</span></button>`).join('')}`;
 }
 
+/** When the hint to save them first showed (the spear's first word waits on it). */
+let saveHintSince = 0;
+
 /** A miracle found: the spear stirs, and shows how it's done. */
 function showDiscovered(): void {
   const ex = state.stages.tribal.tribe?.ex;
   if (!ex?.newPowers?.length || !modal.hidden || cine()) return;
+  // (The spear's first word waits till they've been set to work and the hint to save them has
+  // been up a few seconds: else it covers the very line it follows.)
+  if (ex.newPowers[0] === 'lightning' && ex.day === 0 && (saveHintSince === 0 || performance.now() - saveHintSince < 6000)) return;
   const id = ex.newPowers.shift()!;
   const sp = SPELL[id];
   showModal(`<p class="label dim">${id === 'lightning' ? 'The spear\'s will' : 'The spear stirs'}</p>
@@ -1349,7 +1355,10 @@ function renderHint(): void {
   } else if (state.current === 'tribal') {
     if (!state.stages.tribal.tribe?.awake) text = 'Tap the spear';
     else if (state.stages.tribal.tribe?.ex && state.stages.tribal.tribe.ex.day === 0 && state.stages.tribal.tribe.ex.people.every((p) => p.job === 'rest')) text = 'Set them to work, or they starve';
-    else if (state.stages.tribal.tribe?.ex && !Object.keys(state.stages.tribal.tribe.ex.casts ?? {}).length && !casting) text = 'They live or die on their own. Work miracles to save them';
+    else if (state.stages.tribal.tribe?.ex && !Object.keys(state.stages.tribal.tribe.ex.casts ?? {}).length && !casting) {
+      text = 'They live or die on their own. Work miracles to save them';
+      if (!saveHintSince && modal.hidden) saveHintSince = performance.now();
+    }
   } else if (state.current === 'shore') {
     const s = shoreOf(state);
     if (s && !s.raftTaken && !s.built.length && !s.building) text = 'Break up the raft for wood (in the Build tab)';
