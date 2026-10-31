@@ -321,11 +321,17 @@ export class ShoreScene extends RangeScene {
     let foodLeft = plan.food;
     this.movers = [];
     const look = s.look;
+    // (Those out with the war band are with it, not here.)
+    let awayLeft = s.warband?.fighters ?? 0;
     for (const w of this.walkers) {
       const p = s.people.find((q) => q.id === w.id);
       if (!p) continue;
       const grown = isAdult(s, p);
       const isChief = p.id === s.chief;
+      if (grown && !isChief && awayLeft > 0) {
+        awayLeft--;
+        continue;
+      }
       if (isChief) {
         w.x = s.chiefAt.x;
         w.y = s.chiefAt.y;

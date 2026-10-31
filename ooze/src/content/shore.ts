@@ -21,7 +21,7 @@ export const SHORE_STORY = {
   found: '[STORY] Smoke, and huts, and others like them. Not like them.',
 };
 
-export type BuildId = 'forester' | 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails' | 'council' | 'envoy' | 'pottery' | 'thatcher' | 'salter' | 'healer' | 'toolmaker' | 'watch' | 'palisade' | 'spears' | 'greathearth';
+export type BuildId = 'forester' | 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails' | 'council' | 'envoy' | 'pottery' | 'thatcher' | 'salter' | 'healer' | 'toolmaker' | 'watch' | 'palisade' | 'spears' | 'greathearth' | 'warcamp';
 
 /** What the land gives beyond food and wood: each only where it's found (see HABITATS). */
 export type Res = 'fish' | 'clay' | 'reeds' | 'salt' | 'herbs' | 'timber' | 'flint' | 'stone';
@@ -115,6 +115,7 @@ export const BUILDS: BuildDef[] = [
   { id: 'greathearth', cat: 'homes', name: 'The Great Hearth', does: 'A fire for all of them at once, the first of the Great Works: it closes the Hearth Age. Burns 2 wood a day.', wood: 220, growth: 1, max: 1, after: 'hearth', needs: { stone: 20 }, burn: 2 },
   { id: 'watch', cat: 'war', name: 'Watch post', does: 'Someone always watching the paths in: raiders are seen a day sooner, and the village fights 10% harder at home.', wood: 25, growth: 1, max: 1, after: 'hut', fx: { warn: 1, guard: 0.1 } },
   { id: 'palisade', cat: 'war', name: 'Palisade', does: 'A ring of sharpened stakes on a stone footing round the village: it fights half again as hard at home.', wood: 60, growth: 1, max: 1, after: 'watch', needs: { stone: 30 }, fx: { guard: 0.5 } },
+  { id: 'warcamp', cat: 'war', name: 'War chief\'s hut', does: 'One of them made war chief: while you\'re away they rally the defenders (and hold the palisade, if there is one), and raid by the rule you give them.', wood: 50, growth: 1, max: 1, after: 'watch' },
   { id: 'spears', cat: 'war', name: 'Spear-maker', does: 'Flint heads on long shafts: they fight 20% harder, at home or on a raid.', wood: 35, growth: 1, max: 1, after: 'watch', needs: { flint: 15 }, fx: { arms: 0.2 } },
   { id: 'trails', cat: 'explore', name: 'Trail markers', does: 'Cairns and blazes on the trees: the chief and the scouts walk 10% faster.', wood: 40, growth: 1, max: 1, after: 'scout', fx: { speed: 0.1 } },
 ];

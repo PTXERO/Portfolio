@@ -20,7 +20,7 @@ import { answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, se
 import { battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
 import { lineTree, shoreTree } from './ui/familyTree';
 import { choose, setFocus, type ForkId, type Lane } from './economy/culture';
-import { canStepIn, rally, sendBand, setStance, stepIn, type Stance } from './economy/war';
+import { canStepIn, rally, sendBand, setStance, setWarRule, stepIn, type Stance, type WarRule } from './economy/war';
 import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, say, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
@@ -2022,6 +2022,13 @@ function act(el: HTMLElement): void {
     const s = shoreOf(state);
     if (s) {
       setFocus(s, (el.dataset.focus || undefined) as Lane | undefined);
+      popSound(0.8);
+      save();
+    }
+  } else if (el.dataset.warrule) {
+    const s = shoreOf(state);
+    if (s) {
+      setWarRule(s, el.dataset.warrule as WarRule);
       popSound(0.8);
       save();
     }

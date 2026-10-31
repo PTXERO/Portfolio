@@ -6,7 +6,7 @@ import { buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buil
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import { FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
-import { canStepIn, fighters, hasWalls, holders, hostile, odds, ourStrength, payCost, raidable, theirStrength, type Battle, type Fight } from '../economy/war';
+import { canStepIn, fighters, hasWalls, hasWarChief, type WarRule, holders, hostile, odds, ourStrength, payCost, raidable, theirStrength, type Battle, type Fight } from '../economy/war';
 import type { GameState } from '../economy/types';
 
 const n0 = (v: number) => String(Math.floor(v + 1e-6));
@@ -52,7 +52,7 @@ export function shoreKey(state: GameState, tab: string): string {
     return JSON.stringify(['culture', c?.age, c?.done, c?.focus, c?.forks, c?.asking?.fork, LANES.map((l) => Math.floor((c ? laneShare(c, l.id) : 0) * 20)), s.building?.id === 'greathearth', count(s, 'greathearth')]);
   }
   if (tab === 'build') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor((v ?? 0) / 5)), s.building?.id, s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, canPay(s, b.id)])]);
-  const war = JSON.stringify([s.raid?.seen !== undefined && [s.raid.from, s.raid.rallied, Math.ceil(((s.raid.arrives ?? 0) - s.day - s.clock / DAY_SEC) * 4)], s.warband && [s.warband.to, Math.ceil((s.warband.arrives - s.day - s.clock / DAY_SEC) * 4)], fighters(s)]);
+  const war = JSON.stringify([s.raid?.seen !== undefined && [s.raid.from, s.raid.rallied, Math.ceil(((s.raid.arrives ?? 0) - s.day - s.clock / DAY_SEC) * 4)], s.warband && [s.warband.to, Math.ceil((s.warband.arrives - s.day - s.clock / DAY_SEC) * 4)], fighters(s), s.warRule, hasWarChief(s)]);
   if (tab === 'island') return war + JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor(v ?? 0)), s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop)], Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
   const plan = workPlan(s);
   if (villageView === 'elders' && count(s, 'council')) return JSON.stringify(['elders', s.steward, (s.steward?.on ? elderThink(s) : ELDERS_OFF).text, s.elders?.length, s.elders?.[s.elders.length - 1]?.text, s.building?.id]);
@@ -485,6 +485,18 @@ function warCard(s: ShoreState): string {
       <div class="sub">${cap(v.name)} are coming, about ${r.fighters} of them: here ${soon((r.arrives ?? now) - now)}. ${r.stance === 'pay' ? `They'll be paid ${payCost(v, r.fighters).food} food and ${payCost(v, r.fighters).wood} wood to go away.` : `${r.stance === 'walls' ? 'Behind the palisade, all' : 'All'} ${fighters(s)} grown will fight. ${odds(us, them)}`}</div>
       ${r.rallied && r.stance !== 'pay' ? '<div class="sub dim">Rallied: spears out, the young behind the fire.</div>' : ''}</div>
       <div class="col">${r.rallied || r.stance === 'pay' ? '' : '<button class="px-btn gold" data-rally="1">Rally them</button>'}<button class="px-btn" data-stancecard="1">${r.stance === 'pay' ? 'Pay' : r.stance === 'walls' ? 'Walls' : 'Fight'} ›</button></div></div>`;
+  }
+  // The war chief, and the rule they raid by while you're away.
+  if (hasWarChief(s)) {
+    const rule = s.warRule ?? 'off';
+    const RULES: [WarRule, string, string][] = [
+      ['off', 'Off', 'They raid no one unless you send them.'],
+      ['weaker', 'Weaker only', 'They raid prey only when clearly the stronger.'],
+      ['ready', 'Whenever ready', 'They raid any prey when the odds are even or better.'],
+    ];
+    out += `<div class="card px-box lean"><div class="info"><div class="name">The war chief</div>
+      <div class="sub">${RULES.find((r) => r[0] === rule)![2]} Half the grown go, never when food's short or raiders are coming, with rest between. When raiders come and you're not there, they rally the defenders${hasWalls(s) ? ' and hold the palisade' : ''}.</div></div>
+      <div class="seg">${RULES.map(([id, name]) => `<button class="px-btn${rule === id ? ' on' : ''}" data-warrule="${id}">${name}</button>`).join('')}</div></div>`;
   }
   const w = s.warband;
   const to = w && s.villages.find((x) => x.id === w.to);

@@ -14,7 +14,7 @@ import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
 import { inherit, personal } from './genes';
 import { ageOver, cultureDay, cultureFx, maybeTurn, workReady, type Culture } from './culture';
-import { away, stepWar, warDawn, type Battle, type Fight, type Raid, type WarBand } from './war';
+import { away, stepWar, warDawn, type Battle, type Fight, type Raid, type WarBand, type WarRule } from './war';
 import type { CreatureLook } from '../scene/creatureLook';
 import type { GameState, Genes, TribeState } from './types';
 
@@ -216,6 +216,9 @@ export interface ShoreState {
    * when the next is thought of. */
   raid?: Raid;
   warband?: WarBand;
+  /** The war chief's rule, and when the band last went out. */
+  warRule?: WarRule;
+  lastBand?: number;
   /** A fight going on now (a round every few seconds). */
   fight?: Fight;
   /** Hurt in the fighting: the chief walks slowly till then (days since landfall). */

@@ -3,7 +3,7 @@ import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
 import { answerJoin, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
-import { hostile, raidable, sendBand, fighters, setStance, stepIn, payCost } from '../src/economy/war';
+import { hostile, raidable, sendBand, fighters, setStance, stepIn, payCost, setWarRule } from '../src/economy/war';
 import type { TribeState } from '../src/economy/types';
 
 function fresh(diet = 'grazer', cannibal = false) {
@@ -432,6 +432,30 @@ describe('Raids', () => {
     for (let i = 0; i < 100 && s.fight; i++) shoreTick(state, 2);
     expect(s.fight).toBeUndefined();
     expect(s.battles?.[0].chief).toBeDefined();
+  });
+  it('the war chief raids only by the rule given, and rallies the defence', () => {
+    const { state, s } = grown('hunter', 40);
+    const prey = s.villages.find((v) => !v.cannibal && relation(s, v) === 'prey')!;
+    prey.found = true;
+    prey.pop = 8;
+    now(state, 'watch');
+    now(state, 'warcamp');
+    s.food = 200;
+    for (let i = 0; i < 200; i++) shoreTick(state, 2);
+    expect(s.warband).toBeUndefined();
+    setWarRule(s, 'weaker');
+    for (let i = 0; i < 400 && !s.warband; i++) {
+      shoreTick(state, 2);
+      s.food = 200;
+    }
+    expect(s.warband?.to).toBe(prey.id);
+    // A raid with nothing said: the war chief rallies them.
+    const { state: st2, s: s2 } = grown('grazer', 30);
+    now(st2, 'watch');
+    now(st2, 'warcamp');
+    coming(s2);
+    for (let i = 0; i < 5 && !s2.fight; i++) shoreTick(st2, 2);
+    expect(s2.fight?.rallied).toBe(true);
   });
   it('a raid in progress survives a save', () => {
     const { state, s } = grown('grazer', 30);

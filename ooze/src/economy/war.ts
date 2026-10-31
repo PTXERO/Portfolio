@@ -193,9 +193,38 @@ function bury(state: GameState, s: ShoreState, n: number, home: boolean): number
   return dead.length;
 }
 
+/** The war chief's rule for raiding while you're away. */
+export type WarRule = 'off' | 'weaker' | 'ready';
+/** Days the war chief rests the band between raids. */
+const BAND_REST = 6;
+
+/** Whether there's a war chief. */
+export function hasWarChief(s: ShoreState): boolean {
+  return s.built.some((b) => b.id === 'warcamp');
+}
+
+/** The war chief's raid, by the rule: half the grown against the weakest prey that fits it,
+ * never short of food, never with raiders on the way, and with the band rested. */
+function warChiefRaids(state: GameState, s: ShoreState): void {
+  const rule = s.warRule ?? 'off';
+  if (rule === 'off' || !hasWarChief(s) || s.warband || s.fight || s.raid || s.hungry > 0) return;
+  if (today(s) - (s.lastBand ?? -99) < BAND_REST || s.food < Math.min(foodCap(s) * 0.4, s.people.length * 2)) return;
+  const n = Math.floor(fighters(s) / 2);
+  if (n < 4) return;
+  const need = rule === 'weaker' ? 1.5 : 0.95;
+  const v = s.villages
+    .filter((x) => raidable(s, x))
+    .map((x) => ({ x, r: ourStrength(s, n, false) / Math.max(0.1, theirStrength(x, holders(x))) }))
+    .filter((o) => o.r >= need)
+    .sort((a, b) => b.r - a.r)[0]?.x;
+  if (!v) return;
+  if (sendBand(state, s, v.id, n, true)) record(state, `The war chief led ${n} out against ${v.name}, as ${rule === 'weaker' ? 'they had been told: only the weaker' : 'they had been told: whenever ready'}.`, 'shore', shoreWhen(s));
+}
+
 /** Each day: raids gathering, coming, arriving; the war band reaching where it's going. */
 export function warDawn(state: GameState, s: ShoreState): void {
   const now = today(s);
+  warChiefRaids(state, s);
   // A raid coming: seen watching, then seen coming, then here.
   const r = s.raid;
   if (r) {
@@ -286,6 +315,11 @@ function meet(state: GameState, s: ShoreState, v: Village, r: Raid): void {
     s.news.push(`${cap(v.name)} took the tribute, and went away.`);
     record(state, `${cap(v.name)} came, and were paid ${cost.food} food and ${cost.wood} wood to go away. They went.`, 'shore', shoreWhen(s));
     return;
+  }
+  // (Left unsaid, the war chief rallies them, and holds the palisade if there is one.)
+  if (r.stance === undefined && hasWarChief(s)) {
+    r.rallied = true;
+    if (hasWalls(s)) r.stance = 'walls';
   }
   const walls = r.stance === 'walls' && hasWalls(s);
   if (walls) {
@@ -378,19 +412,25 @@ function flee(state: GameState, s: ShoreState, v: Village): void {
 }
 
 /** Sends a war band (this many of the grown) against a village. */
-export function sendBand(state: GameState, s: ShoreState, id: number, n: number): boolean {
+export function sendBand(state: GameState, s: ShoreState, id: number, n: number, byWarChief = false): boolean {
   const v = s.villages.find((x) => x.id === id);
   if (!v || !raidable(s, v) || s.warband || n < 2 || n > fighters(s)) return false;
   const d = Math.hypot(v.x - s.hearth.x, v.y - s.hearth.y) * 1.3;
   const now = today(s);
   s.warband = { to: id, fighters: n, left: now, arrives: now + d / BAND_SPEED / DAY_SEC };
-  const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
+  s.lastBand = now;
   s.news.push(`The war band set out for ${v.name}.`);
+  if (byWarChief) return true;
+  const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
   record(state, `${chief} sent ${n} out against ${v.name}.`, 'shore', shoreWhen(s));
   return true;
 }
 
 /** How the chief means to meet the raid coming. */
+export function setWarRule(s: ShoreState, rule: WarRule): void {
+  if (hasWarChief(s)) s.warRule = rule;
+}
+
 export function setStance(s: ShoreState, stance: Stance): boolean {
   if (s.raid?.seen === undefined) return false;
   if (stance === 'walls' && !hasWalls(s)) return false;
