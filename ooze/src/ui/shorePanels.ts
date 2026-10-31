@@ -407,7 +407,7 @@ function vassalRow(s: ShoreState, v: Village): string {
   return `<div class="card px-box village vassal"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-vassal">Yours</span></div>
     <div class="sub">${Math.floor(v.pop)} of them, ${mood}. They send ${n0(d.food)} food and ${n0(d.wood)} wood a day${d.growth > 0.05 ? ', and are growing' : d.growth < -0.05 ? ', and are dwindling' : ''}.</div>
     <div class="trust"><span class="tiny dim">Loyal</span><div class="making-bar on loyal"><i style="width: ${loy}%"></i></div></div>
-    <div class="seg tax"><span class="tiny dim">Take</span>${TAXES.map((t) => `<button class="px-btn${Math.abs(v.vassal!.tax - t) < 0.01 ? ' on' : ''}" data-tax="${v.id}:${t}">${Math.round(t * 100)}%</button>`).join('')}</div></div>
+    <div class="seg tax"><span class="tiny dim">Take</span>${TAXES.map((t) => `<button class="px-btn${Math.abs(v.vassal!.tax - t) < 0.01 ? ' on' : ''}" data-tax="${v.id}:${t}">${Math.round(t * 100)}%</button>`).join('')}</div>
     <div class="sub dim tiny">The less you take, the more loyal they grow; and the chief's visits and dancing warm them.</div></div>
     <div class="col">${chiefNear(s, v) ? `<button class="px-btn gold" data-dance="${v.id}"${danceLeft(s, v) > 0.5 ? '' : ' disabled'}>${danceLeft(s, v) > 0.5 ? 'Dance' : 'Worn out'}</button>` : `<button class="px-btn" data-visit="${v.id}">Visit</button>`}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
 }
