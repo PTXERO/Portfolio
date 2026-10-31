@@ -101,7 +101,7 @@ function nextHint(state: GameState, which: (u: UpgradeDef) => boolean): string {
 }
 import type { GameState, PartDef, Role, Stat } from '../economy/types';
 import { ROLES, SLOTS, STATS } from '../economy/types';
-import { creatureIcon, creatureLookOf } from '../scene/creatureLook';
+import { creatureIcon, creatureLookOf, miniIcon } from '../scene/creatureLook';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -310,7 +310,7 @@ export function familyLayout(state: GameState, upgradeCard: (u: UpgradeDef) => s
   const mates = s.mates
     .map(
       (m) => `<div class="card px-box mate">
-        <div class="portrait-sm">${creatureIcon({ ...look, parts: { ...look.parts, ...m.parts }, genes: m.genes }, 2)}</div>
+        <div class="portrait-sm">${miniIcon({ ...look, parts: { ...look.parts, ...m.parts }, genes: m.genes }, 4)}</div>
         <div class="info"><div class="name">${esc(m.name)} <span class="tiny dim">${describe(m.genes)}</span></div>
           <div class="sub">${Object.values(m.parts).map((id) => esc(partDef(id!).name)).join(' · ')}</div></div>
         <div class="mate-btns"><button class="px-btn buy" data-breed="${m.id}">Breed</button><button class="px-btn small" data-release="${m.id}">Let go</button></div>

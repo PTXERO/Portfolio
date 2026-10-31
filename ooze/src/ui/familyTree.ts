@@ -8,7 +8,7 @@ import { dietOf } from '../economy/rates';
 import { PARTS } from '../content/creature';
 import { SEASON_DAYS, SEASON_NAMES, type ShorePerson, type ShoreState } from '../economy/shore';
 import type { GameState, Genes } from '../economy/types';
-import { creatureIcon, miniIcon, type CreatureLook } from '../scene/creatureLook';
+import { miniIcon, type CreatureLook } from '../scene/creatureLook';
 
 const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 
@@ -73,7 +73,7 @@ export function shoreTree(state: GameState, s: ShoreState, id: number, back = fa
           : row('Grandparents', grand, 'Not known')) + row('Parents', parents)
       : `<div class="tree-row"><span class="tree-label tiny dim">Came from</span><div class="tree-nodes"><span class="tiny">${kind ? cap(kind) : 'Not recorded (born before the trees were kept)'}</span></div></div>`;
   return `<p class="label dim">Family tree</p>
-    <div class="tree-me">${creatureIcon(lookOf(s, me), 3)}<div><h3>${me.name}</h3><p class="tiny">${role} · ${describe(me.genes)}</p><p class="tiny dim">${life(me)}</p></div></div>
+    <div class="tree-me">${miniIcon(lookOf(s, me), 5)}<div><h3>${me.name}</h3><p class="tiny">${role} · ${describe(me.genes)}</p><p class="tiny dim">${life(me)}</p></div></div>
     <div class="tree">
       ${above}
       ${row('Brothers & sisters', sibs)}

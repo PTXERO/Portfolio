@@ -62,7 +62,7 @@ import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
 import { playCrossing } from './ui/crossing';
 import { cue, glug, hushDrone, popSound, setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
-import { creatureIcon, creatureLookOf, miniIcon } from './scene/creatureLook';
+import { creatureLookOf, miniIcon } from './scene/creatureLook';
 import { describe } from './economy/genes';
 import { glyph, panWeb, pickIdea, webTransform, webView, zoomWeb } from './ui/tribePanels';
 import { record } from './economy/chronicle';
@@ -1431,7 +1431,7 @@ function lastLookCard(): string {
   const c = state.stages.creature;
   const look = creatureLookOf(state);
   return `<p class="label dim">Before you look up</p>
-    <div class="tree-me">${creatureIcon(look, 3)}<div><h3>Your line</h3><p class="tiny">Generation ${c.generation} · ${describe(c.genes)}</p><p class="tiny dim">A herd of ${Math.floor(c.pop)}</p></div></div>
+    <div class="tree-me">${miniIcon(look, 5)}<div><h3>Your line</h3><p class="tiny">Generation ${c.generation} · ${describe(c.genes)}</p><p class="tiny dim">A herd of ${Math.floor(c.pop)}</p></div></div>
     <p><b>There's no going back.</b> What comes next ends the Creature's island for good: no more breeding, no more mates, no more parts.</p>
     <p class="dim">The line goes on exactly as it is now: these looks, these parts, these generations. Its survivors carry them into what comes after, and their children after them.</p>
     <p class="dim tiny">If you'd still like another generation, a new mate's markings, or a different look, stay a while longer.</p>
