@@ -775,6 +775,7 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
   // Nothing pressing: something useful, if the wood's piling up. By use, not by cheapness (and
   // never another woodpile just to hold more: that's only for a build that won't fit).
   const useful: [BuildId, boolean][] = [
+    ['envoy', s.villages.some((v) => canWin(s, v))],
     ['elders', true],
     ['pool', true],
     ['healer', true],
@@ -788,9 +789,8 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
     ['lookout', true],
     ['trails', true],
   ];
-  // Spare: what's left after it would still keep a fair stock by (a quarter of what the
-  // woodpiles hold, at least 20), and the winter's fires.
-  const keep = Math.max(20, woodCap(s) * 0.25) + reserve;
+  // Spare: what's left after a few days' firewood (and, come autumn, the winter's).
+  const keep = Math.max(5, burnPerDay(s) * WOOD_KEEP_DAYS) + reserve;
   const next = useful.find(([id, worth]) => worth && open.has(id) && hasNeeds(s, id))?.[0];
   if (next && s.wood + 0.5 - buildCost(s, next) >= keep) return { pick: next, why: 'spare', text: `"Nothing presses, and there's wood to spare. ${An(next)} would serve us."` };
   // What they'd see to next, and when.
@@ -940,18 +940,21 @@ export function roomLeft(s: ShoreState): number {
 }
 
 /** A gift of food: trust, twice as much with the chief there to give it. */
-export function gift(state: GameState, id: number): number {
+export function gift(state: GameState, id: number, amount?: number): number {
   const s = shoreOf(state);
   const v = s?.villages.find((x) => x.id === id);
-  if (!s || !v || !canWin(s, v) || s.food < giftCost(v)) return 0;
-  s.food -= giftCost(v);
-  const gain = Math.round(GIFT_TRUST * (1 + boosts(s).gift) * (chiefNear(s, v) ? 2 : 1));
+  if (!s || !v || !canWin(s, v)) return 0;
+  // (A smaller gift, from the envoy when there's not a full one to spare, wins less.)
+  const give = Math.min(giftCost(v), amount ?? giftCost(v));
+  if (give <= 0 || s.food < give) return 0;
+  s.food -= give;
+  const gain = GIFT_TRUST * (1 + boosts(s).gift) * (chiefNear(s, v) ? 2 : 1) * (give / giftCost(v));
   if (!v.gifted) {
     v.gifted = true;
-    record(state, `They brought ${cap(v.name)} gifts of food for the first time.`, 'shore', shoreWhen(s));
+    record(state, `They brought ${v.name} gifts of food for the first time.`, 'shore', shoreWhen(s));
   }
   addTrust(state, s, v, gain);
-  return gain;
+  return Math.round(gain);
 }
 
 function addTrust(state: GameState, s: ShoreState, v: Village, n: number): void {
@@ -965,6 +968,10 @@ function addTrust(state: GameState, s: ShoreState, v: Village, n: number): void 
     record(state, `${cap(v.name)} were won over, and would join them, but there was no room.`, 'shore', shoreWhen(s));
   }
 }
+
+/** Days of eating the envoy leaves in the stores; days of firewood the elders keep back. */
+const FOOD_KEEP_DAYS = 3;
+const WOOD_KEEP_DAYS = 4;
 
 /** Patience: days they'll wait for room, once asked to. (For your answer they wait as long as
  * it takes: nothing's decided for you while you're away.) */
@@ -1204,9 +1211,12 @@ function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>
   // The envoy's day: a gift to the nearest kin being won over, if there's food to spare.
   if (count(s, 'envoy') && s.envoyDay !== s.day) {
     const v = s.villages.filter((x) => canWin(s, x)).sort((a, b) => Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y) - Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y))[0];
-    if (v && s.food >= giftCost(v) + 20) {
+    // What's spare: the food past three days' eating. A full gift if there's that much; else
+    // what there is, if it's half a gift or more.
+    const spare = s.food - plan.eat * FOOD_KEEP_DAYS;
+    if (v && spare >= giftCost(v) * 0.5) {
       s.envoyDay = s.day;
-      gift(state, v.id);
+      gift(state, v.id, spare);
     }
   }
   // Old age.
