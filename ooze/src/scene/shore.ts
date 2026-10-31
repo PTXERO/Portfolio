@@ -7,7 +7,7 @@ import { PAL } from '../art/sprites';
 import { Biome, CELL, isLand, type Island, type Pt } from '../economy/island';
 import { raidTarget } from '../economy/war';
 import { findPath } from '../economy/paths';
-import { DAY_SEC, terrainReady, walkTo, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
+import { DAY_SEC, terrainReady, walkTo, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, stageOf, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
 import type { GameState, Genes } from '../economy/types';
 import type { CreatureLook } from './creatureLook';
 import type { BuildId } from '../content/shore';
@@ -990,7 +990,8 @@ export class ShoreScene extends RangeScene {
       const kind = v.habitat ?? 'meadow';
       for (let k = 0; k < huts; k++) {
         const a = k * 2.4 + v.id;
-        const rr = 4 + (k % 3) * 2.5;
+        // (Further out as there come to be more of them, so a town spreads.)
+        const rr = 4 + (k % 3) * 2.5 + Math.floor(k / 9) * 3;
         const hx = v.x + Math.cos(a) * rr;
         const hy = v.y + Math.sin(a) * rr * 0.75;
         const HX = Math.round(this.sx(hx));
@@ -1012,10 +1013,45 @@ export class ShoreScene extends RangeScene {
           b.fillRect(X - z, Y - (3 + (f % 2)) * z, 2 * z, (2 + (f % 2)) * z);
         },
       });
-      // Their people, about their village (a few of them).
+      // A settlement of yours, grown: a woodpile and a drying rack (a village), a fence round it
+      // all (a town).
+      const stage = v.settled !== undefined ? stageOf(v) : 0;
+      if (stage >= 1) {
+        for (const [id, dx, dy] of [['woodpile', -3, 3], ['rack', 3, 3]] as const) {
+          const px = v.x + dx;
+          const py = v.y + dy;
+          const PX = Math.round(this.sx(px));
+          const PY = Math.round(this.py(px, py));
+          sprites.push({ y: py, at: { x: px, y: py }, draw: () => this.drawBuild(b, id, PX, PY, z, close, 1, t, s) });
+        }
+      }
+      if (stage >= 2) {
+        const R = 4 + 2 * 2.5 + Math.floor(huts / 9) * 3 + 3;
+        for (let k = 0; k < 28; k++) {
+          const a = (k / 28) * Math.PI * 2;
+          const fx = v.x + Math.cos(a) * R;
+          const fy = v.y + Math.sin(a) * R * 0.75;
+          if (!isLand(this.island!, fx, fy)) continue;
+          const FX = Math.round(this.sx(fx));
+          const FY = Math.round(this.py(fx, fy));
+          sprites.push({
+            y: fy,
+            at: { x: fx, y: fy },
+            draw: () => {
+              b.fillStyle = '#5a4030';
+              b.fillRect(FX, FY - 4 * z, z, 4 * z);
+              b.fillStyle = '#7a5a3a';
+              b.fillRect(FX - z, FY - 3 * z, 3 * z, z);
+            },
+          });
+        }
+      }
+      // Their people, about their village (a few of them; more as it grows).
       let list = this.locals.get(v.id);
+      const want = Math.min(16, Math.ceil(v.pop / 3));
+      if (list && list.length < want && v.settled !== undefined) list = undefined;
       if (!list) {
-        list = Array.from({ length: Math.min(10, Math.ceil(v.pop / 3)) }, (_, k) => ({ id: k, x: v.x + (hash(k + v.id * 31, 7) - 0.5) * 8, y: v.y + (hash(k + v.id * 31, 8) - 0.5) * 6, goal: null, wait: hash(k, 9) * 3, ph: hash(k, 10) * 9, job: 'home' as const }));
+        list = Array.from({ length: v.settled !== undefined ? want : Math.min(10, want) }, (_, k) => ({ id: k, x: v.x + (hash(k + v.id * 31, 7) - 0.5) * 8, y: v.y + (hash(k + v.id * 31, 8) - 0.5) * 6, goal: null, wait: hash(k, 9) * 3, ph: hash(k, 10) * 9, job: 'home' as const }));
         this.locals.set(v.id, list);
       }
       for (const w of list) {

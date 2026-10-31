@@ -144,7 +144,17 @@ export interface Village {
    * is quicker by far. */
   road?: { done: number; need: number };
   /** What a settlement's gathered today, to send to the hearth at dawn. */
-  load?: { food: number; wood: number };
+  load?: { food: number; wood: number; res?: Partial<Record<Res, number>> };
+  /** A settlement's work (chosen by the chief, there in person): its trade. */
+  focus?: SettleFocus;
+  /** What a settlement's asking of the hearth, and till when; when it'll next ask. */
+  ask?: SettleAsk;
+  askNext?: number;
+  /** Helped, they thrive (till this day); let down, they sulk (till this day). */
+  thrive?: number;
+  sulk?: number;
+  /** How big it's grown, last we looked: 0 a camp, 1 a village, 2 a town. */
+  stage?: number;
   /** Won over, but there wasn't room: waiting for your answer (since this day), or waiting for
    * room (since this day; they lose patience). */
   asking?: number;
@@ -265,7 +275,7 @@ export interface ShoreState {
   /** Raiders running home after a fight; and what their fallen left lying (for a while). */
   retreat?: { from: number; n: number; left: number; arrives: number; sx?: number; sy?: number };
   /** Goods on the road from the settlements to the hearth. */
-  convoys?: { from: number; food: number; wood: number; left: number; arrives: number }[];
+  convoys?: { from: number; food: number; wood: number; res?: Partial<Record<Res, number>>; left: number; arrives: number }[];
   loot?: { x: number; y: number; n: number; until: number };
   /** A fight going on now (a round every few seconds). */
   fight?: Fight;
@@ -816,20 +826,138 @@ function stepRoads(state: GameState, s: ShoreState, k: number): void {
   }
 }
 
-/** A settlement's day: what it sends to the hearth, and how it grows. */
-export function settledDay(v: Village): { food: number; wood: number; growth: number } {
-  return { food: v.pop * 0.45, wood: v.pop * 0.22, growth: v.pop * 0.05 * Math.max(0, 1 - v.pop / 70) };
+/** A settlement's trade: a bit of everything, or mostly one thing. */
+export type SettleFocus = 'mixed' | 'food' | 'wood' | 'goods';
+export const FOCI: { id: SettleFocus; name: string; food: number; wood: number; goods: number }[] = [
+  { id: 'mixed', name: 'A bit of all', food: 0.45, wood: 0.22, goods: 0 },
+  { id: 'food', name: 'Food', food: 0.7, wood: 0.08, goods: 0 },
+  { id: 'wood', name: 'Wood', food: 0.2, wood: 0.5, goods: 0 },
+  { id: 'goods', name: 'Their land\'s goods', food: 0.25, wood: 0.08, goods: 0.08 },
+];
+
+/** What a settlement asks: food, wood, something of what the hearth has, or the chief in person. */
+export type SettleAsk = { kind: 'food' | 'wood' | 'visit' | Res; n: number; since: number; until: number };
+
+/** How big a settlement's grown: a camp, a village (15), a town (35). */
+export const STAGES = ['camp', 'village', 'town'] as const;
+export function stageOf(v: Village): number {
+  return v.pop >= 35 ? 2 : v.pop >= 15 ? 1 : 0;
+}
+
+/** What their land gives besides fish (the goods a settlement can make its trade). */
+export function landGoods(v: Village): Res[] {
+  return v.habitat ? RES_OF[v.habitat].filter((r) => r !== 'fish') : [];
+}
+
+/** A settlement's day: what it sends to the hearth, and how it grows. (More, thriving, or a
+ * town; less, sulking. A town holds more of them.) */
+export function settledDay(v: Village, now = 0): { food: number; wood: number; res: Partial<Record<Res, number>>; growth: number } {
+  const f = FOCI.find((x) => x.id === (v.focus ?? 'mixed')) ?? FOCI[0];
+  const thriving = (v.thrive ?? -1) > now;
+  const sulking = (v.sulk ?? -1) > now;
+  const k = (thriving ? 1.5 : 1) * (sulking ? 0.5 : 1) * (stageOf(v) === 2 ? 1.25 : 1);
+  const res: Partial<Record<Res, number>> = {};
+  if (f.goods) for (const r of landGoods(v)) res[r] = v.pop * f.goods * k;
+  const most = stageOf(v) === 2 ? 100 : 70;
+  return { food: v.pop * f.food * k, wood: v.pop * f.wood * k, res, growth: sulking ? 0 : v.pop * 0.05 * (thriving ? 2 : 1) * Math.max(0, 1 - v.pop / most) };
+}
+
+/** The chief, there in person, sets a settlement's trade. */
+export function setSettleFocus(state: GameState, id: number, focus: SettleFocus): boolean {
+  const s = shoreOf(state);
+  const v = s?.villages.find((x) => x.id === id);
+  if (!s || !v || v.settled === undefined || v.gone || !chiefNear(s, v)) return false;
+  if (focus === 'goods' && !landGoods(v).length) return false;
+  if ((v.focus ?? 'mixed') === focus) return true;
+  v.focus = focus;
+  record(state, `${s.people.find((p) => p.id === s.chief)?.name ?? 'The chief'} asked ${v.name} to turn their hands to ${FOCI.find((x) => x.id === focus)!.name.toLowerCase()}.`, 'shore', shoreWhen(s));
+  return true;
+}
+
+/** Days a settlement waits on what it asked; days helped settlements thrive, and let-down ones
+ * sulk. */
+const ASK_DAYS = 4;
+const THRIVE_DAYS = SEASON_DAYS;
+const SULK_DAYS = 3;
+
+/** What the hearth would hand over, for what's asked. */
+function askHave(s: ShoreState, a: SettleAsk): number {
+  return a.kind === 'food' ? s.food : a.kind === 'wood' ? s.wood : a.kind === 'visit' ? 0 : s.res?.[a.kind] ?? 0;
+}
+export function canAnswer(s: ShoreState, v: Village): boolean {
+  return !!v.ask && v.ask.kind !== 'visit' && askHave(s, v.ask) >= v.ask.n;
+}
+
+/** Each dawn, a settlement may ask something of the hearth (now and then), and one kept waiting
+ * too long sulks. */
+function settledAsks(state: GameState, s: ShoreState): void {
+  const now = s.day + s.clock / DAY_SEC;
+  for (const v of s.villages) {
+    if (v.settled === undefined || v.gone) continue;
+    // Grown into a village, a town: worth telling.
+    const st = stageOf(v);
+    if (st > (v.stage ?? 0)) {
+      s.news.push(`${cap(v.name)} have grown into a ${STAGES[st]}.`);
+      record(state, `${cap(v.name)} grew into a ${STAGES[st]}${st === 2 ? ', with a fence round it and more to give' : ''}.`, 'shore', shoreWhen(s));
+    }
+    v.stage = Math.max(v.stage ?? 0, st);
+    if (v.ask && now > v.ask.until) {
+      v.sulk = now + SULK_DAYS;
+      s.news.push(`${cap(v.name)} are sore that no one came.`);
+      record(state, `${cap(v.name)} asked the hearth for ${askWords(v.ask)}, and no one came. They were sore about it.`, 'shore', shoreWhen(s));
+      v.ask = undefined;
+      v.askNext = now + 5;
+      continue;
+    }
+    const rand = rng(s.seed * 41 + s.day * 13 + v.id * 3);
+    v.askNext ??= v.settled + 3 + rand() * 4;
+    if (v.ask || now < v.askNext) continue;
+    const kinds: SettleAsk['kind'][] = ['food', 'wood', 'visit'];
+    for (const r of Object.keys(s.res ?? {}) as Res[]) if ((s.res?.[r] ?? 0) >= 6 && !landGoods(v).includes(r) && r !== 'fish') kinds.push(r);
+    const kind = kinds[Math.floor(rand() * kinds.length)];
+    const n = kind === 'food' ? Math.round(10 + v.pop * 0.8) : kind === 'wood' ? Math.round(8 + v.pop * 0.5) : kind === 'visit' ? 0 : 6;
+    v.ask = { kind, n, since: now, until: now + ASK_DAYS };
+    s.news.push(`${cap(v.name)} ask the hearth for ${askWords(v.ask)}.`);
+  }
+}
+
+export function askWords(a: SettleAsk): string {
+  return a.kind === 'visit' ? 'a visit from the chief' : `${a.n} ${a.kind === 'food' || a.kind === 'wood' ? a.kind : RES_NAME[a.kind].toLowerCase()}`;
+}
+
+/** What's asked, given: they thrive for a season, and now and then one of their young comes to
+ * live by the hearth. */
+export function answerAsk(state: GameState, id: number): boolean {
+  const s = shoreOf(state);
+  const v = s?.villages.find((x) => x.id === id);
+  if (!s || !v?.ask) return false;
+  const a = v.ask;
+  if (a.kind === 'visit' ? !chiefNear(s, v) : askHave(s, a) < a.n) return false;
+  if (a.kind === 'food') s.food -= a.n;
+  else if (a.kind === 'wood') s.wood -= a.n;
+  else if (a.kind !== 'visit') s.res![a.kind] = (s.res![a.kind] ?? 0) - a.n;
+  const now = s.day + s.clock / DAY_SEC;
+  v.ask = undefined;
+  v.sulk = undefined;
+  v.thrive = now + THRIVE_DAYS;
+  v.askNext = now + 5 + rng(s.seed + v.id * 7 + s.day)() * 5;
+  s.news.push(`${cap(v.name)} are glad of it, and thriving.`);
+  record(state, `${a.kind === 'visit' ? `${s.people.find((p) => p.id === s.chief)?.name ?? 'The chief'} came to ${v.name} when they asked` : `The hearth sent ${v.name} ${askWords(a)} when they asked`}, and they thrived for it.`, 'shore', shoreWhen(s));
+  return true;
 }
 
 /** Goods on the road from the settlements (and the vassals) to the hearth. */
-function stepSettled(s: ShoreState, k: number): void {
+function stepSettled(state: GameState, s: ShoreState, k: number): void {
   for (const v of s.villages) {
     if (v.settled === undefined || v.gone) continue;
-    const d = settledDay(v);
+    const d = settledDay(v, s.day + s.clock / DAY_SEC);
     v.pop += d.growth * k;
     const load = (v.load ??= { food: 0, wood: 0 });
     load.food += d.food * k;
     load.wood += d.wood * k;
+    for (const [r, n] of Object.entries(d.res) as [Res, number][]) (load.res ??= {})[r] = (load.res[r] ?? 0) + n * k;
+    // (Asked for the chief: the chief's being there is the answer.)
+    if (v.ask?.kind === 'visit' && chiefNear(s, v)) answerAsk(state, v.id);
   }
 }
 
@@ -838,7 +966,8 @@ function sendConvoys(s: ShoreState): void {
   const now = s.day + s.clock / DAY_SEC;
   for (const v of s.villages) {
     if (!v.load || (v.load.food < 0.5 && v.load.wood < 0.5)) continue;
-    (s.convoys ??= []).push({ from: v.id, food: Math.round(v.load.food * 10) / 10, wood: Math.round(v.load.wood * 10) / 10, left: now, arrives: now + travelDays(s, v) });
+    const res = v.load.res && Object.fromEntries(Object.entries(v.load.res).map(([r, n]) => [r, Math.round(n * 10) / 10]));
+    (s.convoys ??= []).push({ from: v.id, food: Math.round(v.load.food * 10) / 10, wood: Math.round(v.load.wood * 10) / 10, res, left: now, arrives: now + travelDays(s, v) });
     v.load = undefined;
   }
 }
@@ -850,6 +979,7 @@ function stepConvoys(s: ShoreState): void {
     if (c.arrives > now) continue;
     s.food = Math.min(foodCap(s), s.food + c.food);
     s.wood = Math.min(woodCap(s), s.wood + c.wood);
+    for (const [r, n] of Object.entries(c.res ?? {}) as [Res, number][]) (s.res ??= {})[r] = Math.min(RES_CAP, (s.res[r] ?? 0) + n);
   }
   s.convoys = s.convoys.filter((c) => c.arrives > now);
 }
@@ -1616,7 +1746,7 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
   stepResources(s, k);
   // (From older days: won over, and waiting on room or an answer. They needn't now.)
   for (const v of s.villages) if ((v.waiting !== undefined || v.asking !== undefined) && !v.gone) settle(state, s, v);
-  stepSettled(s, k);
+  stepSettled(state, s, k);
   stepRoads(state, s, k);
   stepConvoys(s);
   // A vassal's loyalty warms while the chief's with them (three a day).
@@ -1669,6 +1799,7 @@ function born(state: GameState, s: ShoreState): void {
 function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>): void {
   warDawn(state, s);
   sendConvoys(s);
+  settledAsks(state, s);
   vassalMoves(state, s);
   pruneDead(s);
   // (Undelivered news is only ever the latest few.)

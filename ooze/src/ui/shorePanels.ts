@@ -2,7 +2,7 @@
 // homes, stores, work, exploring) and the Island (the villages found out there, and the scouts).
 
 import { BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
-import { centre, hearthMost, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { askWords, canAnswer, FOCI, landGoods, stageOf, STAGES, centre, hearthMost, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, RES_CAP, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import { FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
@@ -54,7 +54,7 @@ export function shoreKey(state: GameState, tab: string): string {
   }
   if (tab === 'build') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor((v ?? 0) / 5)), s.building?.id, s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, canPay(s, b.id)])]);
   const war = JSON.stringify([s.raid?.help, s.raid?.allies?.length, s.raid?.seen !== undefined && [s.raid.from, s.raid.rallied, Math.ceil(((s.raid.arrives ?? 0) - s.day - s.clock / DAY_SEC) * 4)], s.warband && [s.warband.to, Math.ceil((s.warband.arrives - s.day - s.clock / DAY_SEC) * 4)], fighters(s), s.warRule, hasWarChief(s)]);
-  if (tab === 'island') return war + JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor(v ?? 0)), s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop)], v.settled !== undefined && Math.floor(v.pop), v.road && Math.floor((v.road.done / v.road.need) * 20), ruled(v) && canRoad(s, v), Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
+  if (tab === 'island') return war + JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor(v ?? 0)), s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop)], v.settled !== undefined && [Math.floor(v.pop), v.focus, v.ask && [v.ask.kind, Math.ceil(v.ask.until - s.day - s.clock / DAY_SEC), canAnswer(s, v)], (v.thrive ?? 0) > s.day, (v.sulk ?? 0) > s.day, chiefNear(s, v)], v.road && Math.floor((v.road.done / v.road.need) * 20), ruled(v) && canRoad(s, v), Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v)]), s.chief]);
   const plan = workPlan(s);
   if (villageView === 'elders' && count(s, 'council')) return JSON.stringify(['elders', s.steward, (s.steward?.on ? elderThink(s) : ELDERS_OFF).text, s.elders?.length, s.elders?.[s.elders.length - 1]?.text, s.building?.id]);
   if (villageView === 'people') return JSON.stringify(['people', s.people.length, s.chief, Math.floor(s.day / 2), s.hungry]);
@@ -425,12 +425,25 @@ function roadLine(s: ShoreState, v: Village): { line: string; button: string } {
 }
 
 function settledRow(s: ShoreState, v: Village): string {
-  const d = settledDay(v);
+  const now = s.day + s.clock / DAY_SEC;
+  const d = settledDay(v, now);
   const road = roadLine(s, v);
-  return `<div class="card px-box village vassal"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">Settlement</span></div>
-    <div class="sub">${Math.floor(v.pop)} of them, in their own village. They send ${n0(d.food)} food and ${n0(d.wood)} wood a day${d.growth > 0.05 ? ', and are growing' : ''}.</div>
+  const near = chiefNear(s, v);
+  const st = stageOf(v);
+  const goods = Object.entries(d.res).filter(([, n]) => (n ?? 0) >= 0.5).map(([r, n]) => `${n0(n!)} ${RES_NAME[r as keyof typeof RES_NAME].toLowerCase()}`);
+  const mood = (v.thrive ?? -1) > now ? ' <b class="good">Thriving.</b>' : (v.sulk ?? -1) > now ? ' <b class="starving">Sulking: let down.</b>' : '';
+  const focus = FOCI.find((f) => f.id === (v.focus ?? 'mixed'))!;
+  const foci = FOCI.filter((f) => f.id !== 'goods' || landGoods(v).length);
+  const ask = v.ask
+    ? `<div class="sub ask"><b>They ask for ${askWords(v.ask)}</b> (${Math.max(0, Math.ceil(v.ask.until - now))} day${Math.ceil(v.ask.until - now) === 1 ? '' : 's'} left). Helped, they'll thrive a season; let down, they'll sulk.</div>`
+    : '';
+  const askBtn = v.ask ? (v.ask.kind === 'visit' ? (near ? '' : `<button class="px-btn gold" data-visit="${v.id}">Go to them</button>`) : `<button class="px-btn${canAnswer(s, v) ? ' gold' : ''}" data-answer="${v.id}"${canAnswer(s, v) ? '' : ' disabled'}>Send ${askWords(v.ask)}</button>`) : '';
+  return `<div class="card px-box village vassal"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">${cap(STAGES[st])}</span></div>
+    <div class="sub">${Math.floor(v.pop)} of them, yours, in their own ${STAGES[st]}.${mood} They send ${n0(d.food)} food, ${n0(d.wood)} wood${goods.length ? `, ${goods.join(', ')}` : ''} a day${d.growth > 0.05 ? ', and are growing' : ''}.${st < 2 ? ` At ${st ? 35 : 15} they'll be a ${STAGES[st + 1]}${st ? ' (more to give, and room to grow)' : ''}.` : ''}</div>
+    ${ask}
+    ${near ? `<div class="seg tax"><span class="tiny dim">Their work</span>${foci.map((f) => `<button class="px-btn${f.id === focus.id ? ' on' : ''}" data-sfocus="${v.id}:${f.id}">${f.name}</button>`).join('')}</div>` : `<div class="sub dim tiny">Their work: ${focus.name.toLowerCase()}. The chief can change it there in person.</div>`}
     ${road.line}</div>
-    <div class="col">${road.button}${chiefNear(s, v) ? '' : `<button class="px-btn" data-visit="${v.id}">Visit</button>`}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
+    <div class="col">${askBtn}${road.button}${near || (v.ask?.kind === 'visit') ? '' : `<button class="px-btn" data-visit="${v.id}">Visit</button>`}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
 }
 
 function vassalRow(s: ShoreState, v: Village): string {

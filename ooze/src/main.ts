@@ -15,7 +15,7 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
-import { chiefNear, setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
+import { answerAsk, setSettleFocus, type SettleFocus, chiefNear, setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
 import { WARM_MAX, dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
 import { danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
 import { startFireDance, type FireDance } from './ui/fireDance';
@@ -2087,6 +2087,17 @@ function act(el: HTMLElement): void {
       walkChief(state, { x: v.x + 4, y: v.y + 4 });
       scene.shoreScene.follow();
       modal.hidden = true;
+    }
+  } else if (el.dataset.sfocus) {
+    const [id, f] = el.dataset.sfocus.split(':');
+    if (setSettleFocus(state, Number(id), f as SettleFocus)) {
+      popSound(0.8);
+      save();
+    }
+  } else if (el.dataset.answer) {
+    if (answerAsk(state, Number(el.dataset.answer))) {
+      cue('chime', 0.4);
+      save();
     }
   } else if (el.dataset.road) {
     if (startRoad(state, Number(el.dataset.road))) {

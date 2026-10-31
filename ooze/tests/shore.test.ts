@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { poiHere, answerJoin, onRoad, roadCells, elderThink, HEARTH_MOST, hearthMost, roomLeft, woodCap, roadCost, roadDone, startRoad, totalCritters, travelDays, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { poiHere, answerJoin, answerAsk, setSettleFocus, settledDay, stageOf, onRoad, roadCells, elderThink, HEARTH_MOST, hearthMost, roomLeft, woodCap, roadCost, roadDone, startRoad, totalCritters, travelDays, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import { hostile, raidable, sendBand, fighters, setStance, stepIn, payCost, setWarRule } from '../src/economy/war';
 import type { TribeState } from '../src/economy/types';
@@ -668,6 +668,52 @@ describe('Settlements and roads', () => {
     expect(roadCells(s).size).toBeGreaterThan(20);
     expect(onRoad(s, s.hearth)).toBe(true);
     expect(onRoad(s, { x: mid.x + 80, y: mid.y + 80 })).toBe(false);
+  });
+  it('the chief, there in person, sets a settlement to a trade; what it sends changes', () => {
+    const { state, s, v } = setup();
+    v.habitat = 'mountain';
+    const mixed = settledDay(v);
+    expect(setSettleFocus(state, v.id, 'wood')).toBe(false);
+    s.chiefAt = { x: v.x + 2, y: v.y + 2 };
+    s.chiefTo = null;
+    expect(setSettleFocus(state, v.id, 'wood')).toBe(true);
+    expect(settledDay(v).wood).toBeGreaterThan(mixed.wood * 2);
+    expect(setSettleFocus(state, v.id, 'goods')).toBe(true);
+    expect(settledDay(v).res.stone).toBeGreaterThan(0);
+  });
+  it('a settlement asks things of the hearth: helped, it thrives; let down, it sulks', () => {
+    const { state, s, v } = setup();
+    s.food = 500;
+    s.wood = 500;
+    for (let i = 0; i < 12 && !v.ask; i++) shoreTick(state, DAY_SEC);
+    expect(v.ask).toBeDefined();
+    if (v.ask!.kind === 'visit') {
+      s.chiefAt = { x: v.x + 2, y: v.y + 2 };
+      s.chiefTo = null;
+      shoreTick(state, 2);
+    } else expect(answerAsk(state, v.id)).toBe(true);
+    expect(v.ask).toBeUndefined();
+    const now = s.day + s.clock / DAY_SEC;
+    expect(v.thrive).toBeGreaterThan(now);
+    expect(settledDay(v, now).food).toBeGreaterThan(settledDay(v, now + 100).food);
+    // The next one, left unanswered (the chief far away).
+    s.chiefAt = { ...s.hearth };
+    for (let i = 0; i < 30 && v.sulk === undefined; i++) {
+      shoreTick(state, DAY_SEC);
+      if (v.ask?.kind === 'visit') v.ask.kind = 'wood';
+    }
+    expect(v.sulk).toBeDefined();
+  });
+  it('a settlement grows from a camp to a village to a town, and a town gives more', () => {
+    const { v } = setup();
+    v.pop = 10;
+    expect(stageOf(v)).toBe(0);
+    v.pop = 20;
+    expect(stageOf(v)).toBe(1);
+    const at34 = (v.pop = 34.9, settledDay(v).food / v.pop);
+    v.pop = 35;
+    expect(stageOf(v)).toBe(2);
+    expect(settledDay(v).food / v.pop).toBeGreaterThan(at34);
   });
   it('a settlement counts toward your critters, and is no one to raid or be raided by', async () => {
     const war = await import('../src/economy/war');
