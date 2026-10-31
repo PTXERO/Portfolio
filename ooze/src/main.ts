@@ -2155,6 +2155,9 @@ function act(el: HTMLElement): void {
         window.setTimeout(() => (extinctEl.hidden = true), 600);
         startShore(state);
         record(state, 'They came ashore on a new island. There was smoke inland.', 'shore', 'Landfall');
+        // (The story's over: the interface comes back.)
+        alone = false;
+        syncCine();
         scene.reload();
         panelKey = '';
         goalKey = '';
