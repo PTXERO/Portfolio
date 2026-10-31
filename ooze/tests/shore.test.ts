@@ -510,3 +510,23 @@ describe('Landmarks, found and finished', () => {
     expect(poiHere(s)).toBeUndefined();
   });
 });
+
+describe('Families, not too close', () => {
+  it('a child never has parents who are parent and child, or brother and sister', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    now(state, 'hearth');
+    for (let i = 0; i < 6; i++) now(state, 'hut');
+    for (let i = 0; i < 20000 && s.births < 40; i++) {
+      shoreTick(state, 2);
+      s.food = Math.max(s.food, 100);
+    }
+    const all = new Map([...(s.dead ?? []), ...s.people].map((p) => [p.id, p]));
+    for (const c of all.values()) {
+      const [a, b] = (c.parents ?? []).map((i) => (i === undefined ? undefined : all.get(i)));
+      if (!a || !b) continue;
+      expect(a.parents?.includes(b.id) || b.parents?.includes(a.id)).toBeFalsy();
+      expect(a.parents?.some((x) => x !== undefined && b.parents?.includes(x))).toBeFalsy();
+    }
+  }, 60_000);
+});

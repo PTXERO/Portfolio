@@ -1338,7 +1338,10 @@ function born(state: GameState, s: ShoreState): void {
   const grown = s.people.filter((p) => isAdult(s, p));
   const parent = grown[Math.floor(rand() * grown.length)];
   // The other parent: one of the same kind if there's one (else anyone grown).
-  const others = grown.filter((p) => p !== parent);
+  // (Never close kin: not a parent or child of theirs, nor a brother or sister.)
+  const kin = (a: ShorePerson, b: ShorePerson) =>
+    !!a.parents?.includes(b.id) || !!b.parents?.includes(a.id) || !!a.parents?.some((x) => x !== undefined && b.parents?.includes(x));
+  const others = grown.filter((p) => p !== parent && (!parent || !kin(parent, p)));
   const same = others.filter((p) => p.kind === parent?.kind);
   const pool = same.length ? same : others;
   const other = pool[Math.floor(rand() * pool.length)];
