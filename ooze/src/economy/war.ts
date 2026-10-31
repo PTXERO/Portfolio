@@ -106,7 +106,7 @@ export function holders(v: Village): number {
   return Math.max(2, Math.round(v.pop * 0.6));
 }
 
-/** A word on the odds, not a number: what the elders would say. */
+/** A word on the odds, not a number. */
 export function odds(us: number, them: number): string {
   const r = us / Math.max(0.1, them);
   return r > 1.8 ? 'They\'d be no match for us.' : r > 1.2 ? 'We\'re the stronger.' : r > 0.85 ? 'It could go either way.' : r > 0.55 ? 'They\'re the stronger.' : 'We\'d be cut to pieces.';
@@ -280,12 +280,6 @@ export function rally(s: ShoreState): boolean {
   if (!s.raid?.seen || s.raid.rallied) return false;
   s.raid.rallied = true;
   return true;
-}
-
-/** Whether there's a palisade or a watch post worth building yet: raids have come, or a
- * hostile village has been found. */
-export function threatened(s: ShoreState): boolean {
-  return (s.raids ?? 0) > 0 || !!s.raid || s.villages.some((v) => v.found && hostile(s, v));
 }
 
 /** Fighters on the war band don't work while away. */

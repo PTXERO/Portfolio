@@ -335,7 +335,7 @@ function eldersLayout(s: ShoreState): string {
   const now = s.steward?.on ? elderThink(s) : ELDERS_OFF;
   const said = (s.elders ?? []).slice().reverse().filter((e, i) => i > 0 || e.text !== now.text);
   return `${councilCard(s)}
-    <div class="card px-box"><div class="info"><div class="name">Round the council fire</div><div class="sub">${now.text}</div></div></div>
+    <div class="card px-box"><div class="info"><div class="name">Round the council fire</div><div class="sub">${now.text}</div>${s.raid?.seen !== undefined || s.warband ? '<div class="sub dim">"War is not ours to speak of. The chief decides."</div>' : ''}</div></div>
     ${said.length ? `<div class="panel-head"><h2>What they've said</h2></div><div class="card px-box"><div class="info">${said.map((e) => `<div class="sub"><span class="dim">${e.when}.</span> ${e.text}</div>`).join('')}</div></div>` : ''}`;
 }
 
@@ -486,7 +486,7 @@ function warCard(s: ShoreState): string {
   return out;
 }
 
-/** Raiding a village: how many to send, and what the elders make of the odds. */
+/** Raiding a village (the chief's call): how many to send, and how the odds look. */
 export function raidChoices(s: ShoreState, v: Village): string {
   const n = fighters(s);
   const def = holders(v);

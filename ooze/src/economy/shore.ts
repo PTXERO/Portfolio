@@ -12,7 +12,7 @@ import { record } from './chronicle';
 import { Biome, CELL, isLand, islandOf, reveal, type Island, type Pt } from './island';
 import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
-import { away, stepWar, threatened, warDawn, type Battle, type Raid, type WarBand } from './war';
+import { away, stepWar, warDawn, type Battle, type Raid, type WarBand } from './war';
 import type { CreatureLook } from '../scene/creatureLook';
 import type { GameState, TribeState } from './types';
 
@@ -774,11 +774,6 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
     const lacking = needs && !hasNeeds(s, id) ? Object.keys(needs).map((r) => RES_NAME[r as Res].toLowerCase()).join(' and ') : '';
     return { pick: null, why: 'saving' as ElderWhy, text: `"${text.slice(1, -1)} ${lacking ? `We have not the ${lacking} for it.` : `We are saving wood for it: ${Math.floor(s.wood)} of ${buildCost(s, id)}.`}"` };
   };
-  // Raided, or raiders coming: a watch post, then arms and a palisade, before all but the woods.
-  if ((s.raids ?? 0) > 0 || s.raid?.seen !== undefined) {
-    const guard = (['watch', 'spears', 'palisade'] as BuildId[]).find((id) => open.has(id) && hasNeeds(s, id));
-    if (guard) return go(guard, 'defence', guard === 'watch' ? '"They will come again. Someone must always be watching the paths in."' : guard === 'spears' ? '"We have flint. Put it on long shafts, and they will think twice."' : '"A wall of stakes, on a footing of stone. Let them break on it."');
-  }
   // The woods thinning: a forester, before anything else.
   if (open.has('forester') && forestShare(s) < 0.5 && count(s, 'forester') < 1 + s.people.length / 30) return go('forester', 'forest', '"The woods round the village are thinning. Someone must plant, or our children will have nothing to burn."');
   const SAY: Partial<Record<ElderWhy, (id: BuildId) => string>> = {
@@ -796,13 +791,11 @@ export function elderThink(s: ShoreState): { pick: BuildId | null; why: ElderWhy
   // Nothing pressing: something useful, if the wood's piling up. By use, not by cheapness (and
   // never another woodpile just to hold more: that's only for a build that won't fit).
   // (Every building they know is weighed here or above: the hearth, homes, food, stores and
-  // woodpiles, and the forester, when they're needed; the rest when there's wood to spare.)
+  // woodpiles, and the forester, when they're needed; the rest when there's wood to spare. All
+  // but war: the watch post, arms and the palisade are the chief's to decide, like every fight.)
   const unseen = s.villages.some((v) => !v.found) || poisOf(s).some((q) => !q.found);
   const useful: [BuildId, boolean][] = [
     ['council', true],
-    ['watch', threatened(s)],
-    ['spears', threatened(s)],
-    ['palisade', threatened(s)],
     ['envoy', s.villages.some((v) => canWin(s, v))],
     ['elders', true],
     ['thatcher', true],

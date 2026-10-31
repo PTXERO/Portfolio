@@ -27,6 +27,8 @@ function choose(state: ReturnType<typeof fresh>, explorer: boolean): BuildId | n
   const s = shoreOf(state)!;
   if (s.building) return null;
   if (explorer && !s.built.some((b) => b.id === 'scout') && buildsOpen(s).some((b) => b.id === 'scout')) return canPay(s, 'scout') ? 'scout' : null;
+  // (Raided: the player sees to a watch post, arms and a palisade; the elders never do.)
+  if ((s.raids ?? 0) > 0) for (const id of ['watch', 'spears', 'palisade'] as BuildId[]) if (buildsOpen(s).some((b) => b.id === id) && canPay(s, id)) return id;
   return stewardPick(s);
 }
 
