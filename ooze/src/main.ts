@@ -1012,8 +1012,8 @@ function shoreFrame(): void {
     s.turned = false;
     cue('ascend', 0.6);
     showModal(`<p class="label dim">${s.people.length} of them</p><h3>The great fire</h3>
-      <p>[STORY] They were a hundred. One night they all gathered at one fire, every one of them, and looked at each other, and knew themselves a people.</p>
-      <p class="dim">From now on the village grows a culture of its own: ideas come by themselves, from what the people do. See the Culture tab.</p>
+      <p>[STORY] They were a hundred. One night they all gathered at one fire, every one of them, and looked at each other, and knew themselves one kind of critter, together.</p>
+      <p class="dim">From now on the village grows a culture of its own: ideas come by themselves, from what the critters do. See the Culture tab.</p>
       <button class="px-btn gold" data-act="dismiss">The long road</button>`);
     save();
   }

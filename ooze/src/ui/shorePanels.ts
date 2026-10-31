@@ -102,7 +102,7 @@ export function shoreLayout(state: GameState, tab: string): string {
   if (tab === 'island') return islandLayout(s);
   const council = count(s, 'council') > 0;
   const view = villageView === 'elders' && !council ? 'village' : villageView;
-  const views = `<div class="seg build-cats"><button class="px-btn${view === 'village' ? ' on' : ''}" data-villageview="village">The village</button><button class="px-btn${view === 'people' ? ' on' : ''}" data-villageview="people">People · ${s.people.length}</button>${council ? `<button class="px-btn${view === 'elders' ? ' on' : ''}" data-villageview="elders">Elders</button>` : ''}<span class="seg-gap"></span><button class="px-btn" data-camera="home">Home</button><button class="px-btn" data-camera="chief">Chief</button></div>`;
+  const views = `<div class="seg build-cats"><button class="px-btn${view === 'village' ? ' on' : ''}" data-villageview="village">The village</button><button class="px-btn${view === 'people' ? ' on' : ''}" data-villageview="people">Critters · ${s.people.length}</button>${council ? `<button class="px-btn${view === 'elders' ? ' on' : ''}" data-villageview="elders">Elders</button>` : ''}<span class="seg-gap"></span><button class="px-btn" data-camera="home">Home</button><button class="px-btn" data-camera="chief">Chief</button></div>`;
   if (view === 'people') return views + peopleLayout(s);
   if (view === 'elders') return views + eldersLayout(s);
   return views + warCard(s) + storesCard(s) + workCard(s) + peopleCard(s);
@@ -123,15 +123,15 @@ function storesCard(s: ShoreState): string {
   const plan = workPlan(s);
   const net = plan.foodRate - plan.eat;
   const cell = (key: string, name: string, have: number, cap: number, gain: string) => `<div class="store"><span class="label dim">${name}</span><b class="num"><span data-t="shore-${key}">${n0(have)}</span><span class="dim">/${cap}</span></b><span class="dim">${gain}</span></div>`;
-  return `<div class="panel-head"><h2>The Village</h2><span class="dim">${s.people.length} people</span></div>
+  return `<div class="panel-head"><h2>The Village</h2><span class="dim">${s.people.length} critters</span></div>
     <div class="card px-box ex-stores shore-stores">
       ${cell('food', 'Food', s.food, foodCap(s), `${net >= 0 ? '+' : ''}${n0(net)} a day`)}
       ${cell('wood', 'Wood', s.wood, woodCap(s), `${plan.woodRate - burnPerDay(s) >= 0 ? '+' : ''}${n0(plan.woodRate - burnPerDay(s))} a day`)}
-      <div class="store"><span class="label dim">People</span><b class="num">${s.people.length}<span class="dim">/${room(s)}</span></b><span class="dim">${(() => {
+      <div class="store"><span class="label dim">Critters</span><b class="num">${s.people.length}<span class="dim">/${room(s)}</span></b><span class="dim">${(() => {
         const free = room(s) - s.people.length;
         return free > 1 ? `${free} beds free` : free === 1 ? '1 bed free' : free === 0 ? 'No beds free' : `${-free} without a bed`;
       })()}</span></div>
-      <div class="sub diet">${s.cold ? `<b class="starving">Freezing: no wood for the fires. ${s.cold >= 2 ? 'The young and the old are dying.' : 'Soon they will start to die.'}</b> ` : ''}${s.hungry ? `<b class="starving">Starving: not enough food for everyone. ${s.hungry >= 2 ? 'People are dying.' : 'Soon people will die.'}</b> ` : ''}${seasonLine(s)}<span data-t="shore-birth">${birthLine(s)}</span></div>
+      <div class="sub diet">${s.cold ? `<b class="starving">Freezing: no wood for the fires. ${s.cold >= 2 ? 'The young and the old are dying.' : 'Soon they will start to die.'}</b> ` : ''}${s.hungry ? `<b class="starving">Starving: not enough food for everyone. ${s.hungry >= 2 ? 'Critters are dying.' : 'Soon critters will die.'}</b> ` : ''}${seasonLine(s)}<span data-t="shore-birth">${birthLine(s)}</span></div>
     </div>`;
 }
 
@@ -315,7 +315,7 @@ function peopleLayout(s: ShoreState): string {
   }
   const plan = workPlan(s);
   const fed = plan.foodRate >= plan.eat || s.food > 0.5;
-  return `<div class="panel-head"><h2>The People</h2><span class="dim">${s.people.length}</span></div>
+  return `<div class="panel-head"><h2>The Critters</h2><span class="dim">${s.people.length}</span></div>
     <div class="card px-box"><div class="info"><div class="sub">${[...kinds].map(([k, n]) => `${n} ${k}`).join(' · ')}</div>
     <div class="sub">${fed ? `Fed: ${n0(plan.foodRate)} food a day comes in, ${n0(plan.eat)} is eaten.` : `<b class="starving">Hungry: ${n0(plan.eat)} food a day is needed, only ${n0(plan.foodRate)} comes in.</b>`}</div></div></div>
     <p class="tiny dim">Tap anyone for their family tree.</p>
@@ -362,7 +362,7 @@ function peopleCard(s: ShoreState): string {
   const chief = s.people.find((p) => p.id === s.chief);
   const grown = s.people.filter((p) => !p.founder && isAdult(s, p)).length;
   const young = s.people.filter((p) => !isAdult(s, p)).length;
-  return `<div class="card px-box"><div class="info"><div class="name">${chief ? `${chief.name} leads` : 'The people'}</div>
+  return `<div class="card px-box"><div class="info"><div class="name">${chief ? `${chief.name} leads` : 'The critters'}</div>
     <div class="sub">${four.length ? `Of the four who crossed: ${four.map((p) => p.name).join(', ')}.` : 'The four who crossed are all gone.'} ${grown ? `${grown} born here and grown. ` : ''}${young ? `${young} children.` : ''}</div>
     <div class="sub dim">${s.births} born · ${s.deaths} dead.</div></div></div>`;
 }
@@ -418,7 +418,7 @@ export function joinCard(s: ShoreState, v: Village): string {
   return `<p class="label dim">Won over</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)}</h3></div>
     <p>They would join you: all ${n} of them. But there's room by your hearth for only ${free} more.</p>
     ${deck([
-      { act: `${v.id}:crowd`, title: 'Take them in', line: `All ${n} come to live by your hearth now.`, good: [`${n} more people, today`], bad: ['Crowded: no children till there\'s room', 'Many more mouths to feed'] },
+      { act: `${v.id}:crowd`, title: 'Take them in', line: `All ${n} come to live by your hearth now.`, good: [`${n} more critters, today`], bad: ['Crowded: no children till there\'s room', 'Many more mouths to feed'] },
       { act: `${v.id}:vassal`, title: 'Keep their village, as yours', line: 'They stay where they are, and answer to your hearth.', good: ['Food and wood sent to you every day', 'They grow on their own'], bad: ['Take too much and they grow restless, then revolt'] },
       { act: `${v.id}:wait`, title: 'Ask them to wait', line: 'They\'ll come once there\'s room for them.', good: ['They join by themselves, when there\'s room'], bad: ['Ten days, then they give up on you'] },
       { act: `${v.id}:away`, title: 'Turn them away', line: 'They leave their village, and go.', good: ['No more mouths to feed'], bad: ['Where they\'ll go, no one says'] },
@@ -551,7 +551,7 @@ function cultureLayout(s: ShoreState): string {
 /** A fork, as cards to choose between. */
 export function forkCard(s: ShoreState, fork: ForkId): string {
   const def = FORKS[fork];
-  return `<p class="label dim">A choice for your people</p><h3>${def.name}</h3><p>${def.ask}</p><p class="dim tiny">Once chosen, it's for good. The road not taken stays on the Long Road, greyed.</p>
+  return `<p class="label dim">A choice for your critters</p><h3>${def.name}</h3><p>${def.ask}</p><p class="dim tiny">Once chosen, it's for good. The road not taken stays on the Long Road, greyed.</p>
     ${deck(forkOptions(s, fork).map((o) => ({ act: `${fork}:${o.id}`, title: o.name, line: o.line, good: [o.lane ? `${LANES.find((l) => l.id === o.lane)!.name} ideas come a quarter faster` : o.fx?.food ? 'Food comes in 5% faster' : ''].filter(Boolean), bad: [] })), 'fork')}`;
 }
 

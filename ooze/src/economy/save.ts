@@ -101,6 +101,7 @@ export function deserialize(text: string): GameState {
   const state: GameState = { ...base, ...saved, stages, started, swirl: 0, news: [], made: [], reports: saved.reports ?? [] };
   settleHabitat(state);
   capTribe(state);
+  critters(state);
   return state;
 }
 
@@ -154,6 +155,14 @@ function slim(state: GameState): GameState {
 export function serializeSlim(state: GameState): string {
   // (Numbers to four places: no one can tell, and the save's a good deal smaller.)
   return JSON.stringify(JSON.parse(serialize(slim(state))), (_k, v) => (typeof v === 'number' && !Number.isInteger(v) ? Math.round(v * 1e4) / 1e4 : v));
+}
+
+/** They're critters, not people: clans named "the … people" in older saves are renamed, and
+ * the Chronicle's older lines say critters too. */
+function critters(state: GameState): void {
+  const word = (s: string) => s.replace(/\bpeople\b/g, 'critters').replace(/\bPeople\b/g, 'Critters');
+  for (const v of state.stages.shore.shore?.villages ?? []) v.name = word(v.name);
+  for (const e of state.chronicle ?? []) e.text = word(e.text);
 }
 
 /** Save as a copyable text string, for backups (iOS can clear web storage). */

@@ -318,7 +318,7 @@ function nameFrom(rand: () => number): string {
 export type Habitat = 'river' | 'lake' | 'desert' | 'scrub' | 'forest' | 'meadow' | 'mountain' | 'coast' | 'marsh';
 
 interface HabitatDef {
-  /** Names: `the {word}folk`, `the {word} people`, `the {word} clan`. */
+  /** Names: `the {word}folk`, `the {word} critters`, `the {word} clan`. */
   words: string[];
   legs: string[];
   backs: string[];
@@ -474,7 +474,7 @@ export function shoreWorld(seed: number, look: CreatureLook, cannibal: boolean):
     let name = '';
     for (let k = 0; k < 12 && (!name || villages.some((v) => v.name === name || v.name.split(' ')[1]?.startsWith(name.split(' ')[1]?.replace('folk', '') ?? ''))); k++) {
       const word = pick(hd.words);
-      name = pick([`the ${word}folk`, `the ${word} clan`, `the ${word} people`]);
+      name = pick([`the ${word}folk`, `the ${word} clan`, `the ${word} critters`]);
     }
     villages.push({
       id: i,
@@ -1206,7 +1206,7 @@ function join(state: GameState, s: ShoreState, v: Village): void {
     s.people.push({ id, name, born: today - age, dies: today - age + 70 + rand() * 30, kind: v.id, joined: today, genes: personal(undefined, id * 31 + v.id) });
   }
   s.news.push(`${cap(v.name)} have joined you: ${v.pop} of them.`);
-  record(state, `${cap(v.name)} joined them: ${v.pop} people of another kind, come to live by their hearth.`, 'shore', shoreWhen(s));
+  record(state, `${cap(v.name)} joined them: ${v.pop} critters of another kind, come to live by their hearth.`, 'shore', shoreWhen(s));
 }
 
 const cap = (t: string) => t[0].toUpperCase() + t.slice(1);

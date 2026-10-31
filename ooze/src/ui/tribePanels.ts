@@ -122,7 +122,7 @@ function hopeCard(ex: ExtinctionState): string {
   const word = h >= 70 ? 'Hopeful' : h >= 55 ? 'Holding together' : h >= 30 ? 'Bearing up' : h >= 15 ? 'Despairing' : 'Broken';
   return `<div class="card px-box hope"><div class="info"><div class="name">Hope <span class="num gold">${h}</span> <span class="dim">· ${word}</span></div>
     <div class="meter"><i style="width:${h}%"></i><b style="left:55%"></b><b style="left:30%"></b></div>
-    <div class="sub">Their mood all together: hunger, grief, the spear's dread, the fire, friends. Above 55, fed, they have children; below 30, people break.</div>
+    <div class="sub">Their mood all together: hunger, grief, the spear's dread, the fire, friends. Above 55, fed, they have children; below 30, critters break.</div>
     ${madLine(ex)}</div></div>`;
 }
 

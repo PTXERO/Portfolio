@@ -164,7 +164,7 @@ export const POIS: PoiDef[] = [
   ] },
   { id: 'stones', sort: 'ruin', name: 'Standing stones', seen: 'Tall stones set in a ring. They didn\'t stand themselves up.', ground: 'grass', count: 3, layers: [
     { sec: 45, find: { text: 'In the middle of the ring, a spiral shell laid on a flat stone, as if left as a gift.', relic: 'shell' } },
-    { sec: 70, find: { text: '[STORY] Marks on the stones: people, a fire, and a long spear falling from the sky.' } },
+    { sec: 70, find: { text: '[STORY] Marks on the stones: critters, a fire, and a long spear falling from the sky.' } },
   ] },
   { id: 'cave', sort: 'natural', name: 'Cave mouth', seen: 'A dark opening in the rock, cold air breathing out of it.', ground: 'rock', count: 3, layers: [
     { sec: 40, find: { text: 'Just inside, it\'s cold and dry: food kept here would last. They learn to build a granary.', learn: 'granary' } },
