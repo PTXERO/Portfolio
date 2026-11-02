@@ -391,11 +391,6 @@ export class HearthView {
     const critter = (r: Spot) => {
       const st = this.seats[r.i];
       if (!st.look) return;
-      // (A dark spot right under them while they're up in the air.)
-      if (st.hop && st.wait <= 0) {
-        b.fillStyle = 'rgba(0,0,0,0.35)';
-        b.fillRect(Math.round(r.x - 5), Math.round(r.base), 10, 1);
-      }
       drawCreature(b, st.look, Math.round(r.x), Math.round(r.y), { left: r.left, frame: st.hop && st.wait <= 0 ? 1 : 0 });
     };
     for (const r of back) critter(r);
