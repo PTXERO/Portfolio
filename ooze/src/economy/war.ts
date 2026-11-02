@@ -14,6 +14,7 @@ import { record } from './chronicle';
 import { alliesFor, foreign, nudge, PEACE, standingOf, struck } from './diplomacy';
 import { boosts, DAY_SEC, foodCap, GROW_DAYS, isAdult, killed, loyaltyOf, nameFrom, resCap, RES_OF, relation, ruled, shoreSeason, shoreWhen, travelDays, woodCap, type ShoreState, type Village } from './shore';
 import { personal } from './genes';
+import { friendsHear, preyHear } from './world';
 
 /** How hard each diet fights (a fighter's worth). */
 const KIND: Record<string, number> = { hunter: 1.3, omnivore: 1.15, grazer: 1 };
@@ -542,6 +543,8 @@ function finish(state: GameState, s: ShoreState, f: Fight): void {
     if (won) {
       v.beaten = (v.beaten ?? 0) + 1;
       s.news.push(`${cap(v.name)} were driven off.`);
+      // (Those they prey on are glad of it.)
+      preyHear(s, v);
       record(state, `${cap(v.name)} fell on the village${f.walls ? ', and broke on the palisade' : ', and were driven off'}.${front}${dead ? ` ${dead} of ours died in the fighting.` : ''}${b.loot ? ` Their fallen left behind ${b.loot.food} food and ${b.loot.wood} wood.` : ''}${v.beaten >= COWED ? ' They will not come again.' : ''}`, 'shore', shoreWhen(s));
     } else {
       const food = Math.floor(s.food * 0.25);
@@ -668,6 +671,8 @@ export function sendBand(state: GameState, s: ShoreState, id: number, n: number,
   s.warband = { to: id, fighters: n, left: now, arrives: now + d / BAND_SPEED / DAY_SEC, wc: byWarChief || undefined, levy: called.length ? called : undefined };
   if (called.length) record(state, `${called.map((a) => `${a.n} of ${s.villages.find((x) => x.id === a.from)!.name}`).join(', ')} marched with them, called up by the hearth.`, 'shore', shoreWhen(s));
   struck(state, s, v);
+  // (And their own kind, the island over, take it ill.)
+  friendsHear(s, v);
   s.lastBand = now;
   s.news.push(`The war band set out for ${v.name}.`);
   if (byWarChief) return true;

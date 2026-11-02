@@ -14,6 +14,7 @@ import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath, findRoute } from './paths';
 import { inherit, personal } from './genes';
 import { diplomacyDawn } from './diplomacy';
+import { worldDawn } from './world';
 import { greatWork, isGreatWork, IDEAS, ageOver, cultureDay, cultureFx, maybeTurn, workReady, type Culture } from './culture';
 import { away, stepWar, warDawn, type Battle, type Fight, type Raid, type WarBand, type WarRule } from './war';
 import type { CreatureLook } from '../scene/creatureLook';
@@ -174,6 +175,10 @@ export interface Village {
   paid?: number;
   /** Driven out by the hearth (that day): their land's an outpost of yours, worked for its goods. */
   outpost?: number;
+  /** The island's own life: the size its land holds (unset: as it began), and the village
+   * it's been made to pay tribute to (another of the island's, not you). */
+  home?: number;
+  overlord?: number;
   /** Turned away: gone from the island's map (to the village they went to, that day). */
   gone?: { to: number; day: number };
 }
@@ -448,7 +453,7 @@ export function habitatAt(is: Island, x: number, y: number): Habitat {
 }
 
 /** Who eats whom: hunters prey on omnivores, omnivores on grazers. */
-const CHAIN = ['hunter', 'omnivore', 'grazer'];
+export const CHAIN = ['hunter', 'omnivore', 'grazer'];
 
 /** What another village is to yours: the same diet can be won over, the rest is war. */
 export function relation(s: Pick<ShoreState, 'look' | 'cannibal'>, v: Village): Relation {
@@ -568,6 +573,30 @@ export function shoreWorld(seed: number, look: CreatureLook, cannibal: boolean):
     });
   });
   return { island: is, hearth, beach, villages };
+}
+
+/** A new camp, founded on the island in the course of things (by critters leaving a crowded
+ * village): its name, looks and habitat the island's own way. */
+export function foundCamp(s: ShoreState, at: Pt, diet: string, cannibal: boolean | undefined, pop: number, rand: () => number): Village {
+  const is = shoreIsland(s.seed);
+  const h = habitatAt(is, at.x, at.y);
+  const hd = HABITATS[h];
+  const pick = <T>(a: T[]) => a[Math.floor(rand() * a.length)];
+  let name = '';
+  for (let k = 0; k < 16 && (!name || s.villages.some((v) => v.name === name)); k++) name = pick([`the ${pick(hd.words)}folk`, `the ${pick(hd.words)} clan`, `the ${pick(hd.words)} critters`]);
+  const id = Math.max(-1, ...s.villages.map((v) => v.id)) + 1;
+  return {
+    id,
+    name,
+    x: Math.round(at.x),
+    y: Math.round(at.y),
+    diet,
+    cannibal,
+    habitat: h,
+    pop,
+    look: { parts: { legs: pick(hd.legs), mouth: pick(MOUTHS[diet] ?? MOUTHS.omnivore), eyes: pick(hd.eyes), back: pick(hd.backs), tail: pick(hd.tails) }, diet, hue: pick(hd.hues) },
+    found: false,
+  };
 }
 
 /** New Shore as it begins: the four, come up from the beach. */
@@ -2238,6 +2267,7 @@ function born(state: GameState, s: ShoreState): void {
 function dawn(state: GameState, s: ShoreState, plan: ReturnType<typeof workPlan>): void {
   warDawn(state, s);
   sendConvoys(s);
+  worldDawn(state, s);
   diplomacyDawn(s);
   roadDawn(state, s, plan.eat);
   settledAsks(state, s);

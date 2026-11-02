@@ -24,6 +24,6 @@ for (let t = 0; t < hours * 3600; t += 2) {
     const kinds: Record<string, number> = {};
     for (const b of s.built) kinds[b.id] = (kinds[b.id] ?? 0) + 1;
     const p = workPlan(s);
-    console.log(`${t / 3600}h day ${s.day} critters ${totalCritters(s)} room ${room(s)} food ${s.food.toFixed(0)}/${foodCap(s)} wood ${s.wood.toFixed(0)}/${woodCap(s)} plan f${p.food} w${p.wood} rate f${p.foodRate.toFixed(0)} w${p.woodRate.toFixed(0)} eat ${p.eat.toFixed(0)} culture ${s.culture ? s.culture.done.length : '-'} built ${JSON.stringify(kinds)}`);
+    console.log(`${t / 3600}h villages ${s.villages.filter((v) => !v.gone).length} wildpop ${Math.round(s.villages.filter((v) => !v.gone && !v.vassal && v.settled === undefined).reduce((a, v) => a + v.pop, 0))} lords ${s.villages.filter((v) => v.overlord !== undefined).length} raids ${s.raids ?? 0} day ${s.day} critters ${totalCritters(s)} room ${room(s)} food ${s.food.toFixed(0)}/${foodCap(s)} wood ${s.wood.toFixed(0)}/${woodCap(s)} plan f${p.food} w${p.wood} rate f${p.foodRate.toFixed(0)} w${p.woodRate.toFixed(0)} eat ${p.eat.toFixed(0)} culture ${s.culture ? s.culture.done.length : '-'} built ${JSON.stringify(kinds)}`);
   }
 }
