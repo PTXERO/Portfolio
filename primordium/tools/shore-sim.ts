@@ -1,12 +1,16 @@
-// New Shore's pace, the idle way: how long a player takes to 25, 50, 75 and 100 critters, and
-// where they are at 6 and 10 hours (food a second, villages won, ideas).
+// New Shore's pace, the idle way: an "auto" player (the council buying, the envoy and the scouts
+// out, and a look in every half hour to buy upgrades, the Great Work, and beat whoever there's
+// the food for) against an "active" one (stoking now and then, looking in every few minutes).
+// How long to win the whole island, and where the waits are: the longest gaps between anything
+// new happening (a new kind of thing to buy, an upgrade, a village, an Age).
 // npm run sim:shore
 import { createState } from '../src/economy/state';
-import { buyGen, buyUpgrade, buyWork, canTake, canWin, councilPick, foodRate, gift, giftCost, takeCost, shoreOf, shoreTick, startShore, stoke, take, takeRaft, upgradeOpen } from '../src/economy/shore';
-import { UPGRADES } from '../src/content/idle';
+import { canCross, cross, embersFor, buyGen, buyUpgrade, buyWork, canTake, canWin, councilPick, foodRate, gift, giftCost, takeCost, shoreOf, shoreTick, startShore, stoke, take, takeRaft, upgradeOpen, genOpen } from '../src/economy/shore';
+import { GENS, UPGRADES } from '../src/content/idle';
 import type { TribeState } from '../src/economy/types';
 
-type Kind = 'idle' | 'active';
+type Kind = 'auto' | 'active';
+const HOURS = Number(process.env.SIM_HOURS ?? 48);
 
 function fresh(diet: string) {
   const state = createState(0);
@@ -16,37 +20,58 @@ function fresh(diet: string) {
   return state;
 }
 
-function run(kind: Kind, diet: string): string {
+const hm = (x?: number) => (x === undefined ? '  —  ' : `${Math.floor(x / 3600)}h${String(Math.floor((x % 3600) / 60)).padStart(2, '0')}`);
+
+function run(kind: Kind, diet: string): void {
   const state = fresh(diet);
-  const s = shoreOf(state)!;
+  let s = shoreOf(state)!;
+  const islands: string[] = [];
+  let islandAt = 0;
   takeRaft(state);
-  const marks: Record<number, number> = {};
-  const at: Record<number, string> = {};
-  const STEP = 2;
-  for (let t = 0; t <= 10 * 3600; t += STEP) {
+  const STEP = 4;
+  const events: { t: number; what: string }[] = [];
+  const seenGens = new Set<string>();
+  let wonAll: number | undefined;
+  let lastAge = s.culture?.age ?? 0;
+  const rates: string[] = [];
+  for (let t = 0; t <= HOURS * 3600; t += STEP) {
     shoreTick(state, STEP);
-    // The idle player: a few minutes' stoking and buying, then the council, and a look in every
-    // half hour (upgrades, gifts). The active one: stokes now and then, buys what's best, looks
-    // in every half minute.
-    const looking = kind === 'active' ? t % 30 === 0 : t < 600 ? t % 10 === 0 : t % 1800 === 0;
-    if (kind === 'active' && t % 4 === 0) stoke(state);
-    if (kind === 'idle' && t < 600 && t % 4 === 0) stoke(state);
+    const looking = kind === 'active' ? t % 120 === 0 : t < 600 ? t % 20 === 0 : t % 1800 === 0;
+    if (kind === 'active' && t % 8 === 0) stoke(state);
+    if (kind === 'auto' && t < 600 && t % 4 === 0) stoke(state);
     if (looking) {
-      for (const u of UPGRADES.filter((x) => upgradeOpen(s, x.id)).sort((a, b) => a.cost - b.cost)) buyUpgrade(state, u.id);
-      if (!s.auto) for (let i = 0; i < 20; i++) { const p = councilPick(s); if (!p || !buyGen(state, p)) break; }
-      // (Gifts and war bands only with plenty to spare; and the Great Work when it's on offer.)
+      for (const u of UPGRADES.filter((x) => upgradeOpen(s, x.id)).sort((a, b) => a.cost - b.cost)) if (buyUpgrade(state, u.id)) events.push({ t, what: `upgrade ${u.id}` });
+      if (!s.auto) for (let i = 0; i < 40; i++) { const p = councilPick(s); if (!p || !buyGen(state, p)) break; }
       for (const v of s.villages) {
-        v.found = true;
-        if (canWin(s, v) && s.food > giftCost(s, v) * 5) gift(state, v.id);
-        else if (canTake(s, v) && s.food > takeCost(s, v).food * 3) take(state, v.id);
+        if (canWin(s, v) && s.food > giftCost(s, v) * 3) gift(state, v.id);
+        else if (canTake(s, v) && s.food > takeCost(s, v).food) if (take(state, v.id)) events.push({ t, what: `beat ${v.name}` });
       }
-      buyWork(state);
+      if (buyWork(state)) events.push({ t, what: 'great work' });
     }
-    for (const m of [25, 50, 75, 100]) if (marks[m] === undefined && s.people.length >= m) marks[m] = t;
-    for (const h of [6, 10]) if (t === h * 3600) at[h] = `${h}h: ${Math.round(foodRate(s))}/s, ${s.villages.filter((v) => v.won !== undefined).length} won, ${s.culture?.done.length ?? 0} ideas, age ${s.culture?.age ?? 0}`;
+    for (const g of GENS) if (!seenGens.has(g.id) && genOpen(s, g.id)) { seenGens.add(g.id); events.push({ t, what: `new ${g.id}` }); }
+    const won = s.villages.filter((v) => v.won !== undefined).length;
+    if (events.length && !events[events.length - 1].what.startsWith('won') && won > events.filter((e) => e.what.startsWith('won')).length) events.push({ t, what: `won ${won}` });
+    if ((s.culture?.age ?? 0) !== lastAge) { lastAge = s.culture?.age ?? 0; events.push({ t, what: `age ${lastAge}` }); }
+    if (wonAll === undefined && s.villages.every((v) => v.won !== undefined || v.gone)) wonAll = t;
+    // Setting out as soon as they can (and looking in): the next island.
+    if (looking && canCross(s) && islands.length < 4) {
+      islands.push(`island ${islands.length + 1}: ${hm(t - islandAt)} (+${embersFor(s)} embers)`);
+      cross(state);
+      s = shoreOf(state)!;
+      takeRaft(state);
+      islandAt = t;
+      seenGens.clear();
+      events.push({ t, what: 'set out' });
+    }
+    if (t % (6 * 3600) === 0 && t) rates.push(`${t / 3600}h ${foodRate(s).toExponential(1)}/s ${s.people.length}c ${won}/${s.villages.length}w ${s.villages.filter((v) => v.found).length}f`);
   }
-  const f = (x?: number) => (x === undefined ? '  —  ' : `${Math.floor(x / 3600)}h${String(Math.floor((x % 3600) / 60)).padStart(2, '0')}`);
-  return `${kind.padEnd(7)} ${diet.padEnd(8)} 25:${f(marks[25])}  50:${f(marks[50])}  75:${f(marks[75])}  100:${f(marks[100])}   ${at[6]} · ${at[10]}`;
+  // The longest waits with nothing new.
+  const gaps = events.slice(1).map((e, i) => ({ from: events[i].t, gap: e.t - events[i].t, next: e.what })).sort((a, b) => b.gap - a.gap).slice(0, 5);
+  console.log(`\n${kind} ${diet}: whole island ${hm(wonAll)} · villages ${s.villages.length}`);
+  console.log('  ' + islands.join(' · '));
+  console.log('  ' + rates.join(' | '));
+  console.log('  longest waits: ' + gaps.map((g) => `${hm(g.gap)} from ${hm(g.from)} (→ ${g.next})`).join('; '));
+  console.log('  villages: ' + events.filter((e) => e.what.startsWith('beat') || e.what.startsWith('won')).map((e) => `${hm(e.t)} ${e.what}`).join(', '));
 }
 
-for (const diet of ['grazer', 'hunter', 'omnivore']) for (const kind of ['idle', 'active'] as Kind[]) console.log(run(kind, diet));
+for (const diet of (process.env.SIM_DIETS ?? 'grazer,hunter').split(',')) for (const kind of ['auto', 'active'] as Kind[]) run(kind, diet);

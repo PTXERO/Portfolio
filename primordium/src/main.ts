@@ -16,7 +16,7 @@ import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
 import { HearthView } from './ui/hearthView';
-import { buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
+import { canCross, cross, embersFor, EMBER_BIRTHS, EMBER_MORE, nextIslandSeed, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
 import { dance, danceLeft, shoreIsland, terrainReady, gift, isAdult, poisOf, shoreOf, shoreSeason, startShore, takeRaft, walkChief } from './economy/shore';
 import { AGES, ageName } from './economy/culture';
 import { buyAmount, setBuildCat, setBuyMany, setIslandView, danceCard, findCard, forkCard, poiCard, setVillageView, villageCard } from './ui/shorePanels';
@@ -2084,6 +2084,37 @@ function act(el: HTMLElement): void {
           const r = el.getBoundingClientRect();
           scene.float(r.left + r.width / 2, r.top, `+${format(D(got))}`, '#e8c86a');
         }
+        break;
+      }
+      case 'cross-ask': {
+        const s = shoreOf(state);
+        if (!s || !canCross(s)) break;
+        const n = embersFor(s);
+        showModal(`<p class="label dim">Set out</p><h3>A new island</h3>
+          <p>The chief and three others take a raft. The rest stay.</p>
+          <p class="green">+${n} ember${n === 1 ? '' : 's'}: all food +${Math.round(n * EMBER_MORE * 100)}%, births +${Math.round(n * EMBER_BIRTHS * 100)}%, for good.</p>
+          <p class="dim tiny">Kept: embers, and know-how (buy ×10, Max, the council, tender, scouts, envoy, lore). The rest starts again.</p>
+          <div class="choices"><button class="px-btn gold" data-act="cross">Set out</button><button class="px-btn" data-act="dismiss">Not yet</button></div>`);
+        break;
+      }
+      case 'cross': {
+        const s = shoreOf(state);
+        if (!s || !canCross(s)) break;
+        modal.hidden = true;
+        const seed = nextIslandSeed(s);
+        // (The new island's made first, before anything changes on screen.)
+        void prepareShoreIsland(seed)
+          .catch(() => shoreIsland(seed))
+          .then(() => {
+            if (!cross(state, seed)) return;
+            cue('ascend', 0.8);
+            scene.reload();
+            ui.tab = 'hearth';
+            ui.open = true;
+            panelKey = '';
+            save();
+            render();
+          });
         break;
       }
       case 'work':

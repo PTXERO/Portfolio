@@ -174,6 +174,10 @@ export interface ShoreState {
   food: number;
   /** Food ever brought in (for the record, and what's shown next). */
   earned?: number;
+  /** Embers carried from island to island (each one: all food +EMBER_MORE, for good), and how
+   * many crossings they've made since the first shore. */
+  embers?: number;
+  crossings?: number;
   /** What's been bought that brings food in or houses critters; and the upgrades, for good. */
   gens: Partial<Record<GenId, number>>;
   ups: string[];
@@ -692,7 +696,7 @@ export function allMult(s: ShoreState): number {
   }
   const won = s.villages.filter((v) => v.won !== undefined).length;
   const now = s.day * DAY_SEC + s.clock;
-  return m * (1 + boosts(s).food) * (1 + won * WON_MORE) * (1 + totalCritters(s) * CRITTER_MORE) * (s.boost && s.boost.until > now ? s.boost.mult : 1) * (1 + fireMore(s));
+  return m * (1 + (s.embers ?? 0) * EMBER_MORE) * (1 + boosts(s).food) * (1 + won * WON_MORE) * (1 + totalCritters(s) * CRITTER_MORE) * (s.boost && s.boost.until > now ? s.boost.mult : 1) * (1 + fireMore(s));
 }
 /** The fire at its hottest, before any upgrades: everything brings in this much more. */
 export const FIRE_MOST = 1;
@@ -726,6 +730,55 @@ export function fireHeat(s: ShoreState): number {
 export function fireMore(s: ShoreState): number {
   return fireMost(s) * Math.min(1, Math.max(0, s.heat ?? 0));
 }
+// ---- Setting out ----
+
+/** Each ember: all food this much more, on every island after. */
+export const EMBER_MORE = 0.1;
+/** ...and births this much more (an island's settled by critters as much as food). */
+export const EMBER_BIRTHS = 0.05;
+/** What a whole island's food is worth in embers (the cube root: waiting longer brings more, but
+ * less and less: better to set out than to sit). */
+export function embersFor(s: ShoreState): number {
+  return Math.floor(Math.cbrt((s.earned ?? 0) / 1e9));
+}
+/** Every village won (or gone): the island's settled, and they can set out for another. */
+export function canCross(s: ShoreState): boolean {
+  return s.villages.length > 0 && s.villages.every((v) => v.won !== undefined || v.gone);
+}
+/** The next island's seed (a new one each crossing). */
+export function nextIslandSeed(s: ShoreState): number {
+  return (s.seed * 31 + 7919 * ((s.crossings ?? 0) + 1)) % 2147483647;
+}
+/** What crosses with them: the embers, and what the village knows how to do (buying ten, the
+ * most, the council, the tender, the scouts, the envoy, the lore-keepers). The rest stays. */
+const KEPT_ACROSS = new Set(['auto', 'feature', 'scouts', 'envoy']);
+/** Setting out: the chief and three of the eldest take a raft to a new island; the rest stay to
+ * keep the old one. Everything starts again there but the embers and the know-how. */
+export function cross(state: GameState, seed = 0): boolean {
+  const s = shoreOf(state);
+  const t = state.stages.tribal.tribe;
+  if (!s || !t || !canCross(s)) return false;
+  const gained = embersFor(s);
+  const own = s.people.filter((p) => p.kind === undefined && isAdult(s, p));
+  const chief = own.find((p) => p.id === s.chief) ?? own[0];
+  const crew = [chief, ...own.filter((p) => p !== chief).sort((a, b) => a.born - b.born).slice(0, 3)].filter(Boolean);
+  const island = seed || nextIslandSeed(s);
+  const tribe = { ...t, look: { ...t.look, parts: { ...s.look.parts }, diet: s.look.diet }, landed: { ...(t.landed ?? { day: 0 }), seed: island }, family: crew.map((p) => ({ name: p.name, trait: p.trait ?? 'hardy', genes: p.genes })) } as TribeState;
+  const next = newShore(tribe);
+  next.embers = (s.embers ?? 0) + gained;
+  next.crossings = (s.crossings ?? 0) + 1;
+  next.ups = s.ups.filter((id) => KEPT_ACROSS.has(UPGRADES.find((u) => u.id === id)?.fx.kind ?? ''));
+  next.auto = s.auto;
+  record(state, `${crew.map((p) => p.name).join(', ')} set out for a new island, with ${gained} ember${gained === 1 ? '' : 's'} from the fire. The rest stayed.`, 'shore', shoreWhen(s));
+  const st = state.stages.shore;
+  st.shore = next;
+  st.seen = new Uint8Array(SHORE_CELLS * SHORE_CELLS);
+  reveal(shoreIsland(next.seed), st.seen, next.beach.x, next.beach.y, HOME_SIGHT);
+  reveal(shoreIsland(next.seed), st.seen, next.hearth.x, next.hearth.y, HOME_SIGHT);
+  poisOf(next);
+  return true;
+}
+
 /** Each village won, and each critter, adds this much to everything. */
 export const WON_MORE = 0.15;
 export const CRITTER_MORE = 0.01;
@@ -748,6 +801,8 @@ export function foodRate(s: ShoreState): number {
 
 /** Stoking the fire: a little food straight in (more with the upgrades, and some of every
  * second's worth once the fire-keepers know their work). */
+/** Each stoke is worth this many seconds of what comes in, before any upgrades. */
+export const TAP_SHARE = 0.25;
 export function tapValue(s: ShoreState): number {
   let k = 1;
   let share = 0;
@@ -756,7 +811,9 @@ export function tapValue(s: ShoreState): number {
     if (fx?.kind === 'tap') k *= fx.mult;
     if (fx?.kind === 'tapRate') share += fx.share;
   }
-  return (1 + share * foodRate(s)) * k * (1 + boosts(s).tap);
+  // (Always worth a quarter-second of everything coming in, so tapping matters at every size;
+  // the stoking upgrades add whole seconds on top.)
+  return (1 + (TAP_SHARE + share) * foodRate(s)) * k * (1 + boosts(s).tap);
 }
 export function stoke(state: GameState): number {
   const s = shoreOf(state);
@@ -773,7 +830,8 @@ export function stoke(state: GameState): number {
  * nearly full), when there's the food for it. */
 export function councilPick(s: ShoreState): GenId | null {
   const open = GENS.filter((g) => genOpen(s, g.id));
-  if (s.people.length >= Math.min(room(s), hearthMost(s)) - 2 && room(s) < hearthMost(s)) {
+  // (Homes when the beds are nearly full, but never before there's anything bringing food in.)
+  if (s.people.length >= Math.min(room(s), hearthMost(s)) - 2 && room(s) < hearthMost(s) && foodRate(s) > 0) {
     const home = open.filter((g) => g.room).sort((a, b) => genCost(s, a.id) / a.room! - genCost(s, b.id) / b.room!)[0];
     if (home) return home.id;
   }
@@ -1131,7 +1189,7 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
   // Children: wherever there's a fire and a bed free, and grown pairs.
   const adults = grownCount(s);
   if (count(s, 'hearth') && s.people.length < Math.min(room(s), hearthMost(s)) && adults >= 2) {
-    s.birthT += Math.max(1, Math.floor(adults / 2)) * PAIR_RATE * (1 + boosts(s).births) * warmth(s) * k;
+    s.birthT += Math.max(1, Math.floor(adults / 2)) * PAIR_RATE * (1 + boosts(s).births) * warmth(s) * (1 + (s.embers ?? 0) * EMBER_BIRTHS) * k;
     if (s.birthT >= 1) {
       s.birthT = 0;
       born(state, s);
@@ -1201,6 +1259,17 @@ function dawn(state: GameState, s: ShoreState): void {
   if (s.news.length > 30) s.news.splice(0, s.news.length - 30);
   maybeTurn(state, s);
   cultureDay(state, s);
+  // Every village found is won, and some are still out in the fog (somewhere the scouts never
+  // get to): their smoke is seen, one a day, so the island can always be settled.
+  if (s.villages.every((v) => !v.found || v.won !== undefined || v.gone)) {
+    const lost = s.villages.find((v) => !v.found && !v.gone);
+    if (lost) {
+      lost.found = true;
+      if (relation(s, lost) === 'kin') lost.trust ??= FIRST_TRUST;
+      s.newFinds.push(lost.id);
+      record(state, `Smoke far off: ${lost.name}, ${Math.round(lost.pop)} of them.`, 'shore', shoreWhen(s));
+    }
+  }
   // The envoy's day: a gift to the nearest kin being won over, if there's a gift's worth spare.
   if (has(s, 'envoy') && s.envoyDay !== s.day) {
     const v = s.villages.filter((x) => canWin(s, x)).sort((a, b) => Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y) - Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y))[0];
