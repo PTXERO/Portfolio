@@ -107,18 +107,23 @@ uniform float uDepth; // haze over the far side of the view
 // up a unit of land height stands.
 uniform float uPerspOn;
 uniform vec4 uPersp;
+uniform vec2 uYaw; // which way it faces: cos, sin (0: north, up the map)
 #define KH uPersp.w
-vec3 camPos() { return vec3(uCam.x, uCam.y + uPersp.z * uPersp.y, uPersp.z * uPersp.x); }
+/** From the camera's own axes (right, toward it) to the island's. */
+vec2 turn(vec2 v) { return vec2(v.x * uYaw.x - v.y * uYaw.y, v.x * uYaw.y + v.y * uYaw.x); }
+vec3 camPos() { return vec3(uCam.xy + turn(vec2(0.0, uPersp.z * uPersp.y)), uPersp.z * uPersp.x); }
 /** The line of sight through an art pixel (unit length). */
 vec3 rayDir(vec2 art) {
   float F = uCam.z * uPersp.z;
   vec3 f = vec3(0.0, -uPersp.y, -uPersp.x);
   vec3 up = vec3(0.0, -uPersp.x, uPersp.y);
-  return normalize(f * F + vec3(art.x - uArt.x * 0.5, 0.0, 0.0) - up * (art.y - uCam.w));
+  vec3 d = f * F + vec3(art.x - uArt.x * 0.5, 0.0, 0.0) - up * (art.y - uCam.w);
+  return normalize(vec3(turn(d.xy), d.z));
 }
 /** Where a point (tiles, and tiles up) is seen: art x, art row. */
 vec2 project(vec3 p) {
   vec3 v = p - camPos();
+  v.xy = vec2(v.x * uYaw.x + v.y * uYaw.y, -v.x * uYaw.y + v.y * uYaw.x);
   float zc = -v.y * uPersp.y - v.z * uPersp.x;
   float F = uCam.z * uPersp.z;
   return vec2(uArt.x * 0.5 + F * v.x / zc, uCam.w - F * (-v.y * uPersp.x + v.z * uPersp.y) / zc);
@@ -281,8 +286,10 @@ void main() {
   vec3 col = inside ? mix(texture2D(uGround0, tuv).rgb, texture2D(uGround1, tuv).rgb, uBlend) : vec3(0.141, 0.314, 0.431);
 
   // How steep the ground is as seen: a face standing up toward the camera, or a top.
-  float dRow = (screenRow(w + vec2(0.0, 0.3)) - screenRow(w - vec2(0.0, 0.3))) / 0.6;
-  float dFlat = (flatRow(w + vec2(0.0, 0.3), h) - flatRow(w - vec2(0.0, 0.3), h)) / 0.6;
+  // (Toward the camera: with it turned, that's not due south.)
+  vec2 toCam = uPerspOn > 0.5 ? turn(vec2(0.0, 0.3)) : vec2(0.0, 0.3);
+  float dRow = (screenRow(w + toCam) - screenRow(w - toCam)) / 0.6;
+  float dFlat = (flatRow(w + toCam, h) - flatRow(w - toCam, h)) / 0.6;
   float face = 1.0 - clamp(dRow / (max(dFlat, 0.0001) * 0.55), 0.0, 1.0);
 
   // Light, from the island's light map (fixed to the land).
@@ -515,6 +522,8 @@ export interface ShadeParams {
   depth?: number;
   /** A real camera: sin and cos of its look down, its distance (tiles), tiles up per unit of height. */
   persp?: [number, number, number, number] | null;
+  /** Which way the real camera faces: cos and sin. */
+  yaw?: [number, number];
 }
 
 function compile(gl: WebGLRenderingContext, vs: string, fs: string): WebGLProgram {
@@ -746,6 +755,7 @@ export class MapShader {
     gl.uniform1f(this.u('uDepth'), p.depth ?? 0);
     gl.uniform1f(this.u('uPerspOn'), p.persp ? 1 : 0);
     gl.uniform4fv(this.u('uPersp'), p.persp ?? [0.6, 0.8, 10, 30]);
+    gl.uniform2fv(this.u('uYaw'), p.yaw ?? [1, 0]);
     gl.uniform2f(this.u('uArt'), artW, artH);
     gl.uniform4f(this.u('uCam'), p.cam[0], p.cam[1], p.cam[2], p.cam[3]);
     gl.uniform1f(this.u('uTime'), p.time);

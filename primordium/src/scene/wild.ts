@@ -28,6 +28,8 @@ export interface WildView {
 
 export interface Sprite {
   y: number;
+  /** Where across it stands (for what's in front, with the camera turned). */
+  x?: number;
   draw: () => void;
   /** Where it stands on the land (so it's hidden behind ridges in front of it). */
   at?: { x: number; y: number };

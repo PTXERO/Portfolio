@@ -433,7 +433,7 @@ export function layout(state: GameState, tab: Tab): string {
     <p class="note">${mixWithMusic ? 'Your own music keeps playing. On a phone set to silent, the game is quiet.' : 'Other music stops while you play. Heard even on silent.'}</p>
     <div class="panel-head"><h2>Camera angle</h2></div>
     <div class="warp">${[0.5, 0.65, 0.85, 0].map((k, i) => `<button class="px-btn" data-tilt="${k}">${['Low', 'Mid', 'High', 'Era default'][i]}</button>`).join('')}</div>
-    <p class="note">On the islands, drag two fingers up or down to tilt the view.</p>
+    <p class="note">On the islands, drag two fingers up or down to tilt the view; twist them to turn it.</p>
     <div class="panel-head"><h2>Interface size</h2></div>
     <div class="warp">${[0.9, 1, 1.15, 1.3].map((k, i) => `<button class="px-btn" data-uiscale="${k}">${['Small', 'Normal', 'Large', 'Huge'][i]}</button>`).join('')}</div>
     <div class="panel-head"><h2>Save</h2></div>

@@ -236,6 +236,50 @@ export class RangeScene {
   /** A real camera in place of the slant (New Shore): further off is smaller, out to a horizon;
    * it looks more straight down zoomed out, and more toward the horizon zoomed in. */
   protected persp = false;
+  /** Which way the real camera faces (radians; 0 looks north, up the map), turned by two
+   * fingers twisting. */
+  yaw = 0;
+  turnBy(d: number): void {
+    if (!this.persp) return;
+    // (Turned about the middle of the view: the ground there stays put.)
+    const at = this.toWorld(this.W / 2, this.midY());
+    this.yaw = (this.yaw + d) % (Math.PI * 2);
+    this.lookTo(at, this.W / 2, this.midY());
+    this.auto = false;
+  }
+  resetTurn(): void {
+    if (!this.persp || !this.yaw) return;
+    const at = this.toWorld(this.W / 2, this.midY());
+    this.yaw = 0;
+    this.lookTo(at, this.W / 2, this.midY());
+  }
+  /** A ground offset turned by the camera's facing (from the camera's own right and toward-it
+   * axes to the island's). */
+  protected turned(r: number, f: number): Pt {
+    const c = Math.cos(this.yaw);
+    const s = Math.sin(this.yaw);
+    return { x: r * c - f * s, y: r * s + f * c };
+  }
+  /** How near the camera a spot on the ground is (along the view, bigger is nearer): what's
+   * drawn in front of what. */
+  depthOf(x: number, y: number): number {
+    if (!this.persp) return y;
+    return -Math.sin(this.yaw) * x + Math.cos(this.yaw) * y;
+  }
+  /** Moves the real camera so a spot on the land is seen at an art pixel. */
+  protected lookTo(at: Pt, ax: number, ay: number): void {
+    const off = this.raiseOff(at.x, at.y);
+    this.camX = at.x - off.x;
+    this.camY = at.y - off.y;
+    for (let i = 0; i < 6; i++) {
+      const [X, Y, zc] = this.project(at.x, at.y, this.heightAt(at.x, at.y) * this.liftUp);
+      const pp = this.perspParams!;
+      const k = (this.zoom * pp[2]) / zc;
+      const d = this.turned((X - ax) / k, (Y - ay) / (k * pp[0]));
+      this.camX += d.x;
+      this.camY += d.y;
+    }
+  }
   /** How far it looks down now (radians): by the zoom, and your own choice of angle. */
   private pitch(): number {
     const k = Math.max(0, Math.min(1, Math.log(this.zoom / ZOOM_MIN) / Math.log(ZOOM_MAX / ZOOM_MIN)));
@@ -249,6 +293,9 @@ export class RangeScene {
   }
   /** For the shader: sin and cos of the look down, the camera's distance (tiles), tiles up per
    * unit of height; null without the real camera. */
+  get yawCS(): [number, number] {
+    return [Math.cos(this.yaw), Math.sin(this.yaw)];
+  }
   get perspParams(): [number, number, number, number] | null {
     if (!this.persp || !this.shaded) return null;
     const p = this.pitch();
@@ -258,8 +305,13 @@ export class RangeScene {
    * off it is along the view (tiles). */
   protected project(x: number, y: number, z: number): [number, number, number] {
     const [s, c, d] = this.perspParams!;
-    const vx = x - this.camX;
-    const vy = y - this.camY - d * c;
+    // (Into the camera's own axes: turned back by its facing.)
+    const cy = Math.cos(this.yaw);
+    const sy = Math.sin(this.yaw);
+    const wx = x - this.camX;
+    const wy = y - this.camY;
+    const vx = wx * cy + wy * sy;
+    const vy = -wx * sy + wy * cy - d * c;
     const vz = z - d * s;
     const zc = Math.max(0.01, -vy * c - vz * s);
     const F = this.zoom * d;
@@ -267,14 +319,14 @@ export class RangeScene {
   }
   /** How far toward the camera to put the camera's centre so a point at this height is seen in
    * the middle (the slant: raised by the land; the real camera: along the line of sight). */
-  protected raiseBack(x: number, y: number): number {
-    if (!this.shaded) return 0;
+  protected raiseOff(x: number, y: number): Pt {
+    if (!this.shaded) return { x: 0, y: 0 };
     const h = this.heightAt(x, y);
     if (this.persp) {
       const p = this.pitch();
-      return (h * this.liftUp * Math.cos(p)) / Math.sin(p);
+      return this.turned(0, (h * this.liftUp * Math.cos(p)) / Math.sin(p));
     }
-    return (h * this.lift) / this.tilt;
+    return { x: 0, y: (h * this.lift) / this.tilt };
   }
 
   /** Where in the day it is (0 sunrise, 0.75 sunset), when the island keeps its own clock (so a
@@ -459,9 +511,13 @@ export class RangeScene {
   private sightGround(ax: number, ay: number): Pt {
     const [s, c, d, KH] = this.perspParams!;
     const F = this.zoom * d;
-    const C = { x: this.camX, y: this.camY + d * c, z: d * s };
-    let Dx = ax - this.W / 2;
-    let Dy = -c * F + s * (ay - this.midY());
+    const back = this.turned(0, d * c);
+    const C = { x: this.camX + back.x, y: this.camY + back.y, z: d * s };
+    const rx = ax - this.W / 2;
+    const fy = -c * F + s * (ay - this.midY());
+    const turn = this.turned(rx, fy);
+    let Dx = turn.x;
+    let Dy = turn.y;
     let Dz = -s * F - c * (ay - this.midY());
     const len = Math.hypot(Dx, Dy, Dz);
     Dx /= len;
@@ -500,13 +556,7 @@ export class RangeScene {
     this.camX = at.x - (ax - this.W / 2) / this.zoom;
     if (this.shaded && this.persp) {
       // (The real camera: nudged until the spot's back under the fingers.)
-      this.camY = at.y;
-      for (let i = 0; i < 6; i++) {
-        const [X, Y, zc] = this.project(at.x, at.y, this.heightAt(at.x, at.y) * this.liftUp);
-        const k = (this.zoom * this.perspParams![2]) / zc;
-        this.camX += (X - ax) / k;
-        this.camY += (Y - ay) / (k * this.perspParams![0]);
-      }
+      this.lookTo(at, ax, ay);
     } else if (this.shaded) this.camY = at.y - (ay - this.midY() + this.heightAt(at.x, at.y) * this.lift * this.zoom) / (this.zoom * this.tilt);
     else this.camY = at.y - (ay - this.midY()) / this.zoom;
     this.auto = false;
@@ -514,6 +564,15 @@ export class RangeScene {
   }
 
   pan(dx: number, dy: number): void {
+    if (this.persp && this.shaded) {
+      // (The real camera: a drag moves over the ground the way the camera faces.)
+      const d = this.turned(-dx / this.zoom, -dy / (this.zoom * this.perspParams![0]));
+      this.camX += d.x;
+      this.camY += d.y;
+      this.auto = false;
+      this.clamp();
+      return;
+    }
     // In 2.5D a tile of depth is squashed on screen, so a drag moves further over the ground.
     this.camX -= dx / this.zoom;
     this.camY -= dy / (this.zoom * (this.shaded ? this.tilt : 1));
@@ -1253,7 +1312,10 @@ export class RangeScene {
       const [s, c] = this.perspParams!;
       const span = ((H_LO + H_SPAN) * this.liftUp * c) / s + 1;
       let top = Infinity;
-      for (let d = 0.75; d <= span; d += 0.75) top = Math.min(top, this.py(x, y + d));
+      for (let d = 0.75; d <= span; d += 0.75) {
+        const o = this.turned(0, d);
+        top = Math.min(top, this.py(x + o.x, y + o.y));
+      }
       return top < row - 0.5 ? top : null;
     }
     // How far above a point (in screen rows, per unit of zoom) the ground in front of it rises:
@@ -1288,6 +1350,13 @@ export class RangeScene {
   private ridgeM = new Map<number, number>();
   private ridgeOf: unknown = null;
   private ridgeLT = 0;
+
+  /** What's drawn first (furthest from the camera first). */
+  protected spriteDepth(s: Sprite): number {
+    if (!this.persp) return s.y;
+    const x = s.at?.x ?? s.x;
+    return x === undefined ? s.y * Math.cos(this.yaw) : this.depthOf(x, s.at?.y ?? s.y);
+  }
 
   /** Draws something standing at a point, hidden wherever the land in front rises over it. */
   protected behind(b: CanvasRenderingContext2D, x: number, y: number, draw: () => void): void {
@@ -1340,8 +1409,9 @@ export class RangeScene {
     if (this.auto) {
       const k = this.snap ? 1 : Math.min(1, dt * 3);
       // In 2.5D the creature stands raised by the land; aim so it's raised into the middle.
-      const ty = me.y - this.raiseBack(me.x, me.y);
-      this.camX += (me.x - this.camX) * k;
+      const off = this.raiseOff(me.x, me.y);
+      const ty = me.y - off.y;
+      this.camX += (me.x - off.x - this.camX) * k;
       this.camY += (ty - this.camY) * k;
       this.snap = false;
     }
@@ -1865,7 +1935,7 @@ export class RangeScene {
     this.wild.update(this.wildView, is, sprites, { b, t, dt, nests: bases, season: si, night, feet: [me, ...this.members], me });
     this.sightings.update(this.wildView, is, sprites, { b, t, dt, night, winter });
 
-    sprites.sort((a, c) => a.y - c.y);
+    sprites.sort((a, c) => this.spriteDepth(a) - this.spriteDepth(c));
     // (Each hidden behind any ridge between it and the camera.)
     for (const s of sprites as Sprite[]) if (s.at) this.behind(b, s.at.x, s.at.y, s.draw);
     else s.draw();

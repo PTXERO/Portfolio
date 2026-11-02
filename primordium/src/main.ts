@@ -1942,6 +1942,8 @@ let swirlSpin = 0;
 const fingers = new Map<number, { x: number; y: number; sx: number; sy: number }>();
 /** What two fingers are doing (decided once they've moved): tilting the view, or pinching. */
 let twoMode: 'none' | 'tilt' | 'pinch' = 'none';
+/** The angle between two fingers last move (for twisting the view round). */
+let twoAngle: number | null = null;
 let twoStart: { spread: number; midY: number } | null = null;
 let mapDragged = false;
 
@@ -2039,6 +2041,7 @@ stageEl.addEventListener('pointerdown', (e) => {
     fingers.set(e.pointerId, { x, y, sx: x, sy: y });
     twoMode = 'none';
     twoStart = null;
+    twoAngle = null;
     if (fingers.size === 1) mapDragged = false;
     else mapDragged = true;
     return;
@@ -2088,8 +2091,17 @@ stageEl.addEventListener('pointermove', (e) => {
         ui.tilt = scene.tiltBy(((a.y + b.y) / 2 - midY) * 0.004);
         return;
       }
-      // Pinch: zoom by the change in spread, about the middle, and pan with the middle.
+      // Pinch: zoom by the change in spread, about the middle, and pan with the middle; twisted,
+      // the view turns round with the fingers.
       if (before > 10) scene.zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, after / before);
+      const ang = Math.atan2(b.y - a.y, b.x - a.x);
+      if (twoAngle !== null) {
+        let da = ang - twoAngle;
+        if (da > Math.PI) da -= Math.PI * 2;
+        if (da < -Math.PI) da += Math.PI * 2;
+        if (Math.abs(da) < 0.5) scene.turnBy(-da);
+      }
+      twoAngle = ang;
       scene.panBy((a.x + b.x) / 2 - midX, (a.y + b.y) / 2 - midY);
       return;
     }
@@ -2129,6 +2141,7 @@ const endFinger = (e: PointerEvent) => {
   if (twoMode === 'tilt' && fingers.size < 2) saveUi();
   twoMode = 'none';
   twoStart = null;
+  twoAngle = null;
   if (e.type === 'pointerup' && !mapDragged && fingers.size === 0 && onMap()) {
     scene.ripple(f.x, f.y);
     scene.shoreTap(state, f.x, f.y);
@@ -2144,7 +2157,9 @@ stageEl.addEventListener(
     if (!onMap()) return;
     e.preventDefault();
     const r = stageEl.getBoundingClientRect();
-    scene.zoomAt(e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.15 : 1 / 1.15);
+    // (Shift and the wheel turns the view round, as two fingers twisting do.)
+    if (e.shiftKey) scene.turnBy((e.deltaY || e.deltaX) > 0 ? 0.12 : -0.12);
+    else scene.zoomAt(e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.15 : 1 / 1.15);
   },
   { passive: false },
 );
@@ -2355,6 +2370,8 @@ function act(el: HTMLElement): void {
     const v = Number(el.dataset.tilt);
     ui.tilt = v || null;
     scene.setTilt(ui.tilt);
+    // (The island's own angle: facing north again too.)
+    if (!v) scene.resetTurn();
     saveUi();
   } else if (el.dataset.uiscale) {
     ui.scale = Number(el.dataset.uiscale);

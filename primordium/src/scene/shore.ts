@@ -98,9 +98,11 @@ export class ShoreScene extends RangeScene {
     this.pinned = false;
     this.auto = false;
     this.looking = true;
-    this.camX = p.x;
-    this.camY = p.y - this.raiseBack(p.x, p.y);
+    // (The zoom first: with the real camera, how far it looks down depends on it.)
     this.zoom = zoom;
+    const off = this.raiseOff(p.x, p.y);
+    this.camX = p.x - off.x;
+    this.camY = p.y - off.y;
   }
 
   /** Follow the chief again. */
@@ -212,8 +214,9 @@ export class ShoreScene extends RangeScene {
     if (this.auto) {
       const me = s.chiefAt;
       const k = this.snap ? 1 : Math.min(1, dt * 3);
-      const ty = me.y - this.raiseBack(me.x, me.y);
-      this.camX += (me.x - this.camX) * k;
+      const off = this.raiseOff(me.x, me.y);
+      const ty = me.y - off.y;
+      this.camX += (me.x - off.x - this.camX) * k;
       this.camY += (ty - this.camY) * k;
       this.snap = false;
     }
@@ -460,7 +463,7 @@ export class ShoreScene extends RangeScene {
 
     this.wild.update(this.wildView, is, sprites, { b, t, dt, nests: [s.hearth], season: si, night, feet: seenFeet, me: s.chiefAt });
     this.trails.update(is.seed, this.walkers.filter((w) => w.goal && Math.hypot(w.goal.x - w.x, w.goal.y - w.y) > 0.3), dt, is.n);
-    sprites.sort((a, c) => a.y - c.y);
+    sprites.sort((a, c) => this.spriteDepth(a) - this.spriteDepth(c));
     // (Each hidden behind any ridge between it and the camera.)
     for (const sp of sprites) if (sp.at) this.behind(b, sp.at.x, sp.at.y, sp.draw);
     else sp.draw();
