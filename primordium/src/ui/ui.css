@@ -1085,3 +1085,4 @@ body.tab-hearth #expand { display: none; }
 #eye .eye-leave { position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 12px; width: 44px; height: 44px; font-size: 20px; }
 #eye .eye-tip { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; color: #fff; text-shadow: 0 2px 0 #000; pointer-events: none; transition: opacity 0.6s; }
 #eye .eye-tip.gone { opacity: 0; }
+#eye canvas.eye-sprites { pointer-events: none; }

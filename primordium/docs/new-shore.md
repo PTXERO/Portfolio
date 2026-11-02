@@ -601,8 +601,12 @@ same height map, ground colours and fog as the 2.5D view: smooth slopes, sun lig
 time of day, darker cliff faces, a speckle within each tile, water with ripples, sky reflection
 and glint, the fog of war as mist, haze into the sky; sky with sun, glow and stars at night.
 Heights at a third of the map's lift (the map exaggerates them so hills read from above). Drag
-to look; tap to walk the way you're looking. *Next*: creatures, huts, the fire and villages
-standing in it (billboards, WebGL2 with depth); then trees, grass, reeds and rocks (both views).
+to look; tap to walk the way you're looking. **Standing in it** *(live)*: the village's critters
+(round the hearth by day, close in at night, the young ones near; up to 160 nearest), its
+buildings and the fire, and the villages found (their huts and some of their own), as pictures
+standing up on a second low-res layer, placed with the same camera; hidden behind a hill (the land
+checked along the line to each), not in the fog, fading past ~70 tiles, darker at night. *Next*:
+trees, grass, reeds and rocks (both views).
 
 ## 12. Polish backlog (back burner)
 

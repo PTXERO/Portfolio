@@ -526,6 +526,33 @@ export class ShoreScene extends RangeScene {
   private stamps = new Map<string, HTMLCanvasElement>();
   private static readonly STILL = new Set<BuildId>(BUILDS.map((d) => d.id).filter((id) => !['hearth', 'scout', 'greathearth', 'kiln', 'shrine'].includes(id)));
 
+  /** A building as a picture standing up (for the eye view): the map's own drawing of it, once. */
+  buildImage(id: BuildId, s: ShoreState): HTMLCanvasElement {
+    const key = `eye|${id}|${s.look.diet}`;
+    let c = this.stamps.get(key);
+    if (!c) {
+      c = document.createElement('canvas');
+      c.width = 32;
+      c.height = 26;
+      this.drawShape(c.getContext('2d')!, id, 16, 24, 2, 1, 0, s);
+      this.stamps.set(key, c);
+    }
+    return c;
+  }
+  /** A village's hut, standing up (for the eye view). */
+  hutImage(v: Village): HTMLCanvasElement {
+    const key = `eyehut|${v.habitat}|${v.look.hue?.join() ?? ''}`;
+    let c = this.stamps.get(key);
+    if (!c) {
+      c = document.createElement('canvas');
+      c.width = 32;
+      c.height = 26;
+      drawHut(c.getContext('2d')!, v.habitat ?? 'meadow', 16, 24, 2, v.look.hue);
+      this.stamps.set(key, c);
+    }
+    return c;
+  }
+
   private drawBuild(b: CanvasRenderingContext2D, id: BuildId, X: number, Y: number, z: number, close: boolean, up: number, t: number, s: ShoreState): void {
     if (!close) {
       b.fillStyle = id === 'hearth' ? 'rgba(255, 150, 60, 0.996)' : '#7a5a3a';

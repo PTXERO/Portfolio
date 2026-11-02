@@ -16,7 +16,7 @@ import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
 import { HearthView } from './ui/hearthView';
-import { workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
+import { growth, SHORE_CELLS, type ShoreState, workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
 import { dance, danceLeft, shoreIsland, terrainReady, gift, isAdult, poisOf, shoreOf, shoreSeason, startShore, takeRaft, walkChief } from './economy/shore';
 import { AGES, ageName } from './economy/culture';
 import { crewCard, buyAmount, setBuildCat, setBuyMany, setIslandView, danceCard, findCard, forkCard, poiCard, setVillageView, villageCard } from './ui/shorePanels';
@@ -65,8 +65,9 @@ import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
 import { playCrossing } from './ui/crossing';
 import { thunder, cue, glug, hushDrone, popSound, setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
-import { creatureLookOf, miniIcon } from './scene/creatureLook';
-import { describe } from './economy/genes';
+import { creatureLookOf, drawCreature, genesKey, miniIcon, type CreatureLook } from './scene/creatureLook';
+import { describe, personal } from './economy/genes';
+import { CELL } from './economy/island';
 import { glyph, panWeb, pickIdea, webTransform, webView, zoomWeb } from './ui/tribePanels';
 import { nameList, record } from './economy/chronicle';
 import { PARTS } from './content/creature';
@@ -391,7 +392,80 @@ function drawEye(): void {
   const k = map.liftTilt[0] * EYE_LIFT;
   const ground = map.heightAt(s.chiefAt.x, s.chiefAt.y);
   const day = map.dayAt ?? 0.3;
-  eye.draw(inp, { x: s.chiefAt.x, y: s.chiefAt.y, z: ground * k + 1.1 }, k, eyeMod!.skyLight(day), performance.now() / 1000);
+  const light = eyeMod!.skyLight(day);
+  const eyeAt = { x: s.chiefAt.x, y: s.chiefAt.y, z: ground * k + 1.1 };
+  eye.draw(inp, eyeAt, k, light, performance.now() / 1000);
+  eye.drawSprites(eyeSprites(s, eyeAt, k, day), eyeAt, (x, y) => map.heightAt(x, y) * k, light.night);
+}
+
+/** A creature's picture (in its own coat, legs one way or the other), made once. */
+const eyeLooks = new Map<string, HTMLCanvasElement>();
+function eyeCreature(look: CreatureLook, frame: number): HTMLCanvasElement {
+  const key = `${look.diet}|${look.hue ?? ''}|${genesKey(look.genes)}|${Object.values(look.parts).join('.')}|${frame}`;
+  let c = eyeLooks.get(key);
+  if (!c) {
+    if (eyeLooks.size > 400) eyeLooks.clear();
+    c = document.createElement('canvas');
+    c.width = 30;
+    c.height = 22;
+    drawCreature(c.getContext('2d')!, look, 15, 21, { frame });
+    eyeLooks.set(key, c);
+  }
+  return c;
+}
+const eh = (a: number, b: number) => {
+  const x = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+};
+/** Who and what's to be seen from the eye: the village's critters (out round the hearth by day,
+ * close in at night; the little ones near), its buildings and the fire, and the villages found,
+ * their huts and their own. Not in the fog, and only the nearer ones. */
+function eyeSprites(s: ShoreState, eyeAt: { x: number; y: number }, k: number, day: number): import('./scene/eyeView').EyeSprite[] {
+  const map = scene.shoreScene;
+  const seen = state.stages.shore.seen;
+  const t = performance.now() / 1000;
+  const night = day > 0.75;
+  const near = (x: number, y: number) => Math.hypot(x - eyeAt.x, y - eyeAt.y) < 100;
+  const clear = (x: number, y: number) => !seen || !!seen[Math.floor(y / CELL) * SHORE_CELLS + Math.floor(x / CELL)];
+  const out: import('./scene/eyeView').EyeSprite[] = [];
+  const put = (x: number, y: number, h: number, img: HTMLCanvasElement, flip = false) => {
+    if (near(x, y) && clear(x, y)) out.push({ x, y, z: map.heightAt(x, y) * k, h, img, flip });
+  };
+  if (s.raftTaken) put(s.hearth.x, s.hearth.y, 1.6, map.buildImage('hearth', s));
+  for (const b of s.built) if (b.id !== 'hearth') put(b.x, b.y, b.id === 'hut' || b.id === 'longhouse' ? 2.2 : 3, map.buildImage(b.id, s));
+  // The village's own (not the chief: that's who's looking).
+  const people = s.people.filter((p) => p.id !== s.chief && p.kind === undefined);
+  const placed: { x: number; y: number; p: (typeof people)[number]; g: number }[] = [];
+  for (const p of people) {
+    const g = growth(s, p);
+    const r = night || g < 1 ? 2 + eh(p.id, 1) * 5 : 4 + eh(p.id, 2) * 16;
+    const a = eh(p.id, 3) * Math.PI * 2 + t * 0.04 * (eh(p.id, 4) - 0.5);
+    const x = s.hearth.x + Math.cos(a) * r;
+    const y = s.hearth.y + Math.sin(a) * r * 0.8;
+    if (near(x, y)) placed.push({ x, y, p, g });
+  }
+  placed.sort((a, b) => Math.hypot(a.x - eyeAt.x, a.y - eyeAt.y) - Math.hypot(b.x - eyeAt.x, b.y - eyeAt.y));
+  for (const q of placed.slice(0, 160)) {
+    const look = q.p.genes ? { ...s.look, genes: q.p.genes } : s.look;
+    put(q.x, q.y, q.g >= 1 ? 1 : 0.4 + 0.3 * q.g, eyeCreature(look, Math.floor(t * 3 + q.p.id) % 2), eh(q.p.id, 5) < 0.5);
+  }
+  // The villages found: their huts round their middle, and some of them about.
+  for (const v of s.villages) {
+    if (!v.found || v.gone || !near(v.x, v.y)) continue;
+    const huts = 3 + Math.min(5, Math.floor(v.pop / 10));
+    for (let i = 0; i < huts; i++) {
+      const a = eh(v.id, i) * Math.PI * 2;
+      const r = 2.5 + eh(v.id, i + 50) * 5;
+      put(v.x + Math.cos(a) * r, v.y + Math.sin(a) * r * 0.8, 2.2, map.hutImage(v));
+    }
+    const folk = Math.min(8, Math.ceil(v.pop / 4));
+    for (let i = 0; i < folk; i++) {
+      const a = eh(v.id, i + 100) * Math.PI * 2 + t * 0.05 * (eh(v.id, i + 150) - 0.5);
+      const r = 1.5 + eh(v.id, i + 200) * 5;
+      put(v.x + Math.cos(a) * r, v.y + Math.sin(a) * r * 0.8, 1, eyeCreature({ ...v.look, genes: personal(v.look.genes, v.id * 101 + i) }, Math.floor(t * 3 + i) % 2), eh(v.id, i + 250) < 0.5);
+    }
+  }
+  return out;
 }
 
 /** The crew chooser redrawn where it is (the lists keep their scroll). */

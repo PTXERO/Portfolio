@@ -62,7 +62,7 @@ vec3 skyCol(vec3 d) {
   vec3 c = mix(mix(dayLow, dayTop, pow(up, 0.6)), mix(nightLow, nightTop, pow(up, 0.6)), uNight);
   // The sun's glow and disc.
   float s = max(dot(d, normalize(uSun)), 0.0);
-  c += uSunCol * (pow(s, 8.0) * 0.25 + smoothstep(0.9993, 0.9996, s) * 1.5) * (1.0 - uNight);
+  c += uSunCol * (pow(s, 8.0) * 0.25 + smoothstep(0.99975, 0.9999, s) * 1.5) * (1.0 - uNight);
   // Stars, at night.
   if (uNight > 0.3 && d.z > 0.0) {
     vec2 q = floor(vec2(atan(d.y, d.x) * 120.0, d.z * 180.0));
@@ -147,6 +147,17 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }`;
 
+/** Something standing in the world (a critter, a hut, the fire): where its feet are (tiles; z
+ * up, as the land's height), how tall it stands (tiles), its picture, facing which way. */
+export interface EyeSprite {
+  x: number;
+  y: number;
+  z: number;
+  h: number;
+  img: CanvasImageSource & { width: number; height: number };
+  flip?: boolean;
+}
+
 export interface EyeInputs {
   key: string;
   n: number;
@@ -197,6 +208,8 @@ const PIXEL = 3;
 export class EyeView {
   readonly el: HTMLElement;
   private canvas: HTMLCanvasElement;
+  /** What stands in the world, drawn over the land (as small, scaled up the same). */
+  private over: HTMLCanvasElement;
   private gl: WebGLRenderingContext;
   private prog: WebGLProgram;
   private tex: Record<'height' | 'g0' | 'g1' | 'fog', WebGLTexture>;
@@ -216,9 +229,10 @@ export class EyeView {
   ) {
     this.el = document.createElement('div');
     this.el.id = 'eye';
-    this.el.innerHTML = `<canvas></canvas><button class="px-btn eye-leave" aria-label="Leave">×</button><div class="eye-tip label">Drag to look · tap to walk</div>`;
+    this.el.innerHTML = `<canvas></canvas><canvas class="eye-sprites"></canvas><button class="px-btn eye-leave" aria-label="Leave">×</button><div class="eye-tip label">Drag to look · tap to walk</div>`;
     parent.appendChild(this.el);
     this.canvas = this.el.querySelector('canvas')!;
+    this.over = this.el.querySelector<HTMLCanvasElement>('canvas.eye-sprites')!;
     const gl = this.canvas.getContext('webgl', { antialias: false, premultipliedAlpha: false });
     if (!gl) throw new Error('no webgl');
     this.gl = gl;
@@ -328,6 +342,77 @@ export class EyeView {
     gl.uniform1f(this.u('uNight'), light.night);
     gl.uniform1f(this.u('uTime'), time);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  /** What stands in the world, over the land: placed with the same camera as the land's rays,
+   * as tall as they are for how far off they are, the far first; hidden behind a hill (the land
+   * between checked along the line to them), fading far off, darker at night. */
+  drawSprites(list: EyeSprite[], eye: { x: number; y: number; z: number }, landAt: (x: number, y: number) => number, night: number): void {
+    const c = this.over;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    if (c.width !== w || c.height !== h) {
+      c.width = w;
+      c.height = h;
+    }
+    const b = c.getContext('2d')!;
+    b.clearRect(0, 0, w, h);
+    b.imageSmoothingEnabled = false;
+    const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw), cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
+    const fwd = [cy * cp, sy * cp, sp];
+    const rl = Math.hypot(-sy, cy);
+    const right = [-sy / rl, cy / rl, 0];
+    // up = fwd × right (the map's y runs south)
+    const up = [fwd[1] * right[2] - fwd[2] * right[1], fwd[2] * right[0] - fwd[0] * right[2], fwd[0] * right[1] - fwd[1] * right[0]];
+    const tan = Math.tan(1.15 / 2);
+    const aspect = w / h;
+    const proj = (x: number, y: number, z: number) => {
+      const v = [x - eye.x, y - eye.y, z - eye.z];
+      const d = v[0] * fwd[0] + v[1] * fwd[1] + v[2] * fwd[2];
+      if (d < 0.3) return null;
+      const sx = (v[0] * right[0] + v[1] * right[1] + v[2] * right[2]) / d / (tan * aspect);
+      const sy2 = (v[0] * up[0] + v[1] * up[1] + v[2] * up[2]) / d / tan;
+      return { X: (sx * 0.5 + 0.5) * w, Y: (1 - (sy2 * 0.5 + 0.5)) * h, d };
+    };
+    const items: { X: number; Y: number; d: number; s: EyeSprite }[] = [];
+    for (const s of list) {
+      const p = proj(s.x, s.y, s.z);
+      if (!p || p.X < -w || p.X > w * 2 || p.Y < -h || p.Y > h * 3) continue;
+      // Behind a hill? (Looked for along the line to its middle.)
+      const mz = s.z + s.h * 0.5;
+      const dist = Math.hypot(s.x - eye.x, s.y - eye.y);
+      let hidden = false;
+      const steps = Math.min(24, Math.ceil(dist / 1.5));
+      for (let k = 1; k < steps && !hidden; k++) {
+        const f = k / steps;
+        const px = eye.x + (s.x - eye.x) * f;
+        const py = eye.y + (s.y - eye.y) * f;
+        if (landAt(px, py) > eye.z + (mz - eye.z) * f + 0.05) hidden = true;
+      }
+      if (!hidden) items.push({ ...p, s });
+    }
+    items.sort((a, c2) => c2.d - a.d);
+    for (const it of items) {
+      const ph = (it.s.h / it.d / tan) * (h / 2);
+      if (ph < 1) continue;
+      const pw = ph * (it.s.img.width / it.s.img.height);
+      b.globalAlpha = Math.max(0, Math.min(1, (110 - it.d) / 40));
+      if (it.s.flip) {
+        b.save();
+        b.translate(Math.round(it.X + pw / 2), Math.round(it.Y - ph));
+        b.scale(-1, 1);
+        b.drawImage(it.s.img, 0, 0, pw, ph);
+        b.restore();
+      } else b.drawImage(it.s.img, Math.round(it.X - pw / 2), Math.round(it.Y - ph), pw, ph);
+    }
+    b.globalAlpha = 1;
+    // Night falls on them too.
+    if (night > 0.02) {
+      b.globalCompositeOperation = 'source-atop';
+      b.fillStyle = `rgba(12, 16, 40, ${0.6 * night})`;
+      b.fillRect(0, 0, w, h);
+      b.globalCompositeOperation = 'source-over';
+    }
   }
 
   /** Gone: the GL context let go of (it's heavy to keep). */
