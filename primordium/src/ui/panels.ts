@@ -1,7 +1,7 @@
 // The tab panels under the scene. Each panel is laid out once (when its rows
 // change) and then patched in place, so a button never vanishes under a finger.
 
-import { CHANNELS, volumes } from '../audio/sound';
+import { CHANNELS, mixWithMusic, volumes } from '../audio/sound';
 import { ideasLayout, spellsLayout, tribeKey, tribeLayout, tribeUpdate } from './tribePanels';
 import { shoreKey, shoreLayout, shoreUpdate } from './shorePanels';
 import { eraName, gathered } from '../economy/chronicle';
@@ -429,6 +429,8 @@ export function layout(state: GameState, tab: Tab): string {
       <p class="note" data-t="offline"></p>
     <div class="panel-head"><h2>Sound</h2></div>
     <div class="sound">${CHANNELS.map((c) => `<label><span>${c.label}</span><input type="range" min="0" max="100" step="1" value="${Math.round(volumes[c.id] * 100)}" data-vol="${c.id}"></label>`).join('')}</div>
+    <div class="warp"><button class="px-btn${mixWithMusic ? ' on' : ''}" data-mix="on">Play over my music</button><button class="px-btn${mixWithMusic ? '' : ' on'}" data-mix="off">Game sound only</button></div>
+    <p class="note">${mixWithMusic ? 'Your own music keeps playing. On a phone set to silent, the game is quiet.' : 'Other music stops while you play. Heard even on silent.'}</p>
     <div class="panel-head"><h2>Camera angle</h2></div>
     <div class="warp">${[0.5, 0.65, 0.85, 0].map((k, i) => `<button class="px-btn" data-tilt="${k}">${['Low', 'Mid', 'High', 'Era default'][i]}</button>`).join('')}</div>
     <p class="note">On the islands, drag two fingers up or down to tilt the view.</p>

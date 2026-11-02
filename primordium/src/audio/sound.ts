@@ -99,6 +99,32 @@ function applyVolumes(): void {
   sky.gain.setTargetAtTime(volumes.effects, now, 0.05);
 }
 
+/** Play over the phone's own music (on: the game mixes in, and follows the silent switch), or
+ * as the only sound (off: it stops other music, and plays with the switch on silent). */
+const MIX_KEY = 'primordium-mix';
+export let mixWithMusic = (() => {
+  try {
+    return localStorage.getItem(MIX_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+})();
+function sessionType(): void {
+  // (iPhone, Safari 16.4 on: what kind of sound this is decides whether other music stops.)
+  const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
+  if (session) session.type = mixWithMusic ? 'ambient' : 'playback';
+}
+export function setMixWithMusic(on: boolean): void {
+  mixWithMusic = on;
+  try {
+    localStorage.setItem(MIX_KEY, on ? 'on' : 'off');
+  } catch {
+    /* private mode: it's just not remembered */
+  }
+  sessionType();
+  if (ctx && !document.hidden) void ctx.resume();
+}
+
 /** Called from the first taps: makes the sound (browsers only allow it from a tap). */
 export function unlockSound(): void {
   if (ctx) {
@@ -109,9 +135,7 @@ export function unlockSound(): void {
   }
   const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
   if (!AC) return;
-  // On iPhone, Web Audio follows the silent switch unless the page says it's playing sound.
-  const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
-  if (session) session.type = 'playback';
+  sessionType();
   ctx = new AC();
   void ctx.resume();
   master = ctx.createGain();

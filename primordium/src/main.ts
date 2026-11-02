@@ -64,7 +64,7 @@ import { LOOK_BACK_SEC } from './scene/tribe';
 import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
 import { playCrossing } from './ui/crossing';
-import { setWordPool, whistle, thunder, cue, glug, hushDrone, popSound, setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
+import { setWordPool, whistle, thunder, cue, glug, hushDrone, popSound, setVolume, setMixWithMusic, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
 import { creatureLookOf, drawCreature, genesKey, miniIcon, type CreatureLook } from './scene/creatureLook';
 import { describe, personal } from './economy/genes';
 import { CELL } from './economy/island';
@@ -2328,6 +2328,12 @@ function act(el: HTMLElement): void {
     if (k === 'explore') c.autoRoam = !c.autoRoam;
     else if (k === 'breed') c.keepBreeding = !c.keepBreeding;
     else if (k === 'places' || k === 'settle' || k === 'mandatory') c.roamOpts[k] = !c.roamOpts[k];
+  } else if (el.dataset.mix) {
+    const on = el.dataset.mix === 'on';
+    setMixWithMusic(on);
+    for (const b of document.querySelectorAll<HTMLElement>('[data-mix]')) b.classList.toggle('on', (b.dataset.mix === 'on') === on);
+    const note = el.parentElement?.nextElementSibling;
+    if (note) note.textContent = on ? 'Your own music keeps playing. On a phone set to silent, the game is quiet.' : 'Other music stops while you play. Heard even on silent.';
   } else if (el.dataset.tilt) {
     const v = Number(el.dataset.tilt);
     ui.tilt = v || null;
