@@ -1092,6 +1092,8 @@ body.tab-hearth #expand { display: none; }
 .words .word-row { padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
 .words .word-head { display: flex; align-items: baseline; gap: 8px; }
 .words .their { color: var(--gold, #e8c86a); font-size: 15px; }
+.their { color: var(--gold, #e8c86a); letter-spacing: 0.03em; }
+.words .was { color: #cdb98a; margin: 1px 0 3px; }
 .words .meaning { margin-left: auto; color: #8acf6a; }
 .words .guess { width: 100%; box-sizing: border-box; margin: 4px 0 2px; padding: 4px 6px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.15); color: inherit; font: inherit; font-size: 13px; }
 /* Talk on the map, over the speaker's head. */
@@ -1099,3 +1101,5 @@ body.tab-hearth #expand { display: none; }
 .map-say b { display: block; font-size: 10px; color: #a0522d; }
 .map-say .gloss { display: block; font-size: 10px; font-style: normal; color: #8a6a4a; }
 .map-say .gloss:empty { display: none; }
+.place-names { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
+.place-names span { position: absolute; left: 0; top: 0; font-size: 10px; letter-spacing: 0.08em; font-style: italic; color: rgba(255, 246, 225, 0.72); text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7), 0 0 3px rgba(0, 0, 0, 0.5); white-space: nowrap; }

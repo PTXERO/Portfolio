@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { borrow, grammarOf, hear, newLanguage, say, shiftSounds, syllables, talk, talkUnheard, wordOf, type Speaker } from '../src/economy/language';
+import { borrow, grammarOf, hear, namePlace, newLanguage, say, sayNow, shiftSounds, syllables, talk, talkUnheard, wordOf, type Speaker } from '../src/economy/language';
 
 const folk: Speaker[] = Array.from({ length: 24 }, (_, i) => ({ age: (['little', 'youngster', 'grown', 'elder'] as const)[i % 4], temper: ['bold', 'cheerful', 'grumpy', 'curious', 'dreamy', 'greedy'][i % 6] }));
 const sit = { heat: 0.4, season: 0, night: false, rain: false, plenty: true, age: 1, won: 1, streak: false, crossed: false };
@@ -60,9 +60,35 @@ describe('Their tongue, made by them', () => {
     let shifted = 0;
     for (let y = 1; y < 15; y++) if (shiftSounds(lang, y)) shifted++;
     expect(shifted).toBeGreaterThan(0);
+    say(lang, { thing: 'fish' }, folk[2], 11, 6);
     const took = borrow(lang, 'the Reed clan', 999, 'grazer', ['fish'], 12);
     expect(took).toHaveLength(1);
     expect(lang.lex.fish.length).toBeGreaterThan(1);
     expect(lang.from.fish).toBe('the Reed clan');
+  });
+  it('words are mostly made where you can hear it: unheard, only after a while of wanting one', () => {
+    const lang = newLanguage(5, 'hunter');
+    talkUnheard(lang, 1, sit, folk);
+    expect(Object.keys(lang.lex)).toHaveLength(0);
+    const sp = say(lang, { thing: 'fire' }, folk[2], 1, 9);
+    expect(sp.made).toEqual(['fire']);
+    for (let d = 2; d <= 6; d++) talkUnheard(lang, d, sit, folk);
+    expect(Object.keys(lang.lex).length).toBeGreaterThan(3);
+  });
+  it('a word keeps its history; places are named out of their words and wear down with them', () => {
+    const lang = newLanguage(77, 'omnivore');
+    say(lang, { thing: 'water' }, folk[2], 1, 1);
+    say(lang, { thing: 'village' }, folk[2], 1, 2);
+    const name = namePlace(lang, 'v1', ['water', 'village'], 2)!;
+    expect(name.startsWith(wordOf(lang, 'water')!)).toBe(true);
+    expect(namePlace(lang, 'v1', ['water', 'village'], 3)).toBeNull();
+    lang.lex.water[0].f = 'tata';
+    lang.places!.v1.f = 'tatate';
+    for (let y = 1; y < 40 && lang.lex.water[0].f === 'tata'; y++) shiftSounds(lang, y, y * 16);
+    expect(lang.lex.water[0].f).not.toBe('tata');
+    expect(lang.past!.water.at(-1)!.f).toBe(lang.lex.water[0].f);
+    expect(lang.places!.v1.f).not.toBe('tatate');
+    // (How they'd put it now: the words they have, in the order most use.)
+    expect(sayNow(lang, { thing: 'water' })).toBe(lang.lex.water[0].f.charAt(0).toUpperCase() + lang.lex.water[0].f.slice(1) + '.');
   });
 });

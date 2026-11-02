@@ -2,10 +2,10 @@
 // batch of what's been brought in (food, there and then), and builds the fire up; a big fire
 // cooks more of everything while it lasts, and it dies down by itself if it's left.
 
-import { langOf, situationOf, speakerOf, DAY_SEC, whiteHot, fireMost, fireMore, growth, knowsSign, praying, prayerMost, signReady, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
+import { langOf, situationOf, speakerOf, spoke, DAY_SEC, whiteHot, fireMost, fireMore, growth, knowsSign, praying, prayerMost, signReady, foodRate, shoreSeason, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
 import { drawCreature, type CreatureLook } from '../scene/creatureLook';
 import { MIRACLES, type MiracleId } from '../content/idle';
-import { hear, say, syllables, talk, wordFor, type Turn } from '../economy/language';
+import { syllables, talk, wordFor, type Turn } from '../economy/language';
 
 import { squeak, whistle } from '../audio/sound';
 import { D, format } from '../economy/num';
@@ -261,11 +261,10 @@ export class HearthView {
       // Said in their own words and their own order (as their tongue stands now); every word
       // heard is counted, and when, for anyone working out what they're saying.
       const lang = langOf(s);
-      const me = speakerOf(s, person);
-      const sp = say(lang, turn, me, s.day, Math.floor(Math.random() * 1e9));
       const heat = s.heat ?? 0;
-      const situation = `${me.age === 'little' ? 'a little one' : me.age === 'youngster' ? 'a youngster' : me.age === 'elder' ? 'an elder' : 'grown'} · ${heat > 0.6 ? 'the fire high' : heat < 0.15 ? 'the fire low' : 'the fire steady'} · ${SEASON_NAMES[shoreSeason(s).si].toLowerCase()}`;
-      hear(lang, sp.said, situation);
+      const sp = spoke(s, person, turn, heat > 0.6 ? 'the fire high' : heat < 0.15 ? 'the fire low' : 'the fire steady', Math.floor(Math.random() * 1e9));
+      // (A word just made: asked back, and said again.)
+      if (sp.echo.length) c.lines.splice(c.at + 1, 0, ...sp.echo);
       const line = sp.text;
       // (Under it, what you've made of it so far: your guesses, or what the scribes wrote down.)
       const gl = sp.said.map((x) => (!x.meaning ? x.word : lang.scribed ? x.meaning : lang.guess[x.meaning] || '·'));

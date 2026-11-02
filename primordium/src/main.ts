@@ -16,7 +16,7 @@ import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
 import { HearthView } from './ui/hearthView';
-import { situationOf, surroundings, speakerOf, langOf, growth, SHORE_CELLS, type ShoreState, workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
+import { situationOf, spoke, placeName, surroundings, speakerOf, langOf, growth, SHORE_CELLS, type ShoreState, workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
 import { dance, danceLeft, shoreIsland, terrainReady, gift, isAdult, poisOf, shoreOf, shoreSeason, startShore, takeRaft, walkChief } from './economy/shore';
 import { AGES, ageName } from './economy/culture';
 import { crewCard, buyAmount, setBuildCat, setBuyMany, setIslandView, danceCard, findCard, forkCard, poiCard, setVillageView, villageCard } from './ui/shorePanels';
@@ -68,7 +68,7 @@ import { setWordPool, whistle, thunder, cue, glug, hushDrone, popSound, setVolum
 import { creatureLookOf, drawCreature, genesKey, miniIcon, type CreatureLook } from './scene/creatureLook';
 import { describe, personal } from './economy/genes';
 import { CELL } from './economy/island';
-import { hear as hearIt, say as sayIt, syllables, talk, wordFor } from './economy/language';
+import { syllables, talk, wordFor } from './economy/language';
 import { glyph, panWeb, pickIdea, webTransform, webView, zoomWeb } from './ui/tribePanels';
 import { nameList, record } from './economy/chronicle';
 import { PARTS } from './content/creature';
@@ -524,8 +524,8 @@ function mapTalk(s: ShoreState): void {
     }
     const lang = langOf(s);
     const me = speakerOf(s, person);
-    const sp = sayIt(lang, turn, me, s.day, Math.floor(Math.random() * 1e9));
-    hearIt(lang, sp.said, `${me.age === 'little' ? 'a little one' : me.age === 'youngster' ? 'a youngster' : me.age === 'elder' ? 'an elder' : 'grown'} · out on the land · ${['spring', 'summer', 'autumn', 'winter'][situationOf(s).season]}`);
+    const sp = spoke(s, person, turn, 'out on the land', Math.floor(Math.random() * 1e9));
+    if (sp.echo.length) c.turns.splice(c.at + 1, 0, ...sp.echo);
     (mapSay.firstElementChild as HTMLElement).textContent = person.name;
     (mapSay.querySelector('span') as HTMLElement).textContent = sp.text;
     const gl = sp.said.map((x) => (!x.meaning ? x.word : lang.scribed ? x.meaning : lang.guess[x.meaning] || '·'));
@@ -547,6 +547,40 @@ function mapTalk(s: ShoreState): void {
   const r = stageEl.getBoundingClientRect();
   mapSay.style.left = `${Math.max(6, Math.min(r.width - w - 6, cx - w / 2))}px`;
   mapSay.style.top = `${Math.max(6, cy - mapSay.offsetHeight - 6)}px`;
+}
+
+// ---- Their names on the land ----
+
+/** What they call the places they know, in their own words, faint on the map under each. */
+const placeLayer = document.createElement('div');
+placeLayer.className = 'place-names';
+stageEl.appendChild(placeLayer);
+const placeEls = new Map<string, HTMLElement>();
+function placeLabels(s: ShoreState): void {
+  const quiet = eye || (ui.open && (ui.tab === 'hearth' || !isWide()));
+  const places = quiet ? {} : (s.lang?.places ?? {});
+  const seenKeys = new Set<string>();
+  for (const key of Object.keys(places)) {
+    const at = key === 'home' ? s.hearth : key[0] === 'v' ? s.villages.find((v) => `v${v.id}` === key) : s.pois?.find((p) => `p${p.id}` === key);
+    const on = at && scene.shoreScene.spotOnScreen(at.x, at.y);
+    if (!on) continue;
+    seenKeys.add(key);
+    let el = placeEls.get(key);
+    if (!el) {
+      el = document.createElement('span');
+      placeLayer.appendChild(el);
+      placeEls.set(key, el);
+    }
+    const name = placeName(s, key)!;
+    if (el.textContent !== name) el.textContent = name;
+    const [cx, cy] = scene.toCss(on.X, on.Y);
+    el.style.transform = `translate(${Math.round(cx)}px, ${Math.round(cy + 4)}px) translateX(-50%)`;
+  }
+  for (const [key, el] of placeEls) {
+    if (seenKeys.has(key)) continue;
+    el.remove();
+    placeEls.delete(key);
+  }
 }
 
 /** The crew chooser redrawn where it is (the lists keep their scroll). */
@@ -1233,6 +1267,7 @@ function shoreFrame(): void {
     return;
   }
   mapTalk(s);
+  placeLabels(s);
   // (Their words, for the whistled chatter as they go about: refreshed now and then.)
   const nowMs = performance.now();
   if (s.lang?.lex && nowMs - wordsAt > 5000) {

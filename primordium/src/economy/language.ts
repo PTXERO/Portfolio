@@ -58,6 +58,17 @@ export interface Language {
   /** Talks had (heard or not), and the day the unheard ones were last had. */
   talks: number;
   day: number;
+  /** How often a talk no one heard wanted a word they didn't have yet (made unheard only once
+   * they've gone wanting a good while: mostly, words are made where you can see it). */
+  need?: Record<string, number>;
+  /** Each word that's been the word for something, and the day it was (oldest first). */
+  past?: Record<string, { f: string; day: number }[]>;
+  /** Who made the word, where, and when (made in front of you). */
+  named?: Record<string, { by: string; where: string; day: number }>;
+  /** The first thing you heard them say (and when), to set beside how they'd say it now. */
+  first?: { fr: Frame; text: string; day: number };
+  /** Places they've named (out of words they have), and what they're named out of. */
+  places?: Record<string, { f: string; of: [string, string]; day: number }>;
 }
 
 export interface Speaker {
@@ -122,7 +133,7 @@ export function wordOf(lang: Language, m: string): string | undefined {
 /** Someone needs a word for something: the one they'd use (the strongest, mostly; an elder holds
  * to the oldest; a little one now and then says it their own way); none yet, one's made up (or,
  * for something new, put together out of words they have). */
-function choose(lang: Language, m: string, who: Speaker, r: () => number, day: number): string {
+function choose(lang: Language, m: string, who: Speaker, r: () => number, day: number, made?: string[]): string {
   let vs = lang.lex[m];
   if (!vs?.length) {
     const def = MEANINGS[m];
@@ -143,6 +154,8 @@ function choose(lang: Language, m: string, who: Speaker, r: () => number, day: n
       }
     }
     vs = lang.lex[m] = [{ f, s: 1, born: day }];
+    remember(lang, m, f, day);
+    made?.push(m);
     return f;
   }
   if (who.age === 'little' && r() < 0.05) {
@@ -167,12 +180,23 @@ export function wordFor(lang: Language, m: string, day: number): string {
 }
 
 /** Heard, and taken up: the word used gains, its rivals lose (the losers are forgotten). */
-function useWord(lang: Language, m: string, f: string): void {
+function useWord(lang: Language, m: string, f: string, day: number): void {
   const vs = lang.lex[m];
   if (!vs) return;
   // (A word's hold has a ceiling: the young can always talk the old ways out, in time.)
   for (const v of vs) v.s = v.f === f ? Math.min(WORD_HOLD, v.s + 1) : Math.max(0, v.s - 0.35);
   lang.lex[m] = vs.filter((v) => v.s > 0.05 || v.f === f).sort((a, b) => b.s - a.s).slice(0, 5);
+  // (A new word for it, once it's taken hold: the old one's history now.)
+  if (lang.lex[m][0].s >= 3) remember(lang, m, lang.lex[m][0].f, day);
+}
+
+/** The word for something now, put down in its history if it's new there. */
+function remember(lang: Language, m: string, f: string, day: number): void {
+  const h = ((lang.past ??= {})[m] ??= []);
+  if (h.at(-1)?.f === f) return;
+  // (Back to an old word: only the latest comes again; a long history keeps its first and last.)
+  h.push({ f, day });
+  if (h.length > 6) h.splice(1, 1);
 }
 
 const WORD_HOLD = 25;
@@ -207,13 +231,34 @@ export interface Said {
 }
 
 /** Something said: in their words and their order (as it stands), and taken up by the rest. */
-export function say(lang: Language, fr: Frame, who: Speaker, day: number, seed: number): { text: string; said: Said[] } {
+export function say(lang: Language, fr: Frame, who: Speaker, day: number, seed: number): { text: string; said: Said[]; made: string[] } {
   const r = rng(seed);
-  const w = (m: string): Said => ({ word: choose(lang, m, who, r, day), meaning: m });
+  const made: string[] = [];
+  const w = (m: string): Said => ({ word: choose(lang, m, who, r, day, made), meaning: m });
   const order = chooseOrder(lang, r);
   const qa = lean(lang.qAfter, r, lang.talks);
   const nf = lean(lang.negFront, r, lang.talks);
   const af = lean(lang.askFront, r, lang.talks);
+  const { out, text, parts } = arrange(fr, w, order, qa, nf, af);
+  // Taken up: the words used gain, and so does the way they were put.
+  for (const s of out) if (s.meaning) useWord(lang, s.meaning, s.word, day);
+  if (parts > 1) for (const o of ORDERS) lang.orders[o] = (lang.orders[o] ?? 0) * 0.99 + (o === order ? 0.01 : 0);
+  if (fr.quality) lang.qAfter = lang.qAfter * 0.99 + (qa ? 0.01 : -0.01);
+  if (fr.no) lang.negFront = lang.negFront * 0.99 + (nf ? 0.01 : -0.01);
+  if (fr.ask) lang.askFront = lang.askFront * 0.99 + (af ? 0.01 : -0.01);
+  lang.talks++;
+  return { text, said: out, made };
+}
+
+/** How they'd say it now, the way most of them would (nothing's taken up by it; a word they
+ * don't have yet shows as a dash). */
+export function sayNow(lang: Language, fr: Frame): string {
+  const g = grammarOf(lang);
+  return arrange(fr, (m) => ({ word: wordOf(lang, m) ?? '–', meaning: m }), g.order, g.qAfter, g.negFront, g.askFront).text;
+}
+
+/** A thing meant, put in words in an order. */
+function arrange(fr: Frame, w: (m: string) => Said, order: string, qa: boolean, nf: boolean, af: boolean): { out: Said[]; text: string; parts: number } {
   const slots: Record<string, Said[]> = { A: [], V: [], T: [] };
   if (fr.who) slots.A.push(w(fr.who));
   if (fr.act) slots.V.push(w(fr.act));
@@ -240,17 +285,10 @@ export function say(lang: Language, fr: Frame, who: Speaker, day: number, seed: 
     else out.push(q);
   }
   if (fr.to) out = [{ word: fr.to }, ...out];
-  // Taken up: the words used gain, and so does the way they were put.
-  for (const s of out) if (s.meaning) useWord(lang, s.meaning, s.word);
-  if (slots.A.length + slots.V.length + slots.T.length > 1) for (const o of ORDERS) lang.orders[o] = (lang.orders[o] ?? 0) * 0.99 + (o === order ? 0.01 : 0);
-  if (fr.quality) lang.qAfter = lang.qAfter * 0.99 + (qa ? 0.01 : -0.01);
-  if (fr.no) lang.negFront = lang.negFront * 0.99 + (nf ? 0.01 : -0.01);
-  if (fr.ask) lang.askFront = lang.askFront * 0.99 + (af ? 0.01 : -0.01);
-  lang.talks++;
   let text = out.map((x) => x.word).join(' ');
   if (fr.to) text = text.replace(fr.to + ' ', fr.to + ', ');
   text = text.charAt(0).toUpperCase() + text.slice(1) + (fr.ask ? '?' : '.');
-  return { text, said: out };
+  return { out, text, parts: slots.A.length + slots.V.length + slots.T.length };
 }
 
 /** What's going on round them, for what they'll talk about. */
@@ -340,9 +378,27 @@ export function talkUnheard(lang: Language, day: number, sit: Situation, speaker
   for (let k = 0; k < 12 * days; k++) {
     const a = speakers[Math.floor(r() * speakers.length)];
     const b = speakers[Math.floor(r() * speakers.length)];
-    for (const t of talk(sit, { ...a, name: '' }, { ...b, name: '' }, r)) say(lang, { ...t, to: undefined }, t.by ? b : a, day, Math.floor(r() * 1e9));
+    for (const t of talk(sit, { ...a, name: '' }, { ...b, name: '' }, r)) {
+      // (Wanting a word they don't have: made unheard only once they've wanted it a while.)
+      // (Said without it, meanwhile: the rest of what they meant, if there's any left.)
+      const need = (lang.need ??= {});
+      const lacks = (m: string | undefined) => !!m && !wordOf(lang, m) && (need[m] = (need[m] ?? 0) + 1) < UNHEARD_MAKES;
+      const fr: Frame = { ...t, to: undefined };
+      if (lacks(fr.who)) fr.who = undefined;
+      if (lacks(fr.act)) fr.act = undefined;
+      if (lacks(fr.thing)) fr.thing = undefined;
+      if (lacks(fr.quality)) fr.quality = undefined;
+      if (fr.no && lacks('no')) fr.no = false;
+      if (fr.ask && lacks('what')) fr.ask = false;
+      if (fr.yes && lacks('yes')) fr.yes = false;
+      if (!fr.who && !fr.act && !fr.thing && !fr.quality) continue;
+      say(lang, fr, t.by ? b : a, day, Math.floor(r() * 1e9));
+    }
   }
 }
+
+/** Talks wanting a word before one is made with no one listening (a day or two of wanting). */
+export const UNHEARD_MAKES = 15;
 
 /** Heard: each word's count goes up, and the situation's noted (a few kept). */
 export function hear(lang: Language, said: Said[], situation: string): void {
@@ -370,7 +426,7 @@ const SHIFTS: { say: string; re: RegExp; to: string }[] = [
   { say: 'u at the end became o', re: /u$/g, to: 'o' },
   { say: 'r after a vowel at the end fell away', re: /(?<=[aeiou])r$/g, to: '' },
 ];
-export function shiftSounds(lang: Language, year: number): string | null {
+export function shiftSounds(lang: Language, year: number, day = lang.day): string | null {
   if (year <= lang.shiftYear) return null;
   lang.shiftYear = year;
   const r = rng(lang.seed + year * 31);
@@ -386,6 +442,12 @@ export function shiftSounds(lang: Language, year: number): string | null {
     }
   }
   if (!changed) return null;
+  for (const [m, vs] of Object.entries(lang.lex)) if (vs[0]) remember(lang, m, vs[0].f, day);
+  // (Place names shift with the rest: a name keeps its old words, worn down.)
+  for (const p of Object.values(lang.places ?? {})) {
+    const nf = p.f.replace(rule.re, rule.to);
+    if (nf.length >= 2) p.f = nf;
+  }
   lang.shifts.push(rule.say);
   return rule.say;
 }
@@ -412,6 +474,20 @@ export function grammarOf(lang: Language): { order: string; orderSure: number; q
   const best = ORDERS.reduce((a, o) => ((lang.orders[o] ?? 0) > (lang.orders[a] ?? 0) ? o : a), ORDERS[0]);
   const tot = ORDERS.reduce((a, o) => a + Math.max(0, lang.orders[o] ?? 0), 0);
   return { order: best, orderSure: tot ? (lang.orders[best] ?? 0) / tot : 0, qAfter: lang.qAfter > 0, negFront: lang.negFront > 0, askFront: lang.askFront > 0 };
+}
+
+/** A place named out of two words they have: the first whole, then the start of the second
+ * ("water" and "village": mek + ra → Mekra). Once named, it keeps its name (it only wears down
+ * with the sounds). None yet if they haven't the words. */
+export function namePlace(lang: Language, key: string, of: [string, string], day: number): string | null {
+  const had = lang.places?.[key];
+  if (had) return null;
+  const a = wordOf(lang, of[0]);
+  const b = wordOf(lang, of[1]);
+  if (!a || !b) return null;
+  const f = a + syllables(b)[0];
+  (lang.places ??= {})[key] = { f, of, day };
+  return f;
 }
 
 /** A word's syllables (for whistling it: one note a syllable). */

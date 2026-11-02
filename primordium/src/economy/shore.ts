@@ -14,7 +14,7 @@ import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
 import { inherit, personal } from './genes';
 import { ageOver, cultureDay, cultureFx, maybeTurn, workReady, type Culture } from './culture';
-import { borrow, newLanguage, shiftSounds, talkUnheard, type Language, type Situation, type Speaker } from './language';
+import { borrow, hear, MEANINGS, namePlace, newLanguage, say, shiftSounds, talkUnheard, type Language, type Said, type Situation, type Speaker, type Turn } from './language';
 import { temperOf } from '../content/hearthTalk';
 import { GENS, MIRACLES, NATURES, PERKS, UPGRADES, WORKS, type GenId, type MiracleId, type NatureDef, type PerkId } from '../content/idle';
 import type { CreatureLook } from '../scene/creatureLook';
@@ -288,6 +288,8 @@ export interface ShoreState {
   watched?: number;
   /** Things the interface should show (and clear): births, deaths, finds. */
   news: string[];
+  /** Lines for the chronicle from the hearth and the map (words made, places named). */
+  toRecord?: string[];
   /** Ids of villages found since the interface last looked. */
   newFinds: number[];
 }
@@ -943,6 +945,8 @@ export function cross(state: GameState, seed = 0): boolean {
   const next = newShore(tribe);
   next.raft = crew.length;
   next.lang = s.lang;
+  // (A new island's places are named afresh.)
+  if (next.lang) next.lang.places = {};
   next.nature = natureForSeed(island).id;
   next.embers = (s.embers ?? 0) + gained;
   next.crossings = (s.crossings ?? 0) + 1;
@@ -1438,6 +1442,7 @@ export function chiefOf(s: ShoreState): ShorePerson | undefined {
 export function shoreTick(state: GameState, dt: number): void {
   const s = shoreOf(state);
   if (!s) return;
+  for (const line of s.toRecord?.splice(0) ?? []) record(state, line, 'shore', shoreWhen(s));
   let left = dt;
   while (left > 0) {
     const step = Math.min(left, 2);
@@ -1600,6 +1605,57 @@ export function situationOf(s: ShoreState, streak = false, near: string[] = []):
   };
 }
 
+/** Something one of them said, in your hearing: in their words (counted, for working out). A word
+ * made just now is a naming: the other asks it back, and it's said again (and it goes in the
+ * chronicle). The first thing you hear said is kept, to set beside how they'd say it later. */
+export function spoke(s: ShoreState, p: ShorePerson, turn: Turn, where: string, seed: number): { text: string; said: Said[]; echo: Turn[] } {
+  const lang = langOf(s);
+  const me = speakerOf(s, p);
+  const sp = say(lang, turn, me, s.day, seed);
+  const ageWord = me.age === 'little' ? 'a little one' : me.age === 'youngster' ? 'a youngster' : me.age === 'elder' ? 'an elder' : 'grown';
+  hear(lang, sp.said, `${ageWord} · ${where} · ${SEASON_NAMES[shoreSeason(s).si].toLowerCase()}`);
+  const echo: Turn[] = [];
+  const m = sp.made.find((x) => MEANINGS[x]?.role !== 'mark');
+  if (m) {
+    const word = sp.said.find((x) => x.meaning === m)!.word;
+    const role = MEANINGS[m].role as 'thing' | 'act' | 'quality' | 'who';
+    const other = (turn.by ? 0 : 1) as 0 | 1;
+    echo.push({ by: other, [role]: m, ask: true }, { by: turn.by, [role]: m });
+    const first = !Object.keys(lang.named ?? {}).length;
+    (lang.named ??= {})[m] = { by: p.name, where, day: s.day };
+    const line = first ? `${p.name} said a word no one had said before: “${word}”.` : `${p.name} made a word: “${word}”.`;
+    s.news.push(line);
+    (s.toRecord ??= []).push(line);
+  }
+  if (!lang.first && sp.said.filter((x) => x.meaning).length >= 2) lang.first = { fr: { ...turn, to: undefined }, text: sp.text, day: s.day };
+  return { text: sp.text, said: sp.said, echo };
+}
+
+/** What they call a place (in their own words), if they've named it. */
+export function placeName(s: ShoreState, key: string): string | undefined {
+  const f = s.lang?.places?.[key]?.f;
+  return f ? f.charAt(0).toUpperCase() + f.slice(1) : undefined;
+}
+
+/** Each dawn, a place or two named, out of words they have: home first, then the villages and
+ * landmarks they've found (what's there, and "village" or "old"). */
+function namePlaces(state: GameState, s: ShoreState): void {
+  const lang = s.lang;
+  if (!lang?.lex) return;
+  const LIVES: Record<Habitat, string> = { river: 'water', lake: 'water', coast: 'water', marsh: 'water', forest: 'wood', mountain: 'stone', desert: 'sun', meadow: 'sun', scrub: 'root' };
+  const want: { key: string; of: [string, string] }[] = [{ key: 'home', of: ['we', 'fire'] }];
+  for (const v of s.villages) if (v.found && !v.gone) want.push({ key: `v${v.id}`, of: [v.habitat ? LIVES[v.habitat] : surroundings(s, v.x, v.y)[0] ?? 'far', 'village'] });
+  for (const p of s.pois ?? []) if (p.found) want.push({ key: `p${p.id}`, of: [surroundings(s, p.x, p.y).find((x) => x !== 'fog') ?? 'stone', 'old'] });
+  let named = 0;
+  for (const w of want) {
+    if (named >= 2) break;
+    const f = namePlace(lang, w.key, w.of, s.day);
+    if (!f) continue;
+    named++;
+    record(state, `They've named a place: ${f.charAt(0).toUpperCase() + f.slice(1)}.`, 'shore', shoreWhen(s));
+  }
+}
+
 /** What a critter standing here can see: the things their talk can be about. */
 export function surroundings(s: ShoreState, x: number, y: number, seen?: Uint8Array): string[] {
   const is = shoreIsland(s.seed);
@@ -1639,9 +1695,10 @@ export function surroundings(s: ShoreState, x: number, y: number, seen?: Uint8Ar
 function dawn(state: GameState, s: ShoreState): void {
   // Once a year their speech shifts a little.
   if (s.lang) {
-    const shift = shiftSounds(s.lang, Math.floor(s.day / YEAR_DAYS) + (s.crossings ?? 0) * 1000);
+    const shift = shiftSounds(s.lang, Math.floor(s.day / YEAR_DAYS) + (s.crossings ?? 0) * 1000, s.day);
     if (shift) record(state, `Their speech shifted: ${shift}.`, 'shore', shoreWhen(s));
   }
+  namePlaces(state, s);
   // And it grows while no one's listening: a dozen talks a day among them.
   if (s.raftTaken && s.people.length >= 2) {
     const lang = langOf(s);

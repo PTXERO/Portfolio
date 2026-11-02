@@ -531,6 +531,14 @@ export class ShoreScene extends RangeScene {
 
   /** The village's own as they're seen now (close enough in to be told apart): who, where on the
    * island, and where in the art's pixels (their heads), for talk over their heads. */
+  /** Where a spot on the island is on screen (art px), if it's in view and near enough to read. */
+  spotOnScreen(x: number, y: number, minZoom = 1.4): { X: number; Y: number } | null {
+    if (this.zoom < minZoom) return null;
+    const X = this.sx(x);
+    const Y = this.py(x, y);
+    return X > 4 && X < this.W - 4 && Y > this.viewTop + 6 && Y < (this.viewBottom || this.H) - 2 ? { X, Y } : null;
+  }
+
   talkers(s: ShoreState): { id: number; x: number; y: number; X: number; Y: number }[] {
     if (this.zoom < 2.5) return [];
     const own = new Set(s.people.filter((p) => p.kind === undefined).map((p) => p.id));

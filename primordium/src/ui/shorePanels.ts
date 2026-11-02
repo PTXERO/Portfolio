@@ -5,7 +5,7 @@
 
 import { type Boosts, POI_SORT, RELICS, type Find } from '../content/shore';
 import { GENS, PERKS, UPGRADES, type GenId } from '../content/idle';
-import { allMult, upgradeCost, destinations, natureOf, crewCandidates, crewOf, CREW_LEAST, growth, raftSeats, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
+import { placeName, YEAR_DAYS, allMult, upgradeCost, destinations, natureOf, crewCandidates, crewOf, CREW_LEAST, growth, raftSeats, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
 import type { GameState } from '../economy/types';
@@ -14,7 +14,7 @@ import { eraName, gathered } from '../economy/chronicle';
 const format = (n: number) => formatD(D(n));
 import { danceStyle } from './fireDance';
 import { temperOf } from '../content/hearthTalk';
-import { grammarOf } from '../economy/language';
+import { grammarOf, sayNow } from '../economy/language';
 
 const n0 = (v: number) => format(Math.floor(v + 1e-6));
 
@@ -276,6 +276,8 @@ export function crewCard(s: ShoreState): string {
  * the season), what it was before the sounds shifted, where it came from, and your guess at
  * what it means (kept; shown under what they say). Once the scribes have written it down, the
  * meaning too. */
+const yearOf = (day: number) => Math.floor(day / YEAR_DAYS) + 1;
+
 function wordsLayout(s: ShoreState): string {
   const lang = s.lang;
   if (!lang?.lex) return '';
@@ -289,9 +291,13 @@ function wordsLayout(s: ShoreState): string {
       const tot = vs.reduce((a, v) => a + v.s, 0) || 1;
       const rivals = vs.length > 1 ? ` · also ${vs.slice(1).map((v) => `“${v.f}” ${Math.round((v.s / tot) * 100)}%`).join(', ')}` : '';
       const from = lang.from[m] ? ` · from ${lang.from[m]}` : '';
-      return `<div class="word-row"><div class="word-head"><b class="their">${vs[0].f}</b><span class="dim tiny">heard ${n}×</span>${lang.scribed ? `<span class="meaning">${m}</span>` : ''}</div>
+      // (What it was before: each word that's been the word for it, and the year.)
+      const past = lang.past?.[m] ?? [];
+      const was = past.length > 1 ? `<div class="tiny was">${past.map((h) => `${h.f} <span class="dim">y${yearOf(h.day)}</span>`).join(' → ')}</div>` : '';
+      const named = lang.named?.[m] ? ` · first said by ${lang.named[m].by}, ${lang.named[m].where}` : '';
+      return `<div class="word-row"><div class="word-head"><b class="their">${vs[0].f}</b><span class="dim tiny">heard ${n}×</span>${lang.scribed ? `<span class="meaning">${m}</span>` : ''}</div>${was}
         <input class="guess" data-guess="${m}" value="${(lang.guess[m] ?? '').replace(/"/g, '&quot;')}" placeholder="your guess" maxlength="40" autocomplete="off">
-        <div class="tiny dim">${(lang.ctx[m] ?? []).join(' / ')}${rivals}${from}</div></div>`;
+        <div class="tiny dim">${(lang.ctx[m] ?? []).join(' / ')}${rivals}${from}${named}</div></div>`;
     })
     .join('');
   const g = grammarOf(lang);
@@ -299,7 +305,19 @@ function wordsLayout(s: ShoreState): string {
   const grammar = lang.scribed
     ? `<p class="tiny dim">How they put it (the scribes): ${g.order.split('').map((c) => roleWord[c]).join(', ')} (${Math.round(g.orderSure * 100)}% of the time); describing words ${g.qAfter ? 'after' : 'before'} the thing; no ${g.negFront ? 'before' : 'after'} what's done; asking at the ${g.askFront ? 'front' : 'end'}.</p>`
     : '';
-  return `<div class="panel-head"><h2>Their words</h2><span class="dim">${Object.keys(lang.heard).length} heard</span></div>
+  // The first thing you heard them say, and how they'd say the same now.
+  let then = '';
+  if (lang.first) {
+    const now = sayNow(lang, lang.first.fr);
+    then = `<p class="tiny then"><span class="dim">Year ${yearOf(lang.first.day)}:</span> ${lang.first.text}${now !== lang.first.text ? `<br><span class="dim">Now:</span> ${now}` : ''}</p>`;
+  }
+  // Places they've named, out of their words (what the parts are, once you've worked them out).
+  const placeRows = Object.values(lang.places ?? {}).map((p) => {
+    const parts = p.of.map((m) => (lang.scribed ? m : lang.guess[m])).filter(Boolean);
+    return `<b class="their">${p.f.charAt(0).toUpperCase() + p.f.slice(1)}</b>${parts.length === 2 ? ` <span class="dim">(${parts.join('-')})</span>` : ''}`;
+  });
+  const places = placeRows.length ? `<p class="tiny">Places: ${placeRows.join(' · ')}</p>` : '';
+  return `<div class="panel-head"><h2>Their words</h2><span class="dim">${Object.keys(lang.heard).length} heard</span></div>${then}${places}
     <p class="tiny dim">${lang.scribed ? 'The scribes wrote down what they mean.' : 'Their own words, made by them. Work out what they mean: your guesses show under what they say.'}</p>${grammar}
     ${lang.shifts.length ? `<p class="tiny dim">Their speech has shifted: ${lang.shifts.join('; ')}.</p>` : ''}
     <div class="card px-box words"><div class="info">${rows}</div></div>`;
@@ -440,7 +458,7 @@ function villageRow(s: ShoreState, v: Village): string {
 /** A village's card (tapped on the map). */
 export function villageCard(s: ShoreState, v: Village): string {
   const rel = relation(s, v);
-  return `<p class="label dim">${v.won !== undefined ? 'Yours' : REL_NAME[rel]}</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)}</h3></div>
+  return `<p class="label dim">${v.won !== undefined ? 'Yours' : REL_NAME[rel]}</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)}</h3></div>${placeName(s, `v${v.id}`) ? `<p class="dim tiny">Your critters call it <b class="their">${placeName(s, `v${v.id}`)}</b>.</p>` : ''}
     <p>${Math.round(v.pop)} of them, ${v.cannibal ? 'eaters of their own kind' : `${(DIET_NAME[v.diet] ?? v.diet).toLowerCase()}`}, another kind altogether.${v.habitat ? ` ${WHERE[v.habitat]}` : ''}</p>
     <p class="dim">${v.won !== undefined ? `Yours: +${Math.round(WON_MORE * 100)}% food.` : REL_LINE[rel]}</p>
     ${chiefNear(s, v) ? `<p class="dim tiny">Dance: all food ×2 while it lasts.</p>` : ''}
