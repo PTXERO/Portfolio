@@ -234,7 +234,7 @@ function islandCounts(s: ShoreState): string {
   const won = found.filter((v) => v.won !== undefined).length;
   const marks = poisOf(s).filter((p) => p.found).length;
   const others = s.people.filter((p) => p.kind !== undefined).length;
-  return `<div class="card px-box"><div class="info"><div class="sub">${found.length} village${found.length === 1 ? '' : 's'} found${found.length < s.villages.length ? ' (more in the fog)' : ''} · ${won} won · ${marks} landmark${marks === 1 ? '' : 's'} found · ${s.relics?.length ?? 0} relic${(s.relics?.length ?? 0) === 1 ? '' : 's'}${others ? ` · ${others} critters of other kinds among yours` : ''}</div></div></div>`;
+  return `<div class="card px-box"><div class="info"><div class="sub">${found.length} village${found.length === 1 ? '' : 's'} found · ${won} won · ${marks} landmark${marks === 1 ? '' : 's'} found · ${s.relics?.length ?? 0} relic${(s.relics?.length ?? 0) === 1 ? '' : 's'}${others ? ` · ${others} critters of other kinds among yours` : ''}</div></div></div>`;
 }
 
 /** Who goes on the raft: a smart pick to start, and anyone grown can be swapped on or off (as in
@@ -361,9 +361,9 @@ function tellingLayout(state: GameState, s: ShoreState): string {
 
 /** Setting out for a new island: once every village is won. */
 function crossCard(s: ShoreState): string {
-  const left = s.villages.filter((v) => v.won === undefined && !v.gone).length;
   const n = embersFor(s);
-  if (!canCross(s)) return `<div class="card px-box"><div class="info"><div class="name">A new island</div><div class="sub">Win every village to set out (${left} left). Raft for ${raftSeats(s)}, +${n} embers so far.</div></div></div>`;
+  // (Not shown till the island's settled: how many villages there are is theirs to find out.)
+  if (!canCross(s)) return '';
   return `<div class="card px-box build raid"><div class="info"><div class="name">Set out for a new island</div><div class="sub">Raft for ${raftSeats(s)}. +${n} ember${n === 1 ? '' : 's'}: food +${Math.round(n * EMBER_MORE * 100)}%, births +${Math.round(n * EMBER_BIRTHS * 100)}%.</div></div><button class="px-btn buy gold" data-act="cross-ask">Set out</button></div>`;
 }
 
@@ -372,7 +372,7 @@ function villagesCard(s: ShoreState): string {
   if (!found.length) return `<div class="panel-head"><h2>The villages</h2></div><div class="card px-box"><div class="info"><div class="sub">Smoke inland. Tap the land to send the chief.</div></div></div>`;
   const won = found.filter((v) => v.won !== undefined);
   const rest = found.filter((v) => v.won === undefined).sort((a, b) => Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y) - Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y));
-  return `<div class="panel-head"><h2>The villages</h2><span class="dim">${found.length} of ${s.villages.length}${found.length < s.villages.length ? '+' : ''} found · ${won.length} won</span></div>
+  return `<div class="panel-head"><h2>The villages</h2><span class="dim">${found.length} found · ${won.length} won</span></div>
     <p class="tiny dim">Each won: +${Math.round(WON_MORE * 100)}% food. Kin: gifts. Others: beat them.</p>
     ${rest.map((v) => villageRow(s, v)).join('')}${won.map((v) => villageRow(s, v)).join('')}`;
 }
