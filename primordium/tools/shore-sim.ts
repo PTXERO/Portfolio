@@ -57,6 +57,7 @@ function run(kind: Kind, diet: string): void {
     if (wonAll === undefined && s.villages.every((v) => v.won !== undefined || v.gone)) wonAll = t;
     // Setting out as soon as they can (and looking in): the next island.
     if (looking && canCross(s) && islands.length < 4 && !process.env.SIM_STAY) {
+      if (process.env.SIM_DEBUG) console.log('leaving', islands.length + 1, s.villages.map((v) => `${v.name}:${v.pop}:${v.won !== undefined ? 'won' : v.gone ? 'gone' : '-'}`).join(' '), 'people', s.people.length, 'rate', foodRate(s).toExponential(1));
       islands.push(`island ${islands.length + 1}: ${hm(t - islandAt)} (+${embersFor(s)} embers, age ${s.culture?.age ?? 0}, ${s.culture?.done.length ?? 0} ideas)`);
       cross(state);
       s = shoreOf(state)!;

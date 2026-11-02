@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { upgradeOpen, spoke, surroundings, situationOf, upgradeCost, workSign, signReady, prayerRate, destinations, natureOf, crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
+import { workOpen, buyWork, upgradeOpen, spoke, surroundings, situationOf, upgradeCost, workSign, signReady, prayerRate, destinations, natureOf, crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import { UPGRADES, type GenId } from '../src/content/idle';
 import type { TribeState } from '../src/economy/types';
@@ -724,5 +724,24 @@ describe('Families, not too close', () => {
     expect(spoke(s, a, { by: 0, thing: 'fire' }, 'the fire steady', 4).echo).toHaveLength(0);
     shoreTick(state, 1);
     expect(state.chronicle!.some((c) => /no one had said before/.test(c.text))).toBe(true);
+  });
+  it('the culture crosses with them: its Age and ideas kept; the old Great Works raised again, in order', () => {
+    const state = fresh();
+    const s = lit(state);
+    while (s.people.length < 12) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30 + s.people.length });
+    s.culture = { since: 0, age: 3, practice: { food: 40 }, done: ['dried', 'plough'], forks: { dead: 'bury' }, focus: 'food' };
+    for (const v of s.villages) v.won = s.day;
+    expect(cross(state)).toBe(true);
+    const n = shoreOf(state)!;
+    expect(n.culture?.age).toBe(3);
+    expect(n.culture?.done).toEqual(['dried', 'plough']);
+    expect(n.culture?.forks.dead).toBe('bury');
+    expect(n.culture?.practice.food).toBe(40);
+    takeRaft(state);
+    expect(workOpen(n)?.id).toBe('greathearth');
+    n.food = 1e9;
+    expect(buyWork(state)).toBe(true);
+    expect(n.culture?.age).toBe(3);
+    expect(workOpen(n)?.id).toBe('square');
   });
 });

@@ -970,6 +970,15 @@ export function cross(state: GameState, seed = 0): boolean {
   const next = newShore(tribe);
   next.raft = crew.length;
   next.lang = s.lang;
+  // The culture crosses with them, whole: its Age, every idea and every road chosen, and how far
+  // each lane's got toward the next. (Its Great Works stayed behind: the new island raises them
+  // again for the room, in order, but the Age doesn't start over.)
+  if (s.culture) {
+    next.culture = JSON.parse(JSON.stringify(s.culture)) as Culture;
+    next.culture.fresh = [];
+    next.culture.since = 0;
+    if (s.writtenFrom !== undefined) next.writtenFrom = 0;
+  }
   // (A new island's places are named afresh.)
   if (next.lang) next.lang.places = {};
   next.nature = natureForSeed(island).id;
@@ -1147,10 +1156,19 @@ export function councilPick(s: ShoreState): GenId | null {
 
 // ---- The Great Works ----
 
-/** The Great Work this Age, if the culture's ready for it and it isn't raised yet. */
+/** The Great Work on offer: an earlier Age's not yet raised again on this island (the culture
+ * came across the sea without them: each is raised again, in order, for the room it gives), or
+ * this Age's, once the culture's ready for it. */
 export function workOpen(s: ShoreState): (typeof WORKS)[number] | undefined {
-  const w = WORKS.find((x) => x.age === s.culture?.age);
+  const age = s.culture?.age ?? 0;
+  const again = WORKS.find((x) => x.age < age && !s.ups.includes(x.id));
+  if (again) return again;
+  const w = WORKS.find((x) => x.age === age);
   return w && workReady(s) && !s.ups.includes(w.id) ? w : undefined;
+}
+/** Whether a Great Work is one raised again (an Age already past, on a new island). */
+export function workAgain(s: ShoreState, id: string): boolean {
+  return (WORKS.find((x) => x.id === id)?.age ?? 0) < (s.culture?.age ?? 0);
 }
 export function buyWork(state: GameState): boolean {
   const s = shoreOf(state);
@@ -1159,6 +1177,11 @@ export function buyWork(state: GameState): boolean {
   s.food -= w.cost;
   s.ups.push(w.id);
   s.built.push({ id: w.id, ...placeFor(s, w.id, shoreIsland(s.seed)), day: s.day });
+  // (Raised again on a new island: the room comes back; the Age goes on as it was.)
+  if (workAgain(s, w.id)) {
+    record(state, `${w.name} was raised again, on the new island.`, 'shore', shoreWhen(s));
+    return true;
+  }
   record(state, `${w.name} was raised. ${w.does}`, 'shore', shoreWhen(s));
   ageOver(state, s);
   return true;

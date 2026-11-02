@@ -5,7 +5,7 @@
 
 import { type Boosts, POI_SORT, RELICS, type Find } from '../content/shore';
 import { GENS, PERKS, UPGRADES, type GenId } from '../content/idle';
-import { placeName, YEAR_DAYS, allMult, upgradeCost, destinations, natureOf, crewCandidates, crewOf, CREW_LEAST, growth, raftSeats, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
+import { placeName, workAgain, YEAR_DAYS, allMult, upgradeCost, destinations, natureOf, crewCandidates, crewOf, CREW_LEAST, growth, raftSeats, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
 import type { GameState } from '../economy/types';
@@ -155,7 +155,7 @@ function buildLayout(s: ShoreState): string {
   const pages = `<div class="seg build-cats">${page('gather', 'Gather', canGen)}${page('ups', 'Upgrades', canUp)}${page('villages', 'Villages', canVil)}${s.embers ? page('embers', 'Embers', canPerk) : ''}</div>`;
   const head = `<div class="panel-head"><h2>Build</h2><span class="dim"><span data-t="shore-food">${n0(s.food)}</span> food</span></div>`;
   // (The Great Work, when it's on offer, sits on top of every page: it closes the Age.)
-  const work = w ? `<div class="card px-box build raid"><div class="info"><div class="name">${w.name}</div><div class="sub">${w.does}</div></div><button class="px-btn buy${s.food >= w.cost ? ' gold' : ''}" data-act="work"${s.food >= w.cost ? '' : ' disabled'}><span class="num">${format(w.cost)}</span></button></div>` : '';
+  const work = w ? `<div class="card px-box build raid"><div class="info"><div class="name">${w.name}</div><div class="sub">${workAgain(s, w.id) ? `Raise it again here. Holds ${w.most}.` : w.does}</div></div><button class="px-btn buy${s.food >= w.cost ? ' gold' : ''}" data-act="work"${s.food >= w.cost ? '' : ' disabled'}><span class="num">${format(w.cost)}</span></button></div>` : '';
   if (buildPage === 'villages') return pages + head + work + crossCard(s) + villagesCard(s);
   if (buildPage === 'embers' && s.embers) {
     if (!count(s, 'hearth')) return `<div class="card px-box"><div class="info"><div class="sub">Light the hearth first (the Hearth tab).</div></div></div>` + emberShop(s, '');
