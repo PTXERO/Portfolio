@@ -122,13 +122,13 @@ describe('Food, the idle way', () => {
     expect(cross(state)).toBe(false);
     for (const v of s.villages) v.won = s.day;
     expect(canCross(s)).toBe(true);
-    expect(embersFor(s)).toBe(20);
+    expect(embersFor(s)).toBe(46);
     const chief = s.people.find((p) => p.id === s.chief)!.name;
     expect(cross(state)).toBe(true);
     const n = shoreOf(state)!;
     expect(n).not.toBe(s);
     expect(n.seed).not.toBe(s.seed);
-    expect(n.embers).toBe(20);
+    expect(n.embers).toBe(46);
     expect(n.crossings).toBe(1);
     expect(n.people.map((p) => p.name)).toContain(chief);
     expect(n.people).toHaveLength(4);
@@ -162,8 +162,8 @@ describe('Food, the idle way', () => {
     s.earned = 1e12;
     expect(cross(state)).toBe(true);
     const n = shoreOf(state)!;
-    expect(n.embers).toBe(30);
-    expect(embersLeft(n)).toBe(19);
+    expect(n.embers).toBe(56);
+    expect(embersLeft(n)).toBe(45);
     expect(perk(n, 'trades')).toBe(1);
     expect(n.food).toBe(100);
     expect(n.people).toHaveLength(5);

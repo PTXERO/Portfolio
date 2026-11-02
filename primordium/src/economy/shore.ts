@@ -714,7 +714,13 @@ export function upgradeOpen(s: ShoreState, id: string): boolean {
   if (!u || s.ups.includes(id) || !s.raftTaken) return false;
   if (u.needGen && count(s, u.needGen[0]) < u.needGen[1]) return false;
   if (u.age !== undefined && (s.culture?.age ?? 0) < u.age) return false;
-  return u.critters === undefined || totalCritters(s) >= u.critters;
+  return u.critters === undefined || totalCritters(s) >= u.critters || richEnough(s, u.cost);
+}
+/** An island rich past its numbers (embers, perks, a good nature) doesn't wait on the critters
+ * for what's cheap to it: once it's earned this many times the price here, it's on offer. */
+export const EARNED_OPENS = 25;
+function richEnough(s: ShoreState, cost: number): boolean {
+  return (s.earned ?? 0) >= cost * EARNED_OPENS;
 }
 export function buyUpgrade(state: GameState, id: string): boolean {
   const s = shoreOf(state);
@@ -788,10 +794,12 @@ export function whiteHot(s: ShoreState): boolean {
 export const EMBER_MORE = 0.1;
 /** ...and births this much more (an island's settled by critters as much as food). */
 export const EMBER_BIRTHS = 0.05;
-/** What a whole island's food is worth in embers (the cube root: waiting longer brings more, but
- * less and less: better to set out than to sit). */
+/** What a whole island's food is worth in embers: so many for every tenfold of it (past a
+ * billion). Staying longer brings more, but ever more slowly: better to set out than to sit, and
+ * a rich island can't snowball the next out of all reason. */
+export const EMBERS_PER_TENFOLD = 12;
 export function embersFor(s: ShoreState): number {
-  return Math.floor(Math.cbrt((s.earned ?? 0) / 1e9) * (natureOf(s).embers ?? 1));
+  return Math.floor(EMBERS_PER_TENFOLD * Math.log10(1 + (s.earned ?? 0) / 1e9) * (natureOf(s).embers ?? 1));
 }
 /** What an island's like. */
 export function natureOf(s: ShoreState): NatureDef {

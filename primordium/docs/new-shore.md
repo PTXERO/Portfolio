@@ -34,10 +34,14 @@ where they disagree; kept for the history and for ideas worth bringing back).
   choices; the Great Hearth (Age 1, holds 300) and Town Square (Age 2, holds 600) close the Ages.
 - **Setting out (prestige).** Once every village is won: a raft as big as the village (4, +1 per
   100 critters, up to +6, more with a perk), crew chosen by hand or a smart pick (the chief, across
-  the ages, not the old, each in a different coat), to a new island. **Embers** (cube root of the
-  island's food, in billions): every ember ever brought is food +10% and births +5% for good, and
+  the ages, not the old, each in a different coat), to a new island. **Embers** (12 for every tenfold
+  of the island's food past a billion: a long stay brings more, ever more slowly): every ember ever brought is food +10% and births +5% for good, and
   unspent ones buy perks in the ember shop (seed stores, remembered trades, born of the fire,
   carried coals, a bigger raft, war songs, charts). Kept across: embers, perks and know-how.
+- **Unlocks follow income too.** An upgrade gated by critters is also on offer once the island
+  has earned 25× its price (a rich, boosted island doesn't sit on millions waiting for the
+  critters to unlock 9K upgrades); generators still open by critters (opening them early too made
+  a boosted island's food, and its embers, run away).
 - **Spoken history.** Before they write, the Chronicle's Story page is **the telling**: told at
   the fire, and changed by retelling. Recent things exactly (20 days); then "some seasons ago",
   counted, not named (to 60 days); older, only the big things, as legend ("One of the four who
