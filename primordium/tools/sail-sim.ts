@@ -3,7 +3,7 @@
 // seconds between looks in).
 import { createState } from '../src/economy/state';
 import { startShore, shoreOf, takeRaft } from '../src/economy/shore';
-import { buyShips, buySailUp, openCost, openRoute, routeOptions, routeRate, SAIL_UPS, sailRate, setSail, shipCost, upCost, type SailUp } from '../src/economy/sail';
+import { buyShips, buySailUp, conquer, conquerCost, giftCost, giftTrust, giveGift, ours, openCost, openRoute, routeOptions, routeRate, SAIL_UPS, sailRate, sendVoyage, setSail, shipCost, shipsOut, toWin, upCost, voyageCost, voyageTarget, type SailUp } from '../src/economy/sail';
 import { tick } from '../src/economy/tick';
 import type { TribeState } from '../src/economy/types';
 
@@ -28,7 +28,7 @@ let seenKey = '';
 for (let t = 0; t <= HOURS * 3600; t += 2) {
   tick(state, 2);
   // (Anything bought, by the player or by Passage, counts as a buy.)
-  const key = JSON.stringify([world.routes!.map((r) => r.ships), world.ups]);
+  const key = JSON.stringify([world.routes!.map((r) => r.ships), world.ups, world.voyages, world.isles.map((i) => i.gifts ?? 0), world.isles.filter((i) => i.joined).length]);
   if (key !== seenKey && seenKey) {
     gaps.push({ t, gap: t - last });
     last = t;
@@ -49,10 +49,17 @@ for (let t = 0; t <= HOURS * 3600; t += 2) {
       const gain = u.id === 'sails' ? rate * 0.3 : u.id === 'holds' ? rate * 0.6 : u.id === 'fleet' ? rate * 0.25 : u.id === 'charts' ? rate * 0.2 : rate * 0.1;
       opts.push({ cost: c, gain, go: () => buySailUp(state, u.id as SailUp) });
     }
+    if (!world.voyage && voyageTarget(world)) opts.push({ cost: voyageCost(world), gain: rate * 2 + 1, go: () => sendVoyage(state) });
+    for (const i of world.isles) {
+      if (!i.found || ours(i)) continue;
+      opts.push({ cost: giftCost(world, i), gain: (rate * 0.15 * giftTrust(world, i)) / 100, go: () => giveGift(state, i.id) });
+      const c = conquerCost(world, i);
+      if (shipsOut(world) >= c.ships) opts.push({ cost: c.influence, gain: rate * 0.15, go: () => conquer(state, i.id) });
+    }
     const best = opts.filter((o) => o.cost <= have()).sort((a, b) => b.gain / b.cost - a.gain / a.cost)[0];
     if (!best || !best.go()) break;
   }
-  if (t % 1800 === 0) log.push(`${hm(t)} ${sailRate(state).toExponential(2)}/s · ${world.routes!.length} routes · ${world.routes!.reduce((n, r) => n + r.ships, 0)} ships · ups ${JSON.stringify(world.ups)}`);
+  if (t % 1800 === 0) log.push(`${hm(t)} ${sailRate(state).toExponential(2)}/s · ${world.isles.filter((i) => i.joined).length} joined, ${toWin(world)} to win, ${world.isles.filter((i) => i.found).length} found · ${world.routes!.length} routes · ${world.routes!.reduce((n, r) => n + r.ships, 0)} ships · ups ${JSON.stringify(world.ups)}`);
 }
 console.log(log.join('\n'));
 const worst = (a: number, b: number) => Math.max(0, ...gaps.filter((g) => g.t >= a && g.t < b).map((g) => g.gap));

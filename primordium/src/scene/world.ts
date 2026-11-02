@@ -5,7 +5,7 @@
 import type { GameState } from '../economy/types';
 import type { Frame } from './paint';
 import { hash } from './paint';
-import { MASK, coastAt, gustLeft, homeOf, routeDist, shipSpeed, sightOf, type World, type WorldIsle } from '../economy/sail';
+import { MASK, coastAt, gustLeft, homeOf, ours, routeDist, shipSpeed, sightFrom, type World, type WorldIsle } from '../economy/sail';
 
 export class WorldScene {
   private camX = 0;
@@ -51,14 +51,14 @@ export class WorldScene {
 
   /** An island's picture, made once: land and sand from its coast, a hill in the middle. */
   private sprite(i: WorldIsle): HTMLCanvasElement {
-    const key = `${i.id}|${i.mine !== undefined ? 'm' : i.found ? 'f' : 'u'}|${i.mask.length}`;
+    const key = `${i.id}|${ours(i) ? 'm' : i.found ? 'f' : 'u'}|${i.mask.length}`;
     let c = this.sprites.get(key);
     if (c) return c;
     c = document.createElement('canvas');
     c.width = MASK;
     c.height = MASK;
     const b = c.getContext('2d')!;
-    const mine = i.mine !== undefined;
+    const mine = ours(i);
     const near = (x: number, y: number) => {
       let sea = 0;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (!coastAt(i.mask, x + dx, y + dy)) sea++;
@@ -130,6 +130,19 @@ export class WorldScene {
       b.drawImage(this.sprite(i), Math.round(X), Math.round(Y), Math.round(s), Math.round(s));
     }
     this.drawRoutes(b, world, f.dt);
+    // The voyage out: a ship making for the fog.
+    if (world.voyage) {
+      const a = world.isles[world.voyage.from];
+      const z = world.isles[world.voyage.to];
+      const k = 1 - world.voyage.left / world.voyage.total;
+      const X = Math.round(this.sx(a.x + (z.x - a.x) * k));
+      const Y = Math.round(this.sy(a.y + (z.y - a.y) * k));
+      b.fillStyle = '#6a4a2a';
+      b.fillRect(X - 2, Y + 1, 5, 1);
+      b.fillStyle = '#fff6c8';
+      b.fillRect(X - 1, Y - 2, 2, 3);
+      if (Math.floor(t * 2) % 2) b.fillRect(X, Y - 4, 1, 1);
+    }
     // Night: your islands' lights come on (the day goes round in two minutes, as on the shore).
     const day = (t % 120) / 120;
     const night = Math.max(0, Math.min(1, (day - 0.72) * 8)) * Math.max(0, Math.min(1, (1.02 - day) * 8));
@@ -137,7 +150,7 @@ export class WorldScene {
       b.fillStyle = `rgba(10, 16, 40, ${0.45 * night})`;
       b.fillRect(0, 0, W, H);
       for (const i of world.isles) {
-        if (i.mine === undefined) continue;
+        if (!ours(i)) continue;
         for (let k = 0; k < (i.mine === -1 ? 14 : 7); k++) {
           const lx = (hash(k, i.id * 13 + 1) - 0.5) * i.r * 0.9;
           const ly = (hash(k, i.id * 13 + 2) - 0.5) * i.r * 0.9;
@@ -218,13 +231,12 @@ export class WorldScene {
     if (!this.fogImg || this.fogImg.width !== W || this.fogImg.height !== H) this.fogImg = b.createImageData(W, H);
     const img = this.fogImg;
     const d = img.data;
-    const mine = world.isles.filter((i) => i.mine !== undefined);
-    const SIGHT = sightOf(world);
+    const mine = world.isles.filter(ours).map((i) => ({ x: i.x, y: i.y, k: sightFrom(world, i) + i.r * 0.6 }));
     for (let y = 0; y < H; y += 1) {
       for (let x = 0; x < W; x += 1) {
         const m = this.toMap(x, y);
         let clear = 1e9;
-        for (const i of mine) clear = Math.min(clear, Math.hypot(i.x - m.x, i.y - m.y) - (SIGHT + i.r * 0.6));
+        for (const i of mine) clear = Math.min(clear, Math.hypot(i.x - m.x, i.y - m.y) - i.k);
         // (The edge of what's seen wavers like cloud.)
         const wob = (Math.sin(m.x * 0.03 + t * 0.15) + Math.sin(m.y * 0.037 - t * 0.11)) * 9;
         const a = Math.max(0, Math.min(1, (clear + wob) / 40));

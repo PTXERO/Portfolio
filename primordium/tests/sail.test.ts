@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createState } from '../src/economy/state';
 import { cross, shoreOf, startShore, takeRaft } from '../src/economy/shore';
-import { buySailUp, buyShips, coastAt, gust, level, makeWorld, MASK, openCost, openRoute, routeOptions, routeRate, sailRate, setSail, shipCost, sightOf } from '../src/economy/sail';
+import { conquer, conquerCost, giftCost, giveGift, joinedMult, ours, sendVoyage, voyageTarget, buySailUp, buyShips, coastAt, gust, level, makeWorld, MASK, openCost, openRoute, routeOptions, routeRate, sailRate, setSail, shipCost, sightOf } from '../src/economy/sail';
 import { tick } from '../src/economy/tick';
 import { D } from '../src/economy/num';
 import { deserialize, serialize } from '../src/economy/save';
@@ -101,5 +101,43 @@ describe('The Age of Sail: the world map', () => {
     tick(state, 1);
     expect(world.routes!.length).toBeGreaterThan(1);
     expect(world.routes![0].ships).toBeGreaterThan(1);
+  });
+  it('voyages find islands one at a time; each people is won with gifts, by trade, or taken; joined islands add to everything', () => {
+    const state = fresh();
+    shoreOf(state)!.culture = { since: 0, age: 6, practice: {}, done: [], forks: {} };
+    setSail(state);
+    const world = state.stages.sail.world!;
+    state.stages.sail.currency = D(1e30);
+    // A voyage: out a while, then the island it made for is found, and its people met.
+    const target = voyageTarget(world)!.to;
+    expect(target.found).toBe(false);
+    expect(sendVoyage(state)).toBe(true);
+    expect(sendVoyage(state)).toBe(false);
+    tick(state, 61);
+    expect(target.found).toBe(true);
+    expect(world.met).toContain(target.id);
+    // Gifts: trust, and dearer each time; at 100 they join.
+    const before = giftCost(world, target);
+    expect(giveGift(state, target.id)).toBe(true);
+    expect(target.trust).toBeGreaterThan(0);
+    expect(giftCost(world, target)).toBeGreaterThan(before);
+    while (!target.joined) giveGift(state, target.id);
+    expect(ours(target)).toBe(true);
+    expect(joinedMult(world)).toBeCloseTo(1.15, 5);
+    // Taken: ships enough and Influence; then the next is dearer.
+    const foe = world.isles.find((i) => i.found && !ours(i))!;
+    const need = conquerCost(world, foe);
+    world.routes![0].ships = need.ships;
+    expect(conquer(state, foe.id)).toBe(true);
+    expect(foe.joined).toBe(true);
+    const next = world.isles.find((i) => i.found && !ours(i));
+    if (next) expect(conquerCost(world, next).influence).toBeGreaterThan(0);
+    // Trade: a route to a people wins their trust by itself.
+    const partner = world.routes!.map((r) => world.isles[r.to]).find((i) => !ours(i));
+    if (partner) {
+      const t0 = partner.trust ?? 0;
+      tick(state, 600);
+      expect(partner.trust ?? 0).toBeGreaterThan(t0);
+    }
   });
 });

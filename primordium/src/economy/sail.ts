@@ -22,6 +22,17 @@ export interface WorldIsle {
   mine?: number;
   /** Seen from your islands (out of the fog). */
   found: boolean;
+  /** Someone else's: how many of them, what they eat, how far they trust you (to 100: they
+   * join), gifts given; and whether they've joined. */
+  pop?: number;
+  diet?: string;
+  trust?: number;
+  gifts?: number;
+  joined?: boolean;
+}
+/** Yours: hopped to (and kept) or joined since. */
+export function ours(i: WorldIsle): boolean {
+  return i.mine !== undefined || !!i.joined;
 }
 export interface World {
   seed: number;
@@ -33,16 +44,26 @@ export interface World {
   routes?: Route[];
   /** The network's upgrades: each branch's level. */
   ups?: Partial<Record<SailUp, number>>;
+  /** A voyage out in the fog: from which of yours, toward which island, seconds left of how many. */
+  voyage?: { from: number; to: number; left: number; total: number } | null;
+  /** Voyages sent so far (each goes further, and takes longer). */
+  voyages?: number;
+  /** Peoples just met, not yet shown (first contact). */
+  met?: number[];
+  /** The diet of the critters who set sail (how they meet a new people). */
+  diet?: string;
 }
 export interface Route {
   to: number;
   ships: number;
 }
 
+/** Islands in the world (yours among them). */
+const WORLD_ISLES = 46;
 /** How far from your islands the fog's lifted (map units), before Charts. */
 export const SIGHT = 110;
 /** How much further each level of Charts sees. */
-const CHART_SIGHT = 45;
+const CHART_SIGHT = 25;
 export function sightOf(world: World): number {
   return SIGHT + CHART_SIGHT * level(world, 'charts');
 }
@@ -115,14 +136,23 @@ export function makeWorld(s: ShoreState): World {
     near++;
   }
   // The rest of the world: islands scattered over the sea, none too close to another.
-  for (let tries = 0; tries < 4000 && isles.length < 60; tries++) {
+  for (let tries = 0; tries < 4000 && isles.length < WORLD_ISLES; tries++) {
     const x = 40 + r() * (W - 80);
     const y = 40 + r() * (H - 80);
     const size = 22 + r() * r() * 70;
     if (isles.some((o) => Math.hypot(o.x - x, o.y - y) < (o.r + size) * 0.75 + 14)) continue;
     isles.push({ id: isles.length, x, y, r: size, mask: blobCoast(seed + tries * 131), found: false });
   }
-  const world: World = { seed, w: W, h: H, isles, routes: [], ups: {} };
+  // Every other island is a people of its own: bigger islands, more of them; any of the three
+  // diets (theirs against yours decides how they're best met).
+  const DIETS = ['grazer', 'hunter', 'omnivore'];
+  for (const i of isles) {
+    if (i.mine !== undefined) continue;
+    i.pop = Math.round(10 + i.r * i.r * 0.06 * (0.6 + r() * 0.8));
+    i.diet = DIETS[Math.floor(r() * 3)];
+    i.trust = 0;
+  }
+  const world: World = { seed, w: W, h: H, isles, routes: [], ups: {}, voyages: 0, met: [], diet: s.look.diet === 'none' ? 'omnivore' : s.look.diet };
   chart(world);
   // (The first route, to the nearest island, comes free, with a ship on it: it starts going.)
   const first = routeOptions(world)[0];
@@ -132,9 +162,14 @@ export function makeWorld(s: ShoreState): World {
 
 /** The fog lifted round your islands: what's within sight of one is found. */
 export function chart(world: World): void {
-  const mine = world.isles.filter((i) => i.mine !== undefined);
-  const sight = sightOf(world);
-  for (const i of world.isles) if (!i.found && mine.some((m) => Math.hypot(m.x - i.x, m.y - i.y) < sight + m.r * 0.5 + i.r * 0.5)) i.found = true;
+  const mine = world.isles.filter(ours);
+  for (const i of world.isles) if (!i.found && mine.some((m) => Math.hypot(m.x - i.x, m.y - i.y) < sightFrom(world, m) + m.r * 0.5 + i.r * 0.5)) i.found = true;
+}
+/** How far the fog's lifted round one of your islands: the islands hopped see with Charts; one
+ * joined only its own waters. */
+export const JOINED_SIGHT = 30;
+export function sightFrom(world: World, i: WorldIsle): number {
+  return i.mine !== undefined ? sightOf(world) : JOINED_SIGHT;
 }
 
 /** Whether the Age of Sail's open (the Republic stands). */
@@ -165,7 +200,7 @@ export const SAIL_UPS: { id: SailUp; name: string; does: string; most: number; c
   { id: 'holds', name: 'Holds', does: 'Each trip carries ×1.6.', most: 5, cost: 4000, growth: 40 },
   { id: 'fleet', name: 'Fleet', does: 'Every ship pays ×1.25.', most: 10, cost: 1500, growth: 11 },
   { id: 'charts', name: 'Charts', does: 'See further: new islands, new routes.', most: 5, cost: 6000, growth: 25 },
-  { id: 'passage', name: 'Passage', does: '1: ships bought for you · 2: routes opened for you.', most: 2, cost: 1e5, growth: 300 },
+  { id: 'passage', name: 'Passage', does: '1: ships bought for you · 2: routes opened · 3: voyages sent.', most: 3, cost: 1e5, growth: 300 },
 ];
 export function level(world: World, id: SailUp): number {
   return world.ups?.[id] ?? 0;
@@ -219,7 +254,9 @@ export function milestone(ships: number): number {
 }
 /** Influence a trip brings in. */
 export function tripPay(state: GameState, world: World, r: Route): number {
-  return 3 * far(routeDist(world, r.to)) ** 2 * 1.6 ** level(world, 'holds') * 1.25 ** level(world, 'fleet') * 2 ** milestone(r.ships) * foodMult(state);
+  // (A route to one of your own islands pays double; every island joined adds to all of them.)
+  const own = ours(world.isles[r.to]) ? 2 : 1;
+  return 3 * far(routeDist(world, r.to)) ** 2 * 1.6 ** level(world, 'holds') * 1.25 ** level(world, 'fleet') * 2 ** milestone(r.ships) * foodMult(state) * own * joinedMult(world);
 }
 /** Seconds a ship takes there and back. */
 export function tripTime(world: World, r: Route): number {
@@ -289,9 +326,32 @@ export function sailTick(state: GameState, dt: number): void {
   const world = state.stages.sail.world;
   if (!world) return;
   world.routes ??= [];
+  // (A world made before islands had peoples: each gets its own now.)
+  if (world.isles.some((i) => i.mine === undefined && i.pop === undefined)) {
+    const r = rng(world.seed + 5);
+    const DIETS = ['grazer', 'hunter', 'omnivore'];
+    for (const i of world.isles) {
+      if (i.mine !== undefined || i.pop !== undefined) continue;
+      i.pop = Math.round(10 + i.r * i.r * 0.06 * (0.6 + r() * 0.8));
+      i.diet = DIETS[Math.floor(r() * 3)];
+      i.trust = 0;
+    }
+    world.diet ??= shoreOf(state)?.look.diet ?? 'omnivore';
+  }
+  // The voyage out: home when its time's up (the island found, its people met).
+  if (world.voyage) {
+    world.voyage.left -= dt;
+    if (world.voyage.left <= 0) landfall(world);
+  }
+  // Trade wins trust: every route to a people not yet yours, a little a second.
+  for (const r of world.routes) {
+    const i = world.isles[r.to];
+    if (!ours(i)) addTrust(world, i, tradeTrust(world, r) * dt);
+  }
   const g = gusts.get(world);
   if (g) for (const [i, left] of g) left - dt <= 0 ? g.delete(i) : g.set(i, left - dt);
   const passage = level(world, 'passage');
+  if (passage >= 3 && !world.voyage && voyageTarget(world) && influence(state) >= voyageCost(world)) sendVoyage(state);
   if (passage >= 2) {
     const next = routeOptions(world)[0];
     if (next && influence(state) >= openCost(world, next.id)) openRoute(state, next.id);
@@ -311,4 +371,116 @@ export function sailTick(state: GameState, dt: number): void {
       if (best < 0 || !buyShips(state, best, 1)) break;
     }
   }
+}
+
+// ---- Voyages, first contact, and winning islands over ----
+
+/** Every island joined: everything at sea +15% (added, not compounded). */
+export const JOINED_MORE = 0.15;
+export function joinedMult(world: World): number {
+  return 1 + JOINED_MORE * joinedCount(world);
+}
+export function joinedCount(world: World): number {
+  return world.isles.filter((i) => i.joined).length;
+}
+/** Each island won makes the next dearer to win (as each village beaten did, on the shore). */
+export const WIN_DEARER = 2;
+function dearer(world: World): number {
+  return WIN_DEARER ** joinedCount(world);
+}
+/** How a people is best met, theirs against yours: kin take gifts gladly (and grazers give
+ * them), hunters take islands, omnivores win them by trading. */
+export function kin(world: World, i: WorldIsle): boolean {
+  return !!i.diet && i.diet === world.diet;
+}
+/** Islands still to be found, and the nearest of them to any of yours (where a voyage goes). */
+export function voyageTarget(world: World): { from: WorldIsle; to: WorldIsle } | null {
+  const mine = world.isles.filter(ours);
+  let best: { from: WorldIsle; to: WorldIsle; d: number } | null = null;
+  for (const i of world.isles) {
+    if (i.found) continue;
+    for (const m of mine) {
+      const d = Math.hypot(i.x - m.x, i.y - m.y);
+      if (!best || d < best.d) best = { from: m, to: i, d };
+    }
+  }
+  return best ? { from: best.from, to: best.to } : null;
+}
+export function voyageCost(world: World): number {
+  return Math.ceil(200 * 1.7 ** (world.voyages ?? 0));
+}
+/** Seconds a voyage takes: further and longer, each one (a minute at first, at most 20). */
+export function voyageTime(world: World): number {
+  return Math.min(1200, 60 * 1.3 ** (world.voyages ?? 0));
+}
+export function sendVoyage(state: GameState): boolean {
+  const world = state.stages.sail.world;
+  if (!world || world.voyage) return false;
+  const go = voyageTarget(world);
+  if (!go || !spend(state, voyageCost(world))) return false;
+  const total = voyageTime(world);
+  world.voyage = { from: go.from.id, to: go.to.id, left: total, total };
+  world.voyages = (world.voyages ?? 0) + 1;
+  return true;
+}
+/** A voyage home: the island it made for is found, and its people met. */
+function landfall(world: World): void {
+  const v = world.voyage!;
+  world.voyage = null;
+  const at = world.isles[v.to];
+  if (at.found) return;
+  at.found = true;
+  if (!ours(at)) (world.met ??= []).push(at.id);
+}
+
+/** Influence a gift takes (more the bigger they are, and each more than the last). */
+export function giftCost(world: World, i: WorldIsle): number {
+  return Math.ceil(40 * (i.pop ?? 20) ** 1.5 * far(routeDist(world, i.id)) ** 2 * 1.4 ** (i.gifts ?? 0) * dearer(world));
+}
+/** Trust a gift wins: kin twice as much; grazers give twice as well. */
+export function giftTrust(world: World, i: WorldIsle): number {
+  return 9 * (kin(world, i) ? 2 : 1) * (world.diet === 'grazer' ? 2 : 1);
+}
+export function giveGift(state: GameState, id: number): boolean {
+  const world = state.stages.sail.world;
+  const i = world?.isles[id];
+  if (!world || !i || !i.found || ours(i) || !spend(state, giftCost(world, i))) return false;
+  i.gifts = (i.gifts ?? 0) + 1;
+  addTrust(world, i, giftTrust(world, i));
+  return true;
+}
+/** What taking an island takes: Influence for the fleet, and ships enough (as many as they are
+ * three times over); hunters half the Influence. */
+export function conquerCost(world: World, i: WorldIsle): { influence: number; ships: number } {
+  return { influence: Math.ceil(300 * (i.pop ?? 20) ** 1.7 * far(routeDist(world, i.id)) ** 2.5 * (world.diet === 'hunter' ? 0.5 : 1) * dearer(world)), ships: (i.pop ?? 20) * 3 };
+}
+export function shipsOut(world: World): number {
+  return (world.routes ?? []).reduce((n, r) => n + r.ships, 0);
+}
+export function conquer(state: GameState, id: number): boolean {
+  const world = state.stages.sail.world;
+  const i = world?.isles[id];
+  if (!world || !i || !i.found || ours(i)) return false;
+  const c = conquerCost(world, i);
+  if (shipsOut(world) < c.ships || !spend(state, c.influence)) return false;
+  join(world, i);
+  return true;
+}
+/** Trust a route to them wins a second (more ships, more; omnivores twice as fast). */
+export function tradeTrust(world: World, r: Route): number {
+  return Math.min(1, 0.0012 * Math.sqrt(r.ships)) * (world.diet === 'omnivore' ? 2 : 1);
+}
+function addTrust(world: World, i: WorldIsle, n: number): void {
+  i.trust = Math.min(100, (i.trust ?? 0) + n);
+  if (i.trust >= 100) join(world, i);
+}
+/** Joined: theirs is yours, and the fog lifts off their own waters. */
+function join(world: World, i: WorldIsle): void {
+  i.joined = true;
+  i.trust = 100;
+  chart(world);
+}
+/** The world's still to win: every island not yet yours. */
+export function toWin(world: World): number {
+  return world.isles.filter((i) => !ours(i)).length;
 }

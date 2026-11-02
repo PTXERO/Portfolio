@@ -15,8 +15,8 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
-import { buySailUp, buyShips, gust, openRoute, setSail, type SailUp } from './economy/sail';
-import { setSailMany } from './ui/sailPanels';
+import { buySailUp, buyShips, conquer, giveGift, gust, openRoute, ours, sendVoyage, setSail, type SailUp } from './economy/sail';
+import { isleName, peopleCard, setSailMany } from './ui/sailPanels';
 import { EmberView } from './ui/emberView';
 import { HearthView } from './ui/hearthView';
 import { YEAR_DAYS, pastShore, situationOf, spoke, placeName, surroundings, speakerOf, langOf, growth, SHORE_CELLS, type ShoreState, workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
@@ -618,7 +618,8 @@ function sailTap(x: number, y: number): void {
   const i = scene.worldIsleAt(state, x, y);
   if (!i) return;
   if (i.mine === undefined) {
-    scene.float(x, y - 12, 'Not yours, yet', '#f2ead7');
+    if (!ours(i)) peopleModal(i.id);
+    else scene.float(x, y - 12, `${isleName(state, i)}: yours`, '#f2ead7');
     return;
   }
   if (!visitStage(state, 'shore')) return;
@@ -628,6 +629,28 @@ function sailTap(x: number, y: number): void {
   goalKey = '';
   if (i.mine >= 0) visitIsle(i.mine);
   else render();
+}
+
+/** A people's card, over the map: who they are, how far they trust you, gift or take. */
+function peopleModal(id: number): void {
+  const world = state.stages.sail.world;
+  const i = world?.isles[id];
+  if (!world || !i) return;
+  showModal(peopleCard(state, world, i, true));
+  modal.dataset.kind = 'people';
+}
+
+/** First contact: a voyage home with a people met, each a card of its own. */
+function sailFrame(): void {
+  const world = state.stages.sail.world;
+  if (!world || state.current !== 'sail' || !modal.hidden || cine()) return;
+  const id = world.met?.shift();
+  if (id === undefined) return;
+  const i = world.isles[id];
+  cue('chime', 0.5);
+  showModal(`<p class="label dim">First contact</p>${peopleCard(state, world, i, true)}`);
+  modal.dataset.kind = 'people';
+  save();
 }
 
 // ---- The compass, and the view left alone ----
@@ -2599,6 +2622,23 @@ function act(el: HTMLElement): void {
       cue('chime', 0.5);
       panelKey = '';
     }
+  } else if (el.dataset.voyage) {
+    if (sendVoyage(state)) {
+      cue('chime', 0.4);
+      panelKey = '';
+    }
+  } else if (el.dataset.sailgift) {
+    if (giveGift(state, Number(el.dataset.sailgift))) {
+      cue('chime', 0.4);
+      panelKey = '';
+      if (!modal.hidden && modal.dataset.kind === 'people') peopleModal(Number(el.dataset.sailgift));
+    }
+  } else if (el.dataset.conquer) {
+    if (conquer(state, Number(el.dataset.conquer))) {
+      cue('impact', 0.5);
+      panelKey = '';
+      if (!modal.hidden && modal.dataset.kind === 'people') modal.hidden = true;
+    }
   } else if (el.dataset.sailup) {
     if (buySailUp(state, el.dataset.sailup as SailUp)) {
       cue('ascend', 0.4);
@@ -3150,6 +3190,7 @@ function frame(now: number): void {
   }
   pondEvents();
   shoreFrame();
+  sailFrame();
   {
     const hs = shoreOf(state);
     hearthView.show(!!hs && ui.open && ui.tab === 'hearth' && !!STAGES[state.current].shore);
