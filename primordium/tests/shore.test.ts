@@ -60,14 +60,14 @@ describe('Food, the idle way', () => {
     const cold = foodRate(s);
     // (Logarithmic: the first stokes count for most.)
     const heats: number[] = [];
-    for (let i = 0; i < 220; i++) {
+    for (let i = 0; i < 500; i++) {
       stoke(state);
       heats.push(s.heat!);
     }
-    // (Some forty stokes to half heat; the last ten add far less than the first ten.)
-    expect(heats[9] - heats[0]).toBeGreaterThan(heats[199] - heats[190]);
-    expect(heats[39]).toBeGreaterThan(0.4);
-    expect(heats[39]).toBeLessThan(0.55);
+    // (Some eighty stokes to half heat; the last ten add far less than the first ten.)
+    expect(heats[9] - heats[0]).toBeGreaterThan(heats[399] - heats[390]);
+    expect(heats[79]).toBeGreaterThan(0.4);
+    expect(heats[79]).toBeLessThan(0.55);
     expect(s.heat).toBe(1);
     expect(foodRate(s)).toBeCloseTo(cold * 2, 6);
     shoreTick(state, 30);
@@ -86,7 +86,7 @@ describe('Food, the idle way', () => {
     s.ups.push('firering', 'firepit', 'embers');
     shoreTick(state, 1);
     expect(s.heat).toBeCloseTo(0.25, 6);
-    for (let i = 0; i < 300; i++) stoke(state);
+    for (let i = 0; i < 600; i++) stoke(state);
     expect(foodRate(s)).toBeCloseTo(cold * 3.5, 6);
     shoreTick(state, 600);
     expect(foodRate(s)).toBeCloseTo(cold * (1 + 2.5 * 0.25), 6);
@@ -99,7 +99,7 @@ describe('Food, the idle way', () => {
     s.gens.forager = 400;
     const v = s.villages[0];
     const g0 = giftCost(s, v);
-    for (let i = 0; i < 200; i++) stoke(state);
+    for (let i = 0; i < 600; i++) stoke(state);
     expect(giftCost(s, v)).toBe(g0);
     expect(baseRate(s)).toBeCloseTo(foodRate(s) / 2, 6);
     expect(warmth(s)).toBe(1);
@@ -107,8 +107,8 @@ describe('Food, the idle way', () => {
     expect(warmth(s)).toBeCloseTo(1.5, 6);
     s.ups.push('tender');
     shoreTick(state, 3600);
-    expect(s.heat).toBeGreaterThan(0.15);
-    expect(s.heat).toBeLessThan(0.35);
+    expect(s.heat).toBeGreaterThan(0.05);
+    expect(s.heat).toBeLessThan(0.2);
   });
   it('setting out: only once every village is won; a new island, the chief and three of the eldest, embers kept, know-how kept, the rest starts again', () => {
     const state = fresh();

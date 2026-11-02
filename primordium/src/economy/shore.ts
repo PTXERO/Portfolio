@@ -767,11 +767,11 @@ export function allMult(s: ShoreState): number {
 export const FIRE_MOST = 1;
 /** The fire's heat goes with the log of the fuel on it: the first few stokes count for a lot,
  * each one after for less, and it's roaring (full heat) at FIRE_FULL fuel. */
-export const FIRE_FULL = 200;
+export const FIRE_FULL = 400;
 /** The fuel the heat's log is taken over (the bigger, the slower the first stokes build it). */
-const FIRE_SOFT = 20;
+const FIRE_SOFT = 40;
 /** The fuel burns away: this share of it a second, and a little more (so it does go out). */
-export const FIRE_BURN = 0.06;
+export const FIRE_BURN = 0.08;
 export const FIRE_BURN_MIN = 0.05;
 function fireFx(s: ShoreState): { most: number; fuel: number; cool: number; floor: number } {
   const f = { most: FIRE_MOST + 0.5 * perk(s, 'coals'), fuel: 1, cool: natureOf(s).cool ?? 1, floor: 0 };

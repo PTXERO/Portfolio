@@ -237,6 +237,9 @@ export class ShoreScene extends RangeScene {
     this.seasonPair = [si, next];
     this.groundPair = [this.ground.get(si)!, ready ? this.ground.get(next)! : this.ground.get(si)!];
     this.paintFog(seen);
+    // The Far Voice's Rain: a storm over the island for as long as it lasts.
+    const rainLeft = (s.rainUntil ?? 0) - (s.day * DAY_SEC + s.clock);
+    if (rainLeft > 0) this.stormLeft = Math.max(this.stormLeft, rainLeft);
     b.imageSmoothingEnabled = false;
     if (this.shaded) b.clearRect(0, 0, W, H);
     else {
