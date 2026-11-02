@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { workSign, signReady, prayerRate, destinations, natureOf, crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
+import { upgradeCost, workSign, signReady, prayerRate, destinations, natureOf, crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
-import type { GenId } from '../src/content/idle';
+import { UPGRADES, type GenId } from '../src/content/idle';
 import type { TribeState } from '../src/economy/types';
 
 function fresh(diet = 'grazer', cannibal = false) {
@@ -297,6 +297,16 @@ describe('Food, the idle way', () => {
     gift(state, v.id);
     expect(c1).toBeGreaterThan(c0);
     expect(giftCost(s, v)).toBeGreaterThan(c1);
+  });
+  it('the council costs a quarter of an hour of what comes in (never a trifle)', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    lit(state);
+    const council = UPGRADES.find((u) => u.id === 'council')!;
+    expect(upgradeCost(s, council)).toBe(council.cost);
+    s.gens.camp = 100;
+    expect(upgradeCost(s, council)).toBeGreaterThan(council.cost);
+    expect(upgradeCost(s, council)).toBeCloseTo(Math.ceil(foodRate(s) * 900), -2);
   });
   it('an older save far enough on keeps buying ten, the most, and its focus', () => {
     const state = fresh();

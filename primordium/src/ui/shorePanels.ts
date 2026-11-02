@@ -5,7 +5,7 @@
 
 import { type Boosts, POI_SORT, RELICS, type Find } from '../content/shore';
 import { GENS, PERKS, UPGRADES, type GenId } from '../content/idle';
-import { allMult, destinations, natureOf, crewCandidates, crewOf, CREW_LEAST, growth, raftSeats, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
+import { allMult, upgradeCost, destinations, natureOf, crewCandidates, crewOf, CREW_LEAST, growth, raftSeats, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
 import type { GameState } from '../economy/types';
@@ -62,7 +62,7 @@ export function shoreKey(state: GameState, tab: string): string {
   }
   if (tab === 'build') {
     // (Rebuilt when what can be afforded changes: each thing's button lights as the food comes.)
-    return JSON.stringify(['build', buildPage, canCross(s), embersFor(s), embersLeft(s), s.perks, buyMany, s.auto, s.ups.length, GENS.map((g) => [genOpen(s, g.id), count(s, g.id), s.food >= genCost(s, g.id, buyMany || 1)]), UPGRADES.filter((u) => upgradeOpen(s, u.id)).map((u) => [u.id, s.food >= u.cost]), !!workOpen(s), s.food >= (workOpen(s)?.cost ?? Infinity),
+    return JSON.stringify(['build', buildPage, canCross(s), embersFor(s), embersLeft(s), s.perks, buyMany, s.auto, s.ups.length, GENS.map((g) => [genOpen(s, g.id), count(s, g.id), s.food >= genCost(s, g.id, buyMany || 1)]), UPGRADES.filter((u) => upgradeOpen(s, u.id)).map((u) => [u.id, s.food >= upgradeCost(s, u)]), !!workOpen(s), s.food >= (workOpen(s)?.cost ?? Infinity),
       s.villages.filter((v) => v.found).map((v) => [v.id, v.won, v.gone, Math.floor((v.trust ?? 0) / 5), Math.round(v.pop), s.food >= (canWin(s, v) ? giftCost(s, v) : canTake(s, v) ? takeCost(s, v).food : Infinity), chiefNear(s, v), danceLeft(s, v) > 0.5]), s.chief]);
   }
   if (tab === 'island') return JSON.stringify(['island', islandView, s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, has(s, 'scouts'), s.villages.filter((v) => v.found).map((v) => [v.id, v.won, v.gone, Math.floor((v.trust ?? 0) / 5), Math.round(v.pop), s.food >= (canWin(s, v) ? giftCost(s, v) : canTake(s, v) ? takeCost(s, v).food : Infinity), chiefNear(s, v)]), s.chief]);
@@ -140,11 +140,11 @@ function buildLayout(s: ShoreState): string {
     if (!s.embers) return note;
     buildPage = 'embers';
   }
-  const ups = UPGRADES.filter((u) => upgradeOpen(s, u.id)).sort((a, b) => a.cost - b.cost);
+  const ups = UPGRADES.filter((u) => upgradeOpen(s, u.id)).sort((a, b) => upgradeCost(s, a) - upgradeCost(s, b));
   const w = workOpen(s);
   // (How many on each page can be bought just now: a number on its button.)
   const canGen = GENS.filter((g) => genOpen(s, g.id) && s.food >= genCost(s, g.id, 1)).length;
-  const canUp = ups.filter((u) => s.food >= u.cost).length;
+  const canUp = ups.filter((u) => s.food >= upgradeCost(s, u)).length;
   const found = s.villages.filter((v) => v.found && !v.gone && v.won === undefined);
   const canVil = found.filter((v) => s.food >= (canWin(s, v) ? giftCost(s, v) : canTake(s, v) ? takeCost(s, v).food : Infinity)).length + (canCross(s) ? 1 : 0);
   const page = (id: BuildPage, name: string, n: number) => `<button class="px-btn${buildPage === id ? ' on' : ''}" data-buildcat="${id}">${name}${n ? ` <span class="can">${n}</span>` : ''}</button>`;
@@ -180,9 +180,9 @@ function emberShop(s: ShoreState, pages: string): string {
 function gatherPage(s: ShoreState, pages: string, head: string, work: string, ups: typeof UPGRADES): string {
   if (buildPage === 'ups') {
     // Everything that can be bought now, and the next few out of reach (the rest come later).
-    const shown = [...ups.filter((u) => s.food >= u.cost), ...ups.filter((u) => s.food < u.cost).slice(0, UPS_AHEAD)];
+    const shown = [...ups.filter((u) => s.food >= upgradeCost(s, u)), ...ups.filter((u) => s.food < upgradeCost(s, u)).slice(0, UPS_AHEAD)];
     const more = ups.length - shown.length;
-    const upRow = (u: (typeof UPGRADES)[number]) => `<div class="card px-box build"><div class="info"><div class="name">${u.name}</div><div class="sub">${u.does}</div></div><button class="px-btn buy${s.food >= u.cost ? ' gold' : ''}" data-upgrade="${u.id}"${s.food >= u.cost ? '' : ' disabled'}><span class="num">${format(u.cost)}</span></button></div>`;
+    const upRow = (u: (typeof UPGRADES)[number]) => `<div class="card px-box build"><div class="info"><div class="name">${u.name}</div><div class="sub">${u.does}</div></div><button class="px-btn buy${s.food >= upgradeCost(s, u) ? ' gold' : ''}" data-upgrade="${u.id}"${s.food >= upgradeCost(s, u) ? '' : ' disabled'}><span class="num">${format(upgradeCost(s, u))}</span></button></div>`;
     const isFire = (u: (typeof UPGRADES)[number]) => u.fx.kind.startsWith('fire') || u.fx.kind === 'tap' || u.fx.kind === 'tapRate';
     const isVoice = (u: (typeof UPGRADES)[number]) => u.fx.kind === 'voice' || u.fx.kind === 'prayer';
     const fire = shown.filter(isFire);

@@ -701,6 +701,12 @@ export function buyGen(state: GameState, id: GenId, n = 1): number {
 const SHOWN_MOST = 12;
 
 /** Whether an upgrade's on offer (its generator's far enough on, the village big enough). */
+/** What an upgrade costs now. Most are fixed; the council (it buys for you, for good) is worth
+ * a quarter of an hour of what comes in, however far on the village is, so it's never a trifle. */
+export function upgradeCost(s: ShoreState, u: { cost: number; fx: { kind: string } }): number {
+  return u.fx.kind === 'auto' ? Math.max(u.cost, Math.ceil(baseRate(s) * COUNCIL_SECONDS)) : u.cost;
+}
+export const COUNCIL_SECONDS = 900;
 export function upgradeOpen(s: ShoreState, id: string): boolean {
   const u = UPGRADES.find((x) => x.id === id);
   if (!u || s.ups.includes(id) || !s.raftTaken) return false;
@@ -711,8 +717,8 @@ export function upgradeOpen(s: ShoreState, id: string): boolean {
 export function buyUpgrade(state: GameState, id: string): boolean {
   const s = shoreOf(state);
   const u = UPGRADES.find((x) => x.id === id);
-  if (!s || !u || !upgradeOpen(s, id) || s.food < u.cost) return false;
-  s.food -= u.cost;
+  if (!s || !u || !upgradeOpen(s, id) || s.food < upgradeCost(s, u)) return false;
+  s.food -= upgradeCost(s, u);
   s.ups.push(id);
   if (u.fx.kind === 'auto') s.auto = true;
   record(state, `${u.name}. ${u.does}`, 'shore', shoreWhen(s));

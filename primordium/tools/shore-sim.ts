@@ -5,7 +5,7 @@
 // new happening (a new kind of thing to buy, an upgrade, a village, an Age).
 // npm run sim:shore
 import { createState } from '../src/economy/state';
-import { buyPerk, perkCost, canCross, cross, embersFor, buyGen, buyUpgrade, buyWork, canTake, canWin, councilPick, foodRate, gift, giftCost, takeCost, shoreOf, shoreTick, startShore, stoke, take, takeRaft, upgradeOpen, genOpen } from '../src/economy/shore';
+import { upgradeCost, buyPerk, perkCost, canCross, cross, embersFor, buyGen, buyUpgrade, buyWork, canTake, canWin, councilPick, foodRate, gift, giftCost, takeCost, shoreOf, shoreTick, startShore, stoke, take, takeRaft, upgradeOpen, genOpen } from '../src/economy/shore';
 import { GENS, PERKS, UPGRADES } from '../src/content/idle';
 import type { TribeState } from '../src/economy/types';
 
@@ -41,7 +41,7 @@ function run(kind: Kind, diet: string): void {
     if (kind === 'active' && t % 8 === 0) stoke(state);
     if (kind === 'auto' && t < 600 && t % 4 === 0) stoke(state);
     if (looking) {
-      for (const u of UPGRADES.filter((x) => upgradeOpen(s, x.id)).sort((a, b) => a.cost - b.cost)) if (buyUpgrade(state, u.id)) events.push({ t, what: `upgrade ${u.id}` });
+      for (const u of UPGRADES.filter((x) => upgradeOpen(s, x.id)).sort((a, b) => upgradeCost(s, a) - upgradeCost(s, b))) if (buyUpgrade(state, u.id)) events.push({ t, what: `upgrade ${u.id}` });
       if (!s.auto) for (let i = 0; i < 40; i++) { const p = councilPick(s); if (!p || !buyGen(state, p)) break; }
       for (const v of s.villages) {
         if (canWin(s, v) && s.food > giftCost(s, v) * 3) gift(state, v.id);
