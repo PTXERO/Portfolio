@@ -2,8 +2,9 @@
 // batch of what's been brought in (food, there and then), and builds the fire up; a big fire
 // cooks more of everything while it lasts, and it dies down by itself if it's left.
 
-import { DAY_SEC, fireMost, fireMore, growth, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
+import { DAY_SEC, fireMost, fireMore, growth, knowsSign, praying, prayerMost, signReady, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
 import { drawCreature, type CreatureLook } from '../scene/creatureLook';
+import { MIRACLES, type MiracleId } from '../content/idle';
 import { pickTalk, temperOf, type Age, type Speaker, type TalkCtx } from '../content/hearthTalk';
 import { squeak } from '../audio/sound';
 import { D, format } from '../economy/num';
@@ -51,6 +52,13 @@ export class HearthView {
   private streak = 0;
   private lastTap = -9;
   private still = 0;
+  /** The Far Voice: when a streak last crossed the sky, when the next will, and a sign's show
+   * (which, and how far into it). */
+  private streakAt = -999;
+  private nextStreak = 60 + Math.random() * 120;
+  private sky: { x0: number; y0: number; x1: number; y1: number; t: number } | null = null;
+  private shown_: { id: MiracleId; t: number } | null = null;
+  private signsKey = '';
   private seatKey = '';
   private spots: Spot[] = [];
   private chat: Chat | null = null;
@@ -62,11 +70,16 @@ export class HearthView {
   private t = 0;
   shown = false;
 
-  constructor(parent: HTMLElement, private onStoke: (x: number, y: number) => number) {
+  constructor(
+    parent: HTMLElement,
+    private onStoke: (x: number, y: number) => number,
+    private onSign: (id: MiracleId) => string,
+  ) {
     this.el = document.createElement('div');
     this.el.id = 'hearth';
     this.el.hidden = true;
     this.el.innerHTML = `<canvas width="${AW}" height="${AH}"></canvas>
+      <div class="hearth-signs" hidden><div class="prayer"><span class="label">Prayer</span><div class="prayer-bar"><i></i></div></div><div class="signs"></div></div>
       <div class="hearth-info">
         <div class="hearth-heat"><span class="label">The fire</span><div class="heat-bar"><i></i></div></div>
         <div class="hearth-stats dim"></div>
@@ -85,6 +98,12 @@ export class HearthView {
     this.el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      // (A sign worked, not the fire stoked.)
+      const sign = (e.target as HTMLElement).closest<HTMLElement>('[data-sign]');
+      if (sign) {
+        if (!sign.classList.contains('off')) this.sign(sign.dataset.sign as MiracleId);
+        return;
+      }
       const got = this.onStoke(e.clientX, e.clientY);
       if (!got) return;
       this.flare = 1;
@@ -220,6 +239,8 @@ export class HearthView {
         foragers: s.gens.forager ?? 0,
         huts: (s.gens.hut ?? 0) + (s.gens.longhouse ?? 0),
         council: this.council,
+        streak: this.t - this.streakAt < 45,
+        spearFaith: s.culture?.forks.faith === 'spear',
       };
       const pick = pickTalk(ctx, this.lastTalks);
       this.lastTalks = [...this.lastTalks.slice(-8), pick.i];
@@ -390,6 +411,93 @@ export class HearthView {
     b.fillRect(FX - (big ? 10 : 8), FY - (big ? 7 : 5), big ? 20 : 16, big ? 3 : 2);
     b.fillStyle = heat > 0.05 ? '#ff7a2a' : '#7a3a1a';
     b.fillRect(FX - 6, FY - 4, 12, 1);
+  }
+
+  /** A sign worked: the show, the line it leaves, and the critters' wonder. */
+  private sign(id: MiracleId): void {
+    const said = this.onSign(id);
+    if (!said) return;
+    this.shown_ = { id, t: 0 };
+    const r = this.el.getBoundingClientRect();
+    this.pop(r.left + r.width / 2, r.top + r.height * 0.3, said);
+    for (let i = 0; i < Math.min(4, this.seats.length); i++) this.emotes.push({ seat: i, kind: 'bang', age: -i * 0.15 });
+    if (id === 'bolt') {
+      this.flare = 1;
+      for (let i = 0; i < 20; i++) this.spark(true);
+    }
+  }
+
+  /** The Far Voice over the fire: the streak across the sky now and then, and a sign's show. */
+  private voice(s: ShoreState, dt: number): void {
+    const b = this.b;
+    // A streak, far off, every few minutes: they look up.
+    this.nextStreak -= dt;
+    if (this.nextStreak <= 0 && s.raftTaken) {
+      this.nextStreak = 90 + Math.random() * 150;
+      const left = Math.random() < 0.5;
+      this.sky = { x0: left ? -5 : AW + 5, y0: 6 + Math.random() * 20, x1: left ? AW * 0.7 : AW * 0.3, y1: 30 + Math.random() * 25, t: 0 };
+      this.streakAt = this.t;
+      this.seats.forEach((_, i) => i % 2 === 0 && this.emotes.push({ seat: i, kind: 'bang', age: -0.3 - i * 0.1 }));
+      this.nextChat = Math.min(this.nextChat, 2);
+    }
+    if (this.sky) {
+      const st = this.sky;
+      st.t += dt;
+      const k = Math.min(1, st.t / 1.4);
+      for (let j = 0; j < 10; j++) {
+        const q = Math.max(0, k - j * 0.025);
+        const x = st.x0 + (st.x1 - st.x0) * q;
+        const y = st.y0 + (st.y1 - st.y0) * q;
+        b.fillStyle = j === 0 ? '#ffffff' : `rgba(200,220,255,${(1 - j / 10) * (1 - Math.max(0, st.t - 1.4))})`;
+        b.fillRect(Math.round(x), Math.round(y), 1, 1);
+      }
+      if (st.t > 2.4) this.sky = null;
+    }
+    // The signs' shows.
+    const sh = this.shown_;
+    if (sh) {
+      sh.t += dt;
+      if (sh.id === 'bolt' && sh.t < 0.5) {
+        b.fillStyle = `rgba(255,255,255,${0.6 * (1 - sh.t / 0.5)})`;
+        b.fillRect(0, 0, AW, AH);
+        b.fillStyle = '#ffffff';
+        let x = FX + 6;
+        for (let y = 0; y < FY - 6; y += 3) {
+          x += Math.round((Math.random() - 0.5) * 6);
+          b.fillRect(x, y, 1, 3);
+        }
+      }
+      if (sh.id === 'light' && sh.t < 3) {
+        const a = Math.sin((sh.t / 3) * Math.PI) * 0.35;
+        b.fillStyle = `rgba(255,240,190,${a})`;
+        b.fillRect(AW * 0.12, 0, 4, FY - 10);
+      }
+      if (sh.id === 'awe' && sh.t < 2.5) {
+        b.strokeStyle = `rgba(255,220,120,${0.6 * (1 - sh.t / 2.5)})`;
+        b.beginPath();
+        b.ellipse(FX, FY - 2, 10 + sh.t * 18, 3 + sh.t * 6, 0, 0, Math.PI * 2);
+        b.stroke();
+      }
+      if (sh.t > 3) this.shown_ = null;
+    }
+    // Rain falling (the sign, while it lasts).
+    if ((s.rainUntil ?? 0) > s.day * DAY_SEC + s.clock) {
+      b.fillStyle = 'rgba(150,180,230,0.5)';
+      for (let i = 0; i < 50; i++) b.fillRect(Math.floor(((i * 31.3 + this.t * 30) % (AW + 10)) - 5), Math.floor((i * 19.7 + this.t * 160) % AH), 1, 3);
+    }
+  }
+
+  /** The prayer meter and the signs known (redrawn only when something changes). */
+  private signsUi(s: ShoreState): void {
+    const box = this.el.querySelector<HTMLElement>('.hearth-signs')!;
+    box.hidden = !praying(s);
+    if (box.hidden) return;
+    (box.querySelector('.prayer-bar i') as HTMLElement).style.width = `${Math.round(((s.prayer ?? 0) / prayerMost(s)) * 100)}%`;
+    const known = MIRACLES.filter((m) => knowsSign(s, m.id));
+    const key = known.map((m) => `${m.id}${signReady(s, m.id) ? 1 : 0}`).join();
+    if (key === this.signsKey) return;
+    this.signsKey = key;
+    box.querySelector('.signs')!.innerHTML = known.map((m) => `<button class="px-btn sign${signReady(s, m.id) ? ' gold' : ' off'}" data-sign="${m.id}"><b>${m.name}</b><span class="tiny">${m.cost} · ${m.does}</span></button>`).join('');
   }
 
   /** The bonfire: long poles leaned together, standing in the flames (drawn over them). */
@@ -611,6 +719,8 @@ export class HearthView {
     this.emotes = this.emotes.filter((e) => e.age <= (e.kind === 'zzz' ? 2.4 : 1.1));
     this.talk(s, dt);
 
+    this.voice(s, dt);
+    this.signsUi(s);
     // The words: how hot, and what it's worth.
     const more = fireMore(s);
     this.bar.style.width = `${Math.round(heat * 100)}%`;

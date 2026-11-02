@@ -62,7 +62,10 @@ export type UpgradeFx =
   | { kind: 'fireAll' }
   /** Things the village can do once it's learned how: buy ten at once, buy as many as there's
    * food for, a tender who stokes the fire, keepers of lore who choose what's thought about. */
-  | { kind: 'feature'; feature: 'buy10' | 'buymax' | 'tender' | 'focus' };
+  | { kind: 'feature'; feature: 'buy10' | 'buymax' | 'tender' | 'focus' }
+  /** The Far Voice: a sign learned (the first also starts the praying), or prayer ×. */
+  | { kind: 'voice'; miracle: 'bolt' | 'rain' | 'light' | 'awe' }
+  | { kind: 'prayer'; mult: number };
 
 export interface UpgradeDef {
   id: string;
@@ -109,6 +112,12 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'tally', name: 'Tally sticks', does: 'Buy ×10.', cost: 200, fx: { kind: 'feature', feature: 'buy10' }, critters: 6 },
   { id: 'counting', name: 'Counting stones', does: 'Buy Max.', cost: 6000, fx: { kind: 'feature', feature: 'buymax' }, critters: 14 },
   { id: 'lore', name: 'Lore-keepers', does: 'Focus a culture lane: its ideas ×2.', cost: 3e6, fx: { kind: 'feature', feature: 'focus' }, critters: 100 },
+  // The Far Voice: prayer at the fire, and the signs worked with it.
+  { id: 'listen', name: 'Listening at night', does: 'They pray at the fire. Sign: the Bolt.', cost: 1500, fx: { kind: 'voice', miracle: 'bolt' }, critters: 10 },
+  { id: 'rainsong', name: 'The rain song', does: 'Sign: Rain.', cost: 2e4, fx: { kind: 'voice', miracle: 'rain' }, critters: 25 },
+  { id: 'seers', name: 'Seers', does: 'Sign: Light in the fog.', cost: 2e5, fx: { kind: 'voice', miracle: 'light' }, critters: 40 },
+  { id: 'awe', name: 'The awe', does: 'Sign: Awe.', cost: 3e6, fx: { kind: 'voice', miracle: 'awe' }, critters: 70 },
+  { id: 'vigils', name: 'Night vigils', does: 'Prayer ×2, holds ×2.', cost: 5e7, fx: { kind: 'prayer', mult: 2 }, critters: 120 },
   { id: 'council', name: 'The council', does: 'Buys the best deal for you.', cost: 800, fx: { kind: 'auto' }, critters: 12 },
   { id: 'envoy', name: 'An envoy', does: 'Gifts kin for you.', cost: 2000, fx: { kind: 'envoy' }, critters: 15 },
   { id: 'scouts', name: 'Scouts', does: 'Two scouts explore the fog.', cost: 400, fx: { kind: 'scouts' }, critters: 8 },
@@ -166,4 +175,13 @@ export const NATURES: NatureDef[] = [
   { id: 'warlike', name: 'A warlike island', does: 'Beating villages ×2 food. Embers ×1.5.', take: 2, embers: 1.5 },
   { id: 'stormy', name: 'A stormy island', does: 'Fire burns down 2× faster. Stokes ×3.', cool: 2, tap: 3 },
   { id: 'barren', name: 'A barren island', does: 'All food ×0.6. Embers ×2.', food: 0.6, embers: 2 },
+];
+
+/** The Far Voice's signs, worked with prayer at the Hearth (each learned by an upgrade). */
+export type MiracleId = 'bolt' | 'rain' | 'light' | 'awe';
+export const MIRACLES: { id: MiracleId; name: string; does: string; cost: number }[] = [
+  { id: 'bolt', name: 'Bolt', does: 'The fire roars.', cost: 30 },
+  { id: 'rain', name: 'Rain', does: 'Births ×3 for a day.', cost: 40 },
+  { id: 'light', name: 'Light', does: 'Shows a hidden village or landmark.', cost: 50 },
+  { id: 'awe', name: 'Awe', does: 'A village half won.', cost: 60 },
 ];

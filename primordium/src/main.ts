@@ -16,7 +16,7 @@ import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
 import { HearthView } from './ui/hearthView';
-import { destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
+import { workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
 import { dance, danceLeft, shoreIsland, terrainReady, gift, isAdult, poisOf, shoreOf, shoreSeason, startShore, takeRaft, walkChief } from './economy/shore';
 import { AGES, ageName } from './economy/culture';
 import { crewCard, buyAmount, setBuildCat, setBuyMany, setIslandView, danceCard, findCard, forkCard, poiCard, setVillageView, villageCard } from './ui/shorePanels';
@@ -64,7 +64,7 @@ import { LOOK_BACK_SEC } from './scene/tribe';
 import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
 import { playCrossing } from './ui/crossing';
-import { cue, glug, hushDrone, popSound, setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
+import { thunder, cue, glug, hushDrone, popSound, setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
 import { creatureLookOf, miniIcon } from './scene/creatureLook';
 import { describe } from './economy/genes';
 import { glyph, panWeb, pickIdea, webTransform, webView, zoomWeb } from './ui/tribePanels';
@@ -97,6 +97,15 @@ const hearthView = new HearthView(stageEl, () => {
   const got = stoke(state);
   if (got) popSound(0.85 + Math.random() * 0.3);
   return got;
+}, (id) => {
+  // A sign of the Far Voice (the Bolt brings its thunder).
+  const said = workSign(state, id);
+  if (said) {
+    if (id === 'bolt') thunder({ level: 0.7 });
+    else cue('ascend', 0.5);
+    save();
+  }
+  return said;
 });
 const sheet = $('sheet');
 const panel = $('panel');

@@ -29,6 +29,10 @@ export interface Speaker {
 export interface TalkCtx {
   a: Speaker;
   b: Speaker;
+  /** A streak crossed the sky just now (the spear, far off). */
+  streak?: boolean;
+  /** They keep faith with the spear's fire. */
+  spearFaith?: boolean;
   /** The fire, 0 (embers) to 1 (roaring). */
   heat: number;
   season: 'Spring' | 'Summer' | 'Autumn' | 'Winter';
@@ -134,6 +138,14 @@ const TALKS: Talk[] = [
   { say: (c) => (c.season === 'Spring' ? ['Smell that? Green things.', 'I smell smoke.', 'Under the smoke.'] : null) },
   { say: (c) => (c.season === 'Summer' ? ['Why do we sit at the fire when it\'s this warm?', 'Habit.', 'Good habit.'] : null) },
   { say: (c) => (c.season === 'Autumn' ? ['The leaves are turning.', 'Into what?', 'Red. Then nothing.'] : null) },
+
+  // ---- The spear, far off ----
+  { am: ['curious', 'dreamy'], say: (c) => (c.streak ? ['Did you see that?', 'A falling star.', 'It didn\'t fall. It went up.'] : null) },
+  { a: ['elder'], say: (c) => (c.streak ? ['It was like that, the night the spear came.', 'Like what?', '...Bright.'] : null) },
+  { a: BIG, say: (c) => (c.streak ? ['Everyone saw it.', 'Saw what?', 'Exactly.'] : null) },
+  { a: KIDS, b: BIG, say: (c) => (c.streak ? ['What was that light?', 'Something far away.', 'Is it coming here?', '...Sleep now.'] : null) },
+  { am: ['curious', 'wise', 'dreamy'], say: () => (Math.random() < 0.3 ? ['Do you hear it humming tonight?', 'Hear what?', 'Never mind.'] : null) },
+  { say: (c) => (c.spearFaith ? ['The fire came from the sky.', 'So they say.', 'So it says.'] : null) },
 
   // ---- The Bronze Age ----
   { a: BIG, say: (c) => (c.age >= 3 ? ['The smiths say the new blades never dull.', 'They said that about the last ones.', 'These are bronze.'] : null) },

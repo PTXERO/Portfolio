@@ -543,9 +543,15 @@ Each diet wants different things first, so the island looks different to each:
    fire); the Chief's Hall (1e17) closes it and the village holds 1200. Bronze bowls of fire on
    posts at the hearth. Sim (staying): an active player's Bronze Age ≈3h (6h→9h), nothing new
    for more than ~50 min; idle ≈7h→14h. *Next*: the Iron Age (empty now: "a future update").
-3. **The Far Voice, small**: whispers at the fire (the spear in talk, a streak in the sky), then
-   prayer and a few miracles at the Hearth (a bolt, rain, a light in the fog, a sign), opened by
-   the faith fork's third answer, "the spear's fire".
+3. **The Far Voice, small** *(live)*: upgrades (each a function): Listening at night (prayer
+   at the fire, and the Bolt), the Rain song, Seers (Light in the fog), the Awe, Night vigils
+   (prayer ×2, holds ×2). Prayer gathers by itself (more with more critters, ×2 where the faith
+   answered "the spear's fire", a new third answer), capped at 100; signs spent from it at the
+   Hearth: **Bolt** (the fire roars, 30), **Rain** (births ×3 for a day, 40), **Light** (the
+   nearest hidden village or landmark shown, 50), **Awe** (a village half won: kin +50 trust,
+   the rest half the war band's food, 60). Whispers: a streak crosses the night sky every few
+   minutes, the critters look up and talk of it ("It didn't fall. It went up."). Kept across
+   crossings like the other know-how.
 4. **Island events**: storms, a good season, a stranger at the fire: short things that ask for
    a tap, a minute's choice.
 

@@ -1060,3 +1060,12 @@ body.tab-hearth #expand { display: none; }
 #modal .dests { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
 #modal .dests .dest { display: flex; flex-direction: column; gap: 4px; padding: 8px; text-align: left; height: auto; white-space: normal; }
 #modal .dests .dest.on { outline: 2px solid var(--gold, #e8c86a); }
+/* The Far Voice at the hearth: prayer, and the signs known. */
+#hearth .hearth-signs { position: absolute; left: 16px; right: 16px; bottom: 74px; display: grid; gap: 6px; }
+#hearth .hearth-signs .prayer { display: flex; align-items: center; gap: 10px; color: #c8d8ff; text-shadow: 0 2px 0 #000; pointer-events: none; }
+#hearth .prayer-bar { flex: 1; height: 6px; background: rgba(0, 0, 0, 0.55); box-shadow: 0 0 0 2px #000; }
+#hearth .prayer-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #6a7ad8, #c8d8ff); transition: width 0.3s; }
+#hearth .signs { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 6px; }
+#hearth .sign { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 4px; height: auto; white-space: normal; line-height: 1.1; }
+#hearth .sign .tiny { font-size: 10px; opacity: 0.85; text-align: center; }
+#hearth .sign.off { opacity: 0.5; }

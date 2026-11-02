@@ -14,7 +14,7 @@ import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
 import { inherit, personal } from './genes';
 import { ageOver, cultureDay, cultureFx, maybeTurn, workReady, type Culture } from './culture';
-import { GENS, NATURES, PERKS, UPGRADES, WORKS, type GenId, type NatureDef, type PerkId } from '../content/idle';
+import { GENS, MIRACLES, NATURES, PERKS, UPGRADES, WORKS, type GenId, type MiracleId, type NatureDef, type PerkId } from '../content/idle';
 import type { CreatureLook } from '../scene/creatureLook';
 import type { GameState, Genes, TribeState } from './types';
 
@@ -106,6 +106,8 @@ export interface Village {
   name: string;
   x: number;
   y: number;
+  /** Saw the Far Voice's sign (half won: trust for kin, half the war band's food for others). */
+  awed?: boolean;
   /** grazer, hunter or omnivore (the diets' own names on the map). */
   diet: string;
   cannibal?: boolean;
@@ -179,6 +181,10 @@ export interface ShoreState {
    * many crossings they've made since the first shore. */
   embers?: number;
   crossings?: number;
+  /** Prayer gathered at the fire (for the Far Voice's signs), and the Rain's end (in the
+   * island's seconds). */
+  prayer?: number;
+  rainUntil?: number;
   /** What this island is like (none: the first, or a quiet one). */
   nature?: string;
   /** Which of the two islands seen from the raft they'll set out for (0 or 1). */
@@ -864,7 +870,7 @@ export function nextIslandSeed(s: ShoreState): number {
 }
 /** What crosses with them: the embers, and what the village knows how to do (buying ten, the
  * most, the council, the tender, the scouts, the envoy, the lore-keepers). The rest stays. */
-const KEPT_ACROSS = new Set(['auto', 'feature', 'scouts', 'envoy']);
+const KEPT_ACROSS = new Set(['auto', 'feature', 'scouts', 'envoy', 'voice', 'prayer']);
 /** Setting out: the chief and three of the eldest take a raft to a new island; the rest stay to
  * keep the old one. Everything starts again there but the embers and the know-how. */
 export function cross(state: GameState, seed = 0): boolean {
@@ -895,6 +901,90 @@ export function cross(state: GameState, seed = 0): boolean {
   reveal(shoreIsland(next.seed), st.seen, next.hearth.x, next.hearth.y, HOME_SIGHT);
   poisOf(next);
   return true;
+}
+
+// ---- The Far Voice ----
+
+/** Whether they pray at all (Listening at night), and which signs they know. */
+export function knowsSign(s: ShoreState, id: MiracleId): boolean {
+  return s.ups.some((u) => {
+    const fx = UPGRADES.find((x) => x.id === u)?.fx;
+    return fx?.kind === 'voice' && fx.miracle === id;
+  });
+}
+export function praying(s: ShoreState): boolean {
+  return knowsSign(s, 'bolt');
+}
+function prayerMult(s: ShoreState): number {
+  let m = 1;
+  for (const u of s.ups) {
+    const fx = UPGRADES.find((x) => x.id === u)?.fx;
+    if (fx?.kind === 'prayer') m *= fx.mult;
+  }
+  return m;
+}
+/** Prayer a second: a little, more the more of them there are, twice as much where the fire is
+ * the spear's (the faith answered so), more with vigils. */
+export function prayerRate(s: ShoreState): number {
+  if (!praying(s)) return 0;
+  return (0.08 + Math.log10(1 + s.people.length) * 0.04) * (s.culture?.forks.faith === 'spear' ? 2 : 1) * prayerMult(s);
+}
+export function prayerMost(s: ShoreState): number {
+  return 100 * prayerMult(s);
+}
+/** Whether a sign can be worked now (known, prayer enough, and something for it to do). */
+export function signReady(s: ShoreState, id: MiracleId): boolean {
+  const m = MIRACLES.find((x) => x.id === id)!;
+  if (!knowsSign(s, id) || (s.prayer ?? 0) < m.cost) return false;
+  if (id === 'light') return !!lightTarget(s);
+  if (id === 'awe') return !!aweTarget(s);
+  return true;
+}
+function lightTarget(s: ShoreState): { v?: Village; p?: Poi } | null {
+  const near = (o: { x: number; y: number }) => Math.hypot(o.x - s.hearth.x, o.y - s.hearth.y);
+  const v = s.villages.filter((x) => !x.found && !x.gone).sort((a, b) => near(a) - near(b))[0];
+  if (v) return { v };
+  const p = poisOf(s).filter((x) => !x.known).sort((a, b) => near(a) - near(b))[0];
+  return p ? { p } : null;
+}
+function aweTarget(s: ShoreState): Village | undefined {
+  return s.villages.filter((v) => v.found && !v.gone && v.won === undefined && !v.awed).sort((a, b) => Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y) - Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y))[0];
+}
+/** A sign worked: what it did, in a line (empty: nothing). */
+export function workSign(state: GameState, id: MiracleId): string {
+  const s = shoreOf(state);
+  if (!s || !signReady(s, id)) return '';
+  s.prayer = (s.prayer ?? 0) - MIRACLES.find((x) => x.id === id)!.cost;
+  const now = s.day * DAY_SEC + s.clock;
+  if (id === 'bolt') {
+    s.fuel = FIRE_FULL * 1.5;
+    s.heat = fireHeat(s);
+    return 'Lightning struck the hearth. The fire roars.';
+  }
+  if (id === 'rain') {
+    s.rainUntil = Math.max(now, s.rainUntil ?? 0) + DAY_SEC;
+    return 'Rain. Children will come of it.';
+  }
+  if (id === 'light') {
+    const t = lightTarget(s)!;
+    if (t.v) {
+      chart(s, t.v);
+      s.newFinds.push(t.v.id);
+      record(state, `A light in the fog showed them ${t.v.name}.`, 'shore', shoreWhen(s));
+      return `A light in the fog: ${t.v.name}.`;
+    }
+    t.p!.found = true;
+    t.p!.known = true;
+    return `A light in the fog: ${poiName(t.p!)}.`;
+  }
+  const v = aweTarget(s)!;
+  v.awed = true;
+  if (canWin(s, v)) v.trust = Math.min(100, (v.trust ?? 0) + 50);
+  return `${cap(v.name)} saw the sign.`;
+}
+/** Rain's births: three times as many, while it falls. */
+function rainMult(s: ShoreState): number {
+  return (s.rainUntil ?? 0) > s.day * DAY_SEC + s.clock ? 3 : 1;
 }
 
 /** Each village won, and each critter, adds this much to everything. */
@@ -1123,7 +1213,7 @@ export function can(s: ShoreState, feature: 'buy10' | 'buymax' | 'tender' | 'foc
  * many critters as there are of them. */
 export function takeCost(s: ShoreState, v: Village): { food: number; critters: number } {
   const k = relation(s, v) === 'prey' ? 1 : relation(s, v) === 'predator' ? 2 : 3;
-  return { food: Math.ceil((200 + v.pop * v.pop * 6) * k * (natureOf(s).take ?? 1) * Math.pow(1.8, s.villages.filter((x) => x.won !== undefined).length)), critters: Math.ceil(v.pop * (1 - 0.15 * perk(s, 'warsongs'))) };
+  return { food: Math.ceil((200 + v.pop * v.pop * 6) * k * (natureOf(s).take ?? 1) * (v.awed ? 0.5 : 1) * Math.pow(1.8, s.villages.filter((x) => x.won !== undefined).length)), critters: Math.ceil(v.pop * (1 - 0.15 * perk(s, 'warsongs'))) };
 }
 
 /** A gift of food: trust, twice as much with the chief there to give it. */
@@ -1282,6 +1372,7 @@ export function shoreTick(state: GameState, dt: number): void {
 
 function stepShore(state: GameState, s: ShoreState, dt: number): void {
   const k = dt / DAY_SEC;
+  if (praying(s)) s.prayer = Math.min(prayerMost(s), (s.prayer ?? 0) + prayerRate(s) * dt);
   if (s.raftTaken) {
     const f = fireFx(s);
     const k = FIRE_BURN * f.cool;
@@ -1307,7 +1398,7 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
   // Children: wherever there's a fire and a bed free, and grown pairs.
   const adults = grownCount(s);
   if (count(s, 'hearth') && s.people.length < Math.min(room(s), hearthMost(s)) && adults >= 2) {
-    s.birthT += Math.max(1, Math.floor(adults / 2)) * PAIR_RATE * (1 + boosts(s).births) * warmth(s) * (1 + (s.embers ?? 0) * EMBER_BIRTHS) * (1 + 0.25 * perk(s, 'fireborn')) * (natureOf(s).births ?? 1) * k;
+    s.birthT += Math.max(1, Math.floor(adults / 2)) * PAIR_RATE * (1 + boosts(s).births) * warmth(s) * (1 + (s.embers ?? 0) * EMBER_BIRTHS) * (1 + 0.25 * perk(s, 'fireborn')) * (natureOf(s).births ?? 1) * rainMult(s) * k;
     if (s.birthT >= 1) {
       s.birthT = 0;
       born(state, s);

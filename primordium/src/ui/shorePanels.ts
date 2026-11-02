@@ -183,10 +183,13 @@ function gatherPage(s: ShoreState, pages: string, head: string, work: string, up
     const more = ups.length - shown.length;
     const upRow = (u: (typeof UPGRADES)[number]) => `<div class="card px-box build"><div class="info"><div class="name">${u.name}</div><div class="sub">${u.does}</div></div><button class="px-btn buy${s.food >= u.cost ? ' gold' : ''}" data-upgrade="${u.id}"${s.food >= u.cost ? '' : ' disabled'}><span class="num">${format(u.cost)}</span></button></div>`;
     const isFire = (u: (typeof UPGRADES)[number]) => u.fx.kind.startsWith('fire') || u.fx.kind === 'tap' || u.fx.kind === 'tapRate';
+    const isVoice = (u: (typeof UPGRADES)[number]) => u.fx.kind === 'voice' || u.fx.kind === 'prayer';
     const fire = shown.filter(isFire);
-    const rest = shown.filter((u) => !isFire(u));
+    const voice = shown.filter(isVoice);
+    const rest = shown.filter((u) => !isFire(u) && !isVoice(u));
     return `${pages}${head}${work}
       ${fire.length ? `<div class="panel-head"><h2>The fire</h2></div>${fire.map(upRow).join('')}` : ''}
+      ${voice.length ? `<div class="panel-head"><h2>The Far Voice</h2></div>${voice.map(upRow).join('')}` : ''}
       ${rest.length ? `<div class="panel-head"><h2>The village</h2></div>${rest.map(upRow).join('')}` : ''}
       ${more ? `<p class="tiny dim">${more} more to come, as there's the food for them.</p>` : ''}
       ${!shown.length ? '<p class="tiny dim">Nothing just now: more come as the village grows.</p>' : ''}`;

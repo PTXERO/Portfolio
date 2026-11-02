@@ -124,6 +124,7 @@ export const FORKS: Record<ForkId, { name: string; ask: string; options: { id: s
     options: [
       { id: 'hearthfire', name: 'The hearth-fire', line: 'The fire that never goes out: it warms the living, and new life comes to it.', lane: 'rites', fx: { births: 0.2 } },
       { id: 'ancestors', name: 'The ancestors', line: 'The four who crossed, and all who came after: they watch, and they keep the hungry alive.', lane: 'stories', fx: { grow: 0.2 } },
+      { id: 'spear', name: 'The spear\'s fire', line: 'It fell from the sky, and the fire came with it.', lane: 'rites' },
     ],
   },
   many: {

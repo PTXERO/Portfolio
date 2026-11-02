@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { destinations, natureOf, crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
+import { workSign, signReady, prayerRate, destinations, natureOf, crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import type { GenId } from '../src/content/idle';
 import type { TribeState } from '../src/economy/types';
@@ -228,6 +228,36 @@ describe('Food, the idle way', () => {
     const r = foodRate(n);
     n.nature = 'still';
     expect(r).toBeCloseTo(foodRate(n) * 0.6, 6);
+  });
+  it('the Far Voice: no prayer till they listen; prayer gathers, capped; the signs do what they say', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    lit(state);
+    buyGen(state, 'forager');
+    expect(prayerRate(s)).toBe(0);
+    s.ups.push('listen', 'rainsong', 'seers', 'awe');
+    shoreTick(state, 10000);
+    expect(s.prayer).toBe(100);
+    // The Bolt: the fire at its hottest.
+    expect(workSign(state, 'bolt')).not.toBe('');
+    expect(s.heat).toBe(1);
+    // Rain: births ×3 for a day.
+    expect(workSign(state, 'rain')).not.toBe('');
+    expect(s.rainUntil).toBeGreaterThan(s.day * DAY_SEC + s.clock);
+    expect(signReady(s, 'light')).toBe(false);
+    s.prayer = 100;
+    // Light: the nearest hidden village found.
+    const hidden = s.villages.filter((v) => !v.found).length;
+    expect(workSign(state, 'light')).toMatch(/A light in the fog/);
+    expect(s.villages.filter((v) => !v.found).length).toBe(hidden - 1);
+    // Awe: a found village half won (kin: +50 trust; the rest: half the war band's food).
+    s.prayer = 100;
+    const v = s.villages.find((x) => x.found && x.won === undefined)!;
+    const before = canTake(s, v) ? takeCost(s, v).food : v.trust ?? 0;
+    expect(workSign(state, 'awe')).not.toBe('');
+    expect(v.awed).toBe(true);
+    if (canTake(s, v)) expect(takeCost(s, v).food).toBeLessThan(before);
+    else expect(v.trust).toBeGreaterThan(before);
   });
   it('an older save far enough on keeps buying ten, the most, and its focus', () => {
     const state = fresh();
