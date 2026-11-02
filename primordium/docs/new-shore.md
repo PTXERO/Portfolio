@@ -535,9 +535,14 @@ Each diet wants different things first, so the island looks different to each:
 
 1. **Islands that differ.** At setting out, two islands seen from the raft to choose between,
    each with a nature (lush, rocky, stormy, crowded with kin, hostile...) that changes the run,
-   and what it's worth in embers. *(building now)*
-2. **The Bronze Age (Age 3)** and on: new generators, upgrades and ideas, its Great Work (the
-   City Centre, 1200), so a long stay is worth more.
+   and what it's worth in embers. *(live: lush, teeming waters, game country, fertile, kin
+   country, warlike, stormy, barren)*
+2. **The Bronze Age (Age 3)** *(live)*: Bronze works and the Harbour (Age 3 only), stone houses
+   (beds for 40), Bronze tools (all food ×1.5) and, past the Hall, the Great games (×2); sixteen
+   ideas (ideas take 3× the practice) and a fork (Many villages: one hearth, or each their own
+   fire); the Chief's Hall (1e17) closes it and the village holds 1200. Bronze bowls of fire on
+   posts at the hearth. Sim (staying): an active player's Bronze Age ≈3h (6h→9h), nothing new
+   for more than ~50 min; idle ≈7h→14h. *Next*: the Iron Age (empty now: "a future update").
 3. **The Far Voice, small**: whispers at the fire (the spear in talk, a streak in the sky), then
    prayer and a few miracles at the Hearth (a bolt, rain, a light in the fog, a sign), opened by
    the faith fork's third answer, "the spear's fire".

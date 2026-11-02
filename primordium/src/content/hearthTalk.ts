@@ -135,6 +135,12 @@ const TALKS: Talk[] = [
   { say: (c) => (c.season === 'Summer' ? ['Why do we sit at the fire when it\'s this warm?', 'Habit.', 'Good habit.'] : null) },
   { say: (c) => (c.season === 'Autumn' ? ['The leaves are turning.', 'Into what?', 'Red. Then nothing.'] : null) },
 
+  // ---- The Bronze Age ----
+  { a: BIG, say: (c) => (c.age >= 3 ? ['The smiths say the new blades never dull.', 'They said that about the last ones.', 'These are bronze.'] : null) },
+  { a: KIDS, b: BIG, say: (c) => (c.age >= 3 ? ['Can I watch the bronze being poured?', 'From back there.', 'From a little closer?', 'From back there.'] : null) },
+  { a: ['elder'], say: (c) => (c.age >= 3 ? ['We used to cut with stone.', 'Stone was fine.', 'Stone was slow.'] : null) },
+  { a: BIG, say: (c) => (c.age >= 3 ? ['Boats came in from the harbour today.', 'From where?', 'They wouldn\'t say.'] : null) },
+
   // ---- Nothing much ----
   { say: (c) => [`Can I tell you something, ${N(c)}?`, 'Go on.', '...I forgot.'] },
   { say: () => ['Your coat\'s nice tonight.', 'It\'s the same coat.', 'It\'s nice tonight.'] },

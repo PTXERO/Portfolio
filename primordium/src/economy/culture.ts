@@ -23,7 +23,7 @@ export const LANES: { id: Lane; name: string; from: string }[] = [
   { id: 'words', name: 'Words', from: 'the scouts and lookout, and the size of the village' },
 ];
 
-export type ForkId = 'dead' | 'law' | 'trade' | 'faith';
+export type ForkId = 'dead' | 'law' | 'trade' | 'faith' | 'many';
 
 export interface Idea {
   id: string;
@@ -72,6 +72,24 @@ export const IDEAS: Idea[] = [
   { id: 'hidemaps', lane: 'stories', age: 2, name: 'Maps on hide', does: 'Sight +3.', fx: { sight: 3 } },
   { id: 'tallies', lane: 'words', age: 2, name: 'Tally sticks', does: 'All food +20%.', fx: { food: 0.2 } },
   { id: 'tithe', lane: 'words', age: 2, name: 'The tithe counted', does: 'All food +15%.', fx: { food: 0.15 } },
+
+  // The Bronze Age.
+  { id: 'plough', lane: 'food', age: 3, name: 'The plough', does: 'All food +30%.', fx: { food: 0.3 } },
+  { id: 'herds', lane: 'food', age: 3, name: 'Herds kept', does: 'Births +25%.', fx: { births: 0.25 } },
+  { id: 'bronze', lane: 'crafts', age: 3, name: 'Copper and tin', does: 'All food +30%.', fx: { food: 0.3 } },
+  { id: 'wheel', lane: 'crafts', age: 3, name: 'The wheel', does: 'Walk +25%.', fx: { speed: 0.25 } },
+  { id: 'bronzearms', lane: 'war', age: 3, name: 'Bronze arms', does: 'All food +20%.', fx: { food: 0.2 } },
+  { id: 'chariots', lane: 'war', age: 3, name: 'Chariots', does: 'Stoke ×2.', fx: { tap: 1 } },
+  { id: 'many', lane: 'rule', age: 3, name: 'Many villages', does: 'One people, or many: a choice.', fork: 'many' },
+  { id: 'households', lane: 'rule', age: 3, name: 'Great households', does: 'All food +25%.', fx: { food: 0.25 } },
+  { id: 'clans', lane: 'kin', age: 3, name: 'Clans by kind', does: 'Births +20%.', fx: { births: 0.2 } },
+  { id: 'tongue', lane: 'kin', age: 3, name: 'A common tongue', does: 'Gift trust +50%.', fx: { gift: 0.5 } },
+  { id: 'shrines', lane: 'rites', age: 3, name: 'The first shrine', does: 'All food +25%.', fx: { food: 0.25 } },
+  { id: 'calendar', lane: 'rites', age: 3, name: 'The calendar', does: 'Growing up +25%.', fx: { grow: 0.25 } },
+  { id: 'heroes', lane: 'stories', age: 3, name: 'Heroes of the island', does: 'All food +25%.', fx: { food: 0.25 } },
+  { id: 'songs', lane: 'stories', age: 3, name: 'Songs of the crossing', does: 'Sight +3.', fx: { sight: 3 } },
+  { id: 'marks', lane: 'words', age: 3, name: 'Picture marks', does: 'All food +30%.', fx: { food: 0.3 } },
+  { id: 'seals', lane: 'words', age: 3, name: 'Seals on jars', does: 'All food +20%.', fx: { food: 0.2 } },
 ];
 
 export const FORKS: Record<ForkId, { name: string; ask: string; options: { id: string; name: string; line: string; fx?: Partial<Boosts>; lane?: Lane; cannibal?: boolean }[] }> = {
@@ -108,6 +126,14 @@ export const FORKS: Record<ForkId, { name: string; ask: string; options: { id: s
       { id: 'ancestors', name: 'The ancestors', line: 'The four who crossed, and all who came after: they watch, and they keep the hungry alive.', lane: 'stories', fx: { grow: 0.2 } },
     ],
   },
+  many: {
+    name: 'Many villages',
+    ask: 'One people, or many?',
+    options: [
+      { id: 'onehearth', name: 'One hearth', line: 'Every village feeds the one fire.', lane: 'rule', fx: { food: 0.25 } },
+      { id: 'ownfires', name: 'Each their own fire', line: 'Every village keeps its own, and they meet as equals.', lane: 'kin', fx: { births: 0.2, gift: 0.25 } },
+    ],
+  },
 };
 
 /** The size at which the village turns to its culture. */
@@ -117,8 +143,10 @@ const IDEA_COST = 100;
 const IDEA_MORE = 100;
 function cost(c: Culture, lane: Lane): number {
   const had = IDEAS.filter((i) => i.lane === lane && i.age === c.age && c.done.includes(i.id)).length;
-  return IDEA_COST + had * IDEA_MORE;
+  return (IDEA_COST + had * IDEA_MORE) * (AGE_HARDER[c.age] ?? 1);
 }
+/** Later Ages' ideas take more practice (the village doing more, more is needed to learn). */
+const AGE_HARDER: Record<number, number> = { 3: 3 };
 /** A focused lane gathers this much more. */
 const FOCUS = 2;
 /** Days a fork waits for an answer before the elders give one. */
@@ -157,10 +185,10 @@ export function practiceRate(s: ShoreState, lane: Lane): number {
   let r = 0.3;
   switch (lane) {
     case 'food':
-      r += gens(['forager', 'camp', 'weir', 'lodge', 'garden']) * 0.02;
+      r += gens(['forager', 'camp', 'weir', 'lodge', 'garden', 'harbour']) * 0.02;
       break;
     case 'crafts':
-      r += gens(['camp', 'weir', 'lodge', 'garden', 'granary', 'market', 'hut', 'longhouse']) * 0.012;
+      r += gens(['camp', 'weir', 'lodge', 'garden', 'granary', 'market', 'hut', 'longhouse', 'foundry', 'house']) * 0.012;
       break;
     case 'war':
       r += won.filter((v) => relation(s, v) !== 'kin').length * 0.5 + gens(['lodge']) * 0.03;
@@ -266,7 +294,8 @@ export const AGES: { name: string; work?: BuildId; workName?: string }[] = [
   { name: '' },
   { name: 'The Hearth Age', work: 'greathearth', workName: 'the Great Hearth' },
   { name: 'The Village Age', work: 'square', workName: 'the Town Square' },
-  { name: 'The Town Age' },
+  { name: 'The Bronze Age', work: 'hall', workName: 'the Chief\'s Hall' },
+  { name: 'The Iron Age' },
 ];
 export function ageName(age: number): string {
   return AGES[age]?.name ?? 'The Long Road';

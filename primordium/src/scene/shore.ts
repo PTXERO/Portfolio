@@ -658,6 +658,45 @@ export class ShoreScene extends RangeScene {
         r(5, -3, 1, 1, '#e8c86a');
         break;
       }
+      case 'hall': {
+        // The Chief's Hall: a long hall on stone footings, a bronze-gold ridge, smoke from its hearth.
+        r(-10, -2, 20, 2, '#6a6460');
+        r(-9, -6, 18, 4, '#7a5634');
+        r(-10, -8, 20, 2, '#5a3a22');
+        r(-8, -9, 16, 1, '#c8963a');
+        r(-1, -5, 2, 3, '#2a1a10');
+        r(-6, -5, 1, 1, Math.floor(t * 2) % 2 ? '#ffb050' : '#e8863a');
+        r(5, -5, 1, 1, Math.floor(t * 2 + 1) % 2 ? '#ffb050' : '#e8863a');
+        r(3, -12, 1, 3, '#8a8480');
+        break;
+      }
+      case 'foundry': {
+        // Bronze works: a squat furnace, its mouth glowing bronze, a crucible by it.
+        r(-4, -3, 8, 3, '#6a5a4a');
+        r(-3, -6, 6, 3, '#7a6a5a');
+        r(-1, -8, 2, 2, '#5a4a3a');
+        r(-1, -3, 2, 2, Math.floor(t * 4) % 2 ? '#ffc060' : '#e89a3a');
+        r(5, -2, 3, 2, '#c8963a');
+        break;
+      }
+      case 'harbour': {
+        // A jetty out over the water, a boat tied to it.
+        r(-8, -1, 16, 1, '#7a5634');
+        r(-6, 0, 1, 2, '#5a3a22');
+        r(5, 0, 1, 2, '#5a3a22');
+        r(-3, -3, 7, 2, '#8a6a44');
+        r(0, -7, 1, 4, '#c8b080');
+        r(1, -7, 3, 3, '#e8e0c8');
+        break;
+      }
+      case 'house': {
+        // A stone house, thatched.
+        r(-5, -4, 10, 4, '#8a847c');
+        r(-6, -6, 12, 2, '#a88a4a');
+        r(-4, -7, 8, 1, '#b89a5a');
+        r(-1, -3, 2, 3, '#3a2a1a');
+        break;
+      }
       case 'market': {
         // Two stalls under awnings, goods laid out.
         r(-7, -4, 6, 1, '#c84a3a');

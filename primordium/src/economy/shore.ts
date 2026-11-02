@@ -37,7 +37,8 @@ export const CENTRES: { id: BuildId | null; name: string; most: number; age: num
   { id: 'hearth', name: 'The Hearth', most: HEARTH_MOST, age: 1 },
   { id: 'greathearth', name: 'The Great Hearth', most: 300, age: 1 },
   { id: 'square', name: 'The Town Square', most: 600, age: 2 },
-  { id: null, name: 'The City Centre', most: 1200, age: 3 },
+  { id: 'hall', name: 'The Chief\'s Hall', most: 1200, age: 3 },
+  { id: null, name: 'The City', most: 2400, age: 4 },
 ];
 
 /** What the heart of the village is now, and what it'll be next. */
@@ -652,7 +653,7 @@ export function maxBuy(s: ShoreState, id: GenId): number {
 /** Whether a generator's on offer yet (the island opens up as the critters grow). */
 export function genOpen(s: ShoreState, id: GenId): boolean {
   const g = GENS.find((x) => x.id === id)!;
-  return !!s.raftTaken && (g.critters === undefined || totalCritters(s) >= g.critters || count(s, id) > 0);
+  return !!s.raftTaken && (g.age === undefined || (s.culture?.age ?? 0) >= g.age || count(s, id) > 0) && (g.critters === undefined || totalCritters(s) >= g.critters || count(s, id) > 0);
 }
 
 /** Buy so many of a generator (as many as there's food for, up to that). Returns how many. */
@@ -682,6 +683,7 @@ export function upgradeOpen(s: ShoreState, id: string): boolean {
   const u = UPGRADES.find((x) => x.id === id);
   if (!u || s.ups.includes(id) || !s.raftTaken) return false;
   if (u.needGen && count(s, u.needGen[0]) < u.needGen[1]) return false;
+  if (u.age !== undefined && (s.culture?.age ?? 0) < u.age) return false;
   return u.critters === undefined || totalCritters(s) >= u.critters;
 }
 export function buyUpgrade(state: GameState, id: string): boolean {

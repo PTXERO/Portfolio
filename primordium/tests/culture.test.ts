@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createState } from '../src/economy/state';
-import { allMult, buyWork, DAY_SEC, hearthMost, shoreOf, shoreTick, startShore, takeRaft, workOpen } from '../src/economy/shore';
+import { genOpen, upgradeOpen, allMult, buyWork, DAY_SEC, hearthMost, shoreOf, shoreTick, startShore, takeRaft, workOpen } from '../src/economy/shore';
 import { ageName, greatWork, IDEAS, lanesDone, LANES, nextIdea, practiceRate, setFocus, TURN_AT, workReady } from '../src/economy/culture';
 import type { TribeState } from '../src/economy/types';
 
@@ -83,6 +83,28 @@ describe('The Ages', () => {
     expect(buyWork(state)).toBe(true);
     expect(s.culture!.age).toBe(3);
     expect(hearthMost(s)).toBe(600);
+  });
+  it('the Bronze Age: its own things to buy, its ideas, and the Chief\'s Hall closes it (the hearth holds 1200)', () => {
+    const { state, s } = hearthAgeDone();
+    s.food = 1e15;
+    buyWork(state);
+    s.culture!.done.push(...IDEAS.filter((i) => i.age === 2 && ['food', 'crafts', 'war', 'rule'].includes(i.lane)).map((i) => i.id));
+    while (s.people.length < 560) s.people.push({ id: s.nextId++, name: 'X', born: -30, dies: 9999 });
+    expect(genOpen(s, 'foundry')).toBe(false);
+    buyWork(state);
+    expect(ageName(3)).toBe('The Bronze Age');
+    expect(genOpen(s, 'foundry')).toBe(true);
+    expect(genOpen(s, 'harbour')).toBe(true);
+    expect(upgradeOpen(s, 'bronzetools')).toBe(true);
+    expect(greatWork(s)).toBe('hall');
+    expect(workReady(s)).toBe(false);
+    s.culture!.done.push(...IDEAS.filter((i) => i.age === 3 && ['food', 'crafts', 'war', 'kin'].includes(i.lane)).map((i) => i.id));
+    expect(workReady(s)).toBe(true);
+    s.food = 1e18;
+    expect(buyWork(state)).toBe(true);
+    expect(s.culture!.age).toBe(4);
+    expect(ageName(4)).toBe('The Iron Age');
+    expect(hearthMost(s)).toBe(1200);
   });
   it('a new Age\'s choices are asked, and the elders answer if left', () => {
     const { state, s } = hearthAgeDone();

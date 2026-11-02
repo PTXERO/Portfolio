@@ -33,6 +33,7 @@ function run(kind: Kind, diet: string): void {
   const seenGens = new Set<string>();
   let wonAll: number | undefined;
   let lastAge = s.culture?.age ?? 0;
+  let ideasSeen = 0;
   const rates: string[] = [];
   for (let t = 0; t <= HOURS * 3600; t += STEP) {
     shoreTick(state, STEP);
@@ -49,12 +50,13 @@ function run(kind: Kind, diet: string): void {
       if (buyWork(state)) events.push({ t, what: 'great work' });
     }
     for (const g of GENS) if (!seenGens.has(g.id) && genOpen(s, g.id)) { seenGens.add(g.id); events.push({ t, what: `new ${g.id}` }); }
+    if ((s.culture?.done.length ?? 0) > ideasSeen) { ideasSeen = s.culture!.done.length; events.push({ t, what: `idea ${ideasSeen}` }); }
     const won = s.villages.filter((v) => v.won !== undefined).length;
     if (events.length && !events[events.length - 1].what.startsWith('won') && won > events.filter((e) => e.what.startsWith('won')).length) events.push({ t, what: `won ${won}` });
     if ((s.culture?.age ?? 0) !== lastAge) { lastAge = s.culture?.age ?? 0; events.push({ t, what: `age ${lastAge}` }); }
     if (wonAll === undefined && s.villages.every((v) => v.won !== undefined || v.gone)) wonAll = t;
     // Setting out as soon as they can (and looking in): the next island.
-    if (looking && canCross(s) && islands.length < 4) {
+    if (looking && canCross(s) && islands.length < 4 && !process.env.SIM_STAY) {
       islands.push(`island ${islands.length + 1}: ${hm(t - islandAt)} (+${embersFor(s)} embers)`);
       cross(state);
       s = shoreOf(state)!;
@@ -66,6 +68,7 @@ function run(kind: Kind, diet: string): void {
       }
       islandAt = t;
       seenGens.clear();
+      ideasSeen = 0;
       events.push({ t, what: 'set out' });
     }
     if (t % (6 * 3600) === 0 && t) rates.push(`${t / 3600}h ${foodRate(s).toExponential(1)}/s ${s.people.length}c ${won}/${s.villages.length}w ${s.villages.filter((v) => v.found).length}f`);

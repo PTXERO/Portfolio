@@ -6,7 +6,7 @@
 import type { BuildId } from './shore';
 
 /** What there is to buy that brings food in, or houses critters. */
-export type GenId = 'forager' | 'camp' | 'weir' | 'lodge' | 'garden' | 'granary' | 'market' | 'hut' | 'longhouse';
+export type GenId = 'forager' | 'camp' | 'weir' | 'lodge' | 'garden' | 'granary' | 'market' | 'foundry' | 'harbour' | 'hut' | 'longhouse' | 'house';
 
 export interface GenDef {
   id: GenId;
@@ -21,6 +21,8 @@ export interface GenDef {
   room?: number;
   /** Shown once there are this many critters (the island opens up as they grow). */
   critters?: number;
+  /** Only from this Age on (the Bronze Age's own). */
+  age?: number;
   /** The building it shows as on the map (some of them: not every one). */
   shows?: BuildId;
 }
@@ -33,8 +35,11 @@ export const GENS: GenDef[] = [
   { id: 'garden', name: 'Gardens', does: 'Plant what they gathered.', cost: 2.2e5, growth: 1.15, rate: 1400, critters: 45, shows: 'garden' },
   { id: 'granary', name: 'Granary', does: 'Nothing spoils.', cost: 3.2e6, growth: 1.16, rate: 1.2e4, critters: 80, shows: 'granary' },
   { id: 'market', name: 'Market', does: 'The island trades here.', cost: 5e7, growth: 1.17, rate: 1e5, critters: 140, shows: 'market' },
+  { id: 'foundry', name: 'Bronze works', does: 'Copper and tin, poured.', cost: 1.2e9, growth: 1.18, rate: 1.3e6, critters: 500, age: 3, shows: 'foundry' },
+  { id: 'harbour', name: 'Harbour', does: 'Boats bring the sea in.', cost: 3e10, growth: 1.19, rate: 1.9e7, critters: 560, age: 3, shows: 'harbour' },
   { id: 'hut', name: 'Hut', does: 'Beds for 4.', cost: 25, growth: 1.18, room: 4, shows: 'hut' },
   { id: 'longhouse', name: 'Longhouse', does: 'Beds for 12.', cost: 2500, growth: 1.2, room: 12, critters: 30, shows: 'longhouse' },
+  { id: 'house', name: 'Stone house', does: 'Beds for 40.', cost: 4e6, growth: 1.2, room: 40, critters: 500, age: 3, shows: 'house' },
 ];
 
 /** An upgrade: bought once, for good. */
@@ -69,6 +74,8 @@ export interface UpgradeDef {
   needGen?: [GenId, number];
   /** Shown once there are this many critters. */
   critters?: number;
+  /** Only from this Age on. */
+  age?: number;
 }
 
 /** Each generator, at 10, 25 and 50 of them, can be made twice as good (the village learns the
@@ -106,6 +113,8 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'envoy', name: 'An envoy', does: 'Gifts kin for you.', cost: 2000, fx: { kind: 'envoy' }, critters: 15 },
   { id: 'scouts', name: 'Scouts', does: 'Two scouts explore the fog.', cost: 400, fx: { kind: 'scouts' }, critters: 8 },
   { id: 'feast1', name: 'Feast days', does: 'All food ×1.25.', cost: 5e4, fx: { kind: 'all', mult: 1.25 }, critters: 30 },
+  { id: 'games', name: 'The great games', does: 'All food ×2.', cost: 5e10, fx: { kind: 'all', mult: 2 }, critters: 900 },
+  { id: 'bronzetools', name: 'Bronze tools', does: 'All food ×1.5.', cost: 2e9, fx: { kind: 'all', mult: 1.5 }, critters: 500, age: 3 },
   { id: 'feast2', name: 'The harvest festival', does: 'All food ×1.5.', cost: 4e6, fx: { kind: 'all', mult: 1.5 }, critters: 90 },
   ...DOUBLERS,
 ];
@@ -115,6 +124,7 @@ export const UPGRADES: UpgradeDef[] = [
 export const WORKS: { id: BuildId; age: number; name: string; does: string; cost: number; most: number }[] = [
   { id: 'greathearth', age: 1, name: 'The Great Hearth', does: 'Ends the Hearth Age. Holds 300.', cost: 4e5, most: 300 },
   { id: 'square', age: 2, name: 'The Town Square', does: 'Ends the Village Age. Holds 600.', cost: 6e7, most: 600 },
+  { id: 'hall', age: 3, name: 'The Chief\'s Hall', does: 'Ends the Bronze Age. Holds 1200.', cost: 1e17, most: 1200 },
 ];
 
 /** What embers buy: for good, on every island after (each has levels, dearer each time). Spending

@@ -310,6 +310,22 @@ export class HearthView {
       b.fillStyle = mix('#3c3a3e', '#c87840', 0.3 + heat * 0.4);
       b.fillRect(FX - 21, FY - 30, 1, 22);
     }
+    // The Bronze Age: bronze bowls of fire on posts, either side (once the Chief's Hall stands,
+    // two more, further out).
+    if (age >= 3) {
+      const bowls = s.ups.includes('hall') ? [-34, -24, 24, 34] : [-30, 30];
+      for (const dx of bowls) {
+        const x = FX + dx;
+        const y = FY - 18;
+        b.fillStyle = '#5a4a3a';
+        b.fillRect(x, y, 1, 10);
+        b.fillStyle = '#c8963a';
+        b.fillRect(x - 2, y - 1, 5, 2);
+        b.fillStyle = Math.floor(this.t * 6 + dx) % 2 ? '#ffc060' : '#ff8a3a';
+        b.fillRect(x - 1, y - 3, 3, 2);
+        b.fillRect(x, y - 4, 1, 1);
+      }
+    }
     // The woodpile: logs stacked behind, to the right.
     if (s.ups.includes('woodpile')) {
       for (let row = 0; row < 3; row++)
