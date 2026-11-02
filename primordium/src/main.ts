@@ -143,9 +143,9 @@ let state: GameState = loadFromStorage() ?? createState();
 (window as unknown as { ooze: () => GameState }).ooze = () => state; // (the old name, for older scripts)
 const ui = (() => {
   try {
-    return { tab: 'grow' as Tab, open: true, full: false, scale: 1, watching: false, tilt: null as number | null, ...JSON.parse(localStorage.getItem(UI_KEY) ?? '{}') };
+    return { tab: 'grow' as Tab, open: true, full: false, scale: 1, watching: false, tilt: null as number | null, lockView: false, ...JSON.parse(localStorage.getItem(UI_KEY) ?? '{}') };
   } catch {
-    return { tab: 'grow' as Tab, open: true, full: false, scale: 1, watching: false, tilt: null as number | null };
+    return { tab: 'grow' as Tab, open: true, full: false, scale: 1, watching: false, tilt: null as number | null, lockView: false };
   }
 })();
 const saveUi = () => {
@@ -570,15 +570,32 @@ function mapTalk(s: ShoreState): void {
 /** Bottom left, under every menu: which way north is; tapped, the view turns back to it. */
 const compass = document.createElement('button');
 compass.className = 'compass';
-compass.setAttribute('aria-label', 'Face north');
-compass.innerHTML = `<svg viewBox="0 0 20 20" width="40" height="40" shape-rendering="crispEdges"><circle cx="10" cy="10" r="9" fill="rgba(20,24,36,0.55)" stroke="rgba(250,240,215,0.75)" stroke-width="1"/><g class="needle"><path d="M10 2 L12.5 10 L7.5 10 Z" fill="#e05a3a"/><path d="M10 18 L12.5 10 L7.5 10 Z" fill="#f2e8d0"/><text x="10" y="6.6" font-size="4" text-anchor="middle" fill="#fff" font-family="monospace">N</text></g></svg>`;
+compass.setAttribute('aria-label', 'Lock the view');
+compass.innerHTML = `<svg viewBox="0 0 20 20" width="56" height="56" shape-rendering="crispEdges"><circle class="ring" cx="10" cy="10" r="9" fill="rgba(20,24,36,0.55)" stroke="rgba(250,240,215,0.75)" stroke-width="1"/><g class="lock"><rect x="13.6" y="14.6" width="4" height="3.2" fill="#e8c86a"/><path d="M14.4 14.6 v-1.2 a1.2 1.2 0 0 1 2.4 0 v1.2" fill="none" stroke="#e8c86a" stroke-width="0.7"/></g><g class="needle"><path d="M10 2 L12.5 10 L7.5 10 Z" fill="#e05a3a"/><path d="M10 18 L12.5 10 L7.5 10 Z" fill="#f2e8d0"/><text x="10" y="6.6" font-size="4" text-anchor="middle" fill="#fff" font-family="monospace">N</text></g></svg>`;
 compass.hidden = true;
+/** Tapped: locked to the era's own view (north, its own angle; no turning or tilting), or
+ * free again. */
+function setViewLock(on: boolean): void {
+  ui.lockView = on;
+  scene.shoreScene.locked = on;
+  compass.classList.toggle('locked', on);
+  compass.setAttribute('aria-label', on ? 'Unlock the view' : 'Lock the view');
+  if (on) {
+    ui.tilt = null;
+    scene.setTilt(null);
+    scene.shoreScene.turnTo(0);
+  }
+  saveUi();
+}
 compass.addEventListener('click', (e) => {
   e.stopPropagation();
-  scene.shoreScene.turnTo(0);
+  setViewLock(!ui.lockView);
   idleAt = performance.now();
 });
 stageEl.appendChild(compass);
+// (Locked last time: still locked.)
+scene.shoreScene.locked = !!ui.lockView;
+compass.classList.toggle('locked', !!ui.lockView);
 /** Where the tab bar starts (CSS px down the stage): the compass sits just over it. */
 let barTop = 0;
 function compassFrame(s: ShoreState): void {
@@ -586,7 +603,7 @@ function compassFrame(s: ShoreState): void {
   const on = !eye && !(ui.open && ui.tab === 'hearth') && !emberOpen && terrainReady(s.seed);
   compass.hidden = !on;
   if (!on) return;
-  compass.style.top = `${Math.round((barTop || stageEl.clientHeight) - 52)}px`;
+  compass.style.top = `${Math.round((barTop || stageEl.clientHeight) - 66)}px`;
   const needle = compass.querySelector<SVGGElement>('.needle')!;
   const deg = (-map.yaw * 180) / Math.PI;
   needle.style.transform = `rotate(${deg.toFixed(1)}deg)`;
@@ -2134,7 +2151,8 @@ stageEl.addEventListener('pointermove', (e) => {
       }
       if (twoMode === 'tilt') {
         // Up looks out toward the horizon (lower, more side-on); down looks straight down.
-        ui.tilt = scene.tiltBy(((a.y + b.y) / 2 - midY) * 0.004);
+        // (Not while the view's locked to the era's own.)
+        if (!(ui.lockView && state.current === 'shore')) ui.tilt = scene.tiltBy(((a.y + b.y) / 2 - midY) * 0.004);
         return;
       }
       // Pinch: zoom by the change in spread, about the middle, and pan with the middle; twisted,
@@ -2414,6 +2432,8 @@ function act(el: HTMLElement): void {
     if (note) note.textContent = on ? 'Your own music keeps playing. On a phone set to silent, the game is quiet.' : 'Other music stops while you play. Heard even on silent.';
   } else if (el.dataset.tilt) {
     const v = Number(el.dataset.tilt);
+    // (An angle of your own: the view's no longer locked to the era's.)
+    if (v && ui.lockView) setViewLock(false);
     ui.tilt = v || null;
     scene.setTilt(ui.tilt);
     // (The island's own angle: facing north again too.)

@@ -1141,8 +1141,12 @@ body.embers-open #hint { display: none; }
 .ember-open { width: 100%; margin: 4px 0 10px; }
 
 /* The compass: bottom left, under the menus (the sheet and every popup cover it). */
-.compass { position: absolute; left: 10px; z-index: 2; width: 40px; height: 40px; padding: 0; border: 0; background: none; cursor: pointer; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6)); }
+.compass { position: absolute; left: 10px; z-index: 2; width: 56px; height: 56px; padding: 0; border: 0; background: none; cursor: pointer; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6)); }
 .compass .needle { transform-origin: 10px 10px; transform-box: view-box; }
 .compass[hidden] { display: none; }
+.compass:focus:not(:focus-visible) { outline: none; }
+.compass .lock { display: none; }
+.compass.locked .lock { display: inline; }
+.compass.locked .ring { stroke: #e8c86a; }
 /* Left alone: the view goes cinematic (the hints step aside). */
 body.cinema #hint { opacity: 0; }

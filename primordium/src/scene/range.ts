@@ -239,8 +239,10 @@ export class RangeScene {
   /** Which way the real camera faces (radians; 0 looks north, up the map), turned by two
    * fingers twisting. */
   yaw = 0;
+  /** Locked to the era's own view (the compass, tapped): no turning by hand. */
+  locked = false;
   turnBy(d: number, yours = true): void {
-    if (!this.persp) return;
+    if (!this.persp || (yours && this.locked)) return;
     // (Turned about the middle of the view: the ground there stays put.)
     const at = this.toWorld(this.W / 2, this.midY());
     this.yaw = (this.yaw + d) % (Math.PI * 2);

@@ -149,8 +149,9 @@ export class ShoreScene extends RangeScene {
       this.cineFor = 18 + Math.random() * 10;
     }
     const at = where() ?? s.chiefAt;
-    // Slowly round, and in a little; the camera glides after them.
-    this.yaw = (this.yaw + dt * 0.045) % (Math.PI * 2);
+    // Slowly round (unless the view's locked to the north), and in a little; the camera glides
+    // after them.
+    if (!this.locked) this.yaw = (this.yaw + dt * 0.045) % (Math.PI * 2);
     this.zoom += (4.6 - this.zoom) * Math.min(1, dt * 0.25);
     const off = this.followOff(at.x, at.y, dt);
     const k = Math.min(1, dt * 0.9);
