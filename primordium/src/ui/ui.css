@@ -225,6 +225,10 @@ html, body {
   z-index: 20;
 }
 #modal .px-box { padding: 16px; max-width: 340px; width: 100%; }
+/* (A tall popup scrolls inside the screen: never off it.) */
+#modal { grid-template-rows: minmax(0, 1fr); padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); }
+#modal > .px-box { max-height: 100%; overflow-y: auto; overscroll-behavior: contain; align-self: center; }
+#modal > .px-box > .choices:last-child, #modal > .px-box > .choices.stick { position: sticky; bottom: -16px; margin: 8px -16px -16px; padding: 10px 16px 14px; background: var(--panel); box-shadow: 0 -6px 10px rgba(16, 20, 31, 0.5); }
 #modal h3 { margin: 0 0 10px; font-size: 18px; color: var(--gold); }
 #modal p { margin: 0 0 8px; }
 #modal .px-btn { width: calc(100% - 6px); margin-top: 8px; }
@@ -1053,8 +1057,10 @@ body.tab-hearth #expand { display: none; }
 /* How many on a Build page can be bought just now. */
 .build-cats .can { display: inline-block; min-width: 1.4em; margin-left: 4px; padding: 0 4px; background: var(--gold, #e8c86a); color: #1a1a1a; font-size: 0.8em; text-align: center; }
 /* The raft's crew, and everyone who could go: each list scrolls on its own. */
-#modal .crew-list .info, #modal .crew-pool .info { max-height: 30vh; overflow-y: auto; }
-#modal .crew-pool .info { max-height: 34vh; }
+#modal .seg .px-btn { width: auto; flex: 1; margin-top: 0; }
+#modal .seg { display: flex; align-items: center; gap: 8px; margin: 6px 0 8px; }
+#modal .crew-list .info, #modal .crew-pool .info { max-height: 22vh; overflow-y: auto; }
+#modal .crew-pool .info { max-height: 26vh; }
 #modal .person.on b { color: var(--gold, #e8c86a); }
 /* The two islands seen from the raft. */
 #modal .dests { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
