@@ -375,6 +375,8 @@ function closeEye(): void {
 function drawEye(): void {
   const s = shoreOf(state);
   const map = scene.shoreScene;
+  // (What the chief sees as they walk clears the fog here too.)
+  if (state.stages.shore.seen) map.syncFog(state.stages.shore.seen);
   const inp = map.shadeInputs();
   if (!s || !eye || state.current !== 'shore') {
     if (eye) closeEye();

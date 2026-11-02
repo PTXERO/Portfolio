@@ -646,6 +646,12 @@ export class RangeScene {
     return cv;
   }
 
+  /** The fog brought up to date with what's been seen (for the eye view, which draws while the
+   * map rests). */
+  syncFog(seen: Uint8Array): void {
+    this.paintFog(seen);
+  }
+
   /** Clears the fog wherever new cells have been seen since last time. */
   protected paintFog(seen: Uint8Array): void {
     const N = this.n;
