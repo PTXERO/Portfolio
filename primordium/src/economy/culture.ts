@@ -251,6 +251,8 @@ export function cultureDay(state: GameState, s: ShoreState): void {
     c.practice[l.id] = 0;
     c.done.push(next.id);
     (c.fresh ??= []).push(next.id);
+    // (Picture marks: they write, from now on.)
+    if (next.id === 'marks') s.writtenFrom ??= s.day;
     s.news.push(`${next.name}: a new idea.`);
     record(state, `${l.name}: ${next.name}. ${next.does}`, 'shore', shoreWhen(s));
     if (next.fork && !c.forks[next.fork] && !c.asking) c.asking = { fork: next.fork, since: today(s) };

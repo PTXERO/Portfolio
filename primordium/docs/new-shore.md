@@ -38,6 +38,14 @@ where they disagree; kept for the history and for ideas worth bringing back).
   island's food, in billions): every ember ever brought is food +10% and births +5% for good, and
   unspent ones buy perks in the ember shop (seed stores, remembered trades, born of the fire,
   carried coals, a bigger raft, war songs, charts). Kept across: embers, perks and know-how.
+- **Spoken history.** Before they write, the Chronicle's Story page is **the telling**: told at
+  the fire, and changed by retelling. Recent things exactly (20 days); then "some seasons ago",
+  counted, not named (to 60 days); older, only the big things, as legend ("One of the four who
+  crossed died of old age", "A new chief was chosen"); each Stories idea keeps memory half again
+  as long. **Picture marks** (Bronze Age) begins writing: from then on it's **the record**,
+  exact. Islands left behind are legend ("Before the crossing"). What came before the shore (Soup
+  to Extinction) is **what the spear remembers**, kept apart. Underneath, everything's still
+  recorded exactly.
 - **Pace (sim, auto with a look every half hour).** First island ~4h30; then 4h, 3h, 2h as embers
   build (22, 68, 125, 143). Without setting out, the island goes flat at ~12h (600 critters).
 

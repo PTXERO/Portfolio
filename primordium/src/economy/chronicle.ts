@@ -13,6 +13,10 @@ export interface ChronicleEntry {
   /** A line that gathers names (everyone born that season, say): what they did, and who. */
   group?: string;
   names?: string[];
+  /** New Shore: the day it happened, and on which island (0 the first, 1 after one crossing...),
+   * so it can be told as it would be told by then (see the telling, in shorePanels). */
+  day?: number;
+  isle?: number;
 }
 
 /** The most kept (the oldest go first). */
@@ -37,7 +41,8 @@ export function whenIn(state: GameState, era: StageId): string {
 /** Writes a line into the Chronicle (in the era it happened in). */
 export function record(state: GameState, text: string, era: StageId = state.current, when?: string): void {
   const c = (state.chronicle ??= []);
-  c.push({ era, when: when ?? whenIn(state, era), text });
+  const s = era === 'shore' ? state.stages.shore?.shore : undefined;
+  c.push({ era, when: when ?? whenIn(state, era), text, ...(s ? { day: s.day, isle: s.crossings ?? 0 } : {}) });
   if (c.length > KEEP) c.splice(0, c.length - KEEP);
 }
 

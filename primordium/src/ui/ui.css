@@ -1069,3 +1069,7 @@ body.tab-hearth #expand { display: none; }
 #hearth .sign { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 4px; height: auto; white-space: normal; line-height: 1.1; }
 #hearth .sign .tiny { font-size: 10px; opacity: 0.85; text-align: center; }
 #hearth .sign.off { opacity: 0.5; }
+/* The telling: legend is told in another voice; the spear's own memory, cooler. */
+.chron-day.legend p { font-style: italic; color: #e8d8b0; }
+.spear-memory { opacity: 0.85; }
+.spear-memory .when, .spear-memory .chron-era { color: #a8b8e8; }

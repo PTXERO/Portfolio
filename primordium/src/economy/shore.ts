@@ -185,6 +185,9 @@ export interface ShoreState {
    * island's seconds). */
   prayer?: number;
   rainUntil?: number;
+  /** The day they began to write (Picture marks): from then on the Chronicle is a record, not
+   * a telling. */
+  writtenFrom?: number;
   /** What this island is like (none: the first, or a quiet one). */
   nature?: string;
   /** Which of the two islands seen from the raft they'll set out for (0 or 1). */

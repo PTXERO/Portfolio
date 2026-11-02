@@ -10,6 +10,7 @@ import { genesKey, miniIcon } from '../scene/creatureLook';
 import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
 import type { GameState } from '../economy/types';
 import { D, format as formatD } from '../economy/num';
+import { eraName, gathered } from '../economy/chronicle';
 const format = (n: number) => formatD(D(n));
 import { danceStyle } from './fireDance';
 import { temperOf } from '../content/hearthTalk';
@@ -49,7 +50,7 @@ export function shoreKey(state: GameState, tab: string): string {
   const s = shoreOf(state);
   if (!s) return '';
   if (tab === 'chronicle') {
-    if (chronView === 'story') return JSON.stringify(['story', s.culture ? 1 : 0]);
+    if (chronView === 'story') return JSON.stringify(['story', state.chronicle?.length ?? 0, Math.floor(s.day / 5), s.writtenFrom, s.culture?.done.length]);
     if (chronView === 'island') return JSON.stringify(['chron-island', islandView, s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, has(s, 'scouts'), s.villages.filter((v) => v.found).map((v) => [v.id, v.won, v.gone, Math.round(v.pop)]), s.chief]);
     if (chronView === 'culture') tab = 'culture';
     else if (chronView === 'people') return JSON.stringify(['people', s.people.length, s.chief, Math.floor(s.day / 2), !!s.culture]);
@@ -95,7 +96,7 @@ function birthLine(s: ShoreState): string {
   return 'A child is on the way.';
 }
 
-export function shoreLayout(state: GameState, tab: string, story?: () => string): string {
+export function shoreLayout(state: GameState, tab: string): string {
   const s = shoreOf(state);
   if (!s) return '';
   if (tab === 'build') return buildLayout(s);
@@ -104,11 +105,11 @@ export function shoreLayout(state: GameState, tab: string, story?: () => string)
   // The Chronicle: everything to look at, a page at a time.
   const page = (id: ChronView, name: string, dot = false) => `<button class="px-btn${chronView === id ? ' on' : ''}" data-villageview="${id}">${name}${dot ? ' <i class="dot"></i>' : ''}</button>`;
   if (chronView === 'culture' && !s.culture) chronView = 'village';
-  const views = `<div class="seg build-cats chron-pages">${page('village', 'Village')}${page('people', `Critters · ${s.people.length}`)}${page('island', 'Island')}${s.culture ? page('culture', 'Culture', !!s.culture.asking) : ''}${page('story', 'Story')}</div>`;
+  const views = `<div class="seg build-cats chron-pages">${page('village', 'Village')}${page('people', `Critters · ${s.people.length}`)}${page('island', 'Island')}${s.culture ? page('culture', 'Culture', !!s.culture.asking) : ''}${page('story', s.writtenFrom !== undefined ? 'Record' : 'Telling')}</div>`;
   if (chronView === 'people') return views + peopleLayout(s);
   if (chronView === 'island') return views + islandLayout(s);
   if (chronView === 'culture') return views + cultureLayout(s);
-  if (chronView === 'story') return views + (story?.() ?? '');
+  if (chronView === 'story') return views + tellingLayout(state, s);
   return views + `<div class="seg build-cats"><button class="px-btn" data-camera="home">See the hearth</button><button class="px-btn" data-camera="chief">See the chief</button></div>` + hearthCard(s) + peopleCard(s);
 }
 
@@ -264,6 +265,96 @@ export function crewCard(s: ShoreState): string {
     <p class="tiny dim">Tap to put on or take off. ${crew.length >= seats ? 'The raft is full.' : ''}</p>
     <div class="card px-box people-list crew-pool"><div class="info">${rest.map(row).join('')}</div></div>
     <div class="choices"><button class="px-btn gold" data-act="cross"${crew.length >= CREW_LEAST ? '' : ' disabled'}>Set out with ${crew.length}</button><button class="px-btn" data-act="dismiss">Not yet</button></div>`;
+}
+
+// ---- The telling ----
+
+/** What's big enough to be remembered as legend (the rest is forgotten, once it's old enough). */
+const BIG = /set out for a new island|was raised|broke up the raft|first born|one of the four who crossed|were won over|beat them|They were a hundred|was over|it was decided|left to the elders|came ashore|became chief/i;
+const countWord = (n: number) => (n === 1 ? 'one' : n === 2 ? 'two' : n === 3 ? 'three' : n <= 6 ? 'a few' : n <= 15 ? 'many' : 'a great many');
+/** How it's put once the names have fallen away (legend). */
+function legendOf(text: string): string {
+  return text
+    .replace(/^\S+, one of the four who crossed, (.*)$/, (_, rest) => `One of the four who crossed ${rest}`)
+    .replace(/^\S+ became chief\.$/, 'A new chief was chosen.')
+    .replace(/^\S+ was born: the first born on the new shore\.$/, 'The first child was born on the new shore.')
+    .replace(/^[^.]*? set out for a new island.*$/, 'Some of them set out for a new island. The rest stayed.');
+}
+const born = (e: { group?: string; names?: string[] }, n: number) => (e.group === 'old' ? `${cap(countWord(n))} grew old and died.` : `${cap(countWord(n))} ${n === 1 ? 'was' : 'were'} born.`);
+
+/** The Chronicle as these critters have it: told at the fire before they write, and told again
+ * and again, so the old changes. Recent things exactly; some seasons back, vaguer (counted, not
+ * named); older still, only the big things, as legend. The Stories lane keeps memory longer;
+ * writing (Picture marks) keeps everything after it exact. Islands left behind are legend. What
+ * came before the shore isn't theirs to tell: it's what the spear remembers. */
+function tellingLayout(state: GameState, s: ShoreState): string {
+  const all = state.chronicle ?? [];
+  const isle = s.crossings ?? 0;
+  const stories = s.culture ? IDEAS.filter((i) => i.lane === 'stories' && s.culture!.done.includes(i.id)).length : 0;
+  const mem = 1 + 0.5 * stories;
+  const FRESH = 20 * mem;
+  const RETOLD = 60 * mem;
+  const written = s.writtenFrom;
+  const groups: { head: string; lines: string[]; legend?: boolean }[] = [];
+  const put = (head: string, line: string, legend = false) => {
+    const g = groups[groups.length - 1];
+    if (g && g.head === head) g.lines.push(line);
+    else groups.push({ head, lines: [line], legend });
+  };
+  // Newest first, as told: this island's, then the islands before.
+  const shore = all.filter((e) => e.era === 'shore').reverse();
+  const legendCounted = new Set<string>();
+  for (const e of shore) {
+    const ei = e.isle ?? 0;
+    const day = e.day ?? 0;
+    if (ei < isle) {
+      // An island left behind: only legend, the names gone.
+      const head = ei === isle - 1 ? 'Before the crossing' : 'Long before, on another island';
+      if (e.group) {
+        if (!legendCounted.has(head)) {
+          legendCounted.add(head);
+          put(head, 'Many were born there, and the old went into the ground.', true);
+        }
+      } else if (BIG.test(e.text)) put(head, legendOf(e.text), true);
+      continue;
+    }
+    const d = s.day - day;
+    if ((written !== undefined && day >= written) || d < FRESH) {
+      put(e.when, e.text);
+    } else if (d < RETOLD) {
+      put('Some seasons ago', e.group && e.names ? born(e, e.names.length) : e.text);
+    } else {
+      const head = day < 30 ? 'In the first years' : 'Long ago';
+      if (e.group) {
+        if (!legendCounted.has(head)) {
+          legendCounted.add(head);
+          put(head, 'Many were born, and the old went into the ground.', true);
+        }
+      } else if (BIG.test(e.text)) put(head, legendOf(e.text), true);
+    }
+  }
+  const rows = groups.map((g) => `<div class="chron-day${g.legend ? ' legend' : ''}"><span class="when">${g.head}</span>${(g.legend ? g.lines : gathered(g.lines)).map((l) => `<p>${l}</p>`).join('')}</div>`).join('');
+  // Before the shore: the spear's own memory.
+  const before = all.filter((e) => e.era !== 'shore').slice(-300).reverse();
+  const bg: { era: string; when: string; lines: string[] }[] = [];
+  for (const e of before) {
+    const g = bg[bg.length - 1];
+    if (g && g.era === e.era && g.when === e.when) g.lines.unshift(e.text);
+    else bg.push({ era: e.era, when: e.when, lines: [e.text] });
+  }
+  let era = '';
+  const spear = bg
+    .map((g) => {
+      const head = g.era !== era ? `<h3 class="chron-era">${eraName(g.era as never)}</h3>` : '';
+      era = g.era;
+      return `${head}<div class="chron-day"><span class="when">${g.when}</span>${gathered(g.lines).map((l) => `<p>${l}</p>`).join('')}</div>`;
+    })
+    .join('');
+  const title = written !== undefined ? 'The record' : 'The telling';
+  const note = written !== undefined ? 'Written since they made marks. What came before is as it was told.' : 'Told at the fire. The old tellings change.';
+  return `<div class="panel-head"><h2>${title}</h2></div><p class="tiny dim">${note}</p>
+    <div class="card px-box chronicle-all"><div class="info">${rows || '<p class="dim">Nothing yet.</p>'}</div></div>
+    ${spear ? `<div class="panel-head"><h2>What the spear remembers</h2></div><div class="card px-box chronicle-all spear-memory"><div class="info">${spear}</div></div>` : ''}`;
 }
 
 /** Setting out for a new island: once every village is won. */

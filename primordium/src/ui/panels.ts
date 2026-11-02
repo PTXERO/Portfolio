@@ -273,7 +273,7 @@ export function layout(state: GameState, tab: Tab): string {
   const cur = icon(CURRENCY_ICON[id], 2);
 
   if (tab === 'hearth') return '';
-  if (def.shore && tab === 'chronicle') return shoreLayout(state, tab, () => chronicleLayout(state));
+  if (def.shore && tab === 'chronicle') return shoreLayout(state, tab);
   if (def.shore && (tab === 'grow' || tab === 'build' || tab === 'island' || tab === 'culture')) return shoreLayout(state, tab);
   if (def.tribal && tab === 'grow') return tribeLayout(state);
   if (def.tribal && tab === 'ideas') return ideasLayout(state);
