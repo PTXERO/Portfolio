@@ -2,7 +2,7 @@
 // batch of what's been brought in (food, there and then), and builds the fire up; a big fire
 // cooks more of everything while it lasts, and it dies down by itself if it's left.
 
-import { fireMost, fireMore, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
+import { fireMost, fireMore, growth, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
 import { drawCreature, type CreatureLook } from '../scene/creatureLook';
 import { pickTalk, type TalkCtx } from '../content/hearthTalk';
 import { squeak } from '../audio/sound';
@@ -16,7 +16,7 @@ const FY = 110;
 
 interface Bit { x: number; y: number; vx: number; vy: number; life: number; age: number; hot: number }
 /** What a critter round the fire is doing: hopping (seconds into it, after a moment's delay). */
-interface Seat { hop: number; wait: number; high: number; turn: number; id: number; name: string; look?: CreatureLook; pitch: number }
+interface Seat { hop: number; wait: number; high: number; turn: number; id: number; name: string; look?: CreatureLook; pitch: number; size: number }
 /** Two of them talking: who (seats), what, which line they're on, and how long it's been up. */
 interface Chat { who: [number, number]; lines: string[]; at: number; t: number }
 /** Where each one sits (and is, mid-hop), in the art's pixels, for the words over their heads. */
@@ -153,24 +153,42 @@ export class HearthView {
     const st = this.seats[i];
     const sp = this.spots.find((q) => q.i === i);
     if (!st) return;
-    const go = () => squeak(level, sp ? (sp.x - FX) / FX : 0, st.pitch);
+    // (The little ones squeak higher.)
+    const go = () => squeak(level, sp ? (sp.x - FX) / FX : 0, st.pitch * (1 + (1 - st.size) * 0.8));
     if (delay) setTimeout(go, delay * 1000);
     else go();
   }
 
   /** Who sits at the fire: the first eight of the village's own (a stranger's kind looks another way). */
   private seat(s: ShoreState): void {
-    const own = s.people.filter((p: ShorePerson) => p.kind === undefined).slice(0, 8);
-    const key = own.map((p) => p.id).join();
+    // (The village's own: up to five grown, and up to three of the children, the eldest of them
+    // first, so the little ones are at the fire too. Each child's size goes with how grown they are.)
+    const own = s.people.filter((p: ShorePerson) => p.kind === undefined);
+    const kids = own.filter((p) => growth(s, p) < 1).slice(0, 3);
+    const grown = own.filter((p) => growth(s, p) >= 1).slice(0, 8 - kids.length);
+    const sat = [...grown, ...kids];
+    // (Kids sit between the grown, not all together.)
+    const order = sat.map((p, i) => ({ p, k: i < grown.length ? i : (i - grown.length) * (grown.length / Math.max(1, kids.length)) + 0.5 })).sort((a, b) => a.k - b.k).map((x) => x.p);
+    for (const st of this.seats) {
+      const p = order.find((q) => q.id === st.id);
+      if (p) st.size = 0.55 + 0.45 * growth(s, p);
+    }
+    const key = order.map((p) => p.id).join();
     if (key === this.seatKey) return;
     this.seatKey = key;
     const old = new Map(this.seats.map((st) => [st.id, st]));
-    this.seats = own.map((p) => {
+    const talking = this.chat ? this.chat.who.map((i) => this.seats[i]?.id) : [];
+    this.seats = order.map((p) => {
       const was = old.get(p.id);
-      return was ?? { hop: 0, wait: 0, high: 0, turn: 0, id: p.id, name: p.name, look: s.look ? (p.genes ? { ...s.look, genes: p.genes } : s.look) : undefined, pitch: 0.85 + ((p.id * 37) % 40) / 100 };
+      return was ?? { hop: 0, wait: 0, high: 0, turn: 0, id: p.id, name: p.name, look: s.look ? (p.genes ? { ...s.look, genes: p.genes } : s.look) : undefined, pitch: 0.85 + ((p.id * 37) % 40) / 100, size: 0.55 + 0.45 * growth(s, p) };
     });
-    this.chat = null;
-    this.bubble.hidden = true;
+    // (A talk goes on if both talking are still at the fire.)
+    const who = talking.map((id) => this.seats.findIndex((st) => st.id === id));
+    if (this.chat && who.every((i) => i >= 0)) this.chat.who = [who[0], who[1]];
+    else {
+      this.chat = null;
+      this.bubble.hidden = true;
+    }
   }
 
   /** Now and then, two of them talk: a line each, back and forth, squeaking as they go. */
@@ -240,7 +258,7 @@ export class HearthView {
     const ox = (r.width - AW * k) * 0.5;
     const oy = (r.height - AH * k) * 0.8;
     const x = ox + sp.x * k;
-    const y = oy + (sp.y - 23) * k;
+    const y = oy + (sp.y - 23 * (this.seats[who]?.size ?? 1)) * k;
     const w = this.bubble.offsetWidth;
     this.bubble.style.left = `${Math.max(8, Math.min(r.width - w - 8, x - w / 2))}px`;
     this.bubble.style.top = `${Math.max(8, y - this.bubble.offsetHeight)}px`;
@@ -370,7 +388,7 @@ export class HearthView {
       const dy = (r.base - FY) * 2.5;
       const d = Math.hypot(dx, dy) || 1;
       const lift = r.base - r.y;
-      const len = (9 + (1 - heat) * 7 + Math.sin(this.t * 11 + r.i) * 0.7) * (1 - lift / 14);
+      const len = (9 + (1 - heat) * 7 + Math.sin(this.t * 11 + r.i) * 0.7) * (1 - lift / 14) * (this.seats[r.i]?.size ?? 1);
       const ux = dx / d;
       const uy = (dy / d) * 0.4;
       b.save();
@@ -391,7 +409,7 @@ export class HearthView {
     const critter = (r: Spot) => {
       const st = this.seats[r.i];
       if (!st.look) return;
-      drawCreature(b, st.look, Math.round(r.x), Math.round(r.y), { left: r.left, frame: st.hop && st.wait <= 0 ? 1 : 0 });
+      drawCreature(b, st.look, Math.round(r.x), Math.round(r.y), { left: r.left, frame: st.hop && st.wait <= 0 ? 1 : 0, size: st.size });
     };
     for (const r of back) critter(r);
 
@@ -441,7 +459,7 @@ export class HearthView {
       if (e.age > life) continue;
       const rise = Math.round(e.age * (e.kind === 'zzz' ? 3 : 5));
       const x0 = Math.round(r.x + (r.left ? -4 : 4) - pic.rows[0].length / 2);
-      const y0 = Math.round(r.y - 22 - rise - pic.rows.length);
+      const y0 = Math.round(r.y - 22 * (this.seats[e.seat]?.size ?? 1) - rise - pic.rows.length);
       if (e.age > life - 0.3 && Math.floor(e.age * 12) % 2) continue;
       b.fillStyle = '#000';
       pic.rows.forEach((row, yy) => [...row].forEach((ch, xx) => ch === 'x' && b.fillRect(x0 + xx - 1, y0 + yy - 1, 3, 3)));

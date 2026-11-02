@@ -264,7 +264,7 @@ function bake(look: CreatureLook, frame: number): HTMLCanvasElement {
  * Draws the creature with its feet on `groundY`, centred on x. `scale` (1 or more,
  * whole numbers) draws it bigger for portraits; `frame` steps the legs.
  */
-export function drawCreature(b: CanvasRenderingContext2D, look: CreatureLook, x: number, groundY: number, opts: { left?: boolean; frame?: number; scale?: number } = {}): void {
+export function drawCreature(b: CanvasRenderingContext2D, look: CreatureLook, x: number, groundY: number, opts: { left?: boolean; frame?: number; scale?: number; size?: number } = {}): void {
   const frame = opts.frame ?? 0;
   const key = `${look.diet}|${look.hue ?? ''}|${genesKey(look.genes)}|${Object.values(look.parts).join('.')}|${frame}`;
   let c = cache.get(key);
@@ -273,7 +273,8 @@ export function drawCreature(b: CanvasRenderingContext2D, look: CreatureLook, x:
     c = bake(look, frame);
     cache.set(key, c);
   }
-  const s = opts.scale ?? 1;
+  // (`size` below 1 draws it smaller, as a child; `scale` is whole pixels bigger.)
+  const s = (opts.scale ?? 1) * Math.min(1, Math.max(0.3, opts.size ?? 1));
   // Feet sit at the bottom of the legs: the body centre is CY, legs reach about CY + 10.
   const top = groundY - (CY + 10) * s;
   b.save();
