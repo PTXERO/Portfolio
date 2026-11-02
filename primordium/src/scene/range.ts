@@ -298,9 +298,52 @@ export class RangeScene {
   }
   get perspParams(): [number, number, number, number] | null {
     if (!this.persp || !this.shaded) return null;
-    const p = this.pitch();
-    return [Math.sin(p), Math.cos(p), (CAM_DIST * this.H) / this.zoom, this.liftUp];
+    // (Worked out once for where the camera is: everything on screen asks for it.)
+    const key = `${this.camX}|${this.camY}|${this.zoom}|${this.yaw}|${this.tilt}|${this.H}|${this.island?.seed}`;
+    if (key === this.perspKey) return this.perspNow!;
+    const up = this.liftUp;
+    let p = this.pitch();
+    // Nothing between the camera and what it looks at: where a hill would rise into the line of
+    // sight (right in close by a peak), it looks down more steeply, easing round as it goes.
+    {
+      const tan = Math.tan(p);
+      let at: Pt = { x: this.camX, y: this.camY };
+      for (let i = 0; i < 3; i++) {
+        const o = this.turned(0, (this.heightAt(at.x, at.y) * up) / tan);
+        at = { x: this.camX + o.x, y: this.camY + o.y };
+      }
+      const h0 = this.heightAt(at.x, at.y) * up;
+      const reach = ((CAM_DIST * this.H) / this.zoom) * Math.cos(p);
+      let need = 0;
+      for (let u = 2; u < reach; u *= 1.3) {
+        const q = this.turned(0, u);
+        // (Only real rises count: a hill, not the gentle lie of the land.)
+        const rise = this.heightAt(at.x + q.x, at.y + q.y) * up - h0;
+        if (rise > 0.5) need = Math.max(need, Math.atan((rise + 0.5) / u) - p);
+      }
+      this.pitchLift += (need - this.pitchLift) * (need > this.pitchLift ? 0.35 : 0.12);
+      p = Math.min((80 * Math.PI) / 180, p + Math.max(0, this.pitchLift));
+    }
+    const s = Math.sin(p);
+    const c = Math.cos(p);
+    // Never down in the land: right in close over high ground, the camera draws back up its line
+    // of sight (what it looks at stays the same size; only the depth flattens a little).
+    let d = (CAM_DIST * this.H) / this.zoom;
+    for (let i = 0; i < 2; i++) {
+      const at = this.turned(0, d * c);
+      let ground = 0;
+      for (const [ox, oy] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]]) ground = Math.max(ground, this.heightAt(this.camX + at.x + ox, this.camY + at.y + oy));
+      const need = ground * up + 3;
+      if (d * s < need) d = need / s;
+    }
+    this.perspKey = key;
+    this.perspNow = [s, c, d, up];
+    return this.perspNow;
   }
+  private perspKey = '';
+  /** How much more steeply the camera looks down just now, to see over a hill in its way. */
+  private pitchLift = 0;
+  private perspNow: [number, number, number, number] | null = null;
   /** Where a point (tiles; tiles up) is seen with the real camera: art x and row, and how far
    * off it is along the view (tiles). */
   protected project(x: number, y: number, z: number): [number, number, number] {
@@ -323,8 +366,8 @@ export class RangeScene {
     if (!this.shaded) return { x: 0, y: 0 };
     const h = this.heightAt(x, y);
     if (this.persp) {
-      const p = this.pitch();
-      return this.turned(0, (h * this.liftUp * Math.cos(p)) / Math.sin(p));
+      const [s, c] = this.perspParams!;
+      return this.turned(0, (h * this.liftUp * c) / s);
     }
     return { x: 0, y: (h * this.lift) / this.tilt };
   }

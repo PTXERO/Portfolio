@@ -157,6 +157,8 @@ const saveUi = () => {
 };
 
 const scene = new Scene($<HTMLCanvasElement>('scene'));
+// (For checking the map by hand, in development.)
+if (import.meta.env.DEV) (window as unknown as { scene: unknown }).scene = scene;
 scene.setTilt(ui.tilt);
 const expandBtn = $('expand');
 

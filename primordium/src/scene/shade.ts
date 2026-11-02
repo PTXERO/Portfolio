@@ -208,13 +208,12 @@ float flatRow(vec2 w, float h) {
   if (uPerspOn > 0.5) return project(vec3(w, h * KH)).y;
   return (w.y - uCam.y) * uCam.z * TY + uCam.w - h * K * uCam.z;
 }
+// (This pixel's camera and line of sight, worked out once.)
+vec3 gC;
+vec3 gD;
 /** On the line of sight through this pixel, the point at a height (land height units). */
 vec2 sightAt(float hh, vec2 art, float wx) {
-  if (uPerspOn > 0.5) {
-    vec3 C = camPos();
-    vec3 D = rayDir(art);
-    return (C + D * ((hh * KH - C.z) / D.z)).xy;
-  }
+  if (uPerspOn > 0.5) return (gC + gD * ((hh * KH - gC.z) / gD.z)).xy;
   return vec2(wx, uCam.y + (art.y - uCam.w + hh * K * uCam.z) / (uCam.z * TY));
 }
 
@@ -233,6 +232,8 @@ void main() {
     // point under the land is what's seen (past a long way off, it's the sea at the horizon).
     vec3 C = camPos();
     vec3 D = rayDir(art);
+    gC = C;
+    gD = D;
     if (D.z > -0.004) {
       // Above the horizon: the sky, deeper overhead.
       vec3 air = airColour();
@@ -244,18 +245,30 @@ void main() {
     float far = uPersp.z * 14.0;
     float tTop = max(0.0, (C.z - ${(H_LO + H_SPAN).toFixed(2)} * KH) / -D.z);
     float tSea = min((C.z + 0.3) / -D.z, far);
-    float stepT = (tSea - tTop) / 72.0;
-    float tq = tSea;
-    for (int i = 0; i <= 72; i++) {
-      float tt = tTop + float(i) * stepT;
-      vec3 q = C + D * tt;
-      if (q.z <= hTop(q.xy) * KH) { tq = tt; break; }
-    }
-    float lo = max(tTop, tq - stepT), hi = tq;
-    for (int i = 0; i < 6; i++) {
-      float m = (lo + hi) * 0.5;
-      vec3 q = C + D * m;
-      if (q.z <= hTop(q.xy) * KH) hi = m; else lo = m;
+    // (Only where it's over the island: off it, it's flat sea, found straight off.)
+    vec2 inv = 1.0 / vec2(abs(D.x) < 1e-5 ? 1e-5 : D.x, abs(D.y) < 1e-5 ? 1e-5 : D.y);
+    vec2 t0 = -C.xy * inv;
+    vec2 t1 = (vec2(N) - C.xy) * inv;
+    float tA = max(max(min(t0.x, t1.x), min(t0.y, t1.y)), tTop);
+    float tB = min(min(max(t0.x, t1.x), max(t0.y, t1.y)), tSea);
+    float hi = tSea;
+    if (tA < tB) {
+      float stepT = (tB - tA) / 64.0;
+      float tq = -1.0;
+      for (int i = 0; i <= 64; i++) {
+        float tt = tA + float(i) * stepT;
+        vec3 q = C + D * tt;
+        if (q.z <= hTop(q.xy) * KH) { tq = tt; break; }
+      }
+      if (tq >= 0.0) {
+        float lo = max(tA, tq - stepT);
+        hi = tq;
+        for (int i = 0; i < 6; i++) {
+          float m = (lo + hi) * 0.5;
+          vec3 q = C + D * m;
+          if (q.z <= hTop(q.xy) * KH) hi = m; else lo = m;
+        }
+      }
     }
     w = (C + D * hi).xy;
     away = hi / uPersp.z;
@@ -387,7 +400,9 @@ void main() {
   // surface (found along the line of sight the way the land is, so a bank in front hides what's
   // behind it), lit by its own shape: bright where it faces the sun, shadowed in its folds,
   // thinning to nothing at its edge.
-  {
+  // (Only where there's fog about: here, or where the line of sight comes down through the
+  // height of a bank. An island explored has next to none, and this is the dearest part.)
+  if (fogA > 0.002 || fogField(sightAt(0.1, art, wx)) > 0.002) {
     // From high above down to the ground: the first point under the fog's top.
     float hiH = 1.2;
     float stepH = hiH / 22.0;
@@ -441,7 +456,7 @@ void main() {
       thin = smoothstep(cz * 1.15, cz * 2.2, C.z);
       cw = sightAt(CLOUD_H, art, wx);
     }
-    float d = cloudAt(cw) * thin;
+    float d = thin > 0.0 ? cloudAt(cw) * thin : 0.0;
     if (d > 0.002) {
       // Light from above and the sun's side: thinner toward it is the lit top, thicker the
       // shaded underside.
