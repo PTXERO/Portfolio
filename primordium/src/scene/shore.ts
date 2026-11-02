@@ -806,6 +806,32 @@ export class ShoreScene extends RangeScene {
         r(10, -9, 1, 4, '#c83a2a');
         break;
       }
+      case 'senatehouse': {
+        // The Senate House: a domed hall on steps, columns across its front.
+        r(-14, -1, 28, 1, '#9a948a');
+        r(-13, -2, 26, 1, '#b8b2a4');
+        r(-11, -11, 22, 9, '#d8d2c4');
+        for (let k = -10; k <= 9; k += 3) r(k, -10, 1, 8, '#ece6d8');
+        r(-12, -12, 24, 1, '#b8b2a4');
+        r(-7, -15, 14, 3, '#c8c2b4');
+        r(-4, -17, 8, 2, '#a8c0c8');
+        r(-1, -19, 2, 2, '#e8c86a');
+        r(-1, -7, 2, 5, '#5a4a3a');
+        break;
+      }
+      case 'lighthouse': {
+        // The Great Lighthouse: a tall stone tower, its fire turning at the top.
+        r(-6, -2, 12, 2, '#8a847c');
+        r(-4, -16, 8, 14, '#d8d2c4');
+        r(-4, -12, 8, 1, '#c83a2a');
+        r(-4, -7, 8, 1, '#c83a2a');
+        r(-3, -20, 6, 4, '#5a5450');
+        const beam = Math.floor(t * 3) % 2;
+        r(-2, -19, 4, 2, beam ? '#ffd24a' : '#ff9a3a');
+        r(beam ? 3 : -7, -19, 4, 1, 'rgba(255, 220, 120, 0.6)');
+        r(-3, -21, 6, 1, '#3a3430');
+        break;
+      }
       case 'forge': {
         // An iron forge: a stone hearth, bellows, sparks off the anvil.
         r(-5, -4, 10, 4, '#5a5450');

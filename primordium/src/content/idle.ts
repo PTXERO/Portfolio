@@ -153,6 +153,8 @@ export const WORKS: { id: BuildId; age: number; name: string; does: string; cost
   { id: 'square', age: 2, name: 'The Town Square', does: 'Ends the Village Age. Holds 600.', cost: 6e7, most: 600 },
   { id: 'hall', age: 3, name: 'The Chief\'s Hall', does: 'Ends the Bronze Age. Holds 1200.', cost: 1e17, most: 1200 },
   { id: 'forum', age: 4, name: 'The Forum', does: 'Ends the Iron Age. Holds 2400.', cost: 6e20, most: 2400 },
+  { id: 'senatehouse', age: 5, name: 'The Senate House', does: 'Ends the Republic. Holds 5000.', cost: 1e23, most: 5000 },
+  { id: 'lighthouse', age: 6, name: 'The Great Lighthouse', does: 'Ends the Age of Sail. Holds 10000.', cost: 3e25, most: 10000 },
 ];
 
 /** What embers buy: for good, on every island after (each has levels, dearer each time). Spending

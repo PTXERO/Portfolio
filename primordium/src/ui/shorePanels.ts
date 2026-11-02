@@ -5,7 +5,7 @@
 
 import { type Boosts, POI_SORT, RELICS, type Find } from '../content/shore';
 import { GENS, PERKS, UPGRADES, type GenId } from '../content/idle';
-import { placeName, workAgain, YEAR_DAYS, allMult, upgradeCost, destinations, natureOf, crewCandidates, crewOf, CREW_LEAST, growth, raftSeats, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
+import { bandResting, giftToday, placeName, workAgain, YEAR_DAYS, allMult, upgradeCost, destinations, natureOf, crewCandidates, crewOf, CREW_LEAST, growth, raftSeats, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
 import type { GameState } from '../economy/types';
@@ -447,13 +447,14 @@ function villageRow(s: ShoreState, v: Village): string {
     const cost = giftCost(s, v);
     return `<div class="card px-box village">${icon}<div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">Kin</span></div>
       <div class="sub">${Math.round(v.pop)} of them. ${near ? 'Chief here: gifts ×2.' : 'Gifts ×2 with the chief.'}</div>${trustBar(v)}</div>
-      <div class="col"><button class="px-btn${s.food >= cost ? ' gold' : ''}" data-gift="${v.id}"${s.food >= cost ? '' : ' disabled'}>Gift ${format(cost)}</button>${near ? `<button class="px-btn gold" data-dance="${v.id}"${danceLeft(s, v) > 0.5 ? '' : ' disabled'}>${danceLeft(s, v) > 0.5 ? 'Dance' : 'Worn out'}</button>` : `<button class="px-btn" data-visit="${v.id}">Visit</button>`}</div></div>`;
+      <div class="col">${giftToday(s, v) ? `<button class="px-btn${s.food >= cost ? ' gold' : ''}" data-gift="${v.id}"${s.food >= cost ? '' : ' disabled'}>Gift ${format(cost)}</button>` : '<button class="px-btn" disabled>Gift taken today</button>'}${near ? `<button class="px-btn gold" data-dance="${v.id}"${danceLeft(s, v) > 0.5 ? '' : ' disabled'}>${danceLeft(s, v) > 0.5 ? 'Dance' : 'Worn out'}</button>` : `<button class="px-btn" data-visit="${v.id}">Visit</button>`}</div></div>`;
   }
   const c = takeCost(s, v);
-  const ok = s.food >= c.food && totalCritters(s) >= c.critters;
+  const rest = bandResting(s);
+  const ok = s.food >= c.food && totalCritters(s) >= c.critters && rest <= 0;
   return `<div class="card px-box village">${icon}<div class="info"><div class="name">${cap(v.name)} <span class="rel rel-${rel}">${REL_NAME[rel]}</span></div>
     <div class="sub">${Math.round(v.pop)} ${DIET_NAME[v.diet] ?? v.diet}. Needs ${format(c.food)} food, ${c.critters} critters${totalCritters(s) < c.critters ? ` (have ${totalCritters(s)})` : ''}.</div></div>
-    <div class="col"><button class="px-btn${ok ? ' gold' : ''}" data-take="${v.id}"${ok ? '' : ' disabled'}>Beat them</button>${near ? `<button class="px-btn" data-dance="${v.id}"${danceLeft(s, v) > 0.5 ? '' : ' disabled'}>Dance</button>` : ''}</div></div>`;
+    <div class="col"><button class="px-btn${ok ? ' gold' : ''}" data-take="${v.id}"${ok ? '' : ' disabled'}>${rest > 0 ? `Band resting · ${Math.ceil(rest)}d` : 'Beat them'}</button>${near ? `<button class="px-btn" data-dance="${v.id}"${danceLeft(s, v) > 0.5 ? '' : ' disabled'}>Dance</button>` : ''}</div></div>`;
 }
 
 /** A village's card (tapped on the map). */

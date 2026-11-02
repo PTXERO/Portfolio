@@ -21,7 +21,7 @@ export const SHORE_STORY = {
   found: '[STORY] Smoke, and huts, and others like them. Not like them.',
 };
 
-export type BuildId = 'forester' | 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails' | 'council' | 'envoy' | 'pottery' | 'thatcher' | 'salter' | 'healer' | 'toolmaker' | 'watch' | 'palisade' | 'spears' | 'greathearth' | 'warcamp' | 'square' | 'market' | 'kiln' | 'shrine' | 'workshop' | 'lodge' | 'garden' | 'hall' | 'foundry' | 'house' | 'harbour' | 'forum' | 'forge' | 'caravan' | 'townhouse';
+export type BuildId = 'forester' | 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails' | 'council' | 'envoy' | 'pottery' | 'thatcher' | 'salter' | 'healer' | 'toolmaker' | 'watch' | 'palisade' | 'spears' | 'greathearth' | 'warcamp' | 'square' | 'market' | 'kiln' | 'shrine' | 'workshop' | 'lodge' | 'garden' | 'hall' | 'foundry' | 'house' | 'harbour' | 'forum' | 'forge' | 'caravan' | 'townhouse' | 'senatehouse' | 'lighthouse';
 
 /** What the land gives beyond food and wood: each only where it's found (see HABITATS). */
 export type Res = 'fish' | 'clay' | 'reeds' | 'salt' | 'herbs' | 'timber' | 'flint' | 'stone';

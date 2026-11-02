@@ -43,7 +43,9 @@ export const CENTRES: { id: BuildId | null; name: string; most: number; age: num
   { id: 'square', name: 'The Town Square', most: 600, age: 2 },
   { id: 'hall', name: 'The Chief\'s Hall', most: 1200, age: 3 },
   { id: 'forum', name: 'The Forum', most: 2400, age: 4 },
-  { id: null, name: 'The City', most: 5000, age: 5 },
+  { id: 'senatehouse', name: 'The Senate House', most: 5000, age: 5 },
+  { id: 'lighthouse', name: 'The Great Lighthouse', most: 10000, age: 6 },
+  { id: null, name: 'The Port City', most: 20000, age: 7 },
 ];
 
 /** What the heart of the village is now, and what it'll be next. */
@@ -72,6 +74,17 @@ const HOME_SIGHT = 22;
 /** Winning a village over: trust a gift brings (twice as much brought by the chief in person),
  * a day of the chief's company, and the grazers' Welcome (kin drifting toward them). */
 const GIFT_TRUST = 4;
+/** Each island further on is harder won (none of it on the first):
+ * two more villages a crossing (up to this many more), each this much bigger, gifts worth less
+ * trust (and only one a day taken), and the war band resting days after each battle. */
+const MORE_VILLAGES_MOST = 8;
+const VILLAGE_GROWS = 1.3;
+const GIFT_LESS = 0.8;
+export const BAND_REST = 3;
+/** How many islands on this one is (0: the first). */
+export function further(s: ShoreState): number {
+  return s.crossings ?? 0;
+}
 const VISIT_TRUST = 2;
 const WELCOME_TRUST = 0.7;
 /** How near the chief must be to count as visiting (tiles). */
@@ -126,6 +139,8 @@ export interface Village {
   look: CreatureLook;
   /** Whether you've ever brought them a gift. */
   gifted?: boolean;
+  /** The day they last took a gift (further on, one a day). */
+  giftDay?: number;
   /** Where they live (shapes their name, their kind, their huts). */
   habitat?: Habitat;
   /** Seen by the chief (or the village's own lookouts). */
@@ -274,6 +289,8 @@ export interface ShoreState {
   told?: string[];
   /** The last day the envoy took a gift. */
   envoyDay?: number;
+  /** The day the war band's rested again (islands further on). */
+  bandRest?: number;
   /** Whether the raft they came on has been broken up (the hearth lit from it). */
   raftTaken?: boolean;
   /** Scouts out exploring (once there are scouts). */
@@ -417,7 +434,7 @@ export function relation(s: Pick<ShoreState, 'look' | 'cannibal'>, v: Village): 
 
 /** Where they settle (a fair way up from the beach, on open ground), and the island's
  * villages: hidden in the fog, each its own kind; the nearest is the smoke they saw. */
-export function shoreWorld(seed: number, look: CreatureLook, cannibal: boolean): { island: Island; hearth: Pt; beach: Pt; villages: Village[] } {
+export function shoreWorld(seed: number, look: CreatureLook, cannibal: boolean, further = 0): { island: Island; hearth: Pt; beach: Pt; villages: Village[] } {
   const is = shoreIsland(seed);
   const N = is.n;
   const rand = rng(seed * 13 + 5);
@@ -459,6 +476,9 @@ export function shoreWorld(seed: number, look: CreatureLook, cannibal: boolean):
     { diet: ours },
     { diet: others[Math.floor(rand() * others.length)] },
   ];
+  // (Each island further on is more peopled: two more villages a crossing, of every kind.)
+  const kinds = [ours, others[0], others[1] ?? ours, ours, predator ?? others[0]];
+  for (let k = 0; k < Math.min(MORE_VILLAGES_MOST, further * 2); k++) plan.push({ diet: kinds[k % kinds.length] });
   // Each settles where its diet does well (grazers on the grass and by water, hunters in the
   // woods, the hills and the dry country, omnivores almost anywhere), spread out over the island
   // (the first within sight of the beach: the smoke they saw).
@@ -516,7 +536,7 @@ export function shoreWorld(seed: number, look: CreatureLook, cannibal: boolean):
       diet: p.diet,
       cannibal: p.cannibal,
       habitat: best.h,
-      pop: Math.round(8 + rand() * 32),
+      pop: Math.round((8 + rand() * 32) * VILLAGE_GROWS ** further),
       look: { parts: { legs: pick(hd.legs), mouth: pick(MOUTHS[p.diet] ?? MOUTHS.omnivore), eyes: pick(hd.eyes), back: pick(hd.backs), tail: pick(hd.tails) }, diet: p.diet, hue: pick(hd.hues) },
       found: false,
     });
@@ -525,11 +545,11 @@ export function shoreWorld(seed: number, look: CreatureLook, cannibal: boolean):
 }
 
 /** New Shore as it begins: the four, come up from the beach. */
-export function newShore(tribe: TribeState): ShoreState {
+export function newShore(tribe: TribeState, further = 0): ShoreState {
   const seed = tribe.landed?.seed ?? tribe.seed + 1;
   const look: CreatureLook = { parts: { ...tribe.look.parts }, diet: tribe.look.diet, ...(tribe.look.genes ? { genes: tribe.look.genes } : {}) };
   const cannibal = !!tribe.cannibal;
-  const w = shoreWorld(seed, look, cannibal);
+  const w = shoreWorld(seed, look, cannibal, further);
   const rand = rng(seed + 99);
   // (Four crossed the first time; a bigger raft, later, carries more.)
   const four = (tribe.family?.length ? tribe.family : [0, 1, 2, 3].map(() => ({ name: nameFrom(rand), trait: 'hardy' }))).slice(0, 16);
@@ -967,7 +987,7 @@ export function cross(state: GameState, seed = 0): boolean {
   if (crew.length < CREW_LEAST) return false;
   const island = seed || destinations(s)[s.destination ?? 0].seed;
   const tribe = { ...t, look: { ...t.look, parts: { ...s.look.parts }, diet: s.look.diet }, landed: { ...(t.landed ?? { day: 0 }), seed: island }, family: crew.map((p) => ({ name: p.name, trait: p.trait ?? 'hardy', genes: p.genes })) } as TribeState;
-  const next = newShore(tribe);
+  const next = newShore(tribe, (s.crossings ?? 0) + 1);
   next.raft = crew.length;
   next.lang = s.lang;
   // The culture crosses with them, whole: its Age, every idea and every road chosen, and how far
@@ -1302,6 +1322,14 @@ export function chiefNear(s: ShoreState, v: Village): boolean {
 export function canWin(s: ShoreState, v: Village): boolean {
   return v.found && v.won === undefined && !v.gone && relation(s, v) === 'kin';
 }
+/** Whether they'll take a gift today (on islands further on, one a day). */
+export function giftToday(s: ShoreState, v: Village): boolean {
+  return !further(s) || v.giftDay !== s.day;
+}
+/** Days before the war band can go out again (islands further on: it rests after a battle). */
+export function bandResting(s: ShoreState): number {
+  return Math.max(0, (s.bandRest ?? 0) - (s.day + s.clock / DAY_SEC));
+}
 /** Whether they can be taken (beaten, and made yours): found, not kin, not yet won. */
 export function canTake(s: ShoreState, v: Village): boolean {
   return v.found && v.won === undefined && !v.gone && relation(s, v) !== 'kin';
@@ -1340,12 +1368,13 @@ export function takeCost(s: ShoreState, v: Village): { food: number; critters: n
 export function gift(state: GameState, id: number): number {
   const s = shoreOf(state);
   const v = s?.villages.find((x) => x.id === id);
-  if (!s || !v || !canWin(s, v)) return 0;
+  if (!s || !v || !canWin(s, v) || !giftToday(s, v)) return 0;
   const give = giftCost(s, v);
   if (s.food < give) return 0;
   s.food -= give;
   v.gifts = (v.gifts ?? 0) + 1;
-  const gain = GIFT_TRUST * (1 + boosts(s).gift) * (chiefNear(s, v) ? 2 : 1) * (natureOf(s).gift ?? 1);
+  v.giftDay = s.day;
+  const gain = (GIFT_TRUST * (1 + boosts(s).gift) * (chiefNear(s, v) ? 2 : 1) * (natureOf(s).gift ?? 1)) / (1 + GIFT_LESS * further(s));
   if (!v.gifted) {
     v.gifted = true;
     record(state, `They brought ${v.name} gifts of food for the first time.`, 'shore', shoreWhen(s));
@@ -1358,10 +1387,12 @@ export function gift(state: GameState, id: number): number {
 export function take(state: GameState, id: number): boolean {
   const s = shoreOf(state);
   const v = s?.villages.find((x) => x.id === id);
-  if (!s || !v || !canTake(s, v)) return false;
+  if (!s || !v || !canTake(s, v) || bandResting(s) > 0) return false;
   const c = takeCost(s, v);
   if (s.food < c.food || totalCritters(s) < c.critters) return false;
   s.food -= c.food;
+  // (Further on, the band comes home worn: it rests a while before the next.)
+  if (further(s)) s.bandRest = s.day + s.clock / DAY_SEC + BAND_REST * (1 + further(s));
   win(state, s, v, `The war band went out against ${v.name} and beat them. Their village is the hearth's now.`);
   return true;
 }

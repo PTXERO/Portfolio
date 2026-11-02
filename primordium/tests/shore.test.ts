@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { workOpen, buyWork, upgradeOpen, spoke, surroundings, situationOf, upgradeCost, workSign, signReady, prayerRate, destinations, natureOf, crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
+import { canWin, bandResting, giftToday, workOpen, buyWork, upgradeOpen, spoke, surroundings, situationOf, upgradeCost, workSign, signReady, prayerRate, destinations, natureOf, crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import { UPGRADES, type GenId } from '../src/content/idle';
 import type { TribeState } from '../src/economy/types';
@@ -743,5 +743,36 @@ describe('Families, not too close', () => {
     expect(buyWork(state)).toBe(true);
     expect(n.culture?.age).toBe(3);
     expect(workOpen(n)?.id).toBe('square');
+  });
+  it('each island further on is harder: more and bigger villages, one gift a day, the war band rests', () => {
+    const state = fresh();
+    const s = lit(state);
+    const first = s.villages.length;
+    while (s.people.length < 12) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30 + s.people.length });
+    for (const v of s.villages) v.won = s.day;
+    expect(cross(state)).toBe(true);
+    const n = shoreOf(state)!;
+    takeRaft(state);
+    expect(n.villages.length).toBe(first + 2);
+    for (const v of n.villages) v.found = true;
+    const kin = n.villages.find((v) => canWin(n, v)) ?? (() => { const v = n.villages[0]; v.found = true; return v; })();
+    kin.found = true;
+    if (canWin(n, kin)) {
+      n.food = 1e12;
+      expect(gift(state, kin.id)).toBeGreaterThan(0);
+      expect(giftToday(n, kin)).toBe(false);
+      expect(gift(state, kin.id)).toBe(0);
+    }
+    const foe = n.villages.find((v) => canTake(n, v))!;
+    foe.found = true;
+    n.food = 1e30;
+    while (n.people.length < 400) n.people.push({ id: n.nextId++, name: `Q${n.people.length}`, born: -30 });
+    expect(take(state, foe.id)).toBe(true);
+    expect(bandResting(n)).toBeGreaterThan(0);
+    const next = n.villages.find((v) => canTake(n, v) && v.id !== foe.id);
+    if (next) {
+      next.found = true;
+      expect(take(state, next.id)).toBe(false);
+    }
   });
 });
