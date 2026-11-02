@@ -1050,3 +1050,5 @@ body.tab-hearth #expand { display: none; }
 }
 #hearth .hearth-say.in { animation: hearth-say 0.18s ease-out; }
 @keyframes hearth-say { from { transform: translateY(6px) scale(0.92); opacity: 0; } }
+/* How many on a Build page can be bought just now. */
+.build-cats .can { display: inline-block; min-width: 1.4em; margin-left: 4px; padding: 0 4px; background: var(--gold, #e8c86a); color: #1a1a1a; font-size: 0.8em; text-align: center; }

@@ -19,7 +19,7 @@ import { HearthView } from './ui/hearthView';
 import { buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
 import { dance, danceLeft, shoreIsland, terrainReady, gift, isAdult, poisOf, shoreOf, shoreSeason, startShore, takeRaft, walkChief } from './economy/shore';
 import { AGES, ageName } from './economy/culture';
-import { buyAmount, setBuyMany, setIslandView, danceCard, findCard, forkCard, poiCard, setVillageView, villageCard } from './ui/shorePanels';
+import { buyAmount, setBuildCat, setBuyMany, setIslandView, danceCard, findCard, forkCard, poiCard, setVillageView, villageCard } from './ui/shorePanels';
 import type { GenId } from './content/idle';
 import { startFireDance, type FireDance } from './ui/fireDance';
 import { lineTree, shoreTree } from './ui/familyTree';
@@ -1882,6 +1882,7 @@ function act(el: HTMLElement): void {
     }
   } else if (el.dataset.buymany !== undefined) setBuyMany(Number(el.dataset.buymany));
   else if (el.dataset.villageview) setVillageView(el.dataset.villageview);
+  else if (el.dataset.buildcat) setBuildCat(el.dataset.buildcat);
   else if (el.dataset.islandview) setIslandView(el.dataset.islandview);
   else if (el.dataset.camera) {
     // Back to the village (and the camera stays there), or back with the chief.

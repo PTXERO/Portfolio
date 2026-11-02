@@ -26,8 +26,14 @@ let islandView: 'villages' | 'landmarks' | 'finds' = 'villages';
 export function setIslandView(v: string): void {
   islandView = v === 'landmarks' || v === 'finds' ? v : 'villages';
 }
-/** Kept for the old Build-tab sorts (there's one list now). */
-export function setBuildCat(_c: string): void {}
+/** Build's pages: what brings food in (and the homes), the upgrades, the villages to win. */
+type BuildPage = 'gather' | 'ups' | 'villages';
+let buildPage: BuildPage = 'gather';
+export function setBuildCat(c: string): void {
+  buildPage = c === 'ups' || c === 'villages' ? c : 'gather';
+}
+/** Upgrades out of reach shown at once (the rest wait their turn: the list stays short). */
+const UPS_AHEAD = 3;
 /** How many at a time the Build tab buys: one, ten, or as many as there's food for. */
 let buyMany: 1 | 10 | 0 = 1;
 export function setBuyMany(n: number): void {
@@ -54,7 +60,7 @@ export function shoreKey(state: GameState, tab: string): string {
   }
   if (tab === 'build') {
     // (Rebuilt when what can be afforded changes: each thing's button lights as the food comes.)
-    return JSON.stringify(['build', buyMany, s.auto, s.ups.length, GENS.map((g) => [genOpen(s, g.id), count(s, g.id), s.food >= genCost(s, g.id, buyMany || 1)]), UPGRADES.filter((u) => upgradeOpen(s, u.id)).map((u) => [u.id, s.food >= u.cost]), !!workOpen(s), s.food >= (workOpen(s)?.cost ?? Infinity),
+    return JSON.stringify(['build', buildPage, buyMany, s.auto, s.ups.length, GENS.map((g) => [genOpen(s, g.id), count(s, g.id), s.food >= genCost(s, g.id, buyMany || 1)]), UPGRADES.filter((u) => upgradeOpen(s, u.id)).map((u) => [u.id, s.food >= u.cost]), !!workOpen(s), s.food >= (workOpen(s)?.cost ?? Infinity),
       s.villages.filter((v) => v.found).map((v) => [v.id, v.won, v.gone, Math.floor((v.trust ?? 0) / 5), Math.round(v.pop), s.food >= (canWin(s, v) ? giftCost(s, v) : canTake(s, v) ? takeCost(s, v).food : Infinity), chiefNear(s, v), danceLeft(s, v) > 0.5]), s.chief]);
   }
   if (tab === 'island') return JSON.stringify(['island', islandView, s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, has(s, 'scouts'), s.villages.filter((v) => v.found).map((v) => [v.id, v.won, v.gone, Math.floor((v.trust ?? 0) / 5), Math.round(v.pop), s.food >= (canWin(s, v) ? giftCost(s, v) : canTake(s, v) ? takeCost(s, v).food : Infinity), chiefNear(s, v)]), s.chief]);
@@ -126,20 +132,38 @@ function hearthCard(s: ShoreState): string {
  * the upgrades, once they're on offer. */
 function buildLayout(s: ShoreState): string {
   if (!count(s, 'hearth')) return `<div class="card px-box"><div class="info"><div class="sub">Light the hearth first (the Hearth tab).</div></div></div>`;
+  const ups = UPGRADES.filter((u) => upgradeOpen(s, u.id)).sort((a, b) => a.cost - b.cost);
+  const w = workOpen(s);
+  // (How many on each page can be bought just now: a number on its button.)
+  const canGen = GENS.filter((g) => genOpen(s, g.id) && s.food >= genCost(s, g.id, 1)).length;
+  const canUp = ups.filter((u) => s.food >= u.cost).length;
+  const found = s.villages.filter((v) => v.found && !v.gone && v.won === undefined);
+  const canVil = found.filter((v) => s.food >= (canWin(s, v) ? giftCost(s, v) : canTake(s, v) ? takeCost(s, v).food : Infinity)).length;
+  const page = (id: BuildPage, name: string, n: number) => `<button class="px-btn${buildPage === id ? ' on' : ''}" data-buildcat="${id}">${name}${n ? ` <span class="can">${n}</span>` : ''}</button>`;
+  const pages = `<div class="seg build-cats">${page('gather', 'Gather', canGen)}${page('ups', 'Upgrades', canUp)}${page('villages', 'Villages', canVil)}</div>`;
+  const head = `<div class="panel-head"><h2>Build</h2><span class="dim"><span data-t="shore-food">${n0(s.food)}</span> food</span></div>`;
+  // (The Great Work, when it's on offer, sits on top of every page: it closes the Age.)
+  const work = w ? `<div class="card px-box build raid"><div class="info"><div class="name">${w.name}</div><div class="sub">${w.does}</div></div><button class="px-btn buy${s.food >= w.cost ? ' gold' : ''}" data-act="work"${s.food >= w.cost ? '' : ' disabled'}><span class="num">${format(w.cost)}</span></button></div>` : '';
+  if (buildPage === 'villages') return pages + head + work + villagesCard(s);
+  if (buildPage === 'ups') {
+    // Everything that can be bought now, and the next few out of reach (the rest come later).
+    const shown = [...ups.filter((u) => s.food >= u.cost), ...ups.filter((u) => s.food < u.cost).slice(0, UPS_AHEAD)];
+    const more = ups.length - shown.length;
+    const upRow = (u: (typeof UPGRADES)[number]) => `<div class="card px-box build"><div class="info"><div class="name">${u.name}</div><div class="sub">${u.does}</div></div><button class="px-btn buy${s.food >= u.cost ? ' gold' : ''}" data-upgrade="${u.id}"${s.food >= u.cost ? '' : ' disabled'}><span class="num">${format(u.cost)}</span></button></div>`;
+    const isFire = (u: (typeof UPGRADES)[number]) => u.fx.kind.startsWith('fire') || u.fx.kind === 'tap' || u.fx.kind === 'tapRate';
+    const fire = shown.filter(isFire);
+    const rest = shown.filter((u) => !isFire(u));
+    return `${pages}${head}${work}
+      ${fire.length ? `<div class="panel-head"><h2>The fire</h2></div>${fire.map(upRow).join('')}` : ''}
+      ${rest.length ? `<div class="panel-head"><h2>The village</h2></div>${rest.map(upRow).join('')}` : ''}
+      ${more ? `<p class="tiny dim">${more} more to come, as there's the food for them.</p>` : ''}
+      ${!shown.length ? '<p class="tiny dim">Nothing just now: more come as the village grows.</p>' : ''}`;
+  }
   const many = `<div class="seg build-cats">${([1, 10, 0] as const).map((n) => `<button class="px-btn${buyMany === n ? ' on' : ''}" data-buymany="${n}">${n ? `×${n}` : 'Max'}</button>`).join('')}${has(s, 'council') ? `<span class="seg-gap"></span><button class="px-btn${s.auto ? ' on' : ''}" data-act="auto">Council: ${s.auto ? 'buying' : 'resting'}</button>` : ''}</div>`;
   const gens = GENS.filter((g) => genOpen(s, g.id)).map((g) => genRow(s, g.id)).join('');
   const next = GENS.find((g) => !genOpen(s, g.id) && g.critters !== undefined);
-  const ups = UPGRADES.filter((u) => upgradeOpen(s, u.id)).sort((a, b) => a.cost - b.cost);
-  const w = workOpen(s);
-  const work = w ? `<div class="panel-head"><h2>The Great Work</h2></div><div class="card px-box build raid"><div class="info"><div class="name">${w.name}</div><div class="sub">${w.does}</div></div><button class="px-btn buy${s.food >= w.cost ? ' gold' : ''}" data-act="work"${s.food >= w.cost ? '' : ' disabled'}><span class="num">${format(w.cost)}</span></button></div>` : '';
-  const upRow = (u: (typeof UPGRADES)[number]) => `<div class="card px-box build"><div class="info"><div class="name">${u.name}</div><div class="sub">${u.does}</div></div><button class="px-btn buy${s.food >= u.cost ? ' gold' : ''}" data-upgrade="${u.id}"${s.food >= u.cost ? '' : ' disabled'}><span class="num">${format(u.cost)}</span></button></div>`;
-  const fire = ups.filter((u) => u.fx.kind.startsWith('fire') || u.fx.kind === 'tap' || u.fx.kind === 'tapRate');
-  const rest = ups.filter((u) => !fire.includes(u));
-  return `${many}<div class="panel-head"><h2>Build</h2><span class="dim"><span data-t="shore-food">${n0(s.food)}</span> food</span></div>${work}${gens}
-    ${next ? `<p class="tiny dim">More to come as the village grows (at ${next.critters} critters).</p>` : ''}
-    ${fire.length ? `<div class="panel-head"><h2>The fire</h2></div>${fire.map(upRow).join('')}` : ''}
-    ${rest.length ? `<div class="panel-head"><h2>Upgrades</h2></div>${rest.map(upRow).join('')}` : ''}
-    ${villagesCard(s)}`;
+  return `${pages}${head}${work}${many}${gens}
+    ${next ? `<p class="tiny dim">More to come as the village grows (at ${next.critters} critters).</p>` : ''}`;
 }
 
 function genRow(s: ShoreState, id: GenId): string {
