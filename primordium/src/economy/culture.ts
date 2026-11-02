@@ -23,7 +23,7 @@ export const LANES: { id: Lane; name: string; from: string }[] = [
   { id: 'words', name: 'Words', from: 'the scouts and lookout, and the size of the village' },
 ];
 
-export type ForkId = 'dead' | 'law' | 'trade' | 'faith' | 'many';
+export type ForkId = 'dead' | 'law' | 'trade' | 'faith' | 'many' | 'written';
 
 export interface Idea {
   id: string;
@@ -90,6 +90,24 @@ export const IDEAS: Idea[] = [
   { id: 'songs', lane: 'stories', age: 3, name: 'Songs of the crossing', does: 'Sight +3.', fx: { sight: 3 } },
   { id: 'marks', lane: 'words', age: 3, name: 'Picture marks', does: 'All food +30%.', fx: { food: 0.3 } },
   { id: 'seals', lane: 'words', age: 3, name: 'Seals on jars', does: 'All food +20%.', fx: { food: 0.2 } },
+
+  // The Iron Age.
+  { id: 'ironplough', lane: 'food', age: 4, name: 'Iron ploughshares', does: 'All food +40%.', fx: { food: 0.4 } },
+  { id: 'mills', lane: 'food', age: 4, name: 'Mills', does: 'All food +30%.', fx: { food: 0.3 } },
+  { id: 'iron', lane: 'crafts', age: 4, name: 'Bog iron', does: 'All food +40%.', fx: { food: 0.4 } },
+  { id: 'ships', lane: 'crafts', age: 4, name: 'Ships', does: 'Sight +4.', fx: { sight: 4 } },
+  { id: 'ironarms', lane: 'war', age: 4, name: 'Iron arms', does: 'All food +30%.', fx: { food: 0.3 } },
+  { id: 'forts', lane: 'war', age: 4, name: 'Forts', does: 'Stoke ×2.', fx: { tap: 1 } },
+  { id: 'onecouncil', lane: 'rule', age: 4, name: 'One council', does: 'Gift trust +50%.', fx: { gift: 0.5 } },
+  { id: 'roads', lane: 'rule', age: 4, name: 'Roads between villages', does: 'Walk +30%.', fx: { speed: 0.3 } },
+  { id: 'citizens', lane: 'kin', age: 4, name: 'Citizens and strangers', does: 'Births +25%.', fx: { births: 0.25 } },
+  { id: 'tongue2', lane: 'kin', age: 4, name: 'One tongue', does: 'All food +30%.', fx: { food: 0.3 } },
+  { id: 'temples', lane: 'rites', age: 4, name: 'Temples', does: 'All food +30%.', fx: { food: 0.3 } },
+  { id: 'festivals', lane: 'rites', age: 4, name: 'The year\'s festivals', does: 'Growing up +30%.', fx: { grow: 0.3 } },
+  { id: 'epics', lane: 'stories', age: 4, name: 'Epics', does: 'All food +30%.', fx: { food: 0.3 } },
+  { id: 'scribes', lane: 'stories', age: 4, name: 'The scribes', does: 'The old tellings written down.' },
+  { id: 'writtenlaw', lane: 'words', age: 4, name: 'Written law', does: 'What is written: a choice.', fork: 'written' },
+  { id: 'schools', lane: 'words', age: 4, name: 'Schools', does: 'All food +40%.', fx: { food: 0.4 } },
 ];
 
 export const FORKS: Record<ForkId, { name: string; ask: string; options: { id: string; name: string; line: string; fx?: Partial<Boosts>; lane?: Lane; cannibal?: boolean }[] }> = {
@@ -127,6 +145,14 @@ export const FORKS: Record<ForkId, { name: string; ask: string; options: { id: s
       { id: 'spear', name: 'The spear\'s fire', line: 'It fell from the sky, and the fire came with it.', lane: 'rites' },
     ],
   },
+  written: {
+    name: 'What is written',
+    ask: 'Which tellings go into the record?',
+    options: [
+      { id: 'astold', name: 'As they were told', line: 'Every telling, word for word, the strange ones too.', lane: 'stories', fx: { food: 0.25 } },
+      { id: 'onlysure', name: 'Only what\'s sure', line: 'What can be counted and sworn to; the rest stays at the fire.', lane: 'words', fx: { gift: 0.4 } },
+    ],
+  },
   many: {
     name: 'Many villages',
     ask: 'One people, or many?',
@@ -147,7 +173,7 @@ function cost(c: Culture, lane: Lane): number {
   return (IDEA_COST + had * IDEA_MORE) * (AGE_HARDER[c.age] ?? 1);
 }
 /** Later Ages' ideas take more practice (the village doing more, more is needed to learn). */
-const AGE_HARDER: Record<number, number> = { 3: 3 };
+const AGE_HARDER: Record<number, number> = { 3: 3, 4: 8 };
 /** A focused lane gathers this much more. */
 const FOCUS = 2;
 /** Days a fork waits for an answer before the elders give one. */
@@ -183,13 +209,15 @@ export function practiceRate(s: ShoreState, lane: Lane): number {
   const today_ = today(s);
   const gens = (ids: string[]) => ids.reduce((n, id) => n + count(s, id as never), 0);
   const won = s.villages.filter((v) => v.won !== undefined);
-  let r = 0.3;
+  // (Every lane goes on by itself a little, as much more in a later Age as its ideas cost more:
+  // no lane's left behind for want of what feeds it.)
+  let r = 0.3 * (AGE_HARDER[c?.age ?? 1] ?? 1);
   switch (lane) {
     case 'food':
-      r += gens(['forager', 'camp', 'weir', 'lodge', 'garden', 'harbour']) * 0.02;
+      r += gens(['forager', 'camp', 'weir', 'lodge', 'garden', 'harbour', 'caravan']) * 0.02;
       break;
     case 'crafts':
-      r += gens(['camp', 'weir', 'lodge', 'garden', 'granary', 'market', 'hut', 'longhouse', 'foundry', 'house']) * 0.012;
+      r += gens(['camp', 'weir', 'lodge', 'garden', 'granary', 'market', 'hut', 'longhouse', 'foundry', 'house', 'forge', 'townhouse']) * 0.012;
       break;
     case 'war':
       r += won.filter((v) => relation(s, v) !== 'kin').length * 0.5 + gens(['lodge']) * 0.03;
@@ -298,7 +326,8 @@ export const AGES: { name: string; work?: BuildId; workName?: string }[] = [
   { name: 'The Hearth Age', work: 'greathearth', workName: 'the Great Hearth' },
   { name: 'The Village Age', work: 'square', workName: 'the Town Square' },
   { name: 'The Bronze Age', work: 'hall', workName: 'the Chief\'s Hall' },
-  { name: 'The Iron Age' },
+  { name: 'The Iron Age', work: 'forum', workName: 'the Forum' },
+  { name: 'The Republic' },
 ];
 export function ageName(age: number): string {
   return AGES[age]?.name ?? 'The Long Road';

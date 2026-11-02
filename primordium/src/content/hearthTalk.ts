@@ -153,6 +153,12 @@ const TALKS: Talk[] = [
   { a: ['elder'], say: (c) => (c.age >= 3 ? ['We used to cut with stone.', 'Stone was fine.', 'Stone was slow.'] : null) },
   { a: BIG, say: (c) => (c.age >= 3 ? ['Boats came in from the harbour today.', 'From where?', 'They wouldn\'t say.'] : null) },
 
+  // ---- The Iron Age ----
+  { a: BIG, say: (c) => (c.age >= 4 ? ['The council sent word to every village today.', 'Saying what?', 'That there\'s a council.'] : null) },
+  { a: KIDS, b: BIG, say: (c) => (c.age >= 4 ? ['The scribe says I have to learn my marks.', 'You do.', 'The fire never learned its marks.'] : null) },
+  { a: ['elder'], say: (c) => (c.age >= 4 ? ['They\'re writing down the old tellings.', 'Good.', 'They\'re writing them down wrong.'] : null) },
+  { a: BIG, say: (c) => (c.age >= 4 ? ['You can walk the road to the far villages in a day now.', 'Why would I?', 'Because you can.'] : null) },
+
   // ---- Nothing much ----
   { say: (c) => [`Can I tell you something, ${N(c)}?`, 'Go on.', '...I forgot.'] },
   { say: () => ['Your coat\'s nice tonight.', 'It\'s the same coat.', 'It\'s nice tonight.'] },

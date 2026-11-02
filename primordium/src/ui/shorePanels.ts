@@ -333,7 +333,9 @@ function tellingLayout(state: GameState, s: ShoreState): string {
       } else if (BIG.test(e.text)) put(head, legendOf(e.text), true);
     }
   }
-  const rows = groups.map((g) => `<div class="chron-day${g.legend ? ' legend' : ''}"><span class="when">${g.head}</span>${(g.legend ? g.lines : gathered(g.lines)).map((l) => `<p>${l}</p>`).join('')}</div>`).join('');
+  // (The scribes: the old tellings written down, as legend.)
+  const scribed = !!s.culture?.done.includes('scribes');
+  const rows = groups.map((g) => `<div class="chron-day${g.legend ? ' legend' : ''}"><span class="when">${g.head}${g.legend && scribed ? ' · as the scribes wrote it' : ''}</span>${(g.legend ? g.lines : gathered(g.lines)).map((l) => `<p>${l}</p>`).join('')}</div>`).join('');
   // Before the shore: the spear's own memory.
   const before = all.filter((e) => e.era !== 'shore').slice(-300).reverse();
   const bg: { era: string; when: string; lines: string[] }[] = [];

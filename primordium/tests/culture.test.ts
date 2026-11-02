@@ -106,6 +106,28 @@ describe('The Ages', () => {
     expect(ageName(4)).toBe('The Iron Age');
     expect(hearthMost(s)).toBe(1200);
   });
+  it('the Iron Age: forge and caravans, its ideas (the scribes among them), the Forum closes it (2400)', () => {
+    const { state, s } = hearthAgeDone();
+    s.food = 1e30;
+    const lanesOf = (age: number) => IDEAS.filter((i) => i.age === age && ['food', 'crafts', 'war', 'kin'].includes(i.lane)).map((i) => i.id);
+    buyWork(state);
+    s.culture!.done.push(...lanesOf(2));
+    buyWork(state);
+    s.culture!.done.push(...lanesOf(3));
+    buyWork(state);
+    expect(ageName(4)).toBe('The Iron Age');
+    while (s.people.length < 1150) s.people.push({ id: s.nextId++, name: 'X', born: -30, dies: 9999 });
+    expect(genOpen(s, 'forge')).toBe(true);
+    expect(genOpen(s, 'caravan')).toBe(true);
+    expect(upgradeOpen(s, 'aqueduct')).toBe(true);
+    expect(IDEAS.some((i) => i.id === 'scribes' && i.age === 4)).toBe(true);
+    expect(greatWork(s)).toBe('forum');
+    s.culture!.done.push(...lanesOf(4));
+    expect(buyWork(state)).toBe(true);
+    expect(s.culture!.age).toBe(5);
+    expect(ageName(5)).toBe('The Republic');
+    expect(hearthMost(s)).toBe(2400);
+  });
   it('a new Age\'s choices are asked, and the elders answer if left', () => {
     const { state, s } = hearthAgeDone();
     s.food = 1e12;

@@ -550,7 +550,17 @@ Each diet wants different things first, so the island looks different to each:
    ideas (ideas take 3× the practice) and a fork (Many villages: one hearth, or each their own
    fire); the Chief's Hall (1e17) closes it and the village holds 1200. Bronze bowls of fire on
    posts at the hearth. Sim (staying): an active player's Bronze Age ≈3h (6h→9h), nothing new
-   for more than ~50 min; idle ≈7h→14h. *Next*: the Iron Age (empty now: "a future update").
+   for more than ~50 min; idle ≈7h→14h.
+   **The Iron Age (Age 4)** *(live)*: the Iron forge and Caravans (Age 4 only), town houses (beds
+   for 120), Ironworks (×1.5) and the Aqueduct (×2); sixteen ideas (8× the practice) with **the
+   scribes** (the old tellings written down, as legend) and a fork (What is written: as they were
+   told, or only what's sure); the Forum (6e20) closes it and the village holds 2400. Iron
+   firedogs at the hearth, red banners once the Forum stands. **The council now saves for the
+   Great Work and raises it itself** (it used to spend every bit of food on gatherers, so an idle
+   player waited ~11h for the Hall). Every lane's own slow practice grows with the Age's cost,
+   so none is left behind. Sim (staying, idle with a look every half hour): Bronze ends ≈8h20,
+   Iron ≈14h40, nothing new for more than ~1h15; active: Iron ends ≈10h30, gaps under 45 min.
+   *Next*: the Republic (named, empty).
 3. **The Far Voice, small** *(live)*: upgrades (each a function): Listening at night (prayer
    at the fire, and the Bolt), the Rain song, Seers (Light in the fog), the Awe, Night vigils
    (prayer ×2, holds ×2). Prayer gathers by itself (more with more critters, ×2 where the faith

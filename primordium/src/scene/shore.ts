@@ -670,6 +670,45 @@ export class ShoreScene extends RangeScene {
         r(3, -12, 1, 3, '#8a8480');
         break;
       }
+      case 'forum': {
+        // The Forum: a colonnade round paving, red banners on the end columns.
+        r(-12, -1, 24, 1, '#a8a296');
+        r(-11, -2, 22, 1, '#c8c2b4');
+        for (let k = -10; k <= 10; k += 4) r(k, -10, 2, 8, '#d8d2c4');
+        r(-12, -12, 24, 2, '#b8b2a4');
+        r(-13, -13, 26, 1, '#8a847c');
+        r(-10, -9, 1, 4, '#c83a2a');
+        r(10, -9, 1, 4, '#c83a2a');
+        break;
+      }
+      case 'forge': {
+        // An iron forge: a stone hearth, bellows, sparks off the anvil.
+        r(-5, -4, 10, 4, '#5a5450');
+        r(-4, -3, 3, 2, Math.floor(t * 5) % 2 ? '#ff7a2a' : '#e84a1a');
+        r(2, -2, 4, 1, '#3a3a40');
+        r(3, -3, 2, 1, '#4a4a52');
+        if (Math.floor(t * 3) % 3 === 0) r(4, -5, 1, 1, '#ffd24a');
+        r(-3, -7, 2, 3, '#4a4440');
+        break;
+      }
+      case 'caravan': {
+        // A paved road, a cart on it.
+        r(-10, -1, 20, 1, '#8a847c');
+        r(-3, -4, 7, 3, '#7a5634');
+        r(-2, -1, 2, 2, '#3a2a1a');
+        r(3, -1, 2, 2, '#3a2a1a');
+        r(-3, -5, 7, 1, '#c8b080');
+        break;
+      }
+      case 'townhouse': {
+        // A town house: two floors of stone, a tiled roof.
+        r(-5, -8, 10, 8, '#a8a296');
+        r(-6, -10, 12, 2, '#a8443a');
+        r(-3, -6, 2, 2, '#3a3a50');
+        r(1, -6, 2, 2, '#3a3a50');
+        r(-1, -3, 2, 3, '#4a3a2a');
+        break;
+      }
       case 'foundry': {
         // Bronze works: a squat furnace, its mouth glowing bronze, a crucible by it.
         r(-4, -3, 8, 3, '#6a5a4a');

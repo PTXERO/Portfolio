@@ -38,7 +38,8 @@ export const CENTRES: { id: BuildId | null; name: string; most: number; age: num
   { id: 'greathearth', name: 'The Great Hearth', most: 300, age: 1 },
   { id: 'square', name: 'The Town Square', most: 600, age: 2 },
   { id: 'hall', name: 'The Chief\'s Hall', most: 1200, age: 3 },
-  { id: null, name: 'The City', most: 2400, age: 4 },
+  { id: 'forum', name: 'The Forum', most: 2400, age: 4 },
+  { id: null, name: 'The City', most: 5000, age: 5 },
 ];
 
 /** What the heart of the village is now, and what it'll be next. */
@@ -1412,8 +1413,14 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
     councilT.set(s, (councilT.get(s) ?? 0) + dt);
     if ((councilT.get(s) ?? 0) >= COUNCIL_SEC) {
       councilT.set(s, 0);
-      const pick = councilPick(s);
-      if (pick) buyGen(state, pick, 1);
+      // (A Great Work on offer: the elders save for it, and raise it themselves; only what's
+      // cheap next to it is still bought meanwhile.)
+      const w = workOpen(s);
+      if (w && s.food >= w.cost) buyWork(state);
+      else {
+        const pick = councilPick(s);
+        if (pick && (!w || genCost(s, pick) < w.cost * 0.001)) buyGen(state, pick, 1);
+      }
     }
   }
   walk(state, s, dt);

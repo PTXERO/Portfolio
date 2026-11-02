@@ -347,6 +347,17 @@ export class HearthView {
         b.fillRect(x, y - 4, 1, 1);
       }
     }
+    // The Forum: red banners on poles behind the fire.
+    if (s.ups.includes('forum')) {
+      for (const dx of [-18, 18]) {
+        b.fillStyle = '#6a6460';
+        b.fillRect(FX + dx, FY - 44, 1, 32);
+        b.fillStyle = Math.floor(this.t * 2 + dx) % 2 ? '#c83a2a' : '#b02a1e';
+        b.fillRect(FX + dx + 1, FY - 43, 5, 7);
+        b.fillStyle = '#e8c86a';
+        b.fillRect(FX + dx + 3, FY - 41, 1, 2);
+      }
+    }
     // The woodpile: logs stacked behind, to the right.
     if (s.ups.includes('woodpile')) {
       for (let row = 0; row < 3; row++)
@@ -402,6 +413,16 @@ export class HearthView {
       b.fillRect(x, y, w, 3);
       b.fillStyle = mix('#5a5450', '#e09050', 0.2 + heat * 0.5);
       b.fillRect(x, y, w, 1);
+    }
+    // The Iron Age: iron firedogs at either end of the logs, lit by the fire.
+    if ((s.culture?.age ?? 1) >= 4) {
+      for (const dx of [-15, 13]) {
+        b.fillStyle = '#2a2a30';
+        b.fillRect(FX + dx, FY - 7, 2, 6);
+        b.fillRect(FX + dx - 1, FY - 8, 4, 1);
+        b.fillStyle = mix('#2a2a30', '#ff8a3a', 0.2 + heat * 0.4);
+        b.fillRect(FX + dx + 1, FY - 7, 1, 5);
+      }
     }
     // The logs: crossed; great ones (thicker, longer) once there are.
     const big = has('logs');
