@@ -360,8 +360,8 @@ export class ShoreScene extends RangeScene {
       const left = moving ? (isChief ? (s.chiefPath?.[0]?.x ?? s.chiefTo?.x ?? x) < x : (w.goal?.x ?? x) < x) : hash(w.id, Math.floor(t / 5)) < 0.5;
       const sleeping = night > 0.5 && !moving && !isChief;
       const kin = this.lookOf(p, p.kind !== undefined ? villageById.get(p.kind)?.look ?? look : look);
-      // (Children grow: half size when born, full size grown.)
-      const size = grown ? 1 : 0.5 + 0.5 * growth(s, p);
+      // (Children grow: under half size when born, still clearly small when nearly grown.)
+      const size = grown ? 1 : 0.4 + 0.3 * growth(s, p);
       sprites.push({ y, draw: () => this.drawBeing(b, kin, x, y, { left, frame: moving ? Math.floor(t * 7 + w.ph) % 2 : 0, sleeping, hero: isChief, hop: moving ? Math.abs(Math.sin(t * 7 + w.ph)) * 1.5 : 0, size }) });
     }
     // The raft they came on, pulled up on the beach where it landed (until it's broken up).

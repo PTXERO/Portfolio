@@ -2,9 +2,9 @@
 // batch of what's been brought in (food, there and then), and builds the fire up; a big fire
 // cooks more of everything while it lasts, and it dies down by itself if it's left.
 
-import { fireMost, fireMore, growth, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
+import { DAY_SEC, fireMost, fireMore, growth, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
 import { drawCreature, type CreatureLook } from '../scene/creatureLook';
-import { pickTalk, type TalkCtx } from '../content/hearthTalk';
+import { pickTalk, TEMPERS, TRAIT_TEMPER, type Age, type Speaker, type TalkCtx } from '../content/hearthTalk';
 import { squeak } from '../audio/sound';
 import { D, format } from '../economy/num';
 
@@ -171,7 +171,7 @@ export class HearthView {
     const order = sat.map((p, i) => ({ p, k: i < grown.length ? i : (i - grown.length) * (grown.length / Math.max(1, kids.length)) + 0.5 })).sort((a, b) => a.k - b.k).map((x) => x.p);
     for (const st of this.seats) {
       const p = order.find((q) => q.id === st.id);
-      if (p) st.size = 0.55 + 0.45 * growth(s, p);
+      if (p) st.size = childSize(growth(s, p));
     }
     const key = order.map((p) => p.id).join();
     if (key === this.seatKey) return;
@@ -180,7 +180,7 @@ export class HearthView {
     const talking = this.chat ? this.chat.who.map((i) => this.seats[i]?.id) : [];
     this.seats = order.map((p) => {
       const was = old.get(p.id);
-      return was ?? { hop: 0, wait: 0, high: 0, turn: 0, id: p.id, name: p.name, look: s.look ? (p.genes ? { ...s.look, genes: p.genes } : s.look) : undefined, pitch: 0.85 + ((p.id * 37) % 40) / 100, size: 0.55 + 0.45 * growth(s, p) };
+      return was ?? { hop: 0, wait: 0, high: 0, turn: 0, id: p.id, name: p.name, look: s.look ? (p.genes ? { ...s.look, genes: p.genes } : s.look) : undefined, pitch: 0.85 + ((p.id * 37) % 40) / 100, size: childSize(growth(s, p)) };
     });
     // (A talk goes on if both talking are still at the fire.)
     const who = talking.map((id) => this.seats.findIndex((st) => st.id === id));
@@ -203,9 +203,11 @@ export class HearthView {
       const byAge = [...s.people].sort((p, q) => p.born - q.born);
       const here = new Set([this.seats[i].id, this.seats[j].id]);
       const others = byAge.filter((p) => !here.has(p.id));
+      const babe = others[others.length - 1];
       const ctx: TalkCtx = {
-        a: this.seats[i].name,
-        b: this.seats[j].name,
+        a: speaker(s, this.seats[i].id),
+        b: speaker(s, this.seats[j].id),
+        crossings: s.crossings ?? 0,
         heat: s.heat ?? 0,
         season: SEASON_NAMES[shoreSeason(s).si] as TalkCtx['season'],
         critters: s.people.length,
@@ -213,7 +215,7 @@ export class HearthView {
         rate: foodRate(s),
         won: s.villages.filter((v) => v.won !== undefined).length,
         age: s.culture?.age ?? 1,
-        young: others.length > 2 && s.day - others[others.length - 1].born < 40 ? others[others.length - 1].name : undefined,
+        young: others.length > 2 && babe && growth(s, babe) < 0.3 ? babe.name : undefined,
         old: others.length > 2 ? others[0].name : undefined,
         foragers: s.gens.forager ?? 0,
         huts: (s.gens.hut ?? 0) + (s.gens.longhouse ?? 0),
@@ -221,7 +223,8 @@ export class HearthView {
       };
       const pick = pickTalk(ctx, this.lastTalks);
       this.lastTalks = [...this.lastTalks.slice(-8), pick.i];
-      this.chat = { who: [i, j], lines: pick.lines, at: -1, t: LINE_SECS };
+      // (Whoever the talk fits opens it.)
+      this.chat = { who: pick.first ? [j, i] : [i, j], lines: pick.lines, at: -1, t: LINE_SECS };
     }
     const c = this.chat;
     c.t += dt;
@@ -263,6 +266,122 @@ export class HearthView {
     this.bubble.style.left = `${Math.max(8, Math.min(r.width - w - 8, x - w / 2))}px`;
     this.bubble.style.top = `${Math.max(8, y - this.bubble.offsetHeight)}px`;
     this.bubble.style.setProperty('--tail', `${Math.max(12, Math.min(w - 12, x - Math.max(8, Math.min(r.width - w - 8, x - w / 2))))}px`);
+  }
+
+  /** The ground round the fire: this island's own pebbles and tufts, the season on them, and
+   * what's been built there (the woodpile, the flagstones, the standing stone). Behind the ring. */
+  private ground(s: ShoreState, heat: number): void {
+    const b = this.b;
+    const r = seeded(s.seed);
+    const si = shoreSeason(s).si;
+    // Pebbles and tufts, where this island has them (lit a little by the fire).
+    for (let i = 0; i < 26; i++) {
+      const x = Math.floor(r() * AW);
+      const y = Math.floor(FY - 6 + r() * (AH - FY + 6));
+      const kind = r();
+      const lit = Math.max(0, 1 - Math.hypot(x - FX, (y - FY) * 2) / 60) * heat;
+      if (kind < 0.4) {
+        b.fillStyle = mix('#2a2622', '#6a5040', lit);
+        b.fillRect(x, y, 2, 1);
+      } else {
+        const col = si === 3 ? '#c8d0dc' : si === 2 ? (kind < 0.7 ? '#8a4a1e' : '#a0602a') : si === 0 && kind > 0.85 ? (kind > 0.93 ? '#d88aa8' : '#d8c860') : '#2a3a20';
+        b.fillStyle = mix(col, '#c88040', lit * 0.4);
+        b.fillRect(x, y, si === 3 ? 2 : 1, si === 3 ? 1 : si === 1 || si === 0 ? 2 : 1);
+      }
+    }
+    if (!s.raftTaken) return;
+    const age = s.culture?.age ?? 1;
+    // The Great Hearth: flagstones laid round the fire.
+    if (s.ups.includes('greathearth') || age >= 2) {
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        b.fillStyle = i % 2 ? '#4c4844' : '#56504a';
+        b.fillRect(Math.round(FX + Math.cos(a) * 22 - 3), Math.round(FY + Math.sin(a) * 7 - 1), 6, 3);
+      }
+    }
+    // The Town Square: a standing stone behind the fire, its face lit by it.
+    if (s.ups.includes('square') || age >= 3) {
+      b.fillStyle = '#3c3a3e';
+      b.fillRect(FX - 26, FY - 30, 6, 22);
+      b.fillRect(FX - 25, FY - 32, 4, 2);
+      b.fillStyle = mix('#3c3a3e', '#c87840', 0.3 + heat * 0.4);
+      b.fillRect(FX - 21, FY - 30, 1, 22);
+    }
+    // The woodpile: logs stacked behind, to the right.
+    if (s.ups.includes('woodpile')) {
+      for (let row = 0; row < 3; row++)
+        for (let k = 0; k < 3 - row; k++) {
+          const x = FX + 22 + k * 4 + row * 2;
+          const y = FY - 12 - row * 3;
+          b.fillStyle = '#5a3a22';
+          b.fillRect(x, y, 4, 3);
+          b.fillStyle = '#a07850';
+          b.fillRect(x, y + 1, 1, 1);
+        }
+    }
+    // Tinder: a bundle of sticks by the fire, to the left.
+    if (s.ups.includes('tinder')) {
+      b.fillStyle = '#8a6a3a';
+      for (let k = 0; k < 4; k++) b.fillRect(FX - 26 + k, FY - 9 - (k % 2), 1, 4);
+      b.fillStyle = '#6a4a2a';
+      b.fillRect(FX - 27, FY - 7, 6, 1);
+    }
+  }
+
+  /** The fire's own place: a few stones at first; a ring of them; a pit; banked coals; great logs;
+   * the bonfire's tall teepee. */
+  private pit(s: ShoreState, heat: number): void {
+    const b = this.b;
+    const has = (id: string) => s.ups.includes(id);
+    const ring = has('firering') || has('firepit');
+    // A pit, dug down: dark inside the ring.
+    if (has('firepit')) {
+      b.fillStyle = '#100c0a';
+      b.beginPath();
+      b.ellipse(FX, FY - 1, 14, 4, 0, 0, Math.PI * 2);
+      b.fill();
+    }
+    // Banked embers: a bed of coals, glowing as the fire breathes.
+    if (has('embers')) {
+      for (let i = 0; i < 18; i++) {
+        const x = FX - 10 + ((i * 7) % 21);
+        const y = FY - 2 + (i % 3);
+        const glow = 0.5 + 0.5 * Math.sin(this.t * 2 + i * 1.7);
+        b.fillStyle = glow > 0.6 ? '#ff7a2a' : glow > 0.3 ? '#c83a1a' : '#5a1a10';
+        b.fillRect(x, y, 1, 1);
+      }
+    }
+    // The stones: a few at first, then a full ring of bigger ones, lit on the side facing in.
+    const n = ring ? 14 : 9;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const w = ring ? 5 : 4;
+      const x = Math.round(FX + Math.cos(a) * (ring ? 16 : 15) - w / 2);
+      const y = Math.round(FY + Math.sin(a) * (ring ? 5 : 4) - 1);
+      b.fillStyle = ring ? (i % 2 ? '#5a5450' : '#4a4440') : '#4a4440';
+      b.fillRect(x, y, w, 3);
+      b.fillStyle = mix('#5a5450', '#e09050', 0.2 + heat * 0.5);
+      b.fillRect(x, y, w, 1);
+    }
+    // The logs: crossed; great ones (thicker, longer) once there are.
+    const big = has('logs');
+    b.fillStyle = '#5a3a22';
+    b.fillRect(FX - (big ? 14 : 12), FY - (big ? 4 : 3), big ? 28 : 24, big ? 4 : 3);
+    b.fillStyle = '#6e4a2a';
+    b.fillRect(FX - (big ? 10 : 8), FY - (big ? 7 : 5), big ? 20 : 16, big ? 3 : 2);
+    b.fillStyle = heat > 0.05 ? '#ff7a2a' : '#7a3a1a';
+    b.fillRect(FX - 6, FY - 4, 12, 1);
+  }
+
+  /** The bonfire: long poles leaned together, standing in the flames (drawn over them). */
+  private poles(s: ShoreState): void {
+    if (!s.raftTaken || !s.ups.includes('bonfire')) return;
+    const b = this.b;
+    for (let k = 0; k < 4; k++) {
+      const x0 = FX - 12 + k * 8;
+      b.fillStyle = k % 2 ? '#3a2414' : '#4a2e1a';
+      for (let y = 0; y < 26; y++) b.fillRect(Math.round(x0 + (FX - x0) * (y / 26)), FY - 4 - y, 1, 1);
+    }
   }
 
   /** Set by the game each frame: whether the council's buying by itself (for the talk). */
@@ -336,6 +455,7 @@ export class HearthView {
     g.addColorStop(1, 'rgba(0,0,0,0)');
     b.fillStyle = g;
     if (s.raftTaken) b.fillRect(0, 0, AW, AH);
+    this.ground(s, heat);
 
     // Critters round the fire, lit on the side that faces it: the first eight of the village,
     // each in their own coat, with their own name and voice.
@@ -356,8 +476,10 @@ export class HearthView {
       const a = Math.PI * 2 * ((i + 0.5) / seats) + 0.3;
       const st = this.seats[i];
       // (Now and then one hops by themselves: restless, or just glad of the fire.)
-      if (!st.hop && Math.random() < dt * (0.04 + heat * 0.08)) {
-        Object.assign(st, { hop: 0.0001, wait: 0, high: 1 + Math.random() * 1.5 });
+      // (Children can't sit still: they bounce about four times as often, and higher for their size.)
+      const kid = st.size < 1;
+      if (!st.hop && Math.random() < dt * (0.04 + heat * 0.08) * (kid ? 4 : 1)) {
+        Object.assign(st, { hop: 0.0001, wait: 0, high: kid ? 2 + Math.random() * 2 : 1 + Math.random() * 1.5 });
         if (Math.random() < 0.3) this.squeakFrom(i, 0.08);
       }
       let lift = 0;
@@ -422,20 +544,7 @@ export class HearthView {
       b.fillStyle = '#c8a870';
       b.fillRect(FX - 11, FY - 9, 1, 13);
       b.fillRect(FX + 10, FY - 9, 1, 13);
-    } else {
-      // Stones and logs.
-      b.fillStyle = '#4a4440';
-      for (let i = 0; i < 9; i++) {
-        const a = (i / 9) * Math.PI * 2;
-        b.fillRect(Math.round(FX + Math.cos(a) * 15 - 2), Math.round(FY + Math.sin(a) * 4 - 1), 4, 3);
-      }
-      b.fillStyle = '#5a3a22';
-      b.fillRect(FX - 12, FY - 3, 24, 3);
-      b.fillStyle = '#6e4a2a';
-      b.fillRect(FX - 8, FY - 5, 16, 2);
-      b.fillStyle = heat > 0.05 ? '#ff7a2a' : '#7a3a1a';
-      b.fillRect(FX - 6, FY - 4, 12, 1);
-    }
+    } else this.pit(s, heat);
 
     // The flames: white-hot at the heart, yellow, orange, red at the tips.
     for (const p of this.flames) {
@@ -444,6 +553,7 @@ export class HearthView {
       b.fillStyle = k < 0.15 ? '#fff4c8' : k < 0.4 ? '#ffd24a' : k < 0.7 ? '#ff8a2a' : '#c83a1a';
       b.fillRect(Math.round(p.x - r / 2), Math.round(p.y - r / 2), r, r);
     }
+    this.poles(s);
     for (const p of this.embers) {
       b.fillStyle = p.age / p.life < 0.5 ? '#ffd24a' : '#e0602a';
       b.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
@@ -475,6 +585,34 @@ export class HearthView {
     const text = `Stoke +${format(D(tapValue(s)))} · all food ×${(1 + more).toFixed(2)} (max ×${1 + fireMost(s)}) · ${format(D(foodRate(s)))}/s`;
     if (this.stats.textContent !== text) this.stats.textContent = text;
   }
+}
+
+/** How big a child is drawn as they grow (a newborn under half; nearly grown still clearly
+ * smaller than the grown), and the grown at full size. */
+export function childSize(g: number): number {
+  return g >= 1 ? 1 : 0.35 + 0.3 * g;
+}
+
+/** A small seeded random (the same island, the same pebbles). */
+function seeded(seed: number): () => number {
+  let x = (seed * 2654435761) >>> 0 || 1;
+  return () => {
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    return (x >>> 0) / 4294967296;
+  };
+}
+
+/** Who someone is, for the talk: their name, how old they are, what they're like. */
+function speaker(s: ShoreState, id: number): Speaker {
+  const p = s.people.find((q) => q.id === id)!;
+  const g = growth(s, p);
+  const today = s.day + s.clock / DAY_SEC;
+  const old = p.dies !== undefined && (p.dies - today) < (p.dies - p.born) * 0.3;
+  const age: Age = g < 0.5 ? 'little' : g < 1 ? 'youngster' : old ? 'elder' : 'grown';
+  const temper = (p.trait && TRAIT_TEMPER[p.trait]) || TEMPERS[(p.id * 2654435761) % TEMPERS.length >>> 0] || 'cheerful';
+  return { name: p.name, age, temper, crossed: !!p.founder };
 }
 
 function mix(a: string, b: string, k: number): string {
