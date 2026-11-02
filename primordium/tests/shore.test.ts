@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
+import { buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import type { GenId } from '../src/content/idle';
 import type { TribeState } from '../src/economy/types';
@@ -137,6 +137,33 @@ describe('Food, the idle way', () => {
     takeRaft(state);
     buyGen(state, 'forager');
     expect(allMult(n)).toBeGreaterThan(2.9);
+  });
+  it('the ember shop: spending embers keeps their boost; what\'s bought crosses too', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    lit(state);
+    s.embers = 20;
+    buyGen(state, 'forager');
+    const r0 = foodRate(s);
+    const m0 = allMult(s);
+    expect(buyPerk(state, 'trades')).toBe(true);
+    expect(embersLeft(s)).toBe(16);
+    expect(allMult(s)).toBeCloseTo(m0, 6);
+    expect(foodRate(s)).toBeCloseTo(r0 * 2, 6);
+    expect(buyPerk(state, 'seed')).toBe(true);
+    expect(buyPerk(state, 'crew')).toBe(true);
+    expect(buyPerk(state, 'charts')).toBe(false);
+    expect(embersLeft(s)).toBe(9);
+    for (const v of s.villages) v.won = s.day;
+    while (s.people.length < 12) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30 });
+    s.earned = 1e12;
+    expect(cross(state)).toBe(true);
+    const n = shoreOf(state)!;
+    expect(n.embers).toBe(30);
+    expect(embersLeft(n)).toBe(19);
+    expect(perk(n, 'trades')).toBe(1);
+    expect(n.food).toBe(100);
+    expect(n.people).toHaveLength(5);
   });
   it('an older save far enough on keeps buying ten, the most, and its focus', () => {
     const state = fresh();

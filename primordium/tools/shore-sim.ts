@@ -5,8 +5,8 @@
 // new happening (a new kind of thing to buy, an upgrade, a village, an Age).
 // npm run sim:shore
 import { createState } from '../src/economy/state';
-import { canCross, cross, embersFor, buyGen, buyUpgrade, buyWork, canTake, canWin, councilPick, foodRate, gift, giftCost, takeCost, shoreOf, shoreTick, startShore, stoke, take, takeRaft, upgradeOpen, genOpen } from '../src/economy/shore';
-import { GENS, UPGRADES } from '../src/content/idle';
+import { buyPerk, perkCost, canCross, cross, embersFor, buyGen, buyUpgrade, buyWork, canTake, canWin, councilPick, foodRate, gift, giftCost, takeCost, shoreOf, shoreTick, startShore, stoke, take, takeRaft, upgradeOpen, genOpen } from '../src/economy/shore';
+import { GENS, PERKS, UPGRADES } from '../src/content/idle';
 import type { TribeState } from '../src/economy/types';
 
 type Kind = 'auto' | 'active';
@@ -59,6 +59,11 @@ function run(kind: Kind, diet: string): void {
       cross(state);
       s = shoreOf(state)!;
       takeRaft(state);
+      // (Embers spent, cheapest first, as long as there are any.)
+      for (let k = 0; k < 50; k++) {
+        const next = PERKS.map((p) => ({ p, c: perkCost(s, p.id) })).filter((x) => x.c !== null).sort((a, b) => a.c! - b.c!)[0];
+        if (!next || !buyPerk(state, next.p.id)) break;
+      }
       islandAt = t;
       seenGens.clear();
       events.push({ t, what: 'set out' });

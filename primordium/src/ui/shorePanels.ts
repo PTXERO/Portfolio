@@ -4,8 +4,8 @@
 // family trees, the island's landmarks and relics, the culture, the story so far) and the Menu.
 
 import { type Boosts, POI_SORT, RELICS, type Find } from '../content/shore';
-import { GENS, UPGRADES, type GenId } from '../content/idle';
-import { allMult, can, canCross, embersFor, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
+import { GENS, PERKS, UPGRADES, type GenId } from '../content/idle';
+import { allMult, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
 import type { GameState } from '../economy/types';
@@ -27,10 +27,10 @@ export function setIslandView(v: string): void {
   islandView = v === 'landmarks' || v === 'finds' ? v : 'villages';
 }
 /** Build's pages: what brings food in (and the homes), the upgrades, the villages to win. */
-type BuildPage = 'gather' | 'ups' | 'villages';
+type BuildPage = 'gather' | 'ups' | 'villages' | 'embers';
 let buildPage: BuildPage = 'gather';
 export function setBuildCat(c: string): void {
-  buildPage = c === 'ups' || c === 'villages' ? c : 'gather';
+  buildPage = c === 'ups' || c === 'villages' || c === 'embers' ? c : 'gather';
 }
 /** Upgrades out of reach shown at once (the rest wait their turn: the list stays short). */
 const UPS_AHEAD = 3;
@@ -60,7 +60,7 @@ export function shoreKey(state: GameState, tab: string): string {
   }
   if (tab === 'build') {
     // (Rebuilt when what can be afforded changes: each thing's button lights as the food comes.)
-    return JSON.stringify(['build', buildPage, canCross(s), embersFor(s), buyMany, s.auto, s.ups.length, GENS.map((g) => [genOpen(s, g.id), count(s, g.id), s.food >= genCost(s, g.id, buyMany || 1)]), UPGRADES.filter((u) => upgradeOpen(s, u.id)).map((u) => [u.id, s.food >= u.cost]), !!workOpen(s), s.food >= (workOpen(s)?.cost ?? Infinity),
+    return JSON.stringify(['build', buildPage, canCross(s), embersFor(s), embersLeft(s), s.perks, buyMany, s.auto, s.ups.length, GENS.map((g) => [genOpen(s, g.id), count(s, g.id), s.food >= genCost(s, g.id, buyMany || 1)]), UPGRADES.filter((u) => upgradeOpen(s, u.id)).map((u) => [u.id, s.food >= u.cost]), !!workOpen(s), s.food >= (workOpen(s)?.cost ?? Infinity),
       s.villages.filter((v) => v.found).map((v) => [v.id, v.won, v.gone, Math.floor((v.trust ?? 0) / 5), Math.round(v.pop), s.food >= (canWin(s, v) ? giftCost(s, v) : canTake(s, v) ? takeCost(s, v).food : Infinity), chiefNear(s, v), danceLeft(s, v) > 0.5]), s.chief]);
   }
   if (tab === 'island') return JSON.stringify(['island', islandView, s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, has(s, 'scouts'), s.villages.filter((v) => v.found).map((v) => [v.id, v.won, v.gone, Math.floor((v.trust ?? 0) / 5), Math.round(v.pop), s.food >= (canWin(s, v) ? giftCost(s, v) : canTake(s, v) ? takeCost(s, v).food : Infinity), chiefNear(s, v)]), s.chief]);
@@ -123,7 +123,7 @@ function hearthCard(s: ShoreState): string {
       <div class="store"><span class="label dim">Food</span><b class="num"><span data-t="shore-food">${n0(s.food)}</span></b><span class="dim" data-t="shore-rate">${format(foodRate(s))} a second</span></div>
       <div class="store"><span class="label dim">Critters</span><b class="num">${s.people.length}<span class="dim">/${Math.min(room(s), hearthMost(s))}</span></b><span class="dim">+${Math.round(CRITTER_MORE * 100)}% food each</span></div>
       <div class="sub">All food ×${mult.toFixed(2)}. <b class="green" data-t="shore-boost"></b></div>
-      ${s.embers ? `<div class="sub">${s.embers} embers (food +${Math.round(s.embers * EMBER_MORE * 100)}%, births +${Math.round(s.embers * EMBER_BIRTHS * 100)}%) · island ${(s.crossings ?? 0) + 1}</div>` : ''}
+      ${s.embers ? `<div class="sub">${s.embers} embers ever (food +${Math.round(s.embers * EMBER_MORE * 100)}%, births +${Math.round(s.embers * EMBER_BIRTHS * 100)}%) · ${embersLeft(s)} to spend · island ${(s.crossings ?? 0) + 1}</div>` : ''}
       <div class="sub dim"><span data-t="shore-birth">${birthLine(s)}</span></div>
     </div>`;
 }
@@ -131,7 +131,12 @@ function hearthCard(s: ShoreState): string {
 /** What brings food in, and what houses them: buy one, ten, or as many as there's food for; and
  * the upgrades, once they're on offer. */
 function buildLayout(s: ShoreState): string {
-  if (!count(s, 'hearth')) return `<div class="card px-box"><div class="info"><div class="sub">Light the hearth first (the Hearth tab).</div></div></div>`;
+  // (Before the hearth's lit, only the embers can be spent: just landed is when they're wanted.)
+  if (!count(s, 'hearth')) {
+    const note = `<div class="card px-box"><div class="info"><div class="sub">Light the hearth first (the Hearth tab).</div></div></div>`;
+    if (!s.embers) return note;
+    buildPage = 'embers';
+  }
   const ups = UPGRADES.filter((u) => upgradeOpen(s, u.id)).sort((a, b) => a.cost - b.cost);
   const w = workOpen(s);
   // (How many on each page can be bought just now: a number on its button.)
@@ -140,11 +145,36 @@ function buildLayout(s: ShoreState): string {
   const found = s.villages.filter((v) => v.found && !v.gone && v.won === undefined);
   const canVil = found.filter((v) => s.food >= (canWin(s, v) ? giftCost(s, v) : canTake(s, v) ? takeCost(s, v).food : Infinity)).length + (canCross(s) ? 1 : 0);
   const page = (id: BuildPage, name: string, n: number) => `<button class="px-btn${buildPage === id ? ' on' : ''}" data-buildcat="${id}">${name}${n ? ` <span class="can">${n}</span>` : ''}</button>`;
-  const pages = `<div class="seg build-cats">${page('gather', 'Gather', canGen)}${page('ups', 'Upgrades', canUp)}${page('villages', 'Villages', canVil)}</div>`;
+  const canPerk = PERKS.filter((p) => buyPerkOk(s, p.id)).length;
+  const pages = `<div class="seg build-cats">${page('gather', 'Gather', canGen)}${page('ups', 'Upgrades', canUp)}${page('villages', 'Villages', canVil)}${s.embers ? page('embers', 'Embers', canPerk) : ''}</div>`;
   const head = `<div class="panel-head"><h2>Build</h2><span class="dim"><span data-t="shore-food">${n0(s.food)}</span> food</span></div>`;
   // (The Great Work, when it's on offer, sits on top of every page: it closes the Age.)
   const work = w ? `<div class="card px-box build raid"><div class="info"><div class="name">${w.name}</div><div class="sub">${w.does}</div></div><button class="px-btn buy${s.food >= w.cost ? ' gold' : ''}" data-act="work"${s.food >= w.cost ? '' : ' disabled'}><span class="num">${format(w.cost)}</span></button></div>` : '';
   if (buildPage === 'villages') return pages + head + work + crossCard(s) + villagesCard(s);
+  if (buildPage === 'embers' && s.embers) {
+    if (!count(s, 'hearth')) return `<div class="card px-box"><div class="info"><div class="sub">Light the hearth first (the Hearth tab).</div></div></div>` + emberShop(s, '');
+    return emberShop(s, pages);
+  }
+  return gatherPage(s, pages, head, work, ups);
+}
+
+/** What embers buy, for good (spending them never takes from their boost). */
+function emberShop(s: ShoreState, pages: string): string {
+  const all = s.embers ?? 0;
+  {
+    const row = (p: (typeof PERKS)[number]) => {
+      const lv = perk(s, p.id);
+      const cost = perkCost(s, p.id);
+      const ok = buyPerkOk(s, p.id);
+      return `<div class="card px-box build"><div class="info"><div class="name">${p.name} <span class="dim">${lv}/${p.most}</span></div><div class="sub">${p.does}</div></div>${cost === null ? '<span class="dim tiny">Done</span>' : `<button class="px-btn buy${ok ? ' gold' : ''}" data-perk="${p.id}"${ok ? '' : ' disabled'}><span class="num">${cost}</span> ✦</button>`}</div>`;
+    };
+    return `${pages}<div class="panel-head"><h2>Embers</h2><span class="dim">${embersLeft(s)} to spend</span></div>
+      <p class="tiny dim">All ${all} ever: food +${Math.round(all * EMBER_MORE * 100)}%, births +${Math.round(all * EMBER_BIRTHS * 100)}%. Spending keeps that.</p>
+      ${PERKS.map(row).join('')}`;
+  }
+}
+
+function gatherPage(s: ShoreState, pages: string, head: string, work: string, ups: typeof UPGRADES): string {
   if (buildPage === 'ups') {
     // Everything that can be bought now, and the next few out of reach (the rest come later).
     const shown = [...ups.filter((u) => s.food >= u.cost), ...ups.filter((u) => s.food < u.cost).slice(0, UPS_AHEAD)];

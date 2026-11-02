@@ -16,7 +16,7 @@ import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
 import { HearthView } from './ui/hearthView';
-import { canCross, cross, embersFor, EMBER_BIRTHS, EMBER_MORE, nextIslandSeed, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
+import { buyPerk, canCross, cross, embersFor, EMBER_BIRTHS, EMBER_MORE, nextIslandSeed, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
 import { dance, danceLeft, shoreIsland, terrainReady, gift, isAdult, poisOf, shoreOf, shoreSeason, startShore, takeRaft, walkChief } from './economy/shore';
 import { AGES, ageName } from './economy/culture';
 import { buyAmount, setBuildCat, setBuyMany, setIslandView, danceCard, findCard, forkCard, poiCard, setVillageView, villageCard } from './ui/shorePanels';
@@ -1896,6 +1896,12 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.buymany !== undefined) setBuyMany(Number(el.dataset.buymany));
   else if (el.dataset.villageview) setVillageView(el.dataset.villageview);
   else if (el.dataset.buildcat) setBuildCat(el.dataset.buildcat);
+  else if (el.dataset.perk) {
+    if (buyPerk(state, el.dataset.perk as never)) {
+      cue('ascend', 0.5);
+      save();
+    }
+  }
   else if (el.dataset.islandview) setIslandView(el.dataset.islandview);
   else if (el.dataset.camera) {
     // Back to the village (and the camera stays there), or back with the chief.
