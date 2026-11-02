@@ -152,7 +152,7 @@ export class ShoreScene extends RangeScene {
     // Slowly round, and in a little; the camera glides after them.
     this.yaw = (this.yaw + dt * 0.045) % (Math.PI * 2);
     this.zoom += (4.6 - this.zoom) * Math.min(1, dt * 0.25);
-    const off = this.raiseOff(at.x, at.y);
+    const off = this.followOff(at.x, at.y, dt);
     const k = Math.min(1, dt * 0.9);
     this.camX += (at.x - off.x - this.camX) * k;
     this.camY += (at.y - off.y - this.camY) * k;
@@ -251,6 +251,7 @@ export class ShoreScene extends RangeScene {
     const is = shoreIsland(s.seed);
     this.island = is;
     this.easeTurn(dt);
+    this.settleCamera(dt);
     this.cinemaStep(s, dt);
     this.ash = 0;
     const seen = state.stages.shore.seen;
@@ -269,7 +270,7 @@ export class ShoreScene extends RangeScene {
     if (this.auto) {
       const me = s.chiefAt;
       const k = this.snap ? 1 : Math.min(1, dt * 3);
-      const off = this.raiseOff(me.x, me.y);
+      const off = this.followOff(me.x, me.y, dt);
       const ty = me.y - off.y;
       this.camX += (me.x - off.x - this.camX) * k;
       this.camY += (ty - this.camY) * k;

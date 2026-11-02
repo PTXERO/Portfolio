@@ -320,51 +320,76 @@ export class RangeScene {
   }
   get perspParams(): [number, number, number, number] | null {
     if (!this.persp || !this.shaded) return null;
-    // (Worked out once for where the camera is: everything on screen asks for it.)
-    const key = `${this.camX}|${this.camY}|${this.zoom}|${this.yaw}|${this.tilt}|${this.H}|${this.island?.seed}`;
+    // (Worked out once for where the camera is: everything on screen asks for it. What the land
+    // asks of it, the steeper look and the drawing back, is settled frame by frame, smoothly:
+    // see settleCamera.)
+    const key = `${this.camX}|${this.camY}|${this.zoom}|${this.yaw}|${this.tilt}|${this.H}|${this.island?.seed}|${this.pitchLift}|${this.distMul}`;
     if (key === this.perspKey) return this.perspNow!;
-    const up = this.liftUp;
-    let p = this.pitch();
-    // Nothing between the camera and what it looks at: where a hill would rise into the line of
-    // sight (right in close by a peak), it looks down more steeply, easing round as it goes.
-    {
-      const tan = Math.tan(p);
-      let at: Pt = { x: this.camX, y: this.camY };
-      for (let i = 0; i < 3; i++) {
-        const o = this.turned(0, (this.heightAt(at.x, at.y) * up) / tan);
-        at = { x: this.camX + o.x, y: this.camY + o.y };
-      }
-      const h0 = this.heightAt(at.x, at.y) * up;
-      const reach = ((CAM_DIST * this.H) / this.zoom) * Math.cos(p);
-      let need = 0;
-      for (let u = 2; u < reach; u *= 1.3) {
-        const q = this.turned(0, u);
-        // (Only real rises count: a hill, not the gentle lie of the land.)
-        const rise = this.heightAt(at.x + q.x, at.y + q.y) * up - h0;
-        if (rise > 0.5) need = Math.max(need, Math.atan((rise + 0.5) / u) - p);
-      }
-      this.pitchLift += (need - this.pitchLift) * (need > this.pitchLift ? 0.35 : 0.12);
-      p = Math.min((80 * Math.PI) / 180, p + Math.max(0, this.pitchLift));
-    }
+    const p = Math.min((80 * Math.PI) / 180, this.pitch() + Math.max(0, this.pitchLift));
     const s = Math.sin(p);
     const c = Math.cos(p);
-    // Never down in the land: right in close over high ground, the camera draws back up its line
-    // of sight (what it looks at stays the same size; only the depth flattens a little).
-    let d = (CAM_DIST * this.H) / this.zoom;
-    for (let i = 0; i < 2; i++) {
-      const at = this.turned(0, d * c);
-      let ground = 0;
-      for (const [ox, oy] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]]) ground = Math.max(ground, this.heightAt(this.camX + at.x + ox, this.camY + at.y + oy));
-      const need = ground * up + 3;
-      if (d * s < need) d = need / s;
-    }
+    const d = ((CAM_DIST * this.H) / this.zoom) * this.distMul;
     this.perspKey = key;
-    this.perspNow = [s, c, d, up];
+    this.perspNow = [s, c, d, this.liftUp];
     return this.perspNow;
   }
-  private perspKey = '';
-  /** How much more steeply the camera looks down just now, to see over a hill in its way. */
+  /** How much more steeply the camera looks down just now (to see over a hill in its way), and
+   * how much further back it stands (to keep out of high ground under it): both eased. */
   private pitchLift = 0;
+  private distMul = 1;
+  /** The land's asks of the camera, once a frame, eased in (and out more slowly), so going over
+   * rough ground the view glides instead of bouncing. It only jumps to keep out of the land. */
+  protected settleCamera(dt: number): void {
+    if (!this.persp || !this.shaded || !this.island) return;
+    const up = this.liftUp;
+    const p0 = this.pitch();
+    // A hill rising into the line of sight between the camera and what it looks at (judged on
+    // the land's broad shape: the highest of a few spots round each step, not every bump).
+    const tan = Math.tan(p0 + Math.max(0, this.pitchLift));
+    let at: Pt = { x: this.camX, y: this.camY };
+    for (let i = 0; i < 3; i++) {
+      const o = this.turned(0, (this.heightAt(at.x, at.y) * up) / tan);
+      at = { x: this.camX + o.x, y: this.camY + o.y };
+    }
+    const broad = (x: number, y: number) => Math.max(this.heightAt(x, y), this.heightAt(x + 2, y), this.heightAt(x - 2, y), this.heightAt(x, y + 2), this.heightAt(x, y - 2));
+    const h0 = broad(at.x, at.y) * up;
+    const reach = ((CAM_DIST * this.H) / this.zoom) * Math.cos(p0);
+    let need = 0;
+    for (let u = 3; u < reach; u *= 1.3) {
+      const q = this.turned(0, u);
+      const rise = broad(at.x + q.x, at.y + q.y) * up - h0;
+      if (rise > 2) need = Math.max(need, Math.atan((rise + 1) / u) - p0);
+    }
+    const ease = (now: number, goal: number, up: number, down: number) => now + (goal - now) * (1 - Math.exp(-dt * (goal > now ? up : down)));
+    this.pitchLift = ease(this.pitchLift, need, 2.5, 0.8);
+    // Drawn back up its line of sight if the ground under it is high (what it looks at stays the
+    // same size); snapped, if it would be in the land.
+    const p = Math.min((80 * Math.PI) / 180, p0 + Math.max(0, this.pitchLift));
+    const s = Math.sin(p);
+    const c = Math.cos(p);
+    const base = (CAM_DIST * this.H) / this.zoom;
+    let goal = 1;
+    for (let i = 0; i < 2; i++) {
+      const o = this.turned(0, base * goal * c);
+      let ground = 0;
+      for (const [ox, oy] of [[0, 0], [3, 0], [-3, 0], [0, 3], [0, -3]]) ground = Math.max(ground, this.heightAt(this.camX + o.x + ox, this.camY + o.y + oy));
+      goal = Math.max(goal, (ground * up + 4) / (base * s));
+    }
+    this.distMul = ease(this.distMul, goal, 3, 0.8);
+    {
+      const o = this.turned(0, base * this.distMul * c);
+      const under = this.heightAt(this.camX + o.x, this.camY + o.y) * up + 1;
+      if (base * this.distMul * s < under) this.distMul = under / (base * s);
+    }
+  }
+  /** The height of whoever the camera follows, eased (so it doesn't bob over every bump). */
+  protected followH: number | null = null;
+  protected followOff(x: number, y: number, dt: number): Pt {
+    const h = this.heightAt(x, y);
+    this.followH = this.followH === null ? h : this.followH + (h - this.followH) * (1 - Math.exp(-dt * 2));
+    return this.raiseOff(x, y, this.followH);
+  }
+  private perspKey = '';
   private perspNow: [number, number, number, number] | null = null;
   /** Where a point (tiles; tiles up) is seen with the real camera: art x and row, and how far
    * off it is along the view (tiles). */
@@ -384,9 +409,9 @@ export class RangeScene {
   }
   /** How far toward the camera to put the camera's centre so a point at this height is seen in
    * the middle (the slant: raised by the land; the real camera: along the line of sight). */
-  protected raiseOff(x: number, y: number): Pt {
+  protected raiseOff(x: number, y: number, at?: number): Pt {
     if (!this.shaded) return { x: 0, y: 0 };
-    const h = this.heightAt(x, y);
+    const h = at ?? this.heightAt(x, y);
     if (this.persp) {
       const [s, c] = this.perspParams!;
       return this.turned(0, (h * this.liftUp * c) / s);
@@ -1474,7 +1499,7 @@ export class RangeScene {
     if (this.auto) {
       const k = this.snap ? 1 : Math.min(1, dt * 3);
       // In 2.5D the creature stands raised by the land; aim so it's raised into the middle.
-      const off = this.raiseOff(me.x, me.y);
+      const off = this.followOff(me.x, me.y, dt);
       const ty = me.y - off.y;
       this.camX += (me.x - off.x - this.camX) * k;
       this.camY += (ty - this.camY) * k;
