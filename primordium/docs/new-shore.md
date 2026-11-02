@@ -7,6 +7,42 @@ questions are collected at the end. Keep this up to date as we decide things.
 
 ---
 
+## 0. Where it stands now: the idle rebuild *(live)*
+
+New Shore was rebuilt as an idle game (the 4X systems below, §4–§6 and §11, are **superseded**
+where they disagree; kept for the history and for ideas worth bringing back).
+
+- **One currency, food.** Generators bought with it, each dearer than the last (foragers,
+  gathering camps, fishing weirs, hunting lodges, gardens, granaries, markets), homes (huts,
+  longhouses), and upgrades (×2 per generator at 10/25/50, feasts, stoking, the fire's own line).
+- **Four tabs.** Hearth (tap), Build (spend: Gather, Upgrades, Villages, Embers), Chronicle
+  (look: Village, Critters and their family trees, Island, Culture, Story), Menu. Anything that
+  adds a function is an upgrade (buy ×10, Max, the council, the fire-tender, scouts, envoy,
+  lore-keepers). Descriptions short.
+- **The Hearth.** The whole screen is the fire. A tap stokes it: food now (a quarter-second of
+  everything, more with upgrades), and fuel; the heat goes with the log of the fuel and burns
+  down by itself. Heat is all food ×2 (more with upgrades); Warm nights spreads it to births and
+  ideas. Eight of the village sit round it, children among them (drawn small), by name, in their
+  own coats, hopping, squeaking, and talking to each other by age and temper. The fireplace grows
+  with what's built (stones, a ring, a pit, coals, flagstones, a standing stone, the bonfire), and
+  the ground shows the island and the season.
+- **Critters.** Born free when there's room, +1% food each, children grow (shown small), old age
+  takes them. Days are 2 minutes (kept: everything counts in days).
+- **Villages.** Kin won with gifts (×2 with the chief there), the rest beaten (food and critters);
+  each won +15% food. Never-found villages are seen in the end, so an island can always be settled.
+- **Culture and the Ages.** At 100 critters the culture turns; ideas come by themselves; forks are
+  choices; the Great Hearth (Age 1, holds 300) and Town Square (Age 2, holds 600) close the Ages.
+- **Setting out (prestige).** Once every village is won: a raft as big as the village (4, +1 per
+  100 critters, up to +6, more with a perk), crew chosen by hand or a smart pick (the chief, across
+  the ages, not the old, each in a different coat), to a new island. **Embers** (cube root of the
+  island's food, in billions): every ember ever brought is food +10% and births +5% for good, and
+  unspent ones buy perks in the ember shop (seed stores, remembered trades, born of the fire,
+  carried coals, a bigger raft, war songs, charts). Kept across: embers, perks and know-how.
+- **Pace (sim, auto with a look every half hour).** First island ~4h30; then 4h, 3h, 2h as embers
+  build (22, 68, 125, 143). Without setting out, the island goes flat at ~12h (600 critters).
+
+---
+
 ## 1. In one paragraph
 
 Four survivors come ashore on a big, fogged island that is already lived on. They found a
@@ -494,6 +530,38 @@ Each diet wants different things first, so the island looks different to each:
 2. Is the stock (spent on buildings) wanted in Phase 1, or just access (simpler)?
 3. Which come first in the build: fish, clay, reeds, salt and herbs (kin-friendly) in Phase 1;
    flint and stone with raids (milestone 3); grain, copper and tin with Phase 2?
+
+## 12a. Build-out roadmap (New Shore, next)
+
+1. **Islands that differ.** At setting out, two islands seen from the raft to choose between,
+   each with a nature (lush, rocky, stormy, crowded with kin, hostile...) that changes the run,
+   and what it's worth in embers. *(building now)*
+2. **The Bronze Age (Age 3)** and on: new generators, upgrades and ideas, its Great Work (the
+   City Centre, 1200), so a long stay is worth more.
+3. **The Far Voice, small**: whispers at the fire (the spear in talk, a streak in the sky), then
+   prayer and a few miracles at the Hearth (a bolt, rain, a light in the fog, a sign), opened by
+   the faith fork's third answer, "the spear's fire".
+4. **Island events**: storms, a good season, a stranger at the fire: short things that ask for
+   a tap, a minute's choice.
+
+## 13. The spear endgame *(parked: design only)*
+
+*Evangelion-like in what it's about, our own in every name and picture.*
+
+- The spear struck the first island (the Creature's, the Extinction's), and it's **still there,
+  intact**. Everything since has been moving away from it; in the end they go back.
+- **The pull.** From the second island on, the spear hums: in talk at the fire, a streak in the
+  night sky growing brighter each crossing (no number shown).
+- **The return.** After enough crossings (5? or growing each time: open), the crossing offers a
+  second way: home to the first island. A last, hard island: scorched, few villages, all hostile.
+- **The choice at the spear.**
+  - **Become one**: every critter, every island, every village ever won drawn into the spear and
+    made one. The deepest reset (embers, perks, islands, all of it), back to a first shore, for a
+    new top currency (name open: "Unity", "the Joining", "Whole"...) whose effects change the
+    rules (villages join on sight, the fire never goes out, the pull comes sooner).
+  - **Stay many**: refuse; keep everything; the spear breaks and its shards are a smaller lasting
+    boost, and the pull stops. (Open: a real branch, or there for the story.)
+- Its words are `[STORY]`, the user's to write. It's the bridge toward Orbit.
 
 ## 12. Polish backlog (back burner)
 

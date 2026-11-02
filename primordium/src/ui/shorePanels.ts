@@ -5,7 +5,7 @@
 
 import { type Boosts, POI_SORT, RELICS, type Find } from '../content/shore';
 import { GENS, PERKS, UPGRADES, type GenId } from '../content/idle';
-import { allMult, crewCandidates, crewOf, CREW_LEAST, growth, raftSeats, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
+import { allMult, destinations, natureOf, crewCandidates, crewOf, CREW_LEAST, growth, raftSeats, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
 import type { GameState } from '../economy/types';
@@ -124,6 +124,7 @@ function hearthCard(s: ShoreState): string {
       <div class="store"><span class="label dim">Food</span><b class="num"><span data-t="shore-food">${n0(s.food)}</span></b><span class="dim" data-t="shore-rate">${format(foodRate(s))} a second</span></div>
       <div class="store"><span class="label dim">Critters</span><b class="num">${s.people.length}<span class="dim">/${Math.min(room(s), hearthMost(s))}</span></b><span class="dim">+${Math.round(CRITTER_MORE * 100)}% food each</span></div>
       <div class="sub">All food ×${mult.toFixed(2)}. <b class="green" data-t="shore-boost"></b></div>
+      ${s.nature && s.nature !== 'still' ? `<div class="sub">${natureOf(s).name}: ${natureOf(s).does}</div>` : ''}
       ${s.embers ? `<div class="sub">${s.embers} embers ever (food +${Math.round(s.embers * EMBER_MORE * 100)}%, births +${Math.round(s.embers * EMBER_BIRTHS * 100)}%) · ${embersLeft(s)} to spend · island ${(s.crossings ?? 0) + 1}</div>` : ''}
       <div class="sub dim"><span data-t="shore-birth">${birthLine(s)}</span></div>
     </div>`;
@@ -249,7 +250,11 @@ export function crewCard(s: ShoreState): string {
   const row = (p: ShorePerson) => `<button class="person${on.has(p.id) ? ' on' : ''}" data-crew="${p.id}">${iconOf(p)}<b>${on.has(p.id) ? '» ' : ''}${p.name}</b><span class="dim">${p.id === s.chief ? 'chief · ' : ''}${ageWord(p)} · ${temperOf(p)}</span></button>`;
   const rest = crewCandidates(s).filter((p) => !on.has(p.id)).sort((a, b) => b.born - a.born);
   const n = embersFor(s);
-  return `<p class="label dim">Set out</p><h3>Who goes</h3>
+  // Where to: the two islands seen from the raft.
+  const dest = destinations(s)
+    .map((d, i) => `<button class="px-btn dest${(s.destination ?? 0) === i ? ' on' : ''}" data-dest="${i}"><b>${d.nature.name}</b><span class="tiny">${d.nature.does}</span></button>`)
+    .join('');
+  return `<p class="label dim">Set out</p><h3>Where to</h3><div class="dests">${dest}</div><h3>Who goes</h3>
     <p class="dim tiny">The raft carries ${seats}. +${n} ember${n === 1 ? '' : 's'}: food +${Math.round(n * EMBER_MORE * 100)}%, births +${Math.round(n * EMBER_BIRTHS * 100)}%. The rest stay.</p>
     <div class="seg build-cats"><button class="px-btn" data-act="crew-smart">Smart pick</button><button class="px-btn" data-act="crew-clear">Clear</button><span class="seg-gap"></span><span class="dim">${crew.length}/${seats}</span></div>
     <div class="card px-box people-list crew-list"><div class="info">${crew.map(row).join('') || '<span class="dim tiny">No one yet.</span>'}</div></div>

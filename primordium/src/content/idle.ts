@@ -129,3 +129,31 @@ export const PERKS: { id: PerkId; name: string; does: string; cost: number; grow
   { id: 'warsongs', name: 'War songs', does: 'Beating a village: 15% fewer critters.', cost: 6, growth: 2, most: 3 },
   { id: 'charts', name: 'Charts', does: 'Land knowing every village.', cost: 12, growth: 1, most: 1 },
 ];
+
+/** What an island is like (each one after the first has a nature, seen from the raft before
+ * setting out): it changes the run there, and what it's worth in embers when they leave. */
+export type NatureId = 'still' | 'lush' | 'waters' | 'game' | 'fertile' | 'kin' | 'warlike' | 'stormy' | 'barren';
+export interface NatureDef {
+  id: NatureId;
+  name: string;
+  does: string;
+  food?: number;
+  gens?: Partial<Record<GenId, number>>;
+  births?: number;
+  gift?: number;
+  take?: number;
+  cool?: number;
+  tap?: number;
+  embers?: number;
+}
+export const NATURES: NatureDef[] = [
+  { id: 'still', name: 'A quiet island', does: 'Nothing strange.' },
+  { id: 'lush', name: 'A lush island', does: 'Foragers and gardens ×2.', gens: { forager: 2, garden: 2 } },
+  { id: 'waters', name: 'Teeming waters', does: 'Weirs ×3.', gens: { weir: 3 } },
+  { id: 'game', name: 'Game country', does: 'Hunting lodges ×3.', gens: { lodge: 3 } },
+  { id: 'fertile', name: 'A fertile island', does: 'Births +50%.', births: 1.5 },
+  { id: 'kin', name: 'Kin country', does: 'Gifts win ×2 trust.', gift: 2 },
+  { id: 'warlike', name: 'A warlike island', does: 'Beating villages ×2 food. Embers ×1.5.', take: 2, embers: 1.5 },
+  { id: 'stormy', name: 'A stormy island', does: 'Fire burns down 2× faster. Stokes ×3.', cool: 2, tap: 3 },
+  { id: 'barren', name: 'A barren island', does: 'All food ×0.6. Embers ×2.', food: 0.6, embers: 2 },
+];

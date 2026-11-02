@@ -14,7 +14,7 @@ import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
 import { inherit, personal } from './genes';
 import { ageOver, cultureDay, cultureFx, maybeTurn, workReady, type Culture } from './culture';
-import { GENS, PERKS, UPGRADES, WORKS, type GenId, type PerkId } from '../content/idle';
+import { GENS, NATURES, PERKS, UPGRADES, WORKS, type GenId, type NatureDef, type PerkId } from '../content/idle';
 import type { CreatureLook } from '../scene/creatureLook';
 import type { GameState, Genes, TribeState } from './types';
 
@@ -178,6 +178,10 @@ export interface ShoreState {
    * many crossings they've made since the first shore. */
   embers?: number;
   crossings?: number;
+  /** What this island is like (none: the first, or a quiet one). */
+  nature?: string;
+  /** Which of the two islands seen from the raft they'll set out for (0 or 1). */
+  destination?: number;
   /** Who's been chosen to go on the next raft (ids; a smart pick if none). */
   crewChoice?: number[];
   /** How many the raft they landed on carried (it's drawn that big, till it's broken up). */
@@ -704,7 +708,7 @@ export function allMult(s: ShoreState): number {
   }
   const won = s.villages.filter((v) => v.won !== undefined).length;
   const now = s.day * DAY_SEC + s.clock;
-  return m * (1 + (s.embers ?? 0) * EMBER_MORE) * (1 + boosts(s).food) * (1 + won * WON_MORE) * (1 + totalCritters(s) * CRITTER_MORE) * (s.boost && s.boost.until > now ? s.boost.mult : 1) * (1 + fireMore(s));
+  return m * (natureOf(s).food ?? 1) * (1 + (s.embers ?? 0) * EMBER_MORE) * (1 + boosts(s).food) * (1 + won * WON_MORE) * (1 + totalCritters(s) * CRITTER_MORE) * (s.boost && s.boost.until > now ? s.boost.mult : 1) * (1 + fireMore(s));
 }
 /** The fire at its hottest, before any upgrades: everything brings in this much more. */
 export const FIRE_MOST = 1;
@@ -715,7 +719,7 @@ export const FIRE_FULL = 150;
 export const FIRE_BURN = 0.04;
 export const FIRE_BURN_MIN = 0.05;
 function fireFx(s: ShoreState): { most: number; fuel: number; cool: number; floor: number } {
-  const f = { most: FIRE_MOST + 0.5 * perk(s, 'coals'), fuel: 1, cool: 1, floor: 0 };
+  const f = { most: FIRE_MOST + 0.5 * perk(s, 'coals'), fuel: 1, cool: natureOf(s).cool ?? 1, floor: 0 };
   for (const id of s.ups) {
     const fx = UPGRADES.find((x) => x.id === id)?.fx;
     if (fx?.kind === 'fire') f.most += fx.more;
@@ -747,7 +751,22 @@ export const EMBER_BIRTHS = 0.05;
 /** What a whole island's food is worth in embers (the cube root: waiting longer brings more, but
  * less and less: better to set out than to sit). */
 export function embersFor(s: ShoreState): number {
-  return Math.floor(Math.cbrt((s.earned ?? 0) / 1e9));
+  return Math.floor(Math.cbrt((s.earned ?? 0) / 1e9) * (natureOf(s).embers ?? 1));
+}
+/** What an island's like. */
+export function natureOf(s: ShoreState): NatureDef {
+  return NATURES.find((n) => n.id === s.nature) ?? NATURES[0];
+}
+/** The nature an island seed has (the same seed, the same island, the same nature). */
+export function natureForSeed(seed: number): NatureDef {
+  return NATURES[1 + (Math.imul(seed | 0, 2654435761 | 0) >>> 0) % (NATURES.length - 1)];
+}
+/** The two islands seen from the raft: their seeds and natures (never two alike). */
+export function destinations(s: ShoreState): { seed: number; nature: NatureDef }[] {
+  const a = nextIslandSeed(s);
+  let b = (a * 48271 + 11) % 2147483647;
+  for (let k = 0; natureForSeed(b).id === natureForSeed(a).id && k < 20; k++) b = (b * 48271 + 11) % 2147483647;
+  return [a, b].map((seed) => ({ seed, nature: natureForSeed(seed) }));
 }
 /** A perk's level (what's been bought with embers). */
 export function perk(s: ShoreState, id: PerkId): number {
@@ -853,10 +872,11 @@ export function cross(state: GameState, seed = 0): boolean {
   const gained = embersFor(s);
   const crew = crewOf(s);
   if (crew.length < CREW_LEAST) return false;
-  const island = seed || nextIslandSeed(s);
+  const island = seed || destinations(s)[s.destination ?? 0].seed;
   const tribe = { ...t, look: { ...t.look, parts: { ...s.look.parts }, diet: s.look.diet }, landed: { ...(t.landed ?? { day: 0 }), seed: island }, family: crew.map((p) => ({ name: p.name, trait: p.trait ?? 'hardy', genes: p.genes })) } as TribeState;
   const next = newShore(tribe);
   next.raft = crew.length;
+  next.nature = natureForSeed(island).id;
   next.embers = (s.embers ?? 0) + gained;
   next.crossings = (s.crossings ?? 0) + 1;
   next.embersSpent = s.embersSpent;
@@ -888,7 +908,7 @@ export function genRate(s: ShoreState, id: GenId): number {
     const u = UPGRADES.find((x) => x.id === uid);
     if (u?.fx.kind === 'gen' && u.fx.gen === id) m *= u.fx.mult;
   }
-  return g.rate * count(s, id) * m * 2 ** perk(s, 'trades') * allMult(s);
+  return g.rate * count(s, id) * m * 2 ** perk(s, 'trades') * (natureOf(s).gens?.[id] ?? 1) * allMult(s);
 }
 /** Food a second, everything together. */
 export function foodRate(s: ShoreState): number {
@@ -909,7 +929,7 @@ export function tapValue(s: ShoreState): number {
   }
   // (Always worth a quarter-second of everything coming in, so tapping matters at every size;
   // the stoking upgrades add whole seconds on top.)
-  return (1 + (TAP_SHARE + share) * foodRate(s)) * k * (1 + boosts(s).tap);
+  return (1 + (TAP_SHARE + share) * foodRate(s)) * k * (1 + boosts(s).tap) * (natureOf(s).tap ?? 1);
 }
 export function stoke(state: GameState): number {
   const s = shoreOf(state);
@@ -1101,7 +1121,7 @@ export function can(s: ShoreState, feature: 'buy10' | 'buymax' | 'tender' | 'foc
  * many critters as there are of them. */
 export function takeCost(s: ShoreState, v: Village): { food: number; critters: number } {
   const k = relation(s, v) === 'prey' ? 1 : relation(s, v) === 'predator' ? 2 : 3;
-  return { food: Math.ceil((200 + v.pop * v.pop * 6) * k * Math.pow(1.8, s.villages.filter((x) => x.won !== undefined).length)), critters: Math.ceil(v.pop * (1 - 0.15 * perk(s, 'warsongs'))) };
+  return { food: Math.ceil((200 + v.pop * v.pop * 6) * k * (natureOf(s).take ?? 1) * Math.pow(1.8, s.villages.filter((x) => x.won !== undefined).length)), critters: Math.ceil(v.pop * (1 - 0.15 * perk(s, 'warsongs'))) };
 }
 
 /** A gift of food: trust, twice as much with the chief there to give it. */
@@ -1112,7 +1132,7 @@ export function gift(state: GameState, id: number): number {
   const give = giftCost(s, v);
   if (s.food < give) return 0;
   s.food -= give;
-  const gain = GIFT_TRUST * (1 + boosts(s).gift) * (chiefNear(s, v) ? 2 : 1);
+  const gain = GIFT_TRUST * (1 + boosts(s).gift) * (chiefNear(s, v) ? 2 : 1) * (natureOf(s).gift ?? 1);
   if (!v.gifted) {
     v.gifted = true;
     record(state, `They brought ${v.name} gifts of food for the first time.`, 'shore', shoreWhen(s));
@@ -1285,7 +1305,7 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
   // Children: wherever there's a fire and a bed free, and grown pairs.
   const adults = grownCount(s);
   if (count(s, 'hearth') && s.people.length < Math.min(room(s), hearthMost(s)) && adults >= 2) {
-    s.birthT += Math.max(1, Math.floor(adults / 2)) * PAIR_RATE * (1 + boosts(s).births) * warmth(s) * (1 + (s.embers ?? 0) * EMBER_BIRTHS) * (1 + 0.25 * perk(s, 'fireborn')) * k;
+    s.birthT += Math.max(1, Math.floor(adults / 2)) * PAIR_RATE * (1 + boosts(s).births) * warmth(s) * (1 + (s.embers ?? 0) * EMBER_BIRTHS) * (1 + 0.25 * perk(s, 'fireborn')) * (natureOf(s).births ?? 1) * k;
     if (s.birthT >= 1) {
       s.birthT = 0;
       born(state, s);

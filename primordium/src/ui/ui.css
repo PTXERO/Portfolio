@@ -1056,3 +1056,7 @@ body.tab-hearth #expand { display: none; }
 #modal .crew-list .info, #modal .crew-pool .info { max-height: 30vh; overflow-y: auto; }
 #modal .crew-pool .info { max-height: 34vh; }
 #modal .person.on b { color: var(--gold, #e8c86a); }
+/* The two islands seen from the raft. */
+#modal .dests { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+#modal .dests .dest { display: flex; flex-direction: column; gap: 4px; padding: 8px; text-align: left; height: auto; white-space: normal; }
+#modal .dests .dest.on { outline: 2px solid var(--gold, #e8c86a); }

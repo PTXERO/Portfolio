@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
+import { destinations, natureOf, crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import type { GenId } from '../src/content/idle';
 import type { TribeState } from '../src/economy/types';
@@ -205,6 +205,29 @@ describe('Food, the idle way', () => {
     s.crewChoice = [pick, s.chief];
     expect(cross(state)).toBe(true);
     expect(shoreOf(state)!.people.map((p) => p.name)).toEqual([s.people.find((p) => p.id === pick)!.name, s.people.find((p) => p.id === s.chief)!.name]);
+  });
+  it('two islands seen from the raft, never alike; the one chosen is where they land, and its nature counts', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    lit(state);
+    const d = destinations(s);
+    expect(d).toHaveLength(2);
+    expect(d[0].nature.id).not.toBe(d[1].nature.id);
+    expect(natureOf(s).id).toBe('still');
+    for (const v of s.villages) v.won = s.day;
+    while (s.people.length < 8) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -60 });
+    s.destination = 1;
+    expect(cross(state)).toBe(true);
+    const n = shoreOf(state)!;
+    expect(n.seed).toBe(d[1].seed);
+    expect(n.nature).toBe(d[1].nature.id);
+    // (A barren island: all food ×0.6, embers ×2.)
+    n.nature = 'barren';
+    takeRaft(state);
+    buyGen(state, 'forager');
+    const r = foodRate(n);
+    n.nature = 'still';
+    expect(r).toBeCloseTo(foodRate(n) * 0.6, 6);
   });
   it('an older save far enough on keeps buying ten, the most, and its focus', () => {
     const state = fresh();

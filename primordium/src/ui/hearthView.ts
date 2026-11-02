@@ -274,13 +274,16 @@ export class HearthView {
     const b = this.b;
     const r = seeded(s.seed);
     const si = shoreSeason(s).si;
-    // Pebbles and tufts, where this island has them (lit a little by the fire).
-    for (let i = 0; i < 26; i++) {
+    // Pebbles and tufts, where this island has them (lit a little by the fire): more green on a
+    // lush island, bare stone on a barren one.
+    const nature = s.nature ?? 'still';
+    const scatter = nature === 'lush' ? 48 : nature === 'barren' ? 14 : 26;
+    for (let i = 0; i < scatter; i++) {
       const x = Math.floor(r() * AW);
       const y = Math.floor(FY - 6 + r() * (AH - FY + 6));
       const kind = r();
       const lit = Math.max(0, 1 - Math.hypot(x - FX, (y - FY) * 2) / 60) * heat;
-      if (kind < 0.4) {
+      if (kind < (nature === 'barren' ? 0.85 : 0.4)) {
         b.fillStyle = mix('#2a2622', '#6a5040', lit);
         b.fillRect(x, y, 2, 1);
       } else {
@@ -558,6 +561,15 @@ export class HearthView {
       b.fillRect(Math.round(p.x - r / 2), Math.round(p.y - r / 2), r, r);
     }
     this.poles(s);
+    // A stormy island: rain slanting through the firelight.
+    if (s.nature === 'stormy') {
+      b.fillStyle = 'rgba(160,180,220,0.45)';
+      for (let i = 0; i < 40; i++) {
+        const x = ((i * 37.7 + this.t * 60) % (AW + 20)) - 10;
+        const y = (i * 23.3 + this.t * 140) % AH;
+        b.fillRect(Math.floor(x), Math.floor(y), 1, 3);
+      }
+    }
     for (const p of this.embers) {
       b.fillStyle = p.age / p.life < 0.5 ? '#ffd24a' : '#e0602a';
       b.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
@@ -599,7 +611,7 @@ export function childSize(g: number): number {
 
 /** A small seeded random (the same island, the same pebbles). */
 function seeded(seed: number): () => number {
-  let x = (seed * 2654435761) >>> 0 || 1;
+  let x = Math.imul(seed | 0, 2654435761 | 0) >>> 0 || 1;
   return () => {
     x ^= x << 13;
     x ^= x >>> 17;

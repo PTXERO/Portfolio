@@ -15,7 +15,7 @@ export const TRAIT_TEMPER: Record<string, Temper> = { strong: 'bold', swift: 're
 /** What someone's like: from their trait if they have one (the four), else born to it (the same
  * all their life). */
 export function temperOf(p: { id: number; trait?: string }): Temper {
-  return (p.trait && TRAIT_TEMPER[p.trait]) || TEMPERS[((p.id * 2654435761) >>> 0) % TEMPERS.length];
+  return (p.trait && TRAIT_TEMPER[p.trait]) || TEMPERS[(Math.imul(p.id | 0, 2654435761 | 0) >>> 0) % TEMPERS.length];
 }
 
 export interface Speaker {
