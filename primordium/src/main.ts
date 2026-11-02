@@ -68,7 +68,7 @@ import { cue, glug, hushDrone, popSound, setVolume, soundFrame, soundHidden, tap
 import { creatureLookOf, miniIcon } from './scene/creatureLook';
 import { describe } from './economy/genes';
 import { glyph, panWeb, pickIdea, webTransform, webView, zoomWeb } from './ui/tribePanels';
-import { record } from './economy/chronicle';
+import { nameList, record } from './economy/chronicle';
 import { PARTS } from './content/creature';
 import { choiceButton } from './ui/creaturePanels';
 import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady, layout, layoutKey, organelleNear, rewardText, TABS, tabsFor, update, type Tab } from './ui/panels';
@@ -956,6 +956,8 @@ function renderHud(): void {
 /** New Shore's strip: just the village's news going by. (No clock:
  * this is just life now.) */
 const shoreNews: string[] = [];
+/** The strip's last line, when it's a list of names still being added to. */
+let shoreNewsLast: { kind: string; names: string[] } | null = null;
 /** Villages already known to have joined (so only new ones get a card; not those in the save). */
 const joinedSeen = new Set<number>();
 let joinedReady = false;
@@ -988,7 +990,18 @@ function shoreFrame(): void {
   const s = shoreOf(state);
   if (!s || state.current !== 'shore') return;
   if (s.news.length) {
-    shoreNews.push(...s.news.splice(0));
+    // (Births, and deaths of old age, one after another, go by as one line: "Ka, Ri and Mo were born.")
+    for (const line of s.news.splice(0)) {
+      const kind = /^\S+ was born\.$/.test(line) ? 'born' : /^\S+ died of old age\.$/.test(line) ? 'old' : '';
+      const name = line.split(' ')[0];
+      if (kind && shoreNewsLast?.kind === kind) {
+        shoreNewsLast.names.push(name);
+        shoreNews[shoreNews.length - 1] = `${nameList(shoreNewsLast.names, 6)} ${kind === 'born' ? 'were born' : 'died of old age'}.`;
+        continue;
+      }
+      shoreNews.push(line);
+      shoreNewsLast = kind ? { kind, names: [name] } : null;
+    }
     if (shoreNews.length > 12) shoreNews.splice(0, shoreNews.length - 12);
   }
   if (s.newFinds.length && modal.hidden && !cine()) {

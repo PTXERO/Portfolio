@@ -8,7 +8,7 @@
 // Time is counted in days (DAY_SEC each). Everything runs offline too.
 
 import { buildName, POIS, RELICS, SHORE_STORY, type Boosts, type BuildId, type Find, type PoiKind, type RelicId } from '../content/shore';
-import { record } from './chronicle';
+import { record, recordName } from './chronicle';
 import { Biome, CELL, isLand, islandOf, reveal, type Island, type Pt } from './island';
 import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
@@ -1148,7 +1148,7 @@ function born(state: GameState, s: ShoreState): void {
     s.people.filter((p) => p.founder).forEach((p, i) => (p.dies = s.day + 16 + i * 8 + rand() * 5));
   } else {
     s.news.push(`${name} was born.`);
-    record(state, `${name} was born${parent ? ` to ${parent.name}` : ''}.`, 'shore', shoreWhen(s));
+    recordName(state, 'born', name, '{names} was born.', '{names} were born.', 'shore', shoreWhen(s));
   }
 }
 
@@ -1221,7 +1221,8 @@ function die(state: GameState, s: ShoreState, p: ShorePerson, why: 'old age' | '
     record(state, `${p.name}, one of the four who crossed, died of old age.${left ? '' : ' The last of them.'}`, 'shore', shoreWhen(s));
   } else {
     s.news.push(why === 'hunger' ? `${p.name} died of hunger.` : why === 'cold' ? `${p.name} died of the cold.` : `${p.name} died of old age.`);
-    record(state, `${p.name} died of ${why === 'cold' ? 'the cold, with no wood for the fire' : why === 'hunger' ? 'hunger' : 'old age'}.`, 'shore', shoreWhen(s));
+    if (why === 'cold' || why === 'hunger') record(state, `${p.name} died of ${why === 'cold' ? 'the cold, with no wood for the fire' : 'hunger'}.`, 'shore', shoreWhen(s));
+    else recordName(state, 'old', p.name, '{names} died of old age.', '{names} died of old age.', 'shore', shoreWhen(s));
   }
   if (p.id === s.chief) {
     // The heir: the eldest of the four left, else the eldest grown.

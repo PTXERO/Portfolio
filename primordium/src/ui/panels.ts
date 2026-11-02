@@ -4,7 +4,7 @@
 import { CHANNELS, volumes } from '../audio/sound';
 import { ideasLayout, spellsLayout, tribeKey, tribeLayout, tribeUpdate } from './tribePanels';
 import { shoreKey, shoreLayout, shoreUpdate } from './shorePanels';
-import { eraName } from '../economy/chronicle';
+import { eraName, gathered } from '../economy/chronicle';
 import { icon, type SpriteName } from '../art/sprites';
 import { lifeIcon } from '../scene/icons';
 import { bodyLayout, creatureKey, creatureUpdate, exploreLayout, familyLayout, herdLayout } from './creaturePanels';
@@ -679,7 +679,7 @@ function chronicleLayout(state: GameState): string {
     .map((g) => {
       const head = g.era !== era ? `<h3 class="chron-era">${eraName(g.era as StageId)}</h3>` : '';
       era = g.era;
-      return `${head}<div class="chron-day"><span class="when">${g.when}</span>${g.lines.map((l) => `<p>${l}</p>`).join('')}</div>`;
+      return `${head}<div class="chron-day"><span class="when">${g.when}</span>${gathered(g.lines).map((l) => `<p>${l}</p>`).join('')}</div>`;
     })
     .join('');
   return `<div class="panel-head"><h2>Chronicle</h2><span class="dim">${all.length} entries</span></div>
