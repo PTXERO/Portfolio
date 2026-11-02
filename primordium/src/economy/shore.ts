@@ -14,7 +14,8 @@ import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
 import { inherit, personal } from './genes';
 import { ageOver, cultureDay, cultureFx, maybeTurn, workReady, type Culture } from './culture';
-import { borrow, newLanguage, shiftSounds, type Language } from './language';
+import { borrow, newLanguage, shiftSounds, talkUnheard, type Language, type Situation, type Speaker } from './language';
+import { temperOf } from '../content/hearthTalk';
 import { GENS, MIRACLES, NATURES, PERKS, UPGRADES, WORKS, type GenId, type MiracleId, type NatureDef, type PerkId } from '../content/idle';
 import type { CreatureLook } from '../scene/creatureLook';
 import type { GameState, Genes, TribeState } from './types';
@@ -1311,7 +1312,7 @@ function win(state: GameState, s: ShoreState, v: Village, line: string): void {
   const lang = langOf(s);
   const things = ['fish', 'root', 'song', 'dance', 'hut', 'star', 'drum', 'stone', 'boat', 'leaf', 'rain', 'gift'];
   const pick = [things[(v.id * 7) % things.length], things[(v.id * 11 + 3) % things.length]];
-  const took = borrow(lang, v.name, s.seed * 131 + v.id * 977, v.diet, [...new Set(pick)]);
+  const took = borrow(lang, v.name, s.seed * 131 + v.id * 977, v.diet, [...new Set(pick)], s.day);
   if (took.length) record(state, `From ${v.name} they took ${took.length === 1 ? 'a word' : 'words'}: ${took.map((w) => `“${w}”`).join(', ')}.`, 'shore', shoreWhen(s));
   s.news.push(`${cap(v.name)} are yours: +${Math.round(WON_MORE * 100)}% food.`);
   record(state, line, 'shore', shoreWhen(s));
@@ -1540,6 +1541,12 @@ function born(state: GameState, s: ShoreState): void {
 
 /** Their tongue: made the first time it's needed, from the line's look and diet. */
 export function langOf(s: ShoreState): Language {
+  // (A tongue from before they made their own words: begun again, the guesses kept.)
+  if (s.lang && !s.lang.lex) {
+    const old = s.lang as unknown as { guess?: Record<string, string> };
+    s.lang = undefined;
+    langOf(s).guess = { ...(old.guess ?? {}) };
+  }
   if (!s.lang) {
     let h = s.seed >>> 0;
     for (const c of `${s.look.diet}|${Object.values(s.look.parts).join('.')}`) h = Math.imul(h ^ c.charCodeAt(0), 2654435761) >>> 0;
@@ -1548,11 +1555,43 @@ export function langOf(s: ShoreState): Language {
   return s.lang;
 }
 
+/** Someone as a speaker: how old they are, what they're like. */
+export function speakerOf(s: ShoreState, p: ShorePerson): Speaker {
+  const g = growth(s, p);
+  const today = s.day + s.clock / DAY_SEC;
+  const old = p.dies !== undefined && p.dies - today < (p.dies - p.born) * 0.3;
+  return { age: g < 0.5 ? 'little' : g < 1 ? 'youngster' : old ? 'elder' : 'grown', temper: temperOf(p) };
+}
+/** What's going on, for what they'll talk about. */
+export function situationOf(s: ShoreState, streak = false): Situation {
+  const now = s.day * DAY_SEC + s.clock;
+  const little = s.people.filter((p) => p.kind === undefined && growth(s, p) < 0.3).at(-1);
+  return {
+    heat: s.heat ?? 0,
+    season: shoreSeason(s).si,
+    night: s.clock / DAY_SEC > 0.75,
+    rain: (s.rainUntil ?? 0) > now,
+    plenty: baseRate(s) > 50,
+    little: little?.name,
+    age: s.culture?.age ?? 1,
+    won: s.villages.filter((v) => v.won !== undefined).length,
+    streak,
+    crossed: (s.crossings ?? 0) > 0,
+  };
+}
+
 function dawn(state: GameState, s: ShoreState): void {
   // Once a year their speech shifts a little.
   if (s.lang) {
     const shift = shiftSounds(s.lang, Math.floor(s.day / YEAR_DAYS) + (s.crossings ?? 0) * 1000);
     if (shift) record(state, `Their speech shifted: ${shift}.`, 'shore', shoreWhen(s));
+  }
+  // And it grows while no one's listening: a dozen talks a day among them.
+  if (s.raftTaken && s.people.length >= 2) {
+    const lang = langOf(s);
+    const folk = s.people.filter((p) => p.kind === undefined);
+    const pick = folk.length > 40 ? folk.filter((_, i) => i % Math.ceil(folk.length / 40) === 0) : folk;
+    talkUnheard(lang, s.day + (s.crossings ?? 0) * 100000, situationOf(s), pick.map((p) => speakerOf(s, p)));
   }
   pruneDead(s);
   // (Undelivered news is only ever the latest few.)

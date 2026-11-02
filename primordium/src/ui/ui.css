@@ -1094,3 +1094,8 @@ body.tab-hearth #expand { display: none; }
 .words .their { color: var(--gold, #e8c86a); font-size: 15px; }
 .words .meaning { margin-left: auto; color: #8acf6a; }
 .words .guess { width: 100%; box-sizing: border-box; margin: 4px 0 2px; padding: 4px 6px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.15); color: inherit; font: inherit; font-size: 13px; }
+/* Talk on the map, over the speaker's head. */
+.map-say { position: absolute; z-index: 5; max-width: min(220px, 60%); padding: 4px 8px 5px; background: rgba(250, 240, 215, 0.92); color: #2a1e14; box-shadow: 0 0 0 2px #000; font-size: 12px; line-height: 1.25; pointer-events: none; }
+.map-say b { display: block; font-size: 10px; color: #a0522d; }
+.map-say .gloss { display: block; font-size: 10px; font-style: normal; color: #8a6a4a; }
+.map-say .gloss:empty { display: none; }

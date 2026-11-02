@@ -529,6 +529,21 @@ export class ShoreScene extends RangeScene {
   private stamps = new Map<string, HTMLCanvasElement>();
   private static readonly STILL = new Set<BuildId>(BUILDS.map((d) => d.id).filter((id) => !['hearth', 'scout', 'greathearth', 'kiln', 'shrine'].includes(id)));
 
+  /** The village's own as they're seen now (close enough in to be told apart): who, where on the
+   * island, and where in the art's pixels (their heads), for talk over their heads. */
+  talkers(s: ShoreState): { id: number; x: number; y: number; X: number; Y: number }[] {
+    if (this.zoom < 2.5) return [];
+    const own = new Set(s.people.filter((p) => p.kind === undefined).map((p) => p.id));
+    const out: { id: number; x: number; y: number; X: number; Y: number }[] = [];
+    for (const w of this.walkers) {
+      if (!own.has(w.id)) continue;
+      const X = this.sx(w.x);
+      const Y = this.py(w.x, w.y) - 7;
+      if (X > 8 && X < this.W - 8 && Y > this.viewTop + 10 && Y < (this.viewBottom || this.H) - 4) out.push({ id: w.id, x: w.x, y: w.y, X, Y });
+    }
+    return out;
+  }
+
   /** A building as a picture standing up (for the eye view): the map's own drawing of it, once. */
   buildImage(id: BuildId, s: ShoreState): HTMLCanvasElement {
     const key = `eye|${id}|${s.look.diet}`;

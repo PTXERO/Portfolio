@@ -16,7 +16,7 @@ import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
 import { HearthView } from './ui/hearthView';
-import { langOf, growth, SHORE_CELLS, type ShoreState, workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
+import { situationOf, speakerOf, langOf, growth, SHORE_CELLS, type ShoreState, workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
 import { dance, danceLeft, shoreIsland, terrainReady, gift, isAdult, poisOf, shoreOf, shoreSeason, startShore, takeRaft, walkChief } from './economy/shore';
 import { AGES, ageName } from './economy/culture';
 import { crewCard, buyAmount, setBuildCat, setBuyMany, setIslandView, danceCard, findCard, forkCard, poiCard, setVillageView, villageCard } from './ui/shorePanels';
@@ -64,11 +64,11 @@ import { LOOK_BACK_SEC } from './scene/tribe';
 import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
 import { playCrossing } from './ui/crossing';
-import { whistle, thunder, cue, glug, hushDrone, popSound, setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
+import { setWordPool, whistle, thunder, cue, glug, hushDrone, popSound, setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
 import { creatureLookOf, drawCreature, genesKey, miniIcon, type CreatureLook } from './scene/creatureLook';
 import { describe, personal } from './economy/genes';
 import { CELL } from './economy/island';
-import { syllables, wordFor } from './economy/language';
+import { hear as hearIt, say as sayIt, syllables, talk, wordFor } from './economy/language';
 import { glyph, panWeb, pickIdea, webTransform, webView, zoomWeb } from './ui/tribePanels';
 import { nameList, record } from './economy/chronicle';
 import { PARTS } from './content/creature';
@@ -467,6 +467,86 @@ function eyeSprites(s: ShoreState, eyeAt: { x: number; y: number }, k: number, d
     }
   }
   return out;
+}
+
+// ---- Talk on the map ----
+
+/** Two of them out on the land, close by each other, talk now and then (when they're near enough
+ * on screen to be told apart): a few turns, in their tongue, over their heads, whistled. */
+const mapSay = document.createElement('div');
+mapSay.className = 'map-say';
+mapSay.hidden = true;
+mapSay.innerHTML = '<b></b><span></span><i class="gloss"></i>';
+stageEl.appendChild(mapSay);
+let mapChat: { ids: [number, number]; turns: import('./economy/language').Turn[]; at: number; t: number } | null = null;
+let mapNext = 8;
+let mapLast = performance.now();
+function mapTalk(s: ShoreState): void {
+  const now = performance.now();
+  const dt = Math.min(0.5, (now - mapLast) / 1000);
+  mapLast = now;
+  const quiet = eye || !modal.hidden || (ui.open && (ui.tab === 'hearth' || !isWide()));
+  const map = scene.shoreScene;
+  if (quiet || !s.lang?.lex) {
+    mapSay.hidden = true;
+    mapChat = null;
+    return;
+  }
+  const near = map.talkers(s);
+  if (!mapChat) {
+    mapSay.hidden = true;
+    mapNext -= dt;
+    if (mapNext > 0 || near.length < 2) return;
+    mapNext = 8 + Math.random() * 7;
+    // (Two close by each other.)
+    const a = near[Math.floor(Math.random() * near.length)];
+    const b = near.filter((q) => q.id !== a.id).sort((p, q) => Math.hypot(p.x - a.x, p.y - a.y) - Math.hypot(q.x - a.x, q.y - a.y))[0];
+    if (!b || Math.hypot(b.x - a.x, b.y - a.y) > 8) return;
+    const pa = s.people.find((p) => p.id === a.id)!;
+    const pb = s.people.find((p) => p.id === b.id)!;
+    mapChat = { ids: [a.id, b.id], turns: talk(situationOf(s), { ...speakerOf(s, pa), name: pa.name }, { ...speakerOf(s, pb), name: pb.name }, Math.random), at: -1, t: 99 };
+  }
+  const c = mapChat;
+  c.t += dt;
+  if (c.t >= 2.8) {
+    c.at++;
+    c.t = 0;
+    if (c.at >= c.turns.length) {
+      mapChat = null;
+      mapSay.hidden = true;
+      return;
+    }
+    const turn = c.turns[c.at];
+    const person = s.people.find((p) => p.id === c.ids[turn.by]);
+    if (!person) {
+      mapChat = null;
+      return;
+    }
+    const lang = langOf(s);
+    const me = speakerOf(s, person);
+    const sp = sayIt(lang, turn, me, s.day, Math.floor(Math.random() * 1e9));
+    hearIt(lang, sp.said, `${me.age === 'little' ? 'a little one' : me.age === 'youngster' ? 'a youngster' : me.age === 'elder' ? 'an elder' : 'grown'} · out on the land · ${['spring', 'summer', 'autumn', 'winter'][situationOf(s).season]}`);
+    (mapSay.firstElementChild as HTMLElement).textContent = person.name;
+    (mapSay.querySelector('span') as HTMLElement).textContent = sp.text;
+    const gl = sp.said.map((x) => (!x.meaning ? x.word : lang.scribed ? x.meaning : lang.guess[x.meaning] || '·'));
+    (mapSay.querySelector('.gloss') as HTMLElement).textContent = sp.said.some((x) => x.meaning && (lang.scribed || lang.guess[x.meaning])) ? gl.join(' ') : '';
+    mapSay.hidden = false;
+    const at = near.find((q) => q.id === person.id);
+    const r = stageEl.getBoundingClientRect();
+    whistle(sp.said.filter((x) => x.meaning).flatMap((x) => syllables(x.word)), 0.1, at ? (at.X / (r.width / 2) - 1) * 0.5 : 0, me.age === 'little' ? 1.3 : me.age === 'elder' ? 0.9 : 1, 1.2);
+  }
+  // Over the speaker's head (following them as they walk); gone if they've walked off screen.
+  const turn = c.turns[Math.max(0, c.at)];
+  const at = near.find((q) => q.id === c.ids[turn?.by ?? 0]);
+  if (!at) {
+    mapSay.hidden = true;
+    return;
+  }
+  const [cx, cy] = scene.toCss(at.X, at.Y);
+  const w = mapSay.offsetWidth;
+  const r = stageEl.getBoundingClientRect();
+  mapSay.style.left = `${Math.max(6, Math.min(r.width - w - 6, cx - w / 2))}px`;
+  mapSay.style.top = `${Math.max(6, cy - mapSay.offsetHeight - 6)}px`;
 }
 
 /** The crew chooser redrawn where it is (the lists keep their scroll). */
@@ -1113,6 +1193,7 @@ function renderHud(): void {
  * this is just life now.) */
 const shoreNews: string[] = [];
 /** The strip's last line, when it's a list of names still being added to. */
+let wordsAt = 0;
 let shoreNewsLast: { kind: string; names: string[] } | null = null;
 /** Villages already known to have joined (so only new ones get a card; not those in the save). */
 const joinedSeen = new Set<number>();
@@ -1144,7 +1225,20 @@ function renderShoreGoal(): void {
  * found gets its own card. */
 function shoreFrame(): void {
   const s = shoreOf(state);
-  if (!s || state.current !== 'shore') return;
+  if (!s || state.current !== 'shore') {
+    if (wordsAt) {
+      setWordPool([]);
+      wordsAt = 0;
+    }
+    return;
+  }
+  mapTalk(s);
+  // (Their words, for the whistled chatter as they go about: refreshed now and then.)
+  const nowMs = performance.now();
+  if (s.lang?.lex && nowMs - wordsAt > 5000) {
+    wordsAt = nowMs;
+    setWordPool(Object.values(s.lang.lex).map((v) => syllables(v[0].f)));
+  }
   if (s.news.length) {
     // (Births, and deaths of old age, one after another, go by as one line: "Ka, Ri and Mo were born.")
     for (const line of s.news.splice(0)) {
@@ -1258,7 +1352,7 @@ function startDance(): void {
     // The dance song, a word a turn, whistled in their tongue: higher and quicker as it builds.
     const song = ['dance', 'fire', 'we', 'sing', 'good', 'night'];
     const m = song[streak % song.length];
-    whistle(syllables(wordFor(langOf(s), m, m === 'dance' || m === 'sing' ? 'v' : m === 'we' ? 'x' : m === 'good' ? 'a' : 'n')), 0.25, 0, (theirWay ? 1.05 : 0.95) + Math.min(10, streak) * 0.03, 1 + Math.min(10, streak) * 0.05);
+    whistle(syllables(wordFor(langOf(s), m, s.day)), 0.25, 0, (theirWay ? 1.05 : 0.95) + Math.min(10, streak) * 0.03, 1 + Math.min(10, streak) * 0.05);
     scene.float(at.x, at.y - 10, `+${got.toFixed(1)} ${v.vassal ? 'goodwill' : 'trust'}`, theirWay ? '#e8c86a' : '#8acf6a');
     save();
     danceInfo();
@@ -2484,7 +2578,7 @@ document.addEventListener('change', (e) => {
   const el = e.target as HTMLInputElement;
   if (el.dataset?.guess === undefined) return;
   const lang = shoreOf(state)?.lang;
-  const meaning = lang && Object.keys(lang.words)[Number(el.dataset.guess)];
+  const meaning = lang && el.dataset.guess;
   if (!lang || !meaning) return;
   const g = el.value.trim().slice(0, 40);
   if (g) lang.guess[meaning] = g;
@@ -2747,7 +2841,6 @@ function frame(now: number): void {
     const hs = shoreOf(state);
     hearthView.show(!!hs && ui.open && ui.tab === 'hearth' && !!STAGES[state.current].shore);
     if (hs) {
-      hearthView.setCouncil(!!hs.auto && hs.ups.includes('council'));
       hearthView.frame(hs, dt);
     }
   }

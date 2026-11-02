@@ -2,12 +2,11 @@
 // batch of what's been brought in (food, there and then), and builds the fire up; a big fire
 // cooks more of everything while it lasts, and it dies down by itself if it's left.
 
-import { langOf, DAY_SEC, whiteHot, fireMost, fireMore, growth, knowsSign, praying, prayerMost, signReady, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
+import { langOf, situationOf, speakerOf, DAY_SEC, whiteHot, fireMost, fireMore, growth, knowsSign, praying, prayerMost, signReady, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
 import { drawCreature, type CreatureLook } from '../scene/creatureLook';
 import { MIRACLES, type MiracleId } from '../content/idle';
-import { hear, speak, syllables, wordFor } from '../economy/language';
+import { hear, say, syllables, talk, wordFor, type Turn } from '../economy/language';
 
-import { pickTalk, temperOf, type Age, type Speaker, type TalkCtx } from '../content/hearthTalk';
 import { squeak, whistle } from '../audio/sound';
 import { D, format } from '../economy/num';
 
@@ -21,7 +20,7 @@ interface Bit { x: number; y: number; vx: number; vy: number; life: number; age:
 /** What a critter round the fire is doing: hopping (seconds into it, after a moment's delay). */
 interface Seat { hop: number; wait: number; high: number; turn: number; id: number; name: string; look?: CreatureLook; pitch: number; size: number }
 /** Two of them talking: who (seats), what, which line they're on, and how long it's been up. */
-interface Chat { who: [number, number]; lines: string[]; at: number; t: number }
+interface Chat { who: [number, number]; lines: Turn[]; at: number; t: number }
 /** Where each one sits (and is, mid-hop), in the art's pixels, for the words over their heads. */
 interface Spot { x: number; y: number; base: number; left: boolean; i: number }
 const LINE_SECS = 2.8;
@@ -74,10 +73,7 @@ export class HearthView {
   private spots: Spot[] = [];
   private chat: Chat | null = null;
   private nextChat = 4;
-  private lastTalks: number[] = [];
   private bubble!: HTMLElement;
-  /** The rest of the game's state the talk needs (set each frame). */
-  private council = false;
   private t = 0;
   shown = false;
 
@@ -236,33 +232,12 @@ export class HearthView {
       const i = Math.floor(Math.random() * n);
       let j = Math.floor(Math.random() * (n - 1));
       if (j >= i) j++;
-      const byAge = [...s.people].sort((p, q) => p.born - q.born);
-      const here = new Set([this.seats[i].id, this.seats[j].id]);
-      const others = byAge.filter((p) => !here.has(p.id));
-      const babe = others[others.length - 1];
-      const ctx: TalkCtx = {
-        a: speaker(s, this.seats[i].id),
-        b: speaker(s, this.seats[j].id),
-        crossings: s.crossings ?? 0,
-        heat: s.heat ?? 0,
-        season: SEASON_NAMES[shoreSeason(s).si] as TalkCtx['season'],
-        critters: s.people.length,
-        food: format(D(s.food)),
-        rate: foodRate(s),
-        won: s.villages.filter((v) => v.won !== undefined).length,
-        age: s.culture?.age ?? 1,
-        young: others.length > 2 && babe && growth(s, babe) < 0.3 ? babe.name : undefined,
-        old: others.length > 2 ? others[0].name : undefined,
-        foragers: s.gens.forager ?? 0,
-        huts: (s.gens.hut ?? 0) + (s.gens.longhouse ?? 0),
-        council: this.council,
-        streak: this.t - this.streakAt < 45,
-        spearFaith: s.culture?.forks.faith === 'spear',
-      };
-      const pick = pickTalk(ctx, this.lastTalks);
-      this.lastTalks = [...this.lastTalks.slice(-8), pick.i];
-      // (Whoever the talk fits opens it.)
-      this.chat = { who: pick.first ? [j, i] : [i, j], lines: pick.lines, at: -1, t: LINE_SECS };
+      // What they talk about comes from what's going on, and who they are; the words are theirs.
+      const pa = s.people.find((p) => p.id === this.seats[i].id)!;
+      const pb = s.people.find((p) => p.id === this.seats[j].id)!;
+      const sit = situationOf(s, this.t - this.streakAt < 45);
+      const turns = talk(sit, { ...speakerOf(s, pa), name: pa.name }, { ...speakerOf(s, pb), name: pb.name }, Math.random);
+      this.chat = { who: [i, j], lines: turns, at: -1, t: LINE_SECS };
     }
     const c = this.chat;
     c.t += dt;
@@ -275,33 +250,39 @@ export class HearthView {
         this.nextChat = 10 + Math.random() * 14;
         return;
       }
-      const who = c.who[c.at % 2];
-      const english = c.lines[c.at];
-      // Said in their own tongue (the English is only what it means underneath); every word
+      const turn = c.lines[c.at];
+      const speakerIdx = c.who[turn.by];
+      const person = s.people.find((p) => p.id === this.seats[speakerIdx]?.id);
+      if (!person) {
+        this.chat = null;
+        this.bubble.hidden = true;
+        return;
+      }
+      // Said in their own words and their own order (as their tongue stands now); every word
       // heard is counted, and when, for anyone working out what they're saying.
       const lang = langOf(s);
-      const sp = speak(lang, english, new Set(s.people.map((p) => p.name)));
-      const me = speaker(s, this.seats[who].id);
+      const me = speakerOf(s, person);
+      const sp = say(lang, turn, me, s.day, Math.floor(Math.random() * 1e9));
       const heat = s.heat ?? 0;
       const situation = `${me.age === 'little' ? 'a little one' : me.age === 'youngster' ? 'a youngster' : me.age === 'elder' ? 'an elder' : 'grown'} · ${heat > 0.6 ? 'the fire high' : heat < 0.15 ? 'the fire low' : 'the fire steady'} · ${SEASON_NAMES[shoreSeason(s).si].toLowerCase()}`;
       hear(lang, sp.said, situation);
       const line = sp.text;
       // (Under it, what you've made of it so far: your guesses, or what the scribes wrote down.)
-      const base = (m: string) => m.replace(/ \((many|past)\)/g, '');
-      const gl = sp.said.map((x) => (!x.meaning ? x.word : lang.scribed ? base(x.meaning) : lang.guess[base(x.meaning)] || '·'));
+      const gl = sp.said.map((x) => (!x.meaning ? x.word : lang.scribed ? x.meaning : lang.guess[x.meaning] || '·'));
       const glossEl = this.bubble.querySelector<HTMLElement>('.gloss')!;
-      glossEl.textContent = gl.some((g) => g !== '·' && sp.said.some((x) => x.meaning && g !== x.word)) ? gl.join(' ') : '';
-      (this.bubble.firstElementChild as HTMLElement).textContent = this.seats[who].name;
+      glossEl.textContent = sp.said.some((x) => x.meaning && (lang.scribed || lang.guess[x.meaning])) ? gl.join(' ') : '';
+      const who = speakerIdx;
+      (this.bubble.firstElementChild as HTMLElement).textContent = person.name;
       (this.bubble.querySelector('span') as HTMLElement).textContent = line;
-      this.lastSaid = sp.said.map((x) => x.word);
+      this.lastSaid = sp.said.filter((x) => x.meaning).map((x) => x.word);
       this.bubble.hidden = false;
       this.el.querySelector('.hearth-tip')?.classList.add('gone');
       this.bubble.classList.remove('in');
       void this.bubble.offsetWidth;
       this.bubble.classList.add('in');
-      // (Talking: a squeak a word or so, in their own voice, and a little hop on the first.)
-      const words = Math.min(4, 1 + Math.floor(line.split(' ').length / 3));
-      for (let k = 0; k < words; k++) this.squeakFrom(who, 0.16, k * 0.13);
+      // (Talking: the sentence whistled, a note a syllable, in their own voice.)
+      const spot = this.spots.find((q) => q.i === who);
+      whistle(sp.said.filter((x) => x.meaning).flatMap((x) => syllables(x.word)), 0.14, spot ? (spot.x - FX) / FX : 0, this.seats[who].pitch * (1 + (1 - this.seats[who].size) * 0.5), 1.2);
       const st = this.seats[who];
       if (!st.hop) Object.assign(st, { hop: 0.0001, wait: 0, high: 1.5 });
     }
@@ -564,10 +545,6 @@ export class HearthView {
     }
   }
 
-  /** Set by the game each frame: whether the council's buying by itself (for the talk). */
-  setCouncil(on: boolean): void {
-    this.council = on;
-  }
 
   /** Someone sings: a phrase whistled in their tongue (what was last said, or words of the fire),
    * higher the hotter the fire and the faster the stoking, higher still for a little one. */
@@ -576,7 +553,7 @@ export class HearthView {
     const st = this.seats[seat];
     if (!s || !st) return;
     const lang = langOf(s);
-    const words = this.lastSaid.length ? this.lastSaid.slice(0, 4) : ['fire', 'good', 'sing'].map((m) => wordFor(lang, m, m === 'sing' ? 'v' : m === 'good' ? 'a' : 'n'));
+    const words = this.lastSaid.length ? this.lastSaid.slice(0, 4) : ['we', 'sing', 'fire'].map((m) => wordFor(lang, m, s.day));
     const sp = this.spots.find((q) => q.i === seat);
     whistle(words.flatMap(syllables), 0.22, sp ? (sp.x - FX) / FX : 0, (1 + (s.heat ?? 0) * 0.15 + (1 - st.size) * 0.4) * (st.pitch * 0.5 + 0.5), 1 + Math.min(1, this.streak * 0.03));
   }
@@ -816,16 +793,6 @@ function seeded(seed: number): () => number {
   };
 }
 
-/** Who someone is, for the talk: their name, how old they are, what they're like. */
-function speaker(s: ShoreState, id: number): Speaker {
-  const p = s.people.find((q) => q.id === id)!;
-  const g = growth(s, p);
-  const today = s.day + s.clock / DAY_SEC;
-  const old = p.dies !== undefined && (p.dies - today) < (p.dies - p.born) * 0.3;
-  const age: Age = g < 0.5 ? 'little' : g < 1 ? 'youngster' : old ? 'elder' : 'grown';
-  const temper = temperOf(p);
-  return { name: p.name, age, temper, crossed: !!p.founder };
-}
 
 function mix(a: string, b: string, k: number): string {
   const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));

@@ -14,6 +14,7 @@ import { eraName, gathered } from '../economy/chronicle';
 const format = (n: number) => formatD(D(n));
 import { danceStyle } from './fireDance';
 import { temperOf } from '../content/hearthTalk';
+import { grammarOf } from '../economy/language';
 
 const n0 = (v: number) => format(Math.floor(v + 1e-6));
 
@@ -50,7 +51,7 @@ export function shoreKey(state: GameState, tab: string): string {
   const s = shoreOf(state);
   if (!s) return '';
   if (tab === 'chronicle') {
-    if (chronView === 'words') return JSON.stringify(['words', Object.keys(s.lang?.heard ?? {}).length, Math.floor(Object.values(s.lang?.heard ?? {}).reduce((a, b) => a + b, 0) / 20), s.lang?.scribed, s.lang?.shifts.length]);
+    if (chronView === 'words') return JSON.stringify(['words', Object.keys(s.lang?.heard ?? {}).length, Math.floor(Object.values(s.lang?.heard ?? {}).reduce((a, b) => a + b, 0) / 20), s.lang?.scribed, s.lang?.shifts.length, Math.floor((s.lang?.talks ?? 0) / 50)]);
     if (chronView === 'story') return JSON.stringify(['story', state.chronicle?.length ?? 0, Math.floor(s.day / 5), s.writtenFrom, s.culture?.done.length]);
     if (chronView === 'island') return JSON.stringify(['chron-island', islandView, s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, has(s, 'scouts'), s.villages.filter((v) => v.found).map((v) => [v.id, v.won, v.gone, Math.round(v.pop)]), s.chief]);
     if (chronView === 'culture') tab = 'culture';
@@ -106,7 +107,7 @@ export function shoreLayout(state: GameState, tab: string): string {
   // The Chronicle: everything to look at, a page at a time.
   const page = (id: ChronView, name: string, dot = false) => `<button class="px-btn${chronView === id ? ' on' : ''}" data-villageview="${id}">${name}${dot ? ' <i class="dot"></i>' : ''}</button>`;
   if (chronView === 'culture' && !s.culture) chronView = 'village';
-  const views = `<div class="seg build-cats chron-pages">${page('village', 'Village')}${page('people', `Critters · ${s.people.length}`)}${page('island', 'Island')}${s.culture ? page('culture', 'Culture', !!s.culture.asking) : ''}${page('story', s.writtenFrom !== undefined ? 'Record' : 'Telling')}${s.lang && Object.keys(s.lang.heard).length ? page('words', 'Words') : ''}</div>`;
+  const views = `<div class="seg build-cats chron-pages">${page('village', 'Village')}${page('people', `Critters · ${s.people.length}`)}${page('island', 'Island')}${s.culture ? page('culture', 'Culture', !!s.culture.asking) : ''}${page('story', s.writtenFrom !== undefined ? 'Record' : 'Telling')}${s.lang?.lex && Object.keys(s.lang.heard).length ? page('words', 'Words') : ''}</div>`;
   if (chronView === 'people') return views + peopleLayout(s);
   if (chronView === 'island') return views + islandLayout(s);
   if (chronView === 'culture') return views + cultureLayout(s);
@@ -277,24 +278,29 @@ export function crewCard(s: ShoreState): string {
  * meaning too. */
 function wordsLayout(s: ShoreState): string {
   const lang = s.lang;
-  if (!lang) return '';
-  const keys = Object.keys(lang.words);
+  if (!lang?.lex) return '';
   const rows = Object.entries(lang.heard)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 300)
     .map(([m, n]) => {
-      const w = lang.words[m];
-      if (!w) return '';
-      const was = lang.was[m]?.length ? ` · once “${lang.was[m].join('”, “')}”` : '';
+      const vs = lang.lex[m];
+      if (!vs?.length) return '';
+      // (Words still fighting it out for the same thing: each with its share of the saying.)
+      const tot = vs.reduce((a, v) => a + v.s, 0) || 1;
+      const rivals = vs.length > 1 ? ` · also ${vs.slice(1).map((v) => `“${v.f}” ${Math.round((v.s / tot) * 100)}%`).join(', ')}` : '';
       const from = lang.from[m] ? ` · from ${lang.from[m]}` : '';
-      return `<div class="word-row"><div class="word-head"><b class="their">${w}</b><span class="dim tiny">heard ${n}×</span>${lang.scribed ? `<span class="meaning">${m}</span>` : ''}</div>
-        <input class="guess" data-guess="${keys.indexOf(m)}" value="${(lang.guess[m] ?? '').replace(/"/g, '&quot;')}" placeholder="your guess" maxlength="40" autocomplete="off">
-        <div class="tiny dim">${(lang.ctx[m] ?? []).join(' / ')}${was}${from}</div></div>`;
+      return `<div class="word-row"><div class="word-head"><b class="their">${vs[0].f}</b><span class="dim tiny">heard ${n}×</span>${lang.scribed ? `<span class="meaning">${m}</span>` : ''}</div>
+        <input class="guess" data-guess="${m}" value="${(lang.guess[m] ?? '').replace(/"/g, '&quot;')}" placeholder="your guess" maxlength="40" autocomplete="off">
+        <div class="tiny dim">${(lang.ctx[m] ?? []).join(' / ')}${rivals}${from}</div></div>`;
     })
     .join('');
-  const grammar = lang.scribed ? `<p class="tiny dim">Their order: ${lang.order.split('').map((c) => ({ S: 'who', V: 'does', O: 'what' })[c as 'S']).join(', ')}. Describing words ${lang.adjAfter ? 'after' : 'before'} the thing. Many: “-${lang.plural}”. Done before: “-${lang.past}”. No: “${lang.neg}”. Asking: “${lang.ask}”.</p>` : '';
+  const g = grammarOf(lang);
+  const roleWord: Record<string, string> = { A: 'who', V: 'does', T: 'what' };
+  const grammar = lang.scribed
+    ? `<p class="tiny dim">How they put it (the scribes): ${g.order.split('').map((c) => roleWord[c]).join(', ')} (${Math.round(g.orderSure * 100)}% of the time); describing words ${g.qAfter ? 'after' : 'before'} the thing; no ${g.negFront ? 'before' : 'after'} what's done; asking at the ${g.askFront ? 'front' : 'end'}.</p>`
+    : '';
   return `<div class="panel-head"><h2>Their words</h2><span class="dim">${Object.keys(lang.heard).length} heard</span></div>
-    <p class="tiny dim">${lang.scribed ? 'The scribes wrote down what they mean.' : 'What they say at the fire, in their own tongue. Work out what it means: your guesses show under what they say.'}</p>${grammar}
+    <p class="tiny dim">${lang.scribed ? 'The scribes wrote down what they mean.' : 'Their own words, made by them. Work out what they mean: your guesses show under what they say.'}</p>${grammar}
     ${lang.shifts.length ? `<p class="tiny dim">Their speech has shifted: ${lang.shifts.join('; ')}.</p>` : ''}
     <div class="card px-box words"><div class="info">${rows}</div></div>`;
 }

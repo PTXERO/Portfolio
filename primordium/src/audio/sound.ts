@@ -224,6 +224,14 @@ export function glug(): void {
   cue(`glug${i}` as Cue, 0.9);
 }
 
+/** The words they have now (each as its syllables), for their chatter as they go about. */
+let wordPool: string[][] = [];
+export function setWordPool(words: string[][]): void {
+  wordPool = words.filter((w) => w.length);
+}
+/** A blow, before there are words. */
+const BLIPS = ['a', 'e', 'i', 'o', 'u'];
+
 /** Their party whistles (a metal whistle, seven blows), laid end to end: [start, length]. */
 const WHISTLES: [number, number][] = [
   [0.0, 0.54], [0.62, 0.9], [1.6, 0.69], [2.37, 0.5], [2.95, 0.87], [3.9, 0.2], [4.18, 0.75],
@@ -288,6 +296,13 @@ export function herdInView(on: boolean): void {
  * on screen (`pan` −1 left to 1 right), at `level`; `pitch` below 1 for a lower, sadder one
  * (the Extinction's). */
 export function squeak(level: number, pan = 0, pitch = 1): void {
+  // (They don't squeak any more: they whistle a word of their tongue, in their own voice, or a
+  // single blow before they have one.)
+  if (buffers.whistles) {
+    const word = wordPool.length ? wordPool[Math.floor(Math.random() * wordPool.length)] : [BLIPS[Math.floor(Math.random() * BLIPS.length)]];
+    whistle(word, level * 0.55, pan, pitch * (0.9 + Math.random() * 0.2), 1.5);
+    return;
+  }
   const buf = buffers.squeaks;
   if (!ctx || !buf || ctx.state !== 'running' || level <= 0.005) return;
   let i = Math.floor(Math.random() * SQUEAKS.length);

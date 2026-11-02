@@ -42,17 +42,27 @@ where they disagree; kept for the history and for ideas worth bringing back).
   has earned 25× its price (a rich, boosted island doesn't sit on millions waiting for the
   critters to unlock 9K upgrades); generators still open by critters (opening them early too made
   a boosted island's food, and its embers, run away).
-- **Their own tongue** (`src/economy/language.ts`). Sounds from the line's diet (soft for grazers,
-  hard for hunters), a grammar seeded once (word order SVO/SOV/VSO, adjectives before or after,
-  plural and past endings, a no-word before or after the verb, an asking-word at the front or end,
-  "is" dropped or not). The talk at the fire is said in it (the English lines are only what it
-  means underneath: tagged by a small built-in word list, articles dropped, grammar applied,
-  names kept); words are made the first time something needs saying, so the vocabulary grows with
-  the talk. Once a year a sound shift (k → ch before i, final vowels lost...), the old forms kept;
-  villages won lend words. **Chronicle → Words**: every word heard, how often, when (who said it,
-  the fire, the season), its old forms, where it came from, and a guess box: guesses show under
-  what they say at the fire. The **scribes** (Iron Age) write the meanings and the grammar down.
-  Crosses with them. Cheap: a line's worked out when said; shifts once a year.
+- **Their own tongue, made by them** (`src/economy/language.ts`). Nothing of theirs is
+  predefined: only the things there are to talk about (fire, food, a child, rain, the light in the
+  sky, eat, sing, big, cold, yes, no, what... ~50). Words are **made up by whoever first needs
+  one** (from the sounds their diet makes), and compete: each use strengthens the word used and
+  weakens its rivals (a naming game), so synonyms die out and one word wins; a little one now and
+  then says a word their own way (a new rival), elders hold to the oldest, a word's hold has a
+  ceiling so the young can always shift it. **Grammar emerges the same way**: the order of who,
+  does and what (six possible), describing words before or after, no and asking at the front or
+  end, each speaker's habit at first, then what the most do (settles in ~40 minutes). New things
+  are **named out of their own words** (bronze = fire+hard, boat = water+hut, iron, marks, the
+  harbour). **Conversations come from what's going on** (the fire, the season, night, rain, food,
+  a new child, a light in the sky, villages, the Age) and who's talking (little ones ask, the
+  grumpy say no, the cheerful say yes and sing, elders tell of the crossing): meaning frames said
+  in their words. A dozen unheard talks a day keep it growing while no one listens. Yearly sound
+  shifts; won villages lend rival words. **Chronicle → Words**: every word heard, how often, when,
+  its rivals and their shares, where it came from, your guess (shown under what they say); the
+  **scribes** write the meanings and how they put things. Crosses with them.
+- **Talk on the map**: zoomed in, two of them close by each other talk now and then, the bubble
+  over the speaker's head as they walk, whistled.
+- **No more squeaks**: every squeak is now a word of theirs whistled in the speaker's voice (a
+  single blow before they have words).
 - **Party whistles.** A metal whistle cut into seven blows; when they sing at the hearth, and on
   each turn of the fire dance, they whistle in their tongue: a syllable a blow, its vowel the
   pitch, so the same word is always the same tune; higher and quicker as they get excited.

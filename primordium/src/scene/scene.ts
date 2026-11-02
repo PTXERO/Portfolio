@@ -183,6 +183,11 @@ export class Scene {
     }
   }
 
+  /** A point in the art's pixels, on the screen (CSS pixels within the scene). */
+  toCss(x: number, y: number): [number, number] {
+    return [x * this.px, y * this.px];
+  }
+
   private toArt(x: number, y: number): [number, number] {
     return [x / this.px, y / this.px];
   }
