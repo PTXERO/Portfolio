@@ -102,6 +102,27 @@ uniform float uK; // how far the land rises (tiles per unit of height)
 uniform float uTY; // the slant: how much depth is squashed
 #define TY uTY
 uniform float uDepth; // haze over the far side of the view
+// A real camera (New Shore): things further off are smaller, out to a horizon. On: sin and cos
+// of how far it looks down, its distance from the point it looks at (tiles), and how many tiles
+// up a unit of land height stands.
+uniform float uPerspOn;
+uniform vec4 uPersp;
+#define KH uPersp.w
+vec3 camPos() { return vec3(uCam.x, uCam.y + uPersp.z * uPersp.y, uPersp.z * uPersp.x); }
+/** The line of sight through an art pixel (unit length). */
+vec3 rayDir(vec2 art) {
+  float F = uCam.z * uPersp.z;
+  vec3 f = vec3(0.0, -uPersp.y, -uPersp.x);
+  vec3 up = vec3(0.0, -uPersp.x, uPersp.y);
+  return normalize(f * F + vec3(art.x - uArt.x * 0.5, 0.0, 0.0) - up * (art.y - uCam.w));
+}
+/** Where a point (tiles, and tiles up) is seen: art x, art row. */
+vec2 project(vec3 p) {
+  vec3 v = p - camPos();
+  float zc = -v.y * uPersp.y - v.z * uPersp.x;
+  float F = uCam.z * uPersp.z;
+  return vec2(uArt.x * 0.5 + F * v.x / zc, uCam.w - F * (-v.y * uPersp.x + v.z * uPersp.y) / zc);
+}
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -173,28 +194,85 @@ float biomeAt(vec2 w) {
   return floor(texture2D(uHeight, (floor(w) + 0.5) / N).g * 255.0 / 20.0 + 0.5);
 }
 // Where a bit of ground lands on screen (art pixels, row).
-float screenRow(vec2 w) { return (w.y - uCam.y) * uCam.z * TY + uCam.w - hTop(w) * K * uCam.z; }
+float screenRow(vec2 w) {
+  if (uPerspOn > 0.5) return project(vec3(w, hTop(w) * KH)).y;
+  return (w.y - uCam.y) * uCam.z * TY + uCam.w - hTop(w) * K * uCam.z;
+}
+/** The same on flat ground at a height: how a row of tiles there would be squashed, seen. */
+float flatRow(vec2 w, float h) {
+  if (uPerspOn > 0.5) return project(vec3(w, h * KH)).y;
+  return (w.y - uCam.y) * uCam.z * TY + uCam.w - h * K * uCam.z;
+}
+/** On the line of sight through this pixel, the point at a height (land height units). */
+vec2 sightAt(float hh, vec2 art, float wx) {
+  if (uPerspOn > 0.5) {
+    vec3 C = camPos();
+    vec3 D = rayDir(art);
+    return (C + D * ((hh * KH - C.z) / D.z)).xy;
+  }
+  return vec2(wx, uCam.y + (art.y - uCam.w + hh * K * uCam.z) / (uCam.z * TY));
+}
+
+vec3 airColour() {
+  return mix(vec3(0.62, 0.72, 0.84), vec3(0.95, 0.72, 0.55), clamp(length(uHaze) * 3.0, 0.0, 1.0)) * clamp(lum(uAmb + uSunCol), 0.12, 1.1);
+}
 
 void main() {
   vec2 art = vUv * uArt;
   float wx = uCam.x + (art.x - uArt.x * 0.5) / uCam.z;
-  float base = uCam.y + (art.y - uCam.w) / (uCam.z * TY);
-  // March from the furthest ground that could rise into this pixel back to the ground
-  // right under it: the first that reaches up to the pixel is what's seen.
-  float span = K * 1.05 / TY;
-  float stepW = span / 72.0;
-  float wy = base;
-  for (int i = 0; i <= 72; i++) {
-    float y = base + span - float(i) * stepW;
-    if (screenRow(vec2(wx, y)) <= art.y) { wy = y; break; }
+  vec2 w;
+  // How far off the ground seen is, in camera distances (the real camera only): for the haze.
+  float away = 1.0;
+  if (uPerspOn > 0.5) {
+    // Along the line of sight, from the height of the highest peak down to the sea: the first
+    // point under the land is what's seen (past a long way off, it's the sea at the horizon).
+    vec3 C = camPos();
+    vec3 D = rayDir(art);
+    if (D.z > -0.004) {
+      // Above the horizon: the sky, deeper overhead.
+      vec3 air = airColour();
+      vec3 skyCol = mix(air, air * vec3(0.62, 0.74, 1.0), clamp((D.z + 0.004) * 6.0, 0.0, 1.0));
+      skyCol = mix(skyCol, vec3(0.05, 0.07, 0.14), uNight * 0.85) * uGrade + uHaze;
+      gl_FragColor = vec4(clamp(skyCol, 0.0, 1.0), 1.0);
+      return;
+    }
+    float far = uPersp.z * 14.0;
+    float tTop = max(0.0, (C.z - ${(H_LO + H_SPAN).toFixed(2)} * KH) / -D.z);
+    float tSea = min((C.z + 0.3) / -D.z, far);
+    float stepT = (tSea - tTop) / 72.0;
+    float tq = tSea;
+    for (int i = 0; i <= 72; i++) {
+      float tt = tTop + float(i) * stepT;
+      vec3 q = C + D * tt;
+      if (q.z <= hTop(q.xy) * KH) { tq = tt; break; }
+    }
+    float lo = max(tTop, tq - stepT), hi = tq;
+    for (int i = 0; i < 6; i++) {
+      float m = (lo + hi) * 0.5;
+      vec3 q = C + D * m;
+      if (q.z <= hTop(q.xy) * KH) hi = m; else lo = m;
+    }
+    w = (C + D * hi).xy;
+    away = hi / uPersp.z;
+  } else {
+    float base = uCam.y + (art.y - uCam.w) / (uCam.z * TY);
+    // March from the furthest ground that could rise into this pixel back to the ground
+    // right under it: the first that reaches up to the pixel is what's seen.
+    float span = K * 1.05 / TY;
+    float stepW = span / 72.0;
+    float wy = base;
+    for (int i = 0; i <= 72; i++) {
+      float y = base + span - float(i) * stepW;
+      if (screenRow(vec2(wx, y)) <= art.y) { wy = y; break; }
+    }
+    // Narrow it down between that step and the one before.
+    float lo = wy, hi = wy + stepW;
+    for (int i = 0; i < 5; i++) {
+      float m = (lo + hi) * 0.5;
+      if (screenRow(vec2(wx, m)) <= art.y) lo = m; else hi = m;
+    }
+    w = vec2(wx, lo);
   }
-  // Narrow it down between that step and the one before.
-  float lo = wy, hi = wy + stepW;
-  for (int i = 0; i < 5; i++) {
-    float m = (lo + hi) * 0.5;
-    if (screenRow(vec2(wx, m)) <= art.y) lo = m; else hi = m;
-  }
-  vec2 w = vec2(wx, lo);
   float h = hTop(w);
   float raw = hRaw(w);
   float biome = biomeAt(w);
@@ -204,7 +282,8 @@ void main() {
 
   // How steep the ground is as seen: a face standing up toward the camera, or a top.
   float dRow = (screenRow(w + vec2(0.0, 0.3)) - screenRow(w - vec2(0.0, 0.3))) / 0.6;
-  float face = 1.0 - clamp(dRow / (uCam.z * TY * 0.55), 0.0, 1.0);
+  float dFlat = (flatRow(w + vec2(0.0, 0.3), h) - flatRow(w - vec2(0.0, 0.3), h)) / 0.6;
+  float face = 1.0 - clamp(dRow / (max(dFlat, 0.0001) * 0.55), 0.0, 1.0);
 
   // Light, from the island's light map (fixed to the land).
   vec3 L = inside ? texture2D(uLight, w / N).rgb : vec3(0.8, 1.0, 1.0);
@@ -263,7 +342,7 @@ void main() {
   // sun gets low, and slide across the land as the clouds drift). Applied below, over what
   // stands on the land too.
   vec3 sunD = uSun.z > 0.08 ? uSun : vec3(0.3, -0.5, 0.8);
-  vec2 shadowAt = w + sunD.xy / max(sunD.z, 0.25) * max(0.0, CLOUD_H - h) * K;
+  vec2 shadowAt = w + sunD.xy / max(sunD.z, 0.25) * max(0.0, CLOUD_H - h) * (uPerspOn > 0.5 ? KH : K);
   float cloudShade = uClouds > 0.5
     ? cloudAt(shadowAt) * (0.34 + uWeather.x * 0.16 + uAsh * 0.2) * (1.0 - uNight * 0.8)
     // (The earlier islands: shadows of clouds unseen, drifting over the land.)
@@ -285,9 +364,10 @@ void main() {
   lit = mix(lit, vec3(0.86, 0.88, 0.92) * (0.35 + bright * 0.7), mist * 0.75);
 
   // Depth in the air: the far side of the view fades into a soft, sky-coloured haze.
-  float far = uDepth * (1.0 - smoothstep(0.02, 0.6, vUv.y));
-  vec3 airCol = mix(vec3(0.62, 0.72, 0.84), vec3(0.95, 0.72, 0.55), clamp(length(uHaze) * 3.0, 0.0, 1.0)) * clamp(lum(uAmb + uSunCol), 0.12, 1.1);
-  lit = mix(lit, airCol, far * 0.55);
+  // (With the real camera, by how far off it truly is: thick out toward the horizon.)
+  float far = uPerspOn > 0.5 ? smoothstep(1.1, 9.0, away) * 0.85 + uDepth * 0.12 * smoothstep(0.9, 2.5, away) : uDepth * (1.0 - smoothstep(0.02, 0.6, vUv.y)) * 0.55;
+  vec3 airCol = airColour();
+  lit = mix(lit, airCol, far);
 
   // Creatures, markers and weather, drawn by the scene at their lifted spots: lit as
   // figures standing up in the light.
@@ -307,7 +387,7 @@ void main() {
     float found = -1.0;
     for (int i = 0; i <= 22; i++) {
       float hh = hiH - float(i) * stepH;
-      vec2 p = vec2(wx, uCam.y + (art.y - uCam.w + hh * K * uCam.z) / (uCam.z * TY));
+      vec2 p = sightAt(hh, art, wx);
       // (Under the fog's top first: a step can pass right through a thin bank into the hillside,
       // and that's still the bank, found between it and the step above. Else the bank came and
       // went in contour lines, wherever the steps happened to miss it.)
@@ -319,10 +399,10 @@ void main() {
       float lo = found, hi = found + stepH;
       for (int i = 0; i < 5; i++) {
         float m = (lo + hi) * 0.5;
-        vec2 p = vec2(wx, uCam.y + (art.y - uCam.w + m * K * uCam.z) / (uCam.z * TY));
+        vec2 p = sightAt(m, art, wx);
         if (m <= fogTop(p)) lo = m; else hi = m;
       }
-      vec2 p = vec2(wx, uCam.y + (art.y - uCam.w + lo * K * uCam.z) / (uCam.z * TY));
+      vec2 p = sightAt(lo, art, wx);
       float depth = fogTop(p) - hTop(p);
       // The very same cloudy fog as lies on the ground (one even fog over the unseen land: the
       // bank only adds its depth at the edges, hiding what's behind).
@@ -345,7 +425,16 @@ void main() {
     // A level layer CLOUD_H over the sea, seen with the land's slant, a little nearer the eye.
     vec2 ca = (art - vec2(uArt.x * 0.5, uCam.w)) / (uCam.z * CP);
     vec2 cw = vec2(uCam.x + ca.x, uCam.y + (ca.y + CLOUD_H * K) / TY);
-    float d = cloudAt(cw);
+    // (With the real camera: the same layer, where the line of sight crosses it; once the camera's
+    // come down near it the layer thins away, and below it there's none to see.)
+    float thin = 1.0;
+    if (uPerspOn > 0.5) {
+      vec3 C = camPos();
+      float cz = CLOUD_H * KH;
+      thin = smoothstep(cz * 1.15, cz * 2.2, C.z);
+      cw = sightAt(CLOUD_H, art, wx);
+    }
+    float d = cloudAt(cw) * thin;
     if (d > 0.002) {
       // Light from above and the sun's side: thinner toward it is the lit top, thicker the
       // shaded underside.
@@ -424,6 +513,8 @@ export interface ShadeParams {
   lift?: number;
   tilt?: number;
   depth?: number;
+  /** A real camera: sin and cos of its look down, its distance (tiles), tiles up per unit of height. */
+  persp?: [number, number, number, number] | null;
 }
 
 function compile(gl: WebGLRenderingContext, vs: string, fs: string): WebGLProgram {
@@ -653,6 +744,8 @@ export class MapShader {
     gl.uniform1f(this.u('uK'), p.lift ?? LIFT);
     gl.uniform1f(this.u('uTY'), p.tilt ?? TILT);
     gl.uniform1f(this.u('uDepth'), p.depth ?? 0);
+    gl.uniform1f(this.u('uPerspOn'), p.persp ? 1 : 0);
+    gl.uniform4fv(this.u('uPersp'), p.persp ?? [0.6, 0.8, 10, 30]);
     gl.uniform2f(this.u('uArt'), artW, artH);
     gl.uniform4f(this.u('uCam'), p.cam[0], p.cam[1], p.cam[2], p.cam[3]);
     gl.uniform1f(this.u('uTime'), p.time);

@@ -64,6 +64,7 @@ export class ShoreScene extends RangeScene {
   // fading into the air.
   protected lift = 30;
   protected tilt = 0.62;
+  protected persp = true;
   depth = 0.85;
   /** A season's ground being painted, a few rows a frame (the island's too big for one go). */
   private painting: { si: number; job: Generator<void, HTMLCanvasElement> } | null = null;
@@ -98,7 +99,7 @@ export class ShoreScene extends RangeScene {
     this.auto = false;
     this.looking = true;
     this.camX = p.x;
-    this.camY = this.shaded ? p.y - (this.heightAt(p.x, p.y) * this.lift) / this.tilt : p.y;
+    this.camY = p.y - this.raiseBack(p.x, p.y);
     this.zoom = zoom;
   }
 
@@ -119,7 +120,7 @@ export class ShoreScene extends RangeScene {
     // A found village's flag, or one of your own.
     for (const v of s.villages) {
       if (!v.found || v.gone) continue;
-      const X = this.sx(v.x);
+      const X = this.sx(v.x, v.y);
       const Y = this.py(v.x, v.y);
       if (Math.hypot(ax - X, ay - (Y - 5)) < Math.max(8, this.zoom * 3)) {
         this.events.push({ type: 'village', id: v.id, x: X, y: Y - 10 });
@@ -129,7 +130,7 @@ export class ShoreScene extends RangeScene {
     for (const p of poisOf(s)) {
       // (Only close enough in to see them.)
       if (!p.found || p.done >= poiDef(p).layers.length || this.zoom < 1.6) continue;
-      const X = this.sx(p.x);
+      const X = this.sx(p.x, p.y);
       const Y = this.py(p.x, p.y);
       if (Math.hypot(ax - X, ay - (Y - 4)) < Math.max(7, this.zoom * 3)) {
         this.events.push({ type: 'poi', id: p.id, x: X, y: Y - 10 });
@@ -139,14 +140,14 @@ export class ShoreScene extends RangeScene {
     let best: Walker | null = null;
     let d0 = Math.max(5, this.zoom * 1.6);
     for (const w of this.walkers) {
-      const d = Math.hypot(this.sx(w.x) - ax, this.py(w.x, w.y) - Math.max(2, this.zoom) - ay);
+      const d = Math.hypot(this.sx(w.x, w.y) - ax, this.py(w.x, w.y) - Math.max(2, this.zoom) - ay);
       if (d < d0) {
         d0 = d;
         best = w;
       }
     }
     if (best) {
-      this.events.push({ type: 'villager', id: best.id, x: this.sx(best.x), y: this.py(best.x, best.y) - Math.max(8, this.zoom * 3) });
+      this.events.push({ type: 'villager', id: best.id, x: this.sx(best.x, best.y), y: this.py(best.x, best.y) - Math.max(8, this.zoom * 3) });
       return;
     }
     // Anywhere else on land: the chief walks there (and the camera goes with them).
@@ -211,7 +212,7 @@ export class ShoreScene extends RangeScene {
     if (this.auto) {
       const me = s.chiefAt;
       const k = this.snap ? 1 : Math.min(1, dt * 3);
-      const ty = this.shaded ? me.y - (this.heightAt(me.x, me.y) * this.lift) / this.tilt : me.y;
+      const ty = me.y - this.raiseBack(me.x, me.y);
       this.camX += (me.x - this.camX) * k;
       this.camY += (ty - this.camY) * k;
       this.snap = false;
@@ -265,7 +266,7 @@ export class ShoreScene extends RangeScene {
     s.built.forEach((bd, i) => {
       // (One just finished has already gone up, as it was being built.)
       if (!this.raised.has(i)) this.raised.set(i, this.wasBuilding && Math.hypot(this.wasBuilding.x - bd.x, this.wasBuilding.y - bd.y) < 0.5 ? -99 : t);
-      const X = Math.round(this.sx(bd.x));
+      const X = Math.round(this.sx(bd.x, bd.y));
       const Y = Math.round(this.py(bd.x, bd.y));
       if (!onScreen(X, Y)) return;
       // Going up: it rises out of the ground over a few seconds, with dust.
@@ -274,7 +275,7 @@ export class ShoreScene extends RangeScene {
       sprites.push({ y: bd.y, at: bd, draw: () => this.drawBuild(b, bd.id, X, Y, z, close, up, t, s) });
     });
     for (const g of s.graves) {
-      const X = Math.round(this.sx(g.x));
+      const X = Math.round(this.sx(g.x, g.y));
       const Y = Math.round(this.py(g.x, g.y));
       if (!close || !onScreen(X, Y)) continue;
       sprites.push({
@@ -290,7 +291,7 @@ export class ShoreScene extends RangeScene {
     }
     // The hearth's flag when far out (so the village can be found again).
     if (!close && s.built.length) {
-      const X = Math.round(this.sx(s.hearth.x));
+      const X = Math.round(this.sx(s.hearth.x, s.hearth.y));
       const Y = Math.round(this.py(s.hearth.x, s.hearth.y));
       sprites.push({
         y: s.hearth.y,
@@ -355,7 +356,7 @@ export class ShoreScene extends RangeScene {
       const x = w.x;
       const y = w.y;
       if (fogged(x, y) && !isChief) continue;
-      const X = this.sx(x);
+      const X = this.sx(x, y);
       const Y = this.py(x, y);
       if (!onScreen(X, Y)) continue;
       seenFeet.push(w);
@@ -370,7 +371,7 @@ export class ShoreScene extends RangeScene {
     // The raft they came on, pulled up on the beach where it landed (until it's broken up).
     if (!s.raftTaken) {
       const r = { x: s.beach.x - 2, y: s.beach.y + 1 };
-      const X = Math.round(this.sx(r.x));
+      const X = Math.round(this.sx(r.x, r.y));
       const Y = Math.round(this.py(r.x, r.y));
       if (close && onScreen(X, Y)) {
         sprites.push({
@@ -394,7 +395,7 @@ export class ShoreScene extends RangeScene {
     if (s.visitor) {
       const vis = s.visitor;
       const from = s.villages.find((v) => v.id === vis.village);
-      const X = this.sx(vis.at.x);
+      const X = this.sx(vis.at.x, vis.at.y);
       const Y = this.py(vis.at.x, vis.at.y);
       if (from && onScreen(X, Y) && !fogged(vis.at.x, vis.at.y)) {
         const left = (vis.path[0]?.x ?? vis.at.x) < vis.at.x;
@@ -406,7 +407,7 @@ export class ShoreScene extends RangeScene {
       const moving = !!sc.to;
       const x = sc.at.x;
       const y = sc.at.y;
-      const X = this.sx(x);
+      const X = this.sx(x, y);
       const Y = this.py(x, y);
       if (!onScreen(X, Y)) continue;
       if (moving && Y > this.viewTop && Y < (this.viewBottom || H)) this.movers.push({ x: X, voice: OURS });
@@ -418,7 +419,7 @@ export class ShoreScene extends RangeScene {
     }
     // Where the chief is going: a small marker on the ground.
     if (s.chiefTo) {
-      const X = Math.round(this.sx(s.chiefTo.x));
+      const X = Math.round(this.sx(s.chiefTo.x, s.chiefTo.y));
       const Y = Math.round(this.py(s.chiefTo.x, s.chiefTo.y));
       const blink = Math.floor(t * 3) % 2;
       b.fillStyle = blink ? PAL.y : PAL.w;
@@ -433,7 +434,7 @@ export class ShoreScene extends RangeScene {
     for (const p of poisOf(s)) {
       // (Explored to the end, it's gone: nothing more there.)
       if (!p.found || p.done >= poiDef(p).layers.length) continue;
-      const X = Math.round(this.sx(p.x));
+      const X = Math.round(this.sx(p.x, p.y));
       const Y = Math.round(this.py(p.x, p.y));
       if (!onScreen(X, Y, 40)) continue;
       const layers = poiDef(p).layers;
@@ -534,7 +535,7 @@ export class ShoreScene extends RangeScene {
   /** Where a spot on the island is on screen (art px), if it's in view and near enough to read. */
   spotOnScreen(x: number, y: number, minZoom = 1.4): { X: number; Y: number } | null {
     if (this.zoom < minZoom) return null;
-    const X = this.sx(x);
+    const X = this.sx(x, y);
     const Y = this.py(x, y);
     return X > 4 && X < this.W - 4 && Y > this.viewTop + 6 && Y < (this.viewBottom || this.H) - 2 ? { X, Y } : null;
   }
@@ -545,7 +546,7 @@ export class ShoreScene extends RangeScene {
     const out: { id: number; x: number; y: number; X: number; Y: number }[] = [];
     for (const w of this.walkers) {
       if (!own.has(w.id)) continue;
-      const X = this.sx(w.x);
+      const X = this.sx(w.x, w.y);
       const Y = this.py(w.x, w.y) - 7;
       if (X > 8 && X < this.W - 8 && Y > this.viewTop + 10 && Y < (this.viewBottom || this.H) - 4) out.push({ id: w.id, x: w.x, y: w.y, X, Y });
     }
@@ -958,14 +959,14 @@ export class ShoreScene extends RangeScene {
     // couple of their huts, a small fire, your gold flag). (Driven out: the same, theirs empty.)
     if (v.joined || v.outpost !== undefined) {
       if (fogged(v.x, v.y)) return;
-      const X = Math.round(this.sx(v.x));
+      const X = Math.round(this.sx(v.x, v.y));
       const Y = Math.round(this.py(v.x, v.y));
       if (X < -60 || X > this.W + 60 || Y < -80 || Y > this.H + 60) return;
       if (close) {
         for (let k = 0; k < 2; k++) {
           const hx = v.x + (k ? 3 : -3);
           const hy = v.y + (k ? -1 : 1);
-          const HX = Math.round(this.sx(hx));
+          const HX = Math.round(this.sx(hx, hy));
           const HY = Math.round(this.py(hx, hy));
           sprites.push({ y: hy, at: { x: hx, y: hy }, draw: () => drawHut(b, v.habitat ?? 'meadow', HX, HY, z, v.look.hue) });
         }
@@ -1007,7 +1008,7 @@ export class ShoreScene extends RangeScene {
       this.locals.set(v.id, list);
       return;
     }
-    const X = Math.round(this.sx(v.x));
+    const X = Math.round(this.sx(v.x, v.y));
     const Y = Math.round(this.py(v.x, v.y));
     if (X < -150 || X > this.W + 150 || Y < -200 || Y > this.H + 200) return;
     const hidden = fogged(v.x, v.y);
@@ -1041,7 +1042,7 @@ export class ShoreScene extends RangeScene {
         const rr = 4 + (k % 3) * 2.5 + Math.floor(k / 9) * 3;
         const hx = v.x + Math.cos(a) * rr;
         const hy = v.y + Math.sin(a) * rr * 0.75;
-        const HX = Math.round(this.sx(hx));
+        const HX = Math.round(this.sx(hx, hy));
         const HY = Math.round(this.py(hx, hy));
         sprites.push({
           y: hy,
@@ -1067,7 +1068,7 @@ export class ShoreScene extends RangeScene {
         for (const [id, dx, dy] of [['woodpile', -3, 3], ['rack', 3, 3]] as const) {
           const px = v.x + dx;
           const py = v.y + dy;
-          const PX = Math.round(this.sx(px));
+          const PX = Math.round(this.sx(px, py));
           const PY = Math.round(this.py(px, py));
           sprites.push({ y: py, at: { x: px, y: py }, draw: () => this.drawBuild(b, id, PX, PY, z, close, 1, t, s) });
         }
@@ -1079,7 +1080,7 @@ export class ShoreScene extends RangeScene {
           const fx = v.x + Math.cos(a) * R;
           const fy = v.y + Math.sin(a) * R * 0.75;
           if (!isLand(this.island!, fx, fy)) continue;
-          const FX = Math.round(this.sx(fx));
+          const FX = Math.round(this.sx(fx, fy));
           const FY = Math.round(this.py(fx, fy));
           sprites.push({
             y: fy,
@@ -1121,7 +1122,7 @@ export class ShoreScene extends RangeScene {
         }
         const x = w.x;
         const y = w.y;
-        const LX = this.sx(x);
+        const LX = this.sx(x, y);
         const LY = this.py(x, y);
         if (moving && LX > 0 && LX < this.W && LY > this.viewTop && LY < (this.viewBottom || this.H)) this.movers.push({ x: LX, voice: voiceOf(v) });
         sprites.push({ y, draw: () => this.drawBeing(b, v.look, x, y, { left: moving ? dx < 0 : hash(w.id, Math.floor(t / 5)) < 0.5, frame: moving ? Math.floor(t * 7 + w.ph) % 2 : 0, hop: moving ? Math.abs(Math.sin(t * 7 + w.ph)) * 1.5 : 0 }) });

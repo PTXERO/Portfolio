@@ -90,6 +90,12 @@ const DAY_SEC = 120;
 const HERD_WALK = 0.7;
 const ZOOM_MIN = 0.3;
 const ZOOM_MAX = 8;
+/** The real camera (New Shore): how far it looks down zoomed all the way out, and all the way in. */
+const PITCH_FAR = (62 * Math.PI) / 180;
+const PITCH_NEAR = (30 * Math.PI) / 180;
+/** Its distance from what it looks at, in screen heights (so its field of view stays the same:
+ * about 42 degrees top to bottom). */
+const CAM_DIST = 1.3;
 
 type Mote = 'snow' | 'leaf' | 'petal' | 'pollen';
 /** Each season's colour cast over the whole picture (spring fresh, summer warm, autumn gold, winter cold). */
@@ -227,6 +233,50 @@ export class RangeScene {
     return [this.lift, this.tilt, this.depth];
   }
 
+  /** A real camera in place of the slant (New Shore): further off is smaller, out to a horizon;
+   * it looks more straight down zoomed out, and more toward the horizon zoomed in. */
+  protected persp = false;
+  /** How far it looks down now (radians): by the zoom, and your own choice of angle. */
+  private pitch(): number {
+    const k = Math.max(0, Math.min(1, Math.log(this.zoom / ZOOM_MIN) / Math.log(ZOOM_MAX / ZOOM_MIN)));
+    const pref = this.defaultTilt === undefined ? 0 : Math.asin(this.tilt) - Math.asin(this.defaultTilt);
+    return Math.max((22 * Math.PI) / 180, Math.min((80 * Math.PI) / 180, PITCH_FAR + (PITCH_NEAR - PITCH_FAR) * k + pref));
+  }
+  /** Tiles up per unit of land height, with the real camera (the hills as tall as the slant made
+   * them look, at the island's own angle). */
+  private get liftUp(): number {
+    return this.lift / Math.cos(Math.asin(this.defaultTilt ?? this.tilt));
+  }
+  /** For the shader: sin and cos of the look down, the camera's distance (tiles), tiles up per
+   * unit of height; null without the real camera. */
+  get perspParams(): [number, number, number, number] | null {
+    if (!this.persp || !this.shaded) return null;
+    const p = this.pitch();
+    return [Math.sin(p), Math.cos(p), (CAM_DIST * this.H) / this.zoom, this.liftUp];
+  }
+  /** Where a point (tiles; tiles up) is seen with the real camera: art x and row, and how far
+   * off it is along the view (tiles). */
+  protected project(x: number, y: number, z: number): [number, number, number] {
+    const [s, c, d] = this.perspParams!;
+    const vx = x - this.camX;
+    const vy = y - this.camY - d * c;
+    const vz = z - d * s;
+    const zc = Math.max(0.01, -vy * c - vz * s);
+    const F = this.zoom * d;
+    return [this.W / 2 + (F * vx) / zc, this.midY() - (F * (-vy * s + vz * c)) / zc, zc];
+  }
+  /** How far toward the camera to put the camera's centre so a point at this height is seen in
+   * the middle (the slant: raised by the land; the real camera: along the line of sight). */
+  protected raiseBack(x: number, y: number): number {
+    if (!this.shaded) return 0;
+    const h = this.heightAt(x, y);
+    if (this.persp) {
+      const p = this.pitch();
+      return (h * this.liftUp * Math.cos(p)) / Math.sin(p);
+    }
+    return (h * this.lift) / this.tilt;
+  }
+
   /** Where in the day it is (0 sunrise, 0.75 sunset), when the island keeps its own clock (so a
    * reload doesn't make it morning again); null to go by the scene's. */
   dayAt: number | null = null;
@@ -325,7 +375,7 @@ export class RangeScene {
 
   /** Where a point of the island is on screen, in art pixels. */
   screenOf(p: Pt): Pt {
-    return { x: this.sx(p.x), y: this.py(p.x, p.y) };
+    return { x: this.sx(p.x, p.y), y: this.py(p.x, p.y) };
   }
 
   drain(): PondEvent[] {
@@ -347,7 +397,8 @@ export class RangeScene {
   }
 
   /** Screen position (art pixels) of a point on the island. */
-  protected sx(x: number): number {
+  protected sx(x: number, y?: number): number {
+    if (this.persp && this.shaded) return this.project(x, y ?? this.camY, y === undefined ? 0 : this.heightAt(x, y) * this.liftUp)[0];
     return (x - this.camX) * this.zoom + this.W / 2;
   }
 
@@ -368,6 +419,7 @@ export class RangeScene {
   /** Screen row of a point on the ground: in 2.5D, raised by the land's height and seen at a slant. */
   protected py(x: number, y: number): number {
     if (!this.shaded) return this.sy(y);
+    if (this.persp) return this.project(x, y, this.heightAt(x, y) * this.liftUp)[1];
     return (y - this.camY) * this.zoom * this.tilt + this.midY() - this.heightAt(x, y) * this.lift * this.zoom;
   }
 
@@ -378,6 +430,7 @@ export class RangeScene {
   protected toWorld(ax: number, ay: number): Pt {
     const x = this.camX + (ax - this.W / 2) / this.zoom;
     if (!this.shaded) return { x, y: this.camY + (ay - this.midY()) / this.zoom };
+    if (this.persp) return this.sightGround(ax, ay);
     // In 2.5D, the ground under a pixel may have risen into it from nearer the viewer:
     // march back from the furthest that could, the same way the shader does.
     const base = this.camY + (ay - this.midY()) / (this.zoom * this.tilt);
@@ -401,13 +454,60 @@ export class RangeScene {
     return { x, y: base };
   }
 
+  /** With the real camera: the ground seen through an art pixel (along the line of sight, the
+   * first point under the land; past the horizon, the furthest it looks). */
+  private sightGround(ax: number, ay: number): Pt {
+    const [s, c, d, KH] = this.perspParams!;
+    const F = this.zoom * d;
+    const C = { x: this.camX, y: this.camY + d * c, z: d * s };
+    let Dx = ax - this.W / 2;
+    let Dy = -c * F + s * (ay - this.midY());
+    let Dz = -s * F - c * (ay - this.midY());
+    const len = Math.hypot(Dx, Dy, Dz);
+    Dx /= len;
+    Dy /= len;
+    Dz /= len;
+    const far = d * 14;
+    if (Dz > -0.004) return { x: C.x + Dx * far, y: C.y + Dy * far };
+    const tTop = Math.max(0, (C.z - (H_LO + H_SPAN) * KH) / -Dz);
+    const tSea = Math.min((C.z + 0.3) / -Dz, far);
+    const under = (tt: number) => C.z + Dz * tt <= this.heightAt(C.x + Dx * tt, C.y + Dy * tt) * KH;
+    const n = 80;
+    const step = (tSea - tTop) / n;
+    let hit = tSea;
+    for (let i = 0; i <= n; i++) {
+      const tt = tTop + i * step;
+      if (under(tt)) {
+        let lo = Math.max(tTop, tt - step);
+        let hi = tt;
+        for (let k = 0; k < 14; k++) {
+          const m = (lo + hi) / 2;
+          if (under(m)) hi = m;
+          else lo = m;
+        }
+        hit = hi;
+        break;
+      }
+    }
+    return { x: C.x + Dx * hit, y: C.y + Dy * hit };
+  }
+
   zoomAt(ax: number, ay: number, factor: number): void {
     // Keep the ground under the fingers exactly under them: find it, zoom, then place the
     // camera so that spot lands back on the same pixel.
     const at = this.toWorld(ax, ay);
     this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom * factor));
     this.camX = at.x - (ax - this.W / 2) / this.zoom;
-    if (this.shaded) this.camY = at.y - (ay - this.midY() + this.heightAt(at.x, at.y) * this.lift * this.zoom) / (this.zoom * this.tilt);
+    if (this.shaded && this.persp) {
+      // (The real camera: nudged until the spot's back under the fingers.)
+      this.camY = at.y;
+      for (let i = 0; i < 6; i++) {
+        const [X, Y, zc] = this.project(at.x, at.y, this.heightAt(at.x, at.y) * this.liftUp);
+        const k = (this.zoom * this.perspParams![2]) / zc;
+        this.camX += (X - ax) / k;
+        this.camY += (Y - ay) / (k * this.perspParams![0]);
+      }
+    } else if (this.shaded) this.camY = at.y - (ay - this.midY() + this.heightAt(at.x, at.y) * this.lift * this.zoom) / (this.zoom * this.tilt);
     else this.camY = at.y - (ay - this.midY()) / this.zoom;
     this.auto = false;
     this.clamp();
@@ -472,8 +572,8 @@ export class RangeScene {
     b.flinch = 0.4;
     if (b.hits >= this.hitsNeeded(state)) {
       b.fleeing = true;
-      this.events.push({ type: 'fend', x: this.sx(b.x), y: this.py(b.x, b.y) - 8 });
-    } else this.events.push({ type: 'hit', x: this.sx(b.x), y: this.py(b.x, b.y) - 8 });
+      this.events.push({ type: 'fend', x: this.sx(b.x, b.y), y: this.py(b.x, b.y) - 8 });
+    } else this.events.push({ type: 'hit', x: this.sx(b.x, b.y), y: this.py(b.x, b.y) - 8 });
   }
 
   tap(state: GameState, ax: number, ay: number): void {
@@ -485,7 +585,7 @@ export class RangeScene {
       this.fx.pulse(ax, ay, PAL.y);
       return;
     }
-    const near = (x: number, y: number) => Math.hypot(this.sx(x) - ax, this.py(x, y) - 3 - ay) < Math.max(9, this.zoom * 2);
+    const near = (x: number, y: number) => Math.hypot(this.sx(x, y) - ax, this.py(x, y) - 3 - ay) < Math.max(9, this.zoom * 2);
     const b = this.beast;
     if (b && !b.fleeing && near(b.x, b.y)) {
       this.hitBeast(state, b);
@@ -493,7 +593,7 @@ export class RangeScene {
     }
     const v = this.visitor;
     if (v && near(v.x, v.y)) {
-      this.events.push({ type: 'court', x: this.sx(v.x), y: this.py(v.x, v.y) - 12, parts: v.look.parts, genes: v.look.genes });
+      this.events.push({ type: 'court', x: this.sx(v.x, v.y), y: this.py(v.x, v.y) - 12, parts: v.look.parts, genes: v.look.genes });
       this.visitor = null;
       return;
     }
@@ -506,7 +606,7 @@ export class RangeScene {
         const p = is.places[pl.id];
         const found = (st.trips[pl.id] ?? 0) > 0;
         if (!found && !st.seen[Math.floor(p.y / CELL) * this.cells + Math.floor(p.x / CELL)]) continue;
-        const X = this.sx(p.x);
+        const X = this.sx(p.x, p.y);
         const Y = this.py(p.x, p.y);
         if (Math.abs(X + 1 - ax) < 5 && ay > Y - 11 && ay < Y + 2) {
           this.events.push({ type: 'place', id: pl.id, x: X, y: Y - 10 });
@@ -530,8 +630,8 @@ export class RangeScene {
     }
     const at = this.lastPos ?? this.island?.home;
     if (!at) return;
-    this.fx.sparkle(this.sx(at.x), this.py(at.x, at.y) - 8);
-    this.fx.pulse(this.sx(at.x), this.py(at.x, at.y) - 4, PAL.y);
+    this.fx.sparkle(this.sx(at.x, at.y), this.py(at.x, at.y) - 8);
+    this.fx.pulse(this.sx(at.x, at.y), this.py(at.x, at.y) - 4, PAL.y);
   }
 
   // ---- The ground and the fog ----
@@ -805,12 +905,12 @@ export class RangeScene {
 
   protected get wildView(): WildView {
     const seen = this.seenNow;
-    return { zoom: this.zoom, W: this.W, H: this.H, sx: (x) => this.sx(x), py: (x, y) => this.py(x, y), fx: this.fx, toWorld: (x, y) => this.toWorld(x, y), fogged: seen ? (x, y) => !seen[Math.floor(y / CELL) * this.cells + Math.floor(x / CELL)] : undefined };
+    return { zoom: this.zoom, W: this.W, H: this.H, sx: (x, y) => this.sx(x, y), py: (x, y) => this.py(x, y), fx: this.fx, toWorld: (x, y) => this.toWorld(x, y), fogged: seen ? (x, y) => !seen[Math.floor(y / CELL) * this.cells + Math.floor(x / CELL)] : undefined };
   }
 
   /** A little pink heart rising over a spot (age 0 to about 1). */
   protected heart(b: CanvasRenderingContext2D, x: number, y: number, age: number): void {
-    const hx = Math.round(this.sx(x));
+    const hx = Math.round(this.sx(x, y));
     const hy = Math.round(this.py(x, y) - (12 + age * 4) * (this.zoom >= 6 ? 2 : 1));
     b.fillStyle = PAL.p;
     b.fillRect(hx - 1, hy, 1, 1);
@@ -1054,7 +1154,7 @@ export class RangeScene {
       r.z -= r.v * dt;
       r.x -= r.v * 0.08 * dt;
       if (r.z <= 0 || Math.abs(r.x - this.camX) > hw * 1.2 || Math.abs(r.y - this.camY) > hh * 1.2) drop(r, 8 + Math.random() * 6);
-      const X = this.sx(r.x);
+      const X = this.sx(r.x, r.y);
       const Y = lift(r);
       if (X > -2 && X < W + 2 && Y > -3 && Y < H + 2) b.fillRect(Math.round(X), Math.round(Y), 1, 2);
     }
@@ -1124,7 +1224,7 @@ export class RangeScene {
 
   protected drawBeing(b: CanvasRenderingContext2D, look: CreatureLook, x: number, y: number, o: { left?: boolean; frame?: number; sleeping?: boolean; hero?: boolean; hop?: number; size?: number }): void {
     const z = this.zoom;
-    const X = this.sx(x);
+    const X = this.sx(x, y);
     const Y = this.py(x, y);
     if (X < -40 || X > this.W + 40 || Y < -40 || Y > this.H + 40) return;
     this.behind(b, x, y, () => {
@@ -1147,6 +1247,15 @@ export class RangeScene {
    * stands on the land is drawn over it, and would show through a mountain without this. */
   protected ridgeRow(x: number, y: number): number | null {
     if (!this.shaded || !this.island) return null;
+    if (this.persp) {
+      // (The real camera: what's between the point and the camera, as seen.)
+      const row = this.py(x, y);
+      const [s, c] = this.perspParams!;
+      const span = ((H_LO + H_SPAN) * this.liftUp * c) / s + 1;
+      let top = Infinity;
+      for (let d = 0.75; d <= span; d += 0.75) top = Math.min(top, this.py(x, y + d));
+      return top < row - 0.5 ? top : null;
+    }
     // How far above a point (in screen rows, per unit of zoom) the ground in front of it rises:
     // the same wherever the camera is (the screen's an affine view of the land), so worked out
     // once for each spot (to a quarter of a tile) and kept.
@@ -1231,7 +1340,7 @@ export class RangeScene {
     if (this.auto) {
       const k = this.snap ? 1 : Math.min(1, dt * 3);
       // In 2.5D the creature stands raised by the land; aim so it's raised into the middle.
-      const ty = this.shaded ? me.y - (this.heightAt(me.x, me.y) * this.lift) / this.tilt : me.y;
+      const ty = me.y - this.raiseBack(me.x, me.y);
       this.camX += (me.x - this.camX) * k;
       this.camY += (ty - this.camY) * k;
       this.snap = false;
@@ -1275,7 +1384,7 @@ export class RangeScene {
     // Home: nests (with the egg) and burrow mounds, in tile units.
     const tile = (x: number, y: number, w: number, h: number, col: string) => {
       b.fillStyle = col;
-      b.fillRect(Math.round(this.sx(x)), Math.round(this.py(x + w / 2, y)), Math.max(1, Math.round(w * this.zoom)), Math.max(1, Math.round(h * this.zoom * (this.shaded ? this.tilt : 1))));
+      b.fillRect(Math.round(this.sx(x, y)), Math.round(this.py(x + w / 2, y)), Math.max(1, Math.round(w * this.zoom)), Math.max(1, Math.round(h * this.zoom * (this.shaded ? this.tilt : 1))));
     };
     const nests = this.nestSpots(home, Math.min(9, Math.max(1, gens.nest)));
     for (const n of nests) {
@@ -1306,7 +1415,7 @@ export class RangeScene {
       const p = is.places[pl.id];
       const found = (st.trips[pl.id] ?? 0) > 0;
       if (!found && !st.seen[Math.floor(p.y / CELL) * this.cells + Math.floor(p.x / CELL)]) continue;
-      const X = Math.round(this.sx(p.x));
+      const X = Math.round(this.sx(p.x, p.y));
       const Y = Math.round(this.py(p.x, p.y));
       if (X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;
       if (found) {
@@ -1332,9 +1441,9 @@ export class RangeScene {
       for (let k = step * 2; k < d; k += step * 2) {
         const fx = me.x + ((st.walk.tx - me.x) * k) / d;
         const fy = me.y + ((st.walk.ty - me.y) * k) / d;
-        b.fillRect(Math.round(this.sx(fx)), Math.round(this.py(fx, fy)), 1, 1);
+        b.fillRect(Math.round(this.sx(fx, fy)), Math.round(this.py(fx, fy)), 1, 1);
       }
-      const X = Math.round(this.sx(st.walk.tx));
+      const X = Math.round(this.sx(st.walk.tx, st.walk.ty));
       const Y = Math.round(this.py(st.walk.tx, st.walk.ty));
       b.fillStyle = PAL.o;
       for (let k = -2; k <= 2; k++) {
@@ -1520,7 +1629,7 @@ export class RangeScene {
       if (m.role === 'guard' && bt && bt.flinch <= 0 && Math.hypot(bt.x - m.x, bt.y - m.y) < 1.5 && Math.random() < dt * 1.2) this.hitBeast(state, bt);
       const moving = Math.hypot(m.vx, m.vy) > 0.15;
       if (moving) {
-        const sx = this.sx(m.x);
+        const sx = this.sx(m.x, m.y);
         const sy = this.py(m.x, m.y);
         if (sx > 0 && sx < W && sy > this.viewTop && sy < (this.viewBottom || H)) {
           hopping++;
@@ -1551,7 +1660,7 @@ export class RangeScene {
     // close (half volume fully zoomed in, fading fast as the view pulls back). Your own creature
     // too, on the way somewhere (and the mates trotting after it).
     if (st.walk && !st.walk.event) {
-      const hx = this.sx(me.x);
+      const hx = this.sx(me.x, me.y);
       const hy = this.py(me.x, me.y);
       if (hx > 0 && hx < W && hy > this.viewTop && hy < (this.viewBottom || H)) {
         hopping += 1 + st.mates.length;
@@ -1602,7 +1711,7 @@ export class RangeScene {
       sprites.push({
         y: by,
         draw: () => {
-          const X = this.sx(bx);
+          const X = this.sx(bx, by);
           const Y = this.py(bx, by);
           const z = Math.max(0.5, this.zoom / 3);
           const dir = beast.left ? -1 : 1;
@@ -1654,7 +1763,7 @@ export class RangeScene {
           // A little heart over it, so it reads as "come say hello".
           if (Math.floor(t * 2) % 2 && this.zoom >= 1.6) {
             b.fillStyle = PAL.p;
-            const hx = Math.round(this.sx(vx));
+            const hx = Math.round(this.sx(vx, vy));
             const hy = Math.round(this.py(vx, vy) - 14 * (this.zoom >= 6 ? 2 : 1));
             b.fillRect(hx - 2, hy, 2, 1);
             b.fillRect(hx + 1, hy, 2, 1);
@@ -1692,7 +1801,7 @@ export class RangeScene {
             this.drawBeing(b, look, x, y, { left: pleft, frame: Math.floor(t * 8 + j) % 2, hop: Math.abs(Math.sin(t * 7 + j * 1.7)) * 2 });
             if (back && this.zoom >= 1.6) {
               b.fillStyle = j ? PAL.o : PAL.g;
-              b.fillRect(Math.round(this.sx(x)), Math.round(this.py(x, y)) - (this.zoom >= 6 ? 22 : 12) - Math.round(Math.abs(Math.sin(t * 7 + j)) * 1), 2, 2);
+              b.fillRect(Math.round(this.sx(x, y)), Math.round(this.py(x, y)) - (this.zoom >= 6 ? 22 : 12) - Math.round(Math.abs(Math.sin(t * 7 + j)) * 1), 2, 2);
             }
           },
         });
@@ -1702,7 +1811,7 @@ export class RangeScene {
     // (when it's in view).
     if ((st.foraged ?? 0) > this.foragedSeen && st.lastForagePlace && is.places[st.lastForagePlace]) {
       const p = is.places[st.lastForagePlace];
-      const X = Math.round(this.sx(p.x));
+      const X = Math.round(this.sx(p.x, p.y));
       const Y = Math.round(this.py(p.x, p.y)) - 6;
       if (X > 0 && X < W && Y > 0 && Y < H) {
         this.fx.pulse(X, Y, PAL.y);
@@ -1712,7 +1821,7 @@ export class RangeScene {
     this.foragedSeen = st.foraged ?? 0;
     if ((st.partiesHome ?? 0) > this.partiesSeen) {
       const n = this.lastPartyNest ?? home;
-      this.events.push({ type: 'forage', party: true, x: Math.round(this.sx(n.x)), y: Math.round(this.py(n.x, n.y)) - 14 });
+      this.events.push({ type: 'forage', party: true, x: Math.round(this.sx(n.x, n.y)), y: Math.round(this.py(n.x, n.y)) - 14 });
     }
     this.partiesSeen = st.partiesHome ?? 0;
     const nowOut = new Set(st.parties.map((p) => p.place));
@@ -1720,7 +1829,7 @@ export class RangeScene {
       if (nowOut.has(was)) continue;
       const n = is.places[was] ? nearestNest(state, was) : home;
       this.lastPartyNest = n;
-      this.fx.pulse(Math.round(this.sx(n.x)), Math.round(this.py(n.x, n.y)), PAL.g);
+      this.fx.pulse(Math.round(this.sx(n.x, n.y)), Math.round(this.py(n.x, n.y)), PAL.g);
     }
     this.partiesOut = nowOut;
 
@@ -1735,7 +1844,7 @@ export class RangeScene {
         });
         this.drawBeing(b, look, me.x, me.y, { left, frame: walking ? Math.floor(t * 8) % 2 : 0, hero: true, hop: walking ? Math.abs(Math.sin(t * 7)) * 2 : 0 });
         // A blinking "!" when something's stopped it on the road.
-        const X = Math.round(this.sx(me.x));
+        const X = Math.round(this.sx(me.x, me.y));
         const Y = Math.round(this.py(me.x, me.y)) - (this.zoom >= 6 ? 26 : this.zoom >= 1.6 ? 14 : 5);
         if (st.walk?.event) {
           if (Math.floor(t * 3) % 2) {

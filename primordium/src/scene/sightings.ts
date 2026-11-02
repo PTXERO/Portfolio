@@ -67,7 +67,7 @@ export class Sightings {
         // Surfaces, rolls along, blows, and sinks again.
         s.x += s.dir * 0.15 * dt;
         if (v.fogged?.(s.x, s.y)) break;
-        const X = v.sx(s.x);
+        const X = v.sx(s.x, s.y);
         const Y = v.py(s.x, s.y);
         const up = Math.sin((s.age / s.life) * Math.PI);
         sprites.push({
@@ -95,7 +95,7 @@ export class Sightings {
         s.x += s.dir * 0.08 * dt;
         if (v.fogged?.(s.x, s.y)) break;
         const x = s.x;
-        const X = Math.round(v.sx(x));
+        const X = Math.round(v.sx(x, s.y));
         const Y = Math.round(v.py(x, s.y));
         const step = Math.floor(t * 2) % 2;
         sprites.push({
@@ -170,7 +170,7 @@ export class Sightings {
     if (s.kind === 'aurora') near = ay < v.H * 0.35;
     else if (s.sky) near = Math.hypot(s.x - ax, s.y - ay) < 14;
     else {
-      near = Math.hypot(v.sx(s.x) - ax, v.py(s.x, s.y) - 3 - ay) < Math.max(12, v.zoom * 4);
+      near = Math.hypot(v.sx(s.x, s.y) - ax, v.py(s.x, s.y) - 3 - ay) < Math.max(12, v.zoom * 4);
     }
     if (!near) return null;
     this.cur = null;

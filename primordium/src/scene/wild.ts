@@ -17,7 +17,7 @@ export interface WildView {
   zoom: number;
   W: number;
   H: number;
-  sx(x: number): number;
+  sx(x: number, y?: number): number;
   py(x: number, y: number): number;
   fx: Effects;
   /** The ground under a screen point. */
@@ -148,7 +148,7 @@ export class Wild {
   eat(v: WildView, bush: Bush): void {
     if (bush.ripe <= 0.6) return;
     bush.ripe = 0;
-    const X = Math.round(v.sx(bush.x));
+    const X = Math.round(v.sx(bush.x, bush.y));
     const Y = Math.round(v.py(bush.x, bush.y)) - (bush.tree ? 6 : 2);
     v.fx.add(0.5, (f, age) => {
       f.b.fillStyle = bush.tree ? PAL.o : PAL.p;
@@ -193,7 +193,7 @@ export class Wild {
       b.ripe = o.season === 3 ? Math.max(0, b.ripe - 0.03 * dt) : Math.min(1, b.ripe + (b.tree ? TREE_GROW : BUSH_GROW)[o.season] * dt);
       // Only close up: from further out a bush is a speck that just clutters the land.
       if (z < 3) continue;
-      const X = Math.round(v.sx(b.x));
+      const X = Math.round(v.sx(b.x, b.y));
       const Y = Math.round(v.py(b.x, b.y));
       if (!on(X, Y) || v.fogged?.(b.x, b.y)) continue;
       const k = z >= 6 ? 2 : 1;
@@ -210,7 +210,7 @@ export class Wild {
         if (c.hide > 0) continue;
         const dx = Math.sin(t * 0.8 + c.ph) > 0.3 ? Math.sign(Math.sin(t * 0.3 + c.ph)) * 0.6 * dt : 0;
         if (biomeAt(is, c.x + dx, c.y) === Biome.Sand) c.x += dx;
-        const X = Math.round(v.sx(c.x));
+        const X = Math.round(v.sx(c.x, c.y));
         const Y = Math.round(v.py(c.x, c.y));
         if (!on(X, Y) || v.fogged?.(c.x, c.y)) continue;
         const legs = Math.floor(t * 10 + c.ph) % 2;
@@ -244,7 +244,7 @@ export class Wild {
           f.dir = close ? (close.x < f.x ? 1 : -1) : Math.random() < 0.5 ? 1 : -1;
         }
       } else f.up += dt;
-      const X = v.sx(f.x);
+      const X = v.sx(f.x, f.y);
       const Y = v.py(f.x, f.y);
       const lift = Math.max(0, f.up);
       // Insects are only seen close up (from far out they would be giants over the land).
@@ -350,7 +350,7 @@ export class Wild {
           g.x = nx;
           g.y = ny;
         }
-        const X = Math.round(v.sx(g.x));
+        const X = Math.round(v.sx(g.x, g.y));
         const Y = Math.round(v.py(g.x, g.y));
         if (!on(X, Y) || v.fogged?.(g.x, g.y)) continue;
         const moving = Math.hypot(g.vx, g.vy) > 0.1;
@@ -364,7 +364,7 @@ export class Wild {
     this.herds = this.herds.filter((h) => {
       if (h.gone < 25) return true;
       // (Or, if they've got stuck at the water's edge in view, after a while longer anyway.)
-      return h.gone < 90 && h.members.some((g) => on(v.sx(g.x), v.py(g.x, g.y)));
+      return h.gone < 90 && h.members.some((g) => on(v.sx(g.x, g.y), v.py(g.x, g.y)));
     });
   }
 
