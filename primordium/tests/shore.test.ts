@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { spoke, surroundings, situationOf, upgradeCost, workSign, signReady, prayerRate, destinations, natureOf, crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
+import { upgradeOpen, spoke, surroundings, situationOf, upgradeCost, workSign, signReady, prayerRate, destinations, natureOf, crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import { UPGRADES, type GenId } from '../src/content/idle';
 import type { TribeState } from '../src/economy/types';
@@ -124,6 +124,9 @@ describe('Food, the idle way', () => {
     expect(canCross(s)).toBe(true);
     expect(embersFor(s)).toBe(46);
     const chief = s.people.find((p) => p.id === s.chief)!.name;
+    // (The council crosses only if it's remembered; the envoy, not remembered, stays behind.)
+    s.ups.push('envoy');
+    s.perks = { council: 1 };
     expect(cross(state)).toBe(true);
     const n = shoreOf(state)!;
     expect(n).not.toBe(s);
@@ -393,12 +396,30 @@ describe('Food, the idle way', () => {
     const s = lit(state, { forager: 5 });
     while (s.people.length < 12) s.people.push({ id: 1000 + s.people.length, name: 'X', born: -30 });
     s.food = 1e4;
+    // (Not before the Village Age.)
+    expect(buyUpgrade(state, 'council')).toBe(false);
+    s.culture = { since: 0, age: 2, practice: {}, done: [], forks: {} };
     expect(buyUpgrade(state, 'council')).toBe(true);
     expect(s.auto).toBe(true);
     expect(councilPick(s)).toBeTruthy();
     const had = Object.values(s.gens).reduce((a, n) => a + (n ?? 0), 0);
     shoreTick(state, 60);
     expect(Object.values(s.gens).reduce((a, n) => a + (n ?? 0), 0)).toBeGreaterThan(had);
+  });
+  it('the council learns in steps: the Great Work only once it plans; the envoy after a village is won', () => {
+    const state = fresh();
+    const s = lit(state, { forager: 5 });
+    while (s.people.length < 210) s.people.push({ id: 2000 + s.people.length, name: 'X', born: -30 });
+    s.culture = { since: 0, age: 2, practice: {}, done: [], forks: {} };
+    s.food = 1e4;
+    expect(buyUpgrade(state, 'council')).toBe(true);
+    expect(upgradeOpen(s, 'council3')).toBe(false);
+    expect(upgradeOpen(s, 'envoy')).toBe(false);
+    s.villages[0].won = s.day;
+    expect(upgradeOpen(s, 'envoy')).toBe(true);
+    s.food = 2e6;
+    expect(buyUpgrade(state, 'council2')).toBe(true);
+    expect(s.ups).toContain('council2');
   });
   it('left to the council, a village grows to a hundred in a few hours', () => {
     const state = fresh();

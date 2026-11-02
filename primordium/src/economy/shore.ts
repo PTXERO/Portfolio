@@ -733,6 +733,8 @@ export function upgradeOpen(s: ShoreState, id: string): boolean {
   const u = UPGRADES.find((x) => x.id === id);
   if (!u || s.ups.includes(id) || !s.raftTaken) return false;
   if (u.needGen && count(s, u.needGen[0]) < u.needGen[1]) return false;
+  if (u.needUp && !s.ups.includes(u.needUp)) return false;
+  if (u.needWon && !s.villages.some((v) => v.won !== undefined)) return false;
   if (u.age !== undefined && (s.culture?.age ?? 0) < u.age) return false;
   return u.critters === undefined || totalCritters(s) >= u.critters || richEnough(s, u.cost);
 }
@@ -930,7 +932,17 @@ export function nextIslandSeed(s: ShoreState): number {
 }
 /** What crosses with them: the embers, and what the village knows how to do (buying ten, the
  * most, the council, the tender, the scouts, the envoy, the lore-keepers). The rest stays. */
-const KEPT_ACROSS = new Set(['auto', 'feature', 'scouts', 'envoy', 'voice', 'prayer']);
+const KEPT_ACROSS = new Set(['feature', 'scouts', 'voice', 'prayer']);
+/** What only crosses if it's remembered (an ember perk): the council (and all it learned), the
+ * envoy, the fire-tender. */
+function keptAcross(s: ShoreState, id: string): boolean {
+  const u = UPGRADES.find((x) => x.id === id);
+  if (!u) return false;
+  if (u.fx.kind === 'auto') return perk(s, 'council') > 0;
+  if (u.fx.kind === 'envoy') return perk(s, 'envoy') > 0;
+  if (u.fx.kind === 'feature' && u.fx.feature === 'tender') return perk(s, 'tender') > 0;
+  return KEPT_ACROSS.has(u.fx.kind);
+}
 /** Setting out: the chief and three of the eldest take a raft to a new island; the rest stay to
  * keep the old one. Everything starts again there but the embers and the know-how. */
 export function cross(state: GameState, seed = 0): boolean {
@@ -954,8 +966,8 @@ export function cross(state: GameState, seed = 0): boolean {
   next.perks = s.perks ? { ...s.perks } : undefined;
   next.food = 10 * 10 ** perk(s, 'seed');
   if (perk(s, 'charts')) for (const v of next.villages) chart(next, v);
-  next.ups = s.ups.filter((id) => KEPT_ACROSS.has(UPGRADES.find((u) => u.id === id)?.fx.kind ?? ''));
-  next.auto = s.auto;
+  next.ups = s.ups.filter((id) => keptAcross(s, id));
+  next.auto = s.auto && next.ups.includes('council');
   record(state, `${crew.map((p) => p.name).join(', ')} set out for a new island, with ${gained} ember${gained === 1 ? '' : 's'} from the fire. The rest stayed.`, 'shore', shoreWhen(s));
   const st = state.stages.shore;
   st.shore = next;
@@ -1492,9 +1504,16 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
       councilT.set(s, 0);
       // (A Great Work on offer: the elders save for it, and raise it themselves; only what's
       // cheap next to it is still bought meanwhile.)
-      const w = workOpen(s);
+      // (Only once it's learned to: before that, the Great Work is yours to raise.)
+      const plans = has(s, 'council2');
+      const w = plans ? workOpen(s) : undefined;
       if (w && s.food >= w.cost) buyWork(state);
       else {
+        // (Upgrades, once it's wise enough: the cheapest it can pay for, if it's not saving.)
+        if (has(s, 'council3')) {
+          const up = UPGRADES.filter((u) => upgradeOpen(s, u.id) && upgradeCost(s, u) <= s.food && (!w || upgradeCost(s, u) < w.cost * 0.01)).sort((a, b) => upgradeCost(s, a) - upgradeCost(s, b))[0];
+          if (up) buyUpgrade(state, up.id);
+        }
         // (As much as there's food for, the best first each time: the bank doesn't pile up while
         // the council dawdles.)
         for (let n = 0; n < COUNCIL_MOST; n++) {

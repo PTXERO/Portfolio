@@ -39,6 +39,12 @@ function nowNext(id: PerkId, lv: number): [string, string] {
       return [`Battles cost ${15 * lv}% fewer`, `${15 * (lv + 1)}%`];
     case 'charts':
       return [lv ? 'Every village known on landing' : 'Land knowing every village', ''];
+    case 'tender':
+      return [lv ? 'Lands with the fire-tender' : 'Land with the fire-tender', ''];
+    case 'envoy':
+      return [lv ? 'Lands with the envoy' : 'Land with the envoy', ''];
+    case 'council':
+      return [lv ? 'Lands with the council, all it knew' : 'Land with the council, all it knew', ''];
   }
 }
 
@@ -133,7 +139,7 @@ export class EmberView {
       const ok = buyPerkOk(s, p.id);
       const [now, next] = nowNext(p.id, lv);
       const pips = Array.from({ length: p.most }, (_, i) => `<i${i < lv ? ' class="on"' : ''}></i>`).join('');
-      const what = lv === 0 && p.id !== 'charts' ? p.does : `${now}${next && cost !== null ? ` <b>→ ${next}</b>` : ''}`;
+      const what = lv === 0 && p.most > 1 ? p.does : `${now}${next && cost !== null ? ` <b>→ ${next}</b>` : ''}`;
       return `<div class="ember-card${ok ? ' can' : ''}${cost === null ? ' full' : ''}" data-id="${p.id}">
         <div class="ember-name">${p.name}</div>
         <div class="ember-pips">${pips}</div>

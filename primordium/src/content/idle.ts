@@ -78,6 +78,10 @@ export interface UpgradeDef {
   fx: UpgradeFx;
   /** Shown once there are this many of a generator. */
   needGen?: [GenId, number];
+  /** Only after this upgrade. */
+  needUp?: string;
+  /** Only once a village has been won. */
+  needWon?: boolean;
   /** Shown once there are this many critters. */
   critters?: number;
   /** Only from this Age on. */
@@ -121,8 +125,12 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'seers', name: 'Seers', does: 'Sign: Light in the fog.', cost: 2e5, fx: { kind: 'voice', miracle: 'light' }, critters: 40 },
   { id: 'awe', name: 'The awe', does: 'Sign: Awe.', cost: 3e6, fx: { kind: 'voice', miracle: 'awe' }, critters: 70 },
   { id: 'vigils', name: 'Night vigils', does: 'Prayer ×2, holds ×2.', cost: 5e7, fx: { kind: 'prayer', mult: 2 }, critters: 120 },
-  { id: 'council', name: 'The council', does: 'Buys for you, and saves for the Great Work.', cost: 800, fx: { kind: 'auto' }, critters: 12 },
-  { id: 'envoy', name: 'An envoy', does: 'Gifts kin for you.', cost: 2000, fx: { kind: 'envoy' }, critters: 15 },
+  // The council: first it only buys gatherers and homes; it learns to save for the Great Work,
+  // then to buy upgrades too.
+  { id: 'council', name: 'The council', does: 'Buys gatherers and homes for you.', cost: 800, fx: { kind: 'auto' }, critters: 12, age: 2 },
+  { id: 'council2', name: 'Elders who plan', does: 'The council saves for the Great Work, and raises it.', cost: 1e6, fx: { kind: 'auto' }, critters: 200, age: 2, needUp: 'council' },
+  { id: 'council3', name: 'A council of the wise', does: 'The council buys upgrades too.', cost: 1e9, fx: { kind: 'auto' }, critters: 500, age: 3, needUp: 'council2' },
+  { id: 'envoy', name: 'An envoy', does: 'Gifts kin for you.', cost: 2000, fx: { kind: 'envoy' }, critters: 15, needWon: true },
   { id: 'scouts', name: 'Scouts', does: 'Two scouts explore the fog.', cost: 400, fx: { kind: 'scouts' }, critters: 8 },
   { id: 'feast1', name: 'Feast days', does: 'All food ×1.25.', cost: 5e4, fx: { kind: 'all', mult: 1.25 }, critters: 30 },
   { id: 'games', name: 'The great games', does: 'All food ×2.', cost: 5e10, fx: { kind: 'all', mult: 2 }, critters: 900 },
@@ -144,7 +152,7 @@ export const WORKS: { id: BuildId; age: number; name: string; does: string; cost
 
 /** What embers buy: for good, on every island after (each has levels, dearer each time). Spending
  * embers never takes from their passive boost: that goes by every ember ever brought. */
-export type PerkId = 'seed' | 'crew' | 'trades' | 'coals' | 'fireborn' | 'warsongs' | 'charts';
+export type PerkId = 'seed' | 'crew' | 'trades' | 'coals' | 'fireborn' | 'warsongs' | 'charts' | 'council' | 'envoy' | 'tender';
 export const PERKS: { id: PerkId; name: string; does: string; cost: number; growth: number; most: number }[] = [
   { id: 'seed', name: 'Seed stores', does: 'Land with ×10 food.', cost: 2, growth: 2, most: 6 },
   { id: 'trades', name: 'Remembered trades', does: 'All gatherers ×2.', cost: 4, growth: 3, most: 10 },
@@ -153,6 +161,10 @@ export const PERKS: { id: PerkId; name: string; does: string; cost: number; grow
   { id: 'crew', name: 'A bigger raft', does: 'Raft carries one more.', cost: 5, growth: 2, most: 4 },
   { id: 'warsongs', name: 'War songs', does: 'Beating a village: 15% fewer critters.', cost: 6, growth: 2, most: 3 },
   { id: 'charts', name: 'Charts', does: 'Land knowing every village.', cost: 12, growth: 1, most: 1 },
+  // (Who they bring the know-how of: without these, each island learns it all again.)
+  { id: 'tender', name: 'A tender remembered', does: 'Land with the fire-tender.', cost: 5, growth: 1, most: 1 },
+  { id: 'envoy', name: 'An envoy remembered', does: 'Land with the envoy.', cost: 8, growth: 1, most: 1 },
+  { id: 'council', name: 'The council remembered', does: 'Land with the council, all it knew.', cost: 15, growth: 1, most: 1 },
 ];
 
 /** What an island is like (each one after the first has a nature, seen from the raft before
