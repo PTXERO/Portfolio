@@ -110,7 +110,7 @@ export function shoreLayout(state: GameState, tab: string): string {
   if (chronView === 'island') return views + islandLayout(s);
   if (chronView === 'culture') return views + cultureLayout(s);
   if (chronView === 'story') return views + tellingLayout(state, s);
-  return views + `<div class="seg build-cats"><button class="px-btn" data-camera="home">See the hearth</button><button class="px-btn" data-camera="chief">See the chief</button></div>` + hearthCard(s) + peopleCard(s);
+  return views + `<div class="seg build-cats"><button class="px-btn" data-camera="home">See the hearth</button><button class="px-btn" data-camera="chief">See the chief</button><button class="px-btn" data-act="eye">Through their eyes</button></div>` + hearthCard(s) + peopleCard(s);
 }
 
 /** The hearth: what comes in, the critters and their beds. */

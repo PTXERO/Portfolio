@@ -592,6 +592,18 @@ Each diet wants different things first, so the island looks different to each:
     boost, and the pull stops. (Open: a real branch, or there for the story.)
 - Its words are `[STORY]`, the user's to write. It's the bridge toward Orbit.
 
+## 12b. Through their eyes *(prototype live)*
+
+A first-person view from where the chief stands (Chronicle → Village → "Through their eyes"),
+in its own chunk (≈4 KB gzipped), loaded only when opened, its GL context freed on leaving; the
+map isn't drawn meanwhile. A fragment shader casts a ray per (low-res, 1/3 scale) pixel over the
+same height map, ground colours and fog as the 2.5D view: smooth slopes, sun light from the
+time of day, darker cliff faces, a speckle within each tile, water with ripples, sky reflection
+and glint, the fog of war as mist, haze into the sky; sky with sun, glow and stars at night.
+Heights at a third of the map's lift (the map exaggerates them so hills read from above). Drag
+to look; tap to walk the way you're looking. *Next*: creatures, huts, the fire and villages
+standing in it (billboards, WebGL2 with depth); then trees, grass, reeds and rocks (both views).
+
 ## 12. Polish backlog (back burner)
 
 - **Biomes in 2.5D**: forests and meadows as 2D sprites standing on the 3D land (trees, grass

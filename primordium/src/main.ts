@@ -336,6 +336,62 @@ function collectNews(): void {
 
 /** Whether New Shore's island is still being made or loaded (nothing of it runs meanwhile). */
 let waitingIsland = false;
+// ---- Through their eyes (loaded only when asked for) ----
+
+let eye: import('./scene/eyeView').EyeView | null = null;
+const EYE_LIFT = 0.33;
+let eyeMod: typeof import('./scene/eyeView') | null = null;
+async function openEye(): Promise<void> {
+  const s = shoreOf(state);
+  if (!s || eye || state.current !== 'shore') return;
+  try {
+    eyeMod ??= await import('./scene/eyeView');
+    eye = new eyeMod.EyeView(
+      stageEl,
+      (dir) => {
+        const at = shoreOf(state)?.chiefAt;
+        if (at) walkChief(state, { x: at.x + dir.x * 24, y: at.y + dir.y * 24 });
+      },
+      closeEye,
+    );
+    // (Looking the way they were walking, or toward the hearth.)
+    const to = s.chiefTo ?? s.hearth;
+    if (Math.hypot(to.x - s.chiefAt.x, to.y - s.chiefAt.y) > 1) eye.yaw = Math.atan2(to.y - s.chiefAt.y, to.x - s.chiefAt.x);
+    if (!isWide()) ui.open = false;
+    modal.hidden = true;
+    render();
+  } catch (err) {
+    // (No WebGL, or the shader wouldn't build here: the map stays.)
+    console.error('eye view', err);
+    eye?.dispose();
+    eye = null;
+  }
+}
+function closeEye(): void {
+  eye?.dispose();
+  eye = null;
+  render();
+}
+function drawEye(): void {
+  const s = shoreOf(state);
+  const map = scene.shoreScene;
+  const inp = map.shadeInputs();
+  if (!s || !eye || state.current !== 'shore') {
+    if (eye) closeEye();
+    return;
+  }
+  // (The island's data not ready yet: the map makes it, so it draws once to have it.)
+  if (!inp) {
+    scene.draw(state, 0.016);
+    return;
+  }
+  // (The map lifts the land a lot so hills read from above; from the ground a third of that.)
+  const k = map.liftTilt[0] * EYE_LIFT;
+  const ground = map.heightAt(s.chiefAt.x, s.chiefAt.y);
+  const day = map.dayAt ?? 0.3;
+  eye.draw(inp, { x: s.chiefAt.x, y: s.chiefAt.y, z: ground * k + 1.1 }, k, eyeMod!.skyLight(day), performance.now() / 1000);
+}
+
 /** The crew chooser redrawn where it is (the lists keep their scroll). */
 function crewRefresh(): void {
   const s = shoreOf(state);
@@ -2133,6 +2189,9 @@ function act(el: HTMLElement): void {
         }
         break;
       }
+      case 'eye':
+        void openEye();
+        break;
       case 'cross-ask': {
         const s = shoreOf(state);
         if (!s || !canCross(s)) break;
@@ -2571,7 +2630,9 @@ function frame(now: number): void {
   if (acc < FRAME_MS) return;
   const dt = Math.min(acc, 100) / 1000;
   acc %= FRAME_MS;
-  scene.draw(state, dt);
+  // (Through their eyes, the map rests: the eye view draws instead.)
+  if (eye) drawEye();
+  else scene.draw(state, dt);
   nameLeaving();
   // The Extinction's countdown, worked on a little each frame (about 4 ms at most).
   if (guessJob) {
