@@ -127,23 +127,6 @@ export const IDEAS: Idea[] = [
   { id: 'libraries', lane: 'words', age: 5, name: 'Libraries', does: 'All food +60%.', fx: { food: 0.6 } },
   { id: 'lawcodes', lane: 'words', age: 5, name: 'Codes of law', does: 'Gift trust +50%.', fx: { gift: 0.5 } },
 
-  // The Age of Sail.
-  { id: 'spice', lane: 'food', age: 6, name: 'Spice routes', does: 'All food +60%.', fx: { food: 0.6 } },
-  { id: 'estates', lane: 'food', age: 6, name: 'Great estates', does: 'All food +50%.', fx: { food: 0.5 } },
-  { id: 'shipyards', lane: 'crafts', age: 6, name: 'Shipyards', does: 'Sight +4.', fx: { sight: 4 } },
-  { id: 'lodestone', lane: 'crafts', age: 6, name: 'The lodestone', does: 'All food +60%.', fx: { food: 0.6 } },
-  { id: 'navy', lane: 'war', age: 6, name: 'A navy', does: 'All food +50%.', fx: { food: 0.5 } },
-  { id: 'seaforts', lane: 'war', age: 6, name: 'Sea forts', does: 'Stoke ×2.', fx: { tap: 1 } },
-  { id: 'onerule', lane: 'rule', age: 6, name: 'Many islands, one rule', does: 'Gift trust +60%.', fx: { gift: 0.6 } },
-  { id: 'governors', lane: 'rule', age: 6, name: 'Governors', does: 'All food +50%.', fx: { food: 0.5 } },
-  { id: 'portcities', lane: 'kin', age: 6, name: 'Port cities', does: 'Births +40%.', fx: { births: 0.4 } },
-  { id: 'sailors', lane: 'kin', age: 6, name: 'Sailors from everywhere', does: 'All food +50%.', fx: { food: 0.5 } },
-  { id: 'seaprayers', lane: 'rites', age: 6, name: 'Prayers for the sea', does: 'Growing up +40%.', fx: { grow: 0.4 } },
-  { id: 'blessing', lane: 'rites', age: 6, name: 'Blessing the boats', does: 'All food +50%.', fx: { food: 0.5 } },
-  { id: 'seacharts', lane: 'stories', age: 6, name: 'Sea charts', does: 'Sight +4.', fx: { sight: 4 } },
-  { id: 'voyages', lane: 'stories', age: 6, name: 'Sagas of the voyages', does: 'All food +60%.', fx: { food: 0.6 } },
-  { id: 'printing', lane: 'words', age: 6, name: 'Printing', does: 'All food +70%.', fx: { food: 0.7 } },
-  { id: 'logbooks', lane: 'words', age: 6, name: 'Ships\' logs', does: 'All food +50%.', fx: { food: 0.5 } },
 ];
 
 export const FORKS: Record<ForkId, { name: string; ask: string; options: { id: string; name: string; line: string; fx?: Partial<Boosts>; lane?: Lane; cannibal?: boolean }[] }> = {
@@ -209,7 +192,7 @@ function cost(c: Culture, lane: Lane): number {
   return (IDEA_COST + had * IDEA_MORE) * (AGE_HARDER[c.age] ?? 1);
 }
 /** Later Ages' ideas take more practice (the village doing more, more is needed to learn). */
-const AGE_HARDER: Record<number, number> = { 3: 3, 4: 8, 5: 20, 6: 50 };
+const AGE_HARDER: Record<number, number> = { 3: 3, 4: 8, 5: 20 };
 /** A focused lane gathers this much more. */
 const FOCUS = 2;
 /** Days a fork waits for an answer before the elders give one. */
@@ -374,8 +357,8 @@ export const AGES: { name: string; work?: BuildId; workName?: string }[] = [
   { name: 'The Bronze Age', work: 'hall', workName: 'the Chief\'s Hall' },
   { name: 'The Iron Age', work: 'forum', workName: 'the Forum' },
   { name: 'The Republic', work: 'senatehouse', workName: 'the Senate House' },
-  { name: 'The Age of Sail', work: 'lighthouse', workName: 'the Great Lighthouse' },
-  { name: 'Beyond the Sea' },
+  // (New Shore's era ends with the Republic: the Senate House raised, the sea is next.)
+  { name: 'The Age of Sail' },
 ];
 export function ageName(age: number): string {
   return AGES[age]?.name ?? 'The Long Road';
@@ -406,6 +389,13 @@ export function ageOver(state: GameState, s: ShoreState): void {
   if (!was?.work || !count(s, was.work)) return;
   c.age++;
   c.focus = undefined;
+  // The Republic's the last of New Shore's Ages: the era's done, and the sea's next.
+  if (!AGES[c.age]?.work && !ageHasIdeas(c.age)) {
+    s.news.push(`${was.name} stands. The island is theirs. The sea is next.`);
+    record(state, `${cap(was.workName ?? 'The Great Work')} was raised. The Republic stood, the island one people of many kinds, and they looked out to sea. [STORY]`, 'shore', shoreWhen(s));
+    (s.agesNew ??= []).push(c.age);
+    return;
+  }
   s.news.push(`${was.name} is over. ${ageName(c.age)} begins.`);
   record(state, `${cap(was.workName ?? 'The Great Work')} was finished, and ${was.name.toLowerCase()} was over. ${ageName(c.age)} began. [STORY]`, 'shore', shoreWhen(s));
   (s.agesNew ??= []).push(c.age);

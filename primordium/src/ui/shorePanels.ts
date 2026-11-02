@@ -660,7 +660,7 @@ function cultureLayout(s: ShoreState): string {
   }).join('');
   const asking = c.asking ? `<div class="card px-box raid"><div class="info"><div class="name">${FORKS[c.asking.fork].name}</div><div class="sub">${FORKS[c.asking.fork].ask}</div></div><div class="col"><button class="px-btn gold" data-forkcard="${c.asking.fork}">Decide</button></div></div>` : '';
   const workCard = !work
-    ? `<div class="card px-box"><div class="info"><div class="name">${name}</div><div class="sub">More in a future update.</div></div></div>`
+    ? `<div class="card px-box"><div class="info"><div class="name">${name}</div><div class="sub">The Republic stands: New Shore's era is done. The next era, out on the sea, is coming.</div></div></div>`
     : `<div class="card px-box"><div class="info"><div class="name">The Age's Great Work: ${workName}</div><div class="sub">${workReady(s) ? `Ready: see Build.` : `Needs ${LANES_FOR_WORK} lanes done (${done} so far).`}</div></div></div>`;
   if (!ageHasIdeas(c.age)) return `<div class="panel-head"><h2>The Long Road</h2><span class="dim">${name}</span></div>${workCard}${forksCard(s)}`;
   return `<div class="panel-head"><h2>The Long Road</h2><span class="dim">${name}</span></div>

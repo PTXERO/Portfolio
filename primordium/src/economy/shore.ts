@@ -44,8 +44,7 @@ export const CENTRES: { id: BuildId | null; name: string; most: number; age: num
   { id: 'hall', name: 'The Chief\'s Hall', most: 1200, age: 3 },
   { id: 'forum', name: 'The Forum', most: 2400, age: 4 },
   { id: 'senatehouse', name: 'The Senate House', most: 5000, age: 5 },
-  { id: 'lighthouse', name: 'The Great Lighthouse', most: 10000, age: 6 },
-  { id: null, name: 'The Port City', most: 20000, age: 7 },
+
 ];
 
 /** What the heart of the village is now, and what it'll be next. */
