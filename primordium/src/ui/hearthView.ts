@@ -454,7 +454,7 @@ export class HearthView {
     // The words: how hot, and what it's worth.
     const more = fireMore(s);
     this.bar.style.width = `${Math.round(heat * 100)}%`;
-    const text = `Each stoke +${format(D(tapValue(s)))} · the fire's heat: everything ×${(1 + more).toFixed(2)} (up to ×${1 + fireMost(s)}) · ${format(D(foodRate(s)))}/s`;
+    const text = `Stoke +${format(D(tapValue(s)))} · all food ×${(1 + more).toFixed(2)} (max ×${1 + fireMost(s)}) · ${format(D(foodRate(s)))}/s`;
     if (this.stats.textContent !== text) this.stats.textContent = text;
   }
 }

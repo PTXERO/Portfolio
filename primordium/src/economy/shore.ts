@@ -185,6 +185,8 @@ export interface ShoreState {
   /** How hot the hearth is, 0 to 1 (worked out from the fuel on it: see fireHeat). A hot fire
    * cooks more of what's brought in (everything, up to fireMost more). */
   heat?: number;
+  /** Older saves given the features that used to be free (see keepFeatures). */
+  featuresKept?: boolean;
   /** What's been piled on the fire: every stoke adds some, and it burns away by itself. */
   fuel?: number;
   people: ShorePerson[];
@@ -507,6 +509,7 @@ export function newShore(tribe: TribeState): ShoreState {
     cannibal,
     villages: w.villages,
     news: [],
+    featuresKept: true,
     newFinds: [],
   };
 }
@@ -545,6 +548,11 @@ export function count(s: ShoreState, id: BuildId | GenId): number {
   return s.ups.includes(id) ? 1 : 0;
 }
 
+/** How grown they are, 0 (just born) to 1 (grown up). */
+export function growth(s: ShoreState, p: ShorePerson): number {
+  const today = s.day + s.clock / DAY_SEC;
+  return Math.min(1, Math.max(0, (today - p.born) / (GROW_DAYS / (1 + boosts(s).grow))));
+}
 export function isAdult(s: ShoreState, p: ShorePerson): boolean {
   return p.born <= adultCut(s);
 }
@@ -849,7 +857,7 @@ export const SEASON_NAMES = ['Spring', 'Summer', 'Autumn', 'Winter'];
  * the idle way passes through as it is.)
  */
 export function idleShore(raw: ShoreState & Record<string, unknown>): ShoreState {
-  if (raw.gens && raw.ups) return raw;
+  if (raw.gens && raw.ups) return keepFeatures(raw);
   const built = (raw.built ?? []) as { id: string }[];
   const n = (id: string) => built.filter((b) => b.id === id).length;
   const gens: Partial<Record<GenId, number>> = {};
@@ -884,6 +892,19 @@ export function idleShore(raw: ShoreState & Record<string, unknown>): ShoreState
   });
   s.news = [...(raw.news ?? [])];
   s.newFinds = [...(raw.newFinds ?? [])];
+  return keepFeatures(s);
+}
+
+/** Buying ten, buying the most, and focusing a lane were free before they were upgrades: a save
+ * from then that's far enough on keeps them (once, when it's first loaded). */
+function keepFeatures(s: ShoreState): ShoreState {
+  if (s.featuresKept) return s;
+  s.featuresKept = true;
+  const owned = Object.values(s.gens).reduce((n, x) => n + (x ?? 0), 0);
+  const give = (id: string) => !s.ups.includes(id) && s.ups.push(id);
+  if (owned >= 15) give('tally');
+  if (owned >= 40) give('counting');
+  if (s.culture?.focus) give('lore');
   return s;
 }
 
@@ -905,7 +926,22 @@ export function canTake(s: ShoreState, v: Village): boolean {
 /** Food a gift takes: more the bigger they are, and the further on the village is (a gift's
  * worth a while of what comes in). */
 export function giftCost(s: ShoreState, v: Village): number {
-  return Math.ceil(Math.max(10 + v.pop * 0.8, foodRate(s) * 20));
+  return Math.ceil(Math.max(10 + v.pop * 0.8, baseRate(s) * 20));
+}
+/** Food a second without the fire's heat (what prices go by: a hot fire doesn't make them dearer). */
+export function baseRate(s: ShoreState): number {
+  return foodRate(s) / (1 + fireMore(s));
+}
+/** With Warm nights, the fire's heat speeds births and ideas too (at half its strength on food). */
+export function warmth(s: ShoreState): number {
+  return has(s, 'warmth') ? 1 + fireMore(s) * 0.5 : 1;
+}
+/** Whether the village has learned to do something (an upgrade bought). */
+export function can(s: ShoreState, feature: 'buy10' | 'buymax' | 'tender' | 'focus'): boolean {
+  return s.ups.some((id) => {
+    const fx = UPGRADES.find((u) => u.id === id)?.fx;
+    return fx?.kind === 'feature' && fx.feature === feature;
+  });
 }
 /** What beating them takes: food for the war band (more the bigger they are), and at least as
  * many critters as there are of them. */
@@ -945,7 +981,7 @@ export function take(state: GameState, id: number): boolean {
 
 function win(state: GameState, s: ShoreState, v: Village, line: string): void {
   v.won = s.day + s.clock / DAY_SEC;
-  s.news.push(`${cap(v.name)} are yours: everything brings in ${Math.round(WON_MORE * 100)}% more.`);
+  s.news.push(`${cap(v.name)} are yours: +${Math.round(WON_MORE * 100)}% food.`);
   record(state, line, 'shore', shoreWhen(s));
 }
 
@@ -1071,8 +1107,15 @@ export function shoreTick(state: GameState, dt: number): void {
 function stepShore(state: GameState, s: ShoreState, dt: number): void {
   const k = dt / DAY_SEC;
   if (s.raftTaken) {
-    const cool = fireFx(s).cool;
-    s.fuel = Math.max(0, (s.fuel ?? 0) * Math.exp(-FIRE_BURN * cool * dt) - FIRE_BURN_MIN * cool * dt);
+    const f = fireFx(s);
+    const k = FIRE_BURN * f.cool;
+    // (A fire-tender feeds it every 2s: it settles where what's fed matches what burns, worked
+    // out exactly, so it holds as well over a night away as over a minute.)
+    const fed = can(s, 'tender') ? f.fuel / 2 : 0;
+    if (fed) {
+      const eq = Math.max(0, (fed - FIRE_BURN_MIN * f.cool) / k);
+      s.fuel = eq + ((s.fuel ?? 0) - eq) * Math.exp(-k * dt);
+    } else s.fuel = Math.max(0, (s.fuel ?? 0) * Math.exp(-k * dt) - FIRE_BURN_MIN * f.cool * dt);
     s.heat = fireHeat(s);
   }
   // What comes in, comes in (nothing's eaten, nothing spoils: it only ever goes up).
@@ -1088,7 +1131,7 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
   // Children: wherever there's a fire and a bed free, and grown pairs.
   const adults = grownCount(s);
   if (count(s, 'hearth') && s.people.length < Math.min(room(s), hearthMost(s)) && adults >= 2) {
-    s.birthT += Math.max(1, Math.floor(adults / 2)) * PAIR_RATE * (1 + boosts(s).births) * k;
+    s.birthT += Math.max(1, Math.floor(adults / 2)) * PAIR_RATE * (1 + boosts(s).births) * warmth(s) * k;
     if (s.birthT >= 1) {
       s.birthT = 0;
       born(state, s);
@@ -1487,7 +1530,7 @@ function explore(state: GameState, s: ShoreState, dt: number): void {
   const dup = (f.relic && s.relics?.includes(f.relic)) || (f.learn && s.learned?.includes(f.learn));
   // (What's found to eat is worth a while of what comes in: as much as it says, or so many
   // seconds' worth, whichever's more.)
-  const worth = (n: number) => Math.round(Math.max(n, foodRate(s) * n));
+  const worth = (n: number) => Math.round(Math.max(n, baseRate(s) * n));
   if (dup) s.food += worth(30);
   else {
     if (f.relic) (s.relics ??= []).push(f.relic);

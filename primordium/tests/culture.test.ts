@@ -15,7 +15,7 @@ function village(n: number) {
   const s = shoreOf(state)!;
   takeRaft(state);
   s.gens = { forager: 20, camp: 10, hut: 40 };
-  s.ups.push('council', 'scouts');
+  s.ups.push('council', 'scouts', 'lore');
   while (s.people.length < n) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30, dies: 9999 });
   return { state, s };
 }

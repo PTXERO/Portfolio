@@ -194,14 +194,14 @@ export interface RelicDef {
 }
 
 export const RELICS: RelicDef[] = [
-  { id: 'antler', name: 'Carved bone', does: 'Everything brings in 5% more.', fx: { food: 0.05 } },
+  { id: 'antler', name: 'Carved bone', does: 'All food +5%.', fx: { food: 0.05 } },
   { id: 'axe', name: 'Black stone axe', does: 'Stoking the fire brings a quarter more.', fx: { tap: 0.25 } },
   { id: 'shell', name: 'Spiral shell', does: 'Gifts win 15% more trust.', fx: { gift: 0.15 } },
   { id: 'beads', name: 'Stone beads', does: 'Children are born 8% more often.', fx: { births: 0.08 } },
   { id: 'crystal', name: 'Clear stone', does: 'The chief and the scouts see 3 tiles further.', fx: { sight: 3 } },
   { id: 'wraps', name: 'Old foot-wraps', does: 'The chief and the scouts walk 8% faster.', fx: { speed: 0.08 } },
   { id: 'figure', name: 'Clay figure', does: 'Children grow up 8% faster.', fx: { grow: 0.08 } },
-  { id: 'shard', name: 'Humming shard', does: 'Everything brings in 10% more. It hums like the spear.', fx: { food: 0.1 } },
+  { id: 'shard', name: 'Humming shard', does: 'All food +10%.', fx: { food: 0.1 } },
 ];
 
 export const POI_SORT = { natural: 'Landmark', ruin: 'Ruins', strange: 'Strange' } as const;

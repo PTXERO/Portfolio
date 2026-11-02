@@ -1116,7 +1116,7 @@ export class RangeScene {
     return l;
   }
 
-  protected drawBeing(b: CanvasRenderingContext2D, look: CreatureLook, x: number, y: number, o: { left?: boolean; frame?: number; sleeping?: boolean; hero?: boolean; hop?: number }): void {
+  protected drawBeing(b: CanvasRenderingContext2D, look: CreatureLook, x: number, y: number, o: { left?: boolean; frame?: number; sleeping?: boolean; hero?: boolean; hop?: number; size?: number }): void {
     const z = this.zoom;
     const X = this.sx(x);
     const Y = this.py(x, y);
@@ -1130,7 +1130,7 @@ export class RangeScene {
       }
       const k = z >= 6 ? 2 : 1;
       // A cute little hop while it moves: up to a couple of pixels, the shadow staying put.
-      const opts = { left: o.left, frame: o.frame, sleeping: o.sleeping, scale: k, hop: (o.hop ?? 0) * k };
+      const opts = { left: o.left, frame: o.frame, sleeping: o.sleeping, scale: k, hop: (o.hop ?? 0) * k * (o.size ?? 1), size: o.size };
       drawMini(b, look, X, Y, opts);
     });
   }

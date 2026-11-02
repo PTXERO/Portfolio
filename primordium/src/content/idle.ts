@@ -26,15 +26,15 @@ export interface GenDef {
 }
 
 export const GENS: GenDef[] = [
-  { id: 'forager', name: 'Foragers', does: 'Critters out picking what the land gives.', cost: 10, growth: 1.12, rate: 0.4 },
-  { id: 'camp', name: 'Gathering camp', does: 'A lean-to out on the land, where the gathering\'s brought in.', cost: 110, growth: 1.13, rate: 3, critters: 6, shows: 'camp' },
-  { id: 'weir', name: 'Fishing weir', does: 'Stakes across the water: the fish swim in and can\'t get out.', cost: 1300, growth: 1.14, rate: 22, critters: 12, shows: 'weir' },
-  { id: 'lodge', name: 'Hunting lodge', does: 'Where the hunters set out from, and bring the game back to.', cost: 16e3, growth: 1.15, rate: 170, critters: 25, shows: 'lodge' },
-  { id: 'garden', name: 'Gardens', does: 'What they gathered, planted: it grows where they want it.', cost: 2.2e5, growth: 1.15, rate: 1400, critters: 45, shows: 'garden' },
-  { id: 'granary', name: 'Granary', does: 'Stores raised off the ground: nothing spoils, everything goes further.', cost: 3.2e6, growth: 1.16, rate: 1.2e4, critters: 80, shows: 'granary' },
-  { id: 'market', name: 'Market', does: 'Market days: the island\'s plenty comes to the hearth.', cost: 5e7, growth: 1.17, rate: 1e5, critters: 140, shows: 'market' },
-  { id: 'hut', name: 'Hut', does: 'Room for 4 more critters.', cost: 25, growth: 1.18, room: 4, shows: 'hut' },
-  { id: 'longhouse', name: 'Longhouse', does: 'A long hall of beds: room for 12.', cost: 2500, growth: 1.2, room: 12, critters: 30, shows: 'longhouse' },
+  { id: 'forager', name: 'Foragers', does: 'Pick what the land gives.', cost: 10, growth: 1.12, rate: 0.4 },
+  { id: 'camp', name: 'Gathering camp', does: 'A lean-to for the gathering.', cost: 110, growth: 1.13, rate: 3, critters: 6, shows: 'camp' },
+  { id: 'weir', name: 'Fishing weir', does: 'Fish swim in, not out.', cost: 1300, growth: 1.14, rate: 22, critters: 12, shows: 'weir' },
+  { id: 'lodge', name: 'Hunting lodge', does: 'Hunters out, game back.', cost: 16e3, growth: 1.15, rate: 170, critters: 25, shows: 'lodge' },
+  { id: 'garden', name: 'Gardens', does: 'Plant what they gathered.', cost: 2.2e5, growth: 1.15, rate: 1400, critters: 45, shows: 'garden' },
+  { id: 'granary', name: 'Granary', does: 'Nothing spoils.', cost: 3.2e6, growth: 1.16, rate: 1.2e4, critters: 80, shows: 'granary' },
+  { id: 'market', name: 'Market', does: 'The island trades here.', cost: 5e7, growth: 1.17, rate: 1e5, critters: 140, shows: 'market' },
+  { id: 'hut', name: 'Hut', does: 'Beds for 4.', cost: 25, growth: 1.18, room: 4, shows: 'hut' },
+  { id: 'longhouse', name: 'Longhouse', does: 'Beds for 12.', cost: 2500, growth: 1.2, room: 12, critters: 30, shows: 'longhouse' },
 ];
 
 /** An upgrade: bought once, for good. */
@@ -52,7 +52,12 @@ export type UpgradeFx =
   | { kind: 'fire'; more: number }
   | { kind: 'fireFuel'; mult: number }
   | { kind: 'fireCool'; mult: number }
-  | { kind: 'fireFloor'; floor: number };
+  | { kind: 'fireFloor'; floor: number }
+  /** The fire's heat speeds births and ideas too (at half its strength on food). */
+  | { kind: 'fireAll' }
+  /** Things the village can do once it's learned how: buy ten at once, buy as many as there's
+   * food for, a tender who stokes the fire, keepers of lore who choose what's thought about. */
+  | { kind: 'feature'; feature: 'buy10' | 'buymax' | 'tender' | 'focus' };
 
 export interface UpgradeDef {
   id: string;
@@ -73,7 +78,7 @@ const DOUBLERS: UpgradeDef[] = GENS.filter((g) => g.rate).flatMap((g) =>
   ([10, 25, 50] as const).map((n, i) => ({
     id: `${g.id}${n}`,
     name: [`Better ${g.name.toLowerCase()}`, `Skilled ${g.name.toLowerCase()}`, `Master ${g.name.toLowerCase()}`][i],
-    does: `${g.name} bring in twice as much.`,
+    does: `${g.name} ×2.`,
     cost: Math.round(g.cost * [12, 60, 400][i]),
     fx: { kind: 'gen' as const, gen: g.id, mult: 2 },
     needGen: [g.id, n] as [GenId, number],
@@ -81,28 +86,33 @@ const DOUBLERS: UpgradeDef[] = GENS.filter((g) => g.rate).flatMap((g) =>
 );
 
 export const UPGRADES: UpgradeDef[] = [
-  { id: 'stoke1', name: 'Dry kindling', does: 'Stoking the fire brings twice as much.', cost: 50, fx: { kind: 'tap', mult: 2 } },
-  { id: 'stoke2', name: 'A good blaze', does: 'Stoking the fire brings in a second\'s worth of everything else too.', cost: 3000, fx: { kind: 'tapRate', share: 1 }, critters: 10 },
-  { id: 'stoke3', name: 'The fire-keepers', does: 'Stoking brings in five seconds\' worth.', cost: 2e5, fx: { kind: 'tapRate', share: 4 }, critters: 40 },
+  { id: 'stoke1', name: 'Dry kindling', does: 'Stoke ×2.', cost: 50, fx: { kind: 'tap', mult: 2 } },
+  { id: 'stoke2', name: 'A good blaze', does: 'Each stoke: +1s of food.', cost: 3000, fx: { kind: 'tapRate', share: 1 }, critters: 10 },
+  { id: 'stoke3', name: 'The fire-keepers', does: 'Each stoke: +5s of food.', cost: 2e5, fx: { kind: 'tapRate', share: 4 }, critters: 40 },
   // The fire's own line: a hotter fire, easier to build up, slower to die down.
-  { id: 'firering', name: 'A ring of stones', does: 'Stones round the fire hold the heat: at its hottest, everything brings in ×2.5 (was ×2).', cost: 600, fx: { kind: 'fire', more: 0.5 }, critters: 6 },
-  { id: 'tinder', name: 'Tinder and kindling', does: 'Each stoke puts twice as much on the fire.', cost: 2500, fx: { kind: 'fireFuel', mult: 2 }, critters: 10 },
-  { id: 'woodpile', name: 'A woodpile', does: 'Good dry wood by the fire: it burns down half as fast.', cost: 9000, fx: { kind: 'fireCool', mult: 0.5 }, critters: 16 },
-  { id: 'firepit', name: 'A fire pit', does: 'Dug deep and lined with stone: at its hottest, everything brings in ×3.5.', cost: 2e5, fx: { kind: 'fire', more: 1 }, critters: 35 },
-  { id: 'embers', name: 'Banked embers', does: 'Someone always keeps it in: the fire never falls below a quarter of its heat.', cost: 4e6, fx: { kind: 'fireFloor', floor: 0.25 }, critters: 70 },
-  { id: 'logs', name: 'Great logs', does: 'Whole trunks on the fire: each stoke puts on three times as much.', cost: 3e7, fx: { kind: 'fireFuel', mult: 3 }, critters: 110 },
-  { id: 'bonfire', name: 'The bonfire', does: 'A fire the whole island can see: at its hottest, everything brings in ×6.', cost: 1e8, fx: { kind: 'fire', more: 2.5 }, critters: 140 },
-  { id: 'council', name: 'The council', does: 'The elders buy what\'s most worth buying, by themselves, whenever there\'s the food (turn it off and on in the Build tab).', cost: 800, fx: { kind: 'auto' }, critters: 12 },
-  { id: 'envoy', name: 'An envoy', does: 'Carries gifts to the kin being won over, by themselves, when there\'s food to spare.', cost: 2000, fx: { kind: 'envoy' }, critters: 15 },
-  { id: 'scouts', name: 'Scouts', does: 'Two scouts go out into the fog by themselves, finding villages and landmarks.', cost: 400, fx: { kind: 'scouts' }, critters: 8 },
-  { id: 'feast1', name: 'Feast days', does: 'Everything brings in a quarter more.', cost: 5e4, fx: { kind: 'all', mult: 1.25 }, critters: 30 },
-  { id: 'feast2', name: 'The harvest festival', does: 'Everything brings in half again as much.', cost: 4e6, fx: { kind: 'all', mult: 1.5 }, critters: 90 },
+  { id: 'firering', name: 'A ring of stones', does: 'Fire max: food ×2.5.', cost: 600, fx: { kind: 'fire', more: 0.5 }, critters: 6 },
+  { id: 'tinder', name: 'Tinder and kindling', does: 'Stokes add 2× fuel.', cost: 2500, fx: { kind: 'fireFuel', mult: 2 }, critters: 10 },
+  { id: 'woodpile', name: 'A woodpile', does: 'Fire burns down 2× slower.', cost: 9000, fx: { kind: 'fireCool', mult: 0.5 }, critters: 16 },
+  { id: 'firepit', name: 'A fire pit', does: 'Fire max: food ×3.5.', cost: 2e5, fx: { kind: 'fire', more: 1 }, critters: 35 },
+  { id: 'embers', name: 'Banked embers', does: 'Fire never below ¼ heat.', cost: 4e6, fx: { kind: 'fireFloor', floor: 0.25 }, critters: 70 },
+  { id: 'logs', name: 'Great logs', does: 'Stokes add 3× fuel.', cost: 3e7, fx: { kind: 'fireFuel', mult: 3 }, critters: 110 },
+  { id: 'bonfire', name: 'The bonfire', does: 'Fire max: food ×6.', cost: 1e8, fx: { kind: 'fire', more: 2.5 }, critters: 140 },
+  { id: 'tender', name: 'A fire-tender', does: 'Feeds the fire every 2s.', cost: 1500, fx: { kind: 'feature', feature: 'tender' }, critters: 10 },
+  { id: 'warmth', name: 'Warm nights', does: 'The fire speeds births and ideas too.', cost: 4e5, fx: { kind: 'fireAll' }, critters: 45 },
+  { id: 'tally', name: 'Tally sticks', does: 'Buy ×10.', cost: 200, fx: { kind: 'feature', feature: 'buy10' }, critters: 6 },
+  { id: 'counting', name: 'Counting stones', does: 'Buy Max.', cost: 6000, fx: { kind: 'feature', feature: 'buymax' }, critters: 14 },
+  { id: 'lore', name: 'Lore-keepers', does: 'Focus a culture lane: its ideas ×2.', cost: 3e6, fx: { kind: 'feature', feature: 'focus' }, critters: 100 },
+  { id: 'council', name: 'The council', does: 'Buys the best deal for you.', cost: 800, fx: { kind: 'auto' }, critters: 12 },
+  { id: 'envoy', name: 'An envoy', does: 'Gifts kin for you.', cost: 2000, fx: { kind: 'envoy' }, critters: 15 },
+  { id: 'scouts', name: 'Scouts', does: 'Two scouts explore the fog.', cost: 400, fx: { kind: 'scouts' }, critters: 8 },
+  { id: 'feast1', name: 'Feast days', does: 'All food ×1.25.', cost: 5e4, fx: { kind: 'all', mult: 1.25 }, critters: 30 },
+  { id: 'feast2', name: 'The harvest festival', does: 'All food ×1.5.', cost: 4e6, fx: { kind: 'all', mult: 1.5 }, critters: 90 },
   ...DOUBLERS,
 ];
 
 /** The Great Works: one closes each Age (bought with food once the culture's ready for it),
  * and the village round the hearth holds more after it. */
 export const WORKS: { id: BuildId; age: number; name: string; does: string; cost: number; most: number }[] = [
-  { id: 'greathearth', age: 1, name: 'The Great Hearth', does: 'A fire for all of them at once: it closes the Hearth Age, and the village round it holds 300.', cost: 4e5, most: 300 },
-  { id: 'square', age: 2, name: 'The Town Square', does: 'Flagstones round a standing stone: it closes the Village Age, and the village round it holds 600.', cost: 6e7, most: 600 },
+  { id: 'greathearth', age: 1, name: 'The Great Hearth', does: 'Ends the Hearth Age. Holds 300.', cost: 4e5, most: 300 },
+  { id: 'square', age: 2, name: 'The Town Square', does: 'Ends the Village Age. Holds 600.', cost: 6e7, most: 600 },
 ];

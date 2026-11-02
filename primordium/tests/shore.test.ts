@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { allMult, boosts, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
+import { allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import type { GenId } from '../src/content/idle';
 import type { TribeState } from '../src/economy/types';
@@ -88,6 +88,33 @@ describe('Food, the idle way', () => {
     expect(foodRate(s)).toBeCloseTo(cold * 3.5, 6);
     shoreTick(state, 600);
     expect(foodRate(s)).toBeCloseTo(cold * (1 + 2.5 * 0.25), 6);
+  });
+  it('the fire is food only: gifts don\'t get dearer with it; Warm nights spreads it to births and ideas; a fire-tender keeps it at half', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    lit(state);
+    buyGen(state, 'forager');
+    s.gens.forager = 400;
+    const v = s.villages[0];
+    const g0 = giftCost(s, v);
+    for (let i = 0; i < 200; i++) stoke(state);
+    expect(giftCost(s, v)).toBe(g0);
+    expect(baseRate(s)).toBeCloseTo(foodRate(s) / 2, 6);
+    expect(warmth(s)).toBe(1);
+    s.ups.push('warmth');
+    expect(warmth(s)).toBeCloseTo(1.5, 6);
+    s.ups.push('tender');
+    shoreTick(state, 3600);
+    expect(s.heat).toBeGreaterThan(0.4);
+    expect(s.heat).toBeLessThan(0.6);
+  });
+  it('an older save far enough on keeps buying ten, the most, and its focus', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    s.gens = { forager: 30, hut: 20 };
+    s.featuresKept = undefined;
+    keep(s as never);
+    expect(s.ups).toEqual(expect.arrayContaining(['tally', 'counting']));
   });
   it('the hearth lit, stoking brings food; foragers bring it in by themselves; and it only ever goes up', () => {
     const state = fresh();

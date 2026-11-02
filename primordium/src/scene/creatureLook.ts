@@ -428,9 +428,10 @@ export function drawMini(
   look: CreatureLook,
   x: number,
   groundY: number,
-  opts: { left?: boolean; frame?: number; sleeping?: boolean; scale?: number; hop?: number } = {},
+  opts: { left?: boolean; frame?: number; sleeping?: boolean; scale?: number; hop?: number; size?: number } = {},
 ): void {
-  const k = Math.max(1, Math.round(opts.scale ?? 1));
+  // (`size` below 1 draws it smaller: a child, say. The pixel scale stays whole otherwise.)
+  const k = Math.max(1, Math.round(opts.scale ?? 1)) * Math.min(1, Math.max(0.3, opts.size ?? 1));
   // (A look's own part of the key, made once for it: a thousand of them are drawn a frame.)
   let base = lookKeys.get(look);
   if (base === undefined) {
@@ -444,17 +445,17 @@ export function drawMini(
     m = bakeMini(look, opts.frame ?? 0, !!opts.sleeping);
     miniCache.set(key, m);
   }
-  const X = Math.round(x) - (MW / 2) * k;
+  const X = Math.round(Math.round(x) - (MW / 2) * k);
   const G = Math.round(groundY);
   // The shadow sits on the ground under the feet, wider the closer the creature is to it.
   const hop = Math.round(opts.hop ?? 0);
   const shrink = Math.min(2, Math.floor(hop / k / 2));
   b.fillStyle = 'rgba(16,20,31,0.3)';
-  b.fillRect(X + (3 + shrink) * k, G - k, (MW - 6 - shrink * 2) * k, k);
+  b.fillRect(Math.round(X + (3 + shrink) * k), G - Math.max(1, Math.round(k)), Math.round((MW - 6 - shrink * 2) * k), Math.max(1, Math.round(k)));
   b.save();
   b.imageSmoothingEnabled = false;
   // The feet's row lands on the shadow's row.
-  const Y = G - (m.foot + 1) * k - hop;
+  const Y = Math.round(G - (m.foot + 1) * k - hop);
   if (opts.left) {
     b.translate(X + MW * k, Y);
     b.scale(-k, k);

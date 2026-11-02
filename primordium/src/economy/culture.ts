@@ -7,7 +7,7 @@
 
 import type { BuildId, Boosts } from '../content/shore';
 import { record } from './chronicle';
-import { count, DAY_SEC, has, isAdult, poisOf, poiDef, relation, shoreWhen, totalCritters, type ShoreState } from './shore';
+import { can, count, DAY_SEC, has, warmth, isAdult, poisOf, poiDef, relation, shoreWhen, totalCritters, type ShoreState } from './shore';
 import type { GameState } from './types';
 
 export type Lane = 'food' | 'crafts' | 'war' | 'rule' | 'kin' | 'rites' | 'stories' | 'words';
@@ -38,40 +38,40 @@ export interface Idea {
 
 /** Each Age's ideas: two a lane. */
 export const IDEAS: Idea[] = [
-  { id: 'dried', lane: 'food', age: 1, name: 'Dried meat and fruit', does: 'Everything brings in 5% more.', fx: { food: 0.05 } },
-  { id: 'grounds', lane: 'food', age: 1, name: 'Known grounds', does: 'Everything brings in 10% more.', fx: { food: 0.1 } },
-  { id: 'blades', lane: 'crafts', age: 1, name: 'Stone blades', does: 'Stoking the fire brings half again as much.', fx: { tap: 0.5 } },
-  { id: 'baskets', lane: 'crafts', age: 1, name: 'Baskets', does: 'Everything brings in 10% more.', fx: { food: 0.1 } },
-  { id: 'watchers', lane: 'war', age: 1, name: 'Watchers', does: 'The chief and the scouts see 2 tiles further.', fx: { sight: 2 } },
-  { id: 'clubs', lane: 'war', age: 1, name: 'Clubs', does: 'Stoking the fire brings half again as much.', fx: { tap: 0.5 } },
-  { id: 'fourword', lane: 'rule', age: 1, name: 'The four\'s word', does: 'What the four said is law: gifts win 10% more trust.', fx: { gift: 0.1 } },
-  { id: 'circle', lane: 'rule', age: 1, name: 'The elders\' circle', does: 'Children grow up 10% faster.', fx: { grow: 0.1 } },
-  { id: 'hearths', lane: 'kin', age: 1, name: 'Mixed hearths', does: 'Children are born 10% more often.', fx: { births: 0.1 } },
-  { id: 'songs', lane: 'kin', age: 1, name: 'Shared songs', does: 'Gifts win 15% more trust.', fx: { gift: 0.15 } },
+  { id: 'dried', lane: 'food', age: 1, name: 'Dried meat and fruit', does: 'All food +5%.', fx: { food: 0.05 } },
+  { id: 'grounds', lane: 'food', age: 1, name: 'Known grounds', does: 'All food +10%.', fx: { food: 0.1 } },
+  { id: 'blades', lane: 'crafts', age: 1, name: 'Stone blades', does: 'Stoke +50%.', fx: { tap: 0.5 } },
+  { id: 'baskets', lane: 'crafts', age: 1, name: 'Baskets', does: 'All food +10%.', fx: { food: 0.1 } },
+  { id: 'watchers', lane: 'war', age: 1, name: 'Watchers', does: 'Sight +2.', fx: { sight: 2 } },
+  { id: 'clubs', lane: 'war', age: 1, name: 'Clubs', does: 'Stoke +50%.', fx: { tap: 0.5 } },
+  { id: 'fourword', lane: 'rule', age: 1, name: 'The four\'s word', does: 'Gift trust +10%.', fx: { gift: 0.1 } },
+  { id: 'circle', lane: 'rule', age: 1, name: 'The elders\' circle', does: 'Growing up +10%.', fx: { grow: 0.1 } },
+  { id: 'hearths', lane: 'kin', age: 1, name: 'Mixed hearths', does: 'Births +10%.', fx: { births: 0.1 } },
+  { id: 'songs', lane: 'kin', age: 1, name: 'Shared songs', does: 'Gift trust +15%.', fx: { gift: 0.15 } },
   { id: 'dead', lane: 'rites', age: 1, name: 'The dead', does: 'How the dead are seen to: a choice.', fork: 'dead' },
-  { id: 'feast', lane: 'rites', age: 1, name: 'The first feast', does: 'Everything brings in 10% more.', fx: { food: 0.1 } },
-  { id: 'crossing', lane: 'stories', age: 1, name: 'The Crossing told', does: 'Everything brings in 10% more.', fx: { food: 0.1 } },
-  { id: 'farspear', lane: 'stories', age: 1, name: 'The spear far off', does: 'The chief and the scouts see 2 tiles further.', fx: { sight: 2 } },
-  { id: 'names', lane: 'words', age: 1, name: 'Names for everything', does: 'The chief and the scouts walk 10% faster.', fx: { speed: 0.1 } },
-  { id: 'fingers', lane: 'words', age: 1, name: 'Finger-counting', does: 'Everything brings in 10% more.', fx: { food: 0.1 } },
+  { id: 'feast', lane: 'rites', age: 1, name: 'The first feast', does: 'All food +10%.', fx: { food: 0.1 } },
+  { id: 'crossing', lane: 'stories', age: 1, name: 'The Crossing told', does: 'All food +10%.', fx: { food: 0.1 } },
+  { id: 'farspear', lane: 'stories', age: 1, name: 'The spear far off', does: 'Sight +2.', fx: { sight: 2 } },
+  { id: 'names', lane: 'words', age: 1, name: 'Names for everything', does: 'Walk +10%.', fx: { speed: 0.1 } },
+  { id: 'fingers', lane: 'words', age: 1, name: 'Finger-counting', does: 'All food +10%.', fx: { food: 0.1 } },
 
   // The Village Age.
-  { id: 'salting', lane: 'food', age: 2, name: 'Salted stores', does: 'Everything brings in 20% more.', fx: { food: 0.2 } },
+  { id: 'salting', lane: 'food', age: 2, name: 'Salted stores', does: 'All food +20%.', fx: { food: 0.2 } },
   { id: 'markets', lane: 'food', age: 2, name: 'Market days', does: 'How the villages deal with the hearth: a choice.', fork: 'trade' },
-  { id: 'kilns', lane: 'crafts', age: 2, name: 'Fired clay', does: 'Everything brings in 20% more.', fx: { food: 0.2 } },
-  { id: 'roadcraft', lane: 'crafts', age: 2, name: 'Roadcraft', does: 'The chief and the scouts walk 15% faster.', fx: { speed: 0.15 } },
-  { id: 'levies', lane: 'war', age: 2, name: 'Sworn levies', does: 'Stoking the fire brings twice as much.', fx: { tap: 1 } },
-  { id: 'shields', lane: 'war', age: 2, name: 'Hide shields', does: 'Everything brings in 15% more.', fx: { food: 0.15 } },
-  { id: 'oaths', lane: 'rule', age: 2, name: 'Oaths of fealty', does: 'Gifts win a quarter more trust.', fx: { gift: 0.25 } },
+  { id: 'kilns', lane: 'crafts', age: 2, name: 'Fired clay', does: 'All food +20%.', fx: { food: 0.2 } },
+  { id: 'roadcraft', lane: 'crafts', age: 2, name: 'Roadcraft', does: 'Walk +15%.', fx: { speed: 0.15 } },
+  { id: 'levies', lane: 'war', age: 2, name: 'Sworn levies', does: 'Stoke ×2.', fx: { tap: 1 } },
+  { id: 'shields', lane: 'war', age: 2, name: 'Hide shields', does: 'All food +15%.', fx: { food: 0.15 } },
+  { id: 'oaths', lane: 'rule', age: 2, name: 'Oaths of fealty', does: 'Gift trust +25%.', fx: { gift: 0.25 } },
   { id: 'law', lane: 'rule', age: 2, name: 'The spoken law', does: 'Whose word is law: a choice.', fork: 'law' },
-  { id: 'marriages', lane: 'kin', age: 2, name: 'Marriages between villages', does: 'Children are born a fifth more often.', fx: { births: 0.2 } },
-  { id: 'guests', lane: 'kin', age: 2, name: 'Guest-right', does: 'Everything brings in 15% more.', fx: { food: 0.15 } },
+  { id: 'marriages', lane: 'kin', age: 2, name: 'Marriages between villages', does: 'Births +20%.', fx: { births: 0.2 } },
+  { id: 'guests', lane: 'kin', age: 2, name: 'Guest-right', does: 'All food +15%.', fx: { food: 0.15 } },
   { id: 'faith', lane: 'rites', age: 2, name: 'What the fire is', does: 'What they keep faith with: a choice.', fork: 'faith' },
-  { id: 'feastdays', lane: 'rites', age: 2, name: 'Feast days', does: 'Everything brings in 20% more.', fx: { food: 0.2 } },
-  { id: 'founding', lane: 'stories', age: 2, name: 'The foundings told', does: 'Children grow up a fifth faster.', fx: { grow: 0.2 } },
-  { id: 'hidemaps', lane: 'stories', age: 2, name: 'Maps on hide', does: 'The chief and the scouts see 3 tiles further.', fx: { sight: 3 } },
-  { id: 'tallies', lane: 'words', age: 2, name: 'Tally sticks', does: 'Everything brings in 20% more.', fx: { food: 0.2 } },
-  { id: 'tithe', lane: 'words', age: 2, name: 'The tithe counted', does: 'Everything brings in 15% more.', fx: { food: 0.15 } },
+  { id: 'feastdays', lane: 'rites', age: 2, name: 'Feast days', does: 'All food +20%.', fx: { food: 0.2 } },
+  { id: 'founding', lane: 'stories', age: 2, name: 'The foundings told', does: 'Growing up +20%.', fx: { grow: 0.2 } },
+  { id: 'hidemaps', lane: 'stories', age: 2, name: 'Maps on hide', does: 'Sight +3.', fx: { sight: 3 } },
+  { id: 'tallies', lane: 'words', age: 2, name: 'Tally sticks', does: 'All food +20%.', fx: { food: 0.2 } },
+  { id: 'tithe', lane: 'words', age: 2, name: 'The tithe counted', does: 'All food +15%.', fx: { food: 0.15 } },
 ];
 
 export const FORKS: Record<ForkId, { name: string; ask: string; options: { id: string; name: string; line: string; fx?: Partial<Boosts>; lane?: Lane; cannibal?: boolean }[] }> = {
@@ -183,7 +183,7 @@ export function practiceRate(s: ShoreState, lane: Lane): number {
   }
   // The road chosen at a fork: its lane goes a little faster.
   for (const [f, o] of Object.entries(c?.forks ?? {})) if (FORKS[f as ForkId]?.options.find((x) => x.id === o)?.lane === lane) r *= 1.25;
-  return r * (c?.focus === lane ? FOCUS : 1);
+  return r * (c?.focus === lane && can(s, 'focus') ? FOCUS : 1) * warmth(s);
 }
 
 /** What the culture's ideas and forks add (folded into the village's boosts). */
