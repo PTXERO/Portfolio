@@ -1,4 +1,4 @@
-// Ooze to Orbit: the game screen. The scene sits in the middle and takes taps
+// Primordium: the game screen. The scene sits in the middle and takes taps
 // (and, in the Soup, circling fingers); tabs underneath hold everything else.
 
 import '@fontsource/pixelify-sans/latin-500.css';
@@ -75,7 +75,7 @@ import { boostReady, CURRENCY_ICON, finaleNeedsSwirl, finaleReady, heirloomReady
 // Pixelify Sans draws 5 like S, 2 like Z and 8 like B, and its capital B like a G ("Giomass").
 // Every digit, and B, comes from Jersey 10 instead (the other letters stay Pixelify), through
 // a font that covers only those.
-const digitsFont = new FontFace('Ooze Digits', `url(${jerseyDigits})`, { unicodeRange: 'U+0030-0039, U+0042', sizeAdjust: '118%' } as FontFaceDescriptors);
+const digitsFont = new FontFace('Primordium Digits', `url(${jerseyDigits})`, { unicodeRange: 'U+0030-0039, U+0042', sizeAdjust: '118%' } as FontFaceDescriptors);
 document.fonts.add(digitsFont);
 void digitsFont.load().then(() => render());
 
@@ -97,7 +97,8 @@ const UI_KEY = 'ooze-to-orbit/ui';
 
 let state: GameState = loadFromStorage() ?? createState();
 // For automated checks and debugging from the browser console.
-(window as unknown as { ooze: () => GameState }).ooze = () => state;
+(window as unknown as { primordium: () => GameState; ooze: () => GameState }).primordium = () => state;
+(window as unknown as { ooze: () => GameState }).ooze = () => state; // (the old name, for older scripts)
 const ui = (() => {
   try {
     return { tab: 'grow' as Tab, open: true, full: false, scale: 1, watching: false, tilt: null as number | null, ...JSON.parse(localStorage.getItem(UI_KEY) ?? '{}') };

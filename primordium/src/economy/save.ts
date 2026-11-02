@@ -10,6 +10,7 @@ import { D } from './num';
 import { packSeen, unpackSeen } from './island';
 import type { GameState, StageId, StageState } from './types';
 
+// (Keys keep the game's first name, so every save carries over.)
 const STORAGE_KEY = 'ooze-to-orbit/save';
 
 type SavedStage = Omit<StageState, 'currency' | 'totalEarned' | 'seen'> & { currency: string; totalEarned: string; seen: string };

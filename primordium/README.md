@@ -1,4 +1,4 @@
-# Ooze to Orbit (working title)
+# Primordium
 
 An idle creature-evolution game for iPhone. The design doc lives in Claude Docs; this folder is the code.
 

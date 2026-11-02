@@ -1,4 +1,4 @@
-/* Ooze to Orbit interface: pixel panels, chunky buttons, two pixel fonts.
+/* Primordium interface: pixel panels, chunky buttons, two pixel fonts.
    Borders are drawn with stacked box-shadows so corners come out notched,
    the way a sprite's would, at any size. */
 
@@ -21,7 +21,7 @@
   --mint: #7fe0b0;
   --mint-lo: #3f9c7e;
   --red: #e8615a;
-  --body: 'Ooze Digits', 'Pixelify Sans', monospace;
+  --body: 'Primordium Digits', 'Pixelify Sans', monospace;
   --digits: 'Jersey 10', 'Pixelify Sans', monospace;
   color-scheme: dark;
 }

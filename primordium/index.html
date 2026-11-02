@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Primordium" />
+    <meta name="theme-color" content="#10141f" />
+    <title>Primordium</title>
+  </head>
+  <body>
+    <div id="app">
+      <section id="stage">
+        <canvas id="scene"></canvas>
+        <div id="overlay-top">
+        <header id="hud" class="px-box">
+          <div class="hud-row">
+            <span id="stage-name" class="label"></span>
+            <span id="bank-chip" class="label dim"></span>
+          </div>
+          <div class="hud-row hud-main">
+            <span id="currency-icon"></span>
+            <span id="currency" class="num big"></span>
+            <span id="rate" class="dim"></span>
+          </div>
+          <div id="hud-news" class="ticker" hidden><span></span></div>
+        </header>
+        <div id="evolve" class="px-box" hidden></div>
+        <nav id="age-nav"></nav>
+        </div>
+        <div id="hint" class="label">Tap the soup to stir it</div>
+        <div id="modal" hidden></div>
+      </section>
+      <section id="sheet">
+        <button id="expand" class="px-btn" data-act="expand" aria-label="Full-height menu"><svg viewBox="0 0 7 4" width="21" height="12" shape-rendering="crispEdges" fill="currentColor"><path d="M3 0h1v1h1v1h1v1h1v1h-2v-1h-1v-1h-1v1h-1v1h-2v-1h1v-1h1v-1h1z"/></svg></button>
+        <div id="panel"></div>
+        <nav id="tabs"></nav>
+      </section>
+    </div>
+    <div id="ending" hidden></div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

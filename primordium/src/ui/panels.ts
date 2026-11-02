@@ -441,7 +441,7 @@ export function layout(state: GameState, tab: Tab): string {
       <button class="px-btn small" data-act="update">Check for updates</button>
       <button class="px-btn small" data-act="reset">Restart from the start</button>
     </div>
-    <p class="note">Ooze to Orbit · test build <span data-t="build"></span> · art and names are placeholders</p>`;
+    <p class="note">Primordium · test build <span data-t="build"></span> · art and names are placeholders</p>`;
 }
 
 /** The stage's collection: the Soup's Recipe Book or the Cell's Organelles. */

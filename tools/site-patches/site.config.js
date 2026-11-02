@@ -85,12 +85,12 @@ const SITE = {
       hidden: true,
     },
     {
-      id:     'ooze',
-      title:  'OOZE//ORBIT',
+      id:     'primordium',
+      title:  'PRIMORDIUM',
       sub:    'v0.1',
       desc:   'Idle evolution game, from primordial soup to orbit',
       tags:   [],
-      url:    './ooze/',
+      url:    './primordium/',
       status: 'wip',
     },
     // hidden for now (set hidden:false to bring back)
