@@ -2,8 +2,10 @@
 // batch of what's been brought in (food, there and then), and builds the fire up; a big fire
 // cooks more of everything while it lasts, and it dies down by itself if it's left.
 
-import { FIRE_MOST, fireMore, foodRate, tapValue, type ShoreState } from '../economy/shore';
-import { drawCreature } from '../scene/creatureLook';
+import { FIRE_MOST, fireMore, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
+import { drawCreature, type CreatureLook } from '../scene/creatureLook';
+import { pickTalk, type TalkCtx } from '../content/hearthTalk';
+import { squeak } from '../audio/sound';
 import { D, format } from '../economy/num';
 
 /** The art's own size: drawn small, shown big, hard pixel edges. */
@@ -14,7 +16,12 @@ const FY = 110;
 
 interface Bit { x: number; y: number; vx: number; vy: number; life: number; age: number; hot: number }
 /** What a critter round the fire is doing: hopping (seconds into it, after a moment's delay). */
-interface Seat { hop: number; wait: number; high: number; turn: number }
+interface Seat { hop: number; wait: number; high: number; turn: number; id: number; name: string; look?: CreatureLook; pitch: number }
+/** Two of them talking: who (seats), what, which line they're on, and how long it's been up. */
+interface Chat { who: [number, number]; lines: string[]; at: number; t: number }
+/** Where each one sits (and is, mid-hop), in the art's pixels, for the words over their heads. */
+interface Spot { x: number; y: number; base: number; left: boolean; i: number }
+const LINE_SECS = 2.8;
 /** A little picture over a critter's head: glad, startled, a song, love, sleepy. */
 type EmoteKind = 'bang' | 'note' | 'heart' | 'zzz' | 'sweat';
 interface Emote { seat: number; kind: EmoteKind; age: number }
@@ -44,6 +51,14 @@ export class HearthView {
   private streak = 0;
   private lastTap = -9;
   private still = 0;
+  private seatKey = '';
+  private spots: Spot[] = [];
+  private chat: Chat | null = null;
+  private nextChat = 4;
+  private lastTalks: number[] = [];
+  private bubble!: HTMLElement;
+  /** The rest of the game's state the talk needs (set each frame). */
+  private council = false;
   private t = 0;
   shown = false;
 
@@ -56,13 +71,15 @@ export class HearthView {
         <div class="hearth-heat"><span class="label">The fire</span><div class="heat-bar"><i></i></div></div>
         <div class="hearth-stats dim"></div>
       </div>
-      <div class="hearth-tip label">Tap the fire to stoke it</div>`;
+      <div class="hearth-tip label">Tap the fire to stoke it</div>
+      <div class="hearth-say" hidden><b></b><span></span></div>`;
     // (Under the top bar, the hints and the cards: over the map.)
     parent.insertBefore(this.el, parent.querySelector('#overlay-top'));
     this.c = this.el.querySelector('canvas')!;
     this.b = this.c.getContext('2d')!;
     this.stats = this.el.querySelector('.hearth-stats')!;
     this.bar = this.el.querySelector('.heat-bar i')!;
+    this.bubble = this.el.querySelector('.hearth-say')!;
     // (Taps here are for the fire only: none of them get through to the map underneath.)
     for (const ev of ['pointermove', 'pointerup', 'pointercancel', 'wheel', 'click'] as const) this.el.addEventListener(ev, (e) => e.stopPropagation());
     this.el.addEventListener('pointerdown', (e) => {
@@ -82,6 +99,11 @@ export class HearthView {
     if (on === this.shown) return;
     this.shown = on;
     this.el.hidden = !on;
+    if (!on) {
+      this.chat = null;
+      this.bubble.hidden = true;
+      this.nextChat = 3 + Math.random() * 4;
+    }
   }
 
   private pop(x: number, y: number, text: string): void {
@@ -114,6 +136,8 @@ export class HearthView {
     });
     const n = this.seats.length;
     if (!n) return;
+    // (A squeak or two from the ring: not all of them at once.)
+    for (let k = 0; k < Math.min(n, this.streak > 4 ? 2 : 1); k++) this.squeakFrom(Math.floor(Math.random() * n), 0.3);
     const say = (kind: EmoteKind) => {
       const free = [...Array(n).keys()].filter((i) => !this.emotes.some((e) => e.seat === i));
       if (free.length) this.emotes.push({ seat: free[Math.floor(Math.random() * free.length)], kind, age: 0 });
@@ -122,6 +146,110 @@ export class HearthView {
     else if (this.streak === 1) { if (Math.random() < 0.5) say('bang'); }
     else if (this.streak % 6 === 0) say(this.streak >= 18 ? 'heart' : 'note');
     else if (Math.random() < 0.08) say('note');
+  }
+
+  /** One of them squeaks, in their own voice, from where they sit. */
+  private squeakFrom(i: number, level: number, delay = 0): void {
+    const st = this.seats[i];
+    const sp = this.spots.find((q) => q.i === i);
+    if (!st) return;
+    const go = () => squeak(level, sp ? (sp.x - FX) / FX : 0, st.pitch);
+    if (delay) setTimeout(go, delay * 1000);
+    else go();
+  }
+
+  /** Who sits at the fire: the first eight of the village's own (a stranger's kind looks another way). */
+  private seat(s: ShoreState): void {
+    const own = s.people.filter((p: ShorePerson) => p.kind === undefined).slice(0, 8);
+    const key = own.map((p) => p.id).join();
+    if (key === this.seatKey) return;
+    this.seatKey = key;
+    const old = new Map(this.seats.map((st) => [st.id, st]));
+    this.seats = own.map((p) => {
+      const was = old.get(p.id);
+      return was ?? { hop: 0, wait: 0, high: 0, turn: 0, id: p.id, name: p.name, look: s.look ? (p.genes ? { ...s.look, genes: p.genes } : s.look) : undefined, pitch: 0.85 + ((p.id * 37) % 40) / 100 };
+    });
+    this.chat = null;
+    this.bubble.hidden = true;
+  }
+
+  /** Now and then, two of them talk: a line each, back and forth, squeaking as they go. */
+  private talk(s: ShoreState, dt: number): void {
+    const n = this.seats.length;
+    if (!this.chat) {
+      this.nextChat -= dt;
+      if (this.nextChat > 0 || n < 2) return;
+      const i = Math.floor(Math.random() * n);
+      let j = Math.floor(Math.random() * (n - 1));
+      if (j >= i) j++;
+      const byAge = [...s.people].sort((p, q) => p.born - q.born);
+      const here = new Set([this.seats[i].id, this.seats[j].id]);
+      const others = byAge.filter((p) => !here.has(p.id));
+      const ctx: TalkCtx = {
+        a: this.seats[i].name,
+        b: this.seats[j].name,
+        heat: s.heat ?? 0,
+        season: SEASON_NAMES[shoreSeason(s).si] as TalkCtx['season'],
+        critters: s.people.length,
+        food: format(D(s.food)),
+        rate: foodRate(s),
+        won: s.villages.filter((v) => v.won !== undefined).length,
+        age: s.culture?.age ?? 1,
+        young: others.length > 2 && s.day - others[others.length - 1].born < 40 ? others[others.length - 1].name : undefined,
+        old: others.length > 2 ? others[0].name : undefined,
+        foragers: s.gens.forager ?? 0,
+        huts: (s.gens.hut ?? 0) + (s.gens.longhouse ?? 0),
+        council: this.council,
+      };
+      const pick = pickTalk(ctx, this.lastTalks);
+      this.lastTalks = [...this.lastTalks.slice(-8), pick.i];
+      this.chat = { who: [i, j], lines: pick.lines, at: -1, t: LINE_SECS };
+    }
+    const c = this.chat;
+    c.t += dt;
+    if (c.t >= LINE_SECS) {
+      c.at++;
+      c.t = 0;
+      if (c.at >= c.lines.length) {
+        this.chat = null;
+        this.bubble.hidden = true;
+        this.nextChat = 10 + Math.random() * 14;
+        return;
+      }
+      const who = c.who[c.at % 2];
+      const line = c.lines[c.at];
+      (this.bubble.firstElementChild as HTMLElement).textContent = this.seats[who].name;
+      (this.bubble.lastElementChild as HTMLElement).textContent = line;
+      this.bubble.hidden = false;
+      this.el.querySelector('.hearth-tip')?.classList.add('gone');
+      this.bubble.classList.remove('in');
+      void this.bubble.offsetWidth;
+      this.bubble.classList.add('in');
+      // (Talking: a squeak a word or so, in their own voice, and a little hop on the first.)
+      const words = Math.min(4, 1 + Math.floor(line.split(' ').length / 3));
+      for (let k = 0; k < words; k++) this.squeakFrom(who, 0.16, k * 0.13);
+      const st = this.seats[who];
+      if (!st.hop) Object.assign(st, { hop: 0.0001, wait: 0, high: 1.5 });
+    }
+    // The words over the one speaking (they follow them as they hop).
+    const who = c.who[Math.max(0, c.at) % 2];
+    const sp = this.spots.find((q) => q.i === who);
+    if (!sp || this.bubble.hidden) return;
+    const r = this.el.getBoundingClientRect();
+    const k = Math.max(r.width / AW, r.height / AH);
+    const ox = (r.width - AW * k) * 0.5;
+    const oy = (r.height - AH * k) * 0.8;
+    const x = ox + sp.x * k;
+    const y = oy + (sp.y - 23) * k;
+    const w = this.bubble.offsetWidth;
+    this.bubble.style.left = `${Math.max(8, Math.min(r.width - w - 8, x - w / 2))}px`;
+    this.bubble.style.top = `${Math.max(8, y - this.bubble.offsetHeight)}px`;
+    this.bubble.style.setProperty('--tail', `${Math.max(12, Math.min(w - 12, x - Math.max(8, Math.min(r.width - w - 8, x - w / 2))))}px`);
+  }
+
+  /** Set by the game each frame: whether the council's buying by itself (for the talk). */
+  setCouncil(on: boolean): void {
+    this.council = on;
   }
 
   private spark(burst = false): void {
@@ -185,25 +313,29 @@ export class HearthView {
     b.fillStyle = g;
     b.fillRect(0, 0, AW, AH);
 
-    // Critters round the fire, lit on the side that faces it.
-    // (As many as there are, up to eight: half behind the fire, half in front.)
-    const seats = Math.min(8, Math.max(1, s.people.length));
-    while (this.seats.length < seats) this.seats.push({ hop: 0, wait: 0, high: 0, turn: 0 });
-    this.seats.length = seats;
+    // Critters round the fire, lit on the side that faces it: the first eight of the village,
+    // each in their own coat, with their own name and voice.
+    this.seat(s);
+    const seats = this.seats.length;
     this.emotes = this.emotes.filter((e) => e.seat < seats);
     // Left a while with the fire low, they nod off; with it roaring, they sit back from it.
     this.still += dt;
-    if (heat < 0.1 && this.still > 8 && Math.random() < dt * 0.3 && !this.emotes.some((e) => e.kind === 'zzz')) {
+    if (seats && heat < 0.1 && this.still > 8 && Math.random() < dt * 0.3 && !this.emotes.some((e) => e.kind === 'zzz')) {
       this.emotes.push({ seat: Math.floor(Math.random() * seats), kind: 'zzz', age: 0 });
     }
-    if (heat > 0.85 && Math.random() < dt * 0.4 && !this.emotes.some((e) => e.kind === 'sweat')) {
+    if (seats && heat > 0.85 && Math.random() < dt * 0.4 && !this.emotes.some((e) => e.kind === 'sweat')) {
       this.emotes.push({ seat: Math.floor(Math.random() * seats), kind: 'sweat', age: 0 });
     }
     const sitBack = 32 + heat * 4;
-    const ring: { x: number; y: number; left: boolean; i: number }[] = [];
+    const ring: Spot[] = [];
     for (let i = 0; i < seats; i++) {
       const a = Math.PI * 2 * ((i + 0.5) / seats) + 0.3;
       const st = this.seats[i];
+      // (Now and then one hops by themselves: restless, or just glad of the fire.)
+      if (!st.hop && Math.random() < dt * (0.04 + heat * 0.08)) {
+        Object.assign(st, { hop: 0.0001, wait: 0, high: 1 + Math.random() * 1.5 });
+        if (Math.random() < 0.3) this.squeakFrom(i, 0.08);
+      }
       let lift = 0;
       if (st.hop > 0) {
         if (st.wait > 0) st.wait -= dt;
@@ -216,23 +348,51 @@ export class HearthView {
       }
       if (st.turn > 0) st.turn = Math.max(0, st.turn - dt);
       const faceIn = Math.cos(a) > 0;
-      ring.push({ x: FX + Math.cos(a) * sitBack, y: FY + 5 + Math.sin(a) * 9 - lift, left: st.turn > 0.2 ? !faceIn : faceIn, i });
+      const base = FY + 5 + Math.sin(a) * 9;
+      ring.push({ x: FX + Math.cos(a) * sitBack, y: base - lift, base, left: st.turn > 0.2 ? !faceIn : faceIn, i });
     }
     // (Drawn back to front by where they sit, not where they've hopped to.)
-    const base = (r: { i: number }) => FY + 5 + Math.sin(Math.PI * 2 * ((r.i + 0.5) / seats) + 0.3) * 9;
-    ring.sort((p, q) => base(p) - base(q));
-    const back = ring.filter((r) => base(r) < FY + 5);
-    const front = ring.filter((r) => base(r) >= FY + 5);
-    const critter = (r: { x: number; y: number; left: boolean; i: number }) => {
+    ring.sort((p, q) => p.base - q.base);
+    this.spots = ring;
+    const back = ring.filter((r) => r.base < FY + 5);
+    const front = ring.filter((r) => r.base >= FY + 5);
+    // Their shadows, thrown away from the fire: longer when it's low, flickering with it, and
+    // smaller and fainter when they're up in the air.
+    for (const r of ring) {
+      // (Away from the fire across the ground: the ground's seen at a slant, so it's squashed.)
+      const dx = r.x - FX;
+      const dy = (r.base - FY) * 2.5;
+      const d = Math.hypot(dx, dy) || 1;
+      const lift = r.base - r.y;
+      const len = (9 + (1 - heat) * 7 + Math.sin(this.t * 11 + r.i) * 0.7) * (1 - lift / 14);
+      const ux = dx / d;
+      const uy = (dy / d) * 0.4;
+      b.save();
+      b.translate(r.x + ux * len * 0.5, r.base + uy * len * 0.5 + 0.5);
+      b.rotate(Math.atan2(uy, ux));
+      b.scale(1, 0.32);
+      const sh = b.createRadialGradient(0, 0, 0, 0, 0, len * 0.62);
+      const alpha = (0.5 + heat * 0.15) * (1 - lift / 10);
+      sh.addColorStop(0, `rgba(0,0,0,${alpha.toFixed(3)})`);
+      sh.addColorStop(0.7, `rgba(0,0,0,${(alpha * 0.6).toFixed(3)})`);
+      sh.addColorStop(1, 'rgba(0,0,0,0)');
+      b.fillStyle = sh;
+      b.beginPath();
+      b.arc(0, 0, len * 0.62, 0, Math.PI * 2);
+      b.fill();
+      b.restore();
+    }
+    const critter = (r: Spot) => {
       const st = this.seats[r.i];
-      // (Their shadow stays on the ground while they're up in the air.)
+      if (!st.look) return;
+      // (A dark spot right under them while they're up in the air.)
       if (st.hop && st.wait <= 0) {
         b.fillStyle = 'rgba(0,0,0,0.35)';
-        b.fillRect(Math.round(r.x - 6), Math.round(base(r)), 12, 1);
+        b.fillRect(Math.round(r.x - 5), Math.round(r.base), 10, 1);
       }
-      drawCreature(b, s.look!, Math.round(r.x), Math.round(r.y), { left: r.left, frame: st.hop && st.wait <= 0 ? 1 : 0 });
+      drawCreature(b, st.look, Math.round(r.x), Math.round(r.y), { left: r.left, frame: st.hop && st.wait <= 0 ? 1 : 0 });
     };
-    if (s.look) for (const r of back) critter(r);
+    for (const r of back) critter(r);
 
     // Stones and logs.
     b.fillStyle = '#4a4440';
@@ -258,7 +418,7 @@ export class HearthView {
       b.fillStyle = p.age / p.life < 0.5 ? '#ffd24a' : '#e0602a';
       b.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
     }
-    if (s.look) for (const r of front) critter(r);
+    for (const r of front) critter(r);
     // What they're saying, over their heads (rising a little, then gone).
     for (const e of this.emotes) {
       e.age += dt;
@@ -277,6 +437,7 @@ export class HearthView {
       pic.rows.forEach((row, yy) => [...row].forEach((ch, xx) => ch === 'x' && b.fillRect(x0 + xx, y0 + yy, 1, 1)));
     }
     this.emotes = this.emotes.filter((e) => e.age <= (e.kind === 'zzz' ? 2.4 : 1.1));
+    this.talk(s, dt);
 
     // The words: how hot, and what it's worth.
     const more = fireMore(s);

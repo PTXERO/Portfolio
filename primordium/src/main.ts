@@ -2481,7 +2481,10 @@ function frame(now: number): void {
   {
     const hs = shoreOf(state);
     hearthView.show(!!hs && ui.open && ui.tab === 'hearth' && !!STAGES[state.current].shore);
-    if (hs) hearthView.frame(hs, dt);
+    if (hs) {
+      hearthView.setCouncil(!!hs.auto && hs.ups.includes('council'));
+      hearthView.frame(hs, dt);
+    }
   }
   syncCine();
   habitatsOpened();

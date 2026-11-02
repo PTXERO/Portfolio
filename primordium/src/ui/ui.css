@@ -1023,3 +1023,30 @@ div.chart-node.other { cursor: default; }
 @keyframes hearth-pop { to { transform: translate(-50%, -260%); opacity: 0; } }
 body.tab-hearth #panel,
 body.tab-hearth #expand { display: none; }
+/* What they say to each other, over the one speaking. */
+#hearth .hearth-say {
+  position: absolute;
+  max-width: min(260px, 70%);
+  padding: 6px 10px 7px;
+  background: rgba(250, 240, 215, 0.94);
+  color: #2a1e14;
+  box-shadow: 0 0 0 2px #000, 0 4px 0 2px rgba(0, 0, 0, 0.35);
+  font-size: 14px;
+  line-height: 1.3;
+  pointer-events: none;
+}
+#hearth .hearth-say b { display: block; font-size: 11px; color: #a0522d; letter-spacing: 0.04em; }
+#hearth .hearth-say::after {
+  content: '';
+  position: absolute;
+  left: var(--tail, 50%);
+  bottom: -8px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  background: rgba(250, 240, 215, 0.94);
+  box-shadow: 2px 2px 0 0 #000;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+#hearth .hearth-say.in { animation: hearth-say 0.18s ease-out; }
+@keyframes hearth-say { from { transform: translateY(6px) scale(0.92); opacity: 0; } }
