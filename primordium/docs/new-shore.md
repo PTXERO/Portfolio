@@ -42,6 +42,22 @@ where they disagree; kept for the history and for ideas worth bringing back).
   has earned 25× its price (a rich, boosted island doesn't sit on millions waiting for the
   critters to unlock 9K upgrades); generators still open by critters (opening them early too made
   a boosted island's food, and its embers, run away).
+- **Their own tongue** (`src/economy/language.ts`). Sounds from the line's diet (soft for grazers,
+  hard for hunters), a grammar seeded once (word order SVO/SOV/VSO, adjectives before or after,
+  plural and past endings, a no-word before or after the verb, an asking-word at the front or end,
+  "is" dropped or not). The talk at the fire is said in it (the English lines are only what it
+  means underneath: tagged by a small built-in word list, articles dropped, grammar applied,
+  names kept); words are made the first time something needs saying, so the vocabulary grows with
+  the talk. Once a year a sound shift (k → ch before i, final vowels lost...), the old forms kept;
+  villages won lend words. **Chronicle → Words**: every word heard, how often, when (who said it,
+  the fire, the season), its old forms, where it came from, and a guess box: guesses show under
+  what they say at the fire. The **scribes** (Iron Age) write the meanings and the grammar down.
+  Crosses with them. Cheap: a line's worked out when said; shifts once a year.
+- **Party whistles.** A metal whistle cut into seven blows; when they sing at the hearth, and on
+  each turn of the fire dance, they whistle in their tongue: a syllable a blow, its vowel the
+  pitch, so the same word is always the same tune; higher and quicker as they get excited.
+- **The council spends the bank**: up to 200 buys a sitting (it bought one every 4s, and food
+  piled into millions, making everything look cheap).
 - **Spoken history.** Before they write, the Chronicle's Story page is **the telling**: told at
   the fire, and changed by retelling. Recent things exactly (20 days); then "some seasons ago",
   counted, not named (to 60 days); older, only the big things, as legend ("One of the four who

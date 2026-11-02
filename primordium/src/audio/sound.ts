@@ -20,7 +20,7 @@ export const CHANNELS: { id: Channel; label: string }[] = [
 
 const KEY = 'ooze-to-orbit/sound';
 /** Bumped when a sound file changes, so phones don't keep the old one. */
-const SFX_V = 16;
+const SFX_V = 17;
 const DEFAULTS: Record<Channel, number> = { master: 0.8, music: 0.6, ambience: 0.6, effects: 0.7 };
 
 /** The loops are padded either side (so the mp3's own gaps fall outside them): where each
@@ -60,7 +60,7 @@ export const volumes: Record<Channel, number> = (() => {
 let ctx: AudioContext | null = null;
 let master: GainNode;
 const bus = {} as Record<Exclude<Channel, 'master'>, GainNode>;
-type Sound = Loop | 'drops' | 'squeaks' | 'pop' | 'thunder0' | 'thunder1' | 'thunder2' | 'thunder3' | Cue;
+type Sound = Loop | 'drops' | 'squeaks' | 'whistles' | 'pop' | 'thunder0' | 'thunder1' | 'thunder2' | 'thunder3' | Cue;
 /** One-off sounds for moments: an organelle found, a rare microbe gulped down (three glugs),
  * one turning up, a new habitat opening, the boom from the Soup into the Cell, and the meteor's
  * approach (a rumble swelling to the moment it strikes, timed to the cutscene), its impact, and
@@ -138,7 +138,7 @@ export function unlockSound(): void {
   shallow.frequency.value = 2200;
   shallow.connect(sky);
   applyVolumes();
-  for (const name of ['pop', 'drops', 'squeaks', ...CUES, 'thunder0', 'thunder1', 'thunder2', 'thunder3', 'underwater', 'drone', 'wind', 'rain', 'snowstorm', 'depths', 'river'] as const) {
+  for (const name of ['pop', 'drops', 'squeaks', 'whistles', ...CUES, 'thunder0', 'thunder1', 'thunder2', 'thunder3', 'underwater', 'drone', 'wind', 'rain', 'snowstorm', 'depths', 'river'] as const) {
     fetch(`${import.meta.env.BASE_URL}sfx/${name}.mp3?v=${SFX_V}`)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
       .then((a) => new Promise<AudioBuffer>((ok, no) => ctx!.decodeAudioData(a, ok, no)))
@@ -222,6 +222,52 @@ export function glug(): void {
   if (i === lastGlug) i = (i + 1) % 3;
   lastGlug = i;
   cue(`glug${i}` as Cue, 0.9);
+}
+
+/** Their party whistles (a metal whistle, seven blows), laid end to end: [start, length]. */
+const WHISTLES: [number, number][] = [
+  [0.0, 0.54], [0.62, 0.9], [1.6, 0.69], [2.37, 0.5], [2.95, 0.87], [3.9, 0.2], [4.18, 0.75],
+];
+const VOWEL_PITCH: Record<string, number> = { a: 0.92, e: 1.06, i: 1.18, o: 0.84, u: 0.76 };
+/**
+ * A phrase whistled in their tongue: a note a syllable, each syllable always the same blow at
+ * the same pitch (so a word whistles the same tune each time it's sung, and a song is words), the
+ * whole bent by `pitch` (higher when they're excited, or little) and quicker by `pace`. From
+ * where on screen they are (`pan`), at `level`. Returns how long it takes.
+ */
+export function whistle(syllables: string[], level: number, pan = 0, pitch = 1, pace = 1): number {
+  const buf = buffers.whistles;
+  if (!ctx || !buf || ctx.state !== 'running' || level <= 0.005 || !syllables.length) return 0;
+  let at = ctx.currentTime + 0.02;
+  const start = at;
+  for (const syl of syllables.slice(0, 12)) {
+    let h = 7;
+    for (const ch of syl) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    const [from, len] = WHISTLES[h % WHISTLES.length];
+    const vowel = (syl.match(/[aeiou]/) ?? ['a'])[0];
+    const rate = (VOWEL_PITCH[vowel] ?? 1) * pitch * (0.97 + ((h >> 4) % 7) * 0.01);
+    const dur = Math.min(len, (0.14 + syl.length * 0.035) / pace);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = rate;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(level, at + 0.015);
+    g.gain.setValueAtTime(level, at + Math.max(0.02, dur / rate - 0.04));
+    g.gain.linearRampToValueAtTime(0, at + dur / rate);
+    let out: AudioNode = g;
+    if (ctx.createStereoPanner) {
+      const p = ctx.createStereoPanner();
+      p.pan.value = Math.max(-1, Math.min(1, pan)) * 0.6;
+      g.connect(p);
+      out = p;
+    }
+    out.connect(squeakBus);
+    src.connect(g);
+    src.start(at, from, dur + 0.02);
+    at += dur / rate + 0.05 / pace;
+  }
+  return at - start;
 }
 
 /** The squeaks, laid end to end in one file: [start, length] seconds. */

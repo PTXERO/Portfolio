@@ -2,11 +2,13 @@
 // batch of what's been brought in (food, there and then), and builds the fire up; a big fire
 // cooks more of everything while it lasts, and it dies down by itself if it's left.
 
-import { DAY_SEC, whiteHot, fireMost, fireMore, growth, knowsSign, praying, prayerMost, signReady, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
+import { langOf, DAY_SEC, whiteHot, fireMost, fireMore, growth, knowsSign, praying, prayerMost, signReady, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
 import { drawCreature, type CreatureLook } from '../scene/creatureLook';
 import { MIRACLES, type MiracleId } from '../content/idle';
+import { hear, speak, syllables, wordFor } from '../economy/language';
+
 import { pickTalk, temperOf, type Age, type Speaker, type TalkCtx } from '../content/hearthTalk';
-import { squeak } from '../audio/sound';
+import { squeak, whistle } from '../audio/sound';
 import { D, format } from '../economy/num';
 
 /** The art's own size: drawn small, shown big, hard pixel edges. */
@@ -64,6 +66,10 @@ export class HearthView {
   private sky: { x0: number; y0: number; x1: number; y1: number; t: number } | null = null;
   private shown_: { id: MiracleId; t: number } | null = null;
   private signsKey = '';
+  /** The island (set each frame, for the singing). */
+  private shore: ShoreState | null = null;
+  /** The words last said (whistled, when they sing). */
+  private lastSaid: string[] = [];
   private seatKey = '';
   private spots: Spot[] = [];
   private chat: Chat | null = null;
@@ -90,7 +96,7 @@ export class HearthView {
         <div class="hearth-stats dim"></div>
       </div>
       <div class="hearth-tip label">Tap the fire to stoke it</div>
-      <div class="hearth-say" hidden><b></b><span></span></div>`;
+      <div class="hearth-say" hidden><b></b><span></span><i class="gloss"></i></div>`;
     // (Under the top bar, the hints and the cards: over the map.)
     parent.insertBefore(this.el, parent.querySelector('#overlay-top'));
     this.c = this.el.querySelector('canvas')!;
@@ -166,7 +172,11 @@ export class HearthView {
     for (let k = 0; k < Math.min(n, this.streak > 4 ? 2 : 1); k++) this.squeakFrom(Math.floor(Math.random() * n), 0.3);
     const say = (kind: EmoteKind) => {
       const free = [...Array(n).keys()].filter((i) => !this.emotes.some((e) => e.seat === i));
-      if (free.length) this.emotes.push({ seat: free[Math.floor(Math.random() * free.length)], kind, age: 0 });
+      if (!free.length) return;
+      const seat = free[Math.floor(Math.random() * free.length)];
+      this.emotes.push({ seat, kind, age: 0 });
+      // A song: whistled in their tongue (their party language), the same words the same tune.
+      if (kind === 'note' || kind === 'heart') this.sing(seat);
     };
     if (woke) for (let i = 0; i < Math.min(3, n); i++) say('bang');
     else if (this.streak === 1) { if (Math.random() < 0.5) say('bang'); }
@@ -266,9 +276,24 @@ export class HearthView {
         return;
       }
       const who = c.who[c.at % 2];
-      const line = c.lines[c.at];
+      const english = c.lines[c.at];
+      // Said in their own tongue (the English is only what it means underneath); every word
+      // heard is counted, and when, for anyone working out what they're saying.
+      const lang = langOf(s);
+      const sp = speak(lang, english, new Set(s.people.map((p) => p.name)));
+      const me = speaker(s, this.seats[who].id);
+      const heat = s.heat ?? 0;
+      const situation = `${me.age === 'little' ? 'a little one' : me.age === 'youngster' ? 'a youngster' : me.age === 'elder' ? 'an elder' : 'grown'} · ${heat > 0.6 ? 'the fire high' : heat < 0.15 ? 'the fire low' : 'the fire steady'} · ${SEASON_NAMES[shoreSeason(s).si].toLowerCase()}`;
+      hear(lang, sp.said, situation);
+      const line = sp.text;
+      // (Under it, what you've made of it so far: your guesses, or what the scribes wrote down.)
+      const base = (m: string) => m.replace(/ \((many|past)\)/g, '');
+      const gl = sp.said.map((x) => (!x.meaning ? x.word : lang.scribed ? base(x.meaning) : lang.guess[base(x.meaning)] || '·'));
+      const glossEl = this.bubble.querySelector<HTMLElement>('.gloss')!;
+      glossEl.textContent = gl.some((g) => g !== '·' && sp.said.some((x) => x.meaning && g !== x.word)) ? gl.join(' ') : '';
       (this.bubble.firstElementChild as HTMLElement).textContent = this.seats[who].name;
-      (this.bubble.lastElementChild as HTMLElement).textContent = line;
+      (this.bubble.querySelector('span') as HTMLElement).textContent = line;
+      this.lastSaid = sp.said.map((x) => x.word);
       this.bubble.hidden = false;
       this.el.querySelector('.hearth-tip')?.classList.add('gone');
       this.bubble.classList.remove('in');
@@ -544,12 +569,25 @@ export class HearthView {
     this.council = on;
   }
 
+  /** Someone sings: a phrase whistled in their tongue (what was last said, or words of the fire),
+   * higher the hotter the fire and the faster the stoking, higher still for a little one. */
+  sing(seat: number): void {
+    const s = this.shore;
+    const st = this.seats[seat];
+    if (!s || !st) return;
+    const lang = langOf(s);
+    const words = this.lastSaid.length ? this.lastSaid.slice(0, 4) : ['fire', 'good', 'sing'].map((m) => wordFor(lang, m, m === 'sing' ? 'v' : m === 'good' ? 'a' : 'n'));
+    const sp = this.spots.find((q) => q.i === seat);
+    whistle(words.flatMap(syllables), 0.22, sp ? (sp.x - FX) / FX : 0, (1 + (s.heat ?? 0) * 0.15 + (1 - st.size) * 0.4) * (st.pitch * 0.5 + 0.5), 1 + Math.min(1, this.streak * 0.03));
+  }
+
   private spark(burst = false): void {
     const a = (Math.random() - 0.5) * (burst ? 2.2 : 0.8);
     this.embers.push({ x: FX + (Math.random() - 0.5) * 14, y: FY - 6, vx: Math.sin(a) * (burst ? 40 : 8), vy: -(burst ? 50 : 20) - Math.random() * 30, life: 0.7 + Math.random(), age: 0, hot: 1 });
   }
 
   frame(s: ShoreState, dt: number): void {
+    this.shore = s;
     if (!this.shown) return;
     this.t += dt;
     const heat = s.raftTaken ? Math.min(1, s.heat ?? 0) : 0;

@@ -14,6 +14,7 @@ import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
 import { inherit, personal } from './genes';
 import { ageOver, cultureDay, cultureFx, maybeTurn, workReady, type Culture } from './culture';
+import { borrow, newLanguage, shiftSounds, type Language } from './language';
 import { GENS, MIRACLES, NATURES, PERKS, UPGRADES, WORKS, type GenId, type MiracleId, type NatureDef, type PerkId } from '../content/idle';
 import type { CreatureLook } from '../scene/creatureLook';
 import type { GameState, Genes, TribeState } from './types';
@@ -189,6 +190,8 @@ export interface ShoreState {
    * many crossings they've made since the first shore. */
   embers?: number;
   crossings?: number;
+  /** Their tongue (made the first time they talk; it crosses with them). */
+  lang?: Language;
   /** Prayer gathered at the fire (for the Far Voice's signs), and the Rain's end (in the
    * island's seconds). */
   prayer?: number;
@@ -709,6 +712,8 @@ export function upgradeCost(s: ShoreState, u: { cost: number; fx: { kind: string
   return u.fx.kind === 'auto' ? Math.max(u.cost, Math.ceil(baseRate(s) * COUNCIL_SECONDS)) : u.cost;
 }
 export const COUNCIL_SECONDS = 900;
+/** The most the council buys at a sitting. */
+const COUNCIL_MOST = 200;
 export function upgradeOpen(s: ShoreState, id: string): boolean {
   const u = UPGRADES.find((x) => x.id === id);
   if (!u || s.ups.includes(id) || !s.raftTaken) return false;
@@ -924,6 +929,7 @@ export function cross(state: GameState, seed = 0): boolean {
   const tribe = { ...t, look: { ...t.look, parts: { ...s.look.parts }, diet: s.look.diet }, landed: { ...(t.landed ?? { day: 0 }), seed: island }, family: crew.map((p) => ({ name: p.name, trait: p.trait ?? 'hardy', genes: p.genes })) } as TribeState;
   const next = newShore(tribe);
   next.raft = crew.length;
+  next.lang = s.lang;
   next.nature = natureForSeed(island).id;
   next.embers = (s.embers ?? 0) + gained;
   next.crossings = (s.crossings ?? 0) + 1;
@@ -1291,6 +1297,12 @@ export function take(state: GameState, id: number): boolean {
 
 function win(state: GameState, s: ShoreState, v: Village, line: string): void {
   v.won = s.day + s.clock / DAY_SEC;
+  // Their words come with them: a couple of things they say a lot of there.
+  const lang = langOf(s);
+  const things = ['fish', 'root', 'song', 'dance', 'hut', 'star', 'drum', 'stone', 'boat', 'leaf', 'rain', 'gift'];
+  const pick = [things[(v.id * 7) % things.length], things[(v.id * 11 + 3) % things.length]];
+  const took = borrow(lang, v.name, s.seed * 131 + v.id * 977, v.diet, [...new Set(pick)]);
+  if (took.length) record(state, `From ${v.name} they took ${took.length === 1 ? 'a word' : 'words'}: ${took.map((w) => `“${w}”`).join(', ')}.`, 'shore', shoreWhen(s));
   s.news.push(`${cap(v.name)} are yours: +${Math.round(WON_MORE * 100)}% food.`);
   record(state, line, 'shore', shoreWhen(s));
 }
@@ -1458,8 +1470,12 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
       const w = workOpen(s);
       if (w && s.food >= w.cost) buyWork(state);
       else {
-        const pick = councilPick(s);
-        if (pick && (!w || genCost(s, pick) < w.cost * 0.001)) buyGen(state, pick, 1);
+        // (As much as there's food for, the best first each time: the bank doesn't pile up while
+        // the council dawdles.)
+        for (let n = 0; n < COUNCIL_MOST; n++) {
+          const pick = councilPick(s);
+          if (!pick || (w && genCost(s, pick) >= w.cost * 0.001) || !buyGen(state, pick, 1)) break;
+        }
       }
     }
   }
@@ -1512,7 +1528,22 @@ function born(state: GameState, s: ShoreState): void {
   }
 }
 
+/** Their tongue: made the first time it's needed, from the line's look and diet. */
+export function langOf(s: ShoreState): Language {
+  if (!s.lang) {
+    let h = s.seed >>> 0;
+    for (const c of `${s.look.diet}|${Object.values(s.look.parts).join('.')}`) h = Math.imul(h ^ c.charCodeAt(0), 2654435761) >>> 0;
+    s.lang = newLanguage(h, s.look.diet);
+  }
+  return s.lang;
+}
+
 function dawn(state: GameState, s: ShoreState): void {
+  // Once a year their speech shifts a little.
+  if (s.lang) {
+    const shift = shiftSounds(s.lang, Math.floor(s.day / YEAR_DAYS) + (s.crossings ?? 0) * 1000);
+    if (shift) record(state, `Their speech shifted: ${shift}.`, 'shore', shoreWhen(s));
+  }
   pruneDead(s);
   // (Undelivered news is only ever the latest few.)
   if (s.news.length > 30) s.news.splice(0, s.news.length - 30);

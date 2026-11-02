@@ -18,10 +18,10 @@ import { temperOf } from '../content/hearthTalk';
 const n0 = (v: number) => format(Math.floor(v + 1e-6));
 
 /** The Chronicle's pages: the village, everyone in it, the island, the culture, the story. */
-type ChronView = 'village' | 'people' | 'island' | 'culture' | 'story';
+type ChronView = 'village' | 'people' | 'island' | 'culture' | 'story' | 'words';
 let chronView: ChronView = 'village';
 export function setVillageView(v: string): void {
-  chronView = (['village', 'people', 'island', 'culture', 'story'] as const).find((x) => x === v) ?? 'village';
+  chronView = (['village', 'people', 'island', 'culture', 'story', 'words'] as const).find((x) => x === v) ?? 'village';
 }
 /** The Chronicle's island page: the landmarks, or the relics found. (The villages are won from Build.) */
 let islandView: 'villages' | 'landmarks' | 'finds' = 'villages';
@@ -50,6 +50,7 @@ export function shoreKey(state: GameState, tab: string): string {
   const s = shoreOf(state);
   if (!s) return '';
   if (tab === 'chronicle') {
+    if (chronView === 'words') return JSON.stringify(['words', Object.keys(s.lang?.heard ?? {}).length, Math.floor(Object.values(s.lang?.heard ?? {}).reduce((a, b) => a + b, 0) / 20), s.lang?.scribed, s.lang?.shifts.length]);
     if (chronView === 'story') return JSON.stringify(['story', state.chronicle?.length ?? 0, Math.floor(s.day / 5), s.writtenFrom, s.culture?.done.length]);
     if (chronView === 'island') return JSON.stringify(['chron-island', islandView, s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, has(s, 'scouts'), s.villages.filter((v) => v.found).map((v) => [v.id, v.won, v.gone, Math.round(v.pop)]), s.chief]);
     if (chronView === 'culture') tab = 'culture';
@@ -105,11 +106,12 @@ export function shoreLayout(state: GameState, tab: string): string {
   // The Chronicle: everything to look at, a page at a time.
   const page = (id: ChronView, name: string, dot = false) => `<button class="px-btn${chronView === id ? ' on' : ''}" data-villageview="${id}">${name}${dot ? ' <i class="dot"></i>' : ''}</button>`;
   if (chronView === 'culture' && !s.culture) chronView = 'village';
-  const views = `<div class="seg build-cats chron-pages">${page('village', 'Village')}${page('people', `Critters · ${s.people.length}`)}${page('island', 'Island')}${s.culture ? page('culture', 'Culture', !!s.culture.asking) : ''}${page('story', s.writtenFrom !== undefined ? 'Record' : 'Telling')}</div>`;
+  const views = `<div class="seg build-cats chron-pages">${page('village', 'Village')}${page('people', `Critters · ${s.people.length}`)}${page('island', 'Island')}${s.culture ? page('culture', 'Culture', !!s.culture.asking) : ''}${page('story', s.writtenFrom !== undefined ? 'Record' : 'Telling')}${s.lang && Object.keys(s.lang.heard).length ? page('words', 'Words') : ''}</div>`;
   if (chronView === 'people') return views + peopleLayout(s);
   if (chronView === 'island') return views + islandLayout(s);
   if (chronView === 'culture') return views + cultureLayout(s);
   if (chronView === 'story') return views + tellingLayout(state, s);
+  if (chronView === 'words') return views + wordsLayout(s);
   return views + `<div class="seg build-cats"><button class="px-btn" data-camera="home">See the hearth</button><button class="px-btn" data-camera="chief">See the chief</button><button class="px-btn" data-act="eye">Through their eyes</button></div>` + hearthCard(s) + peopleCard(s);
 }
 
@@ -265,6 +267,36 @@ export function crewCard(s: ShoreState): string {
     <p class="tiny dim">Tap to put on or take off. ${crew.length >= seats ? 'The raft is full.' : ''}</p>
     <div class="card px-box people-list crew-pool"><div class="info">${rest.map(row).join('')}</div></div>
     <div class="choices"><button class="px-btn gold" data-act="cross"${crew.length >= CREW_LEAST ? '' : ' disabled'}>Set out with ${crew.length}</button><button class="px-btn" data-act="dismiss">Not yet</button></div>`;
+}
+
+// ---- Their words ----
+
+/** Every word heard at the fire, the most heard first: how often, when (who said it, the fire,
+ * the season), what it was before the sounds shifted, where it came from, and your guess at
+ * what it means (kept; shown under what they say). Once the scribes have written it down, the
+ * meaning too. */
+function wordsLayout(s: ShoreState): string {
+  const lang = s.lang;
+  if (!lang) return '';
+  const keys = Object.keys(lang.words);
+  const rows = Object.entries(lang.heard)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 300)
+    .map(([m, n]) => {
+      const w = lang.words[m];
+      if (!w) return '';
+      const was = lang.was[m]?.length ? ` · once “${lang.was[m].join('”, “')}”` : '';
+      const from = lang.from[m] ? ` · from ${lang.from[m]}` : '';
+      return `<div class="word-row"><div class="word-head"><b class="their">${w}</b><span class="dim tiny">heard ${n}×</span>${lang.scribed ? `<span class="meaning">${m}</span>` : ''}</div>
+        <input class="guess" data-guess="${keys.indexOf(m)}" value="${(lang.guess[m] ?? '').replace(/"/g, '&quot;')}" placeholder="your guess" maxlength="40" autocomplete="off">
+        <div class="tiny dim">${(lang.ctx[m] ?? []).join(' / ')}${was}${from}</div></div>`;
+    })
+    .join('');
+  const grammar = lang.scribed ? `<p class="tiny dim">Their order: ${lang.order.split('').map((c) => ({ S: 'who', V: 'does', O: 'what' })[c as 'S']).join(', ')}. Describing words ${lang.adjAfter ? 'after' : 'before'} the thing. Many: “-${lang.plural}”. Done before: “-${lang.past}”. No: “${lang.neg}”. Asking: “${lang.ask}”.</p>` : '';
+  return `<div class="panel-head"><h2>Their words</h2><span class="dim">${Object.keys(lang.heard).length} heard</span></div>
+    <p class="tiny dim">${lang.scribed ? 'The scribes wrote down what they mean.' : 'What they say at the fire, in their own tongue. Work out what it means: your guesses show under what they say.'}</p>${grammar}
+    ${lang.shifts.length ? `<p class="tiny dim">Their speech has shifted: ${lang.shifts.join('; ')}.</p>` : ''}
+    <div class="card px-box words"><div class="info">${rows}</div></div>`;
 }
 
 // ---- The telling ----

@@ -16,7 +16,7 @@ import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
 import { HearthView } from './ui/hearthView';
-import { growth, SHORE_CELLS, type ShoreState, workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
+import { langOf, growth, SHORE_CELLS, type ShoreState, workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
 import { dance, danceLeft, shoreIsland, terrainReady, gift, isAdult, poisOf, shoreOf, shoreSeason, startShore, takeRaft, walkChief } from './economy/shore';
 import { AGES, ageName } from './economy/culture';
 import { crewCard, buyAmount, setBuildCat, setBuyMany, setIslandView, danceCard, findCard, forkCard, poiCard, setVillageView, villageCard } from './ui/shorePanels';
@@ -64,10 +64,11 @@ import { LOOK_BACK_SEC } from './scene/tribe';
 import { playStrike, storyLine } from './ui/strike';
 import { playWaking } from './ui/waking';
 import { playCrossing } from './ui/crossing';
-import { thunder, cue, glug, hushDrone, popSound, setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
+import { whistle, thunder, cue, glug, hushDrone, popSound, setVolume, soundFrame, soundHidden, tapSound, unlockSound, type Channel } from './audio/sound';
 import { creatureLookOf, drawCreature, genesKey, miniIcon, type CreatureLook } from './scene/creatureLook';
 import { describe, personal } from './economy/genes';
 import { CELL } from './economy/island';
+import { syllables, wordFor } from './economy/language';
 import { glyph, panWeb, pickIdea, webTransform, webView, zoomWeb } from './ui/tribePanels';
 import { nameList, record } from './economy/chronicle';
 import { PARTS } from './content/creature';
@@ -1254,6 +1255,10 @@ function startDance(): void {
     const got = dance(state, id, streak, (theirWay ? 1 : 0.5) * round * 0.6);
     if (got <= 0) return danceLeft(s, v) <= 0.5 ? 'They\'re worn out.' : !chiefNear(s, v) ? 'The chief has wandered off.' : 'They\'ve stopped dancing.';
     popSound(theirWay ? 0.9 + Math.min(8, streak) * 0.07 : 0.6);
+    // The dance song, a word a turn, whistled in their tongue: higher and quicker as it builds.
+    const song = ['dance', 'fire', 'we', 'sing', 'good', 'night'];
+    const m = song[streak % song.length];
+    whistle(syllables(wordFor(langOf(s), m, m === 'dance' || m === 'sing' ? 'v' : m === 'we' ? 'x' : m === 'good' ? 'a' : 'n')), 0.25, 0, (theirWay ? 1.05 : 0.95) + Math.min(10, streak) * 0.03, 1 + Math.min(10, streak) * 0.05);
     scene.float(at.x, at.y - 10, `+${got.toFixed(1)} ${v.vassal ? 'goodwill' : 'trust'}`, theirWay ? '#e8c86a' : '#8acf6a');
     save();
     danceInfo();
@@ -1473,7 +1478,8 @@ function renderPanel(): void {
   }
   if (!ui.open) return;
   const key = layoutKey(state, ui.tab);
-  if (key !== panelKey) {
+  // (Not while a guess is being typed into the dictionary: it'd be lost.)
+  if (key !== panelKey && !(document.activeElement as HTMLElement | null)?.matches?.('[data-guess]')) {
     panelKey = key;
     const keepText = ($('save-text') as HTMLTextAreaElement | null)?.value ?? '';
     const html = layout(state, ui.tab);
@@ -2472,6 +2478,19 @@ document.addEventListener('pointerup', (e) => {
   act(el);
 });
 document.addEventListener('pointercancel', () => (pressed = null));
+// A guess at what one of their words means (the Chronicle's Words page): kept, and shown under
+// what they say at the fire.
+document.addEventListener('change', (e) => {
+  const el = e.target as HTMLInputElement;
+  if (el.dataset?.guess === undefined) return;
+  const lang = shoreOf(state)?.lang;
+  const meaning = lang && Object.keys(lang.words)[Number(el.dataset.guess)];
+  if (!lang || !meaning) return;
+  const g = el.value.trim().slice(0, 40);
+  if (g) lang.guess[meaning] = g;
+  else delete lang.guess[meaning];
+  save();
+});
 // The Menu's volume sliders.
 document.addEventListener('input', (e) => {
   const el = e.target as HTMLInputElement;
