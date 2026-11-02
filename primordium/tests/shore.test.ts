@@ -277,6 +277,20 @@ describe('Food, the idle way', () => {
     expect(lost.found).toBe(true);
     expect(state.chronicle!.at(-1)!.text.toLowerCase()).toContain(lost.name.toLowerCase());
   });
+  it('each gift to a village costs more than the last', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    lit(state);
+    const v = s.villages.find((x) => relation(s, x) === 'kin')!;
+    v.found = true;
+    s.food = 1e9;
+    const c0 = giftCost(s, v);
+    gift(state, v.id);
+    const c1 = giftCost(s, v);
+    gift(state, v.id);
+    expect(c1).toBeGreaterThan(c0);
+    expect(giftCost(s, v)).toBeGreaterThan(c1);
+  });
   it('an older save far enough on keeps buying ten, the most, and its focus', () => {
     const state = fresh();
     const s = shoreOf(state)!;

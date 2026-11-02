@@ -112,6 +112,8 @@ export interface Village {
   name: string;
   x: number;
   y: number;
+  /** How many gifts they've been brought (each asks more than the last). */
+  gifts?: number;
   /** Saw the Far Voice's sign (half won: trust for kin, half the war band's food for others). */
   awed?: boolean;
   /** grazer, hunter or omnivore (the diets' own names on the map). */
@@ -1206,8 +1208,10 @@ export function canTake(s: ShoreState, v: Village): boolean {
 /** Food a gift takes: more the bigger they are, and the further on the village is (a gift's
  * worth a while of what comes in). */
 export function giftCost(s: ShoreState, v: Village): number {
-  return Math.ceil(Math.max(10 + v.pop * 0.8, baseRate(s) * 20));
+  return Math.ceil(Math.max(10 + v.pop * 0.8, baseRate(s) * 20) * GIFT_GROWTH ** (v.gifts ?? 0));
 }
+/** Each gift to a village asks more than the last (they come to expect it). */
+export const GIFT_GROWTH = 1.35;
 /** Food a second without the fire's heat (what prices go by: a hot fire doesn't make them dearer). */
 export function baseRate(s: ShoreState): number {
   return foodRate(s) / (1 + fireMore(s));
@@ -1238,6 +1242,7 @@ export function gift(state: GameState, id: number): number {
   const give = giftCost(s, v);
   if (s.food < give) return 0;
   s.food -= give;
+  v.gifts = (v.gifts ?? 0) + 1;
   const gain = GIFT_TRUST * (1 + boosts(s).gift) * (chiefNear(s, v) ? 2 : 1) * (natureOf(s).gift ?? 1);
   if (!v.gifted) {
     v.gifted = true;
