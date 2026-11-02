@@ -193,6 +193,8 @@ export interface ShoreState {
    * island's seconds). */
   prayer?: number;
   rainUntil?: number;
+  /** A visitor from a village not yet found, walking to the hearth (the way they come is seen). */
+  visitor?: { village: number; at: Pt; path: Pt[]; left: number };
   /** Since when every found village has been won with some still lost in the fog (one makes
    * itself known a year after). */
   lostSince?: number;
@@ -1497,25 +1499,17 @@ function dawn(state: GameState, s: ShoreState): void {
   // get to): once a year one of them makes itself known, its own way, so the island can always
   // be settled.
   const lost = s.villages.find((v) => !v.found && !v.gone);
-  if (lost && s.villages.every((v) => !v.found || v.won !== undefined || v.gone)) {
+  // (A visitor already on the way: wait for them.)
+  if (s.visitor) {
+    // nothing
+  } else if (lost && s.villages.every((v) => !v.found || v.won !== undefined || v.gone)) {
     s.lostSince ??= s.day;
     if (s.day - s.lostSince >= YEAR_DAYS) {
-      s.lostSince = s.day;
-      lost.found = true;
-      const rel = relation(s, lost);
-      const name = cap(lost.name);
-      const line =
-        rel === 'kin'
-          ? `${name} came out of the fog to the fire, with gifts. They'd followed its smoke.`
-          : rel === 'prey'
-            ? `Strangers at the edge of the fog: ${lost.name}, gathering where they thought no one watched.`
-            : rel === 'predator'
-              ? `A hunting party of ${lost.name} was seen watching the village from the fog. Then they were gone.`
-              : `Drums in the fog, at night: ${lost.name}, out there, wanting them to know it.`;
-      if (rel === 'kin') lost.trust = (lost.trust ?? FIRST_TRUST) + 20;
-      s.newFinds.push(lost.id);
-      s.news.push(line);
-      record(state, line, 'shore', shoreWhen(s));
+      // They send someone: out of their village, across the island, to the hearth.
+      const is = shoreIsland(s.seed);
+      const at = { x: lost.x, y: lost.y };
+      s.visitor = { village: lost.id, at, path: findPath(is, at, s.hearth, 30000), left: 600 };
+      s.news.push('Someone is coming out of the fog.');
     }
   } else s.lostSince = undefined;
   // The envoy's day: a gift to the nearest kin being won over, if there's a gift's worth spare.
@@ -1640,6 +1634,44 @@ function scoutGoal(s: ShoreState, seen: Uint8Array, is: Island, sc: Scout, k: nu
   return v ? { x: v.x, y: v.y } : { x: s.hearth.x + (rand() - 0.5) * 200, y: s.hearth.y + (rand() - 0.5) * 200 };
 }
 
+/** The visitor's walk: along their way to the hearth, the land they cross seen as they go (not
+ * near their own village: that's for them to tell). Arrived, their village is known. */
+const VISITOR_SIGHT = 3;
+function visitorWalk(state: GameState, s: ShoreState, is: Island, seen: Uint8Array, dt: number): void {
+  const vis = s.visitor!;
+  const v = s.villages.find((x) => x.id === vis.village);
+  if (!v || v.found) {
+    s.visitor = undefined;
+    return;
+  }
+  // (In steps of a second, so a long time away still clears the whole way.)
+  for (let left = dt; left > 0 && s.visitor; left -= 1) {
+    const r = along(is, vis.at, vis.path, SCOUT_SPEED * 0.7, Math.min(1, left));
+    vis.at = r.at;
+    vis.left -= Math.min(1, left);
+    if (Math.hypot(vis.at.x - v.x, vis.at.y - v.y) > VISITOR_SIGHT * CELL + 10) reveal(is, seen, vis.at.x, vis.at.y, VISITOR_SIGHT);
+    if (r.done || r.stuck || vis.left <= 0 || Math.hypot(vis.at.x - s.hearth.x, vis.at.y - s.hearth.y) < 4) {
+      s.visitor = undefined;
+      s.lostSince = s.day;
+      v.found = true;
+      const rel = relation(s, v);
+      const from = `A visitor from ${v.name}`;
+      const line =
+        rel === 'kin'
+          ? `${from} came to the fire, with gifts: they'd followed its smoke. The way they came is known now.`
+          : rel === 'prey'
+            ? `${from} came, wary, to see who'd lit the fire. The way they came is known now.`
+            : rel === 'predator'
+              ? `${from} walked into the village, looked at everything, and left. The way they came is known now.`
+              : `${from} came to the edge of the village and said only: we're here. The way they came is known now.`;
+      if (rel === 'kin') v.trust = (v.trust ?? FIRST_TRUST) + 20;
+      s.newFinds.push(v.id);
+      s.news.push(line);
+      record(state, line, 'shore', shoreWhen(s));
+    }
+  }
+}
+
 function walk(state: GameState, s: ShoreState, dt: number): void {
   const is = shoreIsland(s.seed);
   const seen = state.stages.shore.seen;
@@ -1699,6 +1731,7 @@ function walk(state: GameState, s: ShoreState, dt: number): void {
     }
     reveal(is, seen, sc.at.x, sc.at.y, SCOUT_SIGHT + bo.sight);
   });
+  if (s.visitor) visitorWalk(state, s, is, seen, dt);
   seeAcrossLakes(s, is, seen);
   for (const v of s.villages) {
     if (v.found) continue;

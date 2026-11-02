@@ -387,6 +387,17 @@ export class ShoreScene extends RangeScene {
         });
       }
     }
+    // A visitor from a village not yet found, on their way to the hearth (in their own kind's look).
+    if (s.visitor) {
+      const vis = s.visitor;
+      const from = s.villages.find((v) => v.id === vis.village);
+      const X = this.sx(vis.at.x);
+      const Y = this.py(vis.at.x, vis.at.y);
+      if (from && onScreen(X, Y) && !fogged(vis.at.x, vis.at.y)) {
+        const left = (vis.path[0]?.x ?? vis.at.x) < vis.at.x;
+        sprites.push({ y: vis.at.y, draw: () => this.drawBeing(b, from.look, vis.at.x, vis.at.y, { left, frame: Math.floor(t * 7) % 2, hop: Math.abs(Math.sin(t * 7)) * 1.5 }) });
+      }
+    }
     // The scouts, out in the fog for you (seen wherever they are).
     for (const sc of s.scouts ?? []) {
       const moving = !!sc.to;

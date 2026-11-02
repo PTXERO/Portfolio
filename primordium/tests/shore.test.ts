@@ -261,7 +261,7 @@ describe('Food, the idle way', () => {
     if (canTake(s, v)) expect(takeCost(s, v).food).toBeLessThan(before);
     else expect(v.trust).toBeGreaterThan(before);
   });
-  it('a village never found makes itself known, once a year, once every found one is won', () => {
+  it('a village never found sends a visitor, once a year, once every found one is won', () => {
     const state = fresh();
     const s = shoreOf(state)!;
     lit(state);
@@ -273,9 +273,16 @@ describe('Food, the idle way', () => {
     lost.found = false;
     shoreTick(state, DAY_SEC * 10);
     expect(lost.found).toBe(false);
-    shoreTick(state, DAY_SEC * 8);
+    expect(s.visitor).toBeUndefined();
+    // A year on: someone sets out from there...
+    shoreTick(state, DAY_SEC * 7);
+    expect(s.visitor?.village).toBe(lost.id);
+    expect(lost.found).toBe(false);
+    // ...and arrives, their village known, the way they came seen.
+    for (let i = 0; i < 40 && !lost.found; i++) shoreTick(state, 30);
     expect(lost.found).toBe(true);
-    expect(state.chronicle!.at(-1)!.text.toLowerCase()).toContain(lost.name.toLowerCase());
+    expect(s.visitor).toBeUndefined();
+    expect(state.chronicle!.at(-1)!.text).toContain('A visitor from');
   });
   it('each gift to a village costs more than the last', () => {
     const state = fresh();
