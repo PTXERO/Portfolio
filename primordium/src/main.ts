@@ -600,7 +600,9 @@ compass.classList.toggle('locked', !!ui.lockView);
 let barTop = 0;
 function compassFrame(s: ShoreState): void {
   const map = scene.shoreScene;
-  const on = !eye && !(ui.open && ui.tab === 'hearth') && !emberOpen && terrainReady(s.seed);
+  // (Only over the bare map: gone while a menu's pulled up over it on a phone, or anything
+  // else is on screen.)
+  const on = !eye && !(ui.open && (ui.tab === 'hearth' || !isWide())) && !emberOpen && modal.hidden && !cine() && terrainReady(s.seed);
   compass.hidden = !on;
   if (!on) return;
   compass.style.top = `${Math.round((barTop || stageEl.clientHeight) - 66)}px`;
