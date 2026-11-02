@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { poiHere, answerJoin, chiefWithCrew, roadFront, roadTier, roadUpgrade, setTrade, tradesWith, upgradeRoad, answerAsk, setSettleFocus, settledDay, stageOf, onRoad, roadCells, elderThink, HEARTH_MOST, hearthMost, roomLeft, woodCap, roadCost, roadDone, startRoad, totalCritters, travelDays, boosts, build, foodCap, stewardPick, sourcesOf, setTax, shoreIsland, takeRaft, walkChief, workPlan, DAY_SEC, gift, poisOf, relation, shoreOf, shoreTick, startShore } from '../src/economy/shore';
+import { allMult, boosts, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
-import { decideConquest, hostile, raidable, sendBand, fighters, setStance, stepIn, payCost, setWarRule } from '../src/economy/war';
+import type { GenId } from '../src/content/idle';
 import type { TribeState } from '../src/economy/types';
 
 function fresh(diet = 'grazer', cannibal = false) {
@@ -18,25 +18,12 @@ function fresh(diet = 'grazer', cannibal = false) {
   return state;
 }
 
-/** Builds it and lets it go up at once (for tests that need things standing). */
-function now(state: ReturnType<typeof fresh>, id: Parameters<typeof build>[1]): boolean {
+/** The hearth lit, and these bought outright. */
+function lit(state: ReturnType<typeof fresh>, gens: Partial<Record<GenId, number>> = {}) {
   const s = shoreOf(state)!;
-  // (The wood for it, whatever the stores hold.)
-  const keep = s.wood;
-  s.wood = 1e6;
-  const ok = build(state, id);
-  s.wood = keep;
-  if (s.building) {
-    s.building.left = 0;
-    shoreTick(state, 0.01);
-  }
-  return ok;
-}
-
-/** Builds what a sensible player would (the elders' own choice). */
-function autobuild(state: ReturnType<typeof fresh>) {
-  const id = stewardPick(shoreOf(state)!);
-  if (id) build(state, id);
+  takeRaft(state);
+  for (const [id, n] of Object.entries(gens)) s.gens[id as GenId] = n;
+  return s;
 }
 
 describe('New Shore', () => {
@@ -54,96 +41,202 @@ describe('New Shore', () => {
     const c = shoreOf(fresh('hunter', true))!;
     expect(c.villages.every((v) => relation(c, v) === 'enemy')).toBe(true);
   });
-
-  it('grows toward a hundred, and the four die of old age once children come', () => {
-    const state = fresh();
-    const s = shoreOf(state)!;
-    const marks: string[] = [];
-    let hundred = -1;
-    takeRaft(state);
-    for (let sec = 0; sec < 6 * 3600; sec += 10) {
-      shoreTick(state, 10);
-      if (sec % 60 === 0) autobuild(state);
-      if (sec % 1800 === 0) marks.push(`${sec / 60}m: ${s.people.length} (${s.built.length} built, food ${Math.round(s.food)}, wood ${Math.round(s.wood)})`);
-      if (hundred < 0 && s.people.length >= 100) hundred = sec;
-    }
-    console.log(marks.join('\n'), '\n100 at', hundred / 60, 'min', 'day', s.day, 'founders left', s.people.filter((p) => p.founder).length);
-    expect(s.births).toBeGreaterThan(20);
-    expect(s.people.filter((p) => p.founder).length).toBe(0);
-    expect(s.day).toBeGreaterThan((6 * 3600) / DAY_SEC - 2);
-  });
-
   it('saves and loads', () => {
     const state = fresh();
+    lit(state, { forager: 3, hut: 2 });
     shoreTick(state, 600);
     const back = deserialize(serialize(state));
     expect(shoreOf(back)).toEqual(shoreOf(state));
     expect(back.stages.shore.seen).toEqual(state.stages.shore.seen);
-    expect(back.current).toBe('shore');
   });
 });
 
-describe('Winning over', () => {
-  it('gifts and visits raise trust until kin are won over, and stay in their village as yours', () => {
+describe('Food, the idle way', () => {
+  it('the hearth lit, stoking brings food; foragers bring it in by themselves; and it only ever goes up', () => {
     const state = fresh();
     const s = shoreOf(state)!;
+    expect(stoke(state)).toBe(0);
+    lit(state);
+    expect(count(s, 'hearth')).toBe(1);
+    const f0 = s.food;
+    expect(stoke(state)).toBe(1);
+    expect(s.food).toBe(f0 + 1);
+    expect(buyGen(state, 'forager')).toBe(1);
+    expect(foodRate(s)).toBeGreaterThan(0);
+    const f1 = s.food;
+    shoreTick(state, 100);
+    expect(s.food).toBeGreaterThan(f1);
+    // Nothing's eaten, nothing spoils, no one starves: left a long while, it's only more.
+    const f2 = s.food;
+    const n = s.people.length;
+    shoreTick(state, DAY_SEC * 40);
+    expect(s.food).toBeGreaterThan(f2);
+    expect(s.people.filter((p) => p.founder).length + (s.dead?.filter((p) => p.cause !== 'old age').length ?? 0)).toBeLessThanOrEqual(n);
+  });
+  it('each one costs more than the last; buying many costs what buying them one by one would', () => {
+    const state = fresh();
+    const s = lit(state);
+    s.food = 1e6;
+    const one = genCost(s, 'forager');
+    const ten = genCost(s, 'forager', 10);
+    buyGen(state, 'forager');
+    expect(genCost(s, 'forager')).toBeGreaterThan(one);
+    let sum = one;
+    for (let i = 1; i < 10; i++) {
+      sum += genCost(s, 'forager');
+      buyGen(state, 'forager');
+    }
+    expect(ten).toBeCloseTo(sum, -1);
+    s.food = genCost(s, 'forager', 3) + 1;
+    expect(maxBuy(s, 'forager')).toBe(3);
+  });
+  it('homes bring critters (children born free), and every critter makes the work go better', () => {
+    const state = fresh();
+    const s = lit(state, { forager: 10, hut: 5 });
+    expect(room(s)).toBe(24);
+    for (let i = 0; i < 4000 && s.people.length < 20; i++) shoreTick(state, 2);
+    expect(s.people.length).toBeGreaterThanOrEqual(20);
+    const before = allMult(s);
+    s.people.push({ id: 999, name: 'X', born: -30 });
+    expect(allMult(s)).toBeCloseTo(before * (1 + (s.people.length * CRITTER_MORE)) / (1 + ((s.people.length - 1) * CRITTER_MORE)), 6);
+    // Never past what the hearth holds.
+    s.gens.hut = 200;
+    expect(Math.min(room(s), hearthMost(s))).toBe(150);
+  });
+  it('upgrades: a doubler doubles its own, the fire-keepers put a second\'s worth in every stoke', () => {
+    const state = fresh();
+    const s = lit(state, { forager: 10 });
+    s.food = 1e6;
+    const r = genRate(s, 'forager');
+    expect(buyUpgrade(state, 'forager10')).toBe(true);
+    expect(genRate(s, 'forager')).toBeCloseTo(r * 2);
+    expect(buyUpgrade(state, 'forager10')).toBe(false);
+    // (Not on offer till the village is big enough.)
+    expect(buyUpgrade(state, 'stoke2')).toBe(false);
+    while (s.people.length < 10) s.people.push({ id: 1000 + s.people.length, name: 'X', born: -30 });
+    expect(buyUpgrade(state, 'stoke2')).toBe(true);
+    expect(tapValue(s)).toBeCloseTo(1 + foodRate(s), 5);
+  });
+  it('the council buys what\'s most worth buying, by itself', () => {
+    const state = fresh();
+    const s = lit(state, { forager: 5 });
+    while (s.people.length < 12) s.people.push({ id: 1000 + s.people.length, name: 'X', born: -30 });
+    s.food = 1e4;
+    expect(buyUpgrade(state, 'council')).toBe(true);
+    expect(s.auto).toBe(true);
+    expect(councilPick(s)).toBeTruthy();
+    const had = Object.values(s.gens).reduce((a, n) => a + (n ?? 0), 0);
+    shoreTick(state, 60);
+    expect(Object.values(s.gens).reduce((a, n) => a + (n ?? 0), 0)).toBeGreaterThan(had);
+  });
+  it('left to the council, a village grows to a hundred in a few hours', () => {
+    const state = fresh();
+    const s = lit(state);
+    let hundred = -1;
+    for (let sec = 0; sec < 6 * 3600 && hundred < 0; sec += 2) {
+      shoreTick(state, 2);
+      // (The player's first minutes: a few stokes, foragers and huts, then the council.)
+      if (sec < 600 && sec % 4 === 0) stoke(state);
+      if (sec % 30 === 0) {
+        buyUpgrade(state, 'council');
+        if (!s.auto) for (const id of ['forager', 'hut', 'camp'] as GenId[]) buyGen(state, id);
+      }
+      if (s.people.length >= 100) hundred = sec;
+    }
+    console.log('a hundred at', Math.round(hundred / 60), 'min');
+    expect(hundred).toBeGreaterThan(0);
+    expect(hundred).toBeLessThan(5 * 3600);
+  }, 60_000);
+});
+
+describe('Winning the island', () => {
+  it('kin won with gifts (twice, with the chief there): theirs is yours, and everything brings in more', () => {
+    const state = fresh();
+    const s = lit(state, { forager: 5 });
     const v = s.villages[0];
     v.found = true;
     v.trust = 10;
-    v.pop = 8;
-    s.wood = 1000;
-    now(state, 'hearth');
-    for (let i = 0; i < 3; i++) now(state, 'hut');
-    s.food = 1000;
-    s.chiefAt = { x: s.hearth.x, y: s.hearth.y };
+    s.food = 1e6;
+    s.chiefAt = { ...s.hearth };
     expect(gift(state, v.id)).toBe(4);
     s.chiefAt = { x: v.x, y: v.y };
     s.chiefTo = null;
     expect(gift(state, v.id)).toBe(8);
-    const before = s.people.length;
-    for (let i = 0; i < 30 && v.settled === undefined; i++) gift(state, v.id);
-    expect(v.settled).toBeDefined();
-    expect(v.joined).toBeFalsy();
-    expect(s.people.length).toBe(before);
-    expect(totalCritters(s)).toBe(before + v.pop);
+    const before = allMult(s);
+    for (let i = 0; i < 30 && v.won === undefined; i++) gift(state, v.id);
+    expect(v.won).toBeDefined();
+    expect(allMult(s)).toBeCloseTo(before * (1 + WON_MORE), 6);
     expect(gift(state, v.id)).toBe(0);
+    expect(giftCost(s, v)).toBeGreaterThan(0);
   });
-  it('the chief staying a while wins them over by itself', () => {
+  it('the rest are beaten: food for the war band, and critters enough', () => {
+    const state = fresh('omnivore');
+    const s = lit(state);
+    const v = s.villages.find((x) => relation(s, x) !== 'kin')!;
+    v.found = true;
+    expect(canTake(s, v)).toBe(true);
+    const c = takeCost(s, v);
+    s.food = c.food;
+    expect(take(state, v.id)).toBe(false);
+    while (s.people.length < c.critters) s.people.push({ id: 1000 + s.people.length, name: 'X', born: -30 });
+    expect(take(state, v.id)).toBe(true);
+    expect(v.won).toBeDefined();
+    expect(s.food).toBe(0);
+    // (The next costs more.)
+    const w = s.villages.find((x) => relation(s, x) !== 'kin' && x.won === undefined)!;
+    w.found = true;
+    w.pop = v.pop;
+    expect(takeCost(s, w).food).toBeGreaterThan(c.food);
+  });
+  it('the chief staying a while wins kin over by themselves', () => {
     const state = fresh('hunter');
-    const s = shoreOf(state)!;
+    const s = lit(state);
     const v = s.villages[0];
     v.found = true;
     v.trust = 10;
-    v.pop = 8;
-    s.wood = 100000;
-    now(state, 'hearth');
-    for (let i = 0; i < 12; i++) now(state, 'hut');
     s.chiefAt = { x: v.x + 3, y: v.y + 3 };
     s.chiefTo = null;
     shoreTick(state, DAY_SEC * 50);
-    expect(v.settled).toBeDefined();
+    expect(v.won).toBeDefined();
+  });
+  it('dancing round their fire: the fire danced up (twice as much, a while), trust from kin, and they tire', () => {
+    const state = fresh();
+    const s = lit(state, { forager: 10 });
+    const v = s.villages.find((x) => relation(s, x) === 'kin')!;
+    v.found = true;
+    v.trust = 10;
+    expect(dance(state, v.id, 0)).toBe(0);
+    s.chiefAt = { x: v.x + 2, y: v.y + 2 };
+    s.chiefTo = null;
+    const r0 = foodRate(s);
+    const one = dance(state, v.id, 0);
+    expect(one).toBeGreaterThan(0);
+    expect(foodRate(s)).toBeCloseTo(r0 * 2, 5);
+    const five = dance(state, v.id, 5);
+    expect(five).toBeGreaterThan(one);
+    let total = one + five;
+    for (let i = 0; i < 100; i++) total += dance(state, v.id, 5);
+    expect(total).toBeCloseTo(DANCE_DAY, 5);
+    expect(dance(state, v.id, 5)).toBe(0);
+    expect(v.trust).toBeGreaterThan(10);
+    // The fire dies down.
+    shoreTick(state, 200);
+    expect(foodRate(s)).toBeCloseTo(r0 * (allMult(s) / allMult(s)), 0);
   });
 });
 
-describe('Scouts', () => {
-  it('a scout explores the fog and finds villages on their own', () => {
+describe('Scouts and landmarks', () => {
+  it('scouts (an upgrade) explore the fog and find villages on their own', () => {
     const state = fresh();
-    const s = shoreOf(state)!;
-    s.wood = 200;
-    now(state, 'hearth');
-    now(state, 'hut');
-    expect(now(state, 'scout')).toBe(true);
+    const s = lit(state);
+    s.ups.push('scouts');
     const seen0 = state.stages.shore.seen.reduce((a, b) => a + b, 0);
     for (let i = 0; i < 5400; i++) shoreTick(state, 2);
     const seen1 = state.stages.shore.seen.reduce((a, b) => a + b, 0);
-    console.log('seen cells', seen0, '->', seen1, 'found', s.villages.filter((v) => v.found).length, 'of', s.villages.length);
     expect(seen1).toBeGreaterThan(seen0 * 5);
     expect(s.villages.some((v) => v.found)).toBe(true);
   });
-});
-
-describe('Landmarks', () => {
-  it('are placed on their own ground; the chief explores them layer by layer for relics and know-how', () => {
+  it('the chief explores a landmark layer by layer for relics; walking away stops it', () => {
     const state = fresh();
     const s = shoreOf(state)!;
     const pois = poisOf(s);
@@ -152,92 +245,60 @@ describe('Landmarks', () => {
     cave.found = true;
     s.chiefAt = { x: cave.x, y: cave.y + 2 };
     s.chiefTo = null;
-    s.wood = 0;
     shoreTick(state, 45);
     expect(cave.done).toBe(1);
-    expect(s.learned).toContain('granary');
     shoreTick(state, 75);
     expect(s.relics).toContain('axe');
-    expect(s.finds!.length).toBe(2);
-    // The axe helps the wood along.
-    expect(boosts(s).wood).toBeCloseTo(0.08);
-    // Walking away stops it.
+    expect(boosts(s).tap).toBeCloseTo(0.25);
     s.chiefTo = { x: s.hearth.x, y: s.hearth.y };
     const t = cave.t;
     shoreTick(state, 5);
     expect(cave.t).toBe(t);
   });
-  it('scouts find landmarks, but only the chief explores them', () => {
+  it('one a scout sees is known (listed) at once; one explored to the end is gone', async () => {
+    const { poiDef } = await import('../src/economy/shore');
     const state = fresh();
     const s = shoreOf(state)!;
-    s.wood = 200;
-    now(state, 'hearth');
-    now(state, 'hut');
-    now(state, 'scout');
-    for (let i = 0; i < 1800; i++) shoreTick(state, 2);
-    const found = poisOf(s).filter((p) => p.found);
-    expect(found.length).toBeGreaterThan(0);
-    expect(found.every((p) => p.done === 0 || Math.hypot(p.x - s.chiefAt.x, p.y - s.chiefAt.y) < 6)).toBe(true);
+    const p = poisOf(s).find((x) => Math.hypot(x.x - s.chiefAt.x, x.y - s.chiefAt.y) > 50)!;
+    const seen = state.stages.shore.seen;
+    seen[Math.floor(p.y / 3) * 340 + Math.floor(p.x / 3)] = 1;
+    shoreTick(state, 2);
+    expect(p.found && p.known).toBe(true);
+    p.done = poiDef(p).layers.length;
+    s.chiefAt = { x: p.x, y: p.y };
+    s.chiefTo = null;
+    expect(poiHere(s)).toBeUndefined();
   });
 });
 
-describe('Won over with no room', () => {
-  const setup = () => {
+describe('Older saves, made over', () => {
+  it('what was built becomes what\'s bought; wood folds into food; every village held is won', () => {
     const state = fresh();
     const s = shoreOf(state)!;
-    const v = s.villages[0];
-    v.found = true;
-    v.trust = 99;
-    v.pop = 20;
-    s.food = 1000;
-    return { state, s, v };
-  };
-  it('no room needed: won over, they stay in their own village, a settlement', () => {
-    const { state, s, v } = setup();
-    const before = s.people.length;
-    gift(state, v.id);
-    expect(v.asking).toBeUndefined();
-    expect(v.settled).toBeDefined();
-    expect(s.people.length).toBe(before);
-  });
-  it('one from an older save, still asking or waiting, is settled', () => {
-    const { state, v } = setup();
-    v.asking = 0;
-    shoreTick(state, 2);
-    expect(v.asking).toBeUndefined();
-    expect(v.settled).toBeDefined();
-  });
-  it('as a vassal they pay tribute and grow; taxed hard they revolt', () => {
-    const { state, s, v } = setup();
-    v.asking = 0;
-    answerJoin(state, v.id, 'vassal');
-    s.food = 0;
-    s.wood = 0;
-    shoreTick(state, DAY_SEC * 5);
-    expect(s.food).toBeGreaterThan(0);
-    expect(v.pop).toBeGreaterThan(20);
-    setTax(state, v.id, 0.6);
-    shoreTick(state, DAY_SEC * 40);
-    expect(v.vassal).toBeUndefined();
-  });
-  it('turned away, they go to swell an enemy camp', () => {
-    const { state, s, v } = setup();
-    v.asking = 0;
-    const before = s.villages.filter((x) => x !== v).reduce((a, x) => a + x.pop, 0);
-    answerJoin(state, v.id, 'away');
-    expect(v.gone).toBeDefined();
-    expect(s.villages.filter((x) => x !== v).reduce((a, x) => a + x.pop, 0)).toBe(before + 20);
-  });
-  it('a village too big for its food starves, more the shorter it is', () => {
-    const state = fresh();
-    const s = shoreOf(state)!;
-    now(state, 'hearth');
-    for (let i = 0; i < 100; i++) s.people.push({ id: 100 + i, name: 'X' + i, born: -10 });
-    // (More than the land round a small camp can feed.)
-    expect(workPlan(s).foodRate).toBeLessThan(workPlan(s).eat);
-    s.food = 0;
-    shoreTick(state, DAY_SEC * 4);
-    expect(s.people.length).toBeLessThan(100);
+    const old = {
+      ...s,
+      raftTaken: true,
+      food: 300,
+      wood: 120,
+      built: [{ id: 'hearth', x: 1, y: 1, day: 0 }, ...Array.from({ length: 20 }, () => ({ id: 'hut', x: 1, y: 1, day: 0 })), { id: 'camp', x: 1, y: 1, day: 0 }, { id: 'council', x: 1, y: 1, day: 0 }, { id: 'scout', x: 1, y: 1, day: 0 }],
+      villages: s.villages.map((v, i) => ({ ...v, ...(i === 0 ? { settled: 3 } : i === 1 ? { vassal: { tax: 0.2, loyalty: 50 } } : {}) })),
+      raid: { from: 2 },
+      res: { stone: 5 },
+    } as unknown as ShoreState & Record<string, unknown>;
+    delete (old as Record<string, unknown>).gens;
+    delete (old as Record<string, unknown>).ups;
+    const n = idleShore(old);
+    expect(n.food).toBe(420);
+    expect(n.gens.hut).toBe(20);
+    expect(n.gens.camp).toBe(1);
+    expect(n.gens.forager).toBeGreaterThanOrEqual(5);
+    expect(n.ups).toEqual(expect.arrayContaining(['council', 'scouts']));
+    expect(n.auto).toBe(true);
+    expect(n.villages[0].won).toBeDefined();
+    expect(n.villages[1].won).toBeDefined();
+    expect(n.villages[2].won).toBeUndefined();
+    expect('raid' in n || 'res' in n || 'wood' in n).toBe(false);
+    expect(n.built.filter((b) => b.id === 'hut').length).toBeLessThanOrEqual(12);
   });
 });
 
@@ -274,229 +335,14 @@ describe('Finding the way', () => {
   });
 });
 
-describe('The elders and the envoy', () => {
-  it('the elders build on their own once there is a council', () => {
-    const state = fresh();
-    const s = shoreOf(state)!;
-    now(state, 'hearth');
-    now(state, 'hut');
-    now(state, 'council');
-    expect(s.steward?.on).toBe(true);
-    s.wood = 50;
-    const before = s.built.length;
-    for (let i = 0; i < 1800; i++) shoreTick(state, 2);
-    expect(s.built.length).toBeGreaterThan(before + 1);
-  });
-  it('the envoy takes gifts to kin by themselves', () => {
-    const state = fresh();
-    const s = shoreOf(state)!;
-    now(state, 'hearth');
-    now(state, 'hut');
-    now(state, 'envoy');
-    const v = s.villages[0];
-    v.found = true;
-    v.trust = 10;
-    v.pop = 8;
-    for (let d = 0; d < 5; d++) {
-      s.food = foodCap(s);
-      shoreTick(state, DAY_SEC);
-    }
-    expect(v.trust!).toBeGreaterThan(20);
-  });
-});
-
-describe('Resources of the land', () => {
-  it('a settlement gives its land’s resources; buildings spend them', () => {
-    const state = fresh();
-    const s = shoreOf(state)!;
-    now(state, 'hearth');
-    for (let i = 0; i < 12; i++) now(state, 'hut');
-    now(state, 'rack');
-    const v = s.villages[0];
-    v.habitat = 'river';
-    v.found = true;
-    v.trust = 99;
-    v.pop = 6;
-    s.food = foodCap(s);
-    gift(state, v.id);
-    expect(v.settled).toBeDefined();
-    expect(sourcesOf(s, 'clay').length).toBe(1);
-    shoreTick(state, DAY_SEC * 12);
-    expect(s.res?.clay ?? 0).toBeGreaterThan(20);
-    s.wood = 1000;
-    expect(build(state, 'pottery')).toBe(true);
-    expect(s.res!.clay!).toBeLessThan(10);
-    // Without a village where there's salt, no salting shed.
-    expect(sourcesOf(s, 'salt').length).toBe(0);
-    s.wood = 1000;
-    s.building = undefined;
-    // (Nor any gathered by hand.)
-    s.res!.salt = 0;
-    expect(build(state, 'salter')).toBe(false);
-  });
-});
-
-describe('Raids', () => {
-  /** A grown village of n, a while ashore. */
-  function grown(diet: string, n: number) {
-    const state = fresh(diet);
-    const s = shoreOf(state)!;
-    now(state, 'hearth');
-    for (let i = 0; i < 8; i++) now(state, 'hut');
-    s.day = 40;
-    while (s.people.length < n) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: 0, dies: 999 });
-    s.food = 60;
-    s.wood = 40;
-    return { state, s };
-  }
-  it('nobody raids in the first years, or a small village', () => {
-    const { state, s } = grown('grazer', 6);
-    s.day = 0;
-    for (let i = 0; i < 2000; i++) shoreTick(state, 2);
-    expect(s.raid).toBeUndefined();
-    expect(s.raids ?? 0).toBe(0);
-  });
-  it('predators come raiding: watched, seen coming, then a battle', () => {
-    const { state, s } = grown('grazer', 30);
-    expect(s.villages.some((v) => hostile(s, v))).toBe(true);
-    // (Big enough to fancy their chances.)
-    for (const v of s.villages) if (hostile(s, v)) v.pop = Math.max(v.pop, 40);
-    let watched = false;
-    let seen = false;
-    for (let i = 0; i < 6000 && !(s.raids ?? 0); i++) {
-      shoreTick(state, 2);
-      if (s.raid) watched = true;
-      if (s.raid?.seen !== undefined) seen = true;
-      s.food = Math.max(s.food, 30);
-    }
-    expect(watched && seen).toBe(true);
-    expect(s.raids).toBe(1);
-    expect(s.battles?.length).toBe(1);
-    expect(s.battles![0].rounds.length).toBeGreaterThan(0);
-  });
-  it('kin never raid, and prey can be raided and taken', () => {
-    const { state, s } = grown('hunter', 40);
-    expect(s.villages.some((v) => hostile(s, v) && !v.cannibal)).toBe(false);
-    const prey = s.villages.find((v) => !v.cannibal && relation(s, v) === 'prey')!;
-    prey.found = true;
-    prey.pop = 10;
-    expect(raidable(s, prey)).toBe(true);
-    const hunters = s.villages.find((x) => relation(s, x) === 'predator');
-    if (hunters) {
-      hunters.found = true;
-      expect(raidable(s, hunters)).toBe(true);
-    }
-    const before = fighters(s);
-    expect(sendBand(state, s, prey.id, 30)).toBe(true);
-    expect(fighters(s)).toBe(before - 30);
-    for (let i = 0; i < 20000 && (s.warband || s.fight); i++) shoreTick(state, 2);
-    expect(s.warband).toBeUndefined();
-    expect(s.battles?.some((b) => b.attack === 'us' && b.won)).toBe(true);
-    // (At your mercy: made vassals.)
-    expect(s.conquest?.id === prey.id || !!prey.gone).toBe(true);
-    if (s.conquest) expect(decideConquest(state, s, 'vassal')).toBe(true);
-    expect(prey.vassal?.conquered !== undefined || !!prey.gone).toBe(true);
-  });
-  /** A raid seen coming, here in a moment. */
-  function coming(s: ReturnType<typeof shoreOf> & object) {
-    const v = s.villages.find((x) => hostile(s, x))!;
-    const now = s.day + s.clock / DAY_SEC;
-    s.raid = { from: v.id, watched: now - 1, seen: now, arrives: now + 0.01, fighters: 8 };
-    s.nextRaid = now + 100;
-    return v;
-  }
-  it('paying them off: no fight, the stores pay, and they ask more next time', () => {
-    const { state, s } = grown('grazer', 30);
-    s.food = 200;
-    s.wood = 100;
-    const v = coming(s);
-    const cost = payCost(v, 8);
-    expect(setStance(s, 'pay')).toBe(true);
-    for (let i = 0; i < 30; i++) shoreTick(state, 2);
-    expect(s.fight).toBeUndefined();
-    expect(s.battles ?? []).toHaveLength(0);
-    expect(v.paid).toBe(1);
-    expect(payCost(v, 8).food).toBeGreaterThan(cost.food);
-  });
-  it('the walls need a palisade', () => {
-    const { s } = grown('grazer', 30);
-    coming(s);
-    expect(setStance(s, 'walls')).toBe(false);
-  });
-  it('a fight is fought a round at a time, and the chief can step in once', () => {
-    const { state, s } = grown('grazer', 30);
-    coming(s);
-    for (let i = 0; i < 5 && !s.fight; i++) shoreTick(state, 2);
-    expect(s.fight).toBeDefined();
-    expect(s.fight!.rounds.length).toBeLessThan(3);
-    s.chiefAt = { ...s.hearth };
-    expect(stepIn(s)).toBe(true);
-    expect(stepIn(s)).toBe(false);
-    for (let i = 0; i < 100 && s.fight; i++) shoreTick(state, 2);
-    expect(s.fight).toBeUndefined();
-    expect(s.battles?.[0].chief).toBeDefined();
-  });
-  it('the war chief raids only by the rule given, and rallies the defence', () => {
-    const { state, s } = grown('hunter', 40);
-    const prey = s.villages.find((v) => !v.cannibal && relation(s, v) === 'prey')!;
-    prey.found = true;
-    prey.pop = 8;
-    now(state, 'watch');
-    now(state, 'warcamp');
-    s.food = 200;
-    for (let i = 0; i < 200; i++) shoreTick(state, 2);
-    expect(s.warband).toBeUndefined();
-    setWarRule(s, 'weaker');
-    for (let i = 0; i < 400 && !s.warband; i++) {
-      shoreTick(state, 2);
-      s.food = 200;
-    }
-    expect(s.warband?.to).toBe(prey.id);
-    // A raid with nothing said: the war chief rallies them.
-    const { state: st2, s: s2 } = grown('grazer', 30);
-    now(st2, 'watch');
-    now(st2, 'warcamp');
-    coming(s2);
-    for (let i = 0; i < 5 && !s2.fight; i++) shoreTick(st2, 2);
-    expect(s2.fight?.rallied).toBe(true);
-  });
-  it('raiders who fall leave loot; those who live run home; none fallen, nothing left', () => {
-    const { state, s } = grown('grazer', 40);
-    s.food = 10;
-    s.wood = 10;
-    coming(s);
-    for (let i = 0; i < 200 && !(s.battles?.length); i++) shoreTick(state, 2);
-    const b = s.battles![0];
-    if (b.theirDead > 0) {
-      expect(b.loot!.food + b.loot!.wood).toBeGreaterThan(0);
-      expect(s.loot).toBeDefined();
-    } else expect(b.loot).toBeUndefined();
-    const left = b.rounds[b.rounds.length - 1][1];
-    if (left > 0) expect(s.retreat?.n).toBe(left);
-    // They get home, and the loot's gathered up.
-    for (let i = 0; i < 4000 && (s.retreat || s.loot); i++) shoreTick(state, 2);
-    expect(s.retreat).toBeUndefined();
-    expect(s.loot).toBeUndefined();
-  });
-  it('a raid in progress survives a save', () => {
-    const { state, s } = grown('grazer', 30);
-    s.raid = { from: s.villages.find((v) => hostile(s, v))!.id, watched: 40, seen: 41, arrives: 42, fighters: 9 };
-    const back = shoreOf(deserialize(serialize(state)))!;
-    expect(back.raid?.fighters).toBe(9);
-  });
-});
-
 describe('Families', () => {
   it('the four carry coats; children have two parents and a coat from them; the dead are remembered', () => {
     const state = fresh();
     const s = shoreOf(state)!;
     expect(s.people.every((p) => p.genes)).toBe(true);
-    now(state, 'hearth');
-    for (let i = 0; i < 4; i++) now(state, 'hut');
-    s.food = 200;
+    lit(state, { hut: 4 });
     for (let i = 0; i < 3000 && s.births < 3; i++) {
       shoreTick(state, 2);
-      s.food = Math.max(s.food, 100);
     }
     const kids = s.people.filter((p) => p.parents);
     expect(kids.length).toBeGreaterThan(0);
@@ -506,7 +352,6 @@ describe('Families', () => {
     }
     for (let i = 0; i < 40000 && s.deaths < 1; i++) {
       shoreTick(state, 2);
-      s.food = Math.max(s.food, 100);
     }
     expect(s.dead?.length).toBe(s.deaths);
     expect(s.dead![0].died).toBeDefined();
@@ -536,11 +381,9 @@ describe('Families, not too close', () => {
   it('a child never has parents who are parent and child, or brother and sister', () => {
     const state = fresh();
     const s = shoreOf(state)!;
-    now(state, 'hearth');
-    for (let i = 0; i < 6; i++) now(state, 'hut');
+    lit(state, { hut: 6 });
     for (let i = 0; i < 20000 && s.births < 40; i++) {
       shoreTick(state, 2);
-      s.food = Math.max(s.food, 100);
     }
     const all = new Map([...(s.dead ?? []), ...s.people].map((p) => [p.id, p]));
     for (const c of all.values()) {
@@ -552,375 +395,3 @@ describe('Families, not too close', () => {
   }, 60_000);
 });
 
-describe('Dancing', () => {
-  it('wins trust with the chief there, more on a streak, and tires out for the day', async () => {
-    const { dance, DANCE_DAY } = await import('../src/economy/shore');
-    const state = fresh();
-    const s = shoreOf(state)!;
-    const v = s.villages.find((x) => relation(s, x) === 'kin')!;
-    v.found = true;
-    v.trust = 10;
-    expect(dance(state, v.id, 0)).toBe(0);
-    s.chiefAt = { x: v.x + 2, y: v.y + 2 };
-    const one = dance(state, v.id, 0);
-    const five = dance(state, v.id, 5);
-    expect(one).toBeGreaterThan(0);
-    expect(five).toBeGreaterThan(one);
-    let total = one + five;
-    for (let i = 0; i < 100; i++) total += dance(state, v.id, 5);
-    expect(total).toBeCloseTo(DANCE_DAY, 5);
-    expect(dance(state, v.id, 5)).toBe(0);
-  });
-});
-
-describe('Coming and going with vassals', () => {
-  function vassalGame() {
-    const state = fresh();
-    const s = shoreOf(state)!;
-    now(state, 'hearth');
-    for (let i = 0; i < 8; i++) now(state, 'hut');
-    const v = s.villages.find((x) => relation(s, x) === 'kin')!;
-    v.found = true;
-    v.vassal = { tax: 0.1, loyalty: 90 };
-    v.pop = 30;
-    s.food = 300;
-    return { state, s, v };
-  }
-  it('with beds free, a content vassal\'s young come to live by the hearth, and tie them closer', () => {
-    const { state, s, v } = vassalGame();
-    const before = s.people.length;
-    for (let i = 0; i < 3000 && s.people.length === before; i++) {
-      shoreTick(state, 2);
-      s.food = Math.max(s.food, 300);
-    }
-    const came = s.people.filter((p) => p.kind === v.id);
-    expect(came.length).toBeGreaterThan(0);
-    // (A vassal grows on its own too: fewer than it would have been, not an exact count.)
-    expect(v.pop).toBeLessThan(31);
-    expect(v.ties).toBe(came.length);
-  });
-  it('crowded, some go to live with the vassal (kept in the family trees, not dead)', () => {
-    const { state, s, v } = vassalGame();
-    while (s.people.length < 50) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30, dies: 9999 });
-    const deaths = s.deaths;
-    for (let i = 0; i < 2000 && !s.dead?.some((p) => p.moved); i++) {
-      shoreTick(state, 2);
-      s.food = Math.max(s.food, 300);
-    }
-    const gone = s.dead!.filter((p) => p.moved);
-    expect(gone.length).toBeGreaterThan(0);
-    expect(gone[0].moved).toBe(v.name);
-    expect(gone[0].died).toBeUndefined();
-    expect(s.deaths).toBe(deaths);
-  });
-  it('with ties enough, a vassal is of the hearth: a settlement, staying where it is', () => {
-    const { state, v } = vassalGame();
-    v.pop = 8;
-    v.ties = 8;
-    for (let i = 0; i < 120 && v.settled === undefined; i++) shoreTick(state, 2);
-    expect(v.settled).toBeDefined();
-    expect(v.joined).toBeFalsy();
-    expect(v.vassal).toBeUndefined();
-  });
-});
-
-describe('Settlements and roads', () => {
-  const setup = () => {
-    const state = fresh();
-    const s = shoreOf(state)!;
-    s.wood = 10000;
-    now(state, 'hearth');
-    for (let i = 0; i < 4; i++) now(state, 'hut');
-    // (The farthest of their kin.)
-    const v = s.villages.filter((x) => relation(s, x) === 'kin').sort((a, b) => Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y) - Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y))[0];
-    v.found = true;
-    v.trust = 99;
-    v.pop = 20;
-    v.beaten = 9;
-    s.food = 1000;
-    gift(state, v.id);
-    s.food = 0;
-    s.wood = 0;
-    return { state, s, v };
-  };
-  it('what a settlement gathers sets out at dawn and reaches the hearth days later', () => {
-    const { state, s, v } = setup();
-    const walk = travelDays(s, v);
-    expect(walk).toBeGreaterThan(1);
-    // Through the night to the next dawn: it sets out.
-    shoreTick(state, DAY_SEC * 1.05);
-    expect(s.convoys?.length).toBe(1);
-    const c = s.convoys![0];
-    expect(c.arrives - c.left).toBeCloseTo(walk, 3);
-    const food = s.food;
-    shoreTick(state, DAY_SEC * (walk + 0.1));
-    expect(s.food).toBeGreaterThan(food + c.food * 0.9);
-    expect(s.convoys!.every((x) => x !== c)).toBe(true);
-  });
-  it('a road (to a settlement, or a vassal) takes the walk times one and a half to lay, and then the way is far quicker', () => {
-    const { state, s, v } = setup();
-    const walk = travelDays(s, v);
-    const cost = roadCost(s, v);
-    expect(cost.days).toBeCloseTo(walk * 1.5, 0);
-    s.wood = 0;
-    expect(startRoad(state, v.id)).toBe(false);
-    s.wood = cost.wood;
-    expect(startRoad(state, v.id)).toBe(true);
-    expect(s.wood).toBe(0);
-    shoreTick(state, DAY_SEC * cost.days * 0.5);
-    expect(roadDone(v)).toBe(false);
-    shoreTick(state, DAY_SEC * cost.days * 0.6);
-    expect(roadDone(v)).toBe(true);
-    expect(travelDays(s, v)).toBeCloseTo(walk * 0.5, 3);
-    // And the chief walks it quicker than the land beside it.
-    const mid = { x: (s.hearth.x * 2 + v.x) / 3, y: (s.hearth.y * 2 + v.y) / 3 };
-    expect(roadCells(s).size).toBeGreaterThan(20);
-    expect(onRoad(s, s.hearth)).toBe(true);
-    expect(onRoad(s, { x: mid.x + 80, y: mid.y + 80 })).toBe(false);
-  });
-  it('the chief, there in person, sets a settlement to a trade; what it sends changes', () => {
-    const { state, s, v } = setup();
-    v.habitat = 'mountain';
-    const mixed = settledDay(v);
-    expect(setSettleFocus(state, v.id, 'wood')).toBe(false);
-    s.chiefAt = { x: v.x + 2, y: v.y + 2 };
-    s.chiefTo = null;
-    expect(setSettleFocus(state, v.id, 'wood')).toBe(true);
-    expect(settledDay(v).wood).toBeGreaterThan(mixed.wood * 2);
-    expect(setSettleFocus(state, v.id, 'goods')).toBe(true);
-    expect(settledDay(v).res.stone).toBeGreaterThan(0);
-  });
-  it('a settlement asks things of the hearth: helped, it thrives; let down, it sulks', () => {
-    const { state, s, v } = setup();
-    s.food = 500;
-    s.wood = 500;
-    for (let i = 0; i < 12 && !v.ask; i++) shoreTick(state, DAY_SEC);
-    expect(v.ask).toBeDefined();
-    if (v.ask!.kind === 'visit') {
-      s.chiefAt = { x: v.x + 2, y: v.y + 2 };
-      s.chiefTo = null;
-      shoreTick(state, 2);
-    } else expect(answerAsk(state, v.id)).toBe(true);
-    expect(v.ask).toBeUndefined();
-    const now = s.day + s.clock / DAY_SEC;
-    expect(v.thrive).toBeGreaterThan(now);
-    expect(settledDay(v, now).food).toBeGreaterThan(settledDay(v, now + 100).food);
-    // The next one, left unanswered (the chief far away).
-    s.chiefAt = { ...s.hearth };
-    for (let i = 0; i < 30 && v.sulk === undefined; i++) {
-      shoreTick(state, DAY_SEC);
-      if (v.ask?.kind === 'visit') v.ask.kind = 'wood';
-    }
-    expect(v.sulk).toBeDefined();
-  });
-  it('a settlement grows from a camp to a village to a town, and a town gives more', () => {
-    const { v } = setup();
-    v.pop = 10;
-    expect(stageOf(v)).toBe(0);
-    v.pop = 20;
-    expect(stageOf(v)).toBe(1);
-    const at34 = (v.pop = 34.9, settledDay(v).food / v.pop);
-    v.pop = 35;
-    expect(stageOf(v)).toBe(2);
-    expect(settledDay(v).food / v.pop).toBeGreaterThan(at34);
-  });
-  it('the chief working with the road crew doubles the work; a finished road is relaid in stone once its idea is known', () => {
-    const { state, s, v } = setup();
-    v.settled = undefined;
-    v.vassal = { tax: 0.1, loyalty: 90 };
-    const cost = roadCost(s, v);
-    s.wood = cost.wood;
-    expect(startRoad(state, v.id)).toBe(true);
-    const front = roadFront(s, v)!;
-    s.chiefAt = { ...front };
-    s.chiefTo = null;
-    expect(chiefWithCrew(s, v)).toBe(true);
-    shoreTick(state, 2);
-    const done = v.road!.done;
-    expect(done).toBeCloseTo((2 / DAY_SEC) * 2, 5);
-    v.road!.done = v.road!.need;
-    const dirt = travelDays(s, v);
-    // Stone: needs the idea, the stone, the wood.
-    s.wood = 10000;
-    expect(roadUpgrade(s, v)!.missing).toMatch(/Stone blades/);
-    s.culture = { since: 0, age: 1, practice: {}, done: ['blades'], forks: {} } as never;
-    expect(roadUpgrade(s, v)!.missing).toMatch(/stone/);
-    (s.res ??= {}).stone = 30;
-    expect(roadUpgrade(s, v)!.missing).toBeUndefined();
-    expect(upgradeRoad(state, v.id)).toBe(true);
-    v.road!.up!.done = v.road!.up!.need;
-    shoreTick(state, 2);
-    expect(roadTier(v)).toBe(1);
-    expect(travelDays(s, v)).toBeLessThan(dirt);
-    // Paved: an Age to come.
-    expect(roadUpgrade(s, v)!.missing).toMatch(/Age/);
-  });
-  it('a caravan along a finished road takes food out and brings their goods back', () => {
-    const { state, s, v } = setup();
-    v.settled = undefined;
-    v.vassal = { tax: 0, loyalty: 90 };
-    v.habitat = 'mountain';
-    v.road = { done: 1, need: 1 };
-    const k = tradesWith(v).findIndex((x) => x.get === 'stone');
-    expect(setTrade(state, v.id, k)).toBe(true);
-    s.food = 400;
-    s.res = {};
-    shoreTick(state, DAY_SEC * 1.05);
-    const c = s.convoys!.find((x) => x.caravan)!;
-    expect(c.res?.stone).toBe(3);
-    shoreTick(state, DAY_SEC * (c.arrives - c.left + 0.1));
-    expect(s.res.stone ?? 0).toBeGreaterThanOrEqual(3);
-  });
-  it('a settlement counts toward your critters, and is no one to raid or be raided by', async () => {
-    const war = await import('../src/economy/war');
-    const { s, v } = setup();
-    expect(totalCritters(s)).toBe(s.people.length + Math.round(v.pop));
-    expect(war.hostile(s, v)).toBe(false);
-    expect(war.raidable(s, v)).toBe(false);
-  });
-});
-
-describe('Vassals and the hearth defend each other', () => {
-  async function setup() {
-    const war = await import('../src/economy/war');
-    const state = fresh();
-    const s = shoreOf(state)!;
-    now(state, 'hearth');
-    for (let i = 0; i < 8; i++) now(state, 'hut');
-    while (s.people.length < 30) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30, dies: 9999 });
-    s.food = 300;
-    s.day = 40;
-    const kin = s.villages.filter((x) => relation(s, x) === 'kin');
-    const foe = s.villages.find((x) => war.hostile(s, x))!;
-    return { war, state, s, kin, foe };
-  }
-  it('a loyal vassal near enough sends help to the hearth; one too far does not', async () => {
-    const { war, state, s, kin, foe } = await setup();
-    const [near, far] = kin;
-    near.vassal = { tax: 0.1, loyalty: 90 };
-    near.pop = 20;
-    near.x = s.hearth.x + 10;
-    near.y = s.hearth.y;
-    far.vassal = { tax: 0.1, loyalty: 90 };
-    far.pop = 20;
-    far.x = s.hearth.x + 900;
-    s.raid = { from: foe.id, watched: s.day - 1.01, fighters: 8 };
-    s.nextRaid = s.day + 100;
-    shoreTick(state, DAY_SEC);
-    const allies = s.raid?.allies ?? [];
-    expect(allies.some((a) => a.from === near.id)).toBe(true);
-    expect(allies.some((a) => a.from === far.id)).toBe(false);
-    for (let i = 0; i < 400 && !s.fight && !s.battles?.length; i++) shoreTick(state, 2);
-    expect(s.fight?.side?.some((a) => a.from === near.id) ?? s.battles?.[0].helpers).toBeTruthy();
-    void war;
-  });
-  it('raiders on a vassal: help goes only if it gets there in time, and loyalty remembers', async () => {
-    const { war, state, s, kin, foe } = await setup();
-    const v = kin[0];
-    v.vassal = { tax: 0.1, loyalty: 70 };
-    v.pop = 12;
-    v.x = s.hearth.x + 20;
-    v.y = s.hearth.y;
-    const d = s.day + s.clock / DAY_SEC;
-    s.raid = { from: foe.id, watched: d - 1, seen: d, arrives: d + 2, fighters: 6, target: v.id };
-    expect(war.canHelp(s)).toBe(true);
-    expect(war.answerHelp(state, s, true)).toBe(true);
-    expect(s.raid.allies?.some((a) => a.from === -1)).toBe(true);
-    const before = v.vassal.loyalty;
-    for (let i = 0; i < 2000 && !s.battles?.length; i++) shoreTick(state, 2);
-    const b = s.battles![0];
-    expect(b.at).toBe(v.id);
-    expect(v.vassal!.loyalty).not.toBe(before);
-    // Too far to get there in time: no help can be sent.
-    s.raid = { from: foe.id, watched: d, seen: s.day + s.clock / DAY_SEC, arrives: s.day + s.clock / DAY_SEC + 0.01, fighters: 6, target: v.id };
-    v.x = s.hearth.x + 600;
-    expect(war.canHelp(s)).toBe(false);
-  });
-});
-
-describe('Reading the enemy in a fight', () => {
-  it('a right read hits harder and blunts theirs; one order a round; raids rallied by themselves', async () => {
-    const war = await import('../src/economy/war');
-    expect(war.clash('hold', 'charge')).toEqual([1.8, 0.6]);
-    expect(war.clash('charge', 'flank')).toEqual([1.8, 0.6]);
-    expect(war.clash('flank', 'hold')).toEqual([1.8, 0.6]);
-    expect(war.clash('charge', 'hold')).toEqual([0.6, 1.4]);
-    expect(war.clash(undefined, 'hold')).toEqual([1, 1]);
-    const state = fresh();
-    const s = shoreOf(state)!;
-    now(state, 'hearth');
-    for (let i = 0; i < 8; i++) now(state, 'hut');
-    while (s.people.length < 30) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30, dies: 9999 });
-    s.food = 300;
-    s.day = 40;
-    const foe = s.villages.find((x) => war.hostile(s, x))!;
-    s.raid = { from: foe.id, watched: s.day - 1.01, fighters: 10 };
-    s.nextRaid = s.day + 100;
-    shoreTick(state, DAY_SEC);
-    expect(s.raid?.rallied).toBe(true);
-    for (let i = 0; i < 400 && !s.fight; i++) shoreTick(state, 2);
-    expect(s.fight?.tell).toBeDefined();
-    expect(war.order(s, 'hold')).toBe(true);
-    expect(war.order(s, 'flank')).toBe(false);
-    shoreTick(state, 3);
-    expect(s.fight?.order).toBeUndefined();
-  });
-});
-
-describe('Dancing tires them for a season; vassals warm to it', () => {
-  it('worn out, they rest it off over a season, not a day', async () => {
-    const { dance, danceLeft, DANCE_DAY } = await import('../src/economy/shore');
-    const state = fresh();
-    const s = shoreOf(state)!;
-    const v = s.villages.find((x) => relation(s, x) === 'kin')!;
-    v.found = true;
-    v.trust = 5;
-    s.chiefAt = { x: v.x + 2, y: v.y + 2 };
-    for (let i = 0; i < 100; i++) dance(state, v.id, 5);
-    expect(danceLeft(s, v)).toBeLessThan(0.5);
-    // (Worn out, they stay so: leaving and coming back doesn't rest them.)
-    shoreTick(state, DAY_SEC);
-    expect(danceLeft(s, v)).toBe(0);
-    shoreTick(state, DAY_SEC * 3);
-    expect(danceLeft(s, v)).toBeCloseTo(DANCE_DAY, 3);
-  });
-  it('dancing with a vassal and visiting it raise where its loyalty settles', async () => {
-    const { dance } = await import('../src/economy/shore');
-    const state = fresh();
-    const s = shoreOf(state)!;
-    const v = s.villages.find((x) => relation(s, x) === 'kin')!;
-    v.found = true;
-    v.vassal = { tax: 0.6, loyalty: 0 + 0.5 };
-    s.chiefAt = { x: v.x + 2, y: v.y + 2 };
-    s.chiefTo = null;
-    for (let i = 0; i < 30; i++) dance(state, v.id, 5);
-    expect(v.vassal!.warm).toBeGreaterThan(10);
-    const before = v.vassal!.loyalty;
-    shoreTick(state, DAY_SEC);
-    expect(v.vassal!.loyalty).toBeGreaterThan(before);
-  });
-});
-
-describe('Left alone a long while', () => {
-  it('one hearth holds so many: no children past it, no more homes, and idle hands rest', () => {
-    const state = fresh();
-    const s = shoreOf(state)!;
-    s.wood = 100000;
-    now(state, 'hearth');
-    for (let i = 0; i < 60; i++) now(state, 'hut');
-    while (s.people.length < HEARTH_MOST) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30, dies: 9999 });
-    s.food = foodCap(s);
-    s.wood = woodCap(s);
-    const n = s.people.length;
-    shoreTick(state, DAY_SEC);
-    expect(s.people.length).toBeLessThanOrEqual(n);
-    expect(elderThink(s).pick).not.toBe('hut');
-    const plan = workPlan(s);
-    expect(plan.rest).toBeGreaterThan(0);
-    expect(plan.wood * 10).toBeLessThan(HEARTH_MOST);
-    // The Great Hearth: the heart of the village holds twice as many, and they build homes again.
-    s.built.push({ id: 'greathearth', x: s.hearth.x + 6, y: s.hearth.y } as never);
-    expect(hearthMost(s)).toBe(300);
-    expect(roomLeft(s)).toBeGreaterThan(0);
-  });
-});

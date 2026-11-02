@@ -15,17 +15,14 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
-import { demandSubmit, giftForeign } from './economy/diplomacy';
-import { decideConquest, type Mercy } from './economy/war';
-import { joinCrew, leaveCrew, annex, upgradeRoad, setTrade, answerAsk, setSettleFocus, type SettleFocus, chiefNear, setSteward, startRoad, totalCritters, type StewardPlan } from './economy/shore';
-import { WARM_MAX, dance, danceLeft, answerJoin, build, shoreIsland, terrainReady, gift, isAdult, poisOf, setTax, type JoinAnswer, setLean, shoreOf, shoreSeason, startShore, takeRaft, walkChief, type Lean } from './economy/shore';
+import { buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
+import { dance, danceLeft, shoreIsland, terrainReady, gift, isAdult, poisOf, shoreOf, shoreSeason, startShore, takeRaft, walkChief } from './economy/shore';
 import { AGES, ageName } from './economy/culture';
-import { setIslandView, toggleVillage, mercyCard, danceCard, battleCard, fightCard, fightNote, findCard, forkCard, joinCard, poiCard, setBuildCat, setVillageView, stanceCard, villageCard } from './ui/shorePanels';
+import { buyAmount, setBuyMany, setIslandView, danceCard, findCard, forkCard, poiCard, setVillageView, villageCard } from './ui/shorePanels';
+import type { GenId } from './content/idle';
 import { startFireDance, type FireDance } from './ui/fireDance';
 import { lineTree, shoreTree } from './ui/familyTree';
 import { choose, setFocus, type ForkId, type Lane } from './economy/culture';
-import { clash, order, type Tactic, answerHelp, canHelp, helpSize, canStepIn, rally, sendBand, setStance, setWarRule, stepIn, type Stance, type WarRule } from './economy/war';
-import type { BuildId } from './content/shore';
 import { moodWord, QUIRKS } from './economy/society';
 import { cast, say, SPELL, spellsFor, toggleOrdain, type SpellId } from './economy/miracles';
 import { CRISES, crisisAnswered, crisisAt, crisisMissed, startCrisis } from './economy/crises';
@@ -894,8 +891,9 @@ function renderHud(): void {
   if (sh) {
     // New Shore counts people too (no limit: the culture begins when the village is big enough).
     // (One of them is the number's icon: it reads as people.) On the right, what's in store.
-    set('currency', String(totalCritters(sh)));
-    set('rate', `${Math.floor(sh.food)} food\n${Math.floor(sh.wood)} wood`);
+    // New Shore: food is everything (the big number), and what comes in a second; the critters.
+    set('currency', format(D(Math.floor(sh.food))));
+    set('rate', `${format(D(foodRate(sh)))}/s\n${totalCritters(sh)} critters`);
   } else if (ex) {
     // The Extinction counts people, not currency.
     set('currency', String(ex.people.length));
@@ -941,7 +939,6 @@ function renderHud(): void {
 const shoreNews: string[] = [];
 /** Villages already known to have joined (so only new ones get a card; not those in the save). */
 const joinedSeen = new Set<number>();
-const askedSeen = new Set<string>();
 let joinedReady = false;
 function renderShoreGoal(): void {
   const s = shoreOf(state);
@@ -984,13 +981,6 @@ function shoreFrame(): void {
       modal.dataset.village = String(v.id);
     }
   }
-  // A village won over with no room for them: the question, once.
-  for (const v of s.villages) {
-    if (v.asking === undefined || askedSeen.has(`${v.id}:${v.asking}`) || !modal.hidden || cine()) continue;
-    askedSeen.add(`${v.id}:${v.asking}`);
-    cue('chime', 0.5);
-    showModal(joinCard(s, v));
-  }
   // What exploring turned up: a card each.
   if (s.finds?.length && modal.hidden && !cine()) {
     const f = s.finds.shift()!;
@@ -1032,67 +1022,12 @@ function shoreFrame(): void {
       <button class="px-btn gold" data-act="dismiss">The long road</button>`);
     save();
   }
-  // A village beaten and at your mercy: what's to be done with them, asked once.
-  const cq = s.conquest;
-  if (cq && !mercyAsked.has(`${cq.id}:${cq.since}`) && modal.hidden && !cine()) {
-    mercyAsked.add(`${cq.id}:${cq.since}`);
-    const v = s.villages.find((x) => x.id === cq.id);
-    if (v) {
-      cue('impact', 0.4);
-      showModal(mercyCard(s, v));
-    }
-  }
   // A fork waiting on the chief: the cards, once.
   const asked = s.culture?.asking;
   if (asked && !forkAsked.has(`${asked.fork}:${asked.since}`) && modal.hidden && !cine()) {
     forkAsked.add(`${asked.fork}:${asked.since}`);
     cue('chime', 0.5);
     showModal(forkCard(s, asked.fork));
-  }
-  // Raiders seen coming: how to meet them, asked once.
-  const r = s.raid;
-  if (r?.seen !== undefined && r.target !== undefined && canHelp(s) && !stanceAsked.has(`${r.from}:${r.seen}`) && modal.hidden && !cine()) {
-    stanceAsked.add(`${r.from}:${r.seen}`);
-    cue('impact', 0.4);
-    const t = s.villages.find((x) => x.id === r.target);
-    const foe = s.villages.find((x) => x.id === r.from);
-    showModal(`<p class="label dim">Raiders</p><h3>${foe ? foe.name[0].toUpperCase() + foe.name.slice(1) : 'Raiders'} are heading for ${t?.name ?? 'a vassal'}</h3>
-      <p>About ${r.fighters} of them. ${t?.name ?? 'They'} pay tribute to the hearth; ${helpSize(s)} of yours could get there in time.</p>
-      <p class="dim tiny">Help sent wins their loyalty, and leaving them to it loses it, more so if they're beaten.</p>
-      <div class="choices"><button class="px-btn gold" data-help="send">Send ${helpSize(s)} to help</button><button class="px-btn" data-help="none">Leave them to it</button></div>`);
-  } else if (r?.seen !== undefined && r.target === undefined && r.stance === undefined && !stanceAsked.has(`${r.from}:${r.seen}`) && modal.hidden && !cine()) {
-    stanceAsked.add(`${r.from}:${r.seen}`);
-    cue('impact', 0.4);
-    showModal(stanceCard(s));
-  }
-  // A fight going on: shown live, a round at a time.
-  const f = s.fight;
-  if (f) {
-    const live = modal.querySelector<HTMLElement>(`.battle.live[data-fight="${f.id}"]`);
-    // (Shown once: closed, it's left to play out; the result still comes.)
-    if (!live && modal.hidden && !cine() && liveFight !== f.id) {
-      cue('impact', 0.5);
-      showModal(fightCard(s, f));
-      liveFight = f.id;
-      liveRounds = 0;
-    }
-    if (live || !modal.hidden) showFight(s);
-  }
-  // A battle fought: the one watched live ends where it stands; one fought while away is played
-  // out, round by round.
-  if (s.battles?.length && !cine()) {
-    const b = s.battles[0];
-    const watching = b.id !== undefined && b.id === liveFight && !!modal.querySelector(`.battle.live[data-fight="${b.id}"]`);
-    if (watching || modal.hidden) {
-      s.battles.shift();
-      const html = battleCard(s, b);
-      if (html) {
-        if (!watching) cue('impact', 0.5);
-        showModal(html);
-        playBattle(watching);
-      }
-      liveFight = undefined;
-    }
   }
 }
 
@@ -1147,140 +1082,12 @@ function danceInfo(): void {
   const left = danceLeft(s, v);
   box.querySelector('.dance-left')!.textContent = left > 0.5 ? (left > 8 ? 'Fresh' : left > 4 ? 'Tiring' : 'Nearly worn out') : 'Worn out: they\'ll rest it off over a season.';
   const bar = box.querySelector<HTMLElement>('.trust .making-bar i');
-  if (bar) bar.style.width = `${Math.floor(v.vassal ? ((v.vassal.warm ?? 0) / WARM_MAX) * 100 : v.trust ?? 0)}%`;
+  if (bar) bar.style.width = `${Math.floor(v.trust ?? 0)}%`;
 }
 
 
-const stanceAsked = new Set<string>();
-const mercyAsked = new Set<string>();
 const forkAsked = new Set<string>();
-let liveFight: number | undefined;
-let liveRounds = 0;
 
-/** The live fight on screen: bars, counts, the fallen, the chief's note and button. */
-function showFight(s: NonNullable<ReturnType<typeof shoreOf>>): void {
-  const f = s.fight;
-  const el = f && modal.querySelector<HTMLElement>(`.battle.live[data-fight="${f.id}"]`);
-  if (!f || !el) return;
-  const now = [f.x, f.y];
-  const start = [f.ours, f.theirs];
-  el.querySelectorAll<HTMLElement>('.side').forEach((side, k) => {
-    side.querySelector<HTMLElement>('.making-bar i')!.style.width = `${Math.round((now[k] / Math.max(1, start[k])) * 100)}%`;
-    side.querySelector<HTMLElement>('.num')!.textContent = String(Math.round(now[k]));
-    const icons = side.querySelectorAll<HTMLElement>('.line img');
-    const stand = Math.ceil((now[k] / Math.max(1, start[k])) * icons.length);
-    icons.forEach((ic, j) => ic.classList.toggle('down', j >= stand));
-  });
-  if (f.rounds.length !== liveRounds) {
-    liveRounds = f.rounds.length;
-    if (liveRounds) {
-      const prev = f.rounds[liveRounds - 2] ?? [f.ours, f.theirs];
-      animateRound(el, prev, f.rounds[liveRounds - 1]);
-      popSound(0.7 + Math.random() * 0.3);
-    }
-  }
-  const note = modal.querySelector<HTMLElement>('.fight-note');
-  const say = fightNote(s, f);
-  if (note && note.textContent !== say) note.textContent = say;
-  const btn = modal.querySelector<HTMLButtonElement>('[data-stepin]');
-  if (btn) btn.hidden = !canStepIn(s);
-  tacticInfo(s);
-}
-
-/** What they show they're about to do, and your answer (if you've given one) for the round. */
-const TELLS: Record<Tactic, string> = { charge: 'They\'re gathering to charge!', hold: 'They\'re bracing behind their shields.', flank: 'They\'re spreading out to go round you.' };
-function tacticInfo(s: NonNullable<ReturnType<typeof shoreOf>>): void {
-  const f = s.fight;
-  const tell = modal.querySelector<HTMLElement>('.tell');
-  if (!f || !tell) return;
-  const say = f.tell ? TELLS[f.tell] : '';
-  if (tell.textContent !== say) tell.textContent = say;
-  modal.querySelectorAll<HTMLButtonElement>('[data-tactic]').forEach((b) => {
-    b.disabled = !!f.order && f.order !== b.dataset.tactic;
-    b.classList.toggle('on', f.order === b.dataset.tactic);
-  });
-  const note = modal.querySelector<HTMLElement>('.tactic-note');
-  if (note) {
-    const [us] = clash(f.order, f.tell);
-    const text = !f.order ? 'Read what they\'re about to do. Hold breaks a charge; a charge smashes a thin, spread line; flanking goes round a braced one.' : us > 1 ? 'Right read: this round, yours hit hard and theirs fall short.' : us < 1 ? 'Wrong read: this round goes their way.' : 'Even: this round is fought as it comes.';
-    if (note.textContent !== text) note.textContent = text;
-  }
-}
-
-/** A round of blows, shown: the lines lunge at each other and clash; those who took losses
- * flash, and the losses rise off them. */
-function animateRound(el: HTMLElement, prev: [number, number], next: [number, number]): void {
-  el.classList.remove('lunge');
-  void el.offsetWidth;
-  el.classList.add('lunge');
-  window.setTimeout(() => {
-    if (!el.isConnected) return;
-    const vs = el.querySelector<HTMLElement>('.vs');
-    if (vs) {
-      const c = document.createElement('i');
-      c.className = 'clash';
-      c.textContent = '✶';
-      vs.appendChild(c);
-      window.setTimeout(() => c.remove(), 500);
-    }
-    el.querySelectorAll<HTMLElement>('.side').forEach((side, k) => {
-      const lost = Math.round(prev[k] - next[k]);
-      if (lost <= 0) return;
-      side.classList.remove('hit');
-      void side.offsetWidth;
-      side.classList.add('hit');
-      const d = document.createElement('i');
-      d.className = 'dmg';
-      d.textContent = `−${lost}`;
-      d.style.left = `${30 + Math.random() * 40}%`;
-      side.appendChild(d);
-      window.setTimeout(() => d.remove(), 1000);
-    });
-  }, 180);
-}
-
-/** The battle's over: the winners hop for joy; the beaten turn and run. */
-function endBattle(el: HTMLElement): void {
-  const usWon = el.dataset.won === 'us';
-  el.classList.add('over');
-  el.querySelector('.side.us')?.classList.add(usWon ? 'win' : 'flee');
-  el.querySelector('.side.them')?.classList.add(usWon ? 'flee' : 'win');
-}
-
-/** The battle on show: the two lines thin round by round, then the result. */
-function playBattle(done = false): void {
-  const el = modal.querySelector<HTMLElement>('.battle');
-  if (!el) return;
-  const all: [number, number][] = JSON.parse(el.dataset.rounds ?? '[]');
-  // (Watched live: only the last round left to show.)
-  const rounds = done ? all.slice(-1) : all;
-  const start = [Number(el.dataset.ours), Number(el.dataset.theirs)];
-  const sides = [el.querySelector<HTMLElement>('.side.us')!, el.querySelector<HTMLElement>('.side.them')!];
-  let i = 0;
-  const step = () => {
-    if (!el.isConnected) return;
-    if (i >= rounds.length) {
-      const res = modal.querySelector<HTMLElement>('.battle-result');
-      if (res) res.hidden = false;
-      endBattle(el);
-      return;
-    }
-    const prevR = (done ? all[all.length - 2] : rounds[i - 1]) ?? (start as [number, number]);
-    const r = rounds[i++];
-    if (!done) animateRound(el, prevR, r);
-    sides.forEach((side, k) => {
-      const left = r[k];
-      side.querySelector<HTMLElement>('.making-bar i')!.style.width = `${Math.round((left / Math.max(1, start[k])) * 100)}%`;
-      side.querySelector<HTMLElement>('.num')!.textContent = String(Math.round(left));
-      const icons = side.querySelectorAll<HTMLElement>('.line img');
-      const stand = Math.ceil((left / Math.max(1, start[k])) * icons.length);
-      icons.forEach((ic, j) => ic.classList.toggle('down', j >= stand));
-    });
-    if (!done) popSound(0.7 + Math.random() * 0.3);
-    setTimeout(step, done ? 300 : 850);
-  };
-  setTimeout(step, done ? 0 : 600);
-}
 
 /** The strip under the top bar: this stage's own goal. It never names what comes next. */
 function renderGoal(): void {
@@ -1516,8 +1323,8 @@ function renderHint(): void {
     }
   } else if (state.current === 'shore') {
     const s = shoreOf(state);
-    if (s && !s.raftTaken && !s.built.length && !s.building) text = 'Break up the raft for wood (in the Build tab)';
-    else if (s && !s.built.length && !s.building) text = 'Build the hearth (in the Build tab)';
+    if (s && !s.raftTaken) text = 'Light the hearth (in the Village tab)';
+    else if (s && !Object.keys(s.gens).length) text = 'Stoke the fire, then send out foragers (in Build)';
     else if (!pokedThisStage) text = 'Tap the land to walk · pinch to zoom';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
@@ -2039,18 +1846,22 @@ function act(el: HTMLElement): void {
     if (pan) pan.setAttribute('style', webTransform());
   }
   else if (el.dataset.cast) startCast(el.dataset.cast as SpellId);
-  else if (el.dataset.build) {
-    if (build(state, el.dataset.build as BuildId)) {
+  else if (el.dataset.sgen) {
+    // New Shore: buy a generator (one, ten, or as many as there's food for).
+    const s = shoreOf(state);
+    const n = buyAmount();
+    if (s && buyGen(state, el.dataset.sgen as GenId, n || 1000)) {
       popSound(0.72);
       save();
     }
-  } else if (el.dataset.lean) setLean(state, el.dataset.lean as Lean);
-  else if (el.dataset.buildcat) setBuildCat(el.dataset.buildcat);
+  } else if (el.dataset.upgrade) {
+    if (buyShoreUpgrade(state, el.dataset.upgrade)) {
+      cue('chime', 0.4);
+      save();
+    }
+  } else if (el.dataset.buymany !== undefined) setBuyMany(Number(el.dataset.buymany));
   else if (el.dataset.villageview) setVillageView(el.dataset.villageview);
   else if (el.dataset.islandview) setIslandView(el.dataset.islandview);
-  else if (el.dataset.openv) toggleVillage(Number(el.dataset.openv));
-  else if (el.dataset.steward) setSteward(state, el.dataset.steward === 'on');
-  else if (el.dataset.stewardplan) setSteward(state, true, el.dataset.stewardplan as StewardPlan);
   else if (el.dataset.camera) {
     // Back to the village (and the camera stays there), or back with the chief.
     const s = shoreOf(state);
@@ -2063,21 +1874,6 @@ function act(el: HTMLElement): void {
   else if (el.dataset.deck) {
     const deck = el.closest<HTMLElement>('.deck');
     if (deck) flipDeck(deck, Number(el.dataset.deck));
-  }
-  else if (el.dataset.join) {
-    const [id, a] = el.dataset.join.split(':');
-    answerJoin(state, Number(id), a as JoinAnswer);
-    modal.hidden = true;
-    panelKey = '';
-    save();
-  } else if (el.dataset.askjoin) {
-    const s = shoreOf(state);
-    const v = s?.villages.find((x) => x.id === Number(el.dataset.askjoin));
-    if (s && v && v.asking !== undefined) showModal(joinCard(s, v));
-  } else if (el.dataset.tax) {
-    const [id, t] = el.dataset.tax.split(':');
-    setTax(state, Number(id), Number(t));
-    panelKey = '';
   }
   else if (el.dataset.gopoi || el.dataset.seepoi) {
     const s = shoreOf(state);
@@ -2100,12 +1896,19 @@ function act(el: HTMLElement): void {
       cue('chime', 0.35);
       const r = el.getBoundingClientRect();
       scene.float(r.left + r.width / 2, r.top, `+${got} trust`, '#8acf6a');
-      // (The card, if it's open, shows the new trust.)
       const v = s.villages.find((x) => x.id === id);
-      if (!modal.hidden && modal.dataset.village === String(id) && v && !v.joined && v.settled === undefined) {
-        showModal(villageCard(s, v));
-        modal.dataset.village = String(id);
-      } else if (v?.joined || v?.settled !== undefined) modal.hidden = true;
+      if (!modal.hidden && modal.dataset.village === String(id) && v) {
+        if (v.won === undefined) {
+          showModal(villageCard(s, v));
+          modal.dataset.village = String(id);
+        } else modal.hidden = true;
+      }
+      save();
+    }
+  } else if (el.dataset.take) {
+    if (take(state, Number(el.dataset.take))) {
+      cue('impact', 0.5);
+      modal.hidden = true;
       save();
     }
   } else if (el.dataset.visit) {
@@ -2114,95 +1917,6 @@ function act(el: HTMLElement): void {
       walkChief(state, { x: v.x + 4, y: v.y + 4 });
       scene.shoreScene.follow();
       modal.hidden = true;
-    }
-  } else if (el.dataset.sfocus) {
-    const [id, f] = el.dataset.sfocus.split(':');
-    if (setSettleFocus(state, Number(id), f as SettleFocus)) {
-      popSound(0.8);
-      save();
-    }
-  } else if (el.dataset.answer) {
-    if (answerAsk(state, Number(el.dataset.answer))) {
-      cue('chime', 0.4);
-      save();
-    }
-  } else if (el.dataset.annex) {
-    if (annex(state, Number(el.dataset.annex))) {
-      cue('ascend', 0.5);
-      save();
-    }
-  } else if (el.dataset.mercy) {
-    const s = shoreOf(state);
-    if (s && decideConquest(state, s, el.dataset.mercy as Mercy)) {
-      cue('chime', 0.4);
-      modal.hidden = true;
-      save();
-    }
-  } else if (el.dataset.giftf) {
-    const s = shoreOf(state);
-    const id = Number(el.dataset.giftf);
-    const got = giftForeign(state, id);
-    if (got && s) {
-      cue('chime', 0.35);
-      const r = el.getBoundingClientRect();
-      scene.float(r.left + r.width / 2, r.top, `+${got} standing`, '#8acf6a');
-      const v = s.villages.find((x) => x.id === id);
-      if (!modal.hidden && modal.dataset.village === String(id) && v) {
-        showModal(villageCard(s, v));
-        modal.dataset.village = String(id);
-      }
-      save();
-    }
-  } else if (el.dataset.demand) {
-    const s = shoreOf(state);
-    const id = Number(el.dataset.demand);
-    const got = demandSubmit(state, id);
-    const v = s?.villages.find((x) => x.id === id);
-    if (got && s && v) {
-      cue(got === 'yes' ? 'ascend' : 'chime', 0.5);
-      showModal(`<p class="label dim">${got === 'yes' ? 'They submit' : 'Refused'}</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${v.name[0].toUpperCase() + v.name.slice(1)}</h3></div>
-        <p>${got === 'yes' ? 'Seeing the strength behind the chief, they gave in without a blow. Their village is yours: a vassal, and not a grudging one.' : 'They laughed, and sent the chief away. They\'ll remember being asked.'}</p><button class="px-btn gold" data-act="dismiss">OK</button>`);
-      save();
-    }
-  } else if (el.dataset.crew) {
-    if (joinCrew(state, Number(el.dataset.crew))) {
-      scene.shoreScene.follow();
-      save();
-    }
-  } else if (el.dataset.leavecrew) {
-    leaveCrew(state);
-    save();
-  } else if (el.dataset.roadup) {
-    if (upgradeRoad(state, Number(el.dataset.roadup))) {
-      cue('chime', 0.35);
-      save();
-    }
-  } else if (el.dataset.trade) {
-    const [id, k] = el.dataset.trade.split(':').map(Number);
-    if (setTrade(state, id, k)) {
-      popSound(0.8);
-      save();
-    }
-  } else if (el.dataset.road) {
-    if (startRoad(state, Number(el.dataset.road))) {
-      cue('chime', 0.35);
-      save();
-    }
-  }
-  else if (el.dataset.raid) {
-    const s = shoreOf(state);
-    const v = s?.villages.find((x) => x.id === Number(el.dataset.raid));
-    if (s && v) {
-      showModal(villageCard(s, v));
-      modal.dataset.village = String(v.id);
-    }
-  } else if (el.dataset.band) {
-    const s = shoreOf(state);
-    const [id, n, levy] = el.dataset.band.split(':').map(Number);
-    if (s && sendBand(state, s, id, n, false, !!levy)) {
-      cue('impact', 0.3);
-      modal.hidden = true;
-      save();
     }
   } else if (el.dataset.tree || el.dataset.treeline) {
     // (From a tree on show: Back returns to it. Opened afresh: a new trail.)
@@ -2232,58 +1946,12 @@ function act(el: HTMLElement): void {
       popSound(0.8);
       save();
     }
-  } else if (el.dataset.warrule) {
-    const s = shoreOf(state);
-    if (s) {
-      setWarRule(s, el.dataset.warrule as WarRule);
-      popSound(0.8);
-      save();
-    }
   } else if (el.dataset.dance) {
     const s = shoreOf(state);
     const v = s?.villages.find((x) => x.id === Number(el.dataset.dance));
     if (s && v) {
       showModal(danceCard(s, v));
       startDance();
-    }
-  } else if (el.dataset.tactic) {
-    const s = shoreOf(state);
-    if (s && order(s, el.dataset.tactic as Tactic)) {
-      popSound(0.9);
-      tacticInfo(s);
-    }
-  } else if (el.dataset.help) {
-    const s = shoreOf(state);
-    if (s && answerHelp(state, s, el.dataset.help === 'send')) {
-      popSound(0.8);
-      modal.hidden = true;
-      save();
-    }
-  } else if (el.dataset.stance) {
-    const s = shoreOf(state);
-    if (s && setStance(s, el.dataset.stance as Stance)) {
-      popSound(0.8);
-      modal.hidden = true;
-      save();
-    }
-  } else if (el.dataset.stancecard) {
-    const s = shoreOf(state);
-    if (s?.raid?.seen !== undefined) showModal(stanceCard(s));
-  } else if (el.dataset.stepin) {
-    const s = shoreOf(state);
-    if (s && stepIn(s)) {
-      cue('ascend', 0.5);
-      const r = el.getBoundingClientRect();
-      scene.float(r.left + r.width / 2, r.top, 'To the front!', '#e8c050');
-      save();
-    }
-  } else if (el.dataset.rally) {
-    const s = shoreOf(state);
-    if (s && rally(s)) {
-      cue('ascend', 0.4);
-      const r = el.getBoundingClientRect();
-      scene.float(r.left + r.width / 2, r.top, 'Rallied!', '#e8c050');
-      save();
     }
   }
   else if (el.dataset.seevillage) {
@@ -2364,6 +2032,33 @@ function act(el: HTMLElement): void {
   } else {
     const ta = $('save-text') as HTMLTextAreaElement | null;
     switch (el.dataset.act) {
+      case 'raft':
+        if (takeRaft(state)) {
+          cue('ascend', 0.5);
+          save();
+        }
+        break;
+      case 'stoke': {
+        const got = stoke(state);
+        if (got) {
+          popSound(0.85 + Math.random() * 0.3);
+          const r = el.getBoundingClientRect();
+          scene.float(r.left + r.width / 2, r.top, `+${format(D(got))}`, '#e8c86a');
+        }
+        break;
+      }
+      case 'work':
+        if (buyWork(state)) {
+          cue('ascend', 0.6);
+          save();
+        }
+        break;
+      case 'auto': {
+        const s = shoreOf(state);
+        if (s) s.auto = !s.auto;
+        save();
+        break;
+      }
       case 'finale':
         if (triggerFinale(state)) playEnding();
         break;

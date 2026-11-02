@@ -8,8 +8,7 @@ import { createState } from '../src/economy/state';
 import { deserialize, exportPlain, exportSave, importSave, serialize } from '../src/economy/save';
 import { tick } from '../src/economy/tick';
 import { DAY_SEC as EX_DAY, extinctionTick, launch, startExtinction } from '../src/economy/extinction';
-import { answerJoin, build, gift, shoreOf, shoreTick, startShore, takeRaft } from '../src/economy/shore';
-import { sendBand, setWarRule } from '../src/economy/war';
+import { gift, shoreOf, shoreTick, startShore, takeRaft } from '../src/economy/shore';
 import type { GameState, TribeState } from '../src/economy/types';
 import { unpackSeen } from '../src/economy/island';
 import { SHORE_CELLS } from '../src/economy/shore';
@@ -116,27 +115,18 @@ describe('Saves keep everything', () => {
     roundTrip('shore early', s);
   });
 
-  it('New Shore late: a big village, joined clans, the dead, raids, culture, a war band out, a fight', () => {
+  it('New Shore late: a big village, villages won, the dead, upgrades, culture, a boost going', () => {
     const s = shoreGame('hunter');
     const sh = shoreOf(s)!;
     takeRaft(s);
-    for (const id of ['hearth', 'hut', 'council', 'envoy', 'scout', 'watch', 'warcamp'] as const) {
-      sh.wood = 1e3;
-      build(s, id);
-      if (sh.building) sh.building.left = 0;
-      shoreTick(s, 0.01);
-    }
+    sh.gens = { forager: 30, camp: 12, weir: 4, hut: 30 };
+    sh.ups.push('council', 'scouts', 'envoy');
+    sh.auto = true;
     for (let t = 0; t < 5 * 3600; t += 60) {
       shoreTick(s, 60);
-      for (const v of sh.villages) if (v.asking !== undefined) answerJoin(s, v.id, 'crowd');
       for (const v of sh.villages) if (v.found) gift(s, v.id);
     }
-    setWarRule(sh, 'weaker');
-    const prey = sh.villages.find((v) => !v.joined && !v.gone && !v.vassal);
-    if (prey) {
-      prey.found = true;
-      sendBand(s, sh, prey.id, 4);
-    }
+    sh.boost = { mult: 2, until: sh.day * 120 + sh.clock + 50 };
     sh.culture ??= { since: sh.day, age: 1, practice: { food: 50 }, done: ['dried'], forks: {}, focus: 'food' };
     expect(sh.people.length).toBeGreaterThan(20);
     expect(sh.dead?.length ?? 0).toBeGreaterThan(0);
@@ -145,11 +135,10 @@ describe('Saves keep everything', () => {
     const back = shoreOf(importSave(exportSave(s)))!;
     expect(back.people.map((p) => [p.id, p.name, p.parents, p.genes])).toEqual(sh.people.map((p) => [p.id, p.name, p.parents, p.genes]));
     expect(back.dead?.length).toBe(sh.dead?.length);
-    expect(back.villages.map((v) => [v.id, v.joined, v.vassal, v.trust])).toEqual(sh.villages.map((v) => [v.id, v.joined, v.vassal, v.trust]));
-    expect(back.built.length).toBe(sh.built.length);
+    expect(back.villages.map((v) => [v.id, v.won, v.trust])).toEqual(sh.villages.map((v) => [v.id, v.won, v.trust]));
+    expect([back.gens, back.ups, back.auto]).toEqual([sh.gens, sh.ups, sh.auto]);
     expect([back.culture?.age, back.culture?.done, back.culture?.forks, back.culture?.focus]).toEqual([sh.culture?.age, sh.culture?.done, sh.culture?.forks, sh.culture?.focus]);
     for (const [k, v] of Object.entries(sh.culture!.practice)) expect(back.culture!.practice[k as never]).toBeCloseTo(v!, 3);
-    expect(back.warband?.to).toBe(sh.warband?.to);
   });
 
   it('ashore, the Extinction behind them: the family, the line and the escape kept', () => {

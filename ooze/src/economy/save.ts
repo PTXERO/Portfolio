@@ -4,7 +4,7 @@ import LZString from 'lz-string';
 import { deflateSync, inflateSync, strFromU8, strToU8 } from 'fflate';
 import { settleHabitat } from './actions';
 import { MAX_SURVIVORS } from './tribal';
-import { SHORE_CELLS } from './shore';
+import { idleShore, SHORE_CELLS } from './shore';
 import { createStageState, createState } from './state';
 import { D } from './num';
 import { packSeen, unpackSeen } from './island';
@@ -63,7 +63,8 @@ export function deserialize(text: string): GameState {
           parties: s.seed !== undefined ? (s.parties ?? []) : [],
           partyReady: s.seed !== undefined ? { ...(s.partyReady ?? {}) } : {},
           sightings: { ...(s.sightings ?? {}) },
-          shore: s.shore ? structuredClone(s.shore) : undefined,
+          // (A New Shore from before the idle way is made over: see idleShore.)
+          shore: s.shore ? idleShore(structuredClone(s.shore) as never) : undefined,
           tribe: s.tribe ? { ...s.tribe, look: { ...s.tribe.look, parts: { ...s.tribe.look.parts } }, stats: { ...s.tribe.stats } } : undefined,
           nests: s.seed !== undefined ? [...(s.nests ?? [])] : [],
           nestSettle: s.seed !== undefined ? { ...(s.nestSettle ?? {}) } : {},

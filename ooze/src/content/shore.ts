@@ -21,7 +21,7 @@ export const SHORE_STORY = {
   found: '[STORY] Smoke, and huts, and others like them. Not like them.',
 };
 
-export type BuildId = 'forester' | 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails' | 'council' | 'envoy' | 'pottery' | 'thatcher' | 'salter' | 'healer' | 'toolmaker' | 'watch' | 'palisade' | 'spears' | 'greathearth' | 'warcamp' | 'square' | 'market' | 'kiln' | 'shrine' | 'workshop';
+export type BuildId = 'forester' | 'hearth' | 'hut' | 'rack' | 'woodpile' | 'camp' | 'cutter' | 'scout' | 'longhouse' | 'elders' | 'pool' | 'granary' | 'weir' | 'lookout' | 'trails' | 'council' | 'envoy' | 'pottery' | 'thatcher' | 'salter' | 'healer' | 'toolmaker' | 'watch' | 'palisade' | 'spears' | 'greathearth' | 'warcamp' | 'square' | 'market' | 'kiln' | 'shrine' | 'workshop' | 'lodge' | 'garden';
 
 /** What the land gives beyond food and wood: each only where it's found (see HABITATS). */
 export type Res = 'fish' | 'clay' | 'reeds' | 'salt' | 'herbs' | 'timber' | 'flint' | 'stone';
@@ -56,7 +56,7 @@ export interface BuildDef {
   /** Only once it's been learned out on the island (at this kind of landmark). */
   learn?: PoiKind;
   /** What it adds (see Boosts). */
-  fx?: Partial<Boosts>;
+  fx?: Record<string, number>;
   /** What else it takes, beyond wood (only to be had from a village where it's found). */
   needs?: Partial<Record<Res, number>>;
   /** Only from this Age of the culture on. */
@@ -68,54 +68,18 @@ export interface BuildDef {
 /** Everything buildings and relics can add to: shares (0.15 is +15%) except room, the stores
  * (food and wood kept) and sight (tiles). */
 export interface Boosts {
+  /** Share more of everything brought in. */
   food: number;
-  wood: number;
+  /** Share more stoking the fire brings. */
+  tap: number;
+  /** Share more often children are born; quicker they grow up. */
   births: number;
   grow: number;
+  /** The chief and the scouts: how much faster they walk, and tiles further they see. */
   speed: number;
   sight: number;
+  /** Share more trust a gift wins. */
   gift: number;
-  room: number;
-  foodCap: number;
-  woodCap: number;
-  /** How much of winter's slowdown is kept off (0 to 1). */
-  winter: number;
-  /** Tiles round the village seen from it. */
-  watch: number;
-  /** Share off what huts cost. */
-  cheap: number;
-  /** Share of hunger's deaths kept off. */
-  mend: number;
-  /** How much harder they fight at home (walls, watchers). */
-  guard: number;
-  /** How much harder they fight anywhere (arms). */
-  arms: number;
-  /** Days sooner raiders are seen coming. */
-  warn: number;
-  /** Share more the settlements and vassals send. */
-  tribute: number;
-  /** Higher a vassal's loyalty settles. */
-  loyalty: number;
-  /** Share more standing a gift wins. */
-  standing: number;
-  /** Share quicker building goes. */
-  build: number;
-  /** More of each of the land's goods kept. */
-  resCap: number;
-  /** Share more a caravan brings back. */
-  trade: number;
-  /** Share off what a road costs in wood. */
-  roadCost: number;
-  /** Share quicker roads are laid. */
-  crew: number;
-  /** Share more of each vassal called up with a war band. */
-  levy: number;
-  /** How much more often wanderers come at the waystations. */
-  wander: number;
-  /** Share off what a feast costs. */
-  feast: number;
-  /** Share quicker the settlements grow. */
-  settleGrow: number;
 }
 
 export const BUILDS: BuildDef[] = [
@@ -230,14 +194,14 @@ export interface RelicDef {
 }
 
 export const RELICS: RelicDef[] = [
-  { id: 'antler', name: 'Carved bone', does: 'Food comes in 5% faster.', fx: { food: 0.05 } },
-  { id: 'axe', name: 'Black stone axe', does: 'Wood comes in 8% faster.', fx: { wood: 0.08 } },
+  { id: 'antler', name: 'Carved bone', does: 'Everything brings in 5% more.', fx: { food: 0.05 } },
+  { id: 'axe', name: 'Black stone axe', does: 'Stoking the fire brings a quarter more.', fx: { tap: 0.25 } },
   { id: 'shell', name: 'Spiral shell', does: 'Gifts win 15% more trust.', fx: { gift: 0.15 } },
   { id: 'beads', name: 'Stone beads', does: 'Children are born 8% more often.', fx: { births: 0.08 } },
   { id: 'crystal', name: 'Clear stone', does: 'The chief and the scouts see 3 tiles further.', fx: { sight: 3 } },
   { id: 'wraps', name: 'Old foot-wraps', does: 'The chief and the scouts walk 8% faster.', fx: { speed: 0.08 } },
   { id: 'figure', name: 'Clay figure', does: 'Children grow up 8% faster.', fx: { grow: 0.08 } },
-  { id: 'shard', name: 'Humming shard', does: 'Food and wood come in 3% faster. It hums like the spear.', fx: { food: 0.03, wood: 0.03 } },
+  { id: 'shard', name: 'Humming shard', does: 'Everything brings in 10% more. It hums like the spear.', fx: { food: 0.1 } },
 ];
 
 export const POI_SORT = { natural: 'Landmark', ruin: 'Ruins', strange: 'Strange' } as const;

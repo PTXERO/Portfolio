@@ -7,7 +7,7 @@
 
 import type { BuildId, Boosts } from '../content/shore';
 import { record } from './chronicle';
-import { networkBonus, count, DAY_SEC, isAdult, poisOf, poiDef, shoreWhen, totalCritters, type ShoreState } from './shore';
+import { count, DAY_SEC, has, isAdult, poisOf, poiDef, relation, shoreWhen, totalCritters, type ShoreState } from './shore';
 import type { GameState } from './types';
 
 export type Lane = 'food' | 'crafts' | 'war' | 'rule' | 'kin' | 'rites' | 'stories' | 'words';
@@ -36,42 +36,42 @@ export interface Idea {
   fork?: ForkId;
 }
 
-/** The Hearth Age's ideas: two a lane. */
+/** Each Age's ideas: two a lane. */
 export const IDEAS: Idea[] = [
-  { id: 'dried', lane: 'food', age: 1, name: 'Dried meat and fruit', does: 'Room for 40 more food.', fx: { foodCap: 40 } },
-  { id: 'grounds', lane: 'food', age: 1, name: 'Known grounds', does: 'Food comes in 5% faster.', fx: { food: 0.05 } },
-  { id: 'blades', lane: 'crafts', age: 1, name: 'Stone blades', does: 'Wood comes in 5% faster; and roads can be relaid in stone.', fx: { wood: 0.05 } },
-  { id: 'baskets', lane: 'crafts', age: 1, name: 'Baskets', does: 'Room for 30 more food and 30 more wood.', fx: { foodCap: 30, woodCap: 30 } },
-  { id: 'watchers', lane: 'war', age: 1, name: 'Watchers', does: 'Raiders are seen a day sooner.', fx: { warn: 1 } },
-  { id: 'clubs', lane: 'war', age: 1, name: 'Clubs', does: 'They fight 10% harder.', fx: { arms: 0.1 } },
+  { id: 'dried', lane: 'food', age: 1, name: 'Dried meat and fruit', does: 'Everything brings in 5% more.', fx: { food: 0.05 } },
+  { id: 'grounds', lane: 'food', age: 1, name: 'Known grounds', does: 'Everything brings in 10% more.', fx: { food: 0.1 } },
+  { id: 'blades', lane: 'crafts', age: 1, name: 'Stone blades', does: 'Stoking the fire brings half again as much.', fx: { tap: 0.5 } },
+  { id: 'baskets', lane: 'crafts', age: 1, name: 'Baskets', does: 'Everything brings in 10% more.', fx: { food: 0.1 } },
+  { id: 'watchers', lane: 'war', age: 1, name: 'Watchers', does: 'The chief and the scouts see 2 tiles further.', fx: { sight: 2 } },
+  { id: 'clubs', lane: 'war', age: 1, name: 'Clubs', does: 'Stoking the fire brings half again as much.', fx: { tap: 0.5 } },
   { id: 'fourword', lane: 'rule', age: 1, name: 'The four\'s word', does: 'What the four said is law: gifts win 10% more trust.', fx: { gift: 0.1 } },
-  { id: 'circle', lane: 'rule', age: 1, name: 'The elders\' circle', does: 'Children grow up 5% faster.', fx: { grow: 0.05 } },
-  { id: 'hearths', lane: 'kin', age: 1, name: 'Mixed hearths', does: 'Children are born 5% more often.', fx: { births: 0.05 } },
-  { id: 'songs', lane: 'kin', age: 1, name: 'Shared songs', does: 'Gifts win 10% more trust.', fx: { gift: 0.1 } },
+  { id: 'circle', lane: 'rule', age: 1, name: 'The elders\' circle', does: 'Children grow up 10% faster.', fx: { grow: 0.1 } },
+  { id: 'hearths', lane: 'kin', age: 1, name: 'Mixed hearths', does: 'Children are born 10% more often.', fx: { births: 0.1 } },
+  { id: 'songs', lane: 'kin', age: 1, name: 'Shared songs', does: 'Gifts win 15% more trust.', fx: { gift: 0.15 } },
   { id: 'dead', lane: 'rites', age: 1, name: 'The dead', does: 'How the dead are seen to: a choice.', fork: 'dead' },
-  { id: 'feast', lane: 'rites', age: 1, name: 'The first feast', does: 'Children are born 5% more often.', fx: { births: 0.05 } },
-  { id: 'crossing', lane: 'stories', age: 1, name: 'The Crossing told', does: 'A tenth fewer die when food runs short.', fx: { mend: 0.1 } },
+  { id: 'feast', lane: 'rites', age: 1, name: 'The first feast', does: 'Everything brings in 10% more.', fx: { food: 0.1 } },
+  { id: 'crossing', lane: 'stories', age: 1, name: 'The Crossing told', does: 'Everything brings in 10% more.', fx: { food: 0.1 } },
   { id: 'farspear', lane: 'stories', age: 1, name: 'The spear far off', does: 'The chief and the scouts see 2 tiles further.', fx: { sight: 2 } },
-  { id: 'names', lane: 'words', age: 1, name: 'Names for everything', does: 'The chief and the scouts walk 5% faster.', fx: { speed: 0.05 } },
-  { id: 'fingers', lane: 'words', age: 1, name: 'Finger-counting', does: 'Room for 40 more wood.', fx: { woodCap: 40 } },
+  { id: 'names', lane: 'words', age: 1, name: 'Names for everything', does: 'The chief and the scouts walk 10% faster.', fx: { speed: 0.1 } },
+  { id: 'fingers', lane: 'words', age: 1, name: 'Finger-counting', does: 'Everything brings in 10% more.', fx: { food: 0.1 } },
 
-  // The Village Age: the hearth's ways carried out to the villages it holds, along the roads.
-  { id: 'salting', lane: 'food', age: 2, name: 'Salted stores', does: 'Food keeps through the cold: winter\'s lean a quarter less.', fx: { winter: 0.25 } },
-  { id: 'markets', lane: 'food', age: 2, name: 'Market days', does: 'How the villages trade with the hearth: a choice.', fork: 'trade' },
-  { id: 'kilns', lane: 'crafts', age: 2, name: 'Fired clay', does: 'Room for 20 more of each of the land\'s goods; and the kiln can be built.', fx: { resCap: 20 } },
-  { id: 'roadcraft', lane: 'crafts', age: 2, name: 'Roadcraft', does: 'Roads cost a quarter less wood, and are laid a quarter faster.', fx: { roadCost: 0.25, crew: 0.25 } },
-  { id: 'levies', lane: 'war', age: 2, name: 'Sworn levies', does: 'A vassal called up sends a third of its fighters, not a quarter.', fx: { levy: 0.08 } },
-  { id: 'shields', lane: 'war', age: 2, name: 'Hide shields', does: 'They hold 15% harder at home.', fx: { guard: 0.15 } },
-  { id: 'oaths', lane: 'rule', age: 2, name: 'Oaths of fealty', does: 'Vassals\' loyalty settles 10 higher.', fx: { loyalty: 10 } },
+  // The Village Age.
+  { id: 'salting', lane: 'food', age: 2, name: 'Salted stores', does: 'Everything brings in 20% more.', fx: { food: 0.2 } },
+  { id: 'markets', lane: 'food', age: 2, name: 'Market days', does: 'How the villages deal with the hearth: a choice.', fork: 'trade' },
+  { id: 'kilns', lane: 'crafts', age: 2, name: 'Fired clay', does: 'Everything brings in 20% more.', fx: { food: 0.2 } },
+  { id: 'roadcraft', lane: 'crafts', age: 2, name: 'Roadcraft', does: 'The chief and the scouts walk 15% faster.', fx: { speed: 0.15 } },
+  { id: 'levies', lane: 'war', age: 2, name: 'Sworn levies', does: 'Stoking the fire brings twice as much.', fx: { tap: 1 } },
+  { id: 'shields', lane: 'war', age: 2, name: 'Hide shields', does: 'Everything brings in 15% more.', fx: { food: 0.15 } },
+  { id: 'oaths', lane: 'rule', age: 2, name: 'Oaths of fealty', does: 'Gifts win a quarter more trust.', fx: { gift: 0.25 } },
   { id: 'law', lane: 'rule', age: 2, name: 'The spoken law', does: 'Whose word is law: a choice.', fork: 'law' },
-  { id: 'marriages', lane: 'kin', age: 2, name: 'Marriages between villages', does: 'Gifts win a quarter more standing with villages not your kin.', fx: { standing: 0.25 } },
-  { id: 'guests', lane: 'kin', age: 2, name: 'Guest-right', does: 'Wanderers come to the waystations twice as often.', fx: { wander: 1 } },
-  { id: 'faith', lane: 'rites', age: 2, name: 'What the fire is', does: 'What they keep faith with: a choice. And the shrine can be built.', fork: 'faith' },
-  { id: 'feastdays', lane: 'rites', age: 2, name: 'Feast days', does: 'A feast to bring a vassal into the fold costs half.', fx: { feast: 0.5 } },
-  { id: 'founding', lane: 'stories', age: 2, name: 'The foundings told', does: 'The settlements grow a fifth faster.', fx: { settleGrow: 0.2 } },
-  { id: 'hidemaps', lane: 'stories', age: 2, name: 'Maps on hide', does: 'The chief and the scouts see 2 tiles further, and walk 5% faster.', fx: { sight: 2, speed: 0.05 } },
-  { id: 'tallies', lane: 'words', age: 2, name: 'Tally sticks', does: 'Building goes a tenth faster.', fx: { build: 0.1 } },
-  { id: 'tithe', lane: 'words', age: 2, name: 'The tithe counted', does: 'Settlements and vassals send a tenth more.', fx: { tribute: 0.1 } },
+  { id: 'marriages', lane: 'kin', age: 2, name: 'Marriages between villages', does: 'Children are born a fifth more often.', fx: { births: 0.2 } },
+  { id: 'guests', lane: 'kin', age: 2, name: 'Guest-right', does: 'Everything brings in 15% more.', fx: { food: 0.15 } },
+  { id: 'faith', lane: 'rites', age: 2, name: 'What the fire is', does: 'What they keep faith with: a choice.', fork: 'faith' },
+  { id: 'feastdays', lane: 'rites', age: 2, name: 'Feast days', does: 'Everything brings in 20% more.', fx: { food: 0.2 } },
+  { id: 'founding', lane: 'stories', age: 2, name: 'The foundings told', does: 'Children grow up a fifth faster.', fx: { grow: 0.2 } },
+  { id: 'hidemaps', lane: 'stories', age: 2, name: 'Maps on hide', does: 'The chief and the scouts see 3 tiles further.', fx: { sight: 3 } },
+  { id: 'tallies', lane: 'words', age: 2, name: 'Tally sticks', does: 'Everything brings in 20% more.', fx: { food: 0.2 } },
+  { id: 'tithe', lane: 'words', age: 2, name: 'The tithe counted', does: 'Everything brings in 15% more.', fx: { food: 0.15 } },
 ];
 
 export const FORKS: Record<ForkId, { name: string; ask: string; options: { id: string; name: string; line: string; fx?: Partial<Boosts>; lane?: Lane; cannibal?: boolean }[] }> = {
@@ -81,31 +81,31 @@ export const FORKS: Record<ForkId, { name: string; ask: string; options: { id: s
     options: [
       { id: 'bury', name: 'Bury them', line: 'Laid in the earth near the hearth, and remembered there.', lane: 'stories' },
       { id: 'burn', name: 'Burn them', line: 'Given to the fire, and gone up with the smoke.', lane: 'rites' },
-      { id: 'eat', name: 'Eat them', line: 'Nothing is wasted. Not even them.', fx: { food: 0.05 }, cannibal: true },
+      { id: 'eat', name: 'Eat them', line: 'Nothing is wasted. Not even them.', fx: { food: 0.1 }, cannibal: true },
     ],
   },
   law: {
     name: 'The spoken law',
     ask: 'Whose word is law, in the hearth and the villages it holds?',
     options: [
-      { id: 'council', name: 'The council\'s', line: 'The elders sit, and talk it through, and their word holds everywhere.', lane: 'rule', fx: { loyalty: 5 } },
-      { id: 'chief', name: 'The chief\'s', line: 'One voice, quick and sure, and the spears behind it.', lane: 'war', fx: { arms: 0.1 } },
+      { id: 'council', name: 'The council\'s', line: 'The elders sit, and talk it through, and their word holds everywhere.', lane: 'rule', fx: { gift: 0.2 } },
+      { id: 'chief', name: 'The chief\'s', line: 'One voice, quick and sure, and the spears behind it.', lane: 'war', fx: { tap: 0.5 } },
     ],
   },
   trade: {
     name: 'Market days',
     ask: 'How do the villages and the hearth deal with each other?',
     options: [
-      { id: 'barter', name: 'Barter', line: 'Goods for goods, on market days: everyone comes away with something.', lane: 'food', fx: { trade: 0.5 } },
-      { id: 'tribute', name: 'Tribute', line: 'What\'s owed the hearth is brought to it, and counted.', lane: 'rule', fx: { tribute: 0.15 } },
+      { id: 'barter', name: 'Barter', line: 'Goods for goods, on market days: everyone comes away with something.', lane: 'food', fx: { food: 0.2 } },
+      { id: 'tribute', name: 'Tribute', line: 'What\'s owed the hearth is brought to it, and counted.', lane: 'rule', fx: { food: 0.15, gift: 0.15 } },
     ],
   },
   faith: {
     name: 'What the fire is',
     ask: 'What do they keep faith with?',
     options: [
-      { id: 'hearthfire', name: 'The hearth-fire', line: 'The fire that never goes out: it warms the living, and new life comes to it.', lane: 'rites', fx: { births: 0.05, winter: 0.1 } },
-      { id: 'ancestors', name: 'The ancestors', line: 'The four who crossed, and all who came after: they watch, and they keep the hungry alive.', lane: 'stories', fx: { mend: 0.15 } },
+      { id: 'hearthfire', name: 'The hearth-fire', line: 'The fire that never goes out: it warms the living, and new life comes to it.', lane: 'rites', fx: { births: 0.2 } },
+      { id: 'ancestors', name: 'The ancestors', line: 'The four who crossed, and all who came after: they watch, and they keep the hungry alive.', lane: 'stories', fx: { grow: 0.2 } },
     ],
   },
 };
@@ -148,42 +148,42 @@ export function nextIdea(c: Culture, lane: Lane): Idea | undefined {
 }
 
 /** Practice a lane gathers a day, from what the village does. */
-export function practiceRate(s: ShoreState, lane: Lane, plan: { food: number; wood: number }): number {
+export function practiceRate(s: ShoreState, lane: Lane): number {
   const c = s.culture;
   const grown = s.people.filter((p) => isAdult(s, p)).length;
   const today_ = today(s);
-  const base = 0.3;
-  let r = base;
+  const gens = (ids: string[]) => ids.reduce((n, id) => n + count(s, id as never), 0);
+  const won = s.villages.filter((v) => v.won !== undefined);
+  let r = 0.3;
   switch (lane) {
     case 'food':
-      r += plan.food * 0.03 + (count(s, 'camp') + count(s, 'weir')) * 0.15;
+      r += gens(['forager', 'camp', 'weir', 'lodge', 'garden']) * 0.02;
       break;
     case 'crafts':
-      r += plan.wood * 0.05 + s.built.length * 0.01;
+      r += gens(['camp', 'weir', 'lodge', 'garden', 'granary', 'market', 'hut', 'longhouse']) * 0.012;
       break;
     case 'war':
-      r += (s.raids ?? 0) * 0.08 + (count(s, 'watch') + count(s, 'spears') + count(s, 'palisade')) * 0.3;
+      r += won.filter((v) => relation(s, v) !== 'kin').length * 0.5 + gens(['lodge']) * 0.03;
       break;
     case 'rule':
-      r += count(s, 'council') * 0.4 + grown * 0.006;
+      r += (has(s, 'council') ? 0.4 : 0) + grown * 0.006;
       break;
     case 'kin':
-      r += s.people.filter((p) => p.kind !== undefined).length * 0.02 + s.villages.filter((v) => v.joined || v.vassal || v.settled !== undefined).length * 0.25;
+      r += s.people.filter((p) => p.kind !== undefined).length * 0.02 + won.filter((v) => relation(s, v) === 'kin').length * 0.4;
       break;
     case 'rites':
-      r += count(s, 'hearth') * 0.3 + count(s, 'elders') * 0.3 + count(s, 'pool') * 0.2 + Math.min(1, s.deaths * 0.01);
+      r += count(s, 'hearth') * 0.3 + Math.min(1, s.deaths * 0.01) + (has(s, 'feast1') ? 0.3 : 0);
       break;
     case 'stories':
       r += s.people.filter((p) => p.dies !== undefined && p.dies - today_ < 15).length * 0.03 + poisOf(s).filter((p) => p.done >= poiDef(p).layers.length).length * 0.15;
       break;
     case 'words':
-      r += count(s, 'scout') * 0.25 + count(s, 'lookout') * 0.3 + grown * 0.004;
+      r += (has(s, 'scouts') ? 0.5 : 0) + grown * 0.004;
       break;
   }
   // The road chosen at a fork: its lane goes a little faster.
   for (const [f, o] of Object.entries(c?.forks ?? {})) if (FORKS[f as ForkId]?.options.find((x) => x.id === o)?.lane === lane) r *= 1.25;
-  // (The roads bring the villages' ways to the hearth: a little more of everything.)
-  return r * (c?.focus === lane ? FOCUS : 1) * (1 + networkBonus(s));
+  return r * (c?.focus === lane ? FOCUS : 1);
 }
 
 /** What the culture's ideas and forks add (folded into the village's boosts). */
@@ -211,13 +211,13 @@ export function maybeTurn(state: GameState, s: ShoreState): void {
 }
 
 /** Each day: practice gathered, ideas landing, a fork answered by the elders if left too long. */
-export function cultureDay(state: GameState, s: ShoreState, plan: { food: number; wood: number }): void {
+export function cultureDay(state: GameState, s: ShoreState): void {
   const c = s.culture;
   if (!c) return;
   for (const l of LANES) {
     const next = nextIdea(c, l.id);
     if (!next) continue;
-    c.practice[l.id] = (c.practice[l.id] ?? 0) + practiceRate(s, l.id, plan);
+    c.practice[l.id] = (c.practice[l.id] ?? 0) + practiceRate(s, l.id);
     if ((c.practice[l.id] ?? 0) < cost(c, l.id)) continue;
     c.practice[l.id] = 0;
     c.done.push(next.id);

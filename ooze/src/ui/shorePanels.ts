@@ -1,18 +1,197 @@
-// New Shore's panels: the Village (stores, who's working at what, the people), Build (by sort:
-// homes, stores, work, exploring) and the Island (the villages found out there, and the scouts).
+// New Shore's panels, the idle way: the Village (stoke the fire, what comes in, the critters),
+// Build (what brings food in and houses them, and the upgrades), the Island (the villages to win,
+// the landmarks, the relics) and the Culture.
 
-import { type Boosts, BUILD_CATS, BUILDS, buildName, POI_SORT, RELICS, RES_NAME, type Res, type BuildCat, type BuildDef, type BuildId, type Find } from '../content/shore';
-import { ANNEX_LOYALTY, annexCost, annexWhy } from '../economy/shore';
-import { canDemand, demandOdds, foreign, PEACE, STANCE_NAME, stanceOf, standingOf } from '../economy/diplomacy';
-import { gatherHere, RES_GROUND, networkBonus, roadPerks, viaName, chiefWithCrew, ROAD_TIERS, roadTier, roadUpgrade, tradesWith, tradeWord, waystations, askWords, canAnswer, FOCI, landGoods, stageOf, STAGES, centre, hearthMost, WARM_MAX, danceLeft, canRoad, roadCost, roadDone, ruled, settledDay, totalCritters, travelDays, buildCost, canPay, elderThink, ELDERS_OFF, buildLeftSec, builders, buildsOpen, burnPerDay, canWin, forestShare, resCap, RES_OF, sourcesOf, roomLeft, vassalDay, learned, poiDef, poiHere, poiName, poisOf, type Poi, RAFT_WOOD, chiefNear, count, foodCap, giftCost, shoreSeason, isAdult, relation, room, shoreOf, woodCap, workPlan, type Lean, type ShoreState, type Village } from '../economy/shore';
+import { type Boosts, POI_SORT, RELICS, type Find } from '../content/shore';
+import { GENS, UPGRADES, type GenId } from '../content/idle';
+import { allMult, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
-import { DAY_SEC, type ShorePerson } from '../economy/shore';
 import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
-import { levyFor, canHelp, helpSize, canStepIn, fighters, hasWalls, hasWarChief, type WarRule, holders, hostile, odds, ourStrength, payCost, raidable, theirStrength, type Battle, type Fight } from '../economy/war';
 import type { GameState } from '../economy/types';
+import { D, format as formatD } from '../economy/num';
+const format = (n: number) => formatD(D(n));
 import { danceStyle } from './fireDance';
 
-const n0 = (v: number) => String(Math.floor(v + 1e-6));
+const n0 = (v: number) => format(Math.floor(v + 1e-6));
+
+/** The Village tab: the village itself, or everyone in it. */
+let villageView: 'village' | 'people' = 'village';
+export function setVillageView(v: string): void {
+  villageView = v === 'people' ? 'people' : 'village';
+}
+/** The Island tab: the villages, the landmarks, or what's been found. */
+let islandView: 'villages' | 'landmarks' | 'finds' = 'villages';
+export function setIslandView(v: string): void {
+  islandView = v === 'landmarks' || v === 'finds' ? v : 'villages';
+}
+/** Kept for the old Build-tab sorts (there's one list now). */
+export function setBuildCat(_c: string): void {}
+/** How many at a time the Build tab buys: one, ten, or as many as there's food for. */
+let buyMany: 1 | 10 | 0 = 1;
+export function setBuyMany(n: number): void {
+  buyMany = n === 10 ? 10 : n === 0 ? 0 : 1;
+}
+export function buyAmount(): number {
+  return buyMany;
+}
+
+/** When a tab's panel must be rebuilt (its numbers are written in place by shoreUpdate). */
+export function shoreKey(state: GameState, tab: string): string {
+  const s = shoreOf(state);
+  if (!s) return '';
+  if (tab === 'culture') {
+    const c = s.culture;
+    return JSON.stringify(['culture', c?.age, c?.done, c?.focus, c?.forks, c?.asking?.fork, LANES.map((l) => Math.floor((c ? laneShare(c, l.id) : 0) * 20)), greatWork(s), !!workOpen(s), s.food >= (workOpen(s)?.cost ?? Infinity)]);
+  }
+  if (tab === 'build') {
+    // (Rebuilt when what can be afforded changes: each thing's button lights as the food comes.)
+    return JSON.stringify(['build', buyMany, s.auto, s.ups.length, GENS.map((g) => [genOpen(s, g.id), count(s, g.id), s.food >= genCost(s, g.id, buyMany || 1)]), UPGRADES.filter((u) => upgradeOpen(s, u.id)).map((u) => [u.id, s.food >= u.cost])]);
+  }
+  if (tab === 'island') return JSON.stringify(['island', islandView, s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, has(s, 'scouts'), s.villages.filter((v) => v.found).map((v) => [v.id, v.won, v.gone, Math.floor((v.trust ?? 0) / 5), Math.round(v.pop), s.food >= (canWin(s, v) ? giftCost(s, v) : canTake(s, v) ? takeCost(s, v).food : Infinity), chiefNear(s, v)]), s.chief]);
+  if (villageView === 'people') return JSON.stringify(['people', s.people.length, s.chief, Math.floor(s.day / 2)]);
+  return JSON.stringify(['village', s.people.length, room(s), s.chief, s.ups.length, Object.values(s.gens), shoreSeason(s).si, s.villages.filter((v) => v.won !== undefined).length, !!workOpen(s)]);
+}
+
+/** Numbers written in place, every frame (the food, the rate, a boost running down). */
+export function shoreUpdate(root: HTMLElement, state: GameState): void {
+  const s = shoreOf(state);
+  if (!s) return;
+  const put = (k: string, v: string) => {
+    for (const el of root.querySelectorAll<HTMLElement>(`[data-t="${k}"]`)) if (el.textContent !== v) el.textContent = v;
+  };
+  put('shore-food', n0(s.food));
+  put('shore-rate', `${format(foodRate(s))} a second`);
+  put('shore-tap', `+${format(tapValue(s))}`);
+  const now = s.day * DAY_SEC + s.clock;
+  put('shore-boost', s.boost && s.boost.until > now ? `×${s.boost.mult} for ${Math.ceil(s.boost.until - now)}s` : '');
+  put('shore-birth', birthLine(s));
+  for (const g of GENS) put(`gen-${g.id}`, `${format(genRate(s, g.id))}/s`);
+}
+
+function birthLine(s: ShoreState): string {
+  if (!count(s, 'hearth')) return 'Break up the raft and light the hearth: then they can settle.';
+  if (s.people.length >= hearthMost(s)) {
+    const c = centre(s);
+    return `As many as ${c.now.name.toLowerCase()} can hold (${c.now.most}).${c.next ? ` ${c.next.name} would hold ${c.next.most}${c.next.id ? ' (the Great Work of an Age)' : ', in an Age to come'}.` : ''}`;
+  }
+  if (s.people.length >= room(s)) return 'Every bed is full: a hut would bring more.';
+  if (s.people.filter((p) => isAdult(s, p)).length < 2) return 'Waiting for the children to grow up.';
+  return 'A child is on the way.';
+}
+
+export function shoreLayout(state: GameState, tab: string): string {
+  const s = shoreOf(state);
+  if (!s) return '';
+  if (tab === 'build') return buildLayout(s);
+  if (tab === 'culture') return cultureLayout(s);
+  if (tab === 'island') return islandLayout(s);
+  const views = `<div class="seg build-cats"><button class="px-btn${villageView === 'village' ? ' on' : ''}" data-villageview="village">The village</button><button class="px-btn${villageView === 'people' ? ' on' : ''}" data-villageview="people">Critters · ${s.people.length}</button><span class="seg-gap"></span><button class="px-btn" data-camera="home">Home</button><button class="px-btn" data-camera="chief">Chief</button></div>`;
+  if (villageView === 'people') return views + peopleLayout(s);
+  return views + hearthCard(s) + peopleCard(s);
+}
+
+/** The hearth: stoke it (the tap), what comes in, the critters and their beds. */
+function hearthCard(s: ShoreState): string {
+  if (!count(s, 'hearth')) {
+    return `<div class="card px-box"><div class="info"><div class="name">No village yet</div>
+      <div class="sub">They sit by the raft, the last of what the crossing left them. Break it up, and light a fire with it.</div></div>
+      <div class="col"><button class="px-btn gold" data-act="raft">Light the hearth</button></div></div>`;
+  }
+  const won = s.villages.filter((v) => v.won !== undefined).length;
+  const mult = allMult(s);
+  return `<div class="panel-head"><h2>The Village</h2><span class="dim">${ageName(s.culture?.age ?? 0) || 'The first years'}</span></div>
+    <div class="card px-box ex-stores shore-stores">
+      <div class="store"><span class="label dim">Food</span><b class="num"><span data-t="shore-food">${n0(s.food)}</span></b><span class="dim" data-t="shore-rate">${format(foodRate(s))} a second</span></div>
+      <div class="store"><span class="label dim">Critters</span><b class="num">${s.people.length}<span class="dim">/${Math.min(room(s), hearthMost(s))}</span></b><span class="dim">each one: +${Math.round(CRITTER_MORE * 100)}% to everything</span></div>
+      <div class="sub">Everything brings in ×${mult.toFixed(2)}${won ? ` (${won} village${won > 1 ? 's' : ''} won: +${Math.round(won * WON_MORE * 100)}%)` : ''}. <b class="green" data-t="shore-boost"></b></div>
+      <div class="sub dim"><span data-t="shore-birth">${birthLine(s)}</span></div>
+    </div>
+    <button class="px-btn gold stoke" data-act="stoke"><b>Stoke the fire</b> <span data-t="shore-tap">+${format(tapValue(s))}</span></button>
+    ${workOpen(s) ? `<div class="card px-box raid"><div class="info"><div class="name">${workOpen(s)!.name}</div><div class="sub">${workOpen(s)!.does}</div></div><div class="col"><button class="px-btn${s.food >= workOpen(s)!.cost ? ' gold' : ''}" data-act="work"${s.food >= workOpen(s)!.cost ? '' : ' disabled'}>${format(workOpen(s)!.cost)}</button></div></div>` : ''}`;
+}
+
+/** What brings food in, and what houses them: buy one, ten, or as many as there's food for; and
+ * the upgrades, once they're on offer. */
+function buildLayout(s: ShoreState): string {
+  if (!count(s, 'hearth')) return `<div class="card px-box"><div class="info"><div class="sub">Light the hearth first (the Village tab).</div></div></div>`;
+  const many = `<div class="seg build-cats">${([1, 10, 0] as const).map((n) => `<button class="px-btn${buyMany === n ? ' on' : ''}" data-buymany="${n}">${n ? `×${n}` : 'Max'}</button>`).join('')}${has(s, 'council') ? `<span class="seg-gap"></span><button class="px-btn${s.auto ? ' on' : ''}" data-act="auto">Council: ${s.auto ? 'buying' : 'resting'}</button>` : ''}</div>`;
+  const gens = GENS.filter((g) => genOpen(s, g.id)).map((g) => genRow(s, g.id)).join('');
+  const next = GENS.find((g) => !genOpen(s, g.id) && g.critters !== undefined);
+  const ups = UPGRADES.filter((u) => upgradeOpen(s, u.id)).sort((a, b) => a.cost - b.cost);
+  return `${many}<div class="panel-head"><h2>Build</h2><span class="dim"><span data-t="shore-food">${n0(s.food)}</span> food</span></div>${gens}
+    ${next ? `<p class="tiny dim">More to come as the village grows (at ${next.critters} critters).</p>` : ''}
+    ${ups.length ? `<div class="panel-head"><h2>Upgrades</h2></div>${ups.map((u) => `<div class="card px-box build"><div class="info"><div class="name">${u.name}</div><div class="sub">${u.does}</div></div><button class="px-btn buy${s.food >= u.cost ? ' gold' : ''}" data-upgrade="${u.id}"${s.food >= u.cost ? '' : ' disabled'}><span class="num">${format(u.cost)}</span></button></div>`).join('')}` : ''}`;
+}
+
+function genRow(s: ShoreState, id: GenId): string {
+  const g = GENS.find((x) => x.id === id)!;
+  const have = count(s, id);
+  const n = buyMany || Math.max(1, maxBuy(s, id));
+  const cost = genCost(s, id, n);
+  const can = s.food >= cost;
+  return `<div class="card px-box build"><div class="info"><div class="name">${g.name} <span class="dim">×${have}</span></div><div class="sub">${g.does}</div>
+    <div class="sub fx">${g.rate ? `<span data-t="gen-${id}">${format(genRate(s, id))}/s</span> in all` : `Room for ${g.room} each`}</div></div>
+    <button class="px-btn buy${can ? ' gold' : ''}" data-sgen="${id}"${can ? '' : ' disabled'}>${n > 1 ? `×${n} ` : ''}<span class="num">${format(cost)}</span></button></div>`;
+}
+
+// ---- The island ----
+
+function islandLayout(s: ShoreState): string {
+  const found = s.villages.filter((v) => v.found && !v.gone).length;
+  const marks = poisOf(s).filter((p) => p.found && p.known && p.done < poiDef(p).layers.length).length;
+  const tab = (id: typeof islandView, name: string) => `<button class="px-btn${islandView === id ? ' on' : ''}" data-islandview="${id}">${name}</button>`;
+  const views = `<div class="seg build-cats">${tab('villages', `Villages · ${found}`)}${tab('landmarks', `Landmarks · ${marks}`)}${tab('finds', 'Relics')}</div>`;
+  if (islandView === 'landmarks') return views + landmarksCard(s);
+  if (islandView === 'finds') return views + relicsCard(s) + scoutsCard(s);
+  return views + villagesCard(s);
+}
+
+function villagesCard(s: ShoreState): string {
+  const found = s.villages.filter((v) => v.found && !v.gone);
+  if (!found.length) return `<div class="panel-head"><h2>The island</h2></div><div class="card px-box"><div class="info"><div class="sub">There's smoke inland. Someone else is here. Walk out and find them.</div></div></div>${scoutsCard(s)}`;
+  const won = found.filter((v) => v.won !== undefined);
+  const rest = found.filter((v) => v.won === undefined).sort((a, b) => Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y) - Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y));
+  return `<div class="panel-head"><h2>The island</h2><span class="dim">${found.length} of ${s.villages.length}${found.length < s.villages.length ? '+' : ''} found · ${won.length} won</span></div>
+    <p class="tiny dim">Every village won: everything brings in ${Math.round(WON_MORE * 100)}% more. Kin are won with gifts and the chief's company; the rest, beaten.</p>
+    ${rest.map((v) => villageRow(s, v)).join('')}${won.map((v) => villageRow(s, v)).join('')}`;
+}
+
+function villageRow(s: ShoreState, v: Village): string {
+  const rel = relation(s, v);
+  const icon = `<span class="kind">${miniIcon(v.look, 2)}</span>`;
+  const near = chiefNear(s, v);
+  if (v.won !== undefined) {
+    return `<div class="card px-box village vassal">${icon}<div class="info"><div class="name">${cap(v.name)} <span class="rel rel-vassal">Yours</span></div>
+      <div class="sub">${Math.round(v.pop)} of them. +${Math.round(WON_MORE * 100)}% to everything.</div></div>
+      <div class="col">${near && canDance(s, v) ? `<button class="px-btn gold" data-dance="${v.id}"${danceLeft(s, v) > 0.5 ? '' : ' disabled'}>${danceLeft(s, v) > 0.5 ? 'Dance' : 'Worn out'}</button>` : `<button class="px-btn" data-visit="${v.id}">Visit</button>`}</div></div>`;
+  }
+  if (canWin(s, v)) {
+    const cost = giftCost(s, v);
+    return `<div class="card px-box village">${icon}<div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">Kin</span></div>
+      <div class="sub">${Math.round(v.pop)} of them. ${near ? 'The chief is with them: gifts count twice, and trust grows.' : 'Gifts count twice brought by the chief.'}</div>${trustBar(v)}</div>
+      <div class="col"><button class="px-btn${s.food >= cost ? ' gold' : ''}" data-gift="${v.id}"${s.food >= cost ? '' : ' disabled'}>Gift ${format(cost)}</button>${near ? `<button class="px-btn gold" data-dance="${v.id}"${danceLeft(s, v) > 0.5 ? '' : ' disabled'}>${danceLeft(s, v) > 0.5 ? 'Dance' : 'Worn out'}</button>` : `<button class="px-btn" data-visit="${v.id}">Visit</button>`}</div></div>`;
+  }
+  const c = takeCost(s, v);
+  const ok = s.food >= c.food && totalCritters(s) >= c.critters;
+  return `<div class="card px-box village">${icon}<div class="info"><div class="name">${cap(v.name)} <span class="rel rel-${rel}">${REL_NAME[rel]}</span></div>
+    <div class="sub">${Math.round(v.pop)} ${DIET_NAME[v.diet] ?? v.diet}. Beaten, theirs is yours: it takes ${format(c.food)} food for the war band, and at least ${c.critters} critters${totalCritters(s) < c.critters ? ` (you have ${totalCritters(s)})` : ''}.</div></div>
+    <div class="col"><button class="px-btn${ok ? ' gold' : ''}" data-take="${v.id}"${ok ? '' : ' disabled'}>Beat them</button>${near ? `<button class="px-btn" data-dance="${v.id}"${danceLeft(s, v) > 0.5 ? '' : ' disabled'}>Dance</button>` : ''}</div></div>`;
+}
+
+/** A village's card (tapped on the map). */
+export function villageCard(s: ShoreState, v: Village): string {
+  const rel = relation(s, v);
+  return `<p class="label dim">${v.won !== undefined ? 'Yours' : REL_NAME[rel]}</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)}</h3></div>
+    <p>${Math.round(v.pop)} of them, ${v.cannibal ? 'eaters of their own kind' : `${(DIET_NAME[v.diet] ?? v.diet).toLowerCase()}`}, another kind altogether.${v.habitat ? ` ${WHERE[v.habitat]}` : ''}</p>
+    <p class="dim">${v.won !== undefined ? `Theirs is yours, for good: everything brings in ${Math.round(WON_MORE * 100)}% more for it.` : REL_LINE[rel]}</p>
+    ${chiefNear(s, v) ? `<p class="dim tiny">${danceStyle(v.habitat).line} Dance with them round their fire: everything brings in twice as much while the fire's up.</p>` : ''}
+    <div class="choices">${villageRow(s, v).match(/<div class="col">([\s\S]*)<\/div><\/div>$/)?.[1] ?? ''}<button class="px-btn" data-act="dismiss">OK</button></div>`;
+}
+
+function scoutsCard(s: ShoreState): string {
+  return `<div class="card px-box"><div class="info"><div class="name">Out in the fog</div>
+    <div class="sub">${has(s, 'scouts') ? 'Two scouts are out exploring for you.' : 'No scouts yet (an upgrade, in Build).'} Tap the land to send ${s.people.find((p) => p.id === s.chief)?.name ?? 'the chief'} walking.</div></div></div>`;
+}
 
 const REL_LINE = {
   kin: 'Your own diet: they could be won over.',
@@ -20,7 +199,9 @@ const REL_LINE = {
   predator: 'They hunt your kind. Expect them to come, or strike first: beaten, their village is yours.',
   enemy: 'Enemies. Nothing will ever change that.',
 } as const;
+
 const REL_NAME = { kin: 'Kin', prey: 'Prey', predator: 'Predators', enemy: 'Enemies' } as const;
+
 const WHERE: Record<string, string> = {
   river: 'They live along the river, in huts up on stilts.',
   lake: 'They live by the lake, their huts up on stilts at the water.',
@@ -32,261 +213,8 @@ const WHERE: Record<string, string> = {
   coast: 'They live on the shore, in shelters of driftwood.',
   marsh: 'They live in the marsh, among the reeds.',
 };
+
 const DIET_NAME: Record<string, string> = { grazer: 'Grazers', hunter: 'Hunters', omnivore: 'Omnivores' };
-
-/** The Village tab: the village itself, or everyone in it. */
-let villageView: 'village' | 'people' | 'elders' = 'village';
-export function setVillageView(v: string): void {
-  villageView = v === 'people' || v === 'elders' ? v : 'village';
-}
-
-/** The Island tab: the villages, the landmarks, or what's been found; and the one village opened
- * out (the rest are a line each). */
-let islandView: 'villages' | 'landmarks' | 'finds' = 'villages';
-export function setIslandView(v: string): void {
-  islandView = v === 'landmarks' || v === 'finds' ? v : 'villages';
-}
-let openVillage: number | null = null;
-export function toggleVillage(id: number): void {
-  openVillage = openVillage === id ? null : id;
-}
-
-/** The Build tab's sort on show (kept while you're in the stage). */
-let buildCat: BuildCat = 'homes';
-export function setBuildCat(c: string): void {
-  if (BUILD_CATS.some((x) => x.id === c)) buildCat = c as BuildCat;
-}
-
-/** When a tab's panel must be rebuilt (its numbers are written in place by shoreUpdate). */
-export function shoreKey(state: GameState, tab: string): string {
-  const s = shoreOf(state);
-  if (!s) return '';
-  if (tab === 'culture') {
-    const c = s.culture;
-    return JSON.stringify(['culture', c?.age, c?.done, c?.focus, c?.forks, c?.asking?.fork, LANES.map((l) => Math.floor((c ? laneShare(c, l.id) : 0) * 20)), s.building?.id, greatWork(s), greatWork(s) && count(s, greatWork(s)!)]);
-  }
-  if (tab === 'build') return JSON.stringify([Object.values(s.res ?? {}).map((v) => Math.floor((v ?? 0) / 5)), s.building?.id, s.learned, buildCat, s.raftTaken, s.built.length, buildsOpen(s).map((b) => [b.id, canPay(s, b.id)])]);
-  const war = JSON.stringify([s.raid?.help, s.raid?.allies?.length, s.raid?.seen !== undefined && [s.raid.from, s.raid.rallied, Math.ceil(((s.raid.arrives ?? 0) - s.day - s.clock / DAY_SEC) * 4)], s.warband && [s.warband.to, Math.ceil((s.warband.arrives - s.day - s.clock / DAY_SEC) * 4)], fighters(s), s.warRule, hasWarChief(s)]);
-  if (tab === 'island') return war + JSON.stringify([islandView, openVillage, Object.values(s.res ?? {}).map((v) => Math.floor(v ?? 0)), s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, count(s, 'scout'), s.villages.filter((v) => v.found).map((v) => [v.id, v.joined, v.gone, v.asking, v.waiting !== undefined && roomLeft(s), v.vassal && [v.vassal.tax, Math.floor(v.vassal.loyalty / 5), Math.floor(v.pop), v.ask && [v.ask.kind, Math.ceil(v.ask.until - s.day - s.clock / DAY_SEC), canAnswer(s, v)], annexWhy(s, v), chiefNear(s, v)], v.settled !== undefined && [Math.floor(v.pop), v.focus, v.ask && [v.ask.kind, Math.ceil(v.ask.until - s.day - s.clock / DAY_SEC), canAnswer(s, v)], (v.thrive ?? 0) > s.day, (v.sulk ?? 0) > s.day, chiefNear(s, v)], v.road && [Math.floor((v.road.done / v.road.need) * 20), v.road.tier, v.road.up && Math.floor((v.road.up.done / v.road.up.need) * 20), chiefWithCrew(s, v), roadUpgrade(s, v)?.missing, v.trade && [v.trade.give, v.trade.get]], ruled(v) && canRoad(s, v), Math.floor((v.trust ?? 0) / 5), s.food >= giftCost(v), Math.floor(standingOf(s, v) / 5), Math.floor(v.pop), v.overlord]), s.chief, s.crewWith]);
-  const plan = workPlan(s);
-  if (villageView === 'elders' && count(s, 'council')) return JSON.stringify(['elders', s.steward, (s.steward?.on ? elderThink(s) : ELDERS_OFF).text, s.elders?.length, s.elders?.[s.elders.length - 1]?.text, s.building?.id]);
-  if (villageView === 'people') return JSON.stringify(['people', s.people.length, s.chief, Math.floor(s.day / 2), s.hungry]);
-  return war + JSON.stringify([s.cold, Math.round(forestShare(s) * 20), Math.round(burnPerDay(s) * 2), s.steward, s.hungry, shoreSeason(s).si, s.people.length, s.built.length, s.lean, plan.food, plan.wood, s.chief, s.people.filter((p) => isAdult(s, p)).length, s.people.filter((p) => p.founder).length]);
-}
-
-export function shoreUpdate(root: HTMLElement, state: GameState): void {
-  const s = shoreOf(state);
-  if (!s) return;
-  const put = (k: string, v: string) => {
-    const el = root.querySelector<HTMLElement>(`[data-t="${k}"]`);
-    if (el && el.textContent !== v) el.textContent = v;
-  };
-  put('shore-food', n0(s.food));
-  if (s.building) {
-    put('build-left', `${Math.ceil(buildLeftSec(s))}s`);
-    const bar = root.querySelector<HTMLElement>('[data-bar="building"] > i');
-    if (bar) bar.style.width = `${Math.round((1 - s.building.left / s.building.total) * 100)}%`;
-  }
-  put('shore-wood', n0(s.wood));
-  const birth = birthLine(s);
-  put('shore-birth', birth);
-}
-
-const SEASONS = ['Spring', 'Summer', 'Autumn', 'Winter'];
-function seasonLine(s: ShoreState): string {
-  const { si } = shoreSeason(s);
-  if (si === 3) return '<b class="winter">Winter: food comes in slower.</b> ';
-  if (si === 2) return '<b class="green">Autumn: a good harvest.</b> ';
-  return `${SEASONS[si]}. `;
-}
-
-function birthLine(s: ShoreState): string {
-  if (!count(s, 'hearth')) return 'No children are born without a hearth.';
-  if (s.people.length >= hearthMost(s)) {
-    const c = centre(s);
-    return `As many as ${c.now.name.toLowerCase()} can hold (${c.now.most}). New critters grow up in your settlements${c.next ? `; ${c.next.name.toLowerCase()} would hold ${c.next.most}${c.next.id ? ' (the Great Work of this Age)' : ', in an Age to come'}` : ''}.`;
-  }
-  if (s.people.length >= room(s)) return 'No room for children: build a hut.';
-  if (s.food < 8) return 'Not enough food to spare for a child.';
-  if (s.people.filter((p) => isAdult(s, p)).length < 2) return 'Waiting for the children to grow up.';
-  return 'A child is on the way.';
-}
-
-export function shoreLayout(state: GameState, tab: string): string {
-  const s = shoreOf(state);
-  if (!s) return '';
-  if (tab === 'build') return buildLayout(s);
-  if (tab === 'culture') return cultureLayout(s);
-  if (tab === 'island') return islandLayout(s);
-  const council = count(s, 'council') > 0;
-  const view = villageView === 'elders' && !council ? 'village' : villageView;
-  const views = `<div class="seg build-cats"><button class="px-btn${view === 'village' ? ' on' : ''}" data-villageview="village">The village</button><button class="px-btn${view === 'people' ? ' on' : ''}" data-villageview="people">Critters · ${s.people.length}</button>${council ? `<button class="px-btn${view === 'elders' ? ' on' : ''}" data-villageview="elders">Elders</button>` : ''}<span class="seg-gap"></span><button class="px-btn" data-camera="home">Home</button><button class="px-btn" data-camera="chief">Chief</button></div>`;
-  if (view === 'people') return views + peopleLayout(s);
-  if (view === 'elders') return views + eldersLayout(s);
-  return views + warCard(s) + storesCard(s) + workCard(s) + peopleCard(s);
-}
-
-/** Whether a sort of building has anything in it yet (built, or to build). */
-function catShown(s: ShoreState, c: BuildCat): boolean {
-  return BUILDS.some((b) => b.cat === c && (count(s, b.id) > 0 || buildsOpen(s).includes(b) || teaser(s, b)));
-}
-
-/** A building still to be learned out on the island, shown so there's a reason to go and look
- * (once what it follows is built). */
-function teaser(s: ShoreState, b: BuildDef): boolean {
-  return !!b.learn && !learned(s, b.id) && (!b.after || count(s, b.after) > 0);
-}
-
-function storesCard(s: ShoreState): string {
-  const plan = workPlan(s);
-  const net = plan.foodRate - plan.eat;
-  const cell = (key: string, name: string, have: number, cap: number, gain: string) => `<div class="store"><span class="label dim">${name}</span><b class="num"><span data-t="shore-${key}">${n0(have)}</span><span class="dim">/${cap}</span></b><span class="dim">${gain}</span></div>`;
-  return `<div class="panel-head"><h2>The Village</h2><span class="dim">${totalCritters(s) > s.people.length ? `${s.people.length} here · ${totalCritters(s) - s.people.length} in settlements` : `${s.people.length} critters`}</span></div>
-    <div class="card px-box ex-stores shore-stores">
-      ${cell('food', 'Food', s.food, foodCap(s), `${net >= 0 ? '+' : ''}${n0(net)} a day`)}
-      ${cell('wood', 'Wood', s.wood, woodCap(s), `${plan.woodRate - burnPerDay(s) >= 0 ? '+' : ''}${n0(plan.woodRate - burnPerDay(s))} a day`)}
-      <div class="store"><span class="label dim">Critters</span><b class="num">${s.people.length}<span class="dim">/${room(s)}</span></b><span class="dim">${(() => {
-        const free = room(s) - s.people.length;
-        return free > 1 ? `${free} beds free` : free === 1 ? '1 bed free' : free === 0 ? 'No beds free' : `${-free} without a bed`;
-      })()}</span></div>
-      <div class="sub diet">${s.cold ? `<b class="starving">Freezing: no wood for the fires. ${s.cold >= 2 ? 'The young and the old are dying.' : 'Soon they will start to die.'}</b> ` : ''}${s.hungry ? `<b class="starving">Starving: not enough food for everyone. ${s.hungry >= 2 ? 'Critters are dying.' : 'Soon critters will die.'}</b> ` : ''}${seasonLine(s)}<span data-t="shore-birth">${birthLine(s)}</span></div>
-    </div>`;
-}
-
-const LEANS: { id: Lean; name: string }[] = [
-  { id: 'food', name: 'Food' },
-  { id: 'balanced', name: 'Balanced' },
-  { id: 'wood', name: 'Wood' },
-];
-
-function workCard(s: ShoreState): string {
-  const plan = workPlan(s);
-  const b = builders(s);
-  const kids = s.people.length - plan.food - plan.wood - (plan.rest ?? 0) - b;
-  if (!count(s, 'hearth')) {
-    return `<div class="card px-box"><div class="info"><div class="name">No village yet</div>
-      <div class="sub">They sit by the raft, living on what the crossing left them. Nothing's gathered until there's a hearth: break up the raft for its wood, and build one.</div></div></div>`;
-  }
-  return `<div class="card px-box lean"><div class="info"><div class="name">What they work at</div>
-    <div class="sub">${plan.food} gathering food, ${plan.wood} cutting wood${b ? `, ${b} building` : ''}${plan.rest ? `, ${plan.rest} resting (nothing wants doing)` : ''}${kids > 0 ? `, ${kids} too young` : ''}. They work it out for themselves; you set what they lean toward.</div>
-    <div class="sub dim">Firewood: ${burnPerDay(s).toFixed(1)} a day${shoreSeason(s).si === 3 ? ' (winter: twice as much)' : ''}. The woods round about: ${Math.round(forestShare(s) * 100)}%${forestShare(s) < 0.5 ? ', thinning (a forester would plant more)' : ''}.</div>
-    <div class="sub${plan.food > plan.land ? ' starving' : ' dim'}">The land round the village feeds ${plan.land} gatherers${plan.food > plan.land ? `: ${plan.food - plan.land} more than it can, and they find little` : ''}. Gathering camps and weirs let it feed more.</div></div>
-    <div class="seg">${LEANS.map((l) => `<button class="px-btn${s.lean === l.id ? ' gold' : ''}" data-lean="${l.id}">${l.name}</button>`).join('')}</div></div>`;
-}
-
-function buildLayout(s: ShoreState): string {
-  const open = buildsOpen(s);
-  const cats = BUILD_CATS.filter((c) => catShown(s, c.id));
-  if (!cats.some((c) => c.id === buildCat)) buildCat = cats[0]?.id ?? 'homes';
-  // A dot on a sort with something in it you can build now.
-  const can = (c: BuildCat) => !s.building && open.some((b) => b.cat === c && canPay(s, b.id));
-  const tabs = cats.length > 1 ? `<div class="seg build-cats">${cats.map((c) => `<button class="px-btn${c.id === buildCat ? ' on' : ''}" data-buildcat="${c.id}">${c.name}${can(c.id) && c.id !== buildCat ? '<i class="dot"></i>' : ''}</button>`).join('')}</div>` : '';
-  const rows = BUILDS.filter((b) => b.cat === buildCat && (open.includes(b) || count(s, b.id) > 0))
-    .map((b) => buildRow(s, b, open.includes(b)))
-    .join('') +
-    BUILDS.filter((b) => b.cat === buildCat && teaser(s, b))
-      .map(() => `<div class="card px-box build locked"><div class="info"><div class="name">???</div><div class="sub">Not known yet.</div></div></div>`)
-      .join('');
-  const locked = BUILDS.filter((b) => !open.includes(b) && !count(s, b.id) && !b.learn).length;
-  const raft = s.raftTaken
-    ? ''
-    : `<div class="card px-box build"><div class="info"><div class="name">The raft</div><div class="sub">Pulled up on the beach where it landed. Its logs would make good wood.</div></div>
-      <button class="px-btn buy gold" data-act="take-raft">Break it up<br><span class="tiny">+${RAFT_WOOD} wood</span></button></div>`;
-  const going = s.building
-    ? `<div class="card px-box build going"><div class="info"><div class="name">Building: ${buildName(s.building.id, s.look.diet)}</div>
-      <div class="making-bar on" data-bar="building"><i style="width: ${Math.round((1 - s.building.left / s.building.total) * 100)}%"></i></div>
-      <div class="sub"><span data-t="build-left">${Math.ceil(buildLeftSec(s))}s</span> to go, with ${builders(s)} at it (not gathering meanwhile). Further from the hearth takes longer.</div></div></div>`
-    : '';
-  return `<div class="panel-head"><h2>Build</h2><span class="dim"><span data-t="shore-wood">${n0(s.wood)}</span> wood</span></div>${going}${raft}${tabs}${rows}${locked ? `<p class="dim tiny">More to build once there's a ${count(s, 'hearth') ? 'hut' : 'hearth'}.</p>` : ''}`;
-}
-
-/** One kind of building: how many there are, what the next costs (or that it's all built). */
-function buildRow(s: ShoreState, b: BuildDef, open: boolean): string {
-  const have = count(s, b.id);
-  const name = `${buildName(b.id, s.look.diet)}${have && b.max !== 1 ? ` <span class="dim">×${have}</span>` : ''}`;
-  if (!open) return `<div class="card px-box build done"><div class="info"><div class="name">${name}</div><div class="sub">${b.does}</div></div><span class="tag">Built</span></div>`;
-  const cost = buildCost(s, b.id);
-  const poor = !canPay(s, b.id) || !!s.building;
-  // What else it takes: how much there is, or (with none of it to be had) where it's found.
-  const needs = (Object.keys(b.needs ?? {}) as Res[]).map((r) => {
-    const want = b.needs![r]!;
-    const have = Math.floor(s.res?.[r] ?? 0);
-    if (have >= want) return `<span class="fx">${want} ${RES_NAME[r].toLowerCase()}</span>`;
-    if (sourcesOf(s, r).length) return `${want} ${RES_NAME[r].toLowerCase()} (${have} so far)`;
-    const hand = RES_GROUND[r];
-    return `<span class="starving">${want} ${RES_NAME[r].toLowerCase()} (${have} so far): no village of yours ${whereRes(r)} brings it.${hand ? ` The chief can gather it by hand, standing still ${hand.where}.` : ''}</span>`;
-  });
-  return `<div class="card px-box build"><div class="info"><div class="name">${name}</div><div class="sub">${b.does}</div>${needs.length ? `<div class="sub">${needs.join(' · ')}</div>` : ''}</div>
-    <button class="px-btn buy${poor ? '' : ' gold'}" data-build="${b.id}"${poor ? ' disabled' : ''}><span class="num">${cost}</span> wood</button></div>`;
-}
-
-/** Where a resource is to be had, in words: "by a river or in the marsh". */
-const PLACE: Record<string, string> = { river: 'by a river', lake: 'by a lake', marsh: 'in the marsh', desert: 'in the desert', scrub: 'in the dry scrub', forest: 'in the woods', meadow: 'on the open grass', mountain: 'in the hills', coast: 'on the coast' };
-function whereRes(r: Res): string {
-  const places = (Object.keys(RES_OF) as (keyof typeof RES_OF)[]).filter((h) => RES_OF[h].includes(r)).map((h) => PLACE[h]);
-  return places.length > 1 ? `${places.slice(0, -1).join(', ')} or ${places[places.length - 1]}` : places[0];
-}
-
-/** Everything the island's land gives: how much is kept, and from whom (or where to look). */
-function resourcesCard(s: ShoreState): string {
-  const rows = (Object.keys(RES_NAME) as Res[]).map((r) => {
-    const from = sourcesOf(s, r);
-    const have = r === 'fish' ? '' : `<b class="num">${Math.floor(s.res?.[r] ?? 0)}</b><span class="dim">/${resCap(s)}</span> `;
-    const hand = RES_GROUND[r];
-    const gathering = !from.length && gatherHere(s).includes(r) && !s.chiefTo;
-    const line = from.length
-      ? `${have}from ${from.map((v) => cap(v.name)).join(', ')}${r === 'fish' ? ' (into the food)' : ''}`
-      : `${r === 'fish' ? '' : have}<span class="dim">No village brings it: they live ${whereRes(r)}.${hand ? ` Or the chief can gather it by hand, standing still ${hand.where}.` : ''}</span>${gathering ? ' <b class="green">The chief is gathering it.</b>' : ''}`;
-    return `<div class="relic"><b>${RES_NAME[r]}</b> ${line}</div>`;
-  });
-  return `<div class="panel-head"><h2>Resources</h2><span class="dim">from the villages you hold</span></div><div class="card px-box"><div class="info">${rows.join('')}</div></div>`;
-}
-
-
-function islandLayout(s: ShoreState): string {
-  const found = s.villages.filter((v) => v.found && (!v.gone || v.outpost !== undefined)).length;
-  const marks = poisOf(s).filter((p) => p.found && p.known && p.done < poiDef(p).layers.length).length;
-  const needs = s.villages.filter((v) => v.found && alerts(s, v).some((a) => a.urgent)).length;
-  const tab = (id: typeof islandView, name: string) => `<button class="px-btn${islandView === id ? ' on' : ''}" data-islandview="${id}">${name}</button>`;
-  const views = `<div class="seg build-cats">${tab('villages', `Villages · ${found}${needs ? ` <b class="badge">${needs}</b>` : ''}`)}${tab('landmarks', `Landmarks · ${marks}`)}${tab('finds', 'Finds')}</div>`;
-  if (islandView === 'landmarks') return views + landmarksCard(s);
-  if (islandView === 'finds') return views + resourcesCard(s) + relicsCard(s) + scoutsCard(s);
-  return views + villagesCard(s);
-}
-
-/** What wants the chief's attention at a village: asked for something, restless, a road going
- * on, the chief there. (Urgent ones count on the tab.) */
-function alerts(s: ShoreState, v: Village): { text: string; cls: string; urgent?: boolean }[] {
-  const out: { text: string; cls: string; urgent?: boolean }[] = [];
-  if (s.conquest?.id === v.id) out.push({ text: 'At your mercy', cls: 'warn', urgent: true });
-  if (v.ask) out.push({ text: `Asks: ${askWords(v.ask)}`, cls: 'ask', urgent: true });
-  if (v.vassal && v.vassal.loyalty < 20) out.push({ text: 'Restless', cls: 'warn', urgent: true });
-  if (v.asking !== undefined) out.push({ text: 'Won over', cls: 'ask', urgent: true });
-  if (s.raid?.target === v.id && s.raid.seen !== undefined) out.push({ text: 'Raided!', cls: 'warn', urgent: true });
-  if (v.road && (!roadDone(v) || v.road.up)) {
-    const w = v.road.up ?? v.road;
-    out.push({ text: `${v.road.up ? 'Relaying road' : 'Road'} ${Math.floor((w.done / w.need) * 100)}%`, cls: 'road' });
-  } else if (roadDone(v)) out.push({ text: `${ROAD_TIERS[roadTier(v)].name} ✓`, cls: 'road' });
-  if (chiefNear(s, v)) out.push({ text: 'Chief here', cls: 'here' });
-  return out;
-}
-
-/** A village's line: who they are, what they are to you, and the gist. */
-function villageGist(s: ShoreState, v: Village): { tag: string; tagCls: string; gist: string } {
-  const now = s.day + s.clock / DAY_SEC;
-  if (v.joined) return { tag: 'Joined', tagCls: 'rel-kin', gist: 'They live by your hearth now.' };
-  if (v.outpost !== undefined) return { tag: 'Outpost', tagCls: 'rel-vassal', gist: 'Their land, worked for you.' };
-  if (v.settled !== undefined) {
-    const d = settledDay(v, now, s);
-    return { tag: cap(STAGES[stageOf(v)]), tagCls: 'rel-kin', gist: `${Math.floor(v.pop)} · ${n0(d.food)} food, ${n0(d.wood)} wood a day` };
-  }
-  if (v.vassal) return { tag: 'Vassal', tagCls: 'rel-vassal', gist: `${Math.floor(v.pop)} · loyal ${Math.round(v.vassal.loyalty)}% · taking ${Math.round(v.vassal.tax * 100)}%` };
-  const rel = relation(s, v);
-  if (canWin(s, v)) return { tag: REL_NAME[rel], tagCls: `rel-${rel}`, gist: `${Math.round(v.pop)} · trust ${Math.floor(v.trust ?? 0)}%` };
-  const lord = v.overlord !== undefined ? s.villages.find((x) => x.id === v.overlord) : undefined;
-  if (foreign(s, v)) return { tag: REL_NAME[rel], tagCls: `rel-${rel}`, gist: `${Math.round(v.pop)} · ${STANCE_NAME[stanceOf(s, v)].toLowerCase()}${lord ? ` · paying ${lord.found ? lord.name : 'someone'} tribute` : ''}` };
-  return { tag: REL_NAME[rel], tagCls: `rel-${rel}`, gist: `${Math.round(v.pop)}` };
-}
 
 function landmarksCard(s: ShoreState): string {
   // (Explored to the end, a landmark's gone from the list as from the map: what it held is in
@@ -304,6 +232,7 @@ function landmarksCard(s: ShoreState): string {
   return head + found.map((p) => poiRow(s, p, p === here)).join('');
 }
 
+
 function poiRow(s: ShoreState, p: Poi, here: boolean): string {
   const def = poiDef(p);
   const left = def.layers.length - p.done;
@@ -318,6 +247,7 @@ function poiRow(s: ShoreState, p: Poi, here: boolean): string {
     <div class="col">${left && !here ? `<button class="px-btn gold" data-gopoi="${p.id}">Go</button>` : ''}<button class="px-btn" data-seepoi="${p.id}">Look</button></div></div>`;
 }
 
+
 function relicsCard(s: ShoreState): string {
   const have = s.relics ?? [];
   if (!have.length) return '';
@@ -327,6 +257,7 @@ function relicsCard(s: ShoreState): string {
       return `<div class="relic"><b>${r.name}</b> <span class="dim">${r.does}</span></div>`;
     }).join('')}</div></div>`;
 }
+
 
 /** A landmark's card (tapped on the map). */
 export function poiCard(s: ShoreState, p: Poi): string {
@@ -339,17 +270,19 @@ export function poiCard(s: ShoreState, p: Poi): string {
     <div class="choices">${left && !here ? `<button class="px-btn gold" data-gopoi="${p.id}">${chief} goes there</button>` : ''}<button class="px-btn" data-act="dismiss">OK</button></div>`;
 }
 
+
 /** What exploring turned up (a card). */
 export function findCard(p: Poi, f: Find, dup: boolean): string {
   const relic = f.relic ? RELICS.find((r) => r.id === f.relic) : undefined;
-  const build = f.learn ? BUILDS.find((b) => b.id === f.learn) : undefined;
+  const build = undefined as { name: string; does: string } | undefined;
   const got = dup
-    ? `<p class="dim">They have one like it already: what was there is taken as wood (+30).</p>`
-    : `${relic ? `<p class="fx">Relic: <b>${relic.name}</b>. ${relic.does}</p>` : ''}${build ? `<p class="fx">Learned: <b>${build.name}</b> (in Build). ${build.does}</p>` : ''}${f.wood ? `<p class="fx">+${f.wood} wood</p>` : ''}${f.food ? `<p class="fx">+${f.food} food</p>` : ''}`;
+    ? `<p class="dim">They have one like it already: what was there is taken as food.</p>`
+    : `${relic ? `<p class="fx">Relic: <b>${relic.name}</b>. ${relic.does}</p>` : ''}${build ? `<p class="fx">Learned: <b>${build.name}</b> (in Build). ${build.does}</p>` : ''}${f.food || f.wood ? '<p class="fx">Food, brought back.</p>' : ''}`;
   const more = p.done < poiDef(p).layers.length;
   return `<p class="label dim">${poiName(p)}</p><h3>${relic && !dup ? relic.name : build && !dup ? 'Something learned' : 'Found'}</h3><p>${f.text}</p>${got}
     ${more ? '<p class="dim tiny">There\'s more to find here.</p>' : ''}<button class="px-btn gold" data-act="dismiss">OK</button>`;
 }
+
 
 /** Everyone, by name: the chief and the four first, then the grown, then the children; each
  * with their kind, and how old (in words). */
@@ -377,49 +310,15 @@ function peopleLayout(s: ShoreState): string {
     const name = p.kind === undefined ? 'your own kind' : cap(s.villages.find((v) => v.id === p.kind)?.name ?? 'others');
     kinds.set(name, (kinds.get(name) ?? 0) + 1);
   }
-  const plan = workPlan(s);
-  const fed = plan.foodRate >= plan.eat || s.food > 0.5;
   return `<div class="panel-head"><h2>The Critters</h2><span class="dim">${s.people.length}</span></div>
     <div class="card px-box"><div class="info"><div class="sub">${[...kinds].map(([k, n]) => `${n} ${k}`).join(' · ')}</div>
-    <div class="sub">${fed ? `Fed: ${n0(plan.foodRate)} food a day comes in, ${n0(plan.eat)} is eaten.` : `<b class="starving">Hungry: ${n0(plan.eat)} food a day is needed, only ${n0(plan.foodRate)} comes in.</b>`}</div></div></div>
+</div></div>
     <p class="tiny dim">Tap anyone for their family tree.</p>
     <div class="card px-box people-list"><div class="info">${list
       .map((p) => `<button class="person" data-tree="${p.id}">${iconOf(p)}<b>${p.name}</b><span class="dim">${p.id === s.chief ? 'chief' : p.founder ? 'one of the four' : age(p)}</span></button>`)
       .join('')}</div></div>`;
 }
 
-function scoutsCard(s: ShoreState): string {
-  const scouts = count(s, 'scout');
-  const out = `<div class="card px-box"><div class="info"><div class="name">Out in the fog</div>
-    <div class="sub">${scouts ? `${scouts} scout${scouts > 1 ? 's are' : ' is'} out exploring for you.` : 'No scouts yet (build a Scout\'s hut to send one out).'} Tap the land to send ${s.people.find((p) => p.id === s.chief)?.name ?? 'the chief'} walking.</div></div></div>`;
-  return out;
-}
-
-const PLANS: { id: string; name: string; does: string }[] = [
-  { id: 'balanced', name: 'Balanced', does: 'room when it\'s short, food when the land is, stores when they\'re full' },
-  { id: 'homes', name: 'Homes', does: 'room first, always a little ahead' },
-  { id: 'food', name: 'Food', does: 'camps and weirs before the land runs short' },
-  { id: 'stores', name: 'Stores', does: 'racks and granaries, and woodpiles for the big builds' },
-];
-
-/** The elders' council: building while you're away, by what you've said matters most. */
-function councilCard(s: ShoreState): string {
-  if (!count(s, 'council')) return '';
-  const st = s.steward ?? { on: true, plan: 'balanced' };
-  const plan = PLANS.find((p) => p.id === st.plan) ?? PLANS[0];
-  return `<div class="card px-box lean"><div class="info"><div class="name">The elders build</div>
-    <div class="sub">${st.on ? `Whenever nothing's going up, they choose what's next: ${plan.does}.` : 'They leave the building to you.'}</div></div>
-    <div class="seg"><button class="px-btn${st.on ? ' on' : ''}" data-steward="${st.on ? 'off' : 'on'}">${st.on ? 'On' : 'Off'}</button>${PLANS.map((p) => `<button class="px-btn${st.plan === p.id ? ' gold' : ''}" data-stewardplan="${p.id}"${st.on ? '' : ' disabled'}>${p.name}</button>`).join('')}</div></div>`;
-}
-
-/** The elders: what they're set to, what they're thinking now, and what they've thought. */
-function eldersLayout(s: ShoreState): string {
-  const now = s.steward?.on ? elderThink(s) : ELDERS_OFF;
-  const said = (s.elders ?? []).slice().reverse().filter((e, i) => i > 0 || e.text !== now.text);
-  return `${councilCard(s)}
-    <div class="card px-box"><div class="info"><div class="name">Round the council fire</div><div class="sub">${now.text}</div>${s.raid?.seen !== undefined || s.warband ? '<div class="sub dim">"War is not ours to speak of. The chief decides."</div>' : ''}</div></div>
-    ${said.length ? `<div class="panel-head"><h2>What they've said</h2></div><div class="card px-box"><div class="info">${said.map((e) => `<div class="sub"><span class="dim">${e.when}.</span> ${e.text}</div>`).join('')}</div></div>` : ''}`;
-}
 
 function peopleCard(s: ShoreState): string {
   const four = s.people.filter((p) => p.founder);
@@ -431,189 +330,6 @@ function peopleCard(s: ShoreState): string {
     <div class="sub dim">${s.births} born · ${s.deaths} dead.</div></div></div>`;
 }
 
-function villagesCard(s: ShoreState): string {
-  const found = s.villages.filter((v) => v.found && (!v.gone || v.outpost !== undefined));
-  if (!found.length) return `<div class="panel-head"><h2>The island</h2></div><div class="card px-box"><div class="info"><div class="sub">There's smoke inland. Someone else is here. Walk out and find them.</div></div></div>`;
-  // Yours first (what wants you first, then the biggest), then the rest (what wants you, then the
-  // nearest).
-  const mine = (v: Village) => v.joined || v.outpost !== undefined || ruled(v);
-  const urgent = (v: Village) => Number(alerts(s, v).some((a) => a.urgent));
-  const d = (v: Village) => Math.hypot(v.x - s.hearth.x, v.y - s.hearth.y);
-  const yours = found.filter(mine).sort((a, b) => urgent(b) - urgent(a) || b.pop - a.pop);
-  const others = found.filter((v) => !mine(v)).sort((a, b) => urgent(b) - urgent(a) || d(a) - d(b));
-  const group = (name: string, list: Village[]) => (list.length ? `<div class="panel-head sub-head"><h3>${name}</h3><span class="dim">${list.length}</span></div>${list.map((v) => villageLine(s, v)).join('')}` : '');
-  return `<div class="panel-head"><h2>The island</h2><span class="dim">${found.length} of ${s.villages.length}${found.length < s.villages.length ? '+' : ''} found · tap one to open it</span></div>${group('Yours', yours)}${group('Others', others)}`;
-}
-
-/** A village as a line (tap to open it out to all there is to do with them). */
-function villageLine(s: ShoreState, v: Village): string {
-  const open = openVillage === v.id;
-  const g = villageGist(s, v);
-  const al = alerts(s, v);
-  return `<div class="vline${open ? ' open' : ''}">
-    <button class="vline-head px-box" data-openv="${v.id}"><span class="kind">${miniIcon(v.look, 2)}</span><span class="vline-text"><span class="name">${cap(v.name)} <span class="rel ${g.tagCls}">${g.tag}</span></span><span class="sub dim">${g.gist}</span>${al.length ? `<span class="vline-alerts">${al.map((a) => `<i class="al-${a.cls}">${a.text}</i>`).join('')}</span>` : ''}</span><span class="vline-caret">${open ? '▾' : '▸'}</span></button>
-    ${open ? `<div class="vline-body">${villageRow(s, v)}</div>` : ''}
-  </div>`;
-}
-
-function villageRow(s: ShoreState, v: Village): string {
-  const rel = relation(s, v);
-  if (v.joined) {
-    return `<div class="card px-box village"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">Joined</span></div>
-      <div class="sub">They live by your hearth now.</div></div></div>`;
-  }
-  if (v.outpost !== undefined) {
-    const goods = RES_OF[v.habitat ?? 'meadow'].filter((r) => r !== 'fish').map((r) => RES_NAME[r].toLowerCase());
-    return `<div class="card px-box village"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">${cap(v.name)}'s land <span class="rel rel-vassal">Outpost</span></div>
-      <div class="sub">Driven out; their land is yours${goods.length ? `, its ${goods.join(' and ')} brought in` : ''}.</div></div></div>`;
-  }
-  if (v.gone) return '';
-  const icon = `<span class="kind">${miniIcon(v.look, 2)}</span>`;
-  if (v.vassal) return vassalRow(s, v);
-  if (v.settled !== undefined) return settledRow(s, v);
-  if (v.asking !== undefined) {
-    return `<div class="card px-box village">${icon}<div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">Won over</span></div>
-      <div class="sub">They'd join you, but there's no room for all ${Math.round(v.pop)} of them.</div></div>
-      <div class="col"><button class="px-btn gold" data-askjoin="${v.id}">Decide</button></div></div>`;
-  }
-  if (v.waiting !== undefined) {
-    return `<div class="card px-box village">${icon}<div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">Waiting</span></div>
-      <div class="sub">Waiting for room: ${Math.round(v.pop)} of them, ${Math.max(0, roomLeft(s))} beds free. They won't wait for ever.</div></div>
-      <div class="col"><button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
-  }
-  const win = canWin(s, v);
-  const far = foreign(s, v);
-  return `<div class="card px-box village">${icon}<div class="info"><div class="name">${cap(v.name)} <span class="rel rel-${rel}">${REL_NAME[rel]}</span>${far ? ` <span class="tiny dim">· ${STANCE_NAME[stanceOf(s, v)]}</span>` : ''}</div>
-    <div class="sub">${Math.round(v.pop)} ${v.cannibal ? 'eaters of their own' : DIET_NAME[v.diet] ?? v.diet}. ${win ? '' : REL_LINE[rel]}</div>${win ? trustBar(v) : far ? standingBar(s, v) : ''}</div>
-    <div class="col">${win ? `<button class="px-btn${s.food >= giftCost(v) ? ' gold' : ''}" data-gift="${v.id}"${s.food >= giftCost(v) ? '' : ' disabled'}>Gift ${giftCost(v)}</button>` : far ? `<button class="px-btn${s.food >= giftCost(v) ? ' gold' : ''}" data-giftf="${v.id}"${s.food >= giftCost(v) ? '' : ' disabled'}>Gift ${giftCost(v)}</button>` : ''}${raidable(s, v) ? `<button class="px-btn" data-raid="${v.id}"${s.warband ? ' disabled' : ''}>Raid</button>` : ''}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
-}
-
-const TAXES = [0, 0.1, 0.25, 0.4, 0.6];
-
-/** Where a village that isn't kin stands with you: a bar from hostile (left) to allies (right),
- * peace marked. */
-function standingBar(s: ShoreState, v: Village): string {
-  const n = standingOf(s, v);
-  const st = stanceOf(s, v);
-  return `<div class="trust standing"><span class="tiny dim">Standing</span><div class="making-bar on stand-${st}"><i style="width: ${Math.round((n + 100) / 2)}%"></i><b class="peace-mark" style="left: ${(PEACE + 100) / 2}%"></b></div></div>`;
-}
-
-/** What the chief can say to a village that isn't kin: a gift, and (there in person, strong
- * enough) a demand that they submit. */
-function diplomacyLine(s: ShoreState, v: Village): string {
-  const st = stanceOf(s, v);
-  const near = chiefNear(s, v);
-  const odds = demandOdds(s, v);
-  const say = st === 'ally' ? 'Allies: they come to help when raiders come, and never raid you.' : st === 'peace' ? 'At peace: they won\'t come raiding, while it lasts. Gifts keep it; past 60, they\'d be allies.' : st === 'wary' ? 'Wary of you. Gifts would win a peace (past 20).' : 'Hostile. Gifts would soften them, slowly.';
-  const chance = odds.chance >= 0.95 ? 'they would give in' : odds.chance > 0.5 ? 'they might well give in' : odds.chance > 0 ? 'they might give in' : 'they would laugh';
-  return `${standingBar(s, v)}<p class="dim tiny">${say} Standing drifts back to what they were, unless it's kept up. Raiding a village at peace is a betrayal the whole island hears of.</p>
-    <div class="choices"><button class="px-btn${s.food >= giftCost(v) ? ' gold' : ''}" data-giftf="${v.id}"${s.food >= giftCost(v) ? '' : ' disabled'}>Send a gift · ${giftCost(v)} food${near ? ' (×2)' : ''}</button>
-    ${near ? `<button class="px-btn" data-demand="${v.id}"${canDemand(s, v) ? '' : ' disabled'}>Demand they submit<span class="tiny dim"> · ${canDemand(s, v) ? chance : 'asked already this season'}</span></button>` : `<button class="px-btn" data-visit="${v.id}">Visit (to demand they submit)</button>`}</div>`;
-}
-
-/** Days, said plainly. */
-const days = (d: number) => (d < 0.6 ? 'under a day' : `${Math.round(d)} day${Math.round(d) === 1 ? '' : 's'}`);
-
-/** The road to a village of yours: to be begun, being laid (the chief can work with the crew),
- * or done (relaid better, as the Ages allow; caravans along it). */
-function roadLine(s: ShoreState, v: Village): { line: string; button: string } {
-  const walk = days(travelDays(s, v));
-  const crew = (w: { done: number; need: number }, what: string) => {
-    const withCrew = chiefWithCrew(s, v);
-    return {
-      line: `<div class="trust"><span class="tiny dim">${what}</span><div class="making-bar on"><i style="width: ${Math.round((w.done / w.need) * 100)}%"></i></div></div><div class="sub dim tiny">${days(w.need - w.done)} from done${withCrew ? ': the chief is working with the crew, twice as fast.' : s.crewWith === v.id ? ': the chief is on the way to the crew.' : '. With the chief working among the crew, it goes twice as fast.'}</div>`,
-      button: s.crewWith === v.id ? `<button class="px-btn" data-leavecrew="1">Leave the crew</button>` : `<button class="px-btn gold" data-crew="${v.id}">Join the crew</button>`,
-    };
-  };
-  if (v.road && !roadDone(v)) return crew(v.road, 'Road');
-  if (v.road) {
-    const tier = ROAD_TIERS[roadTier(v)];
-    if (v.road.up) {
-      const c = crew(v.road.up, `To ${ROAD_TIERS[roadTier(v) + 1].name.toLowerCase()}`);
-      return { line: `<div class="sub dim tiny">${tier.name}: ${walk} from the hearth.</div>${c.line}`, button: c.button };
-    }
-    const u = roadUpgrade(s, v);
-    const trades = tradesWith(v);
-    const now = v.trade ? trades.findIndex((x) => x.give === v.trade!.give && x.get === v.trade!.get) : -1;
-    const trade = v.vassal
-      ? `<div class="seg tax trade"><span class="tiny dim">Caravan</span><button class="px-btn${now < 0 ? ' on' : ''}" data-trade="${v.id}:-1">None</button>${trades.map((x, k) => `<button class="px-btn${k === now ? ' on' : ''}" data-trade="${v.id}:${k}">${x.n} ${x.give} → ${x.m} ${tradeWord(x.get)}</button>`).join('')}</div>`
-      : '';
-    const up = u ? `<div class="sub dim tiny">Relaid as a ${ROAD_TIERS[u.tier].name.toLowerCase()} it'd be quicker still${u.missing ? `: needs ${u.missing}.` : '.'}</div>` : '';
-    const stations = waystations(s, v).length;
-    const perks = roadPerks(v);
-    return {
-      line: `<div class="sub fx tiny">${tier.name}: they send ${Math.round((perks.output - 1) * 100)}% more${v.vassal ? `, and are the more loyal (+${perks.loyalty})` : `, and grow ${Math.round((perks.growth - 1) * 100)}% quicker`}. All your roads together: building and the culture's practice ${Math.round(networkBonus(s) * 100)}% quicker.</div><div class="sub dim tiny">${walk} from the hearth, and the chief walks it quickly. ${stations === 1 ? 'A waystation' : `${stations} waystations`} on the way: wanderers, things left for the hearth${count(s, 'watch') ? '' : ', and, with no watch post, raiders lying in wait'}.</div>${up}${trade}`,
-      button: u && !u.missing ? `<button class="px-btn gold" data-roadup="${v.id}">Upgrade to ${ROAD_TIERS[u.tier].name.toLowerCase()} · ${u.wood} wood${Object.entries(u.needs).map(([r, n]) => `, ${n} ${RES_NAME[r as keyof typeof RES_NAME].toLowerCase()}`).join('')}</button>` : '',
-    };
-  }
-  const c = roadCost(s, v);
-  const busy = s.villages.some((x) => (x.road && !roadDone(x)) || x.road?.up);
-  return {
-    line: `<div class="sub dim tiny">${walk} from the hearth, the way round the water and the mountains. A road${c.via >= 0 ? ` from ${viaName(s, c.via)}, the nearest the roads reach,` : ''} would take ${days(c.days)} to lay${busy ? ' (once the one being laid is done)' : ''}. With it they'd send 15% more${v.vassal ? ', be the more loyal, and trade by caravan' : ', and grow the quicker'}; help and the chief would get there in half the time; and every village the roads reach makes building and the culture's practice a little quicker.</div>`,
-    button: `<button class="px-btn${canRoad(s, v) ? ' gold' : ''}" data-road="${v.id}"${canRoad(s, v) ? '' : ' disabled'}>Road · ${c.wood} wood</button>`,
-  };
-}
-
-/** What a village of yours is asking of the hearth (if anything), and the button to answer. */
-function askBits(s: ShoreState, v: Village, near: boolean): { ask: string; askBtn: string } {
-  const now = s.day + s.clock / DAY_SEC;
-  if (!v.ask) return { ask: '', askBtn: '' };
-  const left = Math.max(0, Math.ceil(v.ask.until - now));
-  return {
-    ask: `<div class="sub ask"><b>They ask for ${askWords(v.ask)}</b> (${left} day${left === 1 ? '' : 's'} left). ${v.vassal ? 'Helped, they\'ll be the more loyal; let down, the less.' : 'Helped, they\'ll thrive a season; let down, they\'ll sulk.'}</div>`,
-    askBtn: v.ask.kind === 'visit' ? (near ? '' : `<button class="px-btn gold" data-visit="${v.id}">Go to them</button>`) : `<button class="px-btn${canAnswer(s, v) ? ' gold' : ''}" data-answer="${v.id}"${canAnswer(s, v) ? '' : ' disabled'}>Send ${askWords(v.ask)}</button>`,
-  };
-}
-
-function settledRow(s: ShoreState, v: Village): string {
-  const now = s.day + s.clock / DAY_SEC;
-  const d = settledDay(v, now, s);
-  const road = roadLine(s, v);
-  const near = chiefNear(s, v);
-  const st = stageOf(v);
-  const goods = Object.entries(d.res).filter(([, n]) => (n ?? 0) >= 0.5).map(([r, n]) => `${n0(n!)} ${RES_NAME[r as keyof typeof RES_NAME].toLowerCase()}`);
-  const mood = (v.thrive ?? -1) > now ? ' <b class="good">Thriving.</b>' : (v.sulk ?? -1) > now ? ' <b class="starving">Sulking: let down.</b>' : '';
-  const focus = FOCI.find((f) => f.id === (v.focus ?? 'mixed'))!;
-  const foci = FOCI.filter((f) => f.id !== 'goods' || landGoods(v).length);
-  const { ask, askBtn } = askBits(s, v, near);
-  return `<div class="card px-box village vassal"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-kin">${cap(STAGES[st])}</span></div>
-    <div class="sub">${Math.floor(v.pop)} of them, yours, in their own ${STAGES[st]}.${mood} They send ${n0(d.food)} food, ${n0(d.wood)} wood${goods.length ? `, ${goods.join(', ')}` : ''} a day${d.growth > 0.05 ? ', and are growing' : ''}.${st < 2 ? ` At ${st ? 35 : 15} they'll be a ${STAGES[st + 1]}${st ? ' (more to give, and room to grow)' : ''}.` : ''}</div>
-    ${ask}
-    ${near ? `<div class="seg tax"><span class="tiny dim">Their work</span>${foci.map((f) => `<button class="px-btn${f.id === focus.id ? ' on' : ''}" data-sfocus="${v.id}:${f.id}">${f.name}</button>`).join('')}</div>` : `<div class="sub dim tiny">Their work: ${focus.name.toLowerCase()}. The chief can change it there in person.</div>`}
-    ${road.line}</div>
-    <div class="col">${askBtn}${road.button}${near || (v.ask?.kind === 'visit') ? '' : `<button class="px-btn" data-visit="${v.id}">Visit</button>`}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
-}
-
-function vassalRow(s: ShoreState, v: Village): string {
-  const d = vassalDay(v, s);
-  const loy = Math.round(v.vassal!.loyalty);
-  const mood = loy > 70 ? 'content' : loy > 40 ? 'grumbling' : loy > 15 ? '<b class="starving">restless</b>' : '<b class="starving">on the edge of revolt</b>';
-  const near = chiefNear(s, v);
-  const { ask, askBtn } = askBits(s, v, near);
-  const why = annexWhy(s, v);
-  const annexLine = `<div class="sub dim tiny">${why ? `Loyal enough (${ANNEX_LOYALTY}) and past any grudge, they could be brought into the hearth's fold: a settlement, kin of the hearth. Needs ${why}.` : `Loyal as they are, they could be brought into the hearth's fold with a feast: a settlement, tribute no more, theirs and yours alike.`}</div>`;
-  return `<div class="card px-box village vassal"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">${cap(v.name)} <span class="rel rel-vassal">Yours</span></div>
-    <div class="sub">${Math.floor(v.pop)} of them, ${mood}. They send ${n0(d.food)} food and ${n0(d.wood)} wood a day${d.growth > 0.05 ? ', and are growing' : d.growth < -0.05 ? ', and are dwindling' : ''}.</div>
-    <div class="trust"><span class="tiny dim">Loyal</span><div class="making-bar on loyal"><i style="width: ${loy}%"></i></div></div>
-    <div class="seg tax"><span class="tiny dim">Take</span>${TAXES.map((t) => `<button class="px-btn${Math.abs(v.vassal!.tax - t) < 0.01 ? ' on' : ''}" data-tax="${v.id}:${t}">${Math.round(t * 100)}%</button>`).join('')}</div>
-    ${ask}
-    <div class="sub dim tiny">The less you take, the more loyal they grow; and the chief's visits and dancing warm them.</div>${roadLine(s, v).line}${annexLine}</div>
-    <div class="col">${askBtn}${why ? '' : `<button class="px-btn gold" data-annex="${v.id}">Feast · ${annexCost(v, s)} food</button>`}${roadLine(s, v).button}${near ? `<button class="px-btn gold" data-dance="${v.id}"${danceLeft(s, v) > 0.5 ? '' : ' disabled'}>${danceLeft(s, v) > 0.5 ? 'Dance' : 'Worn out'}</button>` : `<button class="px-btn" data-visit="${v.id}">Visit</button>`}<button class="px-btn" data-seevillage="${v.id}">Look</button></div></div>`;
-}
-
-/** Won over, but there's no room: what's to be done with them? */
-export function joinCard(s: ShoreState, v: Village): string {
-  const free = Math.max(0, roomLeft(s));
-  const n = Math.round(v.pop);
-  return `<p class="label dim">Won over</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)}</h3></div>
-    <p>They would join you: all ${n} of them. But there's room by your hearth for only ${free} more.</p>
-    ${deck([
-      { act: `${v.id}:crowd`, title: 'Take them in', line: `All ${n} come to live by your hearth now.`, good: [`${n} more critters, today`], bad: ['Crowded: no children till there\'s room', 'Many more mouths to feed'] },
-      { act: `${v.id}:vassal`, title: 'Keep their village, as yours', line: 'They stay where they are, and answer to your hearth.', good: ['Food and wood sent to you every day', 'They grow on their own'], bad: ['Take too much and they grow restless, then revolt'] },
-      { act: `${v.id}:wait`, title: 'Ask them to wait', line: 'They\'ll come once there\'s room for them.', good: ['They join by themselves, when there\'s room'], bad: ['Ten days, then they give up on you'] },
-      { act: `${v.id}:away`, title: 'Turn them away', line: 'They leave their village, and go.', good: ['No more mouths to feed'], bad: ['Where they\'ll go, no one says'] },
-    ])}`;
-}
 
 /** A deck of choices to flip through (swipe, or the arrows), each a card with what it gives and
  * what it costs, and a check to choose it. */
@@ -634,89 +350,14 @@ export function deck(cards: { act: string; title: string; line: string; good: st
   </div>`;
 }
 
+
 function trustBar(v: Village): string {
   const t = Math.floor(v.trust ?? 0);
   return `<div class="trust"><span class="tiny dim">Trust</span><div class="making-bar on"><i style="width: ${t}%"></i></div></div>`;
 }
 
-export function villageCard(s: ShoreState, v: Village): string {
-  const rel = relation(s, v);
-  const win = canWin(s, v);
-  const near = chiefNear(s, v);
-  const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
-  const actions = win
-    ? `${trustBar(v)}
-      <p class="dim tiny">${near ? `${chief} is with them: gifts count twice, and every day there they trust you more.` : `Gifts count twice brought by ${chief} in person, and the longer ${chief} stays, the more they trust you.`} At full trust they're yours: a settlement of the hearth.</p>
-      <div class="choices">
-        <button class="px-btn${s.food >= giftCost(v) ? ' gold' : ''}" data-gift="${v.id}"${s.food >= giftCost(v) ? '' : ' disabled'}>Send a gift · ${giftCost(v)} food${near ? ' (×2)' : ''}</button>
-        ${near ? `<button class="px-btn gold" data-dance="${v.id}"${danceLeft(s, v) > 0.5 ? '' : ' disabled'}>${danceLeft(s, v) > 0.5 ? 'Dance with them' : 'Worn out from dancing'}</button>` : `<button class="px-btn" data-visit="${v.id}">${chief} visits them</button>`}
-        <button class="px-btn" data-act="dismiss">Later</button>
-      </div>`
-    : raidable(s, v)
-      ? `${foreign(s, v) ? diplomacyLine(s, v) : ''}${raidChoices(s, v)}`
-      : foreign(s, v)
-      ? `${diplomacyLine(s, v)}<button class="px-btn" data-act="dismiss">OK</button>`
-      : `<p class="dim tiny">${v.joined ? 'They live by your hearth now; a few stay on at their old village, working its land for you.' : v.settled !== undefined ? 'Yours: a settlement of the hearth, in their own village. What they gather comes to you, days on the road.' : v.vassal ? 'Yours: they pay tribute (set what you take on the Island tab).' : hostile(s, v) ? `They'll come raiding, when they think you're worth it.${v.beaten ? ` Driven off ${v.beaten} time${v.beaten > 1 ? 's' : ''} so far.` : ''}` : (v.beaten ?? 0) >= 3 ? 'Driven off too many times: they leave you be now.' : ''}</p><button class="px-btn gold" data-act="dismiss">OK</button>`;
-  return `<p class="label dim">${REL_NAME[rel]}</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)}</h3></div>
-    <p>${Math.round(v.pop)} of them, ${v.cannibal ? 'eaters of their own kind' : `${(DIET_NAME[v.diet] ?? v.diet).toLowerCase()}`}, another kind altogether.${v.habitat ? ` ${WHERE[v.habitat]}` : ''}</p>
-    <p class="dim">${REL_LINE[rel]}</p>
-    ${v.overlord !== undefined ? `<p class="dim">They pay tribute to ${(() => { const l = s.villages.find((x) => x.id === v.overlord); return l?.found ? l.name : 'another village, somewhere out in the fog'; })()}: beat their masters, and they'd be free, and glad of you.</p>` : ''}
-    ${s.villages.filter((x) => x.overlord === v.id && x.found).length ? `<p class="dim">${s.villages.filter((x) => x.overlord === v.id && x.found).map((x) => cap(x.name)).join(' and ')} pay them tribute.</p>` : ''}
-    ${v.habitat ? `<p class="fx">Their land gives: ${RES_OF[v.habitat].map((r) => RES_NAME[r].toLowerCase()).join(', ')}.</p>` : ''}
-    ${actions}`;
-}
 
 const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
-
-/** How long till then, in words (days of the island's own). */
-function soon(days: number): string {
-  return days <= 0.3 ? 'any moment now' : days <= 1 ? 'before the day is out' : days <= 2 ? 'tomorrow' : `in ${Math.ceil(days)} days`;
-}
-
-/** Raiders coming, or the war band out: at the top of the Village tab. */
-function warCard(s: ShoreState): string {
-  const now = s.day + s.clock / DAY_SEC;
-  let out = '';
-  const r = s.raid;
-  const v = r && s.villages.find((x) => x.id === r.from);
-  const target = r && r.target !== undefined ? s.villages.find((x) => x.id === r.target && x.vassal) : undefined;
-  const allies = (r?.allies ?? []).map((a) => `${a.n} ${a.from === -1 ? 'of yours' : `from ${s.villages.find((x) => x.id === a.from)?.name ?? 'a vassal'}`}${a.arrives > now ? ` (there ${soon(a.arrives - now)})` : ' (there)'}`);
-  if (r?.seen !== undefined && v && target) {
-    out += `<div class="card px-box raid"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">Raiders!</div>
-      <div class="sub">${cap(v.name)} are heading for ${target.name}, about ${r.fighters} of them: there ${soon((r.arrives ?? now) - now)}.${allies.length ? ` Coming to help: ${allies.join(', ')}.` : ''}</div>
-      ${r.help === 'none' ? '<div class="sub dim">You sent no help.</div>' : ''}</div>
-      <div class="col">${canHelp(s) ? `<button class="px-btn gold" data-help="send">Send ${helpSize(s)}</button><button class="px-btn" data-help="none">Leave them</button>` : ''}<button class="px-btn" data-seevillage="${target.id}">Look</button></div></div>`;
-  } else if (r?.seen !== undefined && v) {
-    const us = ourStrength(s, fighters(s), true, r.rallied ? 0.2 : 0);
-    const them = theirStrength(v, r.fighters);
-    out += `<div class="card px-box raid"><span class="kind">${miniIcon(v.look, 2)}</span><div class="info"><div class="name">Raiders!</div>
-      <div class="sub">${cap(v.name)} are coming, about ${r.fighters} of them: here ${soon((r.arrives ?? now) - now)}. ${r.stance === 'pay' ? `They'll be paid ${payCost(v, r.fighters).food} food and ${payCost(v, r.fighters).wood} wood to go away.` : `${r.stance === 'walls' ? 'Behind the palisade, all' : 'All'} ${fighters(s)} grown will fight. ${odds(us, them)}`}</div>
-      ${allies.length ? `<div class="sub">Coming to help: ${allies.join(', ')}.</div>` : ''}
-      ${r.rallied && r.stance !== 'pay' ? '<div class="sub dim">Rallied: spears out, the young behind the fire.</div>' : ''}</div>
-      <div class="col"><button class="px-btn" data-stancecard="1">${r.stance === 'pay' ? 'Pay' : r.stance === 'walls' ? 'Walls' : 'Fight'} ›</button></div></div>`;
-  }
-  // The war chief, and the rule they raid by while you're away.
-  if (hasWarChief(s)) {
-    const rule = s.warRule ?? 'off';
-    const RULES: [WarRule, string, string][] = [
-      ['off', 'Off', 'They raid no one unless you send them.'],
-      ['weaker', 'Weaker only', 'They raid prey only when clearly the stronger.'],
-      ['ready', 'Whenever ready', 'They raid any prey when the odds are even or better.'],
-    ];
-    out += `<div class="card px-box lean"><div class="info"><div class="name">The war chief</div>
-      <div class="sub">${RULES.find((r) => r[0] === rule)![2]} Half the grown go, never when food's short or raiders are coming, with rest between. When raiders come and you're not there, they rally the defenders${hasWalls(s) ? ' and hold the palisade' : ''}.</div></div>
-      <div class="seg">${RULES.map(([id, name]) => `<button class="px-btn${rule === id ? ' on' : ''}" data-warrule="${id}">${name}</button>`).join('')}</div></div>`;
-  }
-  const w = s.warband;
-  const to = w && s.villages.find((x) => x.id === w.to);
-  if (w && to) {
-    const led = Math.hypot(s.chiefAt.x - to.x, s.chiefAt.y - to.y) < 14;
-    out += `<div class="card px-box raid"><span class="kind">${miniIcon(s.look, 2)}</span><div class="info"><div class="name">The war band</div>
-      <div class="sub">${w.fighters} out against ${to.name}, there ${soon(w.arrives - now)}. ${led ? 'The chief is there to lead them.' : 'Walk the chief there to lead them: they fight harder for it.'}</div></div>
-      <div class="col">${led ? '' : `<button class="px-btn" data-visit="${to.id}">Go</button>`}</div></div>`;
-  }
-  return out;
-}
 
 /** The Long Road: the Age, its lanes (what each has come to, and how near the next), the forks
  * taken (and the roads not taken, greyed), and the Age's Great Work. */
@@ -742,12 +383,13 @@ function cultureLayout(s: ShoreState): string {
   const W = workName ? workName[0].toUpperCase() + workName.slice(1) : '';
   const workCard = !work
     ? `<div class="card px-box"><div class="info"><div class="name">${name}</div><div class="sub">${ageName(c.age - 1)} is over. The road goes on in a future update.</div></div></div>`
-    : `<div class="card px-box"><div class="info"><div class="name">The Age's Great Work: ${workName}</div><div class="sub">${workReady(s) ? (s.building?.id === work ? `${W} is going up.` : `${W} can be built now (Build, Homes).`) : `Once ${LANES_FOR_WORK} lanes have this Age's ideas (${done} so far), ${workName} can be built.`}</div></div></div>`;
+    : `<div class="card px-box"><div class="info"><div class="name">The Age's Great Work: ${workName}</div><div class="sub">${workReady(s) ? `${W} can be raised now: see the Village tab.` : `Once ${LANES_FOR_WORK} lanes have this Age's ideas (${done} so far), ${workName} can be built.`}</div></div></div>`;
   if (!ageHasIdeas(c.age)) return `<div class="panel-head"><h2>The Long Road</h2><span class="dim">${name}</span></div>${workCard}${forksCard(s)}`;
   return `<div class="panel-head"><h2>The Long Road</h2><span class="dim">${name}</span></div>
     <p class="tiny dim">Ideas come by themselves, from what the village does. Focus a lane to hurry it.</p>
     ${asking}${workCard}${lanes}${forksCard(s)}`;
 }
+
 
 /** The forks taken (the roads not taken, greyed). */
 function forksCard(s: ShoreState): string {
@@ -760,18 +402,19 @@ function forksCard(s: ShoreState): string {
   return forks ? `<div class="panel-head"><h2>Chosen</h2></div><div class="card px-box"><div class="info">${forks}</div></div>` : '';
 }
 
+
 /** What a boost does, in words. */
 const FX_WORDS: Partial<Record<keyof Boosts, (n: number) => string>> = {
-  food: (n) => `Food comes in ${pc(n)} faster`, wood: (n) => `Wood comes in ${pc(n)} faster`, births: (n) => `Children born ${pc(n)} more often`, grow: (n) => `Children grow up ${pc(n)} faster`,
-  speed: (n) => `The chief and scouts walk ${pc(n)} faster`, sight: (n) => `They see ${n} tiles further`, gift: (n) => `Gifts win ${pc(n)} more trust`, foodCap: (n) => `Room for ${n} more food`, woodCap: (n) => `Room for ${n} more wood`,
-  winter: (n) => `Winter's lean ${pc(n)} less`, mend: (n) => `${pc(n)} fewer die of hunger`, guard: (n) => `${pc(n)} harder at home`, arms: (n) => `They fight ${pc(n)} harder`, warn: (n) => `Raiders seen ${n} day${n === 1 ? '' : 's'} sooner`,
-  tribute: (n) => `Settlements and vassals send ${pc(n)} more`, loyalty: (n) => `Vassals' loyalty settles ${n} higher`, standing: (n) => `Gifts win ${pc(n)} more standing`, build: (n) => `Building goes ${pc(n)} faster`, resCap: (n) => `Room for ${n} more of each good`,
-  trade: (n) => `Caravans bring back ${pc(n)} more`, roadCost: (n) => `Roads cost ${pc(n)} less`, crew: (n) => `Roads laid ${pc(n)} faster`, levy: () => `Vassals called up send more`, wander: (n) => `Wanderers come ${n >= 1 ? 'twice as' : 'more'} often`, feast: (n) => `Feasts cost ${pc(n)} less`, settleGrow: (n) => `Settlements grow ${pc(n)} faster`,
+  food: (n) => `Everything brings in ${pc(n)} more`, tap: (n) => `Stoking brings ${pc(n)} more`, births: (n) => `Children born ${pc(n)} more often`, grow: (n) => `Children grow up ${pc(n)} faster`,
+  speed: (n) => `The chief and scouts walk ${pc(n)} faster`, sight: (n) => `They see ${n} tiles further`, gift: (n) => `Gifts win ${pc(n)} more trust`,
 };
+
 const pc = (n: number) => `${Math.round(n * 100)}%`;
+
 function fxWords(fx?: Partial<Boosts>): string[] {
   return Object.entries(fx ?? {}).map(([k, n]) => FX_WORDS[k as keyof Boosts]?.(n as number)).filter((x): x is string => !!x);
 }
+
 
 /** A fork, as cards to choose between. */
 export function forkCard(s: ShoreState, fork: ForkId): string {
@@ -780,121 +423,15 @@ export function forkCard(s: ShoreState, fork: ForkId): string {
     ${deck(forkOptions(s, fork).map((o) => ({ act: `${fork}:${o.id}`, title: o.name, line: o.line, good: [...(o.lane ? [`${LANES.find((l) => l.id === o.lane)!.name} ideas come a quarter faster`] : []), ...fxWords(o.fx)], bad: [] })), 'fork')}`;
 }
 
+
 /** Dancing with a village: circles drawn round their fire, their way. */
 export function danceCard(s: ShoreState, v: Village): string {
   const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
   return `<p class="label dim">${cap(v.name)}</p><h3>${chief} dances round their fire</h3>
-    <p class="dim tiny">Draw circles round the fire. ${danceStyle(v.habitat).line} Dance it their way and it counts twice; round and steady, the fire roars and more of them join in. They tire after a while.</p>
+    <p class="dim tiny">Draw circles round the fire. ${danceStyle(v.habitat).line} Every turn keeps the fire up longer: everything brings in twice as much while it burns. Dance it their way and it counts twice. They tire after a while.</p>
     <div class="dance" data-dancev="${v.id}"><canvas class="fire-dance"></canvas>
       <div class="dance-info"><span class="dance-streak tiny">Round the fire</span><span class="dance-left tiny dim"></span></div>
-      ${v.vassal ? `<div class="trust"><span class="tiny dim">Goodwill</span><div class="making-bar on loyal"><i style="width: ${Math.round(((v.vassal.warm ?? 0) / WARM_MAX) * 100)}%"></i></div></div>` : trustBar(v)}</div>
+      ${canWin(s, v) ? trustBar(v) : ''}<div class="sub tiny dim">While the fire's up, everything brings in twice as much: <b class="green" data-t="shore-boost"></b></div></div>
     <div class="choices"><button class="px-btn" data-act="dismiss">Rest</button></div>`;
 }
 
-/** Raiders seen coming: how the chief means to meet them (a card each, like the join choices). */
-export function stanceCard(s: ShoreState): string {
-  const r = s.raid;
-  const v = r && s.villages.find((x) => x.id === r.from);
-  if (!r || !v) return '';
-  const now = s.day + s.clock / DAY_SEC;
-  const n = fighters(s);
-  const pay = payCost(v, r.fighters);
-  const canPay = s.food >= pay.food && s.wood >= pay.wood;
-  const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
-  return `<p class="label dim">Raiders</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)} are coming</h3></div>
-    <p>About ${r.fighters} of them, armed, here ${soon((r.arrives ?? now) - now)}. How will ${chief} meet them?</p>
-    ${deck(
-      [
-        { act: 'fight', title: 'Stand and fight', line: `All ${n} grown meet them outside the village.`, good: [odds(ourStrength(s, n, true, r.rallied ? 0.2 : 0), theirStrength(v, r.fighters)), `${chief} can step into the line while it's fought`], bad: ['Beaten, they take a quarter of the stores', 'A third of those who fall die'] },
-        { act: 'walls', title: 'Behind the palisade', line: 'Everyone in, and hold the walls.', good: ['They fight half again as hard', 'Fewer of those who fall die'], bad: ['The fields outside are stripped: a tenth of the food'], off: hasWalls(s) ? undefined : 'There\'s no palisade to hold behind (build one under Defence).' },
-        { act: 'pay', title: 'Pay them off', line: `Food and wood, left out for them: ${pay.food} food and ${pay.wood} wood.`, good: ['No one fights; no one dies'], bad: ['They learn that you pay: back the sooner, and asking more'], off: canPay ? undefined : `There isn't ${pay.food} food and ${pay.wood} wood to give.` },
-      ],
-      'stance',
-    )}`;
-}
-
-/** The fight going on now, live: the lines thinning as the rounds are fought, and the chief's
- * one move in it. */
-export function fightCard(s: ShoreState, f: Fight): string {
-  const v = s.villages.find((x) => x.id === f.village);
-  if (!v) return '';
-  const at = f.at !== undefined ? s.villages.find((x) => x.id === f.at) : undefined;
-  const head = f.attack === 'them' ? `${cap(v.name)} fall on ${at ? at.name : 'the village'}` : `The war band falls on ${v.name}`;
-  const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
-  return `<p class="label dim">${f.walls ? 'Behind the palisade' : f.attack === 'them' ? 'Raid' : 'War band'}</p><h3>${head}</h3>
-    <div class="battle live" data-fight="${f.id}">${line(s.look, f.ours, 'us')}<span class="vs">vs</span>${line(v.look, f.theirs, 'them')}</div>
-    <div class="tactics"><p class="tell"></p>
-      <div class="seg tactic-btns"><button class="px-btn" data-tactic="charge">Charge</button><button class="px-btn" data-tactic="hold">Hold</button><button class="px-btn" data-tactic="flank">Flank</button></div>
-      <p class="dim tiny tactic-note">Read what they're about to do. Hold breaks a charge; a charge smashes a thin, spread line; flanking goes round a braced one.</p></div>
-    <p class="dim tiny fight-note"></p>
-    <div class="choices"><button class="px-btn gold" data-stepin="1">${chief} steps into the line</button><button class="px-btn" data-act="dismiss">Leave them to it</button></div>`;
-}
-
-/** A line of fighters, up to ten shown, with their bar and count. */
-function line(look: ShoreState['look'], n: number, side: string): string {
-  return `<div class="side ${side}"><div class="line">${Array.from({ length: Math.min(10, Math.max(1, n)) }, () => miniIcon(look, 2)).join('')}</div><div class="making-bar on"><i style="width: 100%"></i></div><span class="tiny num">${n}</span></div>`;
-}
-
-/** What the live fight's note says now (who's in it, whether the chief can step in). */
-export function fightNote(s: ShoreState, f: Fight): string {
-  const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
-  if (f.chief !== undefined) return f.chief >= f.rounds.length ? `${chief} pushes to the front…` : f.hurt ? `${chief} fought in the front line, and was hurt.` : `${chief} fought in the front line.`;
-  if (canStepIn(s)) return `Once a fight, ${chief} can lead one round from the front: it hits far harder, but ${chief} may be hurt.`;
-  return f.attack === 'them' ? `${chief} is too far from the village to join the fight.` : `${chief} isn't with the war band.`;
-}
-
-/** Raiding a village (the chief's call): how many to send, and how the odds look. */
-export function raidChoices(s: ShoreState, v: Village): string {
-  const n = fighters(s);
-  const def = holders(v);
-  if (s.warband) return `<p class="dim tiny">The war band is already out.</p><button class="px-btn gold" data-act="dismiss">OK</button>`;
-  const opts = [
-    { n: Math.floor(n / 2), name: 'Half' },
-    { n: Math.floor(n * 0.75), name: 'Most' },
-  ].filter((o, i, a) => o.n >= 2 && a.findIndex((x) => x.n === o.n) === i);
-  if (!opts.length) return `<p class="dim tiny">Too few grown to spare for a war band.</p><button class="px-btn gold" data-act="dismiss">OK</button>`;
-  const chief = s.people.find((p) => p.id === s.chief)?.name ?? 'The chief';
-  const levy = levyFor(s, v);
-  const levyN = levy.reduce((x, a) => x + a.n, 0);
-  const levyStr = levy.reduce((x, a) => x + theirStrength(s.villages.find((y) => y.id === a.from)!, a.n), 0);
-  const most = opts[opts.length - 1];
-  return `<p class="dim tiny">About ${def} of them would hold their village. ${chief} can walk out and lead the band (they fight a quarter harder). Win, and the village is yours, paying tribute. Those who go don't work while they're away.</p>
-    <div class="choices">${opts.map((o) => `<button class="px-btn" data-band="${v.id}:${o.n}">${o.name}: send ${o.n}<span class="tiny dim"> · ${odds(ourStrength(s, o.n, false), theirStrength(v, def))}</span></button>`).join('')}${levyN ? `<button class="px-btn" data-band="${v.id}:${most.n}:1">${most.name}, and call up ${levyN} from your vassals<span class="tiny dim"> · ${odds(ourStrength(s, most.n, false) + levyStr, theirStrength(v, def))}</span></button>` : ''}
-    <button class="px-btn" data-act="dismiss">Not now</button></div>`;
-}
-
-/** A village beaten and at the hearth's mercy: what's to be done with them (as cards). */
-export function mercyCard(_s: ShoreState, v: Village): string {
-  const n = Math.round(v.pop);
-  const goods = RES_OF[v.habitat ?? 'meadow'].filter((r) => r !== 'fish').map((r) => RES_NAME[r].toLowerCase());
-  return `<p class="label dim">At your mercy</p><div class="village-head"><span class="kind">${miniIcon(v.look, 3)}</span><h3>${cap(v.name)}</h3></div>
-    <p>Beaten, ${n} of them left. What's to be done with them is yours to say. (Left too long, they'll be made to pay tribute.)</p>
-    ${deck([
-      { act: 'vassal', title: 'Make them vassals', line: 'They keep their village and pay tribute to the hearth, grudging at first.', good: ['Tribute every day', 'Their land\'s goods'], bad: ['Loyalty to win'] },
-      { act: 'plunder', title: 'Plunder them', line: 'Take everything they have, and leave them to it.', good: [`About ${n * 3} food and ${Math.round(n * 1.5)} wood${goods.length ? `, and ${goods.join(', ')}` : ''}`], bad: ['They stay free, and hate you'] },
-      { act: 'drive', title: 'Drive them out', line: 'Off their land, to whoever will have them. Their land becomes an outpost of yours.', good: [goods.length ? `Their ${goods.join(' and ')}, for good` : 'Their land, for good'], bad: ['Their kin grow stronger', 'The island hears of it'] },
-      { act: 'captives', title: 'Take captives', line: 'Half of them brought back to live by the hearth, another kind among you.', good: [`${Math.floor(n / 2)} more critters`], bad: ['The rest, bitter', 'The island hears of it'] },
-    ], 'mercy')}`;
-}
-
-/** A battle, to watch: two lines trading blows, round by round (played by main). */
-export function battleCard(s: ShoreState, b: Battle): string {
-  const v = s.villages.find((x) => x.id === b.village);
-  if (!v) return '';
-  const at = b.at !== undefined ? s.villages.find((x) => x.id === b.at) : undefined;
-  const head = b.attack === 'them' ? `${cap(v.name)} fall on ${at ? at.name : 'the village'}` : `The war band falls on ${v.name}`;
-  const result =
-    b.attack === 'them'
-      ? b.won
-        ? `Driven off!${b.dead ? ` ${b.dead} of ours died.` : ' None of ours died.'}${b.loot && (b.loot.food || b.loot.wood) ? ` Their fallen left ${b.loot.food} food and ${b.loot.wood} wood.` : ''}`
-        : `They broke through${b.took?.food || b.took?.wood ? `, and carried off ${b.took.food} food and ${b.took.wood} wood` : ', but found nothing to carry off'}.${b.dead ? ` ${b.dead} of ours died.` : ''}${b.loot && (b.loot.food || b.loot.wood) ? ` Their fallen left ${b.loot.food} food and ${b.loot.wood} wood.` : ''}`
-      : b.won
-        ? `They're beaten.${s.conquest?.id === v.id ? ' They\'re at your mercy.' : v.vassal ? ' Their village is yours.' : v.outpost !== undefined ? ' Their land is yours.' : v.gone ? ' What\'s left of them flee.' : ''} ${b.took ? (Math.round(b.took.food) || Math.round(b.took.wood) ? `The band brings back ${Math.round(b.took.food)} food and ${Math.round(b.took.wood)} wood.` : 'The stores are full: the band brings nothing back.') : ''}${b.dead ? ` ${b.dead} of ours died.` : ''}`
-        : `Beaten back.${b.dead ? ` ${b.dead} of ours died.` : ''}`;
-  return `<p class="label dim">${b.when}</p><h3>${head}</h3>${b.led ? '<p class="dim tiny">The chief leads them.</p>' : ''}${b.rallied ? '<p class="dim tiny">Rallied.</p>' : ''}${b.walls ? '<p class="dim tiny">Behind the palisade.</p>' : ''}${b.helpers ? `<p class="dim tiny">${b.helpers} came from ${at ? 'elsewhere' : 'your vassals'} to help.</p>` : ''}${b.chief !== undefined ? `<p class="dim tiny">The chief fought in the front line${b.hurt ? ', and was hurt' : ''}.</p>` : ''}
-    <div class="battle" data-rounds='${JSON.stringify(b.rounds)}' data-ours="${b.ours}" data-theirs="${b.theirs}" data-won="${b.won ? 'us' : 'them'}">${line(s.look, b.ours, 'us')}<span class="vs">vs</span>${line(v.look, b.theirs, 'them')}</div>
-    <p class="battle-result" hidden>${result}</p>
-    <button class="px-btn gold" data-act="dismiss">${b.won ? 'Good' : 'So be it'}</button>`;
-}
-
-export type { BuildId };

@@ -4,10 +4,8 @@
 // fog the island's other villages, their smoke going up.
 
 import { PAL } from '../art/sprites';
-import { Biome, CELL, isLand, type Island, type Pt } from '../economy/island';
-import { raidTarget } from '../economy/war';
-import { findPath } from '../economy/paths';
-import { DAY_SEC, terrainReady, walkTo, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, roadFront, roadPath, roadTier, roadWalk, shoreIsland, stageOf, waystations, shoreOf, shoreSeason, workPlan, type ShoreState, type Village } from '../economy/shore';
+import { Biome, CELL, isLand, type Pt } from '../economy/island';
+import { DAY_SEC, terrainReady, walkTo, type Habitat, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, shoreOf, shoreSeason, type ShoreState, type Village } from '../economy/shore';
 import type { GameState, Genes } from '../economy/types';
 import type { CreatureLook } from './creatureLook';
 import { BUILDS, type BuildId } from '../content/shore';
@@ -49,22 +47,6 @@ const REL_COL = { kin: '#8acf6a', prey: PAL.y, predator: '#e8615a', enemy: '#9a2
 export class ShoreScene extends RangeScene {
   override get clouds(): boolean {
     return true;
-  }
-
-  /** Ways across the island, worked out once and kept (raiders, helpers, the war band). */
-  private routes = new Map<string, { pts: Pt[]; cum: number[]; total: number }>();
-  private route(is: Island, from: Pt, to: Pt): { pts: Pt[]; cum: number[]; total: number } {
-    const key = `${Math.round(from.x)},${Math.round(from.y)}>${Math.round(to.x)},${Math.round(to.y)}`;
-    let r = this.routes.get(key);
-    if (!r) {
-      if (this.routes.size > 40) this.routes.clear();
-      const pts = [{ ...from }, ...findPath(is, from, to, 60000)];
-      const cum = [0];
-      for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
-      r = { pts, cum, total: cum[cum.length - 1] || 1 };
-      this.routes.set(key, r);
-    }
-    return r;
   }
 
   /** A villager's own look: their kind's, in their own coat (kept, not made each frame). */
@@ -288,18 +270,6 @@ export class ShoreScene extends RangeScene {
       if (up < 1 && Math.random() < dt * 6) this.fx.dust(X, Y, 2);
       sprites.push({ y: bd.y, at: bd, draw: () => this.drawBuild(b, bd.id, X, Y, z, close, up, t, s) });
     });
-    // What's going up: it rises as the work goes on, dust kicked up round it.
-    this.wasBuilding = s.building ? { x: s.building.x, y: s.building.y } : this.wasBuilding;
-    if (s.building) {
-      const bd = s.building;
-      const X = Math.round(this.sx(bd.x));
-      const Y = Math.round(this.py(bd.x, bd.y));
-      if (onScreen(X, Y)) {
-        const up = Math.max(0.05, 1 - bd.left / bd.total);
-        if (close && Math.random() < dt * 3) this.fx.dust(X, Y, 2);
-        sprites.push({ y: bd.y, at: bd, draw: () => this.drawBuild(b, bd.id, X, Y, z, close, up, t, s) });
-      }
-    }
     for (const g of s.graves) {
       const X = Math.round(this.sx(g.x));
       const Y = Math.round(this.py(g.x, g.y));
@@ -334,13 +304,11 @@ export class ShoreScene extends RangeScene {
     // Their people: out at work by day (food out on the land, wood in the trees), home round
     // the hearth at night. The chief is drawn where they really are.
     this.syncWalkers(s, t);
-    const plan = workPlan(s);
+    // (Out at work: as many as there are foragers and the like, in the woods and the fields.)
     const woods = this.woodsNear(s);
-    let foodLeft = plan.food;
+    let foodLeft = Math.min(s.people.length, (s.gens.forager ?? 0) + (s.gens.camp ?? 0) * 2);
     this.movers = [];
     const look = s.look;
-    // (Those out with the war band are with it, not here.)
-    let awayLeft = s.warband?.fighters ?? 0;
     // (Looked up once a frame, not once a walker: there may be a thousand of them.)
     const byId = new Map(s.people.map((q) => [q.id, q]));
     const villageById = new Map(s.villages.map((v) => [v.id, v]));
@@ -350,10 +318,6 @@ export class ShoreScene extends RangeScene {
       if (!p) continue;
       const grown = isAdult(s, p);
       const isChief = p.id === s.chief;
-      if (grown && !isChief && awayLeft > 0) {
-        awayLeft--;
-        continue;
-      }
       if (isChief) {
         w.x = s.chiefAt.x;
         w.y = s.chiefAt.y;
@@ -379,7 +343,7 @@ export class ShoreScene extends RangeScene {
         const d = Math.hypot(dx, dy);
         if (d > 0.3) {
           // (Quicker along a road.)
-          const sp = (grown ? 1.6 : 1.1) * dt * roadWalk(s, w);
+          const sp = (grown ? 1.6 : 1.1) * dt;
           w.x += (dx / d) * Math.min(d, sp);
           w.y += (dy / d) * Math.min(d, sp);
         }
@@ -432,202 +396,6 @@ export class ShoreScene extends RangeScene {
         draw: () => this.drawBeing(b, look, x, y, { left, frame: moving ? Math.floor(t * 7) % 2 : 0, hop: moving ? Math.abs(Math.sin(t * 7)) * 1.5 : 0 }),
       });
     }
-    // War: someone watching from the trees, raiders on the way in, the war band on the way out.
-    // Drawn as they are, a band walking, nothing over their heads.
-    const now = s.day + s.clock / DAY_SEC;
-    const band = (look: typeof s.look, from: Pt, to: Pt, k: number, n: number, seed: number, pace = 7, fighting = false) => {
-      // Along the way there (round lakes, along shores), as far as they've got; facing the way
-      // they're going.
-      const r = this.route(is, from, to);
-      const at = Math.max(0, Math.min(1, k)) * r.total;
-      let j = 1;
-      while (j < r.pts.length - 1 && r.cum[j] < at) j++;
-      const a = r.pts[j - 1];
-      const c = r.pts[j];
-      const seg = Math.max(1e-6, r.cum[j] - r.cum[j - 1]);
-      const u = Math.max(0, Math.min(1, (at - r.cum[j - 1]) / seg));
-      const hx = a.x + (c.x - a.x) * u;
-      const hy = a.y + (c.y - a.y) * u;
-      const dx = c.x - a.x || to.x - from.x;
-      const dy = c.y - a.y || to.y - from.y;
-      const d = Math.hypot(dx, dy) || 1;
-      for (let i = 0; i < Math.min(9, n); i++) {
-        const back = (i % 3) * 1.6 + Math.floor(i / 3) * 0.8;
-        const side = ((i % 3) - 1) * 1.4 + (hash(seed + i, 2) - 0.5);
-        const x = hx - (dx / d) * back - (dy / d) * side;
-        const y = hy - (dy / d) * back + (dx / d) * side;
-        if (!isLand(is, x, y) || fogged(x, y)) continue;
-        const X = this.sx(x);
-        const Y = this.py(x, y);
-        if (!onScreen(X, Y)) continue;
-        const ph = hash(seed + i, 3) * 9;
-        // (Fighting: lunging in and back, not walking.)
-        const jx = fighting ? Math.sin(t * pace + ph) * 0.6 * (dx / d) : 0;
-        const jy = fighting ? Math.sin(t * pace + ph) * 0.6 * (dy / d) : 0;
-        sprites.push({ y, draw: () => this.drawBeing(b, look, x + jx, y + jy, { left: dx < 0, frame: Math.floor(t * pace + ph) % 2, hop: Math.abs(Math.sin(t * pace + ph)) * (fighting ? 2.5 : 1.5) }) });
-      }
-    };
-    const raid = s.raid;
-    const from = raid && s.villages.find((v) => v.id === raid.from);
-    if (raid && from) {
-      if (raid.seen === undefined) {
-        // One of them, standing at the edge of the trees, looking in.
-        const a = Math.atan2(from.y - s.hearth.y, from.x - s.hearth.x) + (hash(Math.floor(raid.watched), 4) - 0.5) * 0.8;
-        const x = s.hearth.x + Math.cos(a) * 30;
-        const y = s.hearth.y + Math.sin(a) * 30;
-        if (isLand(is, x, y) && !fogged(x, y) && night < 0.6) {
-          const X = this.sx(x);
-          const Y = this.py(x, y);
-          if (onScreen(X, Y)) sprites.push({ y, draw: () => this.drawBeing(b, from.look, x, y, { left: s.hearth.x < x, frame: 0 }) });
-        }
-      } else if (raid.arrives !== undefined) {
-        // On their way in: a walk at first, a run at the end.
-        const k = Math.max(0, Math.min(1, (now - raid.seen) / Math.max(0.01, raid.arrives - raid.seen)));
-        const goal = raidTarget(s, raid);
-        band(from.look, from, goal, 0.15 + (k * k * 0.4 + k * 0.6) * 0.83, raid.fighters, from.id * 31, k > 0.8 ? 11 : 7);
-        // And those coming to help, from wherever they set out.
-        for (const a of raid.allies ?? []) {
-          const src = a.from === -1 ? s.hearth : s.villages.find((v) => v.id === a.from);
-          const look = a.from === -1 ? s.look : (src as Village | undefined)?.look;
-          if (!src || !look) continue;
-          const ka = Math.max(0, Math.min(1, (now - raid.seen) / Math.max(0.01, a.arrives - raid.seen)));
-          band(look, src, goal, ka * 0.95, a.n, (a.from + 7) * 53, 9);
-        }
-      }
-    }
-    // Roads to the villages that are yours: packed earth (then stone, then paving), as far as
-    // it's been laid; the crew at work at its front; waystations along a finished one.
-    const ROAD_COL = ['rgba(122, 92, 58, 0.75)', 'rgba(140, 140, 136, 0.85)', 'rgba(196, 184, 160, 0.9)'];
-    for (const v of s.villages) {
-      if (!v.road || v.gone) continue;
-      // (Along the way it really runs: from where it joins the roads, round the mountains.)
-      const r = roadPath(s, v);
-      const tier = roadTier(v);
-      const laid = Math.min(1, v.road.done / Math.max(0.01, v.road.need)) * r.total;
-      const better = v.road.up ? Math.min(1, v.road.up.done / Math.max(0.01, v.road.up.need)) * r.total : 0;
-      const pts: { X: number; Y: number; c: number }[] = [];
-      for (let j = 1; j < r.pts.length; j++) {
-        const a = r.pts[j - 1];
-        const c = r.pts[j];
-        const seg = r.cum[j] - r.cum[j - 1];
-        for (let u = 0; u < seg; u += 0.7) {
-          const along = r.cum[j - 1] + u;
-          if (along > laid) break;
-          const x = a.x + ((c.x - a.x) * u) / (seg || 1);
-          const y = a.y + ((c.y - a.y) * u) / (seg || 1);
-          if (fogged(x, y)) continue;
-          const X = Math.round(this.sx(x));
-          const Y = Math.round(this.py(x, y));
-          if (onScreen(X, Y)) pts.push({ X, Y, c: along < better ? tier + 1 : tier });
-        }
-      }
-      if (pts.length) {
-        const w = Math.max(1, Math.round(z * 0.6));
-        sprites.push({
-          y: -1e6,
-          draw: () => {
-            for (const p of pts) {
-              b.fillStyle = ROAD_COL[Math.min(2, p.c)];
-              b.fillRect(p.X - w, p.Y - Math.ceil(w / 2), w * 2, w);
-            }
-          },
-        });
-      }
-      // The crew: three of yours, hard at it where the road's being laid.
-      const front = roadFront(s, v);
-      if (front && !fogged(front.x, front.y)) {
-        for (let k = 0; k < 3; k++) {
-          const x = front.x + (k - 1) * 1.3;
-          const y = front.y + (k % 2) * 0.8;
-          const ph = k * 2.1;
-          if (onScreen(this.sx(x), this.py(x, y))) sprites.push({ y, draw: () => this.drawBeing(b, look, x, y, { left: k === 2, frame: Math.floor(t * 5 + ph) % 2, hop: Math.abs(Math.sin(t * 5 + ph)) * 2 }) });
-        }
-      }
-      for (const st of waystations(s, v)) {
-        if (fogged(st.x, st.y)) continue;
-        const sx = st.x + 2;
-        const sy = st.y + 1;
-        const X = Math.round(this.sx(sx));
-        const Y = Math.round(this.py(sx, sy));
-        if (!close || !onScreen(X, Y)) continue;
-        sprites.push({
-          y: sy,
-          at: { x: sx, y: sy },
-          draw: () => {
-            // A little roofed shelter, a lantern on a post (lit at night).
-            const k = z;
-            b.fillStyle = '#6a4a30';
-            b.fillRect(X - 3 * k, Y - 3 * k, 6 * k, 3 * k);
-            b.fillStyle = '#9a7a4a';
-            b.fillRect(X - 4 * k, Y - 4 * k, 8 * k, k);
-            b.fillStyle = '#2a1e18';
-            b.fillRect(X - k, Y - 2 * k, 2 * k, 2 * k);
-            b.fillStyle = '#5a4030';
-            b.fillRect(X + 5 * k, Y - 6 * k, k, 6 * k);
-            b.fillStyle = night > 0.3 ? '#ffd27a' : '#c8a060';
-            b.fillRect(X + 4 * k, Y - 7 * k, 3 * k, 2 * k);
-          },
-        });
-      }
-    }
-    // Goods on the road from the settlements and vassals: a couple of theirs, carrying it home;
-    // and the caravans, a couple of yours, there and back.
-    for (const c of s.convoys ?? []) {
-      const v = s.villages.find((x) => x.id === c.from);
-      if (!v) continue;
-      const k = (now - c.left) / Math.max(0.01, c.arrives - c.left);
-      if (k < 0 || k > 1) continue;
-      if (c.caravan) {
-        if (k < 0.5) band(look, s.hearth, v, k * 2, 2, v.id * 23 + Math.floor(c.left), 6);
-        else band(look, v, s.hearth, (k - 0.5) * 2, 2, v.id * 23 + Math.floor(c.left), 6);
-      } else band(v.look, v, s.hearth, k, 2, v.id * 17 + Math.floor(c.left), 6);
-    }
-    // The fight at the edge of the village: what's left of them, at it.
-    const fight = s.fight;
-    const foe = fight?.attack === 'them' ? s.villages.find((v) => v.id === fight.village) : undefined;
-    const fightAt = fight?.at !== undefined ? s.villages.find((v) => v.id === fight.at) : undefined;
-    if (fight && foe) band(foe.look, foe, fightAt ?? s.hearth, 0.98, Math.round(fight.y), foe.id * 31, 13, true);
-    // Running home, those who lived; and what the fallen dropped, lying where they fell.
-    const ret = s.retreat;
-    const home = ret && s.villages.find((v) => v.id === ret.from);
-    if (ret && home) {
-      const d = Math.hypot(home.x - s.hearth.x, home.y - s.hearth.y) || 1;
-      const k = Math.max(0, Math.min(1, (now - ret.left) / Math.max(0.01, ret.arrives - ret.left)));
-      const start = { x: ret.sx ?? s.hearth.x, y: ret.sy ?? s.hearth.y };
-      const d2 = Math.hypot(home.x - start.x, home.y - start.y) || d;
-      band(home.look, start, home, Math.min(1, 2 / d2) + k * (1 - 2 / d2), ret.n, home.id * 31, 12);
-    }
-    const loot = s.loot;
-    if (loot && !fogged(loot.x, loot.y)) {
-      for (let i = 0; i < loot.n; i++) {
-        const lx = loot.x + (hash(i, 61) - 0.5) * 4;
-        const ly = loot.y + (hash(i, 62) - 0.5) * 3;
-        const X = Math.round(this.sx(lx));
-        const Y = Math.round(this.py(lx, ly));
-        if (!onScreen(X, Y)) continue;
-        sprites.push({
-          y: ly,
-          at: { x: lx, y: ly },
-          draw: () => {
-            // A dropped bundle: a sack tied at the neck, or a bundle of sticks.
-            const k = z >= 6 ? 2 : 1;
-            if (i % 2) {
-              b.fillStyle = '#8a6a3a';
-              b.fillRect(X - 2 * k, Y - 3 * k, 4 * k, 3 * k);
-              b.fillStyle = '#c8a878';
-              b.fillRect(X - k, Y - 4 * k, 2 * k, k);
-            } else {
-              b.fillStyle = '#6a4a30';
-              b.fillRect(X - 3 * k, Y - 2 * k, 6 * k, k);
-              b.fillRect(X - 2 * k, Y - 3 * k, 5 * k, k);
-            }
-          },
-        });
-      }
-    }
-    const w = s.warband;
-    const to = w && s.villages.find((v) => v.id === w.to);
-    if (w && to) band(s.look, s.hearth, to, Math.max(0, Math.min(1, (now - w.left) / Math.max(0.01, w.arrives - w.left))) * 0.92, w.fighters, 777);
     // Where the chief is going: a small marker on the ground.
     if (s.chiefTo) {
       const X = Math.round(this.sx(s.chiefTo.x));
@@ -1146,7 +914,7 @@ export class ShoreScene extends RangeScene {
       });
       // A settlement of yours, grown: a woodpile and a drying rack (a village), a fence round it
       // all (a town).
-      const stage = v.settled !== undefined ? stageOf(v) : 0;
+      const stage = v.won !== undefined ? (v.pop >= 35 ? 2 : v.pop >= 15 ? 1 : 0) : 0;
       if (stage >= 1) {
         for (const [id, dx, dy] of [['woodpile', -3, 3], ['rack', 3, 3]] as const) {
           const px = v.x + dx;
@@ -1199,7 +967,7 @@ export class ShoreScene extends RangeScene {
         const d = Math.hypot(dx, dy);
         const moving = d > 0.3;
         if (moving) {
-          const sp = 1.3 * dt * roadWalk(s, w);
+          const sp = 1.3 * dt;
           w.x += (dx / d) * Math.min(d, sp);
           w.y += (dy / d) * Math.min(d, sp);
         }
