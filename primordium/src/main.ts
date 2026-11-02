@@ -16,7 +16,7 @@ import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
 import { HearthView } from './ui/hearthView';
-import { buyPerk, canCross, cross, embersFor, EMBER_BIRTHS, EMBER_MORE, nextIslandSeed, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
+import { buyPerk, raftSeats, canCross, cross, embersFor, EMBER_BIRTHS, EMBER_MORE, nextIslandSeed, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
 import { dance, danceLeft, shoreIsland, terrainReady, gift, isAdult, poisOf, shoreOf, shoreSeason, startShore, takeRaft, walkChief } from './economy/shore';
 import { AGES, ageName } from './economy/culture';
 import { buyAmount, setBuildCat, setBuyMany, setIslandView, danceCard, findCard, forkCard, poiCard, setVillageView, villageCard } from './ui/shorePanels';
@@ -2097,7 +2097,7 @@ function act(el: HTMLElement): void {
         if (!s || !canCross(s)) break;
         const n = embersFor(s);
         showModal(`<p class="label dim">Set out</p><h3>A new island</h3>
-          <p>The chief and three others take a raft. The rest stay.</p>
+          <p>A raft for ${raftSeats(s)}: the chief, and others young and old. The rest stay.</p>
           <p class="green">+${n} ember${n === 1 ? '' : 's'}: all food +${Math.round(n * EMBER_MORE * 100)}%, births +${Math.round(n * EMBER_BIRTHS * 100)}%, for good.</p>
           <p class="dim tiny">Kept: embers, and know-how (buy ×10, Max, the council, tender, scouts, envoy, lore). The rest starts again.</p>
           <div class="choices"><button class="px-btn gold" data-act="cross">Set out</button><button class="px-btn" data-act="dismiss">Not yet</button></div>`);

@@ -178,6 +178,8 @@ export interface ShoreState {
    * many crossings they've made since the first shore. */
   embers?: number;
   crossings?: number;
+  /** How many the raft they landed on carried (it's drawn that big, till it's broken up). */
+  raft?: number;
   /** Embers spent in the ember shop (the rest are there to spend), and what they bought. */
   embersSpent?: number;
   perks?: Partial<Record<PerkId, number>>;
@@ -489,7 +491,7 @@ export function newShore(tribe: TribeState): ShoreState {
   const w = shoreWorld(seed, look, cannibal);
   const rand = rng(seed + 99);
   // (Four crossed the first time; a bigger raft, later, carries more.)
-  const four = (tribe.family?.length ? tribe.family : [0, 1, 2, 3].map(() => ({ name: nameFrom(rand), trait: 'hardy' }))).slice(0, 8);
+  const four = (tribe.family?.length ? tribe.family : [0, 1, 2, 3].map(() => ({ name: nameFrom(rand), trait: 'hardy' }))).slice(0, 16);
   const people: ShorePerson[] = four.map((p, i) => ({ id: i, name: p.name, trait: p.trait, born: -20, founder: true, genes: ('genes' in p ? (p.genes as Genes | undefined) : undefined) ?? personal(tribe.look.genes, i + 1) }));
   return {
     seed,
@@ -779,6 +781,13 @@ function chart(s: ShoreState, v: Village): void {
   if (relation(s, v) === 'kin') v.trust ??= FIRST_TRUST;
 }
 
+/** How many the raft carries: four, and one more for every hundred critters the village has
+ * (the bigger the village, the bigger the raft it builds), up to six more; and a bigger raft
+ * yet with the embers' perk. */
+export function raftSeats(s: ShoreState): number {
+  return 4 + Math.min(6, Math.floor(s.people.length / 100)) + perk(s, 'crew');
+}
+
 /** Every village won (or gone): the island's settled, and they can set out for another. */
 export function canCross(s: ShoreState): boolean {
   return s.villages.length > 0 && s.villages.every((v) => v.won !== undefined || v.gone);
@@ -799,10 +808,14 @@ export function cross(state: GameState, seed = 0): boolean {
   const gained = embersFor(s);
   const own = s.people.filter((p) => p.kind === undefined && isAdult(s, p));
   const chief = own.find((p) => p.id === s.chief) ?? own[0];
-  const crew = [chief, ...own.filter((p) => p !== chief).sort((a, b) => a.born - b.born).slice(0, 3 + perk(s, 'crew'))].filter(Boolean);
+  // (The chief, and the rest picked across the ages: not just the eldest, who'd soon be gone.)
+  const rest = own.filter((p) => p !== chief).sort((a, b) => a.born - b.born);
+  const seats = Math.min(rest.length, raftSeats(s) - 1);
+  const crew = [chief, ...Array.from({ length: seats }, (_, i) => rest[Math.floor(((i + 0.5) * rest.length) / seats)])].filter(Boolean);
   const island = seed || nextIslandSeed(s);
   const tribe = { ...t, look: { ...t.look, parts: { ...s.look.parts }, diet: s.look.diet }, landed: { ...(t.landed ?? { day: 0 }), seed: island }, family: crew.map((p) => ({ name: p.name, trait: p.trait ?? 'hardy', genes: p.genes })) } as TribeState;
   const next = newShore(tribe);
+  next.raft = crew.length;
   next.embers = (s.embers ?? 0) + gained;
   next.crossings = (s.crossings ?? 0) + 1;
   next.embersSpent = s.embersSpent;

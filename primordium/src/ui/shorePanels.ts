@@ -5,7 +5,7 @@
 
 import { type Boosts, POI_SORT, RELICS, type Find } from '../content/shore';
 import { GENS, PERKS, UPGRADES, type GenId } from '../content/idle';
-import { allMult, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
+import { allMult, raftSeats, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
 import type { GameState } from '../economy/types';
@@ -235,8 +235,8 @@ function islandCounts(s: ShoreState): string {
 function crossCard(s: ShoreState): string {
   const left = s.villages.filter((v) => v.won === undefined && !v.gone).length;
   const n = embersFor(s);
-  if (!canCross(s)) return `<div class="card px-box"><div class="info"><div class="name">A new island</div><div class="sub">Win every village to set out (${left} left). Now worth +${n} embers.</div></div></div>`;
-  return `<div class="card px-box build raid"><div class="info"><div class="name">Set out for a new island</div><div class="sub">+${n} ember${n === 1 ? '' : 's'}: food +${Math.round(n * EMBER_MORE * 100)}%, births +${Math.round(n * EMBER_BIRTHS * 100)}%. Worth more the longer you stay.</div></div><button class="px-btn buy gold" data-act="cross-ask">Set out</button></div>`;
+  if (!canCross(s)) return `<div class="card px-box"><div class="info"><div class="name">A new island</div><div class="sub">Win every village to set out (${left} left). Raft for ${raftSeats(s)}, +${n} embers so far.</div></div></div>`;
+  return `<div class="card px-box build raid"><div class="info"><div class="name">Set out for a new island</div><div class="sub">Raft for ${raftSeats(s)}. +${n} ember${n === 1 ? '' : 's'}: food +${Math.round(n * EMBER_MORE * 100)}%, births +${Math.round(n * EMBER_BIRTHS * 100)}%.</div></div><button class="px-btn buy gold" data-act="cross-ask">Set out</button></div>`;
 }
 
 function villagesCard(s: ShoreState): string {

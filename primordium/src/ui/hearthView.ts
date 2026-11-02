@@ -536,14 +536,18 @@ export class HearthView {
     for (const r of back) critter(r);
 
     if (!s.raftTaken) {
-      // Not lit yet: the raft they came on, pulled up the beach (planks lashed across).
-      for (let i = 0; i < 6; i++) {
+      // Not lit yet: the raft they came on, pulled up the beach (planks lashed across), as big
+      // as the crew it carried.
+      const n = s.raft ?? 4;
+      const half = Math.min(36, 12 + n * 2);
+      const rows = 5 + Math.min(4, Math.floor(n / 3));
+      for (let i = 0; i < rows; i++) {
         b.fillStyle = i % 2 ? '#7a5634' : '#6a4a2c';
-        b.fillRect(FX - 16, FY - 8 + i * 2, 32, 2);
+        b.fillRect(FX - half, FY - 8 - (rows - 6) * 2 + i * 2, half * 2, 2);
       }
       b.fillStyle = '#c8a870';
-      b.fillRect(FX - 11, FY - 9, 1, 13);
-      b.fillRect(FX + 10, FY - 9, 1, 13);
+      const lashes = Math.max(2, Math.floor(n / 2));
+      for (let k = 0; k < lashes; k++) b.fillRect(Math.round(FX - half + 4 + (k * (half * 2 - 8)) / (lashes - 1)), FY - 9 - (rows - 6) * 2, 1, rows * 2 + 1);
     } else this.pit(s, heat);
 
     // The flames: white-hot at the heart, yellow, orange, red at the tips.

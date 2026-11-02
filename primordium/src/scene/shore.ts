@@ -374,11 +374,15 @@ export class ShoreScene extends RangeScene {
           y: r.y - 0.5,
           at: r,
           draw: () => {
+            // (As big as the crew it carried: longer, and more planks, for more of them.)
+            const n = s.raft ?? 4;
+            const w = 6 + n;
+            const rows = 3 + Math.min(4, Math.floor(n / 3));
             b.fillStyle = '#6a4a30';
-            for (let k = 0; k < 4; k++) b.fillRect(X - 5 * z, Y - (4 - k) * z, 10 * z, z);
+            for (let k = 0; k < rows; k++) b.fillRect(X - Math.round(w / 2) * z, Y - (rows - k) * z, w * z, z);
             b.fillStyle = '#c8b080';
-            b.fillRect(X - 3 * z, Y - 4 * z, z, 4 * z);
-            b.fillRect(X + 2 * z, Y - 4 * z, z, 4 * z);
+            const posts = Math.max(2, Math.floor(n / 3));
+            for (let k = 0; k < posts; k++) b.fillRect(X + (Math.round(-w / 2) + 1 + Math.round((k * (w - 3)) / (posts - 1))) * z, Y - rows * z, z, rows * z);
           },
         });
       }

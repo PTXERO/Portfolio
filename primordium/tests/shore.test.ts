@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
+import { raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import type { GenId } from '../src/content/idle';
 import type { TribeState } from '../src/economy/types';
@@ -130,6 +130,7 @@ describe('Food, the idle way', () => {
     expect(n.crossings).toBe(1);
     expect(n.people.map((p) => p.name)).toContain(chief);
     expect(n.people).toHaveLength(4);
+    expect(n.raft).toBe(4);
     expect(n.ups.sort()).toEqual(['council', 'tally']);
     expect(n.gens).toEqual({});
     expect(n.villages.every((v) => v.won === undefined)).toBe(true);
@@ -164,6 +165,22 @@ describe('Food, the idle way', () => {
     expect(perk(n, 'trades')).toBe(1);
     expect(n.food).toBe(100);
     expect(n.people).toHaveLength(5);
+  });
+  it('the raft: four, one more for each hundred critters (six more at most), more with the perk; the crew across the ages', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    lit(state);
+    while (s.people.length < 350) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -200 + s.people.length * 0.5 });
+    expect(raftSeats(s)).toBe(7);
+    s.perks = { crew: 2 };
+    expect(raftSeats(s)).toBe(9);
+    for (const v of s.villages) v.won = s.day;
+    expect(cross(state)).toBe(true);
+    const n = shoreOf(state)!;
+    expect(n.people).toHaveLength(9);
+    expect(n.raft).toBe(9);
+    // (Not the nine eldest: some of the youngest grown go too.)
+    expect(n.people.some((p) => Number(p.name.slice(1)) > 200)).toBe(true);
   });
   it('an older save far enough on keeps buying ten, the most, and its focus', () => {
     const state = fresh();

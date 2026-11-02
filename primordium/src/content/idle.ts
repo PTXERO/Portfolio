@@ -125,7 +125,7 @@ export const PERKS: { id: PerkId; name: string; does: string; cost: number; grow
   { id: 'trades', name: 'Remembered trades', does: 'All gatherers ×2.', cost: 4, growth: 3, most: 10 },
   { id: 'fireborn', name: 'Born of the fire', does: 'Births +25%.', cost: 3, growth: 2, most: 10 },
   { id: 'coals', name: 'Carried coals', does: 'Fire max: food +0.5.', cost: 3, growth: 2, most: 8 },
-  { id: 'crew', name: 'A bigger raft', does: 'One more crosses.', cost: 5, growth: 2, most: 4 },
+  { id: 'crew', name: 'A bigger raft', does: 'Raft carries one more.', cost: 5, growth: 2, most: 4 },
   { id: 'warsongs', name: 'War songs', does: 'Beating a village: 15% fewer critters.', cost: 6, growth: 2, most: 3 },
   { id: 'charts', name: 'Charts', does: 'Land knowing every village.', cost: 12, growth: 1, most: 1 },
 ];
