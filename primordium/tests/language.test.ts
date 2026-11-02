@@ -41,6 +41,15 @@ describe('Their tongue, made by them', () => {
     for (let k = 0; k < 60; k++) for (const t of talk({ ...sit, streak: true }, { ...folk[2], name: 'A' }, { ...folk[0], name: 'B' }, rnd)) if (t.thing) seen.add(t.thing);
     expect(seen.has('light')).toBe(true);
   });
+  it('they talk about what is around them and what just happened', () => {
+    let r = 0.6;
+    const rnd = () => (r = (r * 9301 + 49297) % 233280) / 233280;
+    const seen = new Set<string>();
+    for (let k = 0; k < 80; k++) for (const t of talk({ ...sit, near: ['water', 'fog'], recent: ['born'] }, { ...folk[2], name: 'A' }, { ...folk[1], name: 'B' }, rnd)) if (t.thing) seen.add(t.thing);
+    expect(seen.has('water')).toBe(true);
+    expect(seen.has('fog')).toBe(true);
+    expect(seen.has('child')).toBe(true);
+  });
   it('heard words are counted, with when; the sounds shift a year on; villages lend words that compete', () => {
     const lang = newLanguage(77, 'omnivore');
     for (let d = 1; d <= 10; d++) talkUnheard(lang, d, sit, folk);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { upgradeCost, workSign, signReady, prayerRate, destinations, natureOf, crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
+import { surroundings, situationOf, upgradeCost, workSign, signReady, prayerRate, destinations, natureOf, crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import { UPGRADES, type GenId } from '../src/content/idle';
 import type { TribeState } from '../src/economy/types';
@@ -254,8 +254,11 @@ describe('Food, the idle way', () => {
     s.prayer = 100;
     // Light: the nearest hidden village found.
     const hidden = s.villages.filter((v) => !v.found).length;
+    const lit0 = state.stages.shore.seen!.reduce((n, c) => n + c, 0);
     expect(workSign(state, 'light')).toMatch(/A light in the fog/);
     expect(s.villages.filter((v) => !v.found).length).toBe(hidden - 1);
+    // (And the fog round it lifts.)
+    expect(state.stages.shore.seen!.reduce((n, c) => n + c, 0)).toBeGreaterThan(lit0);
     // Awe: a found village half won (kin: +50 trust; the rest: half the war band's food).
     s.prayer = 100;
     const v = s.villages.find((x) => x.found && x.won === undefined)!;
@@ -661,5 +664,15 @@ describe('Families, not too close', () => {
       expect(a.parents?.some((x) => x !== undefined && b.parents?.includes(x))).toBeFalsy();
     }
   }, 60_000);
+  it('what a critter sees is what it can talk about, and what just happened', () => {
+    const state = fresh();
+    const s = lit(state);
+    expect(surroundings(s, s.hearth.x, s.hearth.y)).toContain('fire');
+    const is = shoreIsland(s.seed);
+    let wet = -1;
+    for (let i = 0; i < is.biome.length && wet < 0; i++) if (is.biome[i] === Biome.Sea) wet = i;
+    expect(surroundings(s, wet % is.n, Math.floor(wet / is.n))).toContain('water');
+    s.events = [{ kind: 'bolt', day: s.day }];
+    expect(situationOf(s).recent).toContain('bolt');
+  });
 });
-

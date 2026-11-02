@@ -235,7 +235,7 @@ export class HearthView {
       // What they talk about comes from what's going on, and who they are; the words are theirs.
       const pa = s.people.find((p) => p.id === this.seats[i].id)!;
       const pb = s.people.find((p) => p.id === this.seats[j].id)!;
-      const sit = situationOf(s, this.t - this.streakAt < 45);
+      const sit = situationOf(s, this.t - this.streakAt < 45, ['fire', ...(this.seats.some((q) => { const p = s.people.find((x) => x.id === q.id); return p && growth(s, p) < 1; }) ? ['child'] : [])]);
       const turns = talk(sit, { ...speakerOf(s, pa), name: pa.name }, { ...speakerOf(s, pb), name: pb.name }, Math.random);
       this.chat = { who: [i, j], lines: turns, at: -1, t: LINE_SECS };
     }

@@ -267,6 +267,11 @@ export interface Situation {
   won: number;
   streak: boolean;
   crossed: boolean;
+  /** What the speaker can see round them (meanings: water, wood, stone, hut, fire, fog, village,
+   * child...). */
+  near?: string[];
+  /** What's happened lately (born, rain, bolt, won, visitor). */
+  recent?: string[];
 }
 
 export type Turn = Frame & { by: 0 | 1 };
@@ -299,6 +304,23 @@ export function talk(sit: Situation, a: Speaker & { name: string }, b: Speaker &
   if (sit.age >= 3) opts.push({ w: 2, turns: [{ by: 0, thing: 'bronze', quality: 'hard' }, { by: 1, ...reply({ thing: 'bronze', quality: 'good' }) }] });
   if (sit.age >= 3) opts.push({ w: 1, turns: [{ by: 0, thing: 'boat', act: 'come' }, { by: 1, thing: 'harbour', quality: 'big' }] });
   if (sit.age >= 4) opts.push({ w: 2, turns: [{ by: 0, thing: 'iron', quality: 'hard' }, { by: 1, ...reply({ thing: 'mark', quality: 'new' }) }] });
+  // What's in front of them: named, remarked on, asked about (the strongest pull of all: words
+  // for what they meet are the words they need most).
+  const LOOK: Record<string, string> = { water: 'big', wood: 'many', stone: 'hard', hut: 'warm', fire: 'warm', village: 'far', child: 'small', fish: 'many', fog: 'far' };
+  for (const n of sit.near ?? []) {
+    const q = n === 'fire' ? fireQ : LOOK[n];
+    opts.push({ w: 4, turns: [{ by: 0, who: 'i', act: 'see', thing: n }, { by: 1, ...(kid(b) ? { thing: n, ask: true } : reply({ thing: n, quality: q })) }] });
+    if (n === 'fog') opts.push({ w: 3, turns: [{ by: 0, thing: 'fog', ask: true }, { by: 1, thing: 'fog', quality: 'far' }, { by: 0, who: 'we', act: 'go', thing: 'fog', ask: true }, { by: 1, ...reply({ who: 'we', act: 'go', no: true }) }] });
+    if (n === 'water') opts.push({ w: 3, turns: [{ by: 0, who: 'we', act: 'eat', thing: 'fish' }, { by: 1, ...reply({ thing: 'fish', quality: 'many' }) }] });
+    if (n === 'village') opts.push({ w: 2, turns: [{ by: 0, who: 'they', act: 'see', thing: 'we', ask: true }, { by: 1, ...reply({ who: 'they', quality: 'far' }) }] });
+  }
+  // What's just happened.
+  for (const e of sit.recent ?? []) {
+    if (e === 'born') opts.push({ w: 6, turns: [{ by: 0, thing: 'child', quality: 'new' }, { by: 1, ...reply({ thing: 'child', quality: 'small' }) }, { by: 0, who: 'we', quality: 'many' }] });
+    if (e === 'bolt') opts.push({ w: 7, turns: [{ by: 0, thing: 'light', quality: 'big' }, { by: 1, thing: 'fire', act: 'burn', ask: true }, { by: 0, thing: 'fire', quality: 'big' }] });
+    if (e === 'won') opts.push({ w: 6, turns: [{ by: 0, thing: 'village', quality: 'good' }, { by: 1, ...reply({ who: 'they', act: 'come' }) }] });
+    if (e === 'visitor') opts.push({ w: 7, turns: [{ by: 0, who: 'they', act: 'come', thing: 'village' }, { by: 1, thing: 'village', quality: 'far', ask: true }, { by: 0, who: 'i', act: 'see', thing: 'they' }] });
+  }
   const tot = opts.reduce((x, o) => x + o.w, 0);
   let x = r() * tot;
   for (const o of opts) if ((x -= o.w) <= 0) return o.turns;

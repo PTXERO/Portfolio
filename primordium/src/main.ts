@@ -16,7 +16,7 @@ import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
 import { HearthView } from './ui/hearthView';
-import { situationOf, speakerOf, langOf, growth, SHORE_CELLS, type ShoreState, workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
+import { situationOf, surroundings, speakerOf, langOf, growth, SHORE_CELLS, type ShoreState, workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
 import { dance, danceLeft, shoreIsland, terrainReady, gift, isAdult, poisOf, shoreOf, shoreSeason, startShore, takeRaft, walkChief } from './economy/shore';
 import { AGES, ageName } from './economy/culture';
 import { crewCard, buyAmount, setBuildCat, setBuyMany, setIslandView, danceCard, findCard, forkCard, poiCard, setVillageView, villageCard } from './ui/shorePanels';
@@ -504,7 +504,7 @@ function mapTalk(s: ShoreState): void {
     if (!b || Math.hypot(b.x - a.x, b.y - a.y) > 8) return;
     const pa = s.people.find((p) => p.id === a.id)!;
     const pb = s.people.find((p) => p.id === b.id)!;
-    mapChat = { ids: [a.id, b.id], turns: talk(situationOf(s), { ...speakerOf(s, pa), name: pa.name }, { ...speakerOf(s, pb), name: pb.name }, Math.random), at: -1, t: 99 };
+    mapChat = { ids: [a.id, b.id], turns: talk(situationOf(s, false, surroundings(s, a.x, a.y, state.stages.shore?.seen)), { ...speakerOf(s, pa), name: pa.name }, { ...speakerOf(s, pb), name: pb.name }, Math.random), at: -1, t: 99 };
   }
   const c = mapChat;
   c.t += dt;

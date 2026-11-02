@@ -209,6 +209,8 @@ export interface ShoreState {
   /** The day they began to write (Picture marks): from then on the Chronicle is a record, not
    * a telling. */
   writtenFrom?: number;
+  /** What's happened lately (for what they'll talk about): what, and when (the island's day). */
+  events?: { kind: string; day: number }[];
   /** What this island is like (none: the first, or a quiet one). */
   nature?: string;
   /** Which of the two islands seen from the raft they'll set out for (0 or 1). */
@@ -1017,14 +1019,20 @@ export function workSign(state: GameState, id: MiracleId): string {
     s.fuel = FIRE_FULL * 1.2;
     s.heat = fireHeat(s);
     s.boltUntil = Math.max(now, s.boltUntil ?? 0) + BOLT_SECS;
+    happened(s, 'bolt');
     return 'Lightning struck the hearth. The fire burns white.';
   }
   if (id === 'rain') {
     s.rainUntil = Math.max(now, s.rainUntil ?? 0) + DAY_SEC;
+    happened(s, 'rain');
     return 'Rain. Children will come of it.';
   }
   if (id === 'light') {
     const t = lightTarget(s)!;
+    // (Where the light falls, the fog clears.)
+    const at = t.v ?? t.p!;
+    const seen = state.stages.shore.seen;
+    if (seen) reveal(shoreIsland(s.seed), seen, at.x, at.y, 7);
     if (t.v) {
       chart(s, t.v);
       s.newFinds.push(t.v.id);
@@ -1308,6 +1316,7 @@ export function take(state: GameState, id: number): boolean {
 
 function win(state: GameState, s: ShoreState, v: Village, line: string): void {
   v.won = s.day + s.clock / DAY_SEC;
+  happened(s, 'won');
   // Their words come with them: a couple of things they say a lot of there.
   const lang = langOf(s);
   const things = ['fish', 'root', 'song', 'dance', 'hut', 'star', 'drum', 'stone', 'boat', 'leaf', 'rain', 'gift'];
@@ -1522,6 +1531,7 @@ function born(state: GameState, s: ShoreState): void {
   s.people.push({ id: s.nextId++, name, born: today, dies: today + 70 + rand() * 30, kind: parent?.kind, parents: parent ? [parent.id, other?.id] : undefined, genes: inherit(parent?.genes, other?.genes ?? parent?.genes, rand, 0.5, SHORE_MUTATE) });
   s.births++;
   // A rare colouring from nowhere: told of, it's so seldom.
+  happened(s, 'born');
   const child = s.people[s.people.length - 1];
   if (child.genes?.morph && child.genes.morph !== parent?.genes?.morph && child.genes.morph !== other?.genes?.morph) {
     const word = child.genes.morph === 'albino' ? 'white as bone' : child.genes.morph === 'melanistic' ? 'black all over' : 'patched with white';
@@ -1555,6 +1565,13 @@ export function langOf(s: ShoreState): Language {
   return s.lang;
 }
 
+/** Something happened that they'll talk about (a birth, the rain, a bolt, a village won, a
+ * visitor): kept a day or so. */
+export function happened(s: ShoreState, kind: string): void {
+  const now = s.day + s.clock / DAY_SEC;
+  s.events = [...(s.events ?? []).filter((e) => now - e.day < 2), { kind, day: now }].slice(-8);
+}
+
 /** Someone as a speaker: how old they are, what they're like. */
 export function speakerOf(s: ShoreState, p: ShorePerson): Speaker {
   const g = growth(s, p);
@@ -1563,8 +1580,9 @@ export function speakerOf(s: ShoreState, p: ShorePerson): Speaker {
   return { age: g < 0.5 ? 'little' : g < 1 ? 'youngster' : old ? 'elder' : 'grown', temper: temperOf(p) };
 }
 /** What's going on, for what they'll talk about. */
-export function situationOf(s: ShoreState, streak = false): Situation {
+export function situationOf(s: ShoreState, streak = false, near: string[] = []): Situation {
   const now = s.day * DAY_SEC + s.clock;
+  const today = s.day + s.clock / DAY_SEC;
   const little = s.people.filter((p) => p.kind === undefined && growth(s, p) < 0.3).at(-1);
   return {
     heat: s.heat ?? 0,
@@ -1577,7 +1595,45 @@ export function situationOf(s: ShoreState, streak = false): Situation {
     won: s.villages.filter((v) => v.won !== undefined).length,
     streak,
     crossed: (s.crossings ?? 0) > 0,
+    near,
+    recent: [...new Set((s.events ?? []).filter((e) => today - e.day < 1).map((e) => e.kind))],
   };
+}
+
+/** What a critter standing here can see: the things their talk can be about. */
+export function surroundings(s: ShoreState, x: number, y: number, seen?: Uint8Array): string[] {
+  const is = shoreIsland(s.seed);
+  const N = is.n;
+  const out = new Set<string>();
+  const R = 4;
+  for (let dy = -R; dy <= R; dy++)
+    for (let dx = -R; dx <= R; dx++) {
+      const bx = Math.round(x + dx);
+      const by = Math.round(y + dy);
+      if (bx < 0 || by < 0 || bx >= N || by >= N) continue;
+      const b = is.biome[by * N + bx];
+      if (b <= Biome.Sea || b === Biome.Lake || b === Biome.River) out.add('water');
+      else if (b === Biome.Forest) out.add('wood');
+      else if (b >= Biome.High && b <= Biome.Peak) out.add('stone');
+    }
+  if (Math.hypot(s.hearth.x - x, s.hearth.y - y) < 6) out.add('fire');
+  if (s.built.some((b) => b.id !== 'hearth' && Math.hypot(b.x - x, b.y - y) < 6)) out.add('hut');
+  if (s.villages.some((v) => v.found && Math.hypot(v.x - x, v.y - y) < 18)) out.add('village');
+  if (seen) {
+    const cx = Math.floor(x / CELL);
+    const cy = Math.floor(y / CELL);
+    outer: for (let dy = -3; dy <= 3; dy++)
+      for (let dx = -3; dx <= 3; dx++) {
+        const gx = cx + dx;
+        const gy = cy + dy;
+        if (gx < 0 || gy < 0 || gx >= SHORE_CELLS || gy >= SHORE_CELLS) continue;
+        if (!seen[gy * SHORE_CELLS + gx]) {
+          out.add('fog');
+          break outer;
+        }
+      }
+  }
+  return [...out];
 }
 
 function dawn(state: GameState, s: ShoreState): void {
@@ -1768,6 +1824,7 @@ function visitorWalk(state: GameState, s: ShoreState, is: Island, seen: Uint8Arr
               ? `${from} walked into the village, looked at everything, and left. The way they came is known now.`
               : `${from} came to the edge of the village and said only: we're here. The way they came is known now.`;
       if (rel === 'kin') v.trust = (v.trust ?? FIRST_TRUST) + 20;
+      happened(s, 'visitor');
       s.newFinds.push(v.id);
       s.news.push(line);
       record(state, line, 'shore', shoreWhen(s));
