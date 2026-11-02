@@ -186,7 +186,7 @@ export const NATURES: NatureDef[] = [
 /** The Far Voice's signs, worked with prayer at the Hearth (each learned by an upgrade). */
 export type MiracleId = 'bolt' | 'rain' | 'light' | 'awe';
 export const MIRACLES: { id: MiracleId; name: string; does: string; cost: number }[] = [
-  { id: 'bolt', name: 'Bolt', does: 'The fire roars.', cost: 30 },
+  { id: 'bolt', name: 'Bolt', does: 'Fire white-hot: its boost ×2 for 30s.', cost: 30 },
   { id: 'rain', name: 'Rain', does: 'Births ×3 for a day.', cost: 40 },
   { id: 'light', name: 'Light', does: 'Shows a hidden village or landmark.', cost: 50 },
   { id: 'awe', name: 'Awe', does: 'A village half won.', cost: 60 },

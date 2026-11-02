@@ -240,9 +240,13 @@ describe('Food, the idle way', () => {
     s.ups.push('listen', 'rainsong', 'seers', 'awe');
     shoreTick(state, 10000);
     expect(s.prayer).toBe(100);
-    // The Bolt: the fire at its hottest.
+    // The Bolt: the fire at its hottest, and past it: white-hot, its boost doubled a while.
+    const fullRate = (() => { s.heat = 1; s.fuel = 400; return foodRate(s); })();
     expect(workSign(state, 'bolt')).not.toBe('');
     expect(s.heat).toBe(1);
+    expect(foodRate(s)).toBeGreaterThan(fullRate * 1.4);
+    shoreTick(state, 40);
+    expect(foodRate(s)).toBeLessThanOrEqual(fullRate);
     // Rain: births ×3 for a day.
     expect(workSign(state, 'rain')).not.toBe('');
     expect(s.rainUntil).toBeGreaterThan(s.day * DAY_SEC + s.clock);

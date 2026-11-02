@@ -193,6 +193,8 @@ export interface ShoreState {
    * island's seconds). */
   prayer?: number;
   rainUntil?: number;
+  /** The Bolt's white fire: its end (the island's seconds). */
+  boltUntil?: number;
   /** A visitor from a village not yet found, walking to the hearth (the way they come is seen). */
   visitor?: { village: number; at: Pt; path: Pt[]; left: number };
   /** Since when every found village has been won with some still lost in the fog (one makes
@@ -772,7 +774,13 @@ export function fireHeat(s: ShoreState): number {
 }
 /** What the fire's heat adds to everything just now. */
 export function fireMore(s: ShoreState): number {
-  return fireMost(s) * Math.min(1, Math.max(0, s.heat ?? 0));
+  return fireMost(s) * Math.min(1, Math.max(0, s.heat ?? 0)) * (whiteHot(s) ? BOLT_MORE : 1);
+}
+/** The Bolt: for a while the fire burns white, past full, its boost this many times over. */
+export const BOLT_MORE = 2;
+export const BOLT_SECS = 30;
+export function whiteHot(s: ShoreState): boolean {
+  return (s.boltUntil ?? 0) > s.day * DAY_SEC + s.clock;
 }
 // ---- Setting out ----
 
@@ -983,7 +991,8 @@ export function workSign(state: GameState, id: MiracleId): string {
   if (id === 'bolt') {
     s.fuel = FIRE_FULL * 1.2;
     s.heat = fireHeat(s);
-    return 'Lightning struck the hearth. The fire roars.';
+    s.boltUntil = Math.max(now, s.boltUntil ?? 0) + BOLT_SECS;
+    return 'Lightning struck the hearth. The fire burns white.';
   }
   if (id === 'rain') {
     s.rainUntil = Math.max(now, s.rainUntil ?? 0) + DAY_SEC;

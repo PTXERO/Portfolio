@@ -2,7 +2,7 @@
 // batch of what's been brought in (food, there and then), and builds the fire up; a big fire
 // cooks more of everything while it lasts, and it dies down by itself if it's left.
 
-import { DAY_SEC, fireMost, fireMore, growth, knowsSign, praying, prayerMost, signReady, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
+import { DAY_SEC, whiteHot, fireMost, fireMore, growth, knowsSign, praying, prayerMost, signReady, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
 import { drawCreature, type CreatureLook } from '../scene/creatureLook';
 import { MIRACLES, type MiracleId } from '../content/idle';
 import { pickTalk, temperOf, type Age, type Speaker, type TalkCtx } from '../content/hearthTalk';
@@ -559,7 +559,7 @@ export class HearthView {
       tip.textContent = tipText;
       tip.classList.remove('gone');
     }
-    const size = 0.35 + heat * 0.65 + this.flare * 0.25;
+    const size = 0.35 + heat * 0.65 + this.flare * 0.25 + (whiteHot(s) ? 0.35 : 0);
     this.flare = Math.max(0, this.flare - dt * 2.5);
 
     // New flames at the base, more and taller the hotter it is.
@@ -706,11 +706,13 @@ export class HearthView {
       for (let k = 0; k < lashes; k++) b.fillRect(Math.round(FX - half + 4 + (k * (half * 2 - 8)) / (lashes - 1)), FY - 9 - (rows - 6) * 2, 1, rows * 2 + 1);
     } else this.pit(s, heat);
 
-    // The flames: white-hot at the heart, yellow, orange, red at the tips.
+    // The flames: white-hot at the heart, yellow, orange, red at the tips (and, after the Bolt,
+    // white and blue all through).
+    const white = whiteHot(s);
     for (const p of this.flames) {
       const k = p.age / p.life;
       const r = Math.max(1, Math.round((1 - k) * (2 + size * 4)));
-      b.fillStyle = k < 0.15 ? '#fff4c8' : k < 0.4 ? '#ffd24a' : k < 0.7 ? '#ff8a2a' : '#c83a1a';
+      b.fillStyle = white ? (k < 0.3 ? '#ffffff' : k < 0.6 ? '#dcecff' : k < 0.85 ? '#9cc4ff' : '#ffd24a') : k < 0.15 ? '#fff4c8' : k < 0.4 ? '#ffd24a' : k < 0.7 ? '#ff8a2a' : '#c83a1a';
       b.fillRect(Math.round(p.x - r / 2), Math.round(p.y - r / 2), r, r);
     }
     this.poles(s);
@@ -753,7 +755,8 @@ export class HearthView {
     // The words: how hot, and what it's worth.
     const more = fireMore(s);
     this.bar.style.width = `${Math.round(heat * 100)}%`;
-    const text = `Stoke +${format(D(tapValue(s)))} · all food ×${(1 + more).toFixed(2)} (max ×${1 + fireMost(s)}) · ${format(D(foodRate(s)))}/s`;
+    const hotLeft = Math.ceil((s.boltUntil ?? 0) - (s.day * DAY_SEC + s.clock));
+    const text = `Stoke +${format(D(tapValue(s)))} · all food ×${(1 + more).toFixed(2)}${whiteHot(s) ? ` · white-hot ${hotLeft}s` : ` (max ×${1 + fireMost(s)})`} · ${format(D(foodRate(s)))}/s`;
     if (this.stats.textContent !== text) this.stats.textContent = text;
   }
 }
