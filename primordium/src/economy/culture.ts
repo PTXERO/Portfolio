@@ -392,8 +392,9 @@ export function ageOver(state: GameState, s: ShoreState): void {
   // The Republic's the last of New Shore's Ages: the era's done, and the sea's next.
   if (!AGES[c.age]?.work && !ageHasIdeas(c.age)) {
     s.news.push(`${was.name} stands. The island is theirs. The sea is next.`);
+    s.eraEnd = true;
     record(state, `${cap(was.workName ?? 'The Great Work')} was raised. The Republic stood, the island one people of many kinds, and they looked out to sea. [STORY]`, 'shore', shoreWhen(s));
-    (s.agesNew ??= []).push(c.age);
+    // (No new Age's card: the era's own ending says it.)
     return;
   }
   s.news.push(`${was.name} is over. ${ageName(c.age)} begins.`);

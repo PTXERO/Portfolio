@@ -607,6 +607,10 @@ Each diet wants different things first, so the island looks different to each:
 
 - **New Shore ends at the Republic.** Raising the Senate House closes the era: the island is one
   people of many kinds. (Crossings to new islands carry on; the culture crosses with them.)
+- **Built:** raising the Senate House plays the era's end (years, islands, villages, critters,
+  ideas, words, embers; [STORY]); no setting out after it. Every island left is kept as it was
+  (trimmed: its land from its seed, the fog, up to 80 critters) and visited from the top bar's
+  ‹ / › buttons, one island a step, the way the earlier eras are.
 - **The Age of Sail is the next era**, not a sixth Age here. In the master design doc's
   Spore-style run (Soup → Cell → Creature → Ecosystem → Tribe → Civilization → Space), New Shore
   covers the Tribe and the start of Civilization; Sail is the rest of **Civilization**: cities

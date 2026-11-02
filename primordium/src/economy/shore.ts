@@ -9,7 +9,7 @@
 
 import { buildName, POIS, RELICS, SHORE_STORY, type Boosts, type BuildId, type Find, type PoiKind, type RelicId } from '../content/shore';
 import { record, recordName } from './chronicle';
-import { Biome, CELL, isLand, islandOf, reveal, type Island, type Pt } from './island';
+import { Biome, CELL, isLand, islandOf, packSeen, reveal, unpackSeen, type Island, type Pt } from './island';
 import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
 import { inherit, personal } from './genes';
@@ -304,6 +304,10 @@ export interface ShoreState {
   watched?: number;
   /** Things the interface should show (and clear): births, deaths, finds. */
   news: string[];
+  /** The islands left behind, as they were left (oldest first): kept, to be visited. */
+  past?: PastIsland[];
+  /** The Republic's just been raised: the era's end to be shown (once). */
+  eraEnd?: boolean;
   /** Lines for the chronicle from the hearth and the map (words made, places named). */
   toRecord?: string[];
   /** Ids of villages found since the interface last looked. */
@@ -956,12 +960,58 @@ export function raftSeats(s: ShoreState): number {
 
 /** Every village won (or gone): the island's settled, and they can set out for another. */
 export function canCross(s: ShoreState): boolean {
-  return s.villages.length > 0 && s.villages.every((v) => v.won !== undefined || v.gone);
+  // (Once the Republic stands, no more setting out: the islands are done, and the sea's next.)
+  return !republicStands(s) && s.villages.length > 0 && s.villages.every((v) => v.won !== undefined || v.gone);
+}
+/** Whether the Republic stands: New Shore's era done. */
+export function republicStands(s: ShoreState): boolean {
+  return (s.culture?.age ?? 0) >= 6;
 }
 /** The next island's seed (a new one each crossing). */
 export function nextIslandSeed(s: ShoreState): number {
   return (s.seed * 31 + 7919 * ((s.crossings ?? 0) + 1)) % 2147483647;
 }
+// ---- The islands left behind ----
+
+/** An island as it was left: kept light (its land comes back from its seed; a few of its
+ * critters, the rest counted), to be visited from the top bar. */
+export interface PastIsland {
+  /** Which island it was (1: the first). */
+  n: number;
+  seed: number;
+  /** Its years settled, critters and villages won, when they left. */
+  years: number;
+  critters: number;
+  won: number;
+  villages: number;
+  nature?: string;
+  /** The island itself, trimmed (JSON), and its fog (packed). */
+  shore: string;
+  seen: string;
+}
+/** How many of an island's critters are kept to walk about in it, visited. */
+const PAST_PEOPLE = 80;
+export function pastOf(s: ShoreState, seen: Uint8Array): PastIsland {
+  const chief = s.people.find((p) => p.id === s.chief);
+  const people = [...(chief ? [chief] : []), ...s.people.filter((p) => p.id !== s.chief).slice(-(PAST_PEOPLE - 1))];
+  const kept: Partial<ShoreState> = { ...s, people, news: [], toRecord: [], events: [], past: undefined, lang: undefined, newFinds: [] };
+  return {
+    n: (s.crossings ?? 0) + 1,
+    seed: s.seed,
+    years: Math.floor(s.day / YEAR_DAYS) + 1,
+    critters: s.people.length,
+    won: s.villages.filter((v) => v.won !== undefined).length,
+    villages: s.villages.length,
+    nature: s.nature,
+    shore: JSON.stringify(kept),
+    seen: packSeen(seen),
+  };
+}
+/** A past island made whole again, to be drawn (never ticked: it's as it was left). */
+export function pastShore(p: PastIsland): { shore: ShoreState; seen: Uint8Array } {
+  return { shore: JSON.parse(p.shore) as ShoreState, seen: unpackSeen(p.seen, SHORE_CELLS) };
+}
+
 /** What crosses with them: the embers, and what the village knows how to do (buying ten, the
  * most, the council, the tender, the scouts, the envoy, the lore-keepers). The rest stays. */
 const KEPT_ACROSS = new Set(['feature', 'scouts', 'voice', 'prayer']);
@@ -989,6 +1039,9 @@ export function cross(state: GameState, seed = 0): boolean {
   const next = newShore(tribe, (s.crossings ?? 0) + 1);
   next.raft = crew.length;
   next.lang = s.lang;
+  // The island left behind is kept as it was, to be visited (and later, linked by trade).
+  const seenNow = state.stages.shore.seen;
+  next.past = [...(s.past ?? []), pastOf(s, seenNow)];
   // The culture crosses with them, whole: its Age, every idea and every road chosen, and how far
   // each lane's got toward the next. (Its Great Works stayed behind: the new island raises them
   // again for the room, in order, but the Age doesn't start over.)

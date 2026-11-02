@@ -17,7 +17,7 @@ import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants,
 import { prepareShoreIsland } from './economy/terrainStore';
 import { EmberView } from './ui/emberView';
 import { HearthView } from './ui/hearthView';
-import { situationOf, spoke, placeName, surroundings, speakerOf, langOf, growth, SHORE_CELLS, type ShoreState, workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
+import { YEAR_DAYS, pastShore, situationOf, spoke, placeName, surroundings, speakerOf, langOf, growth, SHORE_CELLS, type ShoreState, workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
 import { dance, danceLeft, shoreIsland, terrainReady, gift, isAdult, poisOf, shoreOf, shoreSeason, startShore, takeRaft, walkChief } from './economy/shore';
 import { AGES, ageName } from './economy/culture';
 import { crewCard, buyAmount, setBuildCat, setBuyMany, setIslandView, danceCard, findCard, forkCard, poiCard, setVillageView, villageCard } from './ui/shorePanels';
@@ -563,6 +563,40 @@ function mapTalk(s: ShoreState): void {
   const r = stageEl.getBoundingClientRect();
   mapSay.style.left = `${Math.max(6, Math.min(r.width - w - 6, cx - w / 2))}px`;
   mapSay.style.top = `${Math.max(6, cy - mapSay.offsetHeight - 6)}px`;
+}
+
+// ---- The islands left behind, visited ----
+
+/** A past island on show (as it was left; nothing on it moves on), or none. */
+let isleView: { k: number; state: GameState } | null = null;
+const isleBanner = document.createElement('div');
+isleBanner.className = 'isle-banner px-box';
+isleBanner.hidden = true;
+stageEl.appendChild(isleBanner);
+/** Shows the k-th island left behind (null: back to now). */
+function visitIsle(k: number | null): void {
+  const s = shoreOf(state);
+  const past = s?.past ?? [];
+  if (k === null || !s || !past[k]) {
+    isleView = null;
+    isleBanner.hidden = true;
+    document.body.classList.remove('visiting');
+    scene.reload();
+    render();
+    return;
+  }
+  const p = past[k];
+  const { shore, seen } = pastShore(p);
+  // (Drawn from a copy of the game with that island in the present one's place.)
+  const view = { ...state, stages: { ...state.stages, shore: { ...state.stages.shore, shore, seen } } } as GameState;
+  isleView = { k, state: view };
+  if (!terrainReady(p.seed) && shore.terrain !== undefined) prepareShoreIsland(p.seed).then(() => scene.reload(), () => shoreIsland(p.seed));
+  ui.open = false;
+  document.body.classList.add('visiting');
+  isleBanner.innerHTML = `<div class="label">Island ${p.n} · as it was left</div><div class="dim tiny">${p.years} years · ${p.critters} critters · ${p.won} of ${p.villages} villages</div><button class="px-btn" data-isle="now">Back to now</button>`;
+  isleBanner.hidden = false;
+  scene.reload();
+  render();
 }
 
 // ---- The compass, and the view left alone ----
@@ -1271,7 +1305,7 @@ function renderHud(): void {
   if (!sh) $('hud-news').hidden = true;
   if (sh) set('bank-chip', ['Spring', 'Summer', 'Autumn', 'Winter'][shoreSeason(sh).si]);
   else set('bank-chip', state.timeBank > 0 && !ex ? `⧗ ${formatTime(state.timeBank)}${state.warp > 1 ? ` · ${state.warp}×` : ''}` : '');
-  set('stage-name', def.name);
+  set('stage-name', isleView ? `Island ${isleView.k + 1} · past` : def.name);
   // Small buttons under the banner hop to the previous age (left) or the next one (right).
   const ageNav = $('age-nav');
   // Sealed eras (before the Tribal) can't be gone back to, so they get no button.
@@ -1279,12 +1313,20 @@ function renderHud(): void {
   const i = open.indexOf(state.current);
   const prev = open[i - 1];
   const next = open[i + 1];
-  const navKey = `${prev ?? ''}|${next ?? ''}`;
+  // (On New Shore, the islands left behind come first, going back: one step each, then the
+  // eras before them.)
+  const isles = state.current === 'shore' ? (shoreOf(state)?.past ?? []) : [];
+  const at = isleView ? isleView.k : isles.length;
+  const navKey = `${prev ?? ''}|${next ?? ''}|${isles.length}|${at}`;
   if (ageNav.dataset.key !== navKey) {
     ageNav.dataset.key = navKey;
     const btn = (s: StageId, side: 'prev' | 'next') =>
       `<button class="px-btn age-btn ${side}" data-stage="${s}" aria-label="Go to the ${STAGES[s].name}">${side === 'prev' ? '<span class="arrow">‹</span>' : ''}${icon(CURRENCY_ICON[s], 2)}${side === 'next' ? '<span class="arrow">›</span>' : ''}</button>`;
-    ageNav.innerHTML = `${prev ? btn(prev, 'prev') : '<span></span>'}${next ? btn(next, 'next') : '<span></span>'}`;
+    const isleBtn = (k: number | 'now', side: 'prev' | 'next') =>
+      `<button class="px-btn age-btn ${side}" data-isle="${k}" aria-label="${k === 'now' ? 'Back to now' : `Island ${k + 1}`}">${side === 'prev' ? '<span class="arrow">‹</span>' : ''}<span class="isle-no">${k === 'now' ? 'Now' : `Isle ${k + 1}`}</span>${side === 'next' ? '<span class="arrow">›</span>' : ''}</button>`;
+    const left = isles.length && at > 0 ? isleBtn(at - 1, 'prev') : prev ? btn(prev, 'prev') : '<span></span>';
+    const right = isles.length && at < isles.length ? isleBtn(at + 1 < isles.length ? at + 1 : 'now', 'next') : next ? btn(next, 'next') : '<span></span>';
+    ageNav.innerHTML = left + right;
   }
   const iconEl = $('currency-icon');
     const look = sh ? sh.look : ex ? st.tribe!.look : null;
@@ -1340,8 +1382,14 @@ function shoreFrame(): void {
     }
     return;
   }
-  mapTalk(s);
-  placeLabels(s);
+  if (!isleView) {
+    mapTalk(s);
+    placeLabels(s);
+  } else {
+    mapSay.hidden = true;
+    for (const el of placeEls.values()) el.remove();
+    placeEls.clear();
+  }
   compassFrame(s);
   cinemaFrame(s);
   // (Their words, for the whistled chatter as they go about: refreshed now and then.)
@@ -1364,6 +1412,12 @@ function shoreFrame(): void {
       shoreNewsLast = kind ? { kind, names: [name] } : null;
     }
     if (shoreNews.length > 12) shoreNews.splice(0, shoreNews.length - 12);
+  }
+  // The Republic raised: the era's end, once.
+  if (s.eraEnd && modal.hidden && ending.hidden && !cine()) {
+    s.eraEnd = false;
+    save();
+    playRepublicEnd(s);
   }
   if (s.newFinds.length && modal.hidden && !cine()) {
     const v = s.villages.find((x) => x.id === s.newFinds[0]);
@@ -1800,6 +1854,38 @@ function playEnding(): void {
   }, 6500);
 }
 
+/** The Republic raised: New Shore's era is done (the islands settled, one people of many
+ * kinds), and the sea is next. */
+function playRepublicEnd(s: ShoreState): void {
+  const past = s.past ?? [];
+  const years = past.reduce((n, p) => n + p.years, 0) + Math.floor(s.day / YEAR_DAYS) + 1;
+  const won = past.reduce((n, p) => n + p.won, 0) + s.villages.filter((v) => v.won !== undefined).length;
+  const stats = [
+    ['Years', String(years)],
+    ['Islands settled', String(past.length + 1)],
+    ['Villages joined', String(won)],
+    ['Critters', String(s.people.length)],
+    ['Ideas', String(s.culture?.done.length ?? 0)],
+    ['Words of their own', String(Object.keys(s.lang?.lex ?? {}).length)],
+    ['Embers', String(s.embers ?? 0)],
+  ];
+  scene.evolveFlash();
+  ending.innerHTML = `<div class="ending-inner">
+    <p class="label dim">New Shore</p>
+    <h1>The Republic.</h1>
+    <p>[STORY] One people of many kinds, and the island theirs. They looked out to sea.</p>
+    <dl>${stats.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+    <p class="thanks">Thank you for playing.</p>
+    <div class="after" hidden><p class="stir">The sea is next. The Age of Sail comes in a future update.</p>
+      <button class="px-btn gold" data-act="keep">Keep watching</button></div>
+  </div>`;
+  ending.hidden = false;
+  requestAnimationFrame(() => ending.classList.add('in'));
+  setTimeout(() => {
+    ending.querySelector<HTMLElement>('.after')!.hidden = false;
+  }, 6500);
+}
+
 /** Before the strike: the line as it stands, and the warning that this is for good. */
 function lastLookCard(): string {
   const c = state.stages.creature;
@@ -2210,7 +2296,7 @@ const endFinger = (e: PointerEvent) => {
   twoAngle = null;
   if (e.type === 'pointerup' && !mapDragged && fingers.size === 0 && onMap()) {
     scene.ripple(f.x, f.y);
-    scene.shoreTap(state, f.x, f.y);
+    if (!isleView) scene.shoreTap(state, f.x, f.y);
     pokedThisStage = true;
     render();
   }
@@ -2461,7 +2547,9 @@ function act(el: HTMLElement): void {
     if (chooseEvent(state, Number(el.dataset.choice))) panelKey = '';
     if (modal.dataset.kind === 'runin') modal.hidden = true;
   }
+  else if (el.dataset.isle) visitIsle(el.dataset.isle === 'now' ? null : Number(el.dataset.isle));
   else if (el.dataset.stage) {
+    if (isleView) visitIsle(null);
     if (visitStage(state, el.dataset.stage as StageId)) {
       scene.evolveFlash();
       ui.tab = 'grow';
@@ -2964,7 +3052,7 @@ function frame(now: number): void {
   acc %= FRAME_MS;
   // (Through their eyes, the map rests: the eye view draws instead.)
   if (eye) drawEye();
-  else scene.draw(state, dt);
+  else scene.draw(isleView?.state ?? state, dt);
   nameLeaving();
   // The Extinction's countdown, worked on a little each frame (about 4 ms at most).
   if (guessJob) {

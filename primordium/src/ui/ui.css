@@ -1150,3 +1150,9 @@ body.embers-open #hint { display: none; }
 .compass.locked .ring { stroke: #e8c86a; }
 /* Left alone: the view goes cinematic (the hints step aside). */
 body.cinema #hint { opacity: 0; }
+
+/* A past island on show: its banner, and nothing of the present over it. */
+.isle-banner { position: absolute; left: 50%; transform: translateX(-50%); bottom: 96px; z-index: 6; text-align: center; padding: 8px 14px 10px; min-width: 220px; background: rgba(20, 24, 36, 0.82); }
+.isle-banner .px-btn { margin-top: 8px; width: 100%; }
+body.visiting #sheet, body.visiting #hint { display: none; }
+.age-btn .isle-no { font-size: 11px; padding: 0 2px; }

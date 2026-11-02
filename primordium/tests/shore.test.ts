@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Biome, isLand } from '../src/economy/island';
 import { createState } from '../src/economy/state';
-import { canWin, bandResting, giftToday, workOpen, buyWork, upgradeOpen, spoke, surroundings, situationOf, upgradeCost, workSign, signReady, prayerRate, destinations, natureOf, crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
+import { buyWork as raise, pastShore, canWin, bandResting, giftToday, workOpen, buyWork, upgradeOpen, spoke, surroundings, situationOf, upgradeCost, workSign, signReady, prayerRate, destinations, natureOf, crewOf, smartCrew, toggleCrew, raftSeats, buyPerk, embersLeft, perk, canCross, cross, embersFor, allMult, baseRate, boosts, idleShore as keep, warmth, buyGen, buyUpgrade, canTake, councilPick, count, CRITTER_MORE, dance, DANCE_DAY, DAY_SEC, foodRate, genCost, genRate, gift, giftCost, hearthMost, idleShore, maxBuy, poiHere, poisOf, relation, room, shoreIsland, shoreOf, shoreTick, startShore, stoke, take, takeCost, takeRaft, tapValue, walkChief, WON_MORE, type ShoreState } from '../src/economy/shore';
 import { deserialize, serialize } from '../src/economy/save';
 import { UPGRADES, type GenId } from '../src/content/idle';
 import type { TribeState } from '../src/economy/types';
@@ -774,5 +774,40 @@ describe('Families, not too close', () => {
       next.found = true;
       expect(take(state, next.id)).toBe(false);
     }
+  });
+  it('the island left behind is kept as it was, and comes back whole to be visited (and through a save)', () => {
+    const state = fresh();
+    const s = lit(state, { forager: 7 });
+    while (s.people.length < 12) s.people.push({ id: s.nextId++, name: `P${s.people.length}`, born: -30 + s.people.length });
+    for (const v of s.villages) v.won = s.day;
+    const seed = s.seed;
+    expect(cross(state)).toBe(true);
+    const n = shoreOf(state)!;
+    expect(n.past).toHaveLength(1);
+    expect(n.past![0].n).toBe(1);
+    expect(n.past![0].won).toBe(s.villages.length);
+    const back = pastShore(n.past![0]);
+    expect(back.shore.seed).toBe(seed);
+    expect(back.shore.gens.forager).toBe(7);
+    expect(back.shore.people.length).toBeLessThanOrEqual(80);
+    expect(back.seen.some((c) => c > 0)).toBe(true);
+    const loaded = deserialize(serialize(state));
+    expect(loaded.stages.shore.shore!.past).toHaveLength(1);
+    expect(pastShore(loaded.stages.shore.shore!.past![0]).shore.seed).toBe(seed);
+  });
+  it('the Senate House raised: the Republic stands, the era ends once, and no more setting out', () => {
+    const state = fresh();
+    const s = lit(state);
+    for (const v of s.villages) v.won = s.day;
+    s.culture = { since: 0, age: 5, practice: {}, done: [], forks: {} };
+    for (const id of ['greathearth', 'square', 'hall', 'forum']) s.ups.push(id);
+    expect(canCross(s)).toBe(true);
+    // (Every lane done for the Age: the Senate House can be raised.)
+    s.culture.done = ['terraces', 'fleets', 'glass', 'cranes', 'legions', 'citywalls', 'senate', 'votes', 'citizensall', 'colonies', 'oracles', 'feasts5', 'histories', 'theatre', 'libraries', 'lawcodes'];
+    s.food = 1e30;
+    expect(raise(state)).toBe(true);
+    expect(s.culture.age).toBe(6);
+    expect(s.eraEnd).toBe(true);
+    expect(canCross(s)).toBe(false);
   });
 });
