@@ -715,10 +715,16 @@ const SHOWN_MOST = 12;
 /** Whether an upgrade's on offer (its generator's far enough on, the village big enough). */
 /** What an upgrade costs now. Most are fixed; the council (it buys for you, for good) is worth
  * a quarter of an hour of what comes in, however far on the village is, so it's never a trifle. */
-export function upgradeCost(s: ShoreState, u: { id: string; cost: number; fx: { kind: string } }): number {
+export function upgradeCost(s: ShoreState, u: { id: string; cost: number; fx: { kind: string }; tier?: number; needUp?: string }): number {
+  // (Never cheaper than the step before it was, times the step: a price set before that rule
+  // was is set again.)
+  const before = u.tier && u.needUp ? s.upPrice?.[u.needUp] : undefined;
   const fixed = s.upPrice?.[u.id];
-  if (fixed !== undefined) return fixed;
-  const live = Math.max(u.cost, Math.ceil(baseRate(s) * (PRICE_SECONDS[u.fx.kind] ?? 120)));
+  if (fixed !== undefined && (before === undefined || fixed >= before * TIER_STEP)) return fixed;
+  // (Dearer ones of a kind stay dearer: the floor scales with how far up the kind's line it is.)
+  const spread = u.tier !== undefined ? TIER_STEP ** u.tier : Math.min(SPREAD_MOST, Math.sqrt(u.cost / (KIND_LEAST[u.fx.kind] ?? u.cost)));
+  let live = Math.max(u.cost, Math.ceil(baseRate(s) * (PRICE_SECONDS[u.fx.kind] ?? 120) * spread));
+  if (before !== undefined) live = Math.max(live, Math.ceil(before * TIER_STEP));
   // (Set when it's first on offer, and kept: it doesn't run away while it's saved for.)
   if (upgradeOpen(s, u.id)) (s.upPrice ??= {})[u.id] = live;
   return live;
@@ -726,6 +732,13 @@ export function upgradeCost(s: ShoreState, u: { id: string; cost: number; fx: { 
 /** What an upgrade's worth, in seconds of what comes in when it's first on offer (or its own
  * price, if that's more): so it's never a trifle, however rich the island. */
 const PRICE_SECONDS: Record<string, number> = { auto: 900, all: 300, gen: 180 };
+/** Each step up a line of upgrades (better, skilled, master) costs at least this many times the last. */
+export const TIER_STEP = 4;
+/** How far up a line of other upgrades (the fire, the feasts, the signs) its floor goes, at most. */
+const SPREAD_MOST = 10;
+/** The cheapest of each kind of upgrade (the others' floors are set against it). */
+const KIND_LEAST: Record<string, number> = {};
+for (const u of UPGRADES) KIND_LEAST[u.fx.kind] = Math.min(KIND_LEAST[u.fx.kind] ?? Infinity, u.cost);
 export const COUNCIL_SECONDS = 900;
 /** The most the council buys at a sitting. */
 const COUNCIL_MOST = 200;

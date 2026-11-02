@@ -86,6 +86,8 @@ export interface UpgradeDef {
   critters?: number;
   /** Only from this Age on. */
   age?: number;
+  /** A step in a line (0 the first): each step's price is TIER_STEP times the last's, at least. */
+  tier?: number;
 }
 
 /** Each generator, at 10, 25 and 50 of them, can be made twice as good (the village learns the
@@ -99,6 +101,9 @@ const DOUBLERS: UpgradeDef[] = GENS.filter((g) => g.rate).flatMap((g) =>
     cost: Math.round(g.cost * [12, 60, 400][i]),
     fx: { kind: 'gen' as const, gen: g.id, mult: 2 },
     needGen: [g.id, n] as [GenId, number],
+    // (One tier at a time: the next only once the last is had, and dearer in step.)
+    needUp: i ? `${g.id}${[10, 25, 50][i - 1]}` : undefined,
+    tier: i,
   })),
 );
 

@@ -406,6 +406,21 @@ describe('Food, the idle way', () => {
     shoreTick(state, 60);
     expect(Object.values(s.gens).reduce((a, n) => a + (n ?? 0), 0)).toBeGreaterThan(had);
   });
+  it('a line of upgrades comes a step at a time, each dearer than the last, however rich', () => {
+    const state = fresh();
+    const s = lit(state, { forager: 60 });
+    s.food = 1e30;
+    s.embers = 200;
+    expect(upgradeOpen(s, 'forager10')).toBe(true);
+    expect(upgradeOpen(s, 'forager25')).toBe(false);
+    const a = upgradeCost(s, UPGRADES.find((u) => u.id === 'forager10')!);
+    expect(buyUpgrade(state, 'forager10')).toBe(true);
+    const b = upgradeCost(s, UPGRADES.find((u) => u.id === 'forager25')!);
+    expect(buyUpgrade(state, 'forager25')).toBe(true);
+    const c = upgradeCost(s, UPGRADES.find((u) => u.id === 'forager50')!);
+    expect(b).toBeGreaterThanOrEqual(a * 4);
+    expect(c).toBeGreaterThanOrEqual(b * 4);
+  });
   it('the council learns in steps: the Great Work only once it plans; the envoy after a village is won', () => {
     const state = fresh();
     const s = lit(state, { forager: 5 });
