@@ -16,10 +16,10 @@ import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
 import { HearthView } from './ui/hearthView';
-import { buyPerk, raftSeats, canCross, cross, embersFor, EMBER_BIRTHS, EMBER_MORE, nextIslandSeed, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
+import { buyPerk, smartCrew, toggleCrew, canCross, cross, nextIslandSeed, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
 import { dance, danceLeft, shoreIsland, terrainReady, gift, isAdult, poisOf, shoreOf, shoreSeason, startShore, takeRaft, walkChief } from './economy/shore';
 import { AGES, ageName } from './economy/culture';
-import { buyAmount, setBuildCat, setBuyMany, setIslandView, danceCard, findCard, forkCard, poiCard, setVillageView, villageCard } from './ui/shorePanels';
+import { crewCard, buyAmount, setBuildCat, setBuyMany, setIslandView, danceCard, findCard, forkCard, poiCard, setVillageView, villageCard } from './ui/shorePanels';
 import type { GenId } from './content/idle';
 import { startFireDance, type FireDance } from './ui/fireDance';
 import { lineTree, shoreTree } from './ui/familyTree';
@@ -327,6 +327,20 @@ function collectNews(): void {
 
 /** Whether New Shore's island is still being made or loaded (nothing of it runs meanwhile). */
 let waitingIsland = false;
+/** The crew chooser redrawn where it is (the lists keep their scroll). */
+function crewRefresh(): void {
+  const s = shoreOf(state);
+  if (!s || modal.hidden) return;
+  const lists = [...modal.querySelectorAll<HTMLElement>('.people-list .info')].map((el) => el.scrollTop);
+  const box = modal.firstElementChild as HTMLElement | null;
+  if (!box) return;
+  const top = box.scrollTop;
+  box.innerHTML = crewCard(s);
+  modal.querySelectorAll<HTMLElement>('.people-list .info').forEach((el, i) => (el.scrollTop = lists[i] ?? 0));
+  box.scrollTop = top;
+  save();
+}
+
 function needIsland(): void {
   const s = state.stages.shore.shore;
   if (!s || s.terrain === undefined || terrainReady(s.seed)) return;
@@ -1896,6 +1910,13 @@ function act(el: HTMLElement): void {
   } else if (el.dataset.buymany !== undefined) setBuyMany(Number(el.dataset.buymany));
   else if (el.dataset.villageview) setVillageView(el.dataset.villageview);
   else if (el.dataset.buildcat) setBuildCat(el.dataset.buildcat);
+  else if (el.dataset.crew) {
+    const s = shoreOf(state);
+    if (s) {
+      toggleCrew(s, Number(el.dataset.crew));
+      crewRefresh();
+    }
+  }
   else if (el.dataset.perk) {
     if (buyPerk(state, el.dataset.perk as never)) {
       cue('ascend', 0.5);
@@ -2095,12 +2116,15 @@ function act(el: HTMLElement): void {
       case 'cross-ask': {
         const s = shoreOf(state);
         if (!s || !canCross(s)) break;
-        const n = embersFor(s);
-        showModal(`<p class="label dim">Set out</p><h3>A new island</h3>
-          <p>A raft for ${raftSeats(s)}: the chief, and others young and old. The rest stay.</p>
-          <p class="green">+${n} ember${n === 1 ? '' : 's'}: all food +${Math.round(n * EMBER_MORE * 100)}%, births +${Math.round(n * EMBER_BIRTHS * 100)}%, for good.</p>
-          <p class="dim tiny">Kept: embers, and know-how (buy ×10, Max, the council, tender, scouts, envoy, lore). The rest starts again.</p>
-          <div class="choices"><button class="px-btn gold" data-act="cross">Set out</button><button class="px-btn" data-act="dismiss">Not yet</button></div>`);
+        showModal(crewCard(s));
+        break;
+      }
+      case 'crew-smart':
+      case 'crew-clear': {
+        const s = shoreOf(state);
+        if (!s) break;
+        s.crewChoice = el.dataset.act === 'crew-smart' ? smartCrew(s) : [];
+        crewRefresh();
         break;
       }
       case 'cross': {

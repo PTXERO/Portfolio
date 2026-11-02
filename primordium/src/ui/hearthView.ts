@@ -4,7 +4,7 @@
 
 import { DAY_SEC, fireMost, fireMore, growth, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
 import { drawCreature, type CreatureLook } from '../scene/creatureLook';
-import { pickTalk, TEMPERS, TRAIT_TEMPER, type Age, type Speaker, type TalkCtx } from '../content/hearthTalk';
+import { pickTalk, temperOf, type Age, type Speaker, type TalkCtx } from '../content/hearthTalk';
 import { squeak } from '../audio/sound';
 import { D, format } from '../economy/num';
 
@@ -615,7 +615,7 @@ function speaker(s: ShoreState, id: number): Speaker {
   const today = s.day + s.clock / DAY_SEC;
   const old = p.dies !== undefined && (p.dies - today) < (p.dies - p.born) * 0.3;
   const age: Age = g < 0.5 ? 'little' : g < 1 ? 'youngster' : old ? 'elder' : 'grown';
-  const temper = (p.trait && TRAIT_TEMPER[p.trait]) || TEMPERS[(p.id * 2654435761) % TEMPERS.length >>> 0] || 'cheerful';
+  const temper = temperOf(p);
   return { name: p.name, age, temper, crossed: !!p.founder };
 }
 

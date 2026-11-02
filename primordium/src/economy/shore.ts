@@ -178,6 +178,8 @@ export interface ShoreState {
    * many crossings they've made since the first shore. */
   embers?: number;
   crossings?: number;
+  /** Who's been chosen to go on the next raft (ids; a smart pick if none). */
+  crewChoice?: number[];
   /** How many the raft they landed on carried (it's drawn that big, till it's broken up). */
   raft?: number;
   /** Embers spent in the ember shop (the rest are there to spend), and what they bought. */
@@ -781,6 +783,49 @@ function chart(s: ShoreState, v: Village): void {
   if (relation(s, v) === 'kin') v.trust ??= FIRST_TRUST;
 }
 
+/** Who can go: grown, and of the village's own kind. */
+export function crewCandidates(s: ShoreState): ShorePerson[] {
+  return s.people.filter((p) => p.kind === undefined && isAdult(s, p));
+}
+/** A good crew: the chief, and the rest picked across the ages (not the old, who'd soon be gone,
+ * nor all of one age), each in a different coat where there's the choice. */
+export function smartCrew(s: ShoreState): number[] {
+  const today = s.day + s.clock / DAY_SEC;
+  const all = crewCandidates(s);
+  const chief = all.find((p) => p.id === s.chief) ?? all[0];
+  if (!chief) return [];
+  const notOld = all.filter((p) => p !== chief && (p.dies === undefined || p.dies - today > (p.dies - p.born) * 0.35));
+  const pool = (notOld.length >= raftSeats(s) - 1 ? notOld : all.filter((p) => p !== chief)).sort((a, b) => a.born - b.born);
+  const want = Math.min(pool.length, raftSeats(s) - 1);
+  const picked: ShorePerson[] = [];
+  const coats = new Set<string>([JSON.stringify(chief.genes ?? null)]);
+  for (let i = 0; i < want; i++) {
+    // (From each stretch of ages, someone in a coat not yet aboard if there is one.)
+    const lo = Math.floor((i * pool.length) / want);
+    const hi = Math.max(lo + 1, Math.floor(((i + 1) * pool.length) / want));
+    const span = pool.slice(lo, hi);
+    const p = span.find((q) => !coats.has(JSON.stringify(q.genes ?? null))) ?? span[Math.floor(span.length / 2)];
+    coats.add(JSON.stringify(p.genes ?? null));
+    picked.push(p);
+  }
+  return [chief.id, ...picked.map((p) => p.id)];
+}
+/** Who's going: those chosen (still here, grown, and room for them), or a smart pick if no one's
+ * chosen yet. */
+export function crewOf(s: ShoreState): ShorePerson[] {
+  const ok = new Map(crewCandidates(s).map((p) => [p.id, p]));
+  const ids = s.crewChoice ?? smartCrew(s);
+  return ids.map((id) => ok.get(id)).filter((p): p is ShorePerson => !!p).slice(0, raftSeats(s));
+}
+/** It takes two at least, to start again. */
+export const CREW_LEAST = 2;
+/** Someone on or off the raft (not past its seats). */
+export function toggleCrew(s: ShoreState, id: number): void {
+  const now = crewOf(s).map((p) => p.id);
+  const has = now.includes(id);
+  s.crewChoice = has ? now.filter((x) => x !== id) : now.length < raftSeats(s) ? [...now, id] : now;
+}
+
 /** How many the raft carries: four, and one more for every hundred critters the village has
  * (the bigger the village, the bigger the raft it builds), up to six more; and a bigger raft
  * yet with the embers' perk. */
@@ -806,12 +851,8 @@ export function cross(state: GameState, seed = 0): boolean {
   const t = state.stages.tribal.tribe;
   if (!s || !t || !canCross(s)) return false;
   const gained = embersFor(s);
-  const own = s.people.filter((p) => p.kind === undefined && isAdult(s, p));
-  const chief = own.find((p) => p.id === s.chief) ?? own[0];
-  // (The chief, and the rest picked across the ages: not just the eldest, who'd soon be gone.)
-  const rest = own.filter((p) => p !== chief).sort((a, b) => a.born - b.born);
-  const seats = Math.min(rest.length, raftSeats(s) - 1);
-  const crew = [chief, ...Array.from({ length: seats }, (_, i) => rest[Math.floor(((i + 0.5) * rest.length) / seats)])].filter(Boolean);
+  const crew = crewOf(s);
+  if (crew.length < CREW_LEAST) return false;
   const island = seed || nextIslandSeed(s);
   const tribe = { ...t, look: { ...t.look, parts: { ...s.look.parts }, diet: s.look.diet }, landed: { ...(t.landed ?? { day: 0 }), seed: island }, family: crew.map((p) => ({ name: p.name, trait: p.trait ?? 'hardy', genes: p.genes })) } as TribeState;
   const next = newShore(tribe);

@@ -12,6 +12,12 @@ export const TEMPERS: Temper[] = ['bold', 'restless', 'curious', 'stubborn', 'ge
 /** The four's traits, as tempers. */
 export const TRAIT_TEMPER: Record<string, Temper> = { strong: 'bold', swift: 'restless', keen: 'curious', hardy: 'stubborn', frail: 'gentle', old: 'wise', young: 'cheerful' };
 
+/** What someone's like: from their trait if they have one (the four), else born to it (the same
+ * all their life). */
+export function temperOf(p: { id: number; trait?: string }): Temper {
+  return (p.trait && TRAIT_TEMPER[p.trait]) || TEMPERS[((p.id * 2654435761) >>> 0) % TEMPERS.length];
+}
+
 export interface Speaker {
   name: string;
   age: Age;

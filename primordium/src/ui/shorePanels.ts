@@ -5,13 +5,14 @@
 
 import { type Boosts, POI_SORT, RELICS, type Find } from '../content/shore';
 import { GENS, PERKS, UPGRADES, type GenId } from '../content/idle';
-import { allMult, raftSeats, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
+import { allMult, crewCandidates, crewOf, CREW_LEAST, growth, raftSeats, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
 import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
 import type { GameState } from '../economy/types';
 import { D, format as formatD } from '../economy/num';
 const format = (n: number) => formatD(D(n));
 import { danceStyle } from './fireDance';
+import { temperOf } from '../content/hearthTalk';
 
 const n0 = (v: number) => format(Math.floor(v + 1e-6));
 
@@ -229,6 +230,32 @@ function islandCounts(s: ShoreState): string {
   const marks = poisOf(s).filter((p) => p.found).length;
   const others = s.people.filter((p) => p.kind !== undefined).length;
   return `<div class="card px-box"><div class="info"><div class="sub">${found.length} village${found.length === 1 ? '' : 's'} found${found.length < s.villages.length ? ' (more in the fog)' : ''} · ${won} won · ${marks} landmark${marks === 1 ? '' : 's'} found · ${s.relics?.length ?? 0} relic${(s.relics?.length ?? 0) === 1 ? '' : 's'}${others ? ` · ${others} critters of other kinds among yours` : ''}</div></div></div>`;
+}
+
+/** Who goes on the raft: a smart pick to start, and anyone grown can be swapped on or off (as in
+ * the Extinction, it's yours to choose). */
+export function crewCard(s: ShoreState): string {
+  const seats = raftSeats(s);
+  const crew = crewOf(s);
+  const on = new Set(crew.map((p) => p.id));
+  const today = s.day + s.clock / DAY_SEC;
+  const icons = new Map<string, string>();
+  const iconOf = (p: ShorePerson) => {
+    const key = genesKey(p.genes);
+    if (!icons.has(key)) icons.set(key, miniIcon(p.genes ? { ...s.look, genes: p.genes } : s.look, 2));
+    return icons.get(key)!;
+  };
+  const ageWord = (p: ShorePerson) => (p.dies !== undefined && p.dies - today < (p.dies - p.born) * 0.3 ? 'old' : !p.founder && growth(s, p) >= 1 && today - p.born < 25 ? 'young' : 'grown');
+  const row = (p: ShorePerson) => `<button class="person${on.has(p.id) ? ' on' : ''}" data-crew="${p.id}">${iconOf(p)}<b>${on.has(p.id) ? '» ' : ''}${p.name}</b><span class="dim">${p.id === s.chief ? 'chief · ' : ''}${ageWord(p)} · ${temperOf(p)}</span></button>`;
+  const rest = crewCandidates(s).filter((p) => !on.has(p.id)).sort((a, b) => b.born - a.born);
+  const n = embersFor(s);
+  return `<p class="label dim">Set out</p><h3>Who goes</h3>
+    <p class="dim tiny">The raft carries ${seats}. +${n} ember${n === 1 ? '' : 's'}: food +${Math.round(n * EMBER_MORE * 100)}%, births +${Math.round(n * EMBER_BIRTHS * 100)}%. The rest stay.</p>
+    <div class="seg build-cats"><button class="px-btn" data-act="crew-smart">Smart pick</button><button class="px-btn" data-act="crew-clear">Clear</button><span class="seg-gap"></span><span class="dim">${crew.length}/${seats}</span></div>
+    <div class="card px-box people-list crew-list"><div class="info">${crew.map(row).join('') || '<span class="dim tiny">No one yet.</span>'}</div></div>
+    <p class="tiny dim">Tap to put on or take off. ${crew.length >= seats ? 'The raft is full.' : ''}</p>
+    <div class="card px-box people-list crew-pool"><div class="info">${rest.map(row).join('')}</div></div>
+    <div class="choices"><button class="px-btn gold" data-act="cross"${crew.length >= CREW_LEAST ? '' : ' disabled'}>Set out with ${crew.length}</button><button class="px-btn" data-act="dismiss">Not yet</button></div>`;
 }
 
 /** Setting out for a new island: once every village is won. */
