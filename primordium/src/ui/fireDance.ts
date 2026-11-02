@@ -37,11 +37,16 @@ export interface FireDance {
  * turns. Returns what it won (0 once they're worn out). */
 type OnTurn = (theirWay: boolean, round: number, streak: number, at: { x: number; y: number }) => number | string;
 
-/** Pixels of the drawing: the canvas is this, scaled up to fit. */
-const PW = 160;
-const PH = 100;
+/** Pixels of the drawing across: the canvas is this wide, scaled up to fit; as tall as the
+ * space it has (full screen: taller than it's wide on a phone). */
+const WIDE = 160;
+/** On a tall screen, fewer pixels across: everything drawn bigger, the ring filling the width. */
+const NARROW = 124;
 
 export function startFireDance(canvas: HTMLCanvasElement, v: Village, chief: CreatureLook, onTurn: OnTurn, hint: (text: string) => void): FireDance {
+  const box = canvas.getBoundingClientRect();
+  const PW = box.height > box.width ? NARROW : WIDE;
+  const PH = box.width > 0 && box.height > 0 ? Math.max(100, Math.min(320, Math.round((PW * box.height) / box.width))) : 100;
   canvas.width = PW;
   canvas.height = PH;
   const b = canvas.getContext('2d')!;

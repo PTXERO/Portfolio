@@ -2028,7 +2028,11 @@ function act(el: HTMLElement): void {
     const s = shoreOf(state);
     const v = s?.villages.find((x) => x.id === Number(el.dataset.dance));
     if (s && v) {
+      // (The dance takes the whole screen: the menu steps aside.)
+      if (!isWide()) ui.open = false;
+      render();
       showModal(danceCard(s, v));
+      modal.dataset.kind = 'dance';
       startDance();
     }
   }
