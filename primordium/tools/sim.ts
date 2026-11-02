@@ -56,6 +56,7 @@ const TARGETS: Record<StageId, [number, number]> = {
   creature: [240 * 60, 360 * 60],
   tribal: [180 * 60, 300 * 60],
   shore: [120 * 60, 240 * 60],
+  sail: [6 * 3600, 24 * 3600],
 };
 
 const LIMIT_SEC = 48 * 3600;

@@ -9,6 +9,7 @@
 
 import { buildName, POIS, RELICS, SHORE_STORY, type Boosts, type BuildId, type Find, type PoiKind, type RelicId } from '../content/shore';
 import { record, recordName } from './chronicle';
+import { coastOfIsland } from './coast';
 import { Biome, CELL, isLand, islandOf, packSeen, reveal, unpackSeen, type Island, type Pt } from './island';
 import { generateTerrain, TERRAIN_V, type Terrain } from './terrain';
 import { findPath } from './paths';
@@ -988,6 +989,8 @@ export interface PastIsland {
   /** The island itself, trimmed (JSON), and its fog (packed). */
   shore: string;
   seen: string;
+  /** Its coast, shrunk (for the world map). */
+  mask?: string;
 }
 /** How many of an island's critters are kept to walk about in it, visited. */
 const PAST_PEOPLE = 80;
@@ -1005,6 +1008,7 @@ export function pastOf(s: ShoreState, seen: Uint8Array): PastIsland {
     nature: s.nature,
     shore: JSON.stringify(kept),
     seen: packSeen(seen),
+    mask: terrainReady(s.seed) ? coastOfIsland(shoreIsland(s.seed)) : undefined,
   };
 }
 /** A past island made whole again, to be drawn (never ticked: it's as it was left). */

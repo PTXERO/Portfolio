@@ -66,6 +66,7 @@ export function deserialize(text: string): GameState {
           sightings: { ...(s.sightings ?? {}) },
           // (A New Shore from before the idle way is made over: see idleShore.)
           shore: s.shore ? idleShore(structuredClone(s.shore) as never) : undefined,
+          world: s.world ? structuredClone(s.world) : undefined,
           tribe: s.tribe ? { ...s.tribe, look: { ...s.tribe.look, parts: { ...s.tribe.look.parts } }, stats: { ...s.tribe.stats } } : undefined,
           nests: s.seed !== undefined ? [...(s.nests ?? [])] : [],
           nestSettle: s.seed !== undefined ? { ...(s.nestSettle ?? {}) } : {},

@@ -15,6 +15,7 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
+import { setSail } from './economy/sail';
 import { EmberView } from './ui/emberView';
 import { HearthView } from './ui/hearthView';
 import { YEAR_DAYS, pastShore, situationOf, spoke, placeName, surroundings, speakerOf, langOf, growth, SHORE_CELLS, type ShoreState, workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
@@ -597,6 +598,26 @@ function visitIsle(k: number | null): void {
   isleBanner.hidden = false;
   scene.reload();
   render();
+}
+
+// ---- The world map (the Age of Sail) ----
+
+/** A tap on the world map: one of your islands, to go and see it (as it was left, or home as it
+ * is); someone else's, a word on who they are. */
+function sailTap(x: number, y: number): void {
+  const i = scene.worldIsleAt(state, x, y);
+  if (!i) return;
+  if (i.mine === undefined) {
+    scene.float(x, y - 12, 'Not yours, yet', '#f2ead7');
+    return;
+  }
+  if (!visitStage(state, 'shore')) return;
+  scene.evolveFlash();
+  ui.tab = 'grow';
+  panelKey = '';
+  goalKey = '';
+  if (i.mine >= 0) visitIsle(i.mine);
+  else render();
 }
 
 // ---- The compass, and the view left alone ----
@@ -1271,7 +1292,7 @@ function renderTabs(): void {
   if (!ids.includes(ui.tab)) ui.tab = ids[0];
   tabsEl.style.gridTemplateColumns = `repeat(${ids.length}, 1fr)`;
   tabsEl.innerHTML = TABS.filter((t) => ids.includes(t.id))
-    .map((t) => `<button class="px-btn tab" data-tab="${t.id}">${icon(t.sprite, 3)}<span>${t.id === 'grow' && STAGES[state.current].places ? 'Herd' : t.id === 'grow' && STAGES[state.current].tribal ? 'Survivors' : t.id === 'grow' && STAGES[state.current].shore ? 'Village' : t.label}</span><i class="dot" hidden></i></button>`)
+    .map((t) => `<button class="px-btn tab" data-tab="${t.id}">${icon(t.sprite, 3)}<span>${t.id === 'grow' && STAGES[state.current].places ? 'Herd' : t.id === 'grow' && STAGES[state.current].tribal ? 'Survivors' : t.id === 'grow' && STAGES[state.current].shore ? 'Village' : t.id === 'grow' && STAGES[state.current].sail ? 'World' : t.label}</span><i class="dot" hidden></i></button>`)
     .join('');
 }
 
@@ -1544,6 +1565,11 @@ const forkAsked = new Set<string>();
 function renderGoal(): void {
   const def = STAGES[state.current];
   if (def.shore) return renderShoreGoal();
+  if (def.sail) {
+    evolveEl.hidden = true;
+    $('hud-news').hidden = true;
+    return;
+  }
   // The Tribal era: for now, just what's asked before they wake.
   if (def.tribal) {
     const ex = state.stages.tribal.tribe?.ex;
@@ -1780,6 +1806,8 @@ function renderHint(): void {
     if (s && !s.raftTaken) text = 'Light the hearth (in the Hearth tab)';
     else if (s && !Object.keys(s.gens).length) text = 'Stoke the fire (the Hearth tab), then send out foragers (in Build)';
     else if (!pokedThisStage) text = 'Tap the land to walk · pinch to zoom';
+  } else if (state.current === 'sail') {
+    if (!pokedThisStage) text = 'Drag to look round · tap one of your islands';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
   hint.hidden = !text || !modal.hidden || (ui.open && ui.full) || (ui.open && ui.tab === 'hearth');
@@ -1876,8 +1904,8 @@ function playRepublicEnd(s: ShoreState): void {
     <p>[STORY] One people of many kinds, and the island theirs. They looked out to sea.</p>
     <dl>${stats.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
     <p class="thanks">Thank you for playing.</p>
-    <div class="after" hidden><p class="stir">The sea is next. The Age of Sail comes in a future update.</p>
-      <button class="px-btn gold" data-act="keep">Keep watching</button></div>
+    <div class="after" hidden><p class="stir">The sea is next.</p>
+      <button class="px-btn gold pulse" data-act="set-sail">Set sail</button><button class="px-btn" data-act="keep">Keep watching</button></div>
   </div>`;
   ending.hidden = false;
   requestAnimationFrame(() => ending.classList.add('in'));
@@ -1935,7 +1963,7 @@ function moveOn(): void {
 }
 
 /** Whether the screen shows a map (the Creature's island or what's left of it). */
-const onMap = () => state.current === 'creature' || state.current === 'tribal' || state.current === 'shore';
+const onMap = () => state.current === 'creature' || state.current === 'tribal' || state.current === 'shore' || state.current === 'sail';
 
 // ---- The story's hold on the screen ----
 // From the strike to the waking, everything but the world and the story's words steps away
@@ -2296,7 +2324,8 @@ const endFinger = (e: PointerEvent) => {
   twoAngle = null;
   if (e.type === 'pointerup' && !mapDragged && fingers.size === 0 && onMap()) {
     scene.ripple(f.x, f.y);
-    if (!isleView) scene.shoreTap(state, f.x, f.y);
+    if (state.current === 'sail') sailTap(f.x, f.y);
+    else if (!isleView) scene.shoreTap(state, f.x, f.y);
     pokedThisStage = true;
     render();
   }
@@ -2547,6 +2576,17 @@ function act(el: HTMLElement): void {
     if (chooseEvent(state, Number(el.dataset.choice))) panelKey = '';
     if (modal.dataset.kind === 'runin') modal.hidden = true;
   }
+  else if (el.dataset.worldisle) {
+    const i = state.stages.sail.world?.isles.find((x) => x.id === Number(el.dataset.worldisle));
+    if (i && i.mine !== undefined && visitStage(state, 'shore')) {
+      scene.evolveFlash();
+      ui.tab = 'grow';
+      panelKey = '';
+      goalKey = '';
+      if (i.mine >= 0) visitIsle(i.mine);
+      else render();
+    }
+  }
   else if (el.dataset.isle) visitIsle(el.dataset.isle === 'now' ? null : Number(el.dataset.isle));
   else if (el.dataset.stage) {
     if (isleView) visitIsle(null);
@@ -2666,6 +2706,19 @@ function act(el: HTMLElement): void {
       case 'look-sure':
         modal.hidden = true;
         closeEnding();
+        break;
+      case 'set-sail':
+        if (setSail(state)) {
+          ending.classList.remove('in');
+          setTimeout(() => (ending.hidden = true), 600);
+          if (isleView) visitIsle(null);
+          ui.tab = 'grow';
+          ui.open = false;
+          panelKey = '';
+          goalKey = '';
+          save();
+          render();
+        }
         break;
       case 'keep':
         ending.classList.remove('in');

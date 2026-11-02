@@ -12,6 +12,7 @@ import { CellScene } from './cell';
 import { RangeScene } from './range';
 import { TribeScene } from './tribe';
 import { ShoreScene } from './shore';
+import { WorldScene } from './world';
 import { MapShader } from './shade';
 import type { PondEvent } from './pond';
 import { ring, type Frame } from './paint';
@@ -52,6 +53,7 @@ export class Scene {
   private range = new RangeScene();
   /** New Shore's island and village. */
   private village = new ShoreScene();
+  private world = new WorldScene();
   /** The Tribal era's map: the same island, broken (it builds on the Creature's). */
   private tribe = new TribeScene();
   /** Whether the walk to the spear is done (and it's waiting to be touched). */
@@ -194,6 +196,11 @@ export class Scene {
 
   /** Pinch or wheel on the Creature's map: zooms by `factor` about the point under the fingers. */
   zoomAt(cssX: number, cssY: number, factor: number): void {
+    if (this.stage === 'sail') {
+      const [x, y] = this.toArt(cssX, cssY);
+      this.world.zoomAt(x, y, factor);
+      return;
+    }
     if (!this.isMap) return;
     const [x, y] = this.toArt(cssX, cssY);
     this.map.zoomAt(x, y, factor);
@@ -209,6 +216,10 @@ export class Scene {
 
   /** Dragging the Creature's map. */
   panBy(dxCss: number, dyCss: number): void {
+    if (this.stage === 'sail') {
+      this.world.pan(dxCss / this.px, dyCss / this.px);
+      return;
+    }
     if (!this.isMap) return;
     this.map.pan(dxCss / this.px, dyCss / this.px);
   }
@@ -221,7 +232,14 @@ export class Scene {
   }
 
   get zoomed(): boolean {
-    return this.isMap;
+    return this.isMap || this.stage === 'sail';
+  }
+  /** The island on the world map under a tap (CSS pixels), if any. */
+  worldIsleAt(state: GameState, cssX: number, cssY: number): import('../economy/sail').WorldIsle | null {
+    const world = state.stages.sail.world;
+    if (!world || this.stage !== 'sail') return null;
+    const [x, y] = this.toArt(cssX, cssY);
+    return this.world.isleAt(world, x, y);
   }
 
   ripple(cssX: number, cssY: number): void {
@@ -328,6 +346,7 @@ export class Scene {
     }
     const frame: Frame = { b: this.b, W: this.W, H: this.H, t: this.time, dt, top: Math.ceil(this.topCss / this.px), bottom: Math.ceil(this.bottomCss / this.px) };
     if (state.current === 'soup') this.soup.draw(frame, state, this.displace);
+    else if (state.current === 'sail') this.world.draw(frame, state);
     else if (state.current === 'creature' || state.current === 'tribal' || state.current === 'shore') {
       this.map.shaded = !!this.shader;
       this.map.draw(frame, state);

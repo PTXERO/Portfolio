@@ -1,6 +1,7 @@
 // The tab panels under the scene. Each panel is laid out once (when its rows
 // change) and then patched in place, so a button never vanishes under a finger.
 
+import { worldLayout } from './sailPanels';
 import { CHANNELS, mixWithMusic, volumes } from '../audio/sound';
 import { ideasLayout, spellsLayout, tribeKey, tribeLayout, tribeUpdate } from './tribePanels';
 import { shoreKey, shoreLayout, shoreUpdate } from './shorePanels';
@@ -65,7 +66,7 @@ export function tabsFor(state: GameState): Tab[] {
     build: !!def.shore,
     island: false,
     culture: false,
-    boosts: !habitats && !creature && !def.tribal && !def.shore,
+    boosts: !habitats && !creature && !def.tribal && !def.shore && !def.sail,
     lab: !habitats && !creature && !def.shore && reactions(state.current).length > 0,
     mutate: habitats,
     pond: habitats,
@@ -74,11 +75,11 @@ export function tabsFor(state: GameState): Tab[] {
     body: creature && (cst.discovered.length > 1 || cst.totalEarned.gte(150) || cst.parts.length > 5),
     explore: creature,
     family: creature && (cst.mates.length > 0 || !!cst.egg || cst.generation > 0),
-    roots: !def.shore && hasRoots(state) && (!creature || cst.generation > 0),
+    roots: !def.shore && !def.sail && hasRoots(state) && (!creature || cst.generation > 0),
     ideas: !!def.tribal && !!cst.tribe?.ex,
     miracles: !!def.tribal && !!cst.tribe?.ex,
     // The Chronicle: from the Extinction on (once there's something in it).
-    chronicle: !!def.shore || (!!def.tribal && (state.chronicle?.length ?? 0) > 0),
+    chronicle: !!def.shore || !!def.sail || (!!def.tribal && (state.chronicle?.length ?? 0) > 0),
     menu: true,
   };
   return TABS.map((t) => t.id).filter((t) => has[t]);
@@ -101,7 +102,7 @@ export const DIAL_INFO: Record<DialId, { name: string; sprite: SpriteName }> = {
   charge: { name: 'Charge', sprite: 'bolt' },
 };
 
-export const CURRENCY_ICON: Record<StageId, SpriteName> = { soup: 'nutrient', cell: 'dna', creature: 'biomass', tribal: 'food', shore: 'food' };
+export const CURRENCY_ICON: Record<StageId, SpriteName> = { soup: 'nutrient', cell: 'dna', creature: 'biomass', tribal: 'food', shore: 'food', sail: 'island' };
 export const WARPS = [1, 2, 5, 10];
 const AMOUNTS: BuyAmount[] = [1, 10, 'max'];
 
@@ -276,6 +277,7 @@ export function layout(state: GameState, tab: Tab): string {
   if (def.shore && tab === 'chronicle') return shoreLayout(state, tab);
   if (def.shore && (tab === 'grow' || tab === 'build' || tab === 'island' || tab === 'culture')) return shoreLayout(state, tab);
   if (def.tribal && tab === 'grow') return tribeLayout(state);
+  if (def.sail && tab === 'grow') return worldLayout(state);
   if (def.tribal && tab === 'ideas') return ideasLayout(state);
   if (def.tribal && tab === 'miracles') return spellsLayout(state);
   if (tab === 'chronicle') return chronicleLayout(state);

@@ -23,7 +23,8 @@ const FORAGE_AWAKE = 0.6;
 /** Once the Tribal era has begun, every era before it is sealed: no going back, nothing runs.
  * (And once they're ashore on the new island, the Extinction is behind them too.) */
 export function sealed(state: GameState, id: StageId): boolean {
-  if (state.unlocked.includes('shore')) return id !== 'shore';
+  // (New Shore on: only it and the Age of Sail after it are still open.)
+  if (state.unlocked.includes('shore')) return id !== 'shore' && id !== 'sail';
   return id !== TRIBAL && id !== 'shore' && state.unlocked.includes(TRIBAL);
 }
 
