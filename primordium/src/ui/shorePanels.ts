@@ -176,6 +176,7 @@ function emberShop(s: ShoreState, pages: string): string {
     };
     return `${pages}<div class="panel-head"><h2>Embers</h2><span class="dim">${embersLeft(s)} to spend</span></div>
       <p class="tiny dim">All ${all} ever: food +${Math.round(all * EMBER_MORE * 100)}%, births +${Math.round(all * EMBER_BIRTHS * 100)}%. Spending keeps that.</p>
+      <button class="px-btn gold ember-open" data-buildcat="embers">Tend the embers</button>
       ${PERKS.map(row).join('')}`;
   }
 }

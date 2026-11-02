@@ -1109,3 +1109,33 @@ body.tab-hearth #expand { display: none; }
 .map-say .gloss:empty { display: none; }
 .place-names { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
 .place-names span { position: absolute; left: 0; top: 0; font-size: 10px; letter-spacing: 0.08em; font-style: italic; color: rgba(255, 246, 225, 0.72); text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7), 0 0 3px rgba(0, 0, 0, 0.5); white-space: nowrap; }
+
+/* ---- The ember bed (full screen) ---- */
+#embers { position: fixed; inset: 0; z-index: 40; background: #07070d; overflow: hidden; display: flex; flex-direction: column; user-select: none; -webkit-user-select: none; }
+#embers canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+#embers > :not(canvas) { position: relative; }
+#embers .ember-top { display: flex; align-items: center; justify-content: space-between; padding: max(12px, env(safe-area-inset-top)) 16px 0; }
+#embers .ember-top .label { color: #e7a35a; letter-spacing: 0.2em; }
+#embers .ember-back { width: auto; padding: 6px 14px; }
+#embers .ember-head { text-align: center; padding: 6px 16px 10px; }
+#embers .ember-count { font-size: 64px; line-height: 1; color: #ffcf6a; text-shadow: 0 0 12px rgba(255, 140, 40, 0.9), 0 0 30px rgba(255, 90, 20, 0.6), 0 3px 0 #5a1a08; animation: ember-breathe 3.2s ease-in-out infinite; }
+#embers .ember-sub { color: #e7a35a; margin-top: 4px; }
+#embers .ember-ever { color: #f3d9b0; margin-top: 8px; line-height: 1.5; }
+@keyframes ember-breathe { 50% { text-shadow: 0 0 18px rgba(255, 160, 60, 1), 0 0 44px rgba(255, 100, 30, 0.75), 0 3px 0 #5a1a08; } }
+#embers .ember-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-content: start; padding: 4px 14px calc(26vh + env(safe-area-inset-bottom)); -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 26vh), transparent calc(100% - 14vh)); mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 26vh), transparent calc(100% - 14vh)); }
+#embers .ember-card { display: flex; flex-direction: column; gap: 6px; padding: 10px 10px 8px; background: rgba(26, 14, 16, 0.72); border: 2px solid #4a2a22; box-shadow: 0 0 0 2px #000; backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+#embers .ember-card.can { border-color: #c8662a; animation: ember-ready 2.4s ease-in-out infinite; }
+#embers .ember-card.full { border-color: #e8c86a; background: rgba(48, 30, 12, 0.75); }
+#embers .ember-card.lit { animation: ember-lit 0.9s ease-out; }
+@keyframes ember-ready { 50% { box-shadow: 0 0 0 2px #000, 0 0 14px rgba(255, 120, 40, 0.55); } }
+@keyframes ember-lit { 0% { box-shadow: 0 0 0 2px #000, 0 0 40px rgba(255, 200, 90, 1); background: rgba(120, 60, 20, 0.9); } 100% { box-shadow: 0 0 0 2px #000; } }
+#embers .ember-name { color: #ffe2b0; font-size: 14px; line-height: 1.15; }
+#embers .ember-does { color: #d8b890; line-height: 1.35; flex: 1; }
+#embers .ember-does b { color: #ffcf6a; font-weight: normal; }
+#embers .ember-pips { display: flex; flex-wrap: wrap; gap: 3px; }
+#embers .ember-pips i { width: 8px; height: 6px; background: #2a1612; box-shadow: inset 0 -2px 0 #160a08; }
+#embers .ember-pips i.on { background: #ff9a3a; box-shadow: 0 0 6px rgba(255, 140, 40, 0.9), inset 0 -2px 0 #c0501a; }
+#embers .ember-buy { width: 100%; margin: 0; }
+#embers .ember-cost { color: #e8c86a; text-align: center; padding: 6px 0; }
+body.embers-open #hint { display: none; }
+.ember-open { width: 100%; margin: 4px 0 10px; }

@@ -15,6 +15,7 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
+import { EmberView } from './ui/emberView';
 import { HearthView } from './ui/hearthView';
 import { situationOf, spoke, placeName, surroundings, speakerOf, langOf, growth, SHORE_CELLS, type ShoreState, workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
 import { dance, danceLeft, shoreIsland, terrainReady, gift, isAdult, poisOf, shoreOf, shoreSeason, startShore, takeRaft, walkChief } from './economy/shore';
@@ -85,6 +86,19 @@ void digitsFont.load().then(() => render());
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const stageEl = $('stage');
 // The Hearth tab: the whole screen is the fire, and a tap anywhere stokes it.
+// The ember bed, full screen (opened from Build: Embers).
+let emberOpen = false;
+const emberView = new EmberView(
+  (id) => {
+    if (!buyPerk(state, id)) return false;
+    cue('ascend', 0.5);
+    save();
+    return true;
+  },
+  () => {
+    emberOpen = false;
+  },
+);
 const hearthView = new HearthView(stageEl, () => {
   // (Before the hearth's lit, the first tap breaks up the raft and lights it.)
   const hs = shoreOf(state);
@@ -2185,7 +2199,10 @@ function act(el: HTMLElement): void {
     }
   } else if (el.dataset.buymany !== undefined) setBuyMany(Number(el.dataset.buymany));
   else if (el.dataset.villageview) setVillageView(el.dataset.villageview);
-  else if (el.dataset.buildcat) setBuildCat(el.dataset.buildcat);
+  else if (el.dataset.buildcat) {
+    if (el.dataset.buildcat === 'embers') emberOpen = true;
+    else setBuildCat(el.dataset.buildcat);
+  }
   else if (el.dataset.dest) {
     const s = shoreOf(state);
     if (s) {
@@ -2881,6 +2898,9 @@ function frame(now: number): void {
   {
     const hs = shoreOf(state);
     hearthView.show(!!hs && ui.open && ui.tab === 'hearth' && !!STAGES[state.current].shore);
+    if (!hs || !STAGES[state.current].shore) emberOpen = false;
+    emberView.show(emberOpen);
+    if (hs) emberView.frame(hs, dt);
     if (hs) {
       hearthView.frame(hs, dt);
     }
