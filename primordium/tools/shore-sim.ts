@@ -57,7 +57,7 @@ function run(kind: Kind, diet: string): void {
     if (wonAll === undefined && s.villages.every((v) => v.won !== undefined || v.gone)) wonAll = t;
     // Setting out as soon as they can (and looking in): the next island.
     if (looking && canCross(s) && islands.length < 4 && !process.env.SIM_STAY) {
-      islands.push(`island ${islands.length + 1}: ${hm(t - islandAt)} (+${embersFor(s)} embers)`);
+      islands.push(`island ${islands.length + 1}: ${hm(t - islandAt)} (+${embersFor(s)} embers, age ${s.culture?.age ?? 0}, ${s.culture?.done.length ?? 0} ideas)`);
       cross(state);
       s = shoreOf(state)!;
       takeRaft(state);
@@ -79,6 +79,7 @@ function run(kind: Kind, diet: string): void {
   console.log('  ' + islands.join(' · '));
   console.log('  ' + rates.join(' | '));
   console.log('  longest waits: ' + gaps.map((g) => `${hm(g.gap)} from ${hm(g.from)} (→ ${g.next})`).join('; '));
+  console.log('  ages: ' + events.filter((e) => e.what.startsWith('age') || e.what === 'set out').map((e) => `${hm(e.t)} ${e.what}`).join(', '));
   console.log('  villages: ' + events.filter((e) => e.what.startsWith('beat') || e.what.startsWith('won')).map((e) => `${hm(e.t)} ${e.what}`).join(', '));
 }
 

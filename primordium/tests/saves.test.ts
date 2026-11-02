@@ -135,7 +135,9 @@ describe('Saves keep everything', () => {
     const back = shoreOf(importSave(exportSave(s)))!;
     expect(back.people.map((p) => [p.id, p.name, p.parents, p.genes])).toEqual(sh.people.map((p) => [p.id, p.name, p.parents, p.genes]));
     expect(back.dead?.length).toBe(sh.dead?.length);
-    expect(back.villages.map((v) => [v.id, v.won, v.trust])).toEqual(sh.villages.map((v) => [v.id, v.won, v.trust]));
+    // (Trust is kept to a few places.)
+    const r = (x?: number) => (x === undefined ? x : Math.round(x * 100) / 100);
+    expect(back.villages.map((v) => [v.id, v.won, r(v.trust)])).toEqual(sh.villages.map((v) => [v.id, v.won, r(v.trust)]));
     expect([back.gens, back.ups, back.auto]).toEqual([sh.gens, sh.ups, sh.auto]);
     expect([back.culture?.age, back.culture?.done, back.culture?.forks, back.culture?.focus]).toEqual([sh.culture?.age, sh.culture?.done, sh.culture?.forks, sh.culture?.focus]);
     for (const [k, v] of Object.entries(sh.culture!.practice)) expect(back.culture!.practice[k as never]).toBeCloseTo(v!, 3);

@@ -21,10 +21,10 @@ function village(n: number) {
 }
 
 describe('Culture', () => {
-  it('turns at a hundred, and not before', () => {
+  it('turns at forty, and not before', () => {
     const { state, s } = village(TURN_AT - 1);
     // (Every bed full: no child comes to tip it over.)
-    s.gens.hut = 20;
+    s.gens.hut = 0;
     shoreTick(state, DAY_SEC);
     expect(s.culture).toBeUndefined();
     s.people.push({ id: s.nextId++, name: 'Last', born: -30, dies: 9999 });

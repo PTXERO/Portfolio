@@ -7,7 +7,7 @@
 
 import type { BuildId, Boosts } from '../content/shore';
 import { record } from './chronicle';
-import { can, count, DAY_SEC, has, warmth, isAdult, poisOf, poiDef, relation, shoreWhen, totalCritters, type ShoreState } from './shore';
+import { can, count, DAY_SEC, foodRate, has, warmth, isAdult, poisOf, poiDef, relation, shoreWhen, totalCritters, type ShoreState } from './shore';
 import type { GameState } from './types';
 
 export type Lane = 'food' | 'crafts' | 'war' | 'rule' | 'kin' | 'rites' | 'stories' | 'words';
@@ -164,7 +164,7 @@ export const FORKS: Record<ForkId, { name: string; ask: string; options: { id: s
 };
 
 /** The size at which the village turns to its culture. */
-export const TURN_AT = 100;
+export const TURN_AT = 40;
 /** Practice an idea takes: a lane's first in the Age, then more for each after. */
 const IDEA_COST = 100;
 const IDEA_MORE = 100;
@@ -211,7 +211,7 @@ export function practiceRate(s: ShoreState, lane: Lane): number {
   const won = s.villages.filter((v) => v.won !== undefined);
   // (Every lane goes on by itself a little, as much more in a later Age as its ideas cost more:
   // no lane's left behind for want of what feeds it.)
-  let r = 0.3 * (AGE_HARDER[c?.age ?? 1] ?? 1);
+  let r = DRIFT * (AGE_HARDER[c?.age ?? 1] ?? 1);
   switch (lane) {
     case 'food':
       r += gens(['forager', 'camp', 'weir', 'lodge', 'garden', 'harbour', 'caravan']) * 0.02;
@@ -240,7 +240,15 @@ export function practiceRate(s: ShoreState, lane: Lane): number {
   }
   // The road chosen at a fork: its lane goes a little faster.
   for (const [f, o] of Object.entries(c?.forks ?? {})) if (FORKS[f as ForkId]?.options.find((x) => x.id === o)?.lane === lane) r *= 1.25;
-  return r * (c?.focus === lane && can(s, 'focus') ? FOCUS : 1) * warmth(s);
+  return r * (c?.focus === lane && can(s, 'focus') ? FOCUS : 1) * warmth(s) * plenty(s);
+}
+/** What every lane gathers a day by itself (times the Age's hardness). */
+const DRIFT = 0.8;
+/** A village with more coming in has more time to think: ideas come faster by how many tenfolds
+ * of food a second it has (×1 at 10 a second, ×1.5 at 100 thousand, ×2 at ten billion). So an
+ * island made rich by embers grows its culture as fast as its stores. */
+export function plenty(s: ShoreState): number {
+  return 1 + Math.max(0, Math.log10(1 + foodRate(s)) - 1) / 8;
 }
 
 /** What the culture's ideas and forks add (folded into the village's boosts). */
@@ -259,12 +267,12 @@ export function cultureFx(s: ShoreState): Partial<Boosts>[] {
   return out;
 }
 
-/** The turn: at a hundred, everyone at a great fire, and the culture begins. */
+/** The turn: at forty, everyone at a great fire, and the culture begins. */
 export function maybeTurn(state: GameState, s: ShoreState): void {
   if (s.culture || totalCritters(s) < TURN_AT) return;
   s.culture = { since: today(s), age: 1, practice: {}, done: [], forks: {} };
   s.turned = true;
-  record(state, 'They were a hundred. They gathered at a great fire, all of them at once. [STORY]', 'shore', shoreWhen(s));
+  record(state, 'They were forty. They gathered at a great fire, all of them at once. [STORY]', 'shore', shoreWhen(s));
 }
 
 /** Each day: practice gathered, ideas landing, a fork answered by the elders if left too long. */
