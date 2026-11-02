@@ -239,13 +239,35 @@ export class RangeScene {
   /** Which way the real camera faces (radians; 0 looks north, up the map), turned by two
    * fingers twisting. */
   yaw = 0;
-  turnBy(d: number): void {
+  turnBy(d: number, yours = true): void {
     if (!this.persp) return;
     // (Turned about the middle of the view: the ground there stays put.)
     const at = this.toWorld(this.W / 2, this.midY());
     this.yaw = (this.yaw + d) % (Math.PI * 2);
     this.lookTo(at, this.W / 2, this.midY());
-    this.auto = false;
+    if (yours) {
+      this.auto = false;
+      this.yawGoal = null;
+    }
+  }
+  /** Turning back round to a facing, a little each frame (the compass, tapped). */
+  protected yawGoal: number | null = null;
+  turnTo(yaw: number): void {
+    if (this.persp) this.yawGoal = yaw;
+  }
+  /** A step of turning toward the facing asked for. */
+  protected easeTurn(dt: number): void {
+    if (this.yawGoal === null) return;
+    let d = (this.yawGoal - this.yaw) % (Math.PI * 2);
+    if (d > Math.PI) d -= Math.PI * 2;
+    if (d < -Math.PI) d += Math.PI * 2;
+    if (Math.abs(d) < 0.003) {
+      this.turnBy(d, false);
+      this.yaw = this.yawGoal;
+      this.yawGoal = null;
+      return;
+    }
+    this.turnBy(d * Math.min(1, dt * 5), false);
   }
   resetTurn(): void {
     if (!this.persp || !this.yaw) return;

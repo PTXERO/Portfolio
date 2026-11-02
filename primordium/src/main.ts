@@ -565,6 +565,44 @@ function mapTalk(s: ShoreState): void {
   mapSay.style.top = `${Math.max(6, cy - mapSay.offsetHeight - 6)}px`;
 }
 
+// ---- The compass, and the view left alone ----
+
+/** Bottom left, under every menu: which way north is; tapped, the view turns back to it. */
+const compass = document.createElement('button');
+compass.className = 'compass';
+compass.setAttribute('aria-label', 'Face north');
+compass.innerHTML = `<svg viewBox="0 0 20 20" width="40" height="40" shape-rendering="crispEdges"><circle cx="10" cy="10" r="9" fill="rgba(20,24,36,0.55)" stroke="rgba(250,240,215,0.75)" stroke-width="1"/><g class="needle"><path d="M10 2 L12.5 10 L7.5 10 Z" fill="#e05a3a"/><path d="M10 18 L12.5 10 L7.5 10 Z" fill="#f2e8d0"/><text x="10" y="6.6" font-size="4" text-anchor="middle" fill="#fff" font-family="monospace">N</text></g></svg>`;
+compass.hidden = true;
+compass.addEventListener('click', (e) => {
+  e.stopPropagation();
+  scene.shoreScene.turnTo(0);
+  idleAt = performance.now();
+});
+stageEl.appendChild(compass);
+/** Where the tab bar starts (CSS px down the stage): the compass sits just over it. */
+let barTop = 0;
+function compassFrame(s: ShoreState): void {
+  const map = scene.shoreScene;
+  const on = !eye && !(ui.open && ui.tab === 'hearth') && !emberOpen && terrainReady(s.seed);
+  compass.hidden = !on;
+  if (!on) return;
+  compass.style.top = `${Math.round((barTop || stageEl.clientHeight) - 52)}px`;
+  const needle = compass.querySelector<SVGGElement>('.needle')!;
+  const deg = (-map.yaw * 180) / Math.PI;
+  needle.style.transform = `rotate(${deg.toFixed(1)}deg)`;
+}
+
+/** The last touch, click or key: left alone a while, the view goes cinematic. */
+let idleAt = performance.now();
+const IDLE_CINEMA = 40_000;
+for (const ev of ['pointerdown', 'wheel', 'keydown', 'touchstart'] as const) window.addEventListener(ev, () => (idleAt = performance.now()), { capture: true, passive: true });
+function cinemaFrame(s: ShoreState): void {
+  const free = !eye && modal.hidden && !emberOpen && !(ui.open && (ui.tab === 'hearth' || !isWide())) && terrainReady(s.seed) && !!s.raftTaken;
+  const on = free && performance.now() - idleAt > IDLE_CINEMA;
+  scene.shoreScene.cinema(on);
+  document.body.classList.toggle('cinema', on);
+}
+
 // ---- Their names on the land ----
 
 /** What they call the places they know, in their own words, faint on the map under each. */
@@ -1276,6 +1314,7 @@ function renderShoreGoal(): void {
 function shoreFrame(): void {
   const s = shoreOf(state);
   if (!s || state.current !== 'shore') {
+    compass.hidden = true;
     if (wordsAt) {
       setWordPool([]);
       wordsAt = 0;
@@ -1284,6 +1323,8 @@ function shoreFrame(): void {
   }
   mapTalk(s);
   placeLabels(s);
+  compassFrame(s);
+  cinemaFrame(s);
   // (Their words, for the whistled chatter as they go about: refreshed now and then.)
   const nowMs = performance.now();
   if (s.lang?.lex && nowMs - wordsAt > 5000) {
@@ -1687,6 +1728,9 @@ function render(): void {
   // Where the open (or closed) sheet starts: the map centres its known land above it.
   // (The panel sits above the tab bar, so it's the panel's top when open, the bar's when closed.)
   scene.setVisibleBottom(isWide() ? stageEl.clientHeight : (ui.open ? panel : sheet).getBoundingClientRect().top - stageEl.getBoundingClientRect().top);
+  // (The compass sits over the tab bar, under the sheet when it's pulled up.)
+  if (isWide()) barTop = stageEl.clientHeight;
+  else if (!ui.open) barTop = sheet.getBoundingClientRect().top - stageEl.getBoundingClientRect().top;
   renderPanel();
   for (const b of document.querySelectorAll<HTMLElement>('[data-uiscale]')) b.classList.toggle('on', Number(b.dataset.uiscale) === ui.scale);
   for (const b of document.querySelectorAll<HTMLElement>('[data-tilt]')) b.classList.toggle('on', ui.tilt === null ? b.dataset.tilt === '0' : Math.abs(Number(b.dataset.tilt) - ui.tilt) < 0.02);

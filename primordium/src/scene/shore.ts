@@ -105,6 +105,59 @@ export class ShoreScene extends RangeScene {
     this.camY = p.y - off.y;
   }
 
+  // ---- Left alone: the cinematic view ----
+
+  /** Nobody's touched it for a while: the camera drifts round slowly, in a little closer, after
+   * whoever's out and about (the scouts first, else someone on the move), a while each. */
+  private cine = false;
+  private cineWho: { kind: 'scout' | 'walker'; i: number } | null = null;
+  private cineFor = 0;
+  cinema(on: boolean): void {
+    if (on === this.cine) return;
+    this.cine = on;
+    this.cineWho = null;
+    this.cineFor = 0;
+    if (on) {
+      this.auto = false;
+      this.yawGoal = null;
+    }
+  }
+  get inCinema(): boolean {
+    return this.cine;
+  }
+  private cinemaStep(s: ShoreState, dt: number): void {
+    if (!this.cine) return;
+    this.cineFor -= dt;
+    const where = (): Pt | null => {
+      const w = this.cineWho;
+      if (!w) return null;
+      if (w.kind === 'scout') return s.scouts?.[w.i]?.at ?? null;
+      const k = this.walkers.find((x) => x.id === w.i);
+      return k ? { x: k.x, y: k.y } : null;
+    };
+    if (this.cineFor <= 0 || !where()) {
+      // Someone new to watch: a scout out exploring (often), else one of them on the move.
+      const seen = this.seenNow;
+      const clear = (p: Pt) => !seen || !!seen[Math.floor(p.y / CELL) * this.cells + Math.floor(p.x / CELL)];
+      const scouts = (s.scouts ?? []).map((sc, i) => ({ sc, i })).filter((x) => x.sc.to && clear(x.sc.at));
+      const moving = this.walkers.filter((w) => w.goal && Math.hypot(w.goal.x - w.x, w.goal.y - w.y) > 2 && clear(w));
+      const any = this.walkers.filter((w) => clear(w));
+      if (scouts.length && Math.random() < 0.45) this.cineWho = { kind: 'scout', i: scouts[Math.floor(Math.random() * scouts.length)].i };
+      else if (moving.length) this.cineWho = { kind: 'walker', i: moving[Math.floor(Math.random() * moving.length)].id };
+      else if (any.length) this.cineWho = { kind: 'walker', i: any[Math.floor(Math.random() * any.length)].id };
+      else this.cineWho = null;
+      this.cineFor = 18 + Math.random() * 10;
+    }
+    const at = where() ?? s.chiefAt;
+    // Slowly round, and in a little; the camera glides after them.
+    this.yaw = (this.yaw + dt * 0.045) % (Math.PI * 2);
+    this.zoom += (4.6 - this.zoom) * Math.min(1, dt * 0.25);
+    const off = this.raiseOff(at.x, at.y);
+    const k = Math.min(1, dt * 0.9);
+    this.camX += (at.x - off.x - this.camX) * k;
+    this.camY += (at.y - off.y - this.camY) * k;
+  }
+
   /** Follow the chief again. */
   follow(): void {
     this.auto = true;
@@ -197,6 +250,8 @@ export class ShoreScene extends RangeScene {
     this.keepWeather(state, 'shore');
     const is = shoreIsland(s.seed);
     this.island = is;
+    this.easeTurn(dt);
+    this.cinemaStep(s, dt);
     this.ash = 0;
     const seen = state.stages.shore.seen;
     this.seenNow = seen;
