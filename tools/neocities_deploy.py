@@ -13,6 +13,11 @@ exposed, ascii-render, rf, social.html, icons — is hand-maintained in the Neoc
 editor and is NEVER read, uploaded, or deleted by this tool. --delete likewise only
 removes orphans under reel-vault/ and ooze/, so it can't wipe the hand-maintained site.
 
+EXCEPT patches you've asked for: tools/site-patches/<file> is a hand-maintained file changed
+for you, with <file>.base-sha1 the fingerprint of the live copy it was made from. It's uploaded
+only while the live file is still exactly that copy; edited in the Neocities editor since, it's
+left alone (and said so). So a patch lands once and never overwrites your own later edits.
+
 Get the key at neocities.org → Settings → (your site) → API. Standard library only.
 """
 
@@ -132,6 +137,23 @@ def main():
     files, skipped = local_files()
     changed = [(rel, p) for rel, p in files.items()
                if remote_hash.get(rel) != hashlib.sha1(p.read_bytes()).hexdigest()]
+    # Patches to hand-maintained files: only onto the very copy they were made from.
+    patches = ROOT / "tools" / "site-patches"
+    for p in sorted(patches.glob("*")) if patches.is_dir() else []:
+        if p.name.endswith(".base-sha1") or p.name.startswith("."):
+            continue
+        base = (patches / (p.name + ".base-sha1"))
+        if not base.is_file():
+            print(f"  patch {p.name}: no .base-sha1 beside it, not touched")
+            continue
+        live, want, mine = remote_hash.get(p.name), base.read_text().strip(), hashlib.sha1(p.read_bytes()).hexdigest()
+        if live == mine:
+            continue
+        if live == want:
+            changed.append((p.name, p))
+            print(f"  patch {p.name}: applying (live copy is the one it was made from)")
+        else:
+            print(f"  patch {p.name}: the live file has been edited since; left alone")
     # only consider deleting remote files INSIDE the published subtree — never the
     # hand-maintained parts of the site (and never the server code we don't publish)
     orphans = sorted(r for r in (set(remote_hash) - set(files))
