@@ -30,9 +30,10 @@ import { timeBankCap } from '../economy/offline';
 import { dialMax, dietOf, feedMult, generatorRate, habitatMult, maxLevel, milestoneMet, MILESTONES, nextMilestone, stageRate, upgradeLevel } from '../economy/rates';
 import { DIALS, type BuyAmount, type DialId, type Effect, type GameState, type ReactionDef, type StageId, type UpgradeDef } from '../economy/types';
 
-export type Tab = 'grow' | 'build' | 'island' | 'culture' | 'boosts' | 'lab' | 'mutate' | 'pond' | 'body' | 'explore' | 'family' | 'roots' | 'ideas' | 'miracles' | 'chronicle' | 'menu';
+export type Tab = 'hearth' | 'grow' | 'build' | 'island' | 'culture' | 'boosts' | 'lab' | 'mutate' | 'pond' | 'body' | 'explore' | 'family' | 'roots' | 'ideas' | 'miracles' | 'chronicle' | 'menu';
 
 export const TABS: { id: Tab; label: string; sprite: SpriteName }[] = [
+  { id: 'hearth', label: 'Hearth', sprite: 'flame' },
   { id: 'grow', label: 'Grow', sprite: 'sprout' },
   { id: 'build', label: 'Build', sprite: 'hut' },
   { id: 'island', label: 'Island', sprite: 'island' },
@@ -58,6 +59,7 @@ export function tabsFor(state: GameState): Tab[] {
   const creature = !!def.places;
   const cst = state.stages[state.current];
   const has: Record<Tab, boolean> = {
+    hearth: !!def.shore && !!cst.shore?.raftTaken,
     grow: true,
     build: !!def.shore,
     island: !!def.shore,
@@ -269,6 +271,7 @@ export function layout(state: GameState, tab: Tab): string {
   const def = STAGES[id];
   const cur = icon(CURRENCY_ICON[id], 2);
 
+  if (tab === 'hearth') return '';
   if (def.shore && (tab === 'grow' || tab === 'build' || tab === 'island' || tab === 'culture')) return shoreLayout(state, tab);
   if (def.tribal && tab === 'grow') return tribeLayout(state);
   if (def.tribal && tab === 'ideas') return ideasLayout(state);

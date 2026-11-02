@@ -1,4 +1,4 @@
-// New Shore's panels, the idle way: the Village (stoke the fire, what comes in, the critters),
+// New Shore's panels, the idle way: the Village (what comes in, the critters),
 // Build (what brings food in and houses them, and the upgrades), the Island (the villages to win,
 // the landmarks, the relics) and the Culture.
 
@@ -90,7 +90,7 @@ export function shoreLayout(state: GameState, tab: string): string {
   return views + hearthCard(s) + peopleCard(s);
 }
 
-/** The hearth: stoke it (the tap), what comes in, the critters and their beds. */
+/** The hearth: what comes in, the critters and their beds. */
 function hearthCard(s: ShoreState): string {
   if (!count(s, 'hearth')) {
     return `<div class="card px-box"><div class="info"><div class="name">No village yet</div>
@@ -106,7 +106,7 @@ function hearthCard(s: ShoreState): string {
       <div class="sub">Everything brings in ×${mult.toFixed(2)}${won ? ` (${won} village${won > 1 ? 's' : ''} won: +${Math.round(won * WON_MORE * 100)}%)` : ''}. <b class="green" data-t="shore-boost"></b></div>
       <div class="sub dim"><span data-t="shore-birth">${birthLine(s)}</span></div>
     </div>
-    <button class="px-btn gold stoke" data-act="stoke"><b>Stoke the fire</b> <span data-t="shore-tap">+${format(tapValue(s))}</span></button>
+    <button class="px-btn gold stoke" data-tab="hearth"><b>Go to the fire</b> <span class="dim">tap it to stoke it</span></button>
     ${workOpen(s) ? `<div class="card px-box raid"><div class="info"><div class="name">${workOpen(s)!.name}</div><div class="sub">${workOpen(s)!.does}</div></div><div class="col"><button class="px-btn${s.food >= workOpen(s)!.cost ? ' gold' : ''}" data-act="work"${s.food >= workOpen(s)!.cost ? '' : ' disabled'}>${format(workOpen(s)!.cost)}</button></div></div>` : ''}`;
 }
 

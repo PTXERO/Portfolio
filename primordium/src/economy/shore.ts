@@ -182,6 +182,9 @@ export interface ShoreState {
   /** A boost going (the fire danced up): everything brings in this much more, till then (seconds
    * of the island's clock, as day * DAY_SEC + clock). */
   boost?: { mult: number; until: number };
+  /** How hot the hearth is, 0 to 1: every stoke builds it, and it cools by itself. A hot fire
+   * cooks more of what's brought in (everything, up to FIRE_MOST more). */
+  heat?: number;
   people: ShorePerson[];
   nextId: number;
   births: number;
@@ -679,7 +682,16 @@ export function allMult(s: ShoreState): number {
   }
   const won = s.villages.filter((v) => v.won !== undefined).length;
   const now = s.day * DAY_SEC + s.clock;
-  return m * (1 + boosts(s).food) * (1 + won * WON_MORE) * (1 + totalCritters(s) * CRITTER_MORE) * (s.boost && s.boost.until > now ? s.boost.mult : 1);
+  return m * (1 + boosts(s).food) * (1 + won * WON_MORE) * (1 + totalCritters(s) * CRITTER_MORE) * (s.boost && s.boost.until > now ? s.boost.mult : 1) * (1 + fireMore(s));
+}
+/** The fire at its hottest: everything brings in this much more. */
+export const FIRE_MOST = 1;
+/** Each stoke adds this much heat; it cools by FIRE_COOL a second (about a minute from roaring to embers). */
+export const FIRE_STOKE = 0.04;
+export const FIRE_COOL = 0.015;
+/** What the fire's heat adds to everything just now. */
+export function fireMore(s: ShoreState): number {
+  return FIRE_MOST * Math.min(1, Math.max(0, s.heat ?? 0));
 }
 /** Each village won, and each critter, adds this much to everything. */
 export const WON_MORE = 0.15;
@@ -717,6 +729,7 @@ export function stoke(state: GameState): number {
   const s = shoreOf(state);
   if (!s || !s.raftTaken) return 0;
   const got = tapValue(s);
+  s.heat = Math.min(1, (s.heat ?? 0) + FIRE_STOKE);
   s.food += got;
   s.earned = (s.earned ?? 0) + got;
   return got;
@@ -1031,6 +1044,7 @@ export function shoreTick(state: GameState, dt: number): void {
 
 function stepShore(state: GameState, s: ShoreState, dt: number): void {
   const k = dt / DAY_SEC;
+  if (s.heat) s.heat = Math.max(0, s.heat - FIRE_COOL * dt);
   // What comes in, comes in (nothing's eaten, nothing spoils: it only ever goes up).
   const got = foodRate(s) * dt;
   s.food += got;

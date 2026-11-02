@@ -52,6 +52,22 @@ describe('New Shore', () => {
 });
 
 describe('Food, the idle way', () => {
+  it('stoking builds the fire up: a hot fire makes everything bring in more, and it dies down if left', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    lit(state);
+    buyGen(state, 'forager');
+    const cold = foodRate(s);
+    for (let i = 0; i < 100; i++) stoke(state);
+    expect(s.heat).toBe(1);
+    expect(foodRate(s)).toBeCloseTo(cold * 2, 6);
+    shoreTick(state, 30);
+    expect(s.heat).toBeGreaterThan(0);
+    expect(s.heat).toBeLessThan(1);
+    shoreTick(state, 120);
+    expect(s.heat).toBe(0);
+    expect(foodRate(s)).toBeCloseTo(cold, 6);
+  });
   it('the hearth lit, stoking brings food; foragers bring it in by themselves; and it only ever goes up', () => {
     const state = fresh();
     const s = shoreOf(state)!;

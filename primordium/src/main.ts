@@ -15,6 +15,7 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
+import { HearthView } from './ui/hearthView';
 import { buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
 import { dance, danceLeft, shoreIsland, terrainReady, gift, isAdult, poisOf, shoreOf, shoreSeason, startShore, takeRaft, walkChief } from './economy/shore';
 import { AGES, ageName } from './economy/culture';
@@ -81,6 +82,12 @@ void digitsFont.load().then(() => render());
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const stageEl = $('stage');
+// The Hearth tab: the whole screen is the fire, and a tap anywhere stokes it.
+const hearthView = new HearthView(stageEl, () => {
+  const got = stoke(state);
+  if (got) popSound(0.85 + Math.random() * 0.3);
+  return got;
+});
 const sheet = $('sheet');
 const panel = $('panel');
 const tabsEl = $('tabs');
@@ -133,6 +140,7 @@ function applyUiPrefs(): void {
   // (Side by side, the menu is always open, and never pulled up: it's already full height.)
   document.body.classList.toggle('wide', isWide());
   document.body.classList.toggle('tab-ideas', ui.open && ui.tab === 'ideas');
+  document.body.classList.toggle('tab-hearth', ui.open && ui.tab === 'hearth');
   if (isWide()) {
     ui.open = true;
     ui.full = false;
@@ -1325,11 +1333,11 @@ function renderHint(): void {
   } else if (state.current === 'shore') {
     const s = shoreOf(state);
     if (s && !s.raftTaken) text = 'Light the hearth (in the Village tab)';
-    else if (s && !Object.keys(s.gens).length) text = 'Stoke the fire, then send out foragers (in Build)';
+    else if (s && !Object.keys(s.gens).length) text = 'Stoke the fire (the Hearth tab), then send out foragers (in Build)';
     else if (!pokedThisStage) text = 'Tap the land to walk · pinch to zoom';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
-  hint.hidden = !text || !modal.hidden || (ui.open && ui.full);
+  hint.hidden = !text || !modal.hidden || (ui.open && ui.full) || (ui.open && ui.tab === 'hearth');
   if (hint.textContent !== text) hint.textContent = text;
 }
 
@@ -2036,6 +2044,10 @@ function act(el: HTMLElement): void {
       case 'raft':
         if (takeRaft(state)) {
           cue('ascend', 0.5);
+          // (Straight to the fire, to stoke it.)
+          ui.tab = 'hearth';
+          ui.open = true;
+          saveUi();
           save();
         }
         break;
@@ -2466,6 +2478,11 @@ function frame(now: number): void {
   }
   pondEvents();
   shoreFrame();
+  {
+    const hs = shoreOf(state);
+    hearthView.show(!!hs && ui.open && ui.tab === 'hearth' && !!STAGES[state.current].shore);
+    if (hs) hearthView.frame(hs, dt);
+  }
   syncCine();
   habitatsOpened();
   renderSpellbar();
