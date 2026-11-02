@@ -25,6 +25,8 @@ export const SHORE_CELLS = SHORE_N / CELL;
 export const DAY_SEC = 120;
 /** Days in a season (the year is four, from the spring they landed in). */
 export const SEASON_DAYS = 4;
+/** A year: four seasons. */
+export const YEAR_DAYS = SEASON_DAYS * 4;
 /** Days a child takes to grow up (and start working). */
 export const GROW_DAYS = 10;
 /** The most one hearth holds: past this the land round it feeds no more, and the village grows
@@ -54,6 +56,9 @@ export function hearthMost(s: ShoreState): number {
   return centre(s).now.most;
 }
 const PAIR_RATE = 0.12;
+/** Births a day besides the pairs' (so a small village isn't long without a child: with the
+ * four, one comes every couple of days, not every four). */
+const BIRTH_BASE = 0.5;
 /** Room before any huts (under the raft's planks). */
 const BASE_ROOM = 4;
 /** How far the chief sees, and walks in a second (tiles). */
@@ -186,6 +191,9 @@ export interface ShoreState {
    * island's seconds). */
   prayer?: number;
   rainUntil?: number;
+  /** Since when every found village has been won with some still lost in the fog (one makes
+   * itself known a year after). */
+  lostSince?: number;
   /** The day they began to write (Picture marks): from then on the Chronicle is a record, not
    * a telling. */
   writtenFrom?: number;
@@ -726,9 +734,11 @@ export function allMult(s: ShoreState): number {
 export const FIRE_MOST = 1;
 /** The fire's heat goes with the log of the fuel on it: the first few stokes count for a lot,
  * each one after for less, and it's roaring (full heat) at FIRE_FULL fuel. */
-export const FIRE_FULL = 150;
+export const FIRE_FULL = 200;
+/** The fuel the heat's log is taken over (the bigger, the slower the first stokes build it). */
+const FIRE_SOFT = 20;
 /** The fuel burns away: this share of it a second, and a little more (so it does go out). */
-export const FIRE_BURN = 0.04;
+export const FIRE_BURN = 0.06;
 export const FIRE_BURN_MIN = 0.05;
 function fireFx(s: ShoreState): { most: number; fuel: number; cool: number; floor: number } {
   const f = { most: FIRE_MOST + 0.5 * perk(s, 'coals'), fuel: 1, cool: natureOf(s).cool ?? 1, floor: 0 };
@@ -747,7 +757,7 @@ export function fireMost(s: ShoreState): number {
 }
 /** How hot the fire is, 0 to 1, from the fuel on it (never under the banked embers' floor). */
 export function fireHeat(s: ShoreState): number {
-  const h = Math.log1p(Math.max(0, s.fuel ?? 0)) / Math.log1p(FIRE_FULL);
+  const h = Math.log1p(Math.max(0, s.fuel ?? 0) / FIRE_SOFT) / Math.log1p(FIRE_FULL / FIRE_SOFT);
   return Math.min(1, Math.max(fireFx(s).floor, h));
 }
 /** What the fire's heat adds to everything just now. */
@@ -961,7 +971,7 @@ export function workSign(state: GameState, id: MiracleId): string {
   s.prayer = (s.prayer ?? 0) - MIRACLES.find((x) => x.id === id)!.cost;
   const now = s.day * DAY_SEC + s.clock;
   if (id === 'bolt') {
-    s.fuel = FIRE_FULL * 1.5;
+    s.fuel = FIRE_FULL * 1.2;
     s.heat = fireHeat(s);
     return 'Lightning struck the hearth. The fire roars.';
   }
@@ -1031,7 +1041,7 @@ export function stoke(state: GameState): number {
   const s = shoreOf(state);
   if (!s || !s.raftTaken) return 0;
   const got = tapValue(s);
-  s.fuel = Math.min(FIRE_FULL * 1.5, (s.fuel ?? 0) + fireFx(s).fuel);
+  s.fuel = Math.min(FIRE_FULL * 1.2, (s.fuel ?? 0) + fireFx(s).fuel);
   s.heat = fireHeat(s);
   s.food += got;
   s.earned = (s.earned ?? 0) + got;
@@ -1380,9 +1390,9 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
   if (s.raftTaken) {
     const f = fireFx(s);
     const k = FIRE_BURN * f.cool;
-    // (A fire-tender feeds it every 2s: it settles where what's fed matches what burns, worked
+    // (A fire-tender feeds it every second: it settles where what's fed matches what burns, worked
     // out exactly, so it holds as well over a night away as over a minute.)
-    const fed = can(s, 'tender') ? f.fuel / 2 : 0;
+    const fed = can(s, 'tender') ? f.fuel : 0;
     if (fed) {
       const eq = Math.max(0, (fed - FIRE_BURN_MIN * f.cool) / k);
       s.fuel = eq + ((s.fuel ?? 0) - eq) * Math.exp(-k * dt);
@@ -1402,7 +1412,7 @@ function stepShore(state: GameState, s: ShoreState, dt: number): void {
   // Children: wherever there's a fire and a bed free, and grown pairs.
   const adults = grownCount(s);
   if (count(s, 'hearth') && s.people.length < Math.min(room(s), hearthMost(s)) && adults >= 2) {
-    s.birthT += Math.max(1, Math.floor(adults / 2)) * PAIR_RATE * (1 + boosts(s).births) * warmth(s) * (1 + (s.embers ?? 0) * EMBER_BIRTHS) * (1 + 0.25 * perk(s, 'fireborn')) * (natureOf(s).births ?? 1) * rainMult(s) * k;
+    s.birthT += (BIRTH_BASE + Math.max(1, Math.floor(adults / 2)) * PAIR_RATE) * (1 + boosts(s).births) * warmth(s) * (1 + (s.embers ?? 0) * EMBER_BIRTHS) * (1 + 0.25 * perk(s, 'fireborn')) * (natureOf(s).births ?? 1) * rainMult(s) * k;
     if (s.birthT >= 1) {
       s.birthT = 0;
       born(state, s);
@@ -1479,16 +1489,30 @@ function dawn(state: GameState, s: ShoreState): void {
   maybeTurn(state, s);
   cultureDay(state, s);
   // Every village found is won, and some are still out in the fog (somewhere the scouts never
-  // get to): their smoke is seen, one a day, so the island can always be settled.
-  if (s.villages.every((v) => !v.found || v.won !== undefined || v.gone)) {
-    const lost = s.villages.find((v) => !v.found && !v.gone);
-    if (lost) {
+  // get to): once a year one of them makes itself known, its own way, so the island can always
+  // be settled.
+  const lost = s.villages.find((v) => !v.found && !v.gone);
+  if (lost && s.villages.every((v) => !v.found || v.won !== undefined || v.gone)) {
+    s.lostSince ??= s.day;
+    if (s.day - s.lostSince >= YEAR_DAYS) {
+      s.lostSince = s.day;
       lost.found = true;
-      if (relation(s, lost) === 'kin') lost.trust ??= FIRST_TRUST;
+      const rel = relation(s, lost);
+      const name = cap(lost.name);
+      const line =
+        rel === 'kin'
+          ? `${name} came out of the fog to the fire, with gifts. They'd followed its smoke.`
+          : rel === 'prey'
+            ? `Strangers at the edge of the fog: ${lost.name}, gathering where they thought no one watched.`
+            : rel === 'predator'
+              ? `A hunting party of ${lost.name} was seen watching the village from the fog. Then they were gone.`
+              : `Drums in the fog, at night: ${lost.name}, out there, wanting them to know it.`;
+      if (rel === 'kin') lost.trust = (lost.trust ?? FIRST_TRUST) + 20;
       s.newFinds.push(lost.id);
-      record(state, `Smoke far off: ${lost.name}, ${Math.round(lost.pop)} of them.`, 'shore', shoreWhen(s));
+      s.news.push(line);
+      record(state, line, 'shore', shoreWhen(s));
     }
-  }
+  } else s.lostSince = undefined;
   // The envoy's day: a gift to the nearest kin being won over, if there's a gift's worth spare.
   if (has(s, 'envoy') && s.envoyDay !== s.day) {
     const v = s.villages.filter((x) => canWin(s, x)).sort((a, b) => Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y) - Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y))[0];

@@ -110,7 +110,7 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'embers', name: 'Banked embers', does: 'Fire never below ¼ heat.', cost: 4e6, fx: { kind: 'fireFloor', floor: 0.25 }, critters: 70 },
   { id: 'logs', name: 'Great logs', does: 'Stokes add 3× fuel.', cost: 3e7, fx: { kind: 'fireFuel', mult: 3 }, critters: 110 },
   { id: 'bonfire', name: 'The bonfire', does: 'Fire max: food ×6.', cost: 1e8, fx: { kind: 'fire', more: 2.5 }, critters: 140 },
-  { id: 'tender', name: 'A fire-tender', does: 'Feeds the fire every 2s.', cost: 1500, fx: { kind: 'feature', feature: 'tender' }, critters: 10 },
+  { id: 'tender', name: 'A fire-tender', does: 'Feeds the fire every second.', cost: 1500, fx: { kind: 'feature', feature: 'tender' }, critters: 10 },
   { id: 'warmth', name: 'Warm nights', does: 'The fire speeds births and ideas too.', cost: 4e5, fx: { kind: 'fireAll' }, critters: 45 },
   { id: 'tally', name: 'Tally sticks', does: 'Buy ×10.', cost: 200, fx: { kind: 'feature', feature: 'buy10' }, critters: 6 },
   { id: 'counting', name: 'Counting stones', does: 'Buy Max.', cost: 6000, fx: { kind: 'feature', feature: 'buymax' }, critters: 14 },

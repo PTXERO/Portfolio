@@ -36,6 +36,8 @@ const EMOTES: Record<EmoteKind, { rows: string[]; color: string }> = {
   sweat: { rows: ['.x', 'xx', 'xx'], color: '#7ac8ff' },
 };
 const HOP_TIME = 0.32;
+/** How far round the fire the ring steps with each stoke (radians: about a fiftieth of the way). */
+const RING_PACE = 0.12;
 
 export class HearthView {
   readonly el: HTMLElement;
@@ -52,6 +54,9 @@ export class HearthView {
   private streak = 0;
   private lastTap = -9;
   private still = 0;
+  /** How far the ring of them has gone round the fire (clockwise), and where it's stepping to. */
+  private turnNow = 0;
+  private turnTo = 0;
   /** The Far Voice: when a streak last crossed the sky, when the next will, and a sign's show
    * (which, and how far into it). */
   private streakAt = -999;
@@ -138,6 +143,8 @@ export class HearthView {
 
   /** A stoke: they hop (the nearest first), and now and then one of them says something. */
   private cheer(): void {
+    // (The ring steps round, clockwise, one pace a stoke.)
+    this.turnTo += RING_PACE;
     this.streak = this.t - this.lastTap < 0.6 ? this.streak + 1 : 1;
     this.lastTap = this.t;
     this.still = 0;
@@ -620,8 +627,9 @@ export class HearthView {
     }
     const sitBack = 32 + heat * 4;
     const ring: Spot[] = [];
+    this.turnNow += (this.turnTo - this.turnNow) * Math.min(1, dt * 5);
     for (let i = 0; i < seats; i++) {
-      const a = Math.PI * 2 * ((i + 0.5) / seats) + 0.3;
+      const a = Math.PI * 2 * ((i + 0.5) / seats) + 0.3 + this.turnNow;
       const st = this.seats[i];
       // (Now and then one hops by themselves: restless, or just glad of the fire.)
       // (Children can't sit still: they bounce about four times as often, and higher for their size.)

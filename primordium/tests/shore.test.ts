@@ -60,12 +60,14 @@ describe('Food, the idle way', () => {
     const cold = foodRate(s);
     // (Logarithmic: the first stokes count for most.)
     const heats: number[] = [];
-    for (let i = 0; i < 160; i++) {
+    for (let i = 0; i < 220; i++) {
       stoke(state);
       heats.push(s.heat!);
     }
-    expect(heats[9] - heats[0]).toBeGreaterThan(heats[159] - heats[150]);
-    expect(heats[9]).toBeGreaterThan(0.4);
+    // (Some forty stokes to half heat; the last ten add far less than the first ten.)
+    expect(heats[9] - heats[0]).toBeGreaterThan(heats[199] - heats[190]);
+    expect(heats[39]).toBeGreaterThan(0.4);
+    expect(heats[39]).toBeLessThan(0.55);
     expect(s.heat).toBe(1);
     expect(foodRate(s)).toBeCloseTo(cold * 2, 6);
     shoreTick(state, 30);
@@ -89,7 +91,7 @@ describe('Food, the idle way', () => {
     shoreTick(state, 600);
     expect(foodRate(s)).toBeCloseTo(cold * (1 + 2.5 * 0.25), 6);
   });
-  it('the fire is food only: gifts don\'t get dearer with it; Warm nights spreads it to births and ideas; a fire-tender keeps it at half', () => {
+  it('the fire is food only: gifts don\'t get dearer with it; Warm nights spreads it to births and ideas; a fire-tender keeps it going, low', () => {
     const state = fresh();
     const s = shoreOf(state)!;
     lit(state);
@@ -105,8 +107,8 @@ describe('Food, the idle way', () => {
     expect(warmth(s)).toBeCloseTo(1.5, 6);
     s.ups.push('tender');
     shoreTick(state, 3600);
-    expect(s.heat).toBeGreaterThan(0.4);
-    expect(s.heat).toBeLessThan(0.6);
+    expect(s.heat).toBeGreaterThan(0.15);
+    expect(s.heat).toBeLessThan(0.35);
   });
   it('setting out: only once every village is won; a new island, the chief and three of the eldest, embers kept, know-how kept, the rest starts again', () => {
     const state = fresh();
@@ -258,6 +260,22 @@ describe('Food, the idle way', () => {
     expect(v.awed).toBe(true);
     if (canTake(s, v)) expect(takeCost(s, v).food).toBeLessThan(before);
     else expect(v.trust).toBeGreaterThan(before);
+  });
+  it('a village never found makes itself known, once a year, once every found one is won', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    lit(state);
+    s.villages.forEach((v, i) => {
+      v.found = i > 0;
+      if (i > 0) v.won = 0;
+    });
+    const lost = s.villages[0];
+    lost.found = false;
+    shoreTick(state, DAY_SEC * 10);
+    expect(lost.found).toBe(false);
+    shoreTick(state, DAY_SEC * 8);
+    expect(lost.found).toBe(true);
+    expect(state.chronicle!.at(-1)!.text.toLowerCase()).toContain(lost.name.toLowerCase());
   });
   it('an older save far enough on keeps buying ten, the most, and its focus', () => {
     const state = fresh();
