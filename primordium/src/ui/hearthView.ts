@@ -2,7 +2,7 @@
 // batch of what's been brought in (food, there and then), and builds the fire up; a big fire
 // cooks more of everything while it lasts, and it dies down by itself if it's left.
 
-import { FIRE_MOST, fireMore, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
+import { fireMost, fireMore, foodRate, shoreSeason, SEASON_NAMES, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
 import { drawCreature, type CreatureLook } from '../scene/creatureLook';
 import { pickTalk, type TalkCtx } from '../content/hearthTalk';
 import { squeak } from '../audio/sound';
@@ -260,17 +260,23 @@ export class HearthView {
   frame(s: ShoreState, dt: number): void {
     if (!this.shown) return;
     this.t += dt;
-    const heat = Math.min(1, s.heat ?? 0);
+    const heat = s.raftTaken ? Math.min(1, s.heat ?? 0) : 0;
+    const tip = this.el.querySelector<HTMLElement>('.hearth-tip');
+    const tipText = s.raftTaken ? 'Tap the fire to stoke it' : 'Tap the raft: break it up, and light the hearth';
+    if (tip && tip.textContent !== tipText) {
+      tip.textContent = tipText;
+      tip.classList.remove('gone');
+    }
     const size = 0.35 + heat * 0.65 + this.flare * 0.25;
     this.flare = Math.max(0, this.flare - dt * 2.5);
 
     // New flames at the base, more and taller the hotter it is.
-    const n = Math.round((8 + heat * 26) * dt * 10);
+    const n = s.raftTaken ? Math.round((8 + heat * 26) * dt * 10) : 0;
     for (let i = 0; i < n; i++) {
       const w = 8 + size * 12;
       this.flames.push({ x: FX + (Math.random() - 0.5) * w, y: FY - 3, vx: (Math.random() - 0.5) * 4, vy: -(14 + Math.random() * 18) * (0.6 + size), life: 0.5 + Math.random() * 0.5 * size, age: 0, hot: Math.random() });
     }
-    if (Math.random() < dt * (0.5 + heat * 4)) this.spark();
+    if (s.raftTaken && Math.random() < dt * (0.5 + heat * 4)) this.spark();
     for (const p of this.flames) {
       p.age += dt;
       p.x += (p.vx + (FX - p.x) * 1.6) * dt;
@@ -311,7 +317,7 @@ export class HearthView {
     g.addColorStop(0.5, `rgba(220,90,30,${0.15 + 0.15 * heat})`);
     g.addColorStop(1, 'rgba(0,0,0,0)');
     b.fillStyle = g;
-    b.fillRect(0, 0, AW, AH);
+    if (s.raftTaken) b.fillRect(0, 0, AW, AH);
 
     // Critters round the fire, lit on the side that faces it: the first eight of the village,
     // each in their own coat, with their own name and voice.
@@ -358,7 +364,7 @@ export class HearthView {
     const front = ring.filter((r) => r.base >= FY + 5);
     // Their shadows, thrown away from the fire: longer when it's low, flickering with it, and
     // smaller and fainter when they're up in the air.
-    for (const r of ring) {
+    for (const r of s.raftTaken ? ring : []) {
       // (Away from the fire across the ground: the ground's seen at a slant, so it's squashed.)
       const dx = r.x - FX;
       const dy = (r.base - FY) * 2.5;
@@ -394,18 +400,29 @@ export class HearthView {
     };
     for (const r of back) critter(r);
 
-    // Stones and logs.
-    b.fillStyle = '#4a4440';
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2;
-      b.fillRect(Math.round(FX + Math.cos(a) * 15 - 2), Math.round(FY + Math.sin(a) * 4 - 1), 4, 3);
+    if (!s.raftTaken) {
+      // Not lit yet: the raft they came on, pulled up the beach (planks lashed across).
+      for (let i = 0; i < 6; i++) {
+        b.fillStyle = i % 2 ? '#7a5634' : '#6a4a2c';
+        b.fillRect(FX - 16, FY - 8 + i * 2, 32, 2);
+      }
+      b.fillStyle = '#c8a870';
+      b.fillRect(FX - 11, FY - 9, 1, 13);
+      b.fillRect(FX + 10, FY - 9, 1, 13);
+    } else {
+      // Stones and logs.
+      b.fillStyle = '#4a4440';
+      for (let i = 0; i < 9; i++) {
+        const a = (i / 9) * Math.PI * 2;
+        b.fillRect(Math.round(FX + Math.cos(a) * 15 - 2), Math.round(FY + Math.sin(a) * 4 - 1), 4, 3);
+      }
+      b.fillStyle = '#5a3a22';
+      b.fillRect(FX - 12, FY - 3, 24, 3);
+      b.fillStyle = '#6e4a2a';
+      b.fillRect(FX - 8, FY - 5, 16, 2);
+      b.fillStyle = heat > 0.05 ? '#ff7a2a' : '#7a3a1a';
+      b.fillRect(FX - 6, FY - 4, 12, 1);
     }
-    b.fillStyle = '#5a3a22';
-    b.fillRect(FX - 12, FY - 3, 24, 3);
-    b.fillStyle = '#6e4a2a';
-    b.fillRect(FX - 8, FY - 5, 16, 2);
-    b.fillStyle = heat > 0.05 ? '#ff7a2a' : '#7a3a1a';
-    b.fillRect(FX - 6, FY - 4, 12, 1);
 
     // The flames: white-hot at the heart, yellow, orange, red at the tips.
     for (const p of this.flames) {
@@ -442,7 +459,7 @@ export class HearthView {
     // The words: how hot, and what it's worth.
     const more = fireMore(s);
     this.bar.style.width = `${Math.round(heat * 100)}%`;
-    const text = `Each stoke +${format(D(tapValue(s)))} · the fire's heat: everything ×${(1 + more).toFixed(2)} (up to ×${1 + FIRE_MOST}) · ${format(D(foodRate(s)))}/s`;
+    const text = `Each stoke +${format(D(tapValue(s)))} · the fire's heat: everything ×${(1 + more).toFixed(2)} (up to ×${1 + fireMost(s)}) · ${format(D(foodRate(s)))}/s`;
     if (this.stats.textContent !== text) this.stats.textContent = text;
   }
 }

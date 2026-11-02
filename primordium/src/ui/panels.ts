@@ -59,11 +59,12 @@ export function tabsFor(state: GameState): Tab[] {
   const creature = !!def.places;
   const cst = state.stages[state.current];
   const has: Record<Tab, boolean> = {
-    hearth: !!def.shore && !!cst.shore?.raftTaken,
-    grow: true,
+    // New Shore keeps to four: the Hearth (tap), Build (spend), the Chronicle (look), the Menu.
+    hearth: !!def.shore,
+    grow: !def.shore,
     build: !!def.shore,
-    island: !!def.shore,
-    culture: !!def.shore && !!cst.shore?.culture,
+    island: false,
+    culture: false,
     boosts: !habitats && !creature && !def.tribal && !def.shore,
     lab: !habitats && !creature && !def.shore && reactions(state.current).length > 0,
     mutate: habitats,
@@ -77,7 +78,7 @@ export function tabsFor(state: GameState): Tab[] {
     ideas: !!def.tribal && !!cst.tribe?.ex,
     miracles: !!def.tribal && !!cst.tribe?.ex,
     // The Chronicle: from the Extinction on (once there's something in it).
-    chronicle: (!!def.tribal || !!def.shore) && (state.chronicle?.length ?? 0) > 0,
+    chronicle: !!def.shore || (!!def.tribal && (state.chronicle?.length ?? 0) > 0),
     menu: true,
   };
   return TABS.map((t) => t.id).filter((t) => has[t]);
@@ -272,6 +273,7 @@ export function layout(state: GameState, tab: Tab): string {
   const cur = icon(CURRENCY_ICON[id], 2);
 
   if (tab === 'hearth') return '';
+  if (def.shore && tab === 'chronicle') return shoreLayout(state, tab, () => chronicleLayout(state));
   if (def.shore && (tab === 'grow' || tab === 'build' || tab === 'island' || tab === 'culture')) return shoreLayout(state, tab);
   if (def.tribal && tab === 'grow') return tribeLayout(state);
   if (def.tribal && tab === 'ideas') return ideasLayout(state);

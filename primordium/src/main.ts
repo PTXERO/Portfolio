@@ -84,6 +84,16 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const stageEl = $('stage');
 // The Hearth tab: the whole screen is the fire, and a tap anywhere stokes it.
 const hearthView = new HearthView(stageEl, () => {
+  // (Before the hearth's lit, the first tap breaks up the raft and lights it.)
+  const hs = shoreOf(state);
+  if (hs && !hs.raftTaken) {
+    if (takeRaft(state)) {
+      cue('ascend', 0.5);
+      save();
+      render();
+    }
+    return 0;
+  }
   const got = stoke(state);
   if (got) popSound(0.85 + Math.random() * 0.3);
   return got;
@@ -881,7 +891,7 @@ function renderTabs(): void {
   const key = ids.join() + state.current;
   if (key === tabsKey) return;
   tabsKey = key;
-  if (!ids.includes(ui.tab)) ui.tab = 'grow';
+  if (!ids.includes(ui.tab)) ui.tab = ids[0];
   tabsEl.style.gridTemplateColumns = `repeat(${ids.length}, 1fr)`;
   tabsEl.innerHTML = TABS.filter((t) => ids.includes(t.id))
     .map((t) => `<button class="px-btn tab" data-tab="${t.id}">${icon(t.sprite, 3)}<span>${t.id === 'grow' && STAGES[state.current].places ? 'Herd' : t.id === 'grow' && STAGES[state.current].tribal ? 'Survivors' : t.id === 'grow' && STAGES[state.current].shore ? 'Village' : t.label}</span><i class="dot" hidden></i></button>`)
@@ -1018,7 +1028,7 @@ function shoreFrame(): void {
     const work = AGES[age]?.workName;
     showModal(`<p class="label dim">The Long Road</p><h3>${ageName(age)}</h3>
       <p>[STORY] ${ageName(age - 1)} is over. Something has changed in how they live, and in how they see the island.</p>
-      <p class="dim">${work ? `New ideas to come by, new choices, new buildings; and a new Great Work: ${work}. See the Culture tab.` : 'The road goes on in a future update.'}</p>
+      <p class="dim">${work ? `New ideas to come by, new choices, new buildings; and a new Great Work: ${work}. See the Chronicle.` : 'The road goes on in a future update.'}</p>
       <button class="px-btn gold" data-act="dismiss">Onward</button>`);
     save();
   }
@@ -1027,7 +1037,7 @@ function shoreFrame(): void {
     cue('ascend', 0.6);
     showModal(`<p class="label dim">${totalCritters(s)} of them</p><h3>The great fire</h3>
       <p>[STORY] They were a hundred. One night they all gathered at one fire, every one of them, and looked at each other, and knew themselves one kind of critter, together.</p>
-      <p class="dim">From now on the village grows a culture of its own: ideas come by themselves, from what the critters do. See the Culture tab.</p>
+      <p class="dim">From now on the village grows a culture of its own: ideas come by themselves, from what the critters do. See the Chronicle.</p>
       <button class="px-btn gold" data-act="dismiss">The long road</button>`);
     save();
   }
@@ -1288,7 +1298,9 @@ function renderPanel(): void {
                 ? tripEventDue(state)
                 : t === 'grow' && STAGES[state.current].places
                   ? netRate(state).lt(0) && state.stages.creature.currency.lt(netRate(state).abs().mul(60))
-                  : false;
+                  : t === 'chronicle' && STAGES[state.current].shore
+                    ? !!shoreOf(state)?.culture?.asking
+                    : false;
     if (dot) dot.hidden = !on;
   }
   if (!ui.open) return;
@@ -1332,7 +1344,7 @@ function renderHint(): void {
     }
   } else if (state.current === 'shore') {
     const s = shoreOf(state);
-    if (s && !s.raftTaken) text = 'Light the hearth (in the Village tab)';
+    if (s && !s.raftTaken) text = 'Light the hearth (in the Hearth tab)';
     else if (s && !Object.keys(s.gens).length) text = 'Stoke the fire (the Hearth tab), then send out foragers (in Build)';
     else if (!pokedThisStage) text = 'Tap the land to walk · pinch to zoom';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
@@ -2145,7 +2157,9 @@ function act(el: HTMLElement): void {
         scene.reload();
         panelKey = '';
         goalKey = '';
-        ui.tab = 'grow';
+        // (Ashore: straight to the raft, to break it up and light the hearth.)
+        ui.tab = 'hearth';
+        ui.open = true;
         save();
         render();
         break;

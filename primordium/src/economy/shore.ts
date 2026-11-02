@@ -182,9 +182,11 @@ export interface ShoreState {
   /** A boost going (the fire danced up): everything brings in this much more, till then (seconds
    * of the island's clock, as day * DAY_SEC + clock). */
   boost?: { mult: number; until: number };
-  /** How hot the hearth is, 0 to 1: every stoke builds it, and it cools by itself. A hot fire
-   * cooks more of what's brought in (everything, up to FIRE_MOST more). */
+  /** How hot the hearth is, 0 to 1 (worked out from the fuel on it: see fireHeat). A hot fire
+   * cooks more of what's brought in (everything, up to fireMost more). */
   heat?: number;
+  /** What's been piled on the fire: every stoke adds some, and it burns away by itself. */
+  fuel?: number;
   people: ShorePerson[];
   nextId: number;
   births: number;
@@ -684,14 +686,37 @@ export function allMult(s: ShoreState): number {
   const now = s.day * DAY_SEC + s.clock;
   return m * (1 + boosts(s).food) * (1 + won * WON_MORE) * (1 + totalCritters(s) * CRITTER_MORE) * (s.boost && s.boost.until > now ? s.boost.mult : 1) * (1 + fireMore(s));
 }
-/** The fire at its hottest: everything brings in this much more. */
+/** The fire at its hottest, before any upgrades: everything brings in this much more. */
 export const FIRE_MOST = 1;
-/** Each stoke adds this much heat; it cools by FIRE_COOL a second (about a minute from roaring to embers). */
-export const FIRE_STOKE = 0.04;
-export const FIRE_COOL = 0.015;
+/** The fire's heat goes with the log of the fuel on it: the first few stokes count for a lot,
+ * each one after for less, and it's roaring (full heat) at FIRE_FULL fuel. */
+export const FIRE_FULL = 150;
+/** The fuel burns away: this share of it a second, and a little more (so it does go out). */
+export const FIRE_BURN = 0.04;
+export const FIRE_BURN_MIN = 0.05;
+function fireFx(s: ShoreState): { most: number; fuel: number; cool: number; floor: number } {
+  const f = { most: FIRE_MOST, fuel: 1, cool: 1, floor: 0 };
+  for (const id of s.ups) {
+    const fx = UPGRADES.find((x) => x.id === id)?.fx;
+    if (fx?.kind === 'fire') f.most += fx.more;
+    if (fx?.kind === 'fireFuel') f.fuel *= fx.mult;
+    if (fx?.kind === 'fireCool') f.cool *= fx.mult;
+    if (fx?.kind === 'fireFloor') f.floor = Math.max(f.floor, fx.floor);
+  }
+  return f;
+}
+/** The most the fire can add to everything (it grows with the fire upgrades). */
+export function fireMost(s: ShoreState): number {
+  return fireFx(s).most;
+}
+/** How hot the fire is, 0 to 1, from the fuel on it (never under the banked embers' floor). */
+export function fireHeat(s: ShoreState): number {
+  const h = Math.log1p(Math.max(0, s.fuel ?? 0)) / Math.log1p(FIRE_FULL);
+  return Math.min(1, Math.max(fireFx(s).floor, h));
+}
 /** What the fire's heat adds to everything just now. */
 export function fireMore(s: ShoreState): number {
-  return FIRE_MOST * Math.min(1, Math.max(0, s.heat ?? 0));
+  return fireMost(s) * Math.min(1, Math.max(0, s.heat ?? 0));
 }
 /** Each village won, and each critter, adds this much to everything. */
 export const WON_MORE = 0.15;
@@ -729,7 +754,8 @@ export function stoke(state: GameState): number {
   const s = shoreOf(state);
   if (!s || !s.raftTaken) return 0;
   const got = tapValue(s);
-  s.heat = Math.min(1, (s.heat ?? 0) + FIRE_STOKE);
+  s.fuel = Math.min(FIRE_FULL * 1.5, (s.fuel ?? 0) + fireFx(s).fuel);
+  s.heat = fireHeat(s);
   s.food += got;
   s.earned = (s.earned ?? 0) + got;
   return got;
@@ -1044,7 +1070,11 @@ export function shoreTick(state: GameState, dt: number): void {
 
 function stepShore(state: GameState, s: ShoreState, dt: number): void {
   const k = dt / DAY_SEC;
-  if (s.heat) s.heat = Math.max(0, s.heat - FIRE_COOL * dt);
+  if (s.raftTaken) {
+    const cool = fireFx(s).cool;
+    s.fuel = Math.max(0, (s.fuel ?? 0) * Math.exp(-FIRE_BURN * cool * dt) - FIRE_BURN_MIN * cool * dt);
+    s.heat = fireHeat(s);
+  }
   // What comes in, comes in (nothing's eaten, nothing spoils: it only ever goes up).
   const got = foodRate(s) * dt;
   s.food += got;

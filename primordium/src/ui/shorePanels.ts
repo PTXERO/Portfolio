@@ -1,6 +1,7 @@
-// New Shore's panels, the idle way: the Village (what comes in, the critters),
-// Build (what brings food in and houses them, and the upgrades), the Island (the villages to win,
-// the landmarks, the relics) and the Culture.
+// New Shore's panels, the idle way, in four tabs: the Hearth (the fire: see hearthView), Build
+// (everything food is spent on: what brings it in, the homes, the upgrades, the Great Work, and
+// the villages to win), the Chronicle (everything to look at: the village, the critters and their
+// family trees, the island's landmarks and relics, the culture, the story so far) and the Menu.
 
 import { type Boosts, POI_SORT, RELICS, type Find } from '../content/shore';
 import { GENS, UPGRADES, type GenId } from '../content/idle';
@@ -14,12 +15,13 @@ import { danceStyle } from './fireDance';
 
 const n0 = (v: number) => format(Math.floor(v + 1e-6));
 
-/** The Village tab: the village itself, or everyone in it. */
-let villageView: 'village' | 'people' = 'village';
+/** The Chronicle's pages: the village, everyone in it, the island, the culture, the story. */
+type ChronView = 'village' | 'people' | 'island' | 'culture' | 'story';
+let chronView: ChronView = 'village';
 export function setVillageView(v: string): void {
-  villageView = v === 'people' ? 'people' : 'village';
+  chronView = (['village', 'people', 'island', 'culture', 'story'] as const).find((x) => x === v) ?? 'village';
 }
-/** The Island tab: the villages, the landmarks, or what's been found. */
+/** The Chronicle's island page: the landmarks, or the relics found. (The villages are won from Build.) */
 let islandView: 'villages' | 'landmarks' | 'finds' = 'villages';
 export function setIslandView(v: string): void {
   islandView = v === 'landmarks' || v === 'finds' ? v : 'villages';
@@ -39,16 +41,23 @@ export function buyAmount(): number {
 export function shoreKey(state: GameState, tab: string): string {
   const s = shoreOf(state);
   if (!s) return '';
+  if (tab === 'chronicle') {
+    if (chronView === 'story') return JSON.stringify(['story', s.culture ? 1 : 0]);
+    if (chronView === 'island') return JSON.stringify(['chron-island', islandView, s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, has(s, 'scouts'), s.villages.filter((v) => v.found).map((v) => [v.id, v.won, v.gone, Math.round(v.pop)]), s.chief]);
+    if (chronView === 'culture') tab = 'culture';
+    else if (chronView === 'people') return JSON.stringify(['people', s.people.length, s.chief, Math.floor(s.day / 2), !!s.culture]);
+    else return JSON.stringify(['village', s.people.length, room(s), s.chief, s.ups.length, Object.values(s.gens), shoreSeason(s).si, s.villages.filter((v) => v.won !== undefined).length, !!s.culture]);
+  }
   if (tab === 'culture') {
     const c = s.culture;
     return JSON.stringify(['culture', c?.age, c?.done, c?.focus, c?.forks, c?.asking?.fork, LANES.map((l) => Math.floor((c ? laneShare(c, l.id) : 0) * 20)), greatWork(s), !!workOpen(s), s.food >= (workOpen(s)?.cost ?? Infinity)]);
   }
   if (tab === 'build') {
     // (Rebuilt when what can be afforded changes: each thing's button lights as the food comes.)
-    return JSON.stringify(['build', buyMany, s.auto, s.ups.length, GENS.map((g) => [genOpen(s, g.id), count(s, g.id), s.food >= genCost(s, g.id, buyMany || 1)]), UPGRADES.filter((u) => upgradeOpen(s, u.id)).map((u) => [u.id, s.food >= u.cost])]);
+    return JSON.stringify(['build', buyMany, s.auto, s.ups.length, GENS.map((g) => [genOpen(s, g.id), count(s, g.id), s.food >= genCost(s, g.id, buyMany || 1)]), UPGRADES.filter((u) => upgradeOpen(s, u.id)).map((u) => [u.id, s.food >= u.cost]), !!workOpen(s), s.food >= (workOpen(s)?.cost ?? Infinity),
+      s.villages.filter((v) => v.found).map((v) => [v.id, v.won, v.gone, Math.floor((v.trust ?? 0) / 5), Math.round(v.pop), s.food >= (canWin(s, v) ? giftCost(s, v) : canTake(s, v) ? takeCost(s, v).food : Infinity), chiefNear(s, v), danceLeft(s, v) > 0.5]), s.chief]);
   }
   if (tab === 'island') return JSON.stringify(['island', islandView, s.relics, poisOf(s).map((p) => (p.found && p.known ? p.done : -1)), poiHere(s)?.id, has(s, 'scouts'), s.villages.filter((v) => v.found).map((v) => [v.id, v.won, v.gone, Math.floor((v.trust ?? 0) / 5), Math.round(v.pop), s.food >= (canWin(s, v) ? giftCost(s, v) : canTake(s, v) ? takeCost(s, v).food : Infinity), chiefNear(s, v)]), s.chief]);
-  if (villageView === 'people') return JSON.stringify(['people', s.people.length, s.chief, Math.floor(s.day / 2)]);
   return JSON.stringify(['village', s.people.length, room(s), s.chief, s.ups.length, Object.values(s.gens), shoreSeason(s).si, s.villages.filter((v) => v.won !== undefined).length, !!workOpen(s)]);
 }
 
@@ -79,23 +88,28 @@ function birthLine(s: ShoreState): string {
   return 'A child is on the way.';
 }
 
-export function shoreLayout(state: GameState, tab: string): string {
+export function shoreLayout(state: GameState, tab: string, story?: () => string): string {
   const s = shoreOf(state);
   if (!s) return '';
   if (tab === 'build') return buildLayout(s);
   if (tab === 'culture') return cultureLayout(s);
   if (tab === 'island') return islandLayout(s);
-  const views = `<div class="seg build-cats"><button class="px-btn${villageView === 'village' ? ' on' : ''}" data-villageview="village">The village</button><button class="px-btn${villageView === 'people' ? ' on' : ''}" data-villageview="people">Critters · ${s.people.length}</button><span class="seg-gap"></span><button class="px-btn" data-camera="home">Home</button><button class="px-btn" data-camera="chief">Chief</button></div>`;
-  if (villageView === 'people') return views + peopleLayout(s);
-  return views + hearthCard(s) + peopleCard(s);
+  // The Chronicle: everything to look at, a page at a time.
+  const page = (id: ChronView, name: string, dot = false) => `<button class="px-btn${chronView === id ? ' on' : ''}" data-villageview="${id}">${name}${dot ? ' <i class="dot"></i>' : ''}</button>`;
+  if (chronView === 'culture' && !s.culture) chronView = 'village';
+  const views = `<div class="seg build-cats chron-pages">${page('village', 'Village')}${page('people', `Critters · ${s.people.length}`)}${page('island', 'Island')}${s.culture ? page('culture', 'Culture', !!s.culture.asking) : ''}${page('story', 'Story')}</div>`;
+  if (chronView === 'people') return views + peopleLayout(s);
+  if (chronView === 'island') return views + islandLayout(s);
+  if (chronView === 'culture') return views + cultureLayout(s);
+  if (chronView === 'story') return views + (story?.() ?? '');
+  return views + `<div class="seg build-cats"><button class="px-btn" data-camera="home">See the hearth</button><button class="px-btn" data-camera="chief">See the chief</button></div>` + hearthCard(s) + peopleCard(s);
 }
 
 /** The hearth: what comes in, the critters and their beds. */
 function hearthCard(s: ShoreState): string {
   if (!count(s, 'hearth')) {
     return `<div class="card px-box"><div class="info"><div class="name">No village yet</div>
-      <div class="sub">They sit by the raft, the last of what the crossing left them. Break it up, and light a fire with it.</div></div>
-      <div class="col"><button class="px-btn gold" data-act="raft">Light the hearth</button></div></div>`;
+      <div class="sub">They sit by the raft, the last of what the crossing left them. Break it up, and light a fire with it (the Hearth tab).</div></div></div>`;
   }
   const won = s.villages.filter((v) => v.won !== undefined).length;
   const mult = allMult(s);
@@ -105,22 +119,27 @@ function hearthCard(s: ShoreState): string {
       <div class="store"><span class="label dim">Critters</span><b class="num">${s.people.length}<span class="dim">/${Math.min(room(s), hearthMost(s))}</span></b><span class="dim">each one: +${Math.round(CRITTER_MORE * 100)}% to everything</span></div>
       <div class="sub">Everything brings in ×${mult.toFixed(2)}${won ? ` (${won} village${won > 1 ? 's' : ''} won: +${Math.round(won * WON_MORE * 100)}%)` : ''}. <b class="green" data-t="shore-boost"></b></div>
       <div class="sub dim"><span data-t="shore-birth">${birthLine(s)}</span></div>
-    </div>
-    <button class="px-btn gold stoke" data-tab="hearth"><b>Go to the fire</b> <span class="dim">tap it to stoke it</span></button>
-    ${workOpen(s) ? `<div class="card px-box raid"><div class="info"><div class="name">${workOpen(s)!.name}</div><div class="sub">${workOpen(s)!.does}</div></div><div class="col"><button class="px-btn${s.food >= workOpen(s)!.cost ? ' gold' : ''}" data-act="work"${s.food >= workOpen(s)!.cost ? '' : ' disabled'}>${format(workOpen(s)!.cost)}</button></div></div>` : ''}`;
+    </div>`;
 }
 
 /** What brings food in, and what houses them: buy one, ten, or as many as there's food for; and
  * the upgrades, once they're on offer. */
 function buildLayout(s: ShoreState): string {
-  if (!count(s, 'hearth')) return `<div class="card px-box"><div class="info"><div class="sub">Light the hearth first (the Village tab).</div></div></div>`;
+  if (!count(s, 'hearth')) return `<div class="card px-box"><div class="info"><div class="sub">Light the hearth first (the Hearth tab).</div></div></div>`;
   const many = `<div class="seg build-cats">${([1, 10, 0] as const).map((n) => `<button class="px-btn${buyMany === n ? ' on' : ''}" data-buymany="${n}">${n ? `×${n}` : 'Max'}</button>`).join('')}${has(s, 'council') ? `<span class="seg-gap"></span><button class="px-btn${s.auto ? ' on' : ''}" data-act="auto">Council: ${s.auto ? 'buying' : 'resting'}</button>` : ''}</div>`;
   const gens = GENS.filter((g) => genOpen(s, g.id)).map((g) => genRow(s, g.id)).join('');
   const next = GENS.find((g) => !genOpen(s, g.id) && g.critters !== undefined);
   const ups = UPGRADES.filter((u) => upgradeOpen(s, u.id)).sort((a, b) => a.cost - b.cost);
-  return `${many}<div class="panel-head"><h2>Build</h2><span class="dim"><span data-t="shore-food">${n0(s.food)}</span> food</span></div>${gens}
+  const w = workOpen(s);
+  const work = w ? `<div class="panel-head"><h2>The Great Work</h2></div><div class="card px-box build raid"><div class="info"><div class="name">${w.name}</div><div class="sub">${w.does}</div></div><button class="px-btn buy${s.food >= w.cost ? ' gold' : ''}" data-act="work"${s.food >= w.cost ? '' : ' disabled'}><span class="num">${format(w.cost)}</span></button></div>` : '';
+  const upRow = (u: (typeof UPGRADES)[number]) => `<div class="card px-box build"><div class="info"><div class="name">${u.name}</div><div class="sub">${u.does}</div></div><button class="px-btn buy${s.food >= u.cost ? ' gold' : ''}" data-upgrade="${u.id}"${s.food >= u.cost ? '' : ' disabled'}><span class="num">${format(u.cost)}</span></button></div>`;
+  const fire = ups.filter((u) => u.fx.kind.startsWith('fire') || u.fx.kind === 'tap' || u.fx.kind === 'tapRate');
+  const rest = ups.filter((u) => !fire.includes(u));
+  return `${many}<div class="panel-head"><h2>Build</h2><span class="dim"><span data-t="shore-food">${n0(s.food)}</span> food</span></div>${work}${gens}
     ${next ? `<p class="tiny dim">More to come as the village grows (at ${next.critters} critters).</p>` : ''}
-    ${ups.length ? `<div class="panel-head"><h2>Upgrades</h2></div>${ups.map((u) => `<div class="card px-box build"><div class="info"><div class="name">${u.name}</div><div class="sub">${u.does}</div></div><button class="px-btn buy${s.food >= u.cost ? ' gold' : ''}" data-upgrade="${u.id}"${s.food >= u.cost ? '' : ' disabled'}><span class="num">${format(u.cost)}</span></button></div>`).join('')}` : ''}`;
+    ${fire.length ? `<div class="panel-head"><h2>The fire</h2></div>${fire.map(upRow).join('')}` : ''}
+    ${rest.length ? `<div class="panel-head"><h2>Upgrades</h2></div>${rest.map(upRow).join('')}` : ''}
+    ${villagesCard(s)}`;
 }
 
 function genRow(s: ShoreState, id: GenId): string {
@@ -137,21 +156,30 @@ function genRow(s: ShoreState, id: GenId): string {
 // ---- The island ----
 
 function islandLayout(s: ShoreState): string {
-  const found = s.villages.filter((v) => v.found && !v.gone).length;
   const marks = poisOf(s).filter((p) => p.found && p.known && p.done < poiDef(p).layers.length).length;
   const tab = (id: typeof islandView, name: string) => `<button class="px-btn${islandView === id ? ' on' : ''}" data-islandview="${id}">${name}</button>`;
-  const views = `<div class="seg build-cats">${tab('villages', `Villages · ${found}`)}${tab('landmarks', `Landmarks · ${marks}`)}${tab('finds', 'Relics')}</div>`;
-  if (islandView === 'landmarks') return views + landmarksCard(s);
-  if (islandView === 'finds') return views + relicsCard(s) + scoutsCard(s);
-  return views + villagesCard(s);
+  if (islandView === 'villages') islandView = 'landmarks';
+  const views = `<div class="seg build-cats">${tab('landmarks', `Landmarks · ${marks}`)}${tab('finds', 'Relics')}</div>`;
+  const head = `<div class="panel-head"><h2>The island</h2></div>${islandCounts(s)}${scoutsCard(s)}`;
+  if (islandView === 'finds') return head + views + relicsCard(s);
+  return head + views + landmarksCard(s);
+}
+
+/** The island in numbers: the villages found and won, the critters of other kinds, the landmarks. */
+function islandCounts(s: ShoreState): string {
+  const found = s.villages.filter((v) => v.found && !v.gone);
+  const won = found.filter((v) => v.won !== undefined).length;
+  const marks = poisOf(s).filter((p) => p.found).length;
+  const others = s.people.filter((p) => p.kind !== undefined).length;
+  return `<div class="card px-box"><div class="info"><div class="sub">${found.length} village${found.length === 1 ? '' : 's'} found${found.length < s.villages.length ? ' (more in the fog)' : ''} · ${won} won · ${marks} landmark${marks === 1 ? '' : 's'} found · ${s.relics?.length ?? 0} relic${(s.relics?.length ?? 0) === 1 ? '' : 's'}${others ? ` · ${others} critters of other kinds among yours` : ''}</div></div></div>`;
 }
 
 function villagesCard(s: ShoreState): string {
   const found = s.villages.filter((v) => v.found && !v.gone);
-  if (!found.length) return `<div class="panel-head"><h2>The island</h2></div><div class="card px-box"><div class="info"><div class="sub">There's smoke inland. Someone else is here. Walk out and find them.</div></div></div>${scoutsCard(s)}`;
+  if (!found.length) return `<div class="panel-head"><h2>The villages</h2></div><div class="card px-box"><div class="info"><div class="sub">There's smoke inland. Someone else is here. Walk out and find them (tap the land to send the chief).</div></div></div>`;
   const won = found.filter((v) => v.won !== undefined);
   const rest = found.filter((v) => v.won === undefined).sort((a, b) => Math.hypot(a.x - s.hearth.x, a.y - s.hearth.y) - Math.hypot(b.x - s.hearth.x, b.y - s.hearth.y));
-  return `<div class="panel-head"><h2>The island</h2><span class="dim">${found.length} of ${s.villages.length}${found.length < s.villages.length ? '+' : ''} found · ${won.length} won</span></div>
+  return `<div class="panel-head"><h2>The villages</h2><span class="dim">${found.length} of ${s.villages.length}${found.length < s.villages.length ? '+' : ''} found · ${won.length} won</span></div>
     <p class="tiny dim">Every village won: everything brings in ${Math.round(WON_MORE * 100)}% more. Kin are won with gifts and the chief's company; the rest, beaten.</p>
     ${rest.map((v) => villageRow(s, v)).join('')}${won.map((v) => villageRow(s, v)).join('')}`;
 }
@@ -383,7 +411,7 @@ function cultureLayout(s: ShoreState): string {
   const W = workName ? workName[0].toUpperCase() + workName.slice(1) : '';
   const workCard = !work
     ? `<div class="card px-box"><div class="info"><div class="name">${name}</div><div class="sub">${ageName(c.age - 1)} is over. The road goes on in a future update.</div></div></div>`
-    : `<div class="card px-box"><div class="info"><div class="name">The Age's Great Work: ${workName}</div><div class="sub">${workReady(s) ? `${W} can be raised now: see the Village tab.` : `Once ${LANES_FOR_WORK} lanes have this Age's ideas (${done} so far), ${workName} can be built.`}</div></div></div>`;
+    : `<div class="card px-box"><div class="info"><div class="name">The Age's Great Work: ${workName}</div><div class="sub">${workReady(s) ? `${W} can be raised now: see Build.` : `Once ${LANES_FOR_WORK} lanes have this Age's ideas (${done} so far), ${workName} can be built.`}</div></div></div>`;
   if (!ageHasIdeas(c.age)) return `<div class="panel-head"><h2>The Long Road</h2><span class="dim">${name}</span></div>${workCard}${forksCard(s)}`;
   return `<div class="panel-head"><h2>The Long Road</h2><span class="dim">${name}</span></div>
     <p class="tiny dim">Ideas come by themselves, from what the village does. Focus a lane to hurry it.</p>

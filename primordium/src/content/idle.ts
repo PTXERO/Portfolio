@@ -46,7 +46,13 @@ export type UpgradeFx =
   | { kind: 'auto' }
   | { kind: 'envoy' }
   | { kind: 'scouts' }
-  | { kind: 'work'; age: number };
+  | { kind: 'work'; age: number }
+  /** The fire: hotter at its hottest (adds to the most it can add), more fuel a stoke, slower
+   * to burn down, or never cold below a floor. */
+  | { kind: 'fire'; more: number }
+  | { kind: 'fireFuel'; mult: number }
+  | { kind: 'fireCool'; mult: number }
+  | { kind: 'fireFloor'; floor: number };
 
 export interface UpgradeDef {
   id: string;
@@ -78,6 +84,14 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'stoke1', name: 'Dry kindling', does: 'Stoking the fire brings twice as much.', cost: 50, fx: { kind: 'tap', mult: 2 } },
   { id: 'stoke2', name: 'A good blaze', does: 'Stoking the fire brings in a second\'s worth of everything else too.', cost: 3000, fx: { kind: 'tapRate', share: 1 }, critters: 10 },
   { id: 'stoke3', name: 'The fire-keepers', does: 'Stoking brings in five seconds\' worth.', cost: 2e5, fx: { kind: 'tapRate', share: 4 }, critters: 40 },
+  // The fire's own line: a hotter fire, easier to build up, slower to die down.
+  { id: 'firering', name: 'A ring of stones', does: 'Stones round the fire hold the heat: at its hottest, everything brings in ×2.5 (was ×2).', cost: 600, fx: { kind: 'fire', more: 0.5 }, critters: 6 },
+  { id: 'tinder', name: 'Tinder and kindling', does: 'Each stoke puts twice as much on the fire.', cost: 2500, fx: { kind: 'fireFuel', mult: 2 }, critters: 10 },
+  { id: 'woodpile', name: 'A woodpile', does: 'Good dry wood by the fire: it burns down half as fast.', cost: 9000, fx: { kind: 'fireCool', mult: 0.5 }, critters: 16 },
+  { id: 'firepit', name: 'A fire pit', does: 'Dug deep and lined with stone: at its hottest, everything brings in ×3.5.', cost: 2e5, fx: { kind: 'fire', more: 1 }, critters: 35 },
+  { id: 'embers', name: 'Banked embers', does: 'Someone always keeps it in: the fire never falls below a quarter of its heat.', cost: 4e6, fx: { kind: 'fireFloor', floor: 0.25 }, critters: 70 },
+  { id: 'logs', name: 'Great logs', does: 'Whole trunks on the fire: each stoke puts on three times as much.', cost: 3e7, fx: { kind: 'fireFuel', mult: 3 }, critters: 110 },
+  { id: 'bonfire', name: 'The bonfire', does: 'A fire the whole island can see: at its hottest, everything brings in ×6.', cost: 1e8, fx: { kind: 'fire', more: 2.5 }, critters: 140 },
   { id: 'council', name: 'The council', does: 'The elders buy what\'s most worth buying, by themselves, whenever there\'s the food (turn it off and on in the Build tab).', cost: 800, fx: { kind: 'auto' }, critters: 12 },
   { id: 'envoy', name: 'An envoy', does: 'Carries gifts to the kin being won over, by themselves, when there\'s food to spare.', cost: 2000, fx: { kind: 'envoy' }, critters: 15 },
   { id: 'scouts', name: 'Scouts', does: 'Two scouts go out into the fog by themselves, finding villages and landmarks.', cost: 400, fx: { kind: 'scouts' }, critters: 8 },

@@ -52,21 +52,42 @@ describe('New Shore', () => {
 });
 
 describe('Food, the idle way', () => {
-  it('stoking builds the fire up: a hot fire makes everything bring in more, and it dies down if left', () => {
+  it('stoking builds the fire up, less with each stoke: a hot fire makes everything bring in more, and it dies down if left', () => {
     const state = fresh();
     const s = shoreOf(state)!;
     lit(state);
     buyGen(state, 'forager');
     const cold = foodRate(s);
-    for (let i = 0; i < 100; i++) stoke(state);
+    // (Logarithmic: the first stokes count for most.)
+    const heats: number[] = [];
+    for (let i = 0; i < 160; i++) {
+      stoke(state);
+      heats.push(s.heat!);
+    }
+    expect(heats[9] - heats[0]).toBeGreaterThan(heats[159] - heats[150]);
+    expect(heats[9]).toBeGreaterThan(0.4);
     expect(s.heat).toBe(1);
     expect(foodRate(s)).toBeCloseTo(cold * 2, 6);
     shoreTick(state, 30);
     expect(s.heat).toBeGreaterThan(0);
     expect(s.heat).toBeLessThan(1);
-    shoreTick(state, 120);
+    shoreTick(state, 300);
     expect(s.heat).toBe(0);
     expect(foodRate(s)).toBeCloseTo(cold, 6);
+  });
+  it('the fire\'s upgrades: hotter at its hottest, and banked embers never let it go cold', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    lit(state);
+    buyGen(state, 'forager');
+    const cold = foodRate(s);
+    s.ups.push('firering', 'firepit', 'embers');
+    shoreTick(state, 1);
+    expect(s.heat).toBeCloseTo(0.25, 6);
+    for (let i = 0; i < 300; i++) stoke(state);
+    expect(foodRate(s)).toBeCloseTo(cold * 3.5, 6);
+    shoreTick(state, 600);
+    expect(foodRate(s)).toBeCloseTo(cold * (1 + 2.5 * 0.25), 6);
   });
   it('the hearth lit, stoking brings food; foragers bring it in by themselves; and it only ever goes up', () => {
     const state = fresh();
