@@ -121,7 +121,7 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'seers', name: 'Seers', does: 'Sign: Light in the fog.', cost: 2e5, fx: { kind: 'voice', miracle: 'light' }, critters: 40 },
   { id: 'awe', name: 'The awe', does: 'Sign: Awe.', cost: 3e6, fx: { kind: 'voice', miracle: 'awe' }, critters: 70 },
   { id: 'vigils', name: 'Night vigils', does: 'Prayer ×2, holds ×2.', cost: 5e7, fx: { kind: 'prayer', mult: 2 }, critters: 120 },
-  { id: 'council', name: 'The council', does: 'Buys the best deal for you, and saves for the Great Work.', cost: 800, fx: { kind: 'auto' }, critters: 12 },
+  { id: 'council', name: 'The council', does: 'Buys for you, and saves for the Great Work.', cost: 800, fx: { kind: 'auto' }, critters: 12 },
   { id: 'envoy', name: 'An envoy', does: 'Gifts kin for you.', cost: 2000, fx: { kind: 'envoy' }, critters: 15 },
   { id: 'scouts', name: 'Scouts', does: 'Two scouts explore the fog.', cost: 400, fx: { kind: 'scouts' }, critters: 8 },
   { id: 'feast1', name: 'Feast days', does: 'All food ×1.25.', cost: 5e4, fx: { kind: 'all', mult: 1.25 }, critters: 30 },

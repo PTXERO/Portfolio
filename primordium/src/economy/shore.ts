@@ -203,6 +203,8 @@ export interface ShoreState {
   /** Since when every found village has been won with some still lost in the fog (one makes
    * itself known a year after). */
   lostSince?: number;
+  /** Upgrades' prices, set when each was first on offer. */
+  upPrice?: Record<string, number>;
   /** The day they began to write (Picture marks): from then on the Chronicle is a record, not
    * a telling. */
   writtenFrom?: number;
@@ -708,9 +710,17 @@ const SHOWN_MOST = 12;
 /** Whether an upgrade's on offer (its generator's far enough on, the village big enough). */
 /** What an upgrade costs now. Most are fixed; the council (it buys for you, for good) is worth
  * a quarter of an hour of what comes in, however far on the village is, so it's never a trifle. */
-export function upgradeCost(s: ShoreState, u: { cost: number; fx: { kind: string } }): number {
-  return u.fx.kind === 'auto' ? Math.max(u.cost, Math.ceil(baseRate(s) * COUNCIL_SECONDS)) : u.cost;
+export function upgradeCost(s: ShoreState, u: { id: string; cost: number; fx: { kind: string } }): number {
+  const fixed = s.upPrice?.[u.id];
+  if (fixed !== undefined) return fixed;
+  const live = Math.max(u.cost, Math.ceil(baseRate(s) * (PRICE_SECONDS[u.fx.kind] ?? 120)));
+  // (Set when it's first on offer, and kept: it doesn't run away while it's saved for.)
+  if (upgradeOpen(s, u.id)) (s.upPrice ??= {})[u.id] = live;
+  return live;
 }
+/** What an upgrade's worth, in seconds of what comes in when it's first on offer (or its own
+ * price, if that's more): so it's never a trifle, however rich the island. */
+const PRICE_SECONDS: Record<string, number> = { auto: 900, all: 300, gen: 180 };
 export const COUNCIL_SECONDS = 900;
 /** The most the council buys at a sitting. */
 const COUNCIL_MOST = 200;
