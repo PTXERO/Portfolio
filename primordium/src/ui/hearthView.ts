@@ -13,6 +13,21 @@ const FX = AW / 2;
 const FY = 110;
 
 interface Bit { x: number; y: number; vx: number; vy: number; life: number; age: number; hot: number }
+/** What a critter round the fire is doing: hopping (seconds into it, after a moment's delay). */
+interface Seat { hop: number; wait: number; high: number; turn: number }
+/** A little picture over a critter's head: glad, startled, a song, love, sleepy. */
+type EmoteKind = 'bang' | 'note' | 'heart' | 'zzz' | 'sweat';
+interface Emote { seat: number; kind: EmoteKind; age: number }
+
+/** The emotes, as tiny pixel pictures (x = the colour). */
+const EMOTES: Record<EmoteKind, { rows: string[]; color: string }> = {
+  bang: { rows: ['x', 'x', 'x', '.', 'x'], color: '#ffe9b0' },
+  note: { rows: ['.xx', '.x.', '.x.', 'xx.', 'xx.'], color: '#9fe8c8' },
+  heart: { rows: ['x.x', 'xxx', 'xxx', '.x.'], color: '#ff6a7a' },
+  zzz: { rows: ['xxx', '.x.', 'x..', 'xxx'], color: '#a8b8e8' },
+  sweat: { rows: ['.x', 'xx', 'xx'], color: '#7ac8ff' },
+};
+const HOP_TIME = 0.32;
 
 export class HearthView {
   readonly el: HTMLElement;
@@ -23,6 +38,12 @@ export class HearthView {
   private flames: Bit[] = [];
   private embers: Bit[] = [];
   private flare = 0;
+  private seats: Seat[] = [];
+  private emotes: Emote[] = [];
+  /** Taps in a row (each within a moment of the last): the faster, the more they cheer. */
+  private streak = 0;
+  private lastTap = -9;
+  private still = 0;
   private t = 0;
   shown = false;
 
@@ -42,12 +63,16 @@ export class HearthView {
     this.b = this.c.getContext('2d')!;
     this.stats = this.el.querySelector('.hearth-stats')!;
     this.bar = this.el.querySelector('.heat-bar i')!;
+    // (Taps here are for the fire only: none of them get through to the map underneath.)
+    for (const ev of ['pointermove', 'pointerup', 'pointercancel', 'wheel', 'click'] as const) this.el.addEventListener(ev, (e) => e.stopPropagation());
     this.el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
+      e.stopPropagation();
       const got = this.onStoke(e.clientX, e.clientY);
       if (!got) return;
       this.flare = 1;
       for (let i = 0; i < 5; i++) this.spark(true);
+      this.cheer();
       this.pop(e.clientX, e.clientY, `+${format(D(got))}`);
       this.el.querySelector('.hearth-tip')?.classList.add('gone');
     });
@@ -68,6 +93,35 @@ export class HearthView {
     f.style.top = `${y - r.top}px`;
     this.el.appendChild(f);
     setTimeout(() => f.remove(), 900);
+  }
+
+  /** A stoke: they hop (the nearest first), and now and then one of them says something. */
+  private cheer(): void {
+    this.streak = this.t - this.lastTap < 0.6 ? this.streak + 1 : 1;
+    this.lastTap = this.t;
+    this.still = 0;
+    // (Woken up: the sleepy ones startle.)
+    const woke = this.emotes.some((e) => e.kind === 'zzz');
+    this.emotes = this.emotes.filter((e) => e.kind !== 'zzz');
+    const high = 2 + Math.min(5, this.streak * 0.4);
+    this.seats.forEach((st, i) => {
+      if (st.hop > 0 && st.hop < HOP_TIME * 0.6) return;
+      st.hop = 0.0001;
+      st.wait = Math.random() * 0.12 + (woke ? 0.15 : 0);
+      st.high = high * (0.7 + Math.random() * 0.6);
+      // (On a good run they spin round, one after another.)
+      if (this.streak >= 8 && (this.streak + i) % 4 === 0) st.turn = 0.4;
+    });
+    const n = this.seats.length;
+    if (!n) return;
+    const say = (kind: EmoteKind) => {
+      const free = [...Array(n).keys()].filter((i) => !this.emotes.some((e) => e.seat === i));
+      if (free.length) this.emotes.push({ seat: free[Math.floor(Math.random() * free.length)], kind, age: 0 });
+    };
+    if (woke) for (let i = 0; i < Math.min(3, n); i++) say('bang');
+    else if (this.streak === 1) { if (Math.random() < 0.5) say('bang'); }
+    else if (this.streak % 6 === 0) say(this.streak >= 18 ? 'heart' : 'note');
+    else if (Math.random() < 0.08) say('note');
   }
 
   private spark(burst = false): void {
@@ -134,15 +188,51 @@ export class HearthView {
     // Critters round the fire, lit on the side that faces it.
     // (As many as there are, up to eight: half behind the fire, half in front.)
     const seats = Math.min(8, Math.max(1, s.people.length));
-    const ring: [number, number, boolean][] = [];
+    while (this.seats.length < seats) this.seats.push({ hop: 0, wait: 0, high: 0, turn: 0 });
+    this.seats.length = seats;
+    this.emotes = this.emotes.filter((e) => e.seat < seats);
+    // Left a while with the fire low, they nod off; with it roaring, they sit back from it.
+    this.still += dt;
+    if (heat < 0.1 && this.still > 8 && Math.random() < dt * 0.3 && !this.emotes.some((e) => e.kind === 'zzz')) {
+      this.emotes.push({ seat: Math.floor(Math.random() * seats), kind: 'zzz', age: 0 });
+    }
+    if (heat > 0.85 && Math.random() < dt * 0.4 && !this.emotes.some((e) => e.kind === 'sweat')) {
+      this.emotes.push({ seat: Math.floor(Math.random() * seats), kind: 'sweat', age: 0 });
+    }
+    const sitBack = 32 + heat * 4;
+    const ring: { x: number; y: number; left: boolean; i: number }[] = [];
     for (let i = 0; i < seats; i++) {
       const a = Math.PI * 2 * ((i + 0.5) / seats) + 0.3;
-      ring.push([FX + Math.cos(a) * 32, FY + 5 + Math.sin(a) * 9, Math.cos(a) > 0]);
+      const st = this.seats[i];
+      let lift = 0;
+      if (st.hop > 0) {
+        if (st.wait > 0) st.wait -= dt;
+        else {
+          st.hop += dt;
+          const k = st.hop / HOP_TIME;
+          lift = Math.sin(Math.min(1, k) * Math.PI) * st.high;
+          if (k >= 1) st.hop = 0;
+        }
+      }
+      if (st.turn > 0) st.turn = Math.max(0, st.turn - dt);
+      const faceIn = Math.cos(a) > 0;
+      ring.push({ x: FX + Math.cos(a) * sitBack, y: FY + 5 + Math.sin(a) * 9 - lift, left: st.turn > 0.2 ? !faceIn : faceIn, i });
     }
-    ring.sort((p, q) => p[1] - q[1]);
-    const back = ring.filter((r) => r[1] < FY + 5);
-    const front = ring.filter((r) => r[1] >= FY + 5);
-    if (s.look) for (const [x, y, left] of back) drawCreature(b, s.look, Math.round(x), Math.round(y), { left });
+    // (Drawn back to front by where they sit, not where they've hopped to.)
+    const base = (r: { i: number }) => FY + 5 + Math.sin(Math.PI * 2 * ((r.i + 0.5) / seats) + 0.3) * 9;
+    ring.sort((p, q) => base(p) - base(q));
+    const back = ring.filter((r) => base(r) < FY + 5);
+    const front = ring.filter((r) => base(r) >= FY + 5);
+    const critter = (r: { x: number; y: number; left: boolean; i: number }) => {
+      const st = this.seats[r.i];
+      // (Their shadow stays on the ground while they're up in the air.)
+      if (st.hop && st.wait <= 0) {
+        b.fillStyle = 'rgba(0,0,0,0.35)';
+        b.fillRect(Math.round(r.x - 6), Math.round(base(r)), 12, 1);
+      }
+      drawCreature(b, s.look!, Math.round(r.x), Math.round(r.y), { left: r.left, frame: st.hop && st.wait <= 0 ? 1 : 0 });
+    };
+    if (s.look) for (const r of back) critter(r);
 
     // Stones and logs.
     b.fillStyle = '#4a4440';
@@ -168,7 +258,25 @@ export class HearthView {
       b.fillStyle = p.age / p.life < 0.5 ? '#ffd24a' : '#e0602a';
       b.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
     }
-    if (s.look) for (const [x, y, left] of front) drawCreature(b, s.look, Math.round(x), Math.round(y), { left });
+    if (s.look) for (const r of front) critter(r);
+    // What they're saying, over their heads (rising a little, then gone).
+    for (const e of this.emotes) {
+      e.age += dt;
+      const r = ring.find((q) => q.i === e.seat);
+      const pic = EMOTES[e.kind];
+      if (!r) continue;
+      const life = e.kind === 'zzz' ? 2.4 : 1.1;
+      if (e.age > life) continue;
+      const rise = Math.round(e.age * (e.kind === 'zzz' ? 3 : 5));
+      const x0 = Math.round(r.x + (r.left ? -4 : 4) - pic.rows[0].length / 2);
+      const y0 = Math.round(r.y - 22 - rise - pic.rows.length);
+      if (e.age > life - 0.3 && Math.floor(e.age * 12) % 2) continue;
+      b.fillStyle = '#000';
+      pic.rows.forEach((row, yy) => [...row].forEach((ch, xx) => ch === 'x' && b.fillRect(x0 + xx - 1, y0 + yy - 1, 3, 3)));
+      b.fillStyle = pic.color;
+      pic.rows.forEach((row, yy) => [...row].forEach((ch, xx) => ch === 'x' && b.fillRect(x0 + xx, y0 + yy, 1, 1)));
+    }
+    this.emotes = this.emotes.filter((e) => e.age <= (e.kind === 'zzz' ? 2.4 : 1.1));
 
     // The words: how hot, and what it's worth.
     const more = fireMore(s);
