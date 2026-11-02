@@ -15,7 +15,8 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
-import { setSail } from './economy/sail';
+import { buySailUp, buyShips, gust, openRoute, setSail, type SailUp } from './economy/sail';
+import { setSailMany } from './ui/sailPanels';
 import { EmberView } from './ui/emberView';
 import { HearthView } from './ui/hearthView';
 import { YEAR_DAYS, pastShore, situationOf, spoke, placeName, surroundings, speakerOf, langOf, growth, SHORE_CELLS, type ShoreState, workSign, destinations, buyPerk, smartCrew, toggleCrew, canCross, cross, buyGen, buyUpgrade as buyShoreUpgrade, buyWork, chiefNear, stoke, take, totalCritters, foodRate } from './economy/shore';
@@ -605,6 +606,15 @@ function visitIsle(k: number | null): void {
 /** A tap on the world map: one of your islands, to go and see it (as it was left, or home as it
  * is); someone else's, a word on who they are. */
 function sailTap(x: number, y: number): void {
+  // A route tapped: the wind fills its sails (×2 for a few seconds).
+  const route = scene.worldRouteAt(state, x, y);
+  const world = state.stages.sail.world;
+  if (route !== null && world) {
+    gust(world, route);
+    scene.float(x, y - 10, 'Fair wind! ×2', '#fff6c8');
+    tapSound();
+    return;
+  }
   const i = scene.worldIsleAt(state, x, y);
   if (!i) return;
   if (i.mine === undefined) {
@@ -1807,7 +1817,7 @@ function renderHint(): void {
     else if (s && !Object.keys(s.gens).length) text = 'Stoke the fire (the Hearth tab), then send out foragers (in Build)';
     else if (!pokedThisStage) text = 'Tap the land to walk · pinch to zoom';
   } else if (state.current === 'sail') {
-    if (!pokedThisStage) text = 'Drag to look round · tap one of your islands';
+    if (!pokedThisStage) text = 'Tap a route for a fair wind · drag to look round';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
   hint.hidden = !text || !modal.hidden || (ui.open && ui.full) || (ui.open && ui.tab === 'hearth');
@@ -2575,6 +2585,25 @@ function act(el: HTMLElement): void {
   else if (el.dataset.choice) {
     if (chooseEvent(state, Number(el.dataset.choice))) panelKey = '';
     if (modal.dataset.kind === 'runin') modal.hidden = true;
+  }
+  else if (el.dataset.sailmany !== undefined) {
+    setSailMany(Number(el.dataset.sailmany));
+    panelKey = '';
+  } else if (el.dataset.routebuy) {
+    if (buyShips(state, Number(el.dataset.routebuy), Number(el.dataset.n ?? 1))) {
+      cue('chime', 0.3);
+      panelKey = '';
+    }
+  } else if (el.dataset.routeopen) {
+    if (openRoute(state, Number(el.dataset.routeopen))) {
+      cue('chime', 0.5);
+      panelKey = '';
+    }
+  } else if (el.dataset.sailup) {
+    if (buySailUp(state, el.dataset.sailup as SailUp)) {
+      cue('ascend', 0.4);
+      panelKey = '';
+    }
   }
   else if (el.dataset.worldisle) {
     const i = state.stages.sail.world?.isles.find((x) => x.id === Number(el.dataset.worldisle));

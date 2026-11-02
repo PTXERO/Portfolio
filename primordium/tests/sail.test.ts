@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createState } from '../src/economy/state';
 import { cross, shoreOf, startShore, takeRaft } from '../src/economy/shore';
-import { coastAt, makeWorld, MASK, setSail, SIGHT } from '../src/economy/sail';
+import { buySailUp, buyShips, coastAt, gust, level, makeWorld, MASK, openCost, openRoute, routeOptions, routeRate, sailRate, setSail, shipCost, sightOf } from '../src/economy/sail';
+import { tick } from '../src/economy/tick';
+import { D } from '../src/economy/num';
 import { deserialize, serialize } from '../src/economy/save';
 import type { TribeState } from '../src/economy/types';
 
@@ -40,7 +42,7 @@ describe('The Age of Sail: the world map', () => {
     expect(land).toBeLessThan(MASK * MASK * 0.95);
     for (const i of world.isles) {
       if (i.mine !== undefined) continue;
-      const near = mine.some((m) => Math.hypot(m.x - i.x, m.y - i.y) < SIGHT + m.r * 0.5 + i.r * 0.5);
+      const near = mine.some((m) => Math.hypot(m.x - i.x, m.y - i.y) < sightOf(world) + m.r * 0.5 + i.r * 0.5);
       expect(i.found).toBe(near);
     }
   });
@@ -53,5 +55,51 @@ describe('The Age of Sail: the world map', () => {
     expect(state.unlocked).toContain('sail');
     const back = deserialize(serialize(state));
     expect(back.stages.sail.world?.isles.length).toBe(state.stages.sail.world!.isles.length);
+  });
+  it('trade: a free first route earns by itself; ships cost more each; routes open; upgrades multiply; a gust doubles', () => {
+    const state = fresh();
+    shoreOf(state)!.culture = { since: 0, age: 6, practice: {}, done: [], forks: {} };
+    setSail(state);
+    const world = state.stages.sail.world!;
+    expect(world.routes).toHaveLength(1);
+    expect(world.routes![0].ships).toBe(1);
+    const before = sailRate(state);
+    expect(before).toBeGreaterThan(0);
+    tick(state, 60);
+    expect(state.stages.sail.currency.toNumber()).toBeCloseTo(before * 60, 0);
+    const r = world.routes![0];
+    expect(shipCost(world, { to: r.to, ships: 20 })).toBeGreaterThan(shipCost(world, { to: r.to, ships: 10 }) * 3);
+    state.stages.sail.currency = D(1e12);
+    expect(buyShips(state, 0, 9)).toBe(true);
+    // (10 ships: the route's first ×2.)
+    expect(routeRate(state, world, r)).toBeCloseTo(before * 10 * 2, 5);
+    const next = routeOptions(world)[0];
+    const c = openCost(world, next.id);
+    expect(openRoute(state, next.id)).toBe(true);
+    expect(state.stages.sail.currency.toNumber()).toBeCloseTo(1e12 - shipCost({ ...world, routes: [{ to: r.to, ships: 1 }] } as never, { to: r.to, ships: 1 }, 9) - c, -3);
+    const sails = routeRate(state, world, r);
+    expect(buySailUp(state, 'sails')).toBe(true);
+    expect(level(world, 'sails')).toBe(1);
+    expect(routeRate(state, world, r)).toBeCloseTo(sails * 1.3, 5);
+    gust(world, 0);
+    expect(routeRate(state, world, r, 0)).toBeCloseTo(sails * 1.3 * 2, 5);
+    // (Charts: further seen, more to trade with.)
+    const sight = sightOf(world);
+    const found = world.isles.filter((i) => i.found).length;
+    state.stages.sail.currency = D(1e12);
+    expect(buySailUp(state, 'charts')).toBe(true);
+    expect(sightOf(world)).toBeGreaterThan(sight);
+    expect(world.isles.filter((i) => i.found).length).toBeGreaterThanOrEqual(found);
+  });
+  it('passage buys ships for you, then opens routes', () => {
+    const state = fresh();
+    shoreOf(state)!.culture = { since: 0, age: 6, practice: {}, done: [], forks: {} };
+    setSail(state);
+    const world = state.stages.sail.world!;
+    world.ups = { passage: 2 };
+    state.stages.sail.currency = D(1e9);
+    tick(state, 1);
+    expect(world.routes!.length).toBeGreaterThan(1);
+    expect(world.routes![0].ships).toBeGreaterThan(1);
   });
 });

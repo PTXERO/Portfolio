@@ -1,4 +1,5 @@
 import { tribalRate } from './tribal';
+import { sailRate } from './sail';
 import { STAGES, STAGE_ORDER } from '../content/stages';
 import { D, Decimal, ZERO } from './num';
 import { settledNests, statsOf } from './creature';
@@ -317,6 +318,7 @@ function creatureRate(state: GameState): Decimal {
 export function stageRate(state: GameState, stage: StageId): Decimal {
   if (STAGES[stage].places) return creatureRate(state);
   if (STAGES[stage].tribal) return tribalRate(state);
+  if (STAGES[stage].sail) return D(sailRate(state));
   let total = ZERO;
   for (const g of STAGES[stage].generators) total = total.add(generatorRate(state, stage, g));
   return total;

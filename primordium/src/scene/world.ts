@@ -5,7 +5,7 @@
 import type { GameState } from '../economy/types';
 import type { Frame } from './paint';
 import { hash } from './paint';
-import { MASK, SIGHT, coastAt, type World, type WorldIsle } from '../economy/sail';
+import { MASK, coastAt, gustLeft, homeOf, routeDist, shipSpeed, sightOf, type World, type WorldIsle } from '../economy/sail';
 
 export class WorldScene {
   private camX = 0;
@@ -129,6 +129,7 @@ export class WorldScene {
       if (X > W || Y > H || X + s < 0 || Y + s < 0) continue;
       b.drawImage(this.sprite(i), Math.round(X), Math.round(Y), Math.round(s), Math.round(s));
     }
+    this.drawRoutes(b, world, f.dt);
     // Night: your islands' lights come on (the day goes round in two minutes, as on the shore).
     const day = (t % 120) / 120;
     const night = Math.max(0, Math.min(1, (day - 0.72) * 8)) * Math.max(0, Math.min(1, (1.02 - day) * 8));
@@ -150,6 +151,66 @@ export class WorldScene {
     this.drawFog(b, world, t);
   }
 
+  /** Where each route's ships are along it (0 to 1 there and back), kept frame to frame. */
+  private phase = new Map<number, number>();
+  /** The ends of a route on screen (coast to coast). */
+  private ends(world: World, to: number): [number, number, number, number] {
+    const h = homeOf(world);
+    const i = world.isles[to];
+    const d = Math.hypot(i.x - h.x, i.y - h.y) || 1;
+    const ux = (i.x - h.x) / d;
+    const uy = (i.y - h.y) / d;
+    return [this.sx(h.x + ux * h.r * 0.45), this.sy(h.y + uy * h.r * 0.45), this.sx(i.x - ux * i.r * 0.45), this.sy(i.y - uy * i.r * 0.45)];
+  }
+  /** The routes as faint dotted lines, and their ships going back and forth on them. */
+  private drawRoutes(b: CanvasRenderingContext2D, world: World, dt: number): void {
+    (world.routes ?? []).forEach((r, i) => {
+      const [ax, ay, bx, by] = this.ends(world, r.to);
+      const len = Math.hypot(bx - ax, by - ay);
+      b.fillStyle = 'rgba(190, 225, 240, 0.35)';
+      for (let k = 0; k < len; k += 5) b.fillRect(Math.round(ax + ((bx - ax) * k) / len), Math.round(ay + ((by - ay) * k) / len), 1, 1);
+      // (A round trip takes its real time; a gust blows them along twice as fast.)
+      const trip = (2 * routeDist(world, r.to)) / shipSpeed(world);
+      const p = ((this.phase.get(i) ?? 0) + (dt / trip) * (gustLeft(world, i) > 0 ? 2 : 1)) % 1;
+      this.phase.set(i, p);
+      const shown = Math.min(r.ships, 6 + Math.floor(Math.log2(r.ships)));
+      for (let k = 0; k < shown; k++) {
+        const q = (p + k / shown) % 1;
+        const out = q < 0.5;
+        const s = out ? q * 2 : 2 - q * 2;
+        // (Spread a little either side of the line, so a busy route reads as busy.)
+        const side = ((k * 7) % 5) - 2;
+        const nx = -(by - ay) / (len || 1);
+        const ny = (bx - ax) / (len || 1);
+        const X = Math.round(ax + (bx - ax) * s + nx * side);
+        const Y = Math.round(ay + (by - ay) * s + ny * side);
+        const dir = (out ? bx - ax : ax - bx) >= 0 ? 1 : -1;
+        b.fillStyle = 'rgba(220, 240, 250, 0.5)';
+        b.fillRect(X - dir * 3, Y + 1, 2, 1);
+        b.fillStyle = '#6a4a2a';
+        b.fillRect(X - 1, Y + 1, 3, 1);
+        b.fillStyle = gustLeft(world, i) > 0 ? '#fff6c8' : '#f2ead7';
+        b.fillRect(X, Y - 1, 1, 2);
+      }
+    });
+  }
+  /** The route under a tap (near its line), if any. */
+  routeAt(world: World, ax: number, ay: number): number | null {
+    let best: number | null = null;
+    let bestD = 7;
+    (world.routes ?? []).forEach((r, i) => {
+      const [x1, y1, x2, y2] = this.ends(world, r.to);
+      const L = (x2 - x1) ** 2 + (y2 - y1) ** 2 || 1;
+      const k = Math.max(0, Math.min(1, ((ax - x1) * (x2 - x1) + (ay - y1) * (y2 - y1)) / L));
+      const d = Math.hypot(ax - (x1 + (x2 - x1) * k), ay - (y1 + (y2 - y1) * k));
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    });
+    return best;
+  }
+
   /** The fog over what's not been seen from your islands: soft, drifting cloud. */
   private drawFog(b: CanvasRenderingContext2D, world: World, t: number): void {
     const W = this.W;
@@ -158,6 +219,7 @@ export class WorldScene {
     const img = this.fogImg;
     const d = img.data;
     const mine = world.isles.filter((i) => i.mine !== undefined);
+    const SIGHT = sightOf(world);
     for (let y = 0; y < H; y += 1) {
       for (let x = 0; x < W; x += 1) {
         const m = this.toMap(x, y);
