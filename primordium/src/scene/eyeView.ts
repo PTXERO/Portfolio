@@ -71,6 +71,10 @@ vec3 skyCol(vec3 d) {
   return c;
 }
 
+// (How deep the mist lies over unseen land, tiles; and how thick it is.)
+#define MIST_DEEP 5.0
+#define MIST_THICK 0.16
+
 void main() {
   // The ray from the eye.
   float fov = 1.15;
@@ -86,12 +90,17 @@ void main() {
   float t = 0.2;
   float hitT = -1.0;
   float sea = 0.0;
+  // The fog of war as mist: a grey haze lying a few tiles deep over the land not yet seen,
+  // gathered along the line of sight (seen through near by, thick over far unseen land).
+  float mist = 0.0;
   for (int i = 0; i < 180; i++) {
     vec3 p = uEye + d * t;
     float g = max(height(p.xy), sea);
     float above = p.z - g;
     if (above < 0.02) { hitT = t; break; }
-    t += max(0.04 + t * 0.004, above * 0.45);
+    float step = max(0.04 + t * 0.004, above * 0.45);
+    if (above < MIST_DEEP) mist += texture2D(uFog, p.xy / uN).a * (1.0 - above / MIST_DEEP) * step;
+    t += step;
     if (t > FAR || p.z > uK * 2.0) break;
   }
   vec3 col;
@@ -138,12 +147,14 @@ void main() {
       base = mix(base, base * 0.7 + vec3(0.05), smoothstep(0.35, 0.7, steep));
       col = base * (uAmb + uSunCol * diff);
     }
-    // The fog of war: what's not been seen is mist.
-    float fog = texture2D(uFog, p.xy / uN).a;
-    col = mix(col, mix(vec3(0.85, 0.88, 0.9), vec3(0.2, 0.22, 0.3), uNight), smoothstep(0.2, 0.9, fog));
+    // (Unseen ground itself wears a little of the mist too, so nothing unseen is sharp.)
+    mist += texture2D(uFog, p.xy / uN).a * 4.0;
     // Distance: the far side fades into the sky.
     col = mix(col, skyCol(vec3(d.xy, 0.02)), smoothstep(FAR * 0.35, FAR, t));
   }
+  // The mist: grey, see-through where it's thin, lit by the hour.
+  vec3 mistCol = mix(vec3(0.64, 0.66, 0.69) * (uAmb + uSunCol * 0.6) * 1.15, vec3(0.16, 0.18, 0.24), uNight);
+  col = mix(col, mistCol, 1.0 - exp(-mist * MIST_THICK));
   gl_FragColor = vec4(col, 1.0);
 }`;
 
