@@ -15,6 +15,8 @@ export class Trails {
   /** Cells across (the island's tiles over CELL). */
   private N = ISLAND / CELL;
   private wear = new Float32Array(this.N * this.N);
+  /** Roads laid down (0 none, 1 dirt, 2 stone, 3 paved): drawn from the state, not worn. */
+  private road = new Uint8Array(this.N * this.N);
   readonly canvas = document.createElement('canvas');
   version = 0;
   private seed = -1;
@@ -32,6 +34,7 @@ export class Trails {
     if (n / CELL !== this.N) {
       this.N = n / CELL;
       this.wear = new Float32Array(this.N * this.N);
+      this.road = new Uint8Array(this.N * this.N);
       this.canvas.width = this.N;
       this.canvas.height = this.N;
     }
@@ -63,9 +66,42 @@ export class Trails {
   private redraw(): void {
     const ctx = this.canvas.getContext('2d')!;
     const img = ctx.createImageData(this.N, this.N);
-    for (let i = 0; i < this.wear.length; i++) img.data[i * 4 + 3] = Math.round(Math.min(1, this.wear[i]) * 255);
+    for (let i = 0; i < this.wear.length; i++) {
+      img.data[i * 4 + 3] = Math.round(Math.min(1, this.wear[i]) * 255);
+      if (this.road[i]) {
+        // (Opaque, or the canvas would drop the colour the road's kept in.)
+        img.data[i * 4 + 3] = 255;
+        img.data[i * 4] = 255;
+        img.data[i * 4 + 1] = this.road[i] * 85;
+      }
+    }
     ctx.putImageData(img, 0, 0);
     this.version++;
+  }
+
+  /** Lays the roads (each a line of points, and how it's surfaced), replacing those before. */
+  setRoads(seed: number, n: number, roads: { pts: { x: number; y: number }[]; tier: number }[]): void {
+    if (seed !== this.seed || n / CELL !== this.N) this.load(seed, n);
+    const N = this.N;
+    this.road.fill(0);
+    for (const r of roads) {
+      for (let k = 1; k < r.pts.length; k++) {
+        const a = r.pts[k - 1];
+        const b = r.pts[k];
+        const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / (CELL * 0.5)));
+        for (let j = 0; j <= steps; j++) {
+          const cx = Math.floor((a.x + ((b.x - a.x) * j) / steps) / CELL);
+          const cy = Math.floor((a.y + ((b.y - a.y) * j) / steps) / CELL);
+          // (A road a few tiles across: the cell and the four round it.)
+          for (const [ox, oy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const x = cx + ox;
+            const y = cy + oy;
+            if (x >= 0 && y >= 0 && x < N && y < N) this.road[y * N + x] = Math.max(this.road[y * N + x], r.tier);
+          }
+        }
+      }
+    }
+    this.redraw();
   }
 
   /** A frame: `feet` walked for `dt` seconds (only the ones moving count). */

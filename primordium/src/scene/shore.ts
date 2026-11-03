@@ -5,10 +5,11 @@
 
 import { PAL } from '../art/sprites';
 import { Biome, CELL, isLand, type Pt } from '../economy/island';
-import { DAY_SEC, terrainReady, walkTo, type Habitat, growth, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, shoreOf, shoreSeason, type ShoreState, type Village } from '../economy/shore';
+import { count, DAY_SEC, terrainReady, walkTo, type Habitat, growth, isAdult, poiDef, poiHere, poisOf, relation, shoreIsland, shoreOf, shoreSeason, type ShoreState, type Village } from '../economy/shore';
 import type { GameState, Genes } from '../economy/types';
 import type { CreatureLook } from './creatureLook';
 import { BUILDS, type BuildId } from '../content/shore';
+import { findPath } from '../economy/paths';
 import { RangeScene } from './range';
 import type { Sprite } from './wild';
 import { herdInView, squeak } from '../audio/sound';
@@ -69,6 +70,10 @@ export class ShoreScene extends RangeScene {
   /** A season's ground being painted, a few rows a frame (the island's too big for one go). */
   private painting: { si: number; job: Generator<void, HTMLCanvasElement> } | null = null;
   private walkers: Walker[] = [];
+  /** Roads to the villages won: each one's way (found once), and what was last laid. */
+  private roadWays = new Map<string, Pt[]>();
+  private roadKey = '';
+  private roadsLaid: Pt[][] = [];
   private locals = new Map<number, Walker[]>();
   private woods: Pt[] = [];
   private woodsSeed = -1;
@@ -519,6 +524,8 @@ export class ShoreScene extends RangeScene {
     }
 
     this.wild.update(this.wildView, is, sprites, { b, t, dt, nests: [s.hearth], season: si, night, feet: seenFeet, me: s.chiefAt });
+    this.layRoads(s, is);
+    this.drawCarts(b, sprites, s, t, z, fogged);
     this.trails.update(is.seed, this.walkers.filter((w) => w.goal && Math.hypot(w.goal.x - w.x, w.goal.y - w.y) > 0.3), dt, is.n);
     sprites.sort((a, c) => this.spriteDepth(a) - this.spriteDepth(c));
     // (Each hidden behind any ridge between it and the camera.)
@@ -1037,6 +1044,77 @@ export class ShoreScene extends RangeScene {
       b.fillRect(X - w / 2, gy, w, 2);
       b.fillStyle = PAL.y;
       b.fillRect(X - w / 2, gy, Math.round(w * Math.min(1, progress)), 2);
+    }
+  }
+
+  /** Roads, only to look at: from the village out to each village won (joining the nearest
+   * road already there), laid a stretch a day from the day it was won; dirt, then stone once the
+   * Town Square stands, then paved from the Iron Age. */
+  private layRoads(s: ShoreState, is: ReturnType<typeof shoreIsland>): void {
+    const won = s.villages.filter((v) => v.won !== undefined && !v.gone).sort((a, c) => a.won! - c.won!);
+    const age = s.culture?.age ?? 1;
+    const tier = age >= 4 ? 3 : age >= 3 ? 2 : 1;
+    const shown = won.map((v) => Math.min(20, Math.floor(((s.day - v.won!) / this.roadDays(v, s)) * 20)));
+    const key = `${is.seed}|${tier}|${won.map((v, i) => `${v.id}:${shown[i]}`).join(',')}`;
+    if (key === this.roadKey) return;
+    this.roadKey = key;
+    const net: Pt[] = [{ ...s.hearth }];
+    const laid: Pt[][] = [];
+    won.forEach((v, i) => {
+      const id = `${is.seed}:${v.id}`;
+      let way = this.roadWays.get(id);
+      if (!way) {
+        let from = net[0];
+        for (const p of net) if (Math.hypot(p.x - v.x, p.y - v.y) < Math.hypot(from.x - v.x, from.y - v.y)) from = p;
+        way = [from, ...findPath(is, from, { x: v.x, y: v.y }, 60000)];
+        this.roadWays.set(id, way);
+      }
+      net.push(...way);
+      const pts = way.slice(0, Math.ceil((way.length * shown[i]) / 20));
+      if (pts.length > 1) laid.push(pts);
+    });
+    this.roadsLaid = laid;
+    this.trails.setRoads(is.seed, is.n, laid.map((pts) => ({ pts, tier })));
+  }
+
+  /** Days a village's road takes: about a day for every 30 tiles. */
+  private roadDays(v: Village, s: ShoreState): number {
+    return Math.max(1, Math.hypot(v.x - s.hearth.x, v.y - s.hearth.y) / 30);
+  }
+
+  /** Caravans bought: carts going up and down the roads. */
+  private drawCarts(b: CanvasRenderingContext2D, sprites: Sprite[], s: ShoreState, t: number, z: number, fogged: (x: number, y: number) => boolean): void {
+    const n = Math.min(count(s, 'caravan'), 8);
+    if (!n || !this.roadsLaid.length) return;
+    for (let k = 0; k < n; k++) {
+      const way = this.roadsLaid[k % this.roadsLaid.length];
+      if (way.length < 2) continue;
+      // There and back, each cart its own pace and start.
+      const u = (t / (way.length * 0.9) + k * 0.37) % 2;
+      const f = (u < 1 ? u : 2 - u) * (way.length - 1);
+      const a = way[Math.floor(f)];
+      const c = way[Math.min(way.length - 1, Math.floor(f) + 1)];
+      const x = a.x + (c.x - a.x) * (f % 1);
+      const y = a.y + (c.y - a.y) * (f % 1);
+      if (fogged(x, y)) continue;
+      const X = Math.round(this.sx(x, y));
+      const Y = Math.round(this.py(x, y));
+      if (X < -20 || X > this.W + 20 || Y < -20 || Y > this.H + 20) continue;
+      const q = Math.max(1, Math.round(z * 0.5));
+      sprites.push({
+        y,
+        at: { x, y },
+        draw: () => {
+          const r = (dx: number, dy: number, w: number, h: number, col: string) => {
+            b.fillStyle = col;
+            b.fillRect(X + dx * q, Y + dy * q, w * q, h * q);
+          };
+          r(-3, -4, 7, 3, '#7a5634');
+          r(-3, -5, 7, 1, '#c8b080');
+          r(-2, -1, 2, 2, '#3a2a1a');
+          r(2, -1, 2, 2, '#3a2a1a');
+        },
+      });
     }
   }
 

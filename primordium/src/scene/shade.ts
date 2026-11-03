@@ -342,8 +342,18 @@ void main() {
     }
   } else {
     // Paths worn by the herd's feet: grass gives way to trodden earth.
-    float worn = smoothstep(0.12, 0.7, inside ? texture2D(uTrail, w / N).a : 0.0) * (biome > 2.5 && biome < 6.5 ? 0.7 : 0.0);
+    vec4 tr = inside ? texture2D(uTrail, w / N) : vec4(0.0);
+    float worn = smoothstep(0.12, 0.7, tr.a) * (biome > 2.5 && biome < 6.5 ? 0.7 : 0.0);
     col = mix(col, vec3(0.52, 0.42, 0.3) * (0.88 + 0.24 * hash(floor(w * 2.0))), worn);
+    // Roads to the villages won: dirt, then stone, then paved, as the Ages go on.
+    float road = smoothstep(0.3, 0.7, tr.r);
+    if (road > 0.0) {
+      float tier = tr.g / max(tr.r, 0.01) * 3.0;
+      vec3 rc = vec3(0.55, 0.44, 0.3) * (0.85 + 0.3 * hash(floor(w * 2.0)));
+      if (tier > 1.5) rc = vec3(0.55, 0.54, 0.51) * (0.78 + 0.4 * hash(floor(w * 1.5)));
+      if (tier > 2.5) rc = vec3(0.7, 0.66, 0.6) * (0.9 + 0.12 * step(0.1, fract(w.x * 0.7)) * step(0.1, fract(w.y * 0.7)));
+      col = mix(col, rc, road * 0.92);
+    }
     // Faces: the earth and rock under the top, darker the steeper.
     vec3 earth = mix(vec3(0.42, 0.32, 0.22), vec3(0.45, 0.47, 0.5), smoothstep(0.45, 0.65, h));
     col = mix(col, earth * (0.75 + 0.25 * fract(w.y * 0.5)), face * 0.85);
