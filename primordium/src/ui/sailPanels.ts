@@ -80,7 +80,7 @@ export function worldLayout(state: GameState): string {
       const isle = world.isles[r.to];
       const n = shipsToBuy(world, i, have);
       const cost = shipCost(world, r, n);
-      const next = [10, 25, 50, 100].find((m) => r.ships < m);
+      const next = r.ships < 100 ? [10, 25, 50, 100].find((m) => r.ships < m) : 100 + (Math.floor((r.ships - 100) / 50) + 1) * 50;
       return `<div class="card px-box build"><div class="info"><div class="name">${isleName(state, isle)} <span class="dim">×${r.ships}</span></div>
         <div class="sub">${raided(world, i) ? '<span class="red">Pirates! Tap them on the map.</span> ' : ''}<span class="green" data-t="route-${i}">${format(routeRate(state, world, r, i))}/s</span>${next ? ` · ×2 at ${next} ships` : ''}${milestone(r.ships) ? ` · ×${2 ** milestone(r.ships)}` : ''}</div></div>
         <button class="px-btn buy${have >= cost ? ' gold' : ''}" data-routebuy="${i}" data-n="${n}"${have >= cost ? '' : ' disabled'}>${n > 1 ? `+${n} · ` : ''}${format(cost)}</button></div>`;

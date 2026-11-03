@@ -270,7 +270,8 @@ export function shipSpeed(world: World): number {
 }
 /** ×2 for each of 10, 25, 50 and 100 ships on a route (the same rule as every stage). */
 export function milestone(ships: number): number {
-  return [10, 25, 50, 100].filter((n) => ships >= n).length;
+  // (After a hundred, another every fifty: there's always a next one.)
+  return [10, 25, 50, 100].filter((n) => ships >= n).length + (ships >= 100 ? Math.floor((ships - 100) / 50) : 0);
 }
 /** Influence a trip brings in. */
 export function tripPay(state: GameState, world: World, r: Route): number {
@@ -414,9 +415,11 @@ export function joinedCount(world: World): number {
   return world.isles.filter((i) => i.joined).length;
 }
 /** Each island won makes the next dearer to win (as each village beaten did, on the shore). */
-export const WIN_DEARER = 1.3;
+export const WIN_DEARER = 1.2;
+/** And every island's dear from the start (none of them handed over). */
+export const WIN_BASE = 10;
 function dearer(world: World): number {
-  return WIN_DEARER ** joinedCount(world);
+  return WIN_DEARER ** joinedCount(world) * WIN_BASE;
 }
 /** How a people is best met, theirs against yours: kin take gifts gladly (and grazers give
  * them), hunters take islands, omnivores win them by trading. */
@@ -498,7 +501,8 @@ export function conquer(state: GameState, id: number): boolean {
 }
 /** Trust a route to them wins a second (more ships, more; omnivores twice as fast). */
 export function tradeTrust(world: World, r: Route): number {
-  return Math.min(1, 0.0012 * Math.sqrt(r.ships)) * (world.diet === 'omnivore' ? 2 : 1);
+  // (Slower, as gifts and taking get dearer, the more that are yours.)
+  return (Math.min(1, 0.0012 * Math.sqrt(r.ships)) * (world.diet === 'omnivore' ? 2 : 1)) / dearer(world);
 }
 function addTrust(world: World, i: WorldIsle, n: number): void {
   i.trust = Math.min(100, (i.trust ?? 0) + n);
