@@ -7,7 +7,7 @@ import type { Frame } from './paint';
 import { hash } from './paint';
 import { isleName } from '../ui/sailPanels';
 import { alongLane, laneLength, portOf, routeFrom, seaLane, type Pt } from '../economy/seaways';
-import { MASK, coastAt, gustLeft, ours, routeDist, shipSpeed, sightFrom, type World, type WorldIsle } from '../economy/sail';
+import { MASK, coastAt, gustLeft, level, ours, routeDist, shipSpeed, sightFrom, type World, type WorldIsle } from '../economy/sail';
 
 export class WorldScene {
   private camX = 0;
@@ -311,9 +311,7 @@ export class WorldScene {
     if (!this.fogImg || this.fogImg.width !== W || this.fogImg.height !== H) this.fogImg = b.createImageData(W, H);
     const img = this.fogImg;
     const d = img.data;
-    // (Clear round your islands as far as they see, and round every island found besides: one a
-    // voyage reached sits in a pocket of open sea, out in the fog.)
-    const mine = world.isles.filter((i) => ours(i) || i.found).map((i) => ({ x: i.x, y: i.y, k: ours(i) ? sightFrom(world, i) + i.r * 0.6 : i.r * 0.8 + 14 }));
+    const field = this.clearField(world);
     const bright = 1 - night * 0.55;
     const tone = 0.3 + bright * 0.72;
     for (let y = 0; y < H; y += 1) {
@@ -324,8 +322,7 @@ export class WorldScene {
         const qy = m.y - t * 0.7;
         const jx = (fogNoise(qx * 0.03, qy * 0.03) - 0.5) * 18;
         const jy = (fogNoise(qx * 0.03 + 9, qy * 0.03 + 9) - 0.5) * 18;
-        let clear = 1e9;
-        for (const i of mine) clear = Math.min(clear, Math.hypot(i.x - m.x - jx, i.y - m.y - jy) - i.k);
+        const clear = field.at(m.x + jx, m.y + jy);
         const fogA = smoothstep(-20, 20, clear);
         // Rolling cloud: two drifts of it, crossing.
         const fn = fogFbm(m.x * 0.03 + t * 0.02, m.y * 0.03 - t * 0.013);
@@ -353,6 +350,58 @@ export class WorldScene {
     b.drawImage(c, 0, 0);
   }
   private fogCanvas: HTMLCanvasElement | null = null;
+  /** How far each bit of sea is from being seen (below 0: seen), on a coarse grid, worked out
+   * again only when what's seen changes: round your islands as far as they see, round every
+   * island found besides (one a voyage reached sits in a pocket of open sea), and along every
+   * route your ships sail. */
+  private field: { key: string; at: (x: number, y: number) => number } | null = null;
+  private clearField(world: World): { at: (x: number, y: number) => number } {
+    const key = JSON.stringify([world.seed, world.isles.map((i) => (ours(i) ? 2 : i.found ? 1 : 0)).join(''), (world.routes ?? []).map((r) => r.to), level(world, 'charts')]);
+    if (this.field?.key === key) return this.field;
+    const spots: { x: number; y: number; k: number }[] = world.isles.filter((i) => ours(i) || i.found).map((i) => ({ x: i.x, y: i.y, k: ours(i) ? sightFrom(world, i) + i.r * 0.6 : i.r * 0.8 + 14 }));
+    // (A lane seen all along it, a little way either side: what the ships see from their decks.)
+    for (const r of world.routes ?? []) {
+      const lane = this.lane(world, r.to);
+      const len = laneLength(lane);
+      for (let s = 0; s <= len; s += 10) {
+        const p = alongLane(lane, s / len);
+        spots.push({ x: p.x, y: p.y, k: LANE_SIGHT });
+      }
+    }
+    const C = 8;
+    const gw = Math.ceil(world.w / C) + 1;
+    const gh = Math.ceil(world.h / C) + 1;
+    // (Fog past 60 map units out reads as fog all the same: each spot only reaches that far.)
+    const FAR = 60;
+    const g = new Float32Array(gw * gh).fill(FAR);
+    for (const s of spots) {
+      const reach = s.k + FAR;
+      const x0 = Math.max(0, Math.floor((s.x - reach) / C));
+      const x1 = Math.min(gw - 1, Math.ceil((s.x + reach) / C));
+      const y0 = Math.max(0, Math.floor((s.y - reach) / C));
+      const y1 = Math.min(gh - 1, Math.ceil((s.y + reach) / C));
+      for (let y = y0; y <= y1; y++)
+        for (let x = x0; x <= x1; x++) {
+          const c = Math.hypot(s.x - x * C, s.y - y * C) - s.k;
+          if (c < g[y * gw + x]) g[y * gw + x] = c;
+        }
+    }
+    const at = (x: number, y: number) => {
+      const fx = Math.max(0, Math.min(gw - 1.001, x / C));
+      const fy = Math.max(0, Math.min(gh - 1.001, y / C));
+      const ix = Math.floor(fx);
+      const iy = Math.floor(fy);
+      const ux = fx - ix;
+      const uy = fy - iy;
+      const a = g[iy * gw + ix] + (g[iy * gw + ix + 1] - g[iy * gw + ix]) * ux;
+      const b = g[(iy + 1) * gw + ix] + (g[(iy + 1) * gw + ix + 1] - g[(iy + 1) * gw + ix]) * ux;
+      // (Off the map's edge, nothing's seen.)
+      const out = Math.max(0, -x, -y, x - world.w, y - world.h);
+      return a + (b - a) * uy + out;
+    };
+    this.field = { key, at };
+    return this.field;
+  }
 
   pan(dx: number, dy: number): void {
     if (!this.zoom) return;
@@ -379,6 +428,9 @@ export class WorldScene {
     return best;
   }
 }
+
+/** Map units seen either side of a route. */
+const LANE_SIGHT = 26;
 
 // Value noise for the fog (a fixed lattice, smoothly blended), and four octaves of it.
 const LATTICE = (() => {

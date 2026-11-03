@@ -64,6 +64,8 @@ export interface World {
   driven?: number;
   lost?: number;
   age?: number;
+  /** Passage's harbourmaster told to stop (buying ships, opening routes, sending voyages). */
+  passOff?: boolean;
   /** The island last won, still being settled (seconds left): none won till it's done. */
   settling?: { isle: number; left: number } | null;
 }
@@ -394,7 +396,7 @@ export function sailTick(state: GameState, dt: number): void {
   }
   const g = gusts.get(world);
   if (g) for (const [i, left] of g) left - dt <= 0 ? g.delete(i) : g.set(i, left - dt);
-  const passage = level(world, 'passage');
+  const passage = world.passOff ? 0 : level(world, 'passage');
   if (passage >= 3 && !world.voyage && voyageTarget(world) && influence(state) >= voyageCost(world)) sendVoyage(state);
   if (passage >= 2) {
     const next = routeOptions(world)[0];

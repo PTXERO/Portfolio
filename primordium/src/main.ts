@@ -2638,7 +2638,12 @@ function act(el: HTMLElement): void {
     if (chooseEvent(state, Number(el.dataset.choice))) panelKey = '';
     if (modal.dataset.kind === 'runin') modal.hidden = true;
   }
-  else if (el.dataset.sailmany !== undefined) {
+  else if (el.dataset.passage) {
+    const world = state.stages.sail.world;
+    if (world) world.passOff = !world.passOff;
+    panelKey = '';
+    save();
+  } else if (el.dataset.sailmany !== undefined) {
     setSailMany(Number(el.dataset.sailmany));
     panelKey = '';
   } else if (el.dataset.routebuy) {

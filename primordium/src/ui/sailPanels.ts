@@ -62,6 +62,7 @@ export function sailKey(state: GameState): string {
     !!world.voyage,
     world.voyages,
     settlingLeft(world) > 0,
+    !!world.passOff,
     (world.pirates ?? []).map((p) => p.route),
     havensLeft(world),
     have >= voyageCost(world),
@@ -98,7 +99,14 @@ export function routesLayout(state: GameState): string {
         <button class="px-btn buy${have >= c ? ' gold' : ''}" data-routeopen="${x.id}"${have >= c ? '' : ' disabled'}>${format(c)}</button></div>`;
     })
     .join('');
-  return `<div class="panel-head"><h2>Trade routes</h2><span class="dim"><span data-t="sail-rate"></span></span></div>
+  // Passage at work: what the harbour does by itself, and a switch to stop it.
+  const lv = level(world, 'passage');
+  const doing = ['buys ships with half your income', 'buys ships and opens routes', 'buys ships, opens routes and sends voyages'][lv - 1];
+  const harbour = lv
+    ? `<div class="card px-box build"><div class="info"><div class="name">The harbour <span class="tag">Passage ${lv}</span></div><div class="sub">${world.passOff ? 'Stopped.' : `It ${doing}.`}</div></div>
+      <button class="px-btn${world.passOff ? '' : ' on'}" data-passage="1">${world.passOff ? 'Off' : 'On'}</button></div>`
+    : '';
+  return `${harbour}<div class="panel-head"><h2>Trade routes</h2><span class="dim"><span data-t="sail-rate"></span></span></div>
     <div class="seg build-cats">${amounts}</div>
     ${routes}${opens ? `<div class="panel-head"><h2>New routes</h2></div>${opens}` : ''}`;
 }
