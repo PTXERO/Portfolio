@@ -49,6 +49,8 @@ export interface World {
   ups?: Partial<Record<SailUp, number>>;
   /** A voyage out in the fog: from which of yours, toward which island, seconds left of how many. */
   voyage?: { from: number; to: number; left: number; total: number } | null;
+  /** Voyages made: from which of yours to which island (their wakes stay seen on the map). */
+  wakes?: { from: number; to: number }[];
   /** Voyages sent so far (each goes further, and takes longer). */
   voyages?: number;
   /** Peoples just met, not yet shown (first contact). */
@@ -379,6 +381,14 @@ export function sailTick(state: GameState, dt: number): void {
     world.diet ??= shoreOf(state)?.look.diet ?? 'omnivore';
   }
   if (!world.isles.some((i) => i.haven)) makeHavens(world.isles, homeOf(world));
+  // (A world from before wakes were kept: every island found past what yours see was a
+  // voyage's, out from the nearest of yours.)
+  if (!world.wakes) {
+    const mine = world.isles.filter(ours);
+    world.wakes = world.isles
+      .filter((i) => i.found && !ours(i) && !mine.some((m) => Math.hypot(m.x - i.x, m.y - i.y) < sightFrom(world, m) + m.r * 0.5 + i.r * 0.5))
+      .map((i) => ({ from: mine.reduce((a, m) => (Math.hypot(m.x - i.x, m.y - i.y) < Math.hypot(a.x - i.x, a.y - i.y) ? m : a)).id, to: i.id }));
+  }
   if (world.settling) {
     world.settling.left -= dt;
     if (world.settling.left <= 0) world.settling = null;
@@ -478,6 +488,7 @@ export function sendVoyage(state: GameState): boolean {
 function landfall(world: World): void {
   const v = world.voyage!;
   world.voyage = null;
+  (world.wakes ??= []).push({ from: v.from, to: v.to });
   const at = world.isles[v.to];
   if (at.found) return;
   at.found = true;

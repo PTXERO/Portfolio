@@ -414,7 +414,9 @@ export class WorldScene {
    * route your ships sail. */
   private field: { key: string; at: (x: number, y: number) => number } | null = null;
   private clearField(world: World): { at: (x: number, y: number) => number } {
-    const key = JSON.stringify([world.seed, world.isles.map((i) => (ours(i) ? 2 : i.found ? 1 : 0)).join(''), (world.routes ?? []).map((r) => r.to), level(world, 'charts')]);
+    // (A voyage out sees as it goes: its wake so far, a twentieth of the way at a time.)
+    const sailed = world.voyage ? Math.floor((1 - world.voyage.left / world.voyage.total) * 20) / 20 : 0;
+    const key = JSON.stringify([world.seed, world.isles.map((i) => (ours(i) ? 2 : i.found ? 1 : 0)).join(''), (world.routes ?? []).map((r) => r.to), level(world, 'charts'), world.wakes?.length ?? 0, world.voyage?.to, sailed]);
     if (this.field?.key === key) return this.field;
     const spots: { x: number; y: number; k: number }[] = world.isles.filter((i) => ours(i) || i.found).map((i) => ({ x: i.x, y: i.y, k: ours(i) ? sightFrom(world, i) + i.r * 0.6 : i.r * 0.8 + 14 }));
     // (A lane seen all along it, a little way either side: what the ships see from their decks.)
@@ -424,6 +426,17 @@ export class WorldScene {
       for (let s = 0; s <= len; s += 10) {
         const p = alongLane(lane, s / len);
         spots.push({ x: p.x, y: p.y, k: LANE_SIGHT });
+      }
+    }
+    // (And every voyage's wake, out from the island it left: the voyage out now, as far as it's got.)
+    const wakes = [...(world.wakes ?? []).map((w) => ({ ...w, k: 1 })), ...(world.voyage ? [{ from: world.voyage.from, to: world.voyage.to, k: sailed }] : [])];
+    for (const w of wakes) {
+      const a = world.isles[w.from];
+      const z = world.isles[w.to];
+      const len = Math.hypot(z.x - a.x, z.y - a.y) * w.k;
+      for (let s = 0; s <= len; s += 10) {
+        const f = s / (Math.hypot(z.x - a.x, z.y - a.y) || 1);
+        spots.push({ x: a.x + (z.x - a.x) * f, y: a.y + (z.y - a.y) * f, k: LANE_SIGHT });
       }
     }
     const C = 8;

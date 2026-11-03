@@ -5,6 +5,7 @@
 import { langOf, situationOf, speakerOf, spoke, DAY_SEC, whiteHot, fireMost, fireMore, growth, knowsSign, praying, prayerMost, signReady, foodRate, shoreSeason, tapValue, type ShorePerson, type ShoreState } from '../economy/shore';
 import { drawCreature, type CreatureLook } from '../scene/creatureLook';
 import { MIRACLES, type MiracleId } from '../content/idle';
+import { pickTalk, temperOf, type Speaker, type TalkCtx } from '../content/hearthTalk';
 import { syllables, talk, wordFor, type Turn } from '../economy/language';
 
 import { squeak, whistle } from '../audio/sound';
@@ -20,10 +21,13 @@ interface Bit { x: number; y: number; vx: number; vy: number; life: number; age:
 /** What a critter round the fire is doing: hopping (seconds into it, after a moment's delay). */
 interface Seat { hop: number; wait: number; high: number; turn: number; id: number; name: string; look?: CreatureLook; pitch: number; size: number }
 /** Two of them talking: who (seats), what, which line they're on, and how long it's been up. */
-interface Chat { who: [number, number]; lines: Turn[]; at: number; t: number }
+/** A talk round the fire: in their own tongue (turns), or in plain words (the old way). */
+interface Chat { who: [number, number]; lines: Turn[]; at: number; t: number; plain?: string[] }
 /** Where each one sits (and is, mid-hop), in the art's pixels, for the words over their heads. */
 interface Spot { x: number; y: number; base: number; left: boolean; i: number }
 const LINE_SECS = 2.8;
+/** The share of talks at the fire in plain words (the rest in their own tongue). */
+const PLAIN_SHARE = 0.65;
 /** A little picture over a critter's head: glad, startled, a song, love, sleepy. */
 type EmoteKind = 'bang' | 'note' | 'heart' | 'zzz' | 'sweat';
 interface Emote { seat: number; kind: EmoteKind; age: number }
@@ -69,6 +73,8 @@ export class HearthView {
   private shore: ShoreState | null = null;
   /** The words last said (whistled, when they sing). */
   private lastSaid: string[] = [];
+  /** The quips said lately (not said again too soon). */
+  private lastTalks: number[] = [];
   private seatKey = '';
   private spots: Spot[] = [];
   private chat: Chat | null = null;
@@ -235,6 +241,37 @@ export class HearthView {
       // What they talk about comes from what's going on, and who they are; the words are theirs.
       const pa = s.people.find((p) => p.id === this.seats[i].id)!;
       const pb = s.people.find((p) => p.id === this.seats[j].id)!;
+      // (Most talks the old way, in plain words: their quips, from who they are and what's going
+      // on. The rest in their own tongue, so it still grows at the fire.)
+      if (Math.random() < PLAIN_SHARE) {
+        const byAge = [...s.people].sort((p, q) => p.born - q.born);
+        const others = byAge.filter((p) => p.id !== pa.id && p.id !== pb.id);
+        const babe = others[others.length - 1];
+        const as = (p: ShorePerson): Speaker => ({ age: speakerOf(s, p).age, temper: temperOf(p), name: p.name, crossed: !!p.founder });
+        const ctx: TalkCtx = {
+          a: as(pa),
+          b: as(pb),
+          crossings: s.crossings ?? 0,
+          heat: s.heat ?? 0,
+          season: (['Spring', 'Summer', 'Autumn', 'Winter'] as const)[shoreSeason(s).si],
+          critters: s.people.length,
+          food: format(D(s.food)),
+          rate: foodRate(s),
+          won: s.villages.filter((v) => v.won !== undefined).length,
+          age: s.culture?.age ?? 1,
+          young: others.length > 2 && babe && growth(s, babe) < 0.3 ? babe.name : undefined,
+          old: others.length > 2 ? others[0].name : undefined,
+          foragers: s.gens.forager ?? 0,
+          huts: (s.gens.hut ?? 0) + (s.gens.longhouse ?? 0),
+          council: s.ups.includes('council'),
+          streak: this.t - this.streakAt < 45,
+          spearFaith: s.culture?.forks.faith === 'spear',
+        };
+        const pick = pickTalk(ctx, this.lastTalks);
+        this.lastTalks = [...this.lastTalks.slice(-8), pick.i];
+        this.chat = { who: pick.first ? [j, i] : [i, j], lines: [], plain: pick.lines, at: -1, t: LINE_SECS };
+        return;
+      }
       const sit = situationOf(s, this.t - this.streakAt < 45, ['fire', ...(this.seats.some((q) => { const p = s.people.find((x) => x.id === q.id); return p && growth(s, p) < 1; }) ? ['child'] : [])]);
       const turns = talk(sit, { ...speakerOf(s, pa), name: pa.name }, { ...speakerOf(s, pb), name: pb.name }, Math.random);
       this.chat = { who: [i, j], lines: turns, at: -1, t: LINE_SECS };
@@ -244,10 +281,34 @@ export class HearthView {
     if (c.t >= LINE_SECS) {
       c.at++;
       c.t = 0;
-      if (c.at >= c.lines.length) {
+      if (c.at >= (c.plain ? c.plain.length : c.lines.length)) {
         this.chat = null;
         this.bubble.hidden = true;
         this.nextChat = 10 + Math.random() * 14;
+        return;
+      }
+      if (c.plain) {
+        // The old way: their words as they mean them, a squeak a word or so, a hop on the first.
+        const who = c.who[c.at % 2];
+        const name = s.people.find((p) => p.id === this.seats[who]?.id)?.name;
+        if (!name) {
+          this.chat = null;
+          this.bubble.hidden = true;
+          return;
+        }
+        const line = c.plain[c.at];
+        (this.bubble.firstElementChild as HTMLElement).textContent = name;
+        (this.bubble.querySelector('span') as HTMLElement).textContent = line;
+        this.bubble.querySelector<HTMLElement>('.gloss')!.textContent = '';
+        this.bubble.hidden = false;
+        this.el.querySelector('.hearth-tip')?.classList.add('gone');
+        this.bubble.classList.remove('in');
+        void this.bubble.offsetWidth;
+        this.bubble.classList.add('in');
+        const words = Math.min(4, 1 + Math.floor(line.split(' ').length / 3));
+        for (let k = 0; k < words; k++) this.squeakFrom(who, 0.16, k * 0.13);
+        const st = this.seats[who];
+        if (!st.hop) Object.assign(st, { hop: 0.0001, wait: 0, high: 1.5 });
         return;
       }
       const turn = c.lines[c.at];
