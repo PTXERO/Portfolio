@@ -9,7 +9,7 @@ import { count, DAY_SEC, terrainReady, walkTo, type Habitat, growth, isAdult, po
 import type { GameState, Genes } from '../economy/types';
 import type { CreatureLook } from './creatureLook';
 import { BUILDS, type BuildId } from '../content/shore';
-import { findPath } from '../economy/paths';
+import { findRoute } from '../economy/paths';
 import { RangeScene } from './range';
 import type { Sprite } from './wild';
 import { herdInView, squeak } from '../audio/sound';
@@ -1066,7 +1066,8 @@ export class ShoreScene extends RangeScene {
       if (!way) {
         let from = net[0];
         for (const p of net) if (Math.hypot(p.x - v.x, p.y - v.y) < Math.hypot(from.x - v.x, from.y - v.y)) from = p;
-        way = [from, ...findPath(is, from, { x: v.x, y: v.y }, 60000)];
+        // (The way a road goes: round water, peaks and rock, keeping to the low ground.)
+        way = smoothRoad(is, findRoute(is, from, { x: v.x, y: v.y }, 200000).pts);
         this.roadWays.set(id, way);
       }
       net.push(...way);
@@ -1431,4 +1432,18 @@ function drawHut(b: CanvasRenderingContext2D, kind: Habitat, X: number, Y: numbe
       r(-1, -2, 2, 2, '#2a1e18');
       r(-4, -3, 8, 1, trim);
   }
+}
+
+/** A road's way eased of its grid corners (a point moved only if it stays on passable ground). */
+function smoothRoad(is: ReturnType<typeof shoreIsland>, pts: Pt[]): Pt[] {
+  let out = pts;
+  for (let pass = 0; pass < 3; pass++) {
+    out = out.map((p, i) => {
+      if (i === 0 || i === out.length - 1) return p;
+      const q = { x: (out[i - 1].x + p.x * 2 + out[i + 1].x) / 4, y: (out[i - 1].y + p.y * 2 + out[i + 1].y) / 4 };
+      const b = is.biome[Math.floor(q.y) * is.n + Math.floor(q.x)];
+      return isLand(is, q.x, q.y) && b !== Biome.Peak && b !== Biome.Rock ? q : p;
+    });
+  }
+  return out;
 }

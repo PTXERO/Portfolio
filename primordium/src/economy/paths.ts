@@ -162,9 +162,9 @@ export function findPath(is: Island, from: Pt, to: Pt, limit = 120000, speedAt?:
   return out;
 }
 
-/** What each kind of ground costs to cross (a road, or a long walk): rock and peaks dear, high
- * ground and marsh more than the plain; and every climb or drop costs too. */
-const GROUND: Record<number, number> = { [Biome.Peak]: 6, [Biome.Rock]: 3, [Biome.High]: 1.7, [Biome.Marsh]: 1.8, [Biome.River]: 1.5, [Biome.Forest]: 1.2, [Biome.Sand]: 1.1 };
+/** What each kind of ground costs to cross (a road, or a long walk): rock dear (the peaks not
+ * crossed at all), high ground and marsh more than the plain; and every climb or drop costs too. */
+const GROUND: Record<number, number> = { [Biome.Rock]: 6, [Biome.High]: 1.7, [Biome.Marsh]: 1.8, [Biome.River]: 1.5, [Biome.Forest]: 1.2, [Biome.Sand]: 1.1 };
 const CLIMB = 24;
 
 /**
@@ -183,7 +183,7 @@ export function findRoute(is: Island, from: Pt, to: Pt, limit = 120000): { pts: 
   };
   const walkable = (c: number) => {
     const m = mid(c);
-    return isLand(is, m.x, m.y);
+    return isLand(is, m.x, m.y) && is.biome[tile(c)] !== Biome.Peak;
   };
   const ground = (c: number) => GROUND[is.biome[tile(c)]] ?? 1;
   const start = cell(from);
