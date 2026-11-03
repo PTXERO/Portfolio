@@ -195,7 +195,8 @@ export class WorldScene {
       const trip = (2 * routeDist(world, r.to)) / shipSpeed(world);
       const p = ((this.phase.get(i) ?? 0) + (dt / trip) * (gustLeft(world, i) > 0 ? 2 : 1)) % 1;
       this.phase.set(i, p);
-      const shown = Math.min(r.ships, 6 + Math.floor(Math.log2(r.ships)));
+      // (A sail for each doubling, not each ship: 1, 2, 4, 8, 16... ships show as 1, 2, 3, 4, 5.)
+      const shown = Math.min(r.ships, 1 + Math.floor(Math.log2(r.ships)));
       for (let k = 0; k < shown; k++) {
         const q = (p + k / shown) % 1;
         const out = q < 0.5;
