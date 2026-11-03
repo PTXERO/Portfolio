@@ -6,7 +6,7 @@ import type { GameState } from '../economy/types';
 import type { Frame } from './paint';
 import { hash } from './paint';
 import { isleName } from '../ui/sailPanels';
-import { alongLane, laneLength, portOf, routeFrom, seaLane, type Pt } from '../economy/seaways';
+import { alongLane, landAt, laneLength, portOf, routeFrom, seaLane, type Pt } from '../economy/seaways';
 import { MASK, coastAt, gustLeft, level, ours, routeDist, shipSpeed, sightFrom, type World, type WorldIsle } from '../economy/sail';
 
 export class WorldScene {
@@ -181,22 +181,80 @@ export class WorldScene {
     const i = world.isles[to];
     return seaLane(world, routeFrom(world, i), i);
   }
-  /** The ports: a little jetty off each island found (yours lit). */
+  /** Where each port's shore is (the first land in from it), worked out once. */
+  private shores = new Map<string, Pt>();
+  /** The ports: on each island found, a warehouse on the shore and a plank pier out into the
+   * water, a lantern at its end (lit, if it's yours), and a boat tied up once a route uses it.
+   * Drawn in map units, so they grow and shrink with the map. */
   private drawPorts(b: CanvasRenderingContext2D, world: World): void {
+    const z = this.zoom;
+    const used = new Set<number>();
+    for (const r of world.routes ?? []) {
+      used.add(r.to);
+      used.add(routeFrom(world, world.isles[r.to]).id);
+    }
     for (const i of world.isles) {
       if (!i.found) continue;
       const p = portOf(world, i);
-      const X = Math.round(this.sx(p.x));
-      const Y = Math.round(this.sy(p.y));
-      if (X < -4 || Y < -4 || X > this.W + 4 || Y > this.H + 4) continue;
-      // (Pointing back at the island: a jetty out from the shore.)
-      const d = Math.hypot(i.x - p.x, i.y - p.y) || 1;
-      const ux = (i.x - p.x) / d;
-      const uy = (i.y - p.y) / d;
-      b.fillStyle = '#8a6440';
-      for (let k = 0; k <= 3; k++) b.fillRect(Math.round(X + ux * k), Math.round(Y + uy * k), 1, 1);
-      b.fillStyle = ours(i) ? '#ffd27a' : '#c8d4dc';
-      b.fillRect(X, Y, 1, 1);
+      const d0 = Math.hypot(i.x - p.x, i.y - p.y) || 1;
+      // (In toward the island, and out to sea.)
+      const ix = (i.x - p.x) / d0;
+      const iy = (i.y - p.y) / d0;
+      const key = `${world.seed}:${i.id}`;
+      let shore = this.shores.get(key);
+      if (!shore) {
+        shore = { x: i.x, y: i.y };
+        for (let s = 0; s < d0; s += 0.5)
+          if (landAt(world, p.x + ix * s, p.y + iy * s, 0)) {
+            shore = { x: p.x + ix * s, y: p.y + iy * s };
+            break;
+          }
+        this.shores.set(key, shore);
+      }
+      if (this.sx(shore.x) < -30 || this.sx(shore.x) > this.W + 30 || this.sy(shore.y) < -30 || this.sy(shore.y) > this.H + 30) continue;
+      // (Sizes in map units, twice life size so a port reads at a glance; in pixels, z each.)
+      const u = z * 2;
+      const mine = ours(i);
+      // The pier: from the shore out past the port, planks with posts either side.
+      const len = Math.hypot(shore.x - p.x, shore.y - p.y) + 14;
+      const nx = -iy;
+      const ny = ix;
+      for (let s = 0; s <= len; s += 0.5 / Math.max(0.5, z)) {
+        const mx = shore.x - ix * s;
+        const my = shore.y - iy * s;
+        b.fillStyle = '#9a7048';
+        b.fillRect(Math.round(this.sx(mx - nx * 1.8)), Math.round(this.sy(my - ny * 1.8)), Math.max(1, Math.ceil(u * 1.8)), Math.max(1, Math.ceil(u * 1.8)));
+      }
+      for (let s = 3; s <= len; s += 6) {
+        b.fillStyle = '#4a3220';
+        for (const side of [-2.6, 2.6]) b.fillRect(Math.round(this.sx(shore.x - ix * s + nx * side)), Math.round(this.sy(shore.y - iy * s + ny * side)), Math.max(1, Math.ceil(u * 0.7)), Math.max(1, Math.ceil(u * 0.7)));
+      }
+      // The lantern at its end.
+      const end = { x: shore.x - ix * len, y: shore.y - iy * len };
+      b.fillStyle = mine ? '#ffd27a' : '#9aa6ae';
+      b.fillRect(Math.round(this.sx(end.x) - u * 0.5), Math.round(this.sy(end.y) - u * 1.5), Math.max(1, Math.ceil(u)), Math.max(1, Math.ceil(u * 1.5)));
+      // A boat tied up alongside, if a route sails from here.
+      if (used.has(i.id)) {
+        const bx = this.sx(shore.x - ix * len * 0.6 + nx * 6.4);
+        const by = this.sy(shore.y - iy * len * 0.6 + ny * 6.4);
+        b.fillStyle = '#6a4a2a';
+        b.fillRect(Math.round(bx - u * 2), Math.round(by), Math.max(2, Math.ceil(u * 4)), Math.max(1, Math.ceil(u)));
+        b.fillStyle = '#f2ead7';
+        b.fillRect(Math.round(bx), Math.round(by - u * 2.5), Math.max(1, Math.ceil(u * 0.6)), Math.max(1, Math.ceil(u * 2.5)));
+      }
+      // The warehouse on the shore: walls, a red roof, a dark door.
+      const hx = shore.x + ix * 7;
+      const hy = shore.y + iy * 7;
+      const W = 7 * u;
+      const H = 4.5 * u;
+      const X = Math.round(this.sx(hx) - W / 2);
+      const Y = Math.round(this.sy(hy) - H / 2);
+      b.fillStyle = mine ? '#c8a272' : '#a89a88';
+      b.fillRect(X, Y, Math.max(2, Math.ceil(W)), Math.max(1, Math.ceil(H)));
+      b.fillStyle = mine ? '#a8443a' : '#7a6a62';
+      b.fillRect(X - Math.round(u * 0.6), Math.round(Y - u * 2), Math.max(2, Math.ceil(W + u * 1.2)), Math.max(1, Math.ceil(u * 2.2)));
+      b.fillStyle = '#3a2a1a';
+      if (u >= 0.6) b.fillRect(Math.round(X + W / 2 - u), Math.round(Y + H - u * 2.5), Math.ceil(u * 2), Math.ceil(u * 2.5));
     }
   }
   /** The routes as faint dotted lanes, and their ships going back and forth on them. */
