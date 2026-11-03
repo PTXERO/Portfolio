@@ -48,7 +48,7 @@ for (let t = 0; t <= HOURS * 3600; t += 2) {
     for (const u of SAIL_UPS) {
       const c = upCost(world, u.id as SailUp);
       if (c === null) continue;
-      const gain = u.id === 'sails' ? rate * 0.3 : u.id === 'holds' ? rate * 0.6 : u.id === 'fleet' ? rate * 0.25 : u.id === 'charts' ? rate * 0.2 : rate * 0.1;
+      const gain = u.id === 'sails' ? rate * 0.3 : u.id === 'holds' ? rate * 0.6 : u.id === 'fleet' ? rate * 0.25 : u.id === 'charts' ? rate * 0.2 : u.id === 'winds' ? rate * 0.03 : rate * 0.1;
       opts.push({ cost: c, gain, go: () => buySailUp(state, u.id as SailUp) });
     }
     if (!world.voyage && voyageTarget(world)) opts.push({ cost: voyageCost(world), gain: rate * 2 + 1, go: () => sendVoyage(state) });

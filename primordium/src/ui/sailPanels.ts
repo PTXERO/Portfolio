@@ -6,6 +6,7 @@ import { havensLeft, raided, settlingLeft, conquerCost, giftCost, giftTrust, joi
 import { langOf, shoreOf } from '../economy/shore';
 import { namePlace } from '../economy/language';
 import { D, format as formatD } from '../economy/num';
+import { nextMilestone } from '../economy/rates';
 
 const format = (n: number) => formatD(D(n));
 
@@ -81,7 +82,7 @@ export function worldLayout(state: GameState): string {
       const isle = world.isles[r.to];
       const n = shipsToBuy(world, i, have);
       const cost = shipCost(world, r, n);
-      const next = r.ships < 100 ? [10, 25, 50, 100].find((m) => r.ships < m) : 100 + (Math.floor((r.ships - 100) / 50) + 1) * 50;
+      const next = nextMilestone(r.ships);
       return `<div class="card px-box build"><div class="info"><div class="name">${isleName(state, isle)} <span class="dim">×${r.ships}</span></div>
         <div class="sub">${raided(world, i) ? '<span class="red">Pirates! Tap them on the map.</span> ' : ''}<span class="green" data-t="route-${i}">${format(routeRate(state, world, r, i))}/s</span>${next ? ` · ×2 at ${next} ships` : ''}${milestone(r.ships) ? ` · ×${2 ** milestone(r.ships)}` : ''}</div></div>
         <button class="px-btn buy${have >= cost ? ' gold' : ''}" data-routebuy="${i}" data-n="${n}"${have >= cost ? '' : ' disabled'}>${n > 1 ? `+${n} · ` : ''}${format(cost)}</button></div>`;
@@ -98,7 +99,7 @@ export function worldLayout(state: GameState): string {
   const ups = SAIL_UPS.map((u) => {
     const lv = level(world, u.id);
     const c = upCost(world, u.id);
-    return `<div class="card px-box build"><div class="info"><div class="name">${u.name} <span class="dim">${lv}/${u.most}</span></div><div class="sub">${u.does}</div></div>
+    return `<div class="card px-box build"><div class="info"><div class="name">${u.name} <span class="dim">${u.most === Infinity ? lv : `${lv}/${u.most}`}</span></div><div class="sub">${u.does}</div></div>
       ${c === null ? '<span class="dim tiny">Done</span>' : `<button class="px-btn buy${have >= c ? ' gold' : ''}" data-sailup="${u.id}"${have >= c ? '' : ' disabled'}>${format(c)}</button>`}</div>`;
   }).join('');
   // Voyages out into the fog, and the peoples met: to be won over, traded with, or taken.

@@ -2,6 +2,7 @@
 // its own coast, from its own land), the last of them (the Republic) home, in the middle; the
 // rest of the world is islands still in the fog. (Ships, routes and Influence come next.)
 
+import { milestonesReached } from './rates';
 import type { GameState } from './types';
 import type { Pt } from './island';
 import { MASK, coastOfIsland, packCoast } from './coast';
@@ -214,15 +215,18 @@ export function setSail(state: GameState): boolean {
 
 // ---- The trade network: ships on routes, Influence per trip ----
 
-export type SailUp = 'sails' | 'holds' | 'fleet' | 'charts' | 'passage' | 'guns';
+export type SailUp = 'sails' | 'holds' | 'fleet' | 'charts' | 'passage' | 'guns' | 'winds';
 /** The network's branches, levelled like the Cell's mutations: each level a pricier step. */
 export const SAIL_UPS: { id: SailUp; name: string; does: string; most: number; cost: number; growth: number }[] = [
-  { id: 'sails', name: 'Sails', does: 'Ships ×1.3 faster.', most: 10, cost: 300, growth: 9 },
-  { id: 'holds', name: 'Holds', does: 'Each trip carries ×1.6.', most: 5, cost: 4000, growth: 40 },
-  { id: 'fleet', name: 'Fleet', does: 'Every ship pays ×1.25.', most: 10, cost: 1500, growth: 11 },
-  { id: 'charts', name: 'Charts', does: 'See further: new islands, new routes.', most: 5, cost: 6000, growth: 25 },
+  // (Each level thirty times the last, as the Cell's are; Passage a step of its own.)
+  { id: 'sails', name: 'Sails', does: 'Ships ×1.3 faster.', most: 10, cost: 300, growth: 30 },
+  { id: 'holds', name: 'Holds', does: 'Each trip carries ×1.6.', most: 5, cost: 4000, growth: 30 },
+  { id: 'fleet', name: 'Fleet', does: 'Every ship pays ×1.25.', most: 10, cost: 1500, growth: 30 },
+  { id: 'charts', name: 'Charts', does: 'See further: new islands, new routes.', most: 5, cost: 6000, growth: 30 },
   { id: 'passage', name: 'Passage', does: '1: ships bought for you · 2: routes opened · 3: voyages sent.', most: 3, cost: 1e5, growth: 300 },
-  { id: 'guns', name: 'Guns', does: 'Ships fight pirates off by themselves: sooner, more loot, fewer pirates.', most: 5, cost: 3000, growth: 15 },
+  { id: 'guns', name: 'Guns', does: 'Ships fight pirates off by themselves: sooner, more loot, fewer pirates.', most: 5, cost: 3000, growth: 30 },
+  // (Never done, as the Cell's long simmer: a little more, a little dearer, for good.)
+  { id: 'winds', name: 'Trade winds', does: 'Everything at sea ×1.03.', most: Infinity, cost: 1e6, growth: 1.8 },
 ];
 export function level(world: World, id: SailUp): number {
   return world.ups?.[id] ?? 0;
@@ -255,11 +259,17 @@ export function openCost(world: World, to: number): number {
 }
 export function shipCost(world: World, r: Route, n = 1): number {
   const base = 6 * far(routeDist(world, r.to)) ** 2.6;
+  const g = shipGrowth(world, r);
   let total = 0;
-  for (let k = 0; k < n; k++) total += base * SHIP_GROWTH ** (r.ships + k);
+  for (let k = 0; k < n; k++) total += base * g ** (r.ships + k);
   return Math.ceil(total);
 }
-const SHIP_GROWTH = 1.15;
+/** Each ship dearer than the last: 1.15 on the first route, steeper on each opened after (to
+ * 1.22), as the Cell's later producers are. */
+export function shipGrowth(world: World, r: Route): number {
+  const i = Math.max(0, (world.routes ?? []).indexOf(r));
+  return Math.min(1.22, 1.15 + 0.01 * i);
+}
 /** As many ships as there's Influence for (at most `cap`). */
 export function shipsAffordable(world: World, r: Route, have: number, cap = 1000): number {
   let n = 0;
@@ -270,16 +280,16 @@ export function shipsAffordable(world: World, r: Route, have: number, cap = 1000
 export function shipSpeed(world: World): number {
   return 12 * 1.3 ** level(world, 'sails');
 }
-/** ×2 for each of 10, 25, 50 and 100 ships on a route (the same rule as every stage). */
+/** ×2 for each of 10, 25, 50 and 100 ships on a route, then every hundred from 200 (the Cell's
+ * rule, the same as every stage). */
 export function milestone(ships: number): number {
-  // (After a hundred, another every fifty: there's always a next one.)
-  return [10, 25, 50, 100].filter((n) => ships >= n).length + (ships >= 100 ? Math.floor((ships - 100) / 50) : 0);
+  return milestonesReached(ships);
 }
 /** Influence a trip brings in. */
 export function tripPay(state: GameState, world: World, r: Route): number {
   // (A route to one of your own islands pays double; every island joined adds to all of them.)
   const own = ours(world.isles[r.to]) ? 2 : 1;
-  return 3 * far(routeDist(world, r.to)) ** 2 * 1.6 ** level(world, 'holds') * 1.25 ** level(world, 'fleet') * 2 ** milestone(r.ships) * foodMult(state) * own * joinedMult(world);
+  return 3 * far(routeDist(world, r.to)) ** 2 * 1.6 ** level(world, 'holds') * 1.25 ** level(world, 'fleet') * 2 ** milestone(r.ships) * 1.03 ** level(world, 'winds') * foodMult(state) * own * joinedMult(world);
 }
 /** Seconds a ship takes there and back. */
 export function tripTime(world: World, r: Route): number {
@@ -423,7 +433,7 @@ export function joinedCount(world: World): number {
 /** Each island won makes the next dearer to win (as each village beaten did, on the shore). */
 export const WIN_DEARER = 1.2;
 /** And every island's dear from the start (none of them handed over). */
-export const WIN_BASE = 10;
+export const WIN_BASE = 4;
 function dearer(world: World): number {
   return WIN_DEARER ** joinedCount(world) * WIN_BASE;
 }
