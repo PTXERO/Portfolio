@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createState } from '../src/economy/state';
 import { cross, shoreOf, startShore, takeRaft } from '../src/economy/shore';
-import { conquer, conquerCost, giftCost, giveGift, joinedMult, ours, sendVoyage, voyageTarget, buySailUp, buyShips, coastAt, gust, level, makeWorld, MASK, openCost, openRoute, routeOptions, routeRate, sailRate, setSail, shipCost, sightOf } from '../src/economy/sail';
+import { fightPirate, gunsTime, havensLeft, pirateChance, raided, setPirateDice, conquer, conquerCost, giftCost, giveGift, joinedMult, ours, sendVoyage, voyageTarget, buySailUp, buyShips, coastAt, gust, level, makeWorld, MASK, openCost, openRoute, routeOptions, routeRate, sailRate, setSail, shipCost, sightOf } from '../src/economy/sail';
 import { tick } from '../src/economy/tick';
 import { D } from '../src/economy/num';
 import { deserialize, serialize } from '../src/economy/save';
@@ -98,6 +98,8 @@ describe('The Age of Sail: the world map', () => {
     const world = state.stages.sail.world!;
     world.ups = { passage: 2 };
     state.stages.sail.currency = D(1e9);
+    // (Passage spends half of what comes in; here, a budget to spend already.)
+    world.passBudget = 1e6;
     tick(state, 1);
     expect(world.routes!.length).toBeGreaterThan(1);
     expect(world.routes![0].ships).toBeGreaterThan(1);
@@ -139,5 +141,51 @@ describe('The Age of Sail: the world map', () => {
       tick(state, 600);
       expect(partner.trust ?? 0).toBeGreaterThan(t0);
     }
+  });
+  it('pirates: they come once there are routes, raid one (no pay, ships taken), are driven off for loot; Guns fight them; havens only taken', () => {
+    const state = fresh();
+    shoreOf(state)!.culture = { since: 0, age: 6, practice: {}, done: [], forks: {} };
+    setSail(state);
+    const world = state.stages.sail.world!;
+    expect(havensLeft(world)).toBe(3);
+    const haven = world.isles.find((i) => i.haven)!;
+    haven.found = true;
+    state.stages.sail.currency = D(1e30);
+    expect(giveGift(state, haven.id)).toBe(false);
+    // None for the first quarter-hour, nor with a single route.
+    expect(pirateChance(world)).toBe(0);
+    openRoute(state, routeOptions(world)[0].id);
+    world.routes![0].ships = 20;
+    world.age = 1000;
+    expect(pirateChance(world)).toBeGreaterThan(0);
+    setPirateDice(() => 0);
+    tick(state, 0.5);
+    setPirateDice(() => 0.999);
+    expect(world.pirates).toHaveLength(1);
+    const p = world.pirates![0];
+    expect(raided(world, p.route)).toBe(true);
+    expect(routeRate(state, world, world.routes![p.route], p.route)).toBe(0);
+    const ships = world.routes![p.route].ships;
+    tick(state, 16);
+    expect(world.routes![p.route].ships).toBe(ships - 1);
+    // Driven off: four hits, and the loot.
+    state.stages.sail.currency = D(1000);
+    const had = state.stages.sail.currency.toNumber();
+    for (let k = 0; k < 3; k++) expect(fightPirate(state, 0)).toBe(0);
+    expect(fightPirate(state, 0)).toBeGreaterThan(0);
+    expect(world.pirates).toHaveLength(0);
+    expect(state.stages.sail.currency.toNumber()).toBeGreaterThan(had);
+    // Guns: the ships see them off by themselves.
+    world.ups = { ...world.ups, guns: 3 };
+    expect(gunsTime(world)).toBeLessThan(16);
+    world.pirates!.push({ route: 0, at: 0.5, hp: 4, left: 90, next: 15 });
+    tick(state, gunsTime(world) * 4 + 1);
+    expect(world.pirates).toHaveLength(0);
+    // Every haven taken, fewer raids; all three, none.
+    const before = pirateChance(world);
+    for (const h of world.isles.filter((i) => i.haven)) h.joined = true;
+    expect(pirateChance(world)).toBeLessThan(before);
+    expect(pirateChance(world)).toBe(0);
+    setPirateDice(Math.random);
   });
 });

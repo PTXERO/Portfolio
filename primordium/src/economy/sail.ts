@@ -29,6 +29,8 @@ export interface WorldIsle {
   trust?: number;
   gifts?: number;
   joined?: boolean;
+  /** A pirates' haven: only to be taken (and while it stands, pirates raid). */
+  haven?: boolean;
 }
 /** Yours: hopped to (and kept) or joined since. */
 export function ours(i: WorldIsle): boolean {
@@ -52,6 +54,22 @@ export interface World {
   met?: number[];
   /** The diet of the critters who set sail (how they meet a new people). */
   diet?: string;
+  /** Pirates out on the routes just now: which route, where along it, how many hits left in
+   * them, seconds before they sail off, seconds till they take the next ship. */
+  pirates?: Pirate[];
+  /** What Passage has of the income to spend on ships (half of it). */
+  passBudget?: number;
+  /** Pirates driven off, ships they've taken, and seconds sailed (pirates come later on). */
+  driven?: number;
+  lost?: number;
+  age?: number;
+}
+export interface Pirate {
+  route: number;
+  at: number;
+  hp: number;
+  left: number;
+  next: number;
 }
 export interface Route {
   to: number;
@@ -152,6 +170,7 @@ export function makeWorld(s: ShoreState): World {
     i.diet = DIETS[Math.floor(r() * 3)];
     i.trust = 0;
   }
+  makeHavens(isles, home);
   const world: World = { seed, w: W, h: H, isles, routes: [], ups: {}, voyages: 0, met: [], diet: s.look.diet === 'none' ? 'omnivore' : s.look.diet };
   chart(world);
   // (The first route, to the nearest island, comes free, with a ship on it: it starts going.)
@@ -193,7 +212,7 @@ export function setSail(state: GameState): boolean {
 
 // ---- The trade network: ships on routes, Influence per trip ----
 
-export type SailUp = 'sails' | 'holds' | 'fleet' | 'charts' | 'passage';
+export type SailUp = 'sails' | 'holds' | 'fleet' | 'charts' | 'passage' | 'guns';
 /** The network's branches, levelled like the Cell's mutations: each level a pricier step. */
 export const SAIL_UPS: { id: SailUp; name: string; does: string; most: number; cost: number; growth: number }[] = [
   { id: 'sails', name: 'Sails', does: 'Ships ×1.3 faster.', most: 10, cost: 300, growth: 9 },
@@ -201,6 +220,7 @@ export const SAIL_UPS: { id: SailUp; name: string; does: string; most: number; c
   { id: 'fleet', name: 'Fleet', does: 'Every ship pays ×1.25.', most: 10, cost: 1500, growth: 11 },
   { id: 'charts', name: 'Charts', does: 'See further: new islands, new routes.', most: 5, cost: 6000, growth: 25 },
   { id: 'passage', name: 'Passage', does: '1: ships bought for you · 2: routes opened · 3: voyages sent.', most: 3, cost: 1e5, growth: 300 },
+  { id: 'guns', name: 'Guns', does: 'Ships fight pirates off by themselves: sooner, more loot, fewer pirates.', most: 5, cost: 3000, growth: 15 },
 ];
 export function level(world: World, id: SailUp): number {
   return world.ups?.[id] ?? 0;
@@ -269,6 +289,8 @@ export function foodMult(state: GameState): number {
 }
 /** Influence a second from one route (gusting: ×2 while the wind's in its sails). */
 export function routeRate(state: GameState, world: World, r: Route, i?: number): number {
+  // (A route with pirates on it pays nothing till they're gone.)
+  if (i !== undefined && raided(world, i)) return 0;
   return (r.ships * tripPay(state, world, r)) / tripTime(world, r) * (i !== undefined && gustLeft(world, i) > 0 ? 2 : 1);
 }
 export function sailRate(state: GameState): number {
@@ -321,6 +343,9 @@ export function buySailUp(state: GameState, id: SailUp): boolean {
   return true;
 }
 
+/** The share of what comes in that Passage spends on ships. */
+const PASSAGE_SHARE = 0.5;
+
 /** The sea's own time: gusts die down, and Passage buys and opens for you. */
 export function sailTick(state: GameState, dt: number): void {
   const world = state.stages.sail.world;
@@ -338,6 +363,8 @@ export function sailTick(state: GameState, dt: number): void {
     }
     world.diet ??= shoreOf(state)?.look.diet ?? 'omnivore';
   }
+  if (!world.isles.some((i) => i.haven)) makeHavens(world.isles, homeOf(world));
+  piratesTick(state, world, dt);
   // The voyage out: home when its time's up (the island found, its people met).
   if (world.voyage) {
     world.voyage.left -= dt;
@@ -346,7 +373,7 @@ export function sailTick(state: GameState, dt: number): void {
   // Trade wins trust: every route to a people not yet yours, a little a second.
   for (const r of world.routes) {
     const i = world.isles[r.to];
-    if (!ours(i)) addTrust(world, i, tradeTrust(world, r) * dt);
+    if (!ours(i) && !i.haven) addTrust(world, i, tradeTrust(world, r) * dt);
   }
   const g = gusts.get(world);
   if (g) for (const [i, left] of g) left - dt <= 0 ? g.delete(i) : g.set(i, left - dt);
@@ -357,7 +384,9 @@ export function sailTick(state: GameState, dt: number): void {
     if (next && influence(state) >= openCost(world, next.id)) openRoute(state, next.id);
   }
   if (passage >= 1) {
-    // (The cheapest ship there is, as long as there's Influence for one.)
+    // (Half of what comes in is the harbourmaster's to spend on ships, the cheapest there is;
+    // the rest piles up for you, to save for a voyage or a haven.)
+    world.passBudget = Math.min((world.passBudget ?? 0) + sailRate(state) * dt * PASSAGE_SHARE, influence(state));
     for (let k = 0; k < 50; k++) {
       let best = -1;
       let bestCost = Infinity;
@@ -368,7 +397,8 @@ export function sailTick(state: GameState, dt: number): void {
           best = i;
         }
       });
-      if (best < 0 || !buyShips(state, best, 1)) break;
+      if (best < 0 || bestCost > world.passBudget || !buyShips(state, best, 1)) break;
+      world.passBudget -= bestCost;
     }
   }
 }
@@ -384,7 +414,7 @@ export function joinedCount(world: World): number {
   return world.isles.filter((i) => i.joined).length;
 }
 /** Each island won makes the next dearer to win (as each village beaten did, on the shore). */
-export const WIN_DEARER = 2;
+export const WIN_DEARER = 1.3;
 function dearer(world: World): number {
   return WIN_DEARER ** joinedCount(world);
 }
@@ -444,7 +474,7 @@ export function giftTrust(world: World, i: WorldIsle): number {
 export function giveGift(state: GameState, id: number): boolean {
   const world = state.stages.sail.world;
   const i = world?.isles[id];
-  if (!world || !i || !i.found || ours(i) || !spend(state, giftCost(world, i))) return false;
+  if (!world || !i || !i.found || ours(i) || i.haven || !spend(state, giftCost(world, i))) return false;
   i.gifts = (i.gifts ?? 0) + 1;
   addTrust(world, i, giftTrust(world, i));
   return true;
@@ -452,7 +482,7 @@ export function giveGift(state: GameState, id: number): boolean {
 /** What taking an island takes: Influence for the fleet, and ships enough (as many as they are
  * three times over); hunters half the Influence. */
 export function conquerCost(world: World, i: WorldIsle): { influence: number; ships: number } {
-  return { influence: Math.ceil(300 * (i.pop ?? 20) ** 1.7 * far(routeDist(world, i.id)) ** 2.5 * (world.diet === 'hunter' ? 0.5 : 1) * dearer(world)), ships: (i.pop ?? 20) * 3 };
+  return { influence: Math.ceil(300 * (i.pop ?? 20) ** 1.7 * far(routeDist(world, i.id)) ** 2 * (world.diet === 'hunter' ? 0.5 : 1) * dearer(world)), ships: (i.pop ?? 20) * 3 };
 }
 export function shipsOut(world: World): number {
   return (world.routes ?? []).reduce((n, r) => n + r.ships, 0);
@@ -483,4 +513,104 @@ function join(world: World, i: WorldIsle): void {
 /** The world's still to win: every island not yet yours. */
 export function toWin(world: World): number {
   return world.isles.filter((i) => !ours(i)).length;
+}
+
+// ---- Pirates ----
+
+/** The three islands furthest from home are pirates' havens (taken last). */
+function makeHavens(isles: WorldIsle[], home: Pt): void {
+  isles
+    .filter((i) => i.mine === undefined && !i.joined)
+    .sort((a, b) => Math.hypot(b.x - home.x, b.y - home.y) - Math.hypot(a.x - home.x, a.y - home.y))
+    .slice(0, 3)
+    .forEach((i, k) => {
+      i.haven = true;
+      i.diet = 'pirates';
+      // (A pirates' band, not a people: fewer of them, the furthest the most.)
+      i.pop = 40 + k * 15;
+    });
+}
+export function havensLeft(world: World): number {
+  return world.isles.filter((i) => i.haven && !i.joined).length;
+}
+/** Whether a route has pirates on it now. */
+export function raided(world: World, route: number): boolean {
+  return !!world.pirates?.some((p) => p.route === route);
+}
+/** Hits it takes to drive pirates off (taps, or the guns). */
+export const PIRATE_HP = 4;
+/** Seconds pirates stay on a route before sailing off with what they took. */
+const PIRATE_STAY = 90;
+/** Seconds between the ships they take. */
+const PIRATE_TAKES = 15;
+/** Pirates a second, on a network this big: more routes, more to raid; fewer for every haven
+ * taken, and for Guns. None for the first quarter-hour at sea. */
+export function pirateChance(world: World): number {
+  const routes = world.routes?.length ?? 0;
+  if (routes < 2 || (world.age ?? 0) < 900) return 0;
+  return 0.0025 * Math.sqrt(routes) * (havensLeft(world) / 3) * (1 - 0.12 * level(world, 'guns'));
+}
+/** Seconds the ships take to drive pirates off by themselves (with Guns: sooner each level). */
+export function gunsTime(world: World): number {
+  const g = level(world, 'guns');
+  return g ? 16 / (1 + g) : Infinity;
+}
+let pirateRng = Math.random;
+/** (Tests and the simulator roll their own dice.) */
+export function setPirateDice(f: () => number): void {
+  pirateRng = f;
+}
+function piratesTick(state: GameState, world: World, dt: number): void {
+  world.age = (world.age ?? 0) + dt;
+  world.pirates ??= [];
+  // A new raid, now and then, on a route that hasn't one.
+  if (world.pirates.length < 3 && pirateRng() < pirateChance(world) * dt) {
+    const free = (world.routes ?? []).map((_, i) => i).filter((i) => !raided(world, i));
+    if (free.length) world.pirates.push({ route: free[Math.floor(pirateRng() * free.length)], at: 0.3 + pirateRng() * 0.4, hp: PIRATE_HP, left: PIRATE_STAY, next: PIRATE_TAKES });
+  }
+  const gt = gunsTime(world);
+  for (const p of [...world.pirates]) {
+    p.left -= dt;
+    p.next -= dt;
+    const r = world.routes?.[p.route];
+    // They take a ship now and then (never the last one).
+    if (p.next <= 0) {
+      p.next += PIRATE_TAKES;
+      if (r && r.ships > 1) {
+        r.ships--;
+        world.lost = (world.lost ?? 0) + 1;
+      }
+    }
+    // The guns wear them down, a hit every so often.
+    if (gt < Infinity) {
+      const hits = Math.floor(((PIRATE_STAY - p.left) / gt) | 0) - (PIRATE_HP - p.hp);
+      if (hits > 0) p.hp -= hits;
+    }
+    if (p.hp <= 0) drivenOff(state, world, p);
+    else if (p.left <= 0) world.pirates.splice(world.pirates.indexOf(p), 1);
+  }
+}
+/** Loot for pirates driven off: a while of what their route brings in (more with Guns). */
+export function lootFor(state: GameState, world: World, p: Pirate): number {
+  const r = world.routes?.[p.route];
+  if (!r) return 0;
+  return ((r.ships * tripPay(state, world, r)) / tripTime(world, r)) * 30 * (1 + 0.5 * level(world, 'guns'));
+}
+function drivenOff(state: GameState, world: World, p: Pirate): number {
+  const loot = lootFor(state, world, p);
+  world.pirates = (world.pirates ?? []).filter((x) => x !== p);
+  world.driven = (world.driven ?? 0) + 1;
+  const st = state.stages.sail;
+  st.currency = st.currency.add(loot);
+  st.totalEarned = st.totalEarned.add(loot);
+  return loot;
+}
+/** A tap on pirates: a hit; the last hit drives them off (and the loot's yours). Returns the
+ * loot when driven off, 0 for a hit, -1 if there were none there. */
+export function fightPirate(state: GameState, k: number): number {
+  const world = state.stages.sail.world;
+  const p = world?.pirates?.[k];
+  if (!world || !p) return -1;
+  p.hp--;
+  return p.hp <= 0 ? drivenOff(state, world, p) : 0;
 }

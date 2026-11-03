@@ -130,6 +130,7 @@ export class WorldScene {
       b.drawImage(this.sprite(i), Math.round(X), Math.round(Y), Math.round(s), Math.round(s));
     }
     this.drawRoutes(b, world, f.dt);
+    this.drawPirates(b, world, t);
     // The voyage out: a ship making for the fog.
     if (world.voyage) {
       const a = world.isles[world.voyage.from];
@@ -207,6 +208,45 @@ export class WorldScene {
       }
     });
   }
+  /** Pirates on the routes: dark sails, red when they're struck. */
+  private drawPirates(b: CanvasRenderingContext2D, world: World, t: number): void {
+    for (const p of world.pirates ?? []) {
+      const r = world.routes?.[p.route];
+      if (!r) continue;
+      const [ax, ay, bx, by] = this.ends(world, r.to);
+      const X = Math.round(ax + (bx - ax) * p.at + Math.sin(t * 2 + p.route) * 2);
+      const Y = Math.round(ay + (by - ay) * p.at);
+      // (A ring that pulses: here's trouble.)
+      const pulse = 4 + (Math.sin(t * 6) + 1) * 2;
+      b.strokeStyle = 'rgba(232, 97, 90, 0.7)';
+      b.beginPath();
+      b.arc(X + 0.5, Y, pulse, 0, Math.PI * 2);
+      b.stroke();
+      b.fillStyle = '#2a1a14';
+      b.fillRect(X - 3, Y + 1, 7, 2);
+      b.fillStyle = '#1a1a1e';
+      b.fillRect(X - 1, Y - 3, 3, 4);
+      b.fillStyle = '#e8615a';
+      b.fillRect(X, Y - 4, 1, 1);
+    }
+  }
+  /** The pirates under a tap, if any (their index). */
+  pirateAt(world: World, ax: number, ay: number): number | null {
+    let best: number | null = null;
+    let bestD = 10;
+    (world.pirates ?? []).forEach((p, k) => {
+      const r = world.routes?.[p.route];
+      if (!r) return;
+      const [x1, y1, x2, y2] = this.ends(world, r.to);
+      const d = Math.hypot(ax - (x1 + (x2 - x1) * p.at), ay - (y1 + (y2 - y1) * p.at));
+      if (d < bestD) {
+        bestD = d;
+        best = k;
+      }
+    });
+    return best;
+  }
+
   /** The route under a tap (near its line), if any. */
   routeAt(world: World, ax: number, ay: number): number | null {
     let best: number | null = null;

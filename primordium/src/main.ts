@@ -15,7 +15,7 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
-import { buySailUp, buyShips, conquer, giveGift, gust, openRoute, ours, sendVoyage, setSail, type SailUp } from './economy/sail';
+import { fightPirate, buySailUp, buyShips, conquer, giveGift, gust, openRoute, ours, sendVoyage, setSail, type SailUp } from './economy/sail';
 import { isleName, peopleCard, setSailMany } from './ui/sailPanels';
 import { EmberView } from './ui/emberView';
 import { HearthView } from './ui/hearthView';
@@ -606,6 +606,20 @@ function visitIsle(k: number | null): void {
 /** A tap on the world map: one of your islands, to go and see it (as it was left, or home as it
  * is); someone else's, a word on who they are. */
 function sailTap(x: number, y: number): void {
+  // Pirates tapped: a hit; the last drives them off, and their loot is yours.
+  const pirate = scene.worldPirateAt(state, x, y);
+  if (pirate !== null) {
+    const loot = fightPirate(state, pirate);
+    if (loot > 0) {
+      scene.float(x, y - 12, `Driven off! +${format(D(loot))}`, '#ffd24a');
+      cue('impact', 0.5);
+      panelKey = '';
+    } else {
+      scene.float(x, y - 10, 'Hit!', '#e8615a');
+      tapSound();
+    }
+    return;
+  }
   // A route tapped: the wind fills its sails (×2 for a few seconds).
   const route = scene.worldRouteAt(state, x, y);
   const world = state.stages.sail.world;
@@ -1840,7 +1854,8 @@ function renderHint(): void {
     else if (s && !Object.keys(s.gens).length) text = 'Stoke the fire (the Hearth tab), then send out foragers (in Build)';
     else if (!pokedThisStage) text = 'Tap the land to walk · pinch to zoom';
   } else if (state.current === 'sail') {
-    if (!pokedThisStage) text = 'Tap a route for a fair wind · drag to look round';
+    if (state.stages.sail.world?.pirates?.length) text = 'Pirates on a route! Tap them to drive them off';
+    else if (!pokedThisStage) text = 'Tap a route for a fair wind · drag to look round';
   } else if (!pokedThisStage) text = 'Tap to steer your cell';
   else if (!dietOf(state, state.current)) text = 'Pick a diet in Mutate so your cell can eat';
   hint.hidden = !text || !modal.hidden || (ui.open && ui.full) || (ui.open && ui.tab === 'hearth');

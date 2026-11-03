@@ -2,7 +2,7 @@
 // network's upgrades), then your islands to go and see.
 
 import type { GameState } from '../economy/types';
-import { conquerCost, giftCost, giftTrust, joinedCount, kin, level, milestone, openCost, ours, routeOptions, routeRate, SAIL_UPS, shipCost, shipsAffordable, shipsOut, toWin, upCost, voyageCost, voyageTarget, voyageTime, type World, type WorldIsle } from '../economy/sail';
+import { havensLeft, raided, conquerCost, giftCost, giftTrust, joinedCount, kin, level, milestone, openCost, ours, routeOptions, routeRate, SAIL_UPS, shipCost, shipsAffordable, shipsOut, toWin, upCost, voyageCost, voyageTarget, voyageTime, type World, type WorldIsle } from '../economy/sail';
 import { langOf, shoreOf } from '../economy/shore';
 import { namePlace } from '../economy/language';
 import { D, format as formatD } from '../economy/num';
@@ -45,6 +45,8 @@ export function sailKey(state: GameState): string {
   return JSON.stringify([
     !!world.voyage,
     world.voyages,
+    (world.pirates ?? []).map((p) => p.route),
+    havensLeft(world),
     have >= voyageCost(world),
     world.isles.filter((i) => i.found && !ours(i)).map((i) => [i.id, Math.floor((i.trust ?? 0) / 5), have >= giftCost(world, i), have >= conquerCost(world, i).influence && shipsOut(world) >= conquerCost(world, i).ships]),
     sailMany,
@@ -66,7 +68,7 @@ export function worldLayout(state: GameState): string {
       const cost = shipCost(world, r, n);
       const next = [10, 25, 50, 100].find((m) => r.ships < m);
       return `<div class="card px-box build"><div class="info"><div class="name">${isleName(state, isle)} <span class="dim">×${r.ships}</span></div>
-        <div class="sub"><span class="green" data-t="route-${i}">${format(routeRate(state, world, r, i))}/s</span>${next ? ` · ×2 at ${next} ships` : ''}${milestone(r.ships) ? ` · ×${2 ** milestone(r.ships)}` : ''}</div></div>
+        <div class="sub">${raided(world, i) ? '<span class="red">Pirates! Tap them on the map.</span> ' : ''}<span class="green" data-t="route-${i}">${format(routeRate(state, world, r, i))}/s</span>${next ? ` · ×2 at ${next} ships` : ''}${milestone(r.ships) ? ` · ×${2 ** milestone(r.ships)}` : ''}</div></div>
         <button class="px-btn buy${have >= cost ? ' gold' : ''}" data-routebuy="${i}" data-n="${n}"${have >= cost ? '' : ' disabled'}>${n > 1 ? `+${n} · ` : ''}${format(cost)}</button></div>`;
     })
     .join('');
@@ -117,11 +119,12 @@ export function peopleCard(state: GameState, world: World, i: WorldIsle, close =
   const c = conquerCost(world, i);
   const canTake = have >= c.influence && shipsOut(world) >= c.ships;
   const t = Math.floor(i.trust ?? 0);
-  const how = kin(world, i) ? 'Kin: gifts win them fast.' : world.diet === 'hunter' ? 'Others: easiest taken.' : world.diet === 'omnivore' ? 'Others: trade wins them.' : 'Others: gifts, slowly.';
-  return `<div class="card px-box village"><div class="info"><div class="name">${isleName(state, i)} <span class="rel ${kin(world, i) ? 'rel-kin' : 'rel-prey'}">${kin(world, i) ? 'Kin' : 'Others'}</span></div>
-    <div class="sub">${i.pop} of them, ${i.diet}s. ${how}</div>
-    <div class="trust"><span class="tiny dim">Trust</span><div class="making-bar on"><i style="width: ${t}%"></i></div></div></div>
-    <div class="col"><button class="px-btn${have >= g ? ' gold' : ''}" data-sailgift="${i.id}"${have >= g ? '' : ' disabled'}>Gift ${format(g)} · +${giftTrust(world, i)}</button>
+  const how = i.haven ? 'Pirates: only to be taken. Every haven taken, fewer raids.' : kin(world, i) ? 'Kin: gifts win them fast.' : world.diet === 'hunter' ? 'Others: easiest taken.' : world.diet === 'omnivore' ? 'Others: trade wins them.' : 'Others: gifts, slowly.';
+  const rel = i.haven ? '<span class="rel rel-predator">Pirates</span>' : `<span class="rel ${kin(world, i) ? 'rel-kin' : 'rel-prey'}">${kin(world, i) ? 'Kin' : 'Others'}</span>`;
+  return `<div class="card px-box village"><div class="info"><div class="name">${isleName(state, i)} ${rel}</div>
+    <div class="sub">${i.pop} of them${i.haven ? '' : `, ${i.diet}s`}. ${how}</div>
+    ${i.haven ? '' : `<div class="trust"><span class="tiny dim">Trust</span><div class="making-bar on"><i style="width: ${t}%"></i></div></div>`}</div>
+    <div class="col">${i.haven ? '' : `<button class="px-btn${have >= g ? ' gold' : ''}" data-sailgift="${i.id}"${have >= g ? '' : ' disabled'}>Gift ${format(g)} · +${giftTrust(world, i)}</button>`}
     <button class="px-btn${canTake ? ' gold' : ''}" data-conquer="${i.id}"${canTake ? '' : ' disabled'}>Take ${format(c.influence)} · ${c.ships} ships</button>${close ? '<button class="px-btn" data-act="dismiss">OK</button>' : ''}</div></div>`;
 }
 

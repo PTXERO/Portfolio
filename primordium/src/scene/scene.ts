@@ -234,6 +234,13 @@ export class Scene {
   get zoomed(): boolean {
     return this.isMap || this.stage === 'sail';
   }
+  /** Pirates on the world map under a tap (CSS pixels), if any. */
+  worldPirateAt(state: GameState, cssX: number, cssY: number): number | null {
+    const world = state.stages.sail.world;
+    if (!world || this.stage !== 'sail') return null;
+    const [x, y] = this.toArt(cssX, cssY);
+    return this.world.pirateAt(world, x, y);
+  }
   /** The trade route on the world map under a tap (CSS pixels), if any. */
   worldRouteAt(state: GameState, cssX: number, cssY: number): number | null {
     const world = state.stages.sail.world;
