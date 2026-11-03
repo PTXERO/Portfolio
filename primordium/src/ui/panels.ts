@@ -1,7 +1,7 @@
 // The tab panels under the scene. Each panel is laid out once (when its rows
 // change) and then patched in place, so a button never vanishes under a finger.
 
-import { sailKey, sailUpdate, worldLayout } from './sailPanels';
+import { networkLayout, routesLayout, sailKey, sailUpdate, worldLayout } from './sailPanels';
 import { CHANNELS, mixWithMusic, volumes } from '../audio/sound';
 import { ideasLayout, spellsLayout, tribeKey, tribeLayout, tribeUpdate } from './tribePanels';
 import { shoreKey, shoreLayout, shoreUpdate } from './shorePanels';
@@ -68,8 +68,9 @@ export function tabsFor(state: GameState): Tab[] {
     culture: false,
     boosts: !habitats && !creature && !def.tribal && !def.shore && !def.sail,
     lab: !habitats && !creature && !def.shore && reactions(state.current).length > 0,
-    mutate: habitats,
-    pond: habitats,
+    // (The Age of Sail laid out as the Cell is: Routes to grow, the Network to improve, the World.)
+    mutate: habitats || !!def.sail,
+    pond: habitats || !!def.sail,
     // The Creature's tabs open as they're needed: the Body once there's anything to do with
     // it, Family once there's a mate, Roots once a first egg has hatched.
     body: creature && (cst.discovered.length > 1 || cst.totalEarned.gte(150) || cst.parts.length > 5),
@@ -278,7 +279,9 @@ export function layout(state: GameState, tab: Tab): string {
   if (def.shore && tab === 'chronicle') return shoreLayout(state, tab);
   if (def.shore && (tab === 'grow' || tab === 'build' || tab === 'island' || tab === 'culture')) return shoreLayout(state, tab);
   if (def.tribal && tab === 'grow') return tribeLayout(state);
-  if (def.sail && tab === 'grow') return worldLayout(state);
+  if (def.sail && tab === 'grow') return routesLayout(state);
+  if (def.sail && tab === 'mutate') return networkLayout(state);
+  if (def.sail && tab === 'pond') return worldLayout(state);
   if (def.tribal && tab === 'ideas') return ideasLayout(state);
   if (def.tribal && tab === 'miracles') return spellsLayout(state);
   if (tab === 'chronicle') return chronicleLayout(state);

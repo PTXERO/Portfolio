@@ -8,14 +8,14 @@ import '@fontsource/jersey-10/latin-400.css';
 import './ui/ui.css';
 import jerseyDigits from '@fontsource/jersey-10/files/jersey-10-latin-400-normal.woff2?url';
 
-import { icon } from './art/sprites';
+import { icon, type SpriteName } from './art/sprites';
 import { STAGES } from './content/stages';
 import { EVENTS } from './content/creature';
 import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
-import { fightPirate, buySailUp, buyShips, conquer, giveGift, gust, openRoute, ours, sendVoyage, setSail, type SailUp } from './economy/sail';
+import { fightPirate, buySailUp, buyShips, conquer, giveGift, gust, openRoute, ours, sendVoyage, setSail, SAIL_UPS, upCost, voyageCost, voyageTarget, type SailUp } from './economy/sail';
 import { isleName, peopleCard, setSailMany } from './ui/sailPanels';
 import { EmberView } from './ui/emberView';
 import { HearthView } from './ui/hearthView';
@@ -1339,7 +1339,13 @@ function renderTabs(): void {
   if (!ids.includes(ui.tab)) ui.tab = ids[0];
   tabsEl.style.gridTemplateColumns = `repeat(${ids.length}, 1fr)`;
   tabsEl.innerHTML = TABS.filter((t) => ids.includes(t.id))
-    .map((t) => `<button class="px-btn tab" data-tab="${t.id}">${icon(t.sprite, 3)}<span>${t.id === 'grow' && STAGES[state.current].places ? 'Herd' : t.id === 'grow' && STAGES[state.current].tribal ? 'Survivors' : t.id === 'grow' && STAGES[state.current].shore ? 'Village' : t.id === 'grow' && STAGES[state.current].sail ? 'World' : t.label}</span><i class="dot" hidden></i></button>`)
+    .map((t) => {
+      const sailing = STAGES[state.current].sail;
+      // (At sea the Cell's three tabs: Routes, the Network, the World.)
+      const sail = sailing ? ({ grow: ['Routes', 'explore'], mutate: ['Network', 'spark'], pond: ['World', 'island'] } as Partial<Record<Tab, [string, SpriteName]>>)[t.id] : undefined;
+      const label = sail ? sail[0] : t.id === 'grow' && STAGES[state.current].places ? 'Herd' : t.id === 'grow' && STAGES[state.current].tribal ? 'Survivors' : t.id === 'grow' && STAGES[state.current].shore ? 'Village' : t.label;
+      return `<button class="px-btn tab" data-tab="${t.id}">${icon(sail ? sail[1] : t.sprite, 3)}<span>${label}</span><i class="dot" hidden></i></button>`;
+    })
     .join('');
 }
 
@@ -1790,8 +1796,16 @@ function renderPanel(): void {
     b.classList.toggle('on', ui.open && b.dataset.tab === ui.tab);
     const dot = b.querySelector<HTMLElement>('.dot');
     const t = b.dataset.tab;
-    const on =
-      t === 'boosts' || t === 'mutate'
+    const world = STAGES[state.current].sail ? state.stages.sail.world : undefined;
+    const have = state.stages.sail.currency.toNumber();
+    const on = world
+      ? // (At sea: the Network when something's affordable; the World when a voyage can go.)
+        t === 'mutate'
+        ? SAIL_UPS.some((u) => have >= (upCost(world, u.id) ?? Infinity))
+        : t === 'pond'
+          ? !world.voyage && !!voyageTarget(world) && have >= voyageCost(world)
+          : false
+      : t === 'boosts' || t === 'mutate'
         ? boostReady(state)
         : t === 'lab'
           ? finaleReady(state)

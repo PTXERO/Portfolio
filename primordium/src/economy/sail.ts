@@ -217,16 +217,16 @@ export function setSail(state: GameState): boolean {
 
 export type SailUp = 'sails' | 'holds' | 'fleet' | 'charts' | 'passage' | 'guns' | 'winds';
 /** The network's branches, levelled like the Cell's mutations: each level a pricier step. */
-export const SAIL_UPS: { id: SailUp; name: string; does: string; most: number; cost: number; growth: number }[] = [
+export const SAIL_UPS: { id: SailUp; name: string; does: string; flavor: string; branch: string; most: number; cost: number; growth: number }[] = [
   // (Each level thirty times the last, as the Cell's are; Passage a step of its own.)
-  { id: 'sails', name: 'Sails', does: 'Ships ×1.3 faster.', most: 10, cost: 300, growth: 30 },
-  { id: 'holds', name: 'Holds', does: 'Each trip carries ×1.6.', most: 5, cost: 4000, growth: 30 },
-  { id: 'fleet', name: 'Fleet', does: 'Every ship pays ×1.25.', most: 10, cost: 1500, growth: 30 },
-  { id: 'charts', name: 'Charts', does: 'See further: new islands, new routes.', most: 5, cost: 6000, growth: 30 },
-  { id: 'passage', name: 'Passage', does: '1: ships bought for you · 2: routes opened · 3: voyages sent.', most: 3, cost: 1e5, growth: 300 },
-  { id: 'guns', name: 'Guns', does: 'Ships fight pirates off by themselves: sooner, more loot, fewer pirates.', most: 5, cost: 3000, growth: 30 },
+  { id: 'sails', name: 'Sails', does: 'Ships ×1.3 faster.', flavor: 'More canvas, more wind.', branch: 'Speed', most: 10, cost: 300, growth: 30 },
+  { id: 'holds', name: 'Holds', does: 'Each trip carries ×1.6.', flavor: 'Deeper hulls.', branch: 'Cargo', most: 5, cost: 4000, growth: 30 },
+  { id: 'fleet', name: 'Fleet', does: 'Every ship pays ×1.25.', flavor: 'Better ships, better crews.', branch: 'Cargo', most: 10, cost: 1500, growth: 30 },
+  { id: 'charts', name: 'Charts', does: 'See further: new islands, new routes.', flavor: 'The sea, written down.', branch: 'Charts', most: 5, cost: 6000, growth: 30 },
+  { id: 'passage', name: 'Passage', does: '1: ships bought for you · 2: routes opened · 3: voyages sent.', flavor: 'The harbour runs itself.', branch: 'Harbour', most: 3, cost: 1e5, growth: 300 },
+  { id: 'guns', name: 'Guns', does: 'Ships fight pirates off by themselves: sooner, more loot, fewer pirates.', flavor: 'Iron on the decks.', branch: 'Defence', most: 5, cost: 3000, growth: 30 },
   // (Never done, as the Cell's long simmer: a little more, a little dearer, for good.)
-  { id: 'winds', name: 'Trade winds', does: 'Everything at sea ×1.03.', most: Infinity, cost: 1e6, growth: 1.8 },
+  { id: 'winds', name: 'Trade winds', does: 'Everything at sea ×1.03.', flavor: 'The sea learns your routes.', branch: 'Speed', most: Infinity, cost: 1e6, growth: 1.8 },
 ];
 export function level(world: World, id: SailUp): number {
   return world.ups?.[id] ?? 0;

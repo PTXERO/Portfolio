@@ -7,6 +7,7 @@ import { langOf, shoreOf } from '../economy/shore';
 import { namePlace } from '../economy/language';
 import { D, format as formatD } from '../economy/num';
 import { nextMilestone } from '../economy/rates';
+import { icon } from '../art/sprites';
 
 const format = (n: number) => formatD(D(n));
 
@@ -72,7 +73,8 @@ export function sailKey(state: GameState): string {
   ]);
 }
 
-export function worldLayout(state: GameState): string {
+/** Routes (the Cell's Grow): every route and its ships, then the next routes to open. */
+export function routesLayout(state: GameState): string {
   const world = state.stages.sail.world;
   if (!world) return '';
   const have = influence(state);
@@ -84,7 +86,7 @@ export function worldLayout(state: GameState): string {
       const cost = shipCost(world, r, n);
       const next = nextMilestone(r.ships);
       return `<div class="card px-box build"><div class="info"><div class="name">${isleName(state, isle)} <span class="dim">×${r.ships}</span></div>
-        <div class="sub">${raided(world, i) ? '<span class="red">Pirates! Tap them on the map.</span> ' : ''}<span class="green" data-t="route-${i}">${format(routeRate(state, world, r, i))}/s</span>${next ? ` · ×2 at ${next} ships` : ''}${milestone(r.ships) ? ` · ×${2 ** milestone(r.ships)}` : ''}</div></div>
+        <div class="sub">${raided(world, i) ? '<span class="red">Pirates! Tap them on the map.</span> ' : ''}<span class="green" data-t="route-${i}">${format(routeRate(state, world, r, i))}/s</span> · ×2 at ${next} ships${milestone(r.ships) ? ` · ×${2 ** milestone(r.ships)}` : ''}</div></div>
         <button class="px-btn buy${have >= cost ? ' gold' : ''}" data-routebuy="${i}" data-n="${n}"${have >= cost ? '' : ' disabled'}>${n > 1 ? `+${n} · ` : ''}${format(cost)}</button></div>`;
     })
     .join('');
@@ -96,13 +98,47 @@ export function worldLayout(state: GameState): string {
         <button class="px-btn buy${have >= c ? ' gold' : ''}" data-routeopen="${x.id}"${have >= c ? '' : ' disabled'}>${format(c)}</button></div>`;
     })
     .join('');
-  const ups = SAIL_UPS.map((u) => {
+  return `<div class="panel-head"><h2>Trade routes</h2><span class="dim"><span data-t="sail-rate"></span></span></div>
+    <div class="seg build-cats">${amounts}</div>
+    ${routes}${opens ? `<div class="panel-head"><h2>New routes</h2></div>${opens}` : ''}`;
+}
+
+/** The Network (the Cell's Mutate): what's left to improve, cheapest first; what's done, listed. */
+export function networkLayout(state: GameState): string {
+  const world = state.stages.sail.world;
+  if (!world) return '';
+  const have = influence(state);
+  const open = SAIL_UPS.filter((u) => upCost(world, u.id) !== null).sort((a, b) => upCost(world, a.id)! - upCost(world, b.id)!);
+  const done = SAIL_UPS.filter((u) => upCost(world, u.id) === null);
+  const finite = SAIL_UPS.filter((u) => u.most < Infinity);
+  const score = `${finite.reduce((n, u) => n + level(world, u.id), 0)} / ${finite.reduce((n, u) => n + u.most, 0)}`;
+  const card = (u: (typeof SAIL_UPS)[number]) => {
     const lv = level(world, u.id);
-    const c = upCost(world, u.id);
-    return `<div class="card px-box build"><div class="info"><div class="name">${u.name} <span class="dim">${u.most === Infinity ? lv : `${lv}/${u.most}`}</span></div><div class="sub">${u.does}</div></div>
-      ${c === null ? '<span class="dim tiny">Done</span>' : `<button class="px-btn buy${have >= c ? ' gold' : ''}" data-sailup="${u.id}"${have >= c ? '' : ' disabled'}>${format(c)}</button>`}</div>`;
-  }).join('');
-  // Voyages out into the fog, and the peoples met: to be won over, traded with, or taken.
+    const c = upCost(world, u.id)!;
+    const ok = have >= c;
+    const many = u.most > 1 && u.id !== 'passage';
+    return `<div class="card px-box">
+      <div class="slot">${icon(u.most === Infinity ? 'hourglass' : 'spark', 3)}</div>
+      <div class="info">
+        <div class="name">${u.name}${u.most === Infinity ? ` <span class="count">Lv ${lv}</span> <span class="tag">Endless</span>` : ` <span class="count">${lv}/${u.most}</span>`} <span class="tag">${u.branch}</span></div>
+        <div class="fx">${many ? 'Each level: ' : ''}${u.does}</div>
+        <div class="flavor">${u.flavor}</div>
+        ${u.most > 1 && u.most < Infinity ? `<div class="mini lv">${Array.from({ length: u.most }, (_, i) => `<i${i < lv ? ' class="on"' : ''}></i>`).join('')}</div>` : ''}
+      </div>
+      <button class="px-btn buy${ok ? ' gold' : ''}" data-sailup="${u.id}"${ok ? '' : ' disabled'}><span class="cost">${icon('island', 2)}${format(c)}</span><span class="qty">LEVEL ${lv + 1}</span></button>
+    </div>`;
+  };
+  return `<div class="panel-head"><h2>Improve next</h2><span class="label dim">Network ${score}</span></div>
+    ${open.map(card).join('') || '<p class="note">The network is complete.</p>'}
+    ${done.length ? `<div class="panel-head"><h2>Complete</h2></div><p class="note evolved-list">${done.map((u) => u.name).join(' · ')}</p>` : ''}`;
+}
+
+/** The World (the Cell's Pond): what's being settled, the voyage out, the peoples met, and your
+ * islands to go and see. */
+export function worldLayout(state: GameState): string {
+  const world = state.stages.sail.world;
+  if (!world) return '';
+  const have = influence(state);
   const target = voyageTarget(world);
   const vc = voyageCost(world);
   const voyage = world.voyage
@@ -121,12 +157,7 @@ export function worldLayout(state: GameState): string {
     ? `<div class="card px-box build"><div class="info"><div class="name">Settling ${isleName(state, world.isles[world.settling.isle])}</div><div class="sub">No other won till it's done: <span data-t="settle-left"></span></div></div></div>`
     : '';
   return `<div class="panel-head"><h2>The world</h2><span class="dim">${joinedCount(world)} joined · ${toWin(world)} to win</span></div>
-    ${settling}${voyage}${peoples}
-    <div class="panel-head"><h2>Trade routes</h2><span class="dim"><span data-t="sail-rate"></span></span></div>
-    <div class="seg build-cats">${amounts}</div>
-    ${routes}${opens}
-    <div class="panel-head"><h2>The network</h2></div>
-    ${ups}
+    ${settling}${voyage}${peoples ? `<div class="panel-head"><h2>Peoples</h2></div>${peoples}` : ''}
     <div class="panel-head"><h2>Your islands</h2><span class="dim">tap to go and see</span></div>
     <div class="seg build-cats">${yours}</div>`;
 }
