@@ -1082,39 +1082,82 @@ export class ShoreScene extends RangeScene {
     return Math.max(1, Math.hypot(v.x - s.hearth.x, v.y - s.hearth.y) / 30);
   }
 
-  /** Caravans bought: carts going up and down the roads. */
+  /** Caravans bought: a pack beast and two covered wagons, going up and down the roads. */
   private drawCarts(b: CanvasRenderingContext2D, sprites: Sprite[], s: ShoreState, t: number, z: number, fogged: (x: number, y: number) => boolean): void {
     const n = Math.min(count(s, 'caravan'), 8);
     if (!n || !this.roadsLaid.length) return;
+    const q = Math.max(1, Math.round(z * 0.5));
     for (let k = 0; k < n; k++) {
       const way = this.roadsLaid[k % this.roadsLaid.length];
       if (way.length < 2) continue;
-      // There and back, each cart its own pace and start.
-      const u = (t / (way.length * 0.9) + k * 0.37) % 2;
-      const f = (u < 1 ? u : 2 - u) * (way.length - 1);
-      const a = way[Math.floor(f)];
-      const c = way[Math.min(way.length - 1, Math.floor(f) + 1)];
-      const x = a.x + (c.x - a.x) * (f % 1);
-      const y = a.y + (c.y - a.y) * (f % 1);
-      if (fogged(x, y)) continue;
-      const X = Math.round(this.sx(x, y));
-      const Y = Math.round(this.py(x, y));
-      if (X < -20 || X > this.W + 20 || Y < -20 || Y > this.H + 20) continue;
-      const q = Math.max(1, Math.round(z * 0.5));
-      sprites.push({
-        y,
-        at: { x, y },
-        draw: () => {
-          const r = (dx: number, dy: number, w: number, h: number, col: string) => {
-            b.fillStyle = col;
-            b.fillRect(X + dx * q, Y + dy * q, w * q, h * q);
-          };
-          r(-3, -4, 7, 3, '#7a5634');
-          r(-3, -5, 7, 1, '#c8b080');
-          r(-2, -1, 2, 2, '#3a2a1a');
-          r(2, -1, 2, 2, '#3a2a1a');
-        },
-      });
+      // The way's length, so they keep one pace on any road.
+      const lens = [0];
+      for (let i = 1; i < way.length; i++) lens.push(lens[i - 1] + Math.hypot(way[i].x - way[i - 1].x, way[i].y - way[i - 1].y));
+      const total = lens[lens.length - 1];
+      if (total < 8) continue;
+      const at = (d: number): Pt => {
+        d = Math.max(0, Math.min(total, d));
+        let i = 1;
+        while (i < way.length - 1 && lens[i] < d) i++;
+        const f = (d - lens[i - 1]) / Math.max(0.001, lens[i] - lens[i - 1]);
+        return { x: way[i - 1].x + (way[i].x - way[i - 1].x) * f, y: way[i - 1].y + (way[i].y - way[i - 1].y) * f };
+      };
+      // There and back (a rest at each end), each its own start.
+      const speed = 1.2;
+      const loop = (total / speed) * 2 + 20;
+      const u = ((t + k * 37) % loop) / loop;
+      const out = u < 0.5;
+      const v = out ? u * 2 : (1 - u) * 2;
+      const head = Math.max(0, Math.min(1, v * 1.05 - 0.025)) * total;
+      const dir = out ? 1 : -1;
+      const parts: { d: number; kind: 'beast' | 'wagon' }[] = [
+        { d: head, kind: 'beast' },
+        { d: head - dir * 4.5, kind: 'wagon' },
+        { d: head - dir * 9.5, kind: 'wagon' },
+      ];
+      const ahead = at(head + dir * 2);
+      const here = at(head);
+      const left = this.sx(ahead.x, ahead.y) < this.sx(here.x, here.y);
+      const walk = Math.floor(t * 4 + k) % 2;
+      for (const part of parts) {
+        const p = at(part.d);
+        if (fogged(p.x, p.y)) continue;
+        const X = Math.round(this.sx(p.x, p.y));
+        const Y = Math.round(this.py(p.x, p.y));
+        if (X < -30 || X > this.W + 30 || Y < -30 || Y > this.H + 30) continue;
+        sprites.push({
+          y: p.y,
+          at: p,
+          draw: () => {
+            const r = (dx: number, dy: number, w: number, h: number, col: string) => {
+              b.fillStyle = col;
+              b.fillRect(X + (left ? -dx - w : dx) * q, Y + dy * q, w * q, h * q);
+            };
+            if (part.kind === 'beast') {
+              // A shaggy pack beast, head down, legs going.
+              r(-3, -5, 6, 3, '#6a4a30');
+              r(-3, -6, 5, 1, '#7a5a3a');
+              r(3, -5, 2, 2, '#5a3a24');
+              r(4, -6, 1, 1, '#e8dcc0');
+              r(-3, -2, 1, 2, '#3a2a1a');
+              r(2, -2, 1, 2, '#3a2a1a');
+              r(walk ? -2 : -1, -2, 1, 2, '#4a3422');
+              r(walk ? 1 : 0, -2, 1, 2, '#4a3422');
+            } else {
+              // A wagon under an arched cloth cover, two spoked wheels.
+              r(-4, -3, 8, 1, '#6a4428');
+              r(-4, -7, 8, 4, '#e8dcb8');
+              r(-3, -8, 6, 1, '#f4ecd0');
+              r(-4, -5, 8, 1, '#c8b890');
+              r(4, -3, 2, 1, '#5a3a20');
+              r(-3, -2, 2, 2, '#2a1e14');
+              r(1, -2, 2, 2, '#2a1e14');
+              r(walk ? -3 : -2, -2, 1, 1, '#8a6a44');
+              r(walk ? 2 : 1, -1, 1, 1, '#8a6a44');
+            }
+          },
+        });
+      }
     }
   }
 
