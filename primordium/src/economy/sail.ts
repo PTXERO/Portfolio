@@ -63,6 +63,8 @@ export interface World {
   driven?: number;
   lost?: number;
   age?: number;
+  /** The island last won, still being settled (seconds left): none won till it's done. */
+  settling?: { isle: number; left: number } | null;
 }
 export interface Pirate {
   route: number;
@@ -365,6 +367,10 @@ export function sailTick(state: GameState, dt: number): void {
     world.diet ??= shoreOf(state)?.look.diet ?? 'omnivore';
   }
   if (!world.isles.some((i) => i.haven)) makeHavens(world.isles, homeOf(world));
+  if (world.settling) {
+    world.settling.left -= dt;
+    if (world.settling.left <= 0) world.settling = null;
+  }
   piratesTick(state, world, dt);
   // The voyage out: home when its time's up (the island found, its people met).
   if (world.voyage) {
@@ -493,7 +499,7 @@ export function shipsOut(world: World): number {
 export function conquer(state: GameState, id: number): boolean {
   const world = state.stages.sail.world;
   const i = world?.isles[id];
-  if (!world || !i || !i.found || ours(i)) return false;
+  if (!world || !i || !i.found || ours(i) || settlingLeft(world) > 0) return false;
   const c = conquerCost(world, i);
   if (shipsOut(world) < c.ships || !spend(state, c.influence)) return false;
   join(world, i);
@@ -505,13 +511,21 @@ export function tradeTrust(world: World, r: Route): number {
   return (Math.min(1, 0.0012 * Math.sqrt(r.ships)) * (world.diet === 'omnivore' ? 2 : 1)) / dearer(world);
 }
 function addTrust(world: World, i: WorldIsle, n: number): void {
-  i.trust = Math.min(100, (i.trust ?? 0) + n);
+  // (While the last is settled, trust can build, but not tip them over.)
+  i.trust = Math.min(settlingLeft(world) > 0 ? 99 : 100, (i.trust ?? 0) + n);
   if (i.trust >= 100) join(world, i);
 }
-/** Joined: theirs is yours, and the fog lifts off their own waters. */
+/** Seconds an island won takes to settle: no other won till it has (one at a time, each one
+ * built up). */
+export const SETTLE_SECS = 1800;
+export function settlingLeft(world: World): number {
+  return Math.max(0, world.settling?.left ?? 0);
+}
+/** Joined: theirs is yours, and the fog lifts off their own waters. Then it's settled. */
 function join(world: World, i: WorldIsle): void {
   i.joined = true;
   i.trust = 100;
+  world.settling = { isle: i.id, left: SETTLE_SECS };
   chart(world);
 }
 /** The world's still to win: every island not yet yours. */

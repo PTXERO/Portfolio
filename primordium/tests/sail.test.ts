@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createState } from '../src/economy/state';
 import { cross, shoreOf, startShore, takeRaft } from '../src/economy/shore';
-import { fightPirate, gunsTime, havensLeft, pirateChance, raided, setPirateDice, conquer, conquerCost, giftCost, giveGift, joinedMult, ours, sendVoyage, voyageTarget, buySailUp, buyShips, coastAt, gust, level, makeWorld, MASK, openCost, openRoute, routeOptions, routeRate, sailRate, setSail, shipCost, sightOf } from '../src/economy/sail';
+import { fightPirate, gunsTime, havensLeft, pirateChance, raided, setPirateDice, conquer, conquerCost, giftCost, settlingLeft, SETTLE_SECS, giveGift, joinedMult, ours, sendVoyage, voyageTarget, buySailUp, buyShips, coastAt, gust, level, makeWorld, MASK, openCost, openRoute, routeOptions, routeRate, sailRate, setSail, shipCost, sightOf } from '../src/economy/sail';
 import { tick } from '../src/economy/tick';
 import { D } from '../src/economy/num';
 import { deserialize, serialize } from '../src/economy/save';
@@ -128,10 +128,17 @@ describe('The Age of Sail: the world map', () => {
     while (!target.joined) giveGift(state, target.id);
     expect(ours(target)).toBe(true);
     expect(joinedMult(world)).toBeCloseTo(1.15, 5);
-    // Taken: ships enough and Influence; then the next is dearer.
+    // Settling: half an hour before another can be won (trust builds, but won't tip them).
+    expect(settlingLeft(world)).toBe(SETTLE_SECS);
     const foe = world.isles.find((i) => i.found && !ours(i))!;
     const need = conquerCost(world, foe);
     world.routes![0].ships = need.ships;
+    state.stages.sail.currency = D(need.influence * 2);
+    expect(conquer(state, foe.id)).toBe(false);
+    world.settling!.left = 1;
+    tick(state, 2);
+    expect(settlingLeft(world)).toBe(0);
+    // Taken: ships enough and Influence; then the next is dearer.
     expect(conquer(state, foe.id)).toBe(true);
     expect(foe.joined).toBe(true);
     const next = world.isles.find((i) => i.found && !ours(i));
