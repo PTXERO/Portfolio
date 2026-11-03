@@ -72,5 +72,6 @@ for (let t = 0; t <= HOURS * 3600; t += 2) {
 }
 console.log(log.join('\n'));
 for (const h of world.isles.filter((i) => i.haven && !i.joined)) console.log('haven', h.id, 'found', h.found, 'pop', h.pop, 'cost', conquerCost(world, h).influence.toExponential(2), 'ships', conquerCost(world, h).ships, 'have ships', shipsOut(world));
+for (const h of world.isles.filter((i) => !ours(i))) console.log('left', h.id, 'pop', h.pop, 'trust', Math.round(h.trust ?? 0), 'gift', giftCost(world, h).toExponential(2), 'take', conquerCost(world, h).influence.toExponential(2), conquerCost(world, h).ships, 'route', world.routes!.some((r) => r.to === h.id), 'rate', sailRate(state).toExponential(2));
 const worst = (a: number, b: number) => Math.max(0, ...gaps.filter((g) => g.t >= a && g.t < b).map((g) => g.gap));
 console.log('buys', gaps.length, '· longest wait: hour 1', worst(0, 3600), 's · hours 1-4', worst(3600, 4 * 3600), 's · after', worst(4 * 3600, 1e9), 's');

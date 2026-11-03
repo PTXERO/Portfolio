@@ -2,7 +2,7 @@
 // network's upgrades), then your islands to go and see.
 
 import type { GameState } from '../economy/types';
-import { havensLeft, raided, conquerCost, giftCost, giftTrust, joinedCount, kin, level, milestone, openCost, ours, routeOptions, routeRate, SAIL_UPS, shipCost, shipsAffordable, shipsOut, toWin, upCost, voyageCost, voyageTarget, voyageTime, type World, type WorldIsle } from '../economy/sail';
+import { havensLeft, raided, settlingLeft, conquerCost, giftCost, giftTrust, joinedCount, kin, level, milestone, openCost, ours, routeOptions, routeRate, SAIL_UPS, shipCost, shipsAffordable, shipsOut, toWin, upCost, voyageCost, voyageTarget, voyageTime, type World, type WorldIsle } from '../economy/sail';
 import { langOf, shoreOf } from '../economy/shore';
 import { namePlace } from '../economy/language';
 import { D, format as formatD } from '../economy/num';
@@ -59,6 +59,7 @@ export function sailKey(state: GameState): string {
   return JSON.stringify([
     !!world.voyage,
     world.voyages,
+    settlingLeft(world) > 0,
     (world.pirates ?? []).map((p) => p.route),
     havensLeft(world),
     have >= voyageCost(world),
@@ -115,8 +116,11 @@ export function worldLayout(state: GameState): string {
     .join('');
   const mine = world.isles.filter((i) => i.mine !== undefined).sort((a, b) => (a.mine === -1 ? 1 : b.mine === -1 ? -1 : a.mine! - b.mine!));
   const yours = mine.map((i) => `<button class="px-btn" data-worldisle="${i.id}">${isleName(state, i)}</button>`).join('');
+  const settling = world.settling && settlingLeft(world) > 0
+    ? `<div class="card px-box build"><div class="info"><div class="name">Settling ${isleName(state, world.isles[world.settling.isle])}</div><div class="sub">No other won till it's done: <span data-t="settle-left"></span></div></div></div>`
+    : '';
   return `<div class="panel-head"><h2>The world</h2><span class="dim">${joinedCount(world)} joined · ${toWin(world)} to win</span></div>
-    ${voyage}${peoples}
+    ${settling}${voyage}${peoples}
     <div class="panel-head"><h2>Trade routes</h2><span class="dim"><span data-t="sail-rate"></span></span></div>
     <div class="seg build-cats">${amounts}</div>
     ${routes}${opens}
@@ -131,14 +135,15 @@ export function peopleCard(state: GameState, world: World, i: WorldIsle, close =
   const have = influence(state);
   const g = giftCost(world, i);
   const c = conquerCost(world, i);
-  const canTake = have >= c.influence && shipsOut(world) >= c.ships;
+  const canGive = have >= g && !(settlingLeft(world) > 0 && (i.trust ?? 0) >= 99);
+  const canTake = have >= c.influence && shipsOut(world) >= c.ships && settlingLeft(world) <= 0;
   const t = Math.floor(i.trust ?? 0);
   const how = i.haven ? 'Pirates: only to be taken. Every haven taken, fewer raids.' : kin(world, i) ? 'Kin: gifts win them fast.' : world.diet === 'hunter' ? 'Others: easiest taken.' : world.diet === 'omnivore' ? 'Others: trade wins them.' : 'Others: gifts, slowly.';
   const rel = i.haven ? '<span class="rel rel-predator">Pirates</span>' : `<span class="rel ${kin(world, i) ? 'rel-kin' : 'rel-prey'}">${kin(world, i) ? 'Kin' : 'Others'}</span>`;
   return `<div class="card px-box village"><div class="info"><div class="name">${isleName(state, i)} ${rel}</div>
     <div class="sub">${i.pop} of them${i.haven ? '' : `, ${i.diet}s`}. ${how}</div>
     ${i.haven ? '' : `<div class="trust"><span class="tiny dim">Trust</span><div class="making-bar on"><i style="width: ${t}%"></i></div></div>`}</div>
-    <div class="col">${i.haven ? '' : `<button class="px-btn${have >= g ? ' gold' : ''}" data-sailgift="${i.id}"${have >= g ? '' : ' disabled'}>Gift ${format(g)} · +${giftTrust(world, i)}</button>`}
+    <div class="col">${i.haven ? '' : `<button class="px-btn${canGive ? ' gold' : ''}" data-sailgift="${i.id}"${canGive ? '' : ' disabled'}>Gift ${format(g)} · +${giftTrust(world, i)}</button>`}
     <button class="px-btn${canTake ? ' gold' : ''}" data-conquer="${i.id}"${canTake ? '' : ' disabled'}>Take ${format(c.influence)} · ${c.ships} ships</button>${close ? '<button class="px-btn" data-act="dismiss">OK</button>' : ''}</div></div>`;
 }
 
@@ -150,6 +155,8 @@ export function sailUpdate(root: HTMLElement, state: GameState): void {
     for (const el of root.querySelectorAll<HTMLElement>(`[data-t="${k}"]`)) if (el.textContent !== v) el.textContent = v;
   };
   world.routes?.forEach((r, i) => put(`route-${i}`, `${format(routeRate(state, world, r, i))}/s`));
+  const sl = settlingLeft(world);
+  if (sl > 0) put('settle-left', `${Math.floor(sl / 60)}:${String(Math.floor(sl % 60)).padStart(2, '0')}`);
   if (world.voyage) put('voyage-left', `${Math.floor(world.voyage.left / 60)}:${String(Math.floor(world.voyage.left % 60)).padStart(2, '0')}`);
   put('sail-rate', `${format((world.routes ?? []).reduce((n, r, i) => n + routeRate(state, world, r, i), 0))} a second`);
 }

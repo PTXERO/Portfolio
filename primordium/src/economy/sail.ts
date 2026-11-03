@@ -483,7 +483,8 @@ export function giftTrust(world: World, i: WorldIsle): number {
 export function giveGift(state: GameState, id: number): boolean {
   const world = state.stages.sail.world;
   const i = world?.isles[id];
-  if (!world || !i || !i.found || ours(i) || i.haven || !spend(state, giftCost(world, i))) return false;
+  // (No gift that couldn't win them more: at the brink while another's settled, they wait.)
+  if (!world || !i || !i.found || ours(i) || i.haven || (settlingLeft(world) > 0 && (i.trust ?? 0) >= 99) || !spend(state, giftCost(world, i))) return false;
   i.gifts = (i.gifts ?? 0) + 1;
   addTrust(world, i, giftTrust(world, i));
   return true;
