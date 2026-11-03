@@ -311,6 +311,8 @@ export interface ShoreState {
   eraEnd?: boolean;
   /** Lines for the chronicle from the hearth and the map (words made, places named). */
   toRecord?: string[];
+  /** Things done, counted for good (what speeds the culture's ideas). */
+  deeds?: Record<string, number>;
   /** Ids of villages found since the interface last looked. */
   newFinds: number[];
 }
@@ -1127,6 +1129,7 @@ function aweTarget(s: ShoreState): Village | undefined {
 export function workSign(state: GameState, id: MiracleId): string {
   const s = shoreOf(state);
   if (!s || !signReady(s, id)) return '';
+  deed(s, 'sign');
   s.prayer = (s.prayer ?? 0) - MIRACLES.find((x) => x.id === id)!.cost;
   const now = s.day * DAY_SEC + s.clock;
   if (id === 'bolt') {
@@ -1429,6 +1432,7 @@ export function gift(state: GameState, id: number): number {
   if (s.food < give) return 0;
   s.food -= give;
   v.gifts = (v.gifts ?? 0) + 1;
+  deed(s, 'gift');
   v.giftDay = s.day;
   const gain = (GIFT_TRUST * (1 + boosts(s).gift) * (chiefNear(s, v) ? 2 : 1) * (natureOf(s).gift ?? 1)) / (1 + GIFT_LESS * further(s));
   if (!v.gifted) {
@@ -1449,6 +1453,7 @@ export function take(state: GameState, id: number): boolean {
   s.food -= c.food;
   // (Further on, the band comes home worn: it rests a while before the next.)
   if (further(s)) s.bandRest = s.day + s.clock / DAY_SEC + BAND_REST * (1 + further(s));
+  deed(s, 'beat');
   win(state, s, v, `The war band went out against ${v.name} and beat them. Their village is the hearth's now.`);
   return true;
 }
@@ -1499,6 +1504,7 @@ export function dance(state: GameState, id: number, streak: number, mult = 1): n
   if (!s || !v || !canDance(s, v)) return 0;
   const left = danceLeft(s, v);
   if (left <= 0) return 0;
+  deed(s, 'dance');
   const gain = Math.min(left, DANCE_STEP * (1 + Math.min(5, streak) * 0.4) * mult);
   if (!v.danced) record(state, `${s.people.find((p) => p.id === s.chief)?.name ?? 'The chief'} danced with ${v.name} round their fire.`, 'shore', shoreWhen(s));
   const day = s.day + s.clock / DAY_SEC;
@@ -1715,8 +1721,18 @@ export function langOf(s: ShoreState): Language {
 /** Something happened that they'll talk about (a birth, the rain, a bolt, a village won, a
  * visitor): kept a day or so. */
 export function happened(s: ShoreState, kind: string): void {
+  // (Counted too, for good: what the culture's ideas are sped by.)
+  deed(s, kind);
   const now = s.day + s.clock / DAY_SEC;
   s.events = [...(s.events ?? []).filter((e) => now - e.day < 2), { kind, day: now }].slice(-8);
+}
+
+/** A thing done, counted (gifts given, villages beaten, signs worked, dances...). */
+export function deed(s: ShoreState, kind: string, n = 1): void {
+  (s.deeds ??= {})[kind] = (s.deeds[kind] ?? 0) + n;
+}
+export function deeds(s: ShoreState, kind: string): number {
+  return s.deeds?.[kind] ?? 0;
 }
 
 /** Someone as a speaker: how old they are, what they're like. */
@@ -2234,6 +2250,7 @@ function explore(state: GameState, s: ShoreState, dt: number): void {
   if (p.t < layer.sec) return;
   p.t = 0;
   p.done++;
+  deed(s, 'explored');
   const f = layer.find;
   // A relic or know-how they already have is no use twice: what's there is taken as wood.
   const dup = (f.relic && s.relics?.includes(f.relic)) || (f.learn && s.learned?.includes(f.learn));

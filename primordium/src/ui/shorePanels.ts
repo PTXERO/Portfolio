@@ -7,7 +7,7 @@ import { type Boosts, POI_SORT, RELICS, type Find } from '../content/shore';
 import { GENS, PERKS, UPGRADES, type GenId } from '../content/idle';
 import { republicStands, bandResting, giftToday, placeName, workAgain, YEAR_DAYS, allMult, upgradeCost, destinations, natureOf, crewCandidates, crewOf, CREW_LEAST, growth, raftSeats, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
-import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, workReady, type ForkId } from '../economy/culture';
+import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, boostOf, workReady, type ForkId } from '../economy/culture';
 import type { GameState } from '../economy/types';
 import { D, format as formatD } from '../economy/num';
 import { eraName, gathered } from '../economy/chronicle';
@@ -60,7 +60,7 @@ export function shoreKey(state: GameState, tab: string): string {
   }
   if (tab === 'culture') {
     const c = s.culture;
-    return JSON.stringify(['culture', c?.age, c?.done, c?.focus, c?.forks, c?.asking?.fork, LANES.map((l) => Math.floor((c ? laneShare(c, l.id) : 0) * 20)), greatWork(s), !!workOpen(s), s.food >= (workOpen(s)?.cost ?? Infinity)]);
+    return JSON.stringify(['culture', c?.age, c?.done, c?.focus, c?.forks, c?.asking?.fork, c?.boosted?.length, LANES.map((l) => Math.floor((c ? laneShare(c, l.id) : 0) * 20)), greatWork(s), !!workOpen(s), s.food >= (workOpen(s)?.cost ?? Infinity)]);
   }
   if (tab === 'build') {
     // (Rebuilt when what can be afforded changes: each thing's button lights as the food comes.)
@@ -102,7 +102,7 @@ export function shoreLayout(state: GameState, tab: string): string {
   const s = shoreOf(state);
   if (!s) return '';
   if (tab === 'build') return buildLayout(s);
-  if (tab === 'culture') return cultureLayout(s);
+  if (tab === 'culture') return cultureLayout(state, s);
   if (tab === 'island') return islandLayout(s);
   // The Chronicle: everything to look at, a page at a time.
   const page = (id: ChronView, name: string, dot = false) => `<button class="px-btn${chronView === id ? ' on' : ''}" data-villageview="${id}">${name}${dot ? ' <i class="dot"></i>' : ''}</button>`;
@@ -110,7 +110,7 @@ export function shoreLayout(state: GameState, tab: string): string {
   const views = `<div class="seg build-cats chron-pages">${page('village', 'Village')}${page('people', `Critters · ${s.people.length}`)}${page('island', 'Island')}${s.culture ? page('culture', 'Culture', !!s.culture.asking) : ''}${page('story', s.writtenFrom !== undefined ? 'Record' : 'Telling')}${s.lang?.lex && Object.keys(s.lang.heard).length ? page('words', 'Words') : ''}</div>`;
   if (chronView === 'people') return views + peopleLayout(s);
   if (chronView === 'island') return views + islandLayout(s);
-  if (chronView === 'culture') return views + cultureLayout(s);
+  if (chronView === 'culture') return views + cultureLayout(state, s);
   if (chronView === 'story') return views + tellingLayout(state, s);
   if (chronView === 'words') return views + wordsLayout(s);
   return views + `<div class="seg build-cats"><button class="px-btn" data-camera="home">See the hearth</button><button class="px-btn" data-camera="chief">See the chief</button><button class="px-btn" data-act="eye">Through their eyes</button></div>` + hearthCard(s) + peopleCard(s);
@@ -646,7 +646,7 @@ const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 
 /** The Long Road: the Age, its lanes (what each has come to, and how near the next), the forks
  * taken (and the roads not taken, greyed), and the Age's Great Work. */
-function cultureLayout(s: ShoreState): string {
+function cultureLayout(state: GameState, s: ShoreState): string {
   const c = s.culture;
   if (!c) return '';
   const name = ageName(c.age);
@@ -654,14 +654,16 @@ function cultureLayout(s: ShoreState): string {
   const workName = AGES[c.age]?.workName ?? '';
   const done = lanesDone(c);
   const lanes = LANES.map((l) => {
-    const ideas = IDEAS.filter((i) => i.lane === l.id && i.age === c.age);
+    // This Age's ideas, after any left over from Ages gone (never lost: cheaper now).
+    const ideas = IDEAS.filter((i) => i.lane === l.id && (i.age === c.age || (i.age < c.age && !c.done.includes(i.id))));
     const next = nextIdea(c, l.id);
     const share = laneShare(c, l.id);
+    const boost = next ? boostOf(s, state, next.id) : null;
     const steps = ideas
       .map((i) => (c.done.includes(i.id) ? `<span class="road-idea done" title="${i.does}">${i.name}</span>` : i === next ? `<span class="road-idea next">???<i class="road-bar" style="width:${Math.round(share * 100)}%"></i></span>` : '<span class="road-idea fog">???</span>'))
       .join('<span class="road-step">›</span>');
     return `<div class="card px-box road-lane${c.focus === l.id ? ' focused' : ''}"><div class="info"><div class="name">${l.name}${next ? '' : ' <span class="tiny dim">· done for this Age</span>'}</div>
-      <div class="road-steps">${steps}</div></div>
+      <div class="road-steps">${steps}</div>${boost ? `<div class="sub tiny ${boost.met ? 'green' : 'dim'}">${boost.met ? `✓ ${boost.say}: nearer` : `Faster if: ${boost.say}`}</div>` : ''}</div>
       <div class="col">${next && has(s, 'lore') ? `<button class="px-btn${c.focus === l.id ? ' on' : ''}" data-focus="${c.focus === l.id ? '' : l.id}">${c.focus === l.id ? 'Focused' : 'Focus'}</button>` : ''}</div></div>`;
   }).join('');
   const asking = c.asking ? `<div class="card px-box raid"><div class="info"><div class="name">${FORKS[c.asking.fork].name}</div><div class="sub">${FORKS[c.asking.fork].ask}</div></div><div class="col"><button class="px-btn gold" data-forkcard="${c.asking.fork}">Decide</button></div></div>` : '';

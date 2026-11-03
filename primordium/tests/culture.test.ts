@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createState } from '../src/economy/state';
 import { genOpen, upgradeOpen, allMult, buyWork, DAY_SEC, hearthMost, shoreOf, shoreTick, startShore, takeRaft, workOpen } from '../src/economy/shore';
-import { ageName, greatWork, IDEAS, lanesDone, LANES, nextIdea, practiceRate, setFocus, TURN_AT, workReady } from '../src/economy/culture';
+import { ageName, BOOST, BOOSTS, boostOf, cultureDay, greatWork, ideaCost, IDEAS, lanesDone, LANES, nextIdea, practiceRate, setFocus, TURN_AT, workReady } from '../src/economy/culture';
 import type { TribeState } from '../src/economy/types';
 
 function village(n: number) {
@@ -139,5 +139,45 @@ describe('The Ages', () => {
     expect(s.culture!.asking?.fork).toBe('law');
     shoreTick(state, DAY_SEC * 10);
     expect(['council', 'chief']).toContain(s.culture!.forks.law);
+  });
+});
+
+describe('Culture: nothing lost, one pool, boosts', () => {
+  it('ideas have unique ids, and every idea up to the Republic has a boost', () => {
+    const ids = IDEAS.map((i) => i.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const i of IDEAS) if (i.age <= 5) expect(BOOSTS[i.id], i.id).toBeDefined();
+  });
+  it('an idea left over from an Age gone stays next in its lane, at half the cost', () => {
+    const { s } = village(120);
+    const left = IDEAS.find((i) => i.age === 1)!;
+    s.culture = { since: 0, age: 2, practice: {}, done: IDEAS.filter((i) => i.age === 1 && i !== left).map((i) => i.id), forks: { dead: 'bury' } };
+    expect(nextIdea(s.culture, left.lane)).toBe(left);
+    const full = ideaCost({ ...s.culture, age: 1 }, left);
+    expect(ideaCost(s.culture, left)).toBeCloseTo(full * 0.5, 5);
+  });
+  it('a thing done boosts its idea: cut by 40%, and told', () => {
+    const { state, s } = village(TURN_AT);
+    s.culture = { since: 0, age: 1, practice: {}, done: [], forks: {} };
+    const dried = IDEAS.find((i) => i.id === 'dried')!;
+    const before = ideaCost(s.culture, dried);
+    s.gens.forager = 10;
+    cultureDay(state, s);
+    expect(s.culture.boosted).toContain('dried');
+    expect(boostOf(s, state, 'dried')!.met).toBe(true);
+    expect(ideaCost(s.culture, dried)).toBeCloseTo(before * (1 - BOOST), 5);
+    expect(s.news.some((n) => n.includes('nearer'))).toBe(true);
+  });
+  it('a lane with nothing left gives its practice to the open ones', () => {
+    const { state, s } = village(TURN_AT);
+    const lanes = LANES.map((l) => l.id);
+    const shut = lanes[0];
+    const allAge1 = IDEAS.filter((i) => i.age === 1);
+    s.culture = { since: 0, age: 1, practice: {}, done: allAge1.filter((i) => i.lane === shut).map((i) => i.id), forks: {} };
+    cultureDay(state, s);
+    const got = lanes.slice(1).reduce((n, l) => n + (s.culture!.practice[l] ?? 0), 0);
+    const own = lanes.slice(1).reduce((n, l) => n + practiceRate(s, l), 0);
+    expect(got).toBeGreaterThan(own);
+    expect(s.culture.practice[shut] ?? 0).toBe(0);
   });
 });

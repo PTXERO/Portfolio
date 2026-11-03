@@ -7,7 +7,7 @@
 
 import type { BuildId, Boosts } from '../content/shore';
 import { record } from './chronicle';
-import { can, count, DAY_SEC, foodRate, has, warmth, isAdult, poisOf, poiDef, relation, shoreWhen, totalCritters, type ShoreState } from './shore';
+import { can, count, DAY_SEC, deeds, foodRate, has, warmth, isAdult, poisOf, poiDef, relation, shoreWhen, totalCritters, type ShoreState } from './shore';
 import type { GameState } from './types';
 
 export type Lane = 'food' | 'crafts' | 'war' | 'rule' | 'kin' | 'rites' | 'stories' | 'words';
@@ -87,7 +87,7 @@ export const IDEAS: Idea[] = [
   { id: 'shrines', lane: 'rites', age: 3, name: 'The first shrine', does: 'All food +25%.', fx: { food: 0.25 } },
   { id: 'calendar', lane: 'rites', age: 3, name: 'The calendar', does: 'Growing up +25%.', fx: { grow: 0.25 } },
   { id: 'heroes', lane: 'stories', age: 3, name: 'Heroes of the island', does: 'All food +25%.', fx: { food: 0.25 } },
-  { id: 'songs', lane: 'stories', age: 3, name: 'Songs of the crossing', does: 'Sight +3.', fx: { sight: 3 } },
+  { id: 'crossingsongs', lane: 'stories', age: 3, name: 'Songs of the crossing', does: 'Sight +3.', fx: { sight: 3 } },
   { id: 'marks', lane: 'words', age: 3, name: 'Picture marks', does: 'All food +30%.', fx: { food: 0.3 } },
   { id: 'seals', lane: 'words', age: 3, name: 'Seals on jars', does: 'All food +20%.', fx: { food: 0.2 } },
 
@@ -187,10 +187,20 @@ export const TURN_AT = 40;
 /** Practice an idea takes: a lane's first in the Age, then more for each after. */
 const IDEA_COST = 100;
 const IDEA_MORE = 100;
-function cost(c: Culture, lane: Lane): number {
-  const had = IDEAS.filter((i) => i.lane === lane && i.age === c.age && c.done.includes(i.id)).length;
-  return (IDEA_COST + had * IDEA_MORE) * (AGE_HARDER[c.age] ?? 1);
+/** What an idea takes: its Age's price (each in a lane dearer than the one before it), half
+ * for one left over from an Age gone by, and less again once something done has sped it. */
+export function ideaCost(c: Culture, idea: Idea): number {
+  const before = IDEAS.filter((i) => i.lane === idea.lane && i.age === idea.age && IDEAS.indexOf(i) < IDEAS.indexOf(idea)).length;
+  return (IDEA_COST + before * IDEA_MORE) * (AGE_HARDER[idea.age] ?? 1) * (idea.age < c.age ? LEFTOVER : 1) * (c.boosted?.includes(idea.id) ? 1 - BOOST : 1);
 }
+function cost(c: Culture, lane: Lane): number {
+  const next = nextIdea(c, lane);
+  return next ? ideaCost(c, next) : Infinity;
+}
+/** An idea left over from an Age gone by: half the practice. */
+const LEFTOVER = 0.5;
+/** An idea sped by something done: this much less practice. */
+export const BOOST = 0.4;
 /** Later Ages' ideas take more practice (the village doing more, more is needed to learn). */
 const AGE_HARDER: Record<number, number> = { 3: 3, 4: 8, 5: 20 };
 /** A focused lane gathers this much more. */
@@ -212,13 +222,20 @@ export interface Culture {
   asking?: { fork: ForkId; since: number };
   /** New ideas not yet shown. */
   fresh?: string[];
+  /** Ideas sped by something done (each once). */
+  boosted?: string[];
 }
 
 const today = (s: ShoreState) => s.day + s.clock / DAY_SEC;
 
-/** A lane's next idea in this Age (none: its Age is done). */
+/** A lane's next idea: any left over from an Age gone by first (nothing's ever lost), then this
+ * Age's (none: the lane has nothing more to learn for now). */
 export function nextIdea(c: Culture, lane: Lane): Idea | undefined {
-  return IDEAS.find((i) => i.lane === lane && i.age === c.age && !c.done.includes(i.id));
+  return IDEAS.find((i) => i.lane === lane && i.age <= c.age && !c.done.includes(i.id));
+}
+/** Whether a lane's done this Age's ideas (left-overs from before don't hold the Age up). */
+function laneDoneThisAge(c: Culture, lane: Lane): boolean {
+  return !IDEAS.some((i) => i.lane === lane && i.age === c.age && !c.done.includes(i.id));
 }
 
 /** Practice a lane gathers a day, from what the village does. */
@@ -270,6 +287,112 @@ export function plenty(s: ShoreState): number {
   return 1 + Math.max(0, Math.log10(1 + foodRate(s)) - 1) / 8;
 }
 
+/** What the sea brings to the culture each day (the Age of Sail): routes sailed, islands
+ * joined, voyages made, pirates driven off. */
+export function seaCulture(state: GameState, s: ShoreState): number {
+  const w = state.stages.sail?.world;
+  if (!w) return 0;
+  const joined = w.isles.filter((i) => i.joined).length;
+  return ((w.routes?.length ?? 0) * 0.4 + joined * 0.8 + (w.voyages ?? 0) * 0.3 + (w.driven ?? 0) * 0.1) * (AGE_HARDER[s.culture?.age ?? 1] ?? 1) * warmth(s) * plenty(s);
+}
+
+/** What speeds each idea: a thing done (Civilization VI's inspirations). Shown on the Long Road
+ * for a lane's next idea, so it can be gone after. */
+const won = (s: ShoreState) => s.villages.filter((v) => v.won !== undefined).length;
+const beat = (s: ShoreState) => deeds(s, 'beat');
+const gifted = (s: ShoreState) => Math.max(0, won(s) - beat(s));
+const explored = (s: ShoreState) => deeds(s, 'explored');
+const others = (s: ShoreState) => s.people.filter((p) => p.kind !== undefined).length;
+const words = (s: ShoreState) => Object.keys(s.lang?.heard ?? {}).length;
+const routes = (st: GameState) => st.stages.sail?.world?.routes?.length ?? 0;
+export const BOOSTS: Record<string, { say: string; met: (s: ShoreState, state: GameState) => boolean }> = {
+  dried: { say: 'Have 10 foragers', met: (s) => count(s, 'forager' as never) >= 10 },
+  grounds: { say: 'Have 3 gathering camps', met: (s) => count(s, 'camp' as never) >= 3 },
+  blades: { say: 'Have 10 huts', met: (s) => count(s, 'hut' as never) >= 10 },
+  baskets: { say: 'Have 40 critters', met: (s) => s.people.length >= 40 },
+  watchers: { say: 'Find 3 villages', met: (s) => s.villages.filter((v) => v.found).length >= 3 },
+  clubs: { say: 'Beat a village', met: (s) => beat(s) >= 1 },
+  fourword: { say: 'Win a village with gifts', met: (s) => gifted(s) >= 1 },
+  circle: { say: 'Have 60 critters', met: (s) => s.people.length >= 60 },
+  hearths: { say: 'Another kind living among you', met: (s) => others(s) >= 1 },
+  songs: { say: 'Dance at a village', met: (s) => deeds(s, 'dance') >= 1 },
+  dead: { say: 'Lose one of the four', met: (s) => s.deaths >= 1 },
+  feast: { say: 'Bring the fire to full heat', met: (s) => (s.heat ?? 0) >= 0.98 },
+  crossing: { say: 'Explore a landmark fully', met: (s) => explored(s) >= 1 },
+  farspear: { say: 'Hear the Far Voice', met: (s) => has(s, 'listen') },
+  names: { say: 'Hear 20 of their words', met: (s) => words(s) >= 20 },
+  fingers: { say: 'Have 100 critters', met: (s) => s.people.length >= 100 },
+  salting: { say: 'Build a granary', met: (s) => count(s, 'granary' as never) >= 1 },
+  markets: { say: 'Build a market', met: (s) => count(s, 'market' as never) >= 1 },
+  kilns: { say: 'Have 30 huts', met: (s) => count(s, 'hut' as never) >= 30 },
+  roadcraft: { say: 'Win 4 villages', met: (s) => won(s) >= 4 },
+  levies: { say: 'Beat 2 villages', met: (s) => beat(s) >= 2 },
+  shields: { say: 'Beat 3 villages', met: (s) => beat(s) >= 3 },
+  oaths: { say: 'Win 3 villages with gifts', met: (s) => gifted(s) >= 3 },
+  law: { say: 'Have the council', met: (s) => has(s, 'council') },
+  marriages: { say: 'Have 10 of another kind among you', met: (s) => others(s) >= 10 },
+  guests: { say: 'A visitor out of the fog', met: (s) => deeds(s, 'visitor') >= 1 },
+  faith: { say: 'Work a sign of the Far Voice', met: (s) => deeds(s, 'sign') >= 1 },
+  feastdays: { say: 'Dance 20 times', met: (s) => deeds(s, 'dance') >= 20 },
+  founding: { say: 'Have 200 critters', met: (s) => s.people.length >= 200 },
+  hidemaps: { say: 'Explore 3 landmarks fully', met: (s) => explored(s) >= 3 },
+  tallies: { say: 'Hear 40 of their words', met: (s) => words(s) >= 40 },
+  tithe: { say: 'Win 6 villages', met: (s) => won(s) >= 6 },
+  plough: { say: 'Have 100 gardens', met: (s) => count(s, 'garden' as never) >= 100 },
+  herds: { say: 'Have 400 critters', met: (s) => s.people.length >= 400 },
+  bronze: { say: 'Build a foundry', met: (s) => count(s, 'foundry' as never) >= 1 },
+  wheel: { say: 'Win 10 villages', met: (s) => won(s) >= 10 },
+  bronzearms: { say: 'Beat 6 villages', met: (s) => beat(s) >= 6 },
+  chariots: { say: 'Beat 10 villages', met: (s) => beat(s) >= 10 },
+  many: { say: 'Win villages on two islands', met: (s) => (s.crossings ?? 0) >= 1 && won(s) >= 1 },
+  households: { say: 'Have 600 critters', met: (s) => s.people.length >= 600 },
+  clans: { say: 'Have 50 of another kind among you', met: (s) => others(s) >= 50 },
+  tongue: { say: 'Borrow a word from a village', met: (s) => Object.keys(s.lang?.from ?? {}).length >= 1 },
+  shrines: { say: 'Work 10 signs', met: (s) => deeds(s, 'sign') >= 10 },
+  calendar: { say: 'Live 10 years', met: (s) => s.day >= 160 },
+  heroes: { say: 'Beat 15 villages', met: (s) => beat(s) >= 15 },
+  crossingsongs: { say: 'Cross the sea again', met: (s) => (s.crossings ?? 0) >= 1 },
+  marks: { say: 'Hear 60 of their words', met: (s) => words(s) >= 60 },
+  seals: { say: 'Build a harbour', met: (s) => count(s, 'harbour' as never) >= 1 },
+  ironplough: { say: 'Have 1000 critters', met: (s) => s.people.length >= 1000 },
+  mills: { say: 'Have 300 gardens', met: (s) => count(s, 'garden' as never) >= 300 },
+  iron: { say: 'Build a forge', met: (s) => count(s, 'forge' as never) >= 1 },
+  ships: { say: 'Build 10 harbours', met: (s) => count(s, 'harbour' as never) >= 10 },
+  ironarms: { say: 'Beat 25 villages', met: (s) => beat(s) >= 25 },
+  forts: { say: 'Take a village on a third island', met: (s) => (s.crossings ?? 0) >= 2 && beat(s) >= 1 },
+  onecouncil: { say: 'Win 30 villages', met: (s) => won(s) >= 30 },
+  roads: { say: 'Build 10 caravans', met: (s) => count(s, 'caravan' as never) >= 10 },
+  citizens: { say: 'Have 200 of another kind among you', met: (s) => others(s) >= 200 },
+  tongue2: { say: 'Borrow 5 words', met: (s) => Object.keys(s.lang?.from ?? {}).length >= 5 },
+  temples: { say: 'Work 30 signs', met: (s) => deeds(s, 'sign') >= 30 },
+  festivals: { say: 'Dance 100 times', met: (s) => deeds(s, 'dance') >= 100 },
+  epics: { say: 'Explore 10 landmarks fully', met: (s) => explored(s) >= 10 },
+  scribes: { say: 'Hear 80 of their words', met: (s) => words(s) >= 80 },
+  writtenlaw: { say: 'Have the council plan for you', met: (s) => has(s, 'council2') },
+  schools: { say: 'Have 2000 critters', met: (s) => s.people.length >= 2000 },
+  terraces: { say: 'Have 600 gardens', met: (s) => count(s, 'garden' as never) >= 600 },
+  fleets: { say: 'Open 5 trade routes', met: (_s, st) => routes(st) >= 5 },
+  glass: { say: 'Build 50 forges', met: (s) => count(s, 'forge' as never) >= 50 },
+  cranes: { say: 'Build 100 townhouses', met: (s) => count(s, 'townhouse' as never) >= 100 },
+  legions: { say: 'Beat 40 villages', met: (s) => beat(s) >= 40 },
+  citywalls: { say: 'Have 3000 critters', met: (s) => s.people.length >= 3000 },
+  senate: { say: 'Win 50 villages', met: (s) => won(s) >= 50 },
+  votes: { say: 'Have the council of the wise', met: (s) => has(s, 'council3') },
+  citizensall: { say: 'Have 500 of another kind among you', met: (s) => others(s) >= 500 },
+  colonies: { say: 'Settle 4 islands', met: (s) => (s.crossings ?? 0) >= 3 },
+  oracles: { say: 'Work 60 signs', met: (s) => deeds(s, 'sign') >= 60 },
+  feasts5: { say: 'Dance 200 times', met: (s) => deeds(s, 'dance') >= 200 },
+  histories: { say: 'Explore 20 landmarks fully', met: (s) => explored(s) >= 20 },
+  theatre: { say: 'Hear 100 of their words', met: (s) => words(s) >= 100 },
+  libraries: { say: 'Write down their tongue (the scribes)', met: (s) => !!s.lang?.scribed },
+  lawcodes: { say: 'Borrow 10 words', met: (s) => Object.keys(s.lang?.from ?? {}).length >= 10 },
+};
+/** What speeds an idea, and whether it's been done. */
+export function boostOf(s: ShoreState, state: GameState, id: string): { say: string; met: boolean } | null {
+  const b = BOOSTS[id];
+  return b ? { say: b.say, met: !!s.culture?.boosted?.includes(id) || b.met(s, state) } : null;
+}
+
 /** What the culture's ideas and forks add (folded into the village's boosts). */
 export function cultureFx(s: ShoreState): Partial<Boosts>[] {
   const c = s.culture;
@@ -298,10 +421,24 @@ export function maybeTurn(state: GameState, s: ShoreState): void {
 export function cultureDay(state: GameState, s: ShoreState): void {
   const c = s.culture;
   if (!c) return;
+  // Things done speed the ideas that go with them (once each, for good).
+  for (const [id, b] of Object.entries(BOOSTS)) {
+    if (c.boosted?.includes(id) || c.done.includes(id)) continue;
+    const idea = IDEAS.find((i) => i.id === id);
+    if (!idea || idea.age > c.age + 1 || !b.met(s, state)) continue;
+    (c.boosted ??= []).push(id);
+    s.news.push(`${idea.age <= c.age ? idea.name : 'An idea to come'} is nearer: ${b.say.toLowerCase()}.`);
+  }
+  // One culture: what every lane gathers, and what the sea brings in. A lane with nothing left
+  // to learn gives its share to the others (in proportion to their own), so none of it's lost.
+  const rates = LANES.map((l) => ({ l: l.id, r: practiceRate(s, l.id), open: !!nextIdea(c, l.id) }));
+  const openSum = rates.filter((x) => x.open).reduce((n, x) => n + x.r, 0);
+  const spare = rates.filter((x) => !x.open).reduce((n, x) => n + x.r, 0) + seaCulture(state, s);
   for (const l of LANES) {
     const next = nextIdea(c, l.id);
     if (!next) continue;
-    c.practice[l.id] = (c.practice[l.id] ?? 0) + practiceRate(s, l.id);
+    const own = rates.find((x) => x.l === l.id)!.r;
+    c.practice[l.id] = (c.practice[l.id] ?? 0) + own + (openSum > 0 ? (spare * own) / openSum : 0);
     if ((c.practice[l.id] ?? 0) < cost(c, l.id)) continue;
     c.practice[l.id] = 0;
     c.done.push(next.id);
@@ -346,7 +483,7 @@ export function setFocus(s: ShoreState, lane: Lane | undefined): void {
 
 /** How many lanes have their Age's ideas done (the Great Work needs four). */
 export function lanesDone(c: Culture): number {
-  return LANES.filter((l) => !nextIdea(c, l.id)).length;
+  return LANES.filter((l) => laneDoneThisAge(c, l.id)).length;
 }
 
 /** The Ages, and the Great Work that closes each. */
