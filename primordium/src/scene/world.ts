@@ -6,7 +6,8 @@ import type { GameState } from '../economy/types';
 import type { Frame } from './paint';
 import { hash } from './paint';
 import { isleName } from '../ui/sailPanels';
-import { MASK, coastAt, gustLeft, homeOf, ours, routeDist, shipSpeed, sightFrom, type World, type WorldIsle } from '../economy/sail';
+import { alongLane, laneLength, portOf, routeFrom, seaLane, type Pt } from '../economy/seaways';
+import { MASK, coastAt, gustLeft, ours, routeDist, shipSpeed, sightFrom, type World, type WorldIsle } from '../economy/sail';
 
 export class WorldScene {
   private camX = 0;
@@ -175,22 +176,40 @@ export class WorldScene {
 
   /** Where each route's ships are along it (0 to 1 there and back), kept frame to frame. */
   private phase = new Map<number, number>();
-  /** The ends of a route on screen (coast to coast). */
-  private ends(world: World, to: number): [number, number, number, number] {
-    const h = homeOf(world);
+  /** A route's lane on the map: from the nearest of your ports to theirs, by the sea. */
+  private lane(world: World, to: number): Pt[] {
     const i = world.isles[to];
-    const d = Math.hypot(i.x - h.x, i.y - h.y) || 1;
-    const ux = (i.x - h.x) / d;
-    const uy = (i.y - h.y) / d;
-    return [this.sx(h.x + ux * h.r * 0.45), this.sy(h.y + uy * h.r * 0.45), this.sx(i.x - ux * i.r * 0.45), this.sy(i.y - uy * i.r * 0.45)];
+    return seaLane(world, routeFrom(world, i), i);
   }
-  /** The routes as faint dotted lines, and their ships going back and forth on them. */
+  /** The ports: a little jetty off each island found (yours lit). */
+  private drawPorts(b: CanvasRenderingContext2D, world: World): void {
+    for (const i of world.isles) {
+      if (!i.found) continue;
+      const p = portOf(world, i);
+      const X = Math.round(this.sx(p.x));
+      const Y = Math.round(this.sy(p.y));
+      if (X < -4 || Y < -4 || X > this.W + 4 || Y > this.H + 4) continue;
+      // (Pointing back at the island: a jetty out from the shore.)
+      const d = Math.hypot(i.x - p.x, i.y - p.y) || 1;
+      const ux = (i.x - p.x) / d;
+      const uy = (i.y - p.y) / d;
+      b.fillStyle = '#8a6440';
+      for (let k = 0; k <= 3; k++) b.fillRect(Math.round(X + ux * k), Math.round(Y + uy * k), 1, 1);
+      b.fillStyle = ours(i) ? '#ffd27a' : '#c8d4dc';
+      b.fillRect(X, Y, 1, 1);
+    }
+  }
+  /** The routes as faint dotted lanes, and their ships going back and forth on them. */
   private drawRoutes(b: CanvasRenderingContext2D, world: World, dt: number): void {
     (world.routes ?? []).forEach((r, i) => {
-      const [ax, ay, bx, by] = this.ends(world, r.to);
-      const len = Math.hypot(bx - ax, by - ay);
+      const lane = this.lane(world, r.to);
+      const len = laneLength(lane);
       b.fillStyle = 'rgba(190, 225, 240, 0.35)';
-      for (let k = 0; k < len; k += 5) b.fillRect(Math.round(ax + ((bx - ax) * k) / len), Math.round(ay + ((by - ay) * k) / len), 1, 1);
+      const step = 5 / Math.max(0.2, this.zoom);
+      for (let k = 0; k < len; k += step) {
+        const at = alongLane(lane, k / len);
+        b.fillRect(Math.round(this.sx(at.x)), Math.round(this.sy(at.y)), 1, 1);
+      }
       // (A round trip takes its real time; a gust blows them along twice as fast.)
       const trip = (2 * routeDist(world, r.to)) / shipSpeed(world);
       const p = ((this.phase.get(i) ?? 0) + (dt / trip) * (gustLeft(world, i) > 0 ? 2 : 1)) % 1;
@@ -201,13 +220,12 @@ export class WorldScene {
         const q = (p + k / shown) % 1;
         const out = q < 0.5;
         const s = out ? q * 2 : 2 - q * 2;
-        // (Spread a little either side of the line, so a busy route reads as busy.)
-        const side = ((k * 7) % 5) - 2;
-        const nx = -(by - ay) / (len || 1);
-        const ny = (bx - ax) / (len || 1);
-        const X = Math.round(ax + (bx - ax) * s + nx * side);
-        const Y = Math.round(ay + (by - ay) * s + ny * side);
-        const dir = (out ? bx - ax : ax - bx) >= 0 ? 1 : -1;
+        const at = alongLane(lane, s);
+        // (Each keeps to its own side of the lane, so ships passing don't sail through each other.)
+        const side = out ? 1.5 : -1.5;
+        const X = Math.round(this.sx(at.x - at.dy * side));
+        const Y = Math.round(this.sy(at.y + at.dx * side));
+        const dir = (out ? at.dx : -at.dx) >= 0 ? 1 : -1;
         b.fillStyle = 'rgba(220, 240, 250, 0.5)';
         b.fillRect(X - dir * 3, Y + 1, 2, 1);
         b.fillStyle = '#6a4a2a';
@@ -216,15 +234,21 @@ export class WorldScene {
         b.fillRect(X, Y - 1, 1, 2);
       }
     });
+    this.drawPorts(b, world);
+  }
+  /** Where along a route a share of the way is, on screen. */
+  private onLane(world: World, to: number, s: number): [number, number] {
+    const at = alongLane(this.lane(world, to), s);
+    return [this.sx(at.x), this.sy(at.y)];
   }
   /** Pirates on the routes: dark sails, red when they're struck. */
   private drawPirates(b: CanvasRenderingContext2D, world: World, t: number): void {
     for (const p of world.pirates ?? []) {
       const r = world.routes?.[p.route];
       if (!r) continue;
-      const [ax, ay, bx, by] = this.ends(world, r.to);
-      const X = Math.round(ax + (bx - ax) * p.at + Math.sin(t * 2 + p.route) * 2);
-      const Y = Math.round(ay + (by - ay) * p.at);
+      const [px, py] = this.onLane(world, r.to, p.at);
+      const X = Math.round(px + Math.sin(t * 2 + p.route) * 2);
+      const Y = Math.round(py);
       // (A ring that pulses: here's trouble.)
       const pulse = 4 + (Math.sin(t * 6) + 1) * 2;
       b.strokeStyle = 'rgba(232, 97, 90, 0.7)';
@@ -246,8 +270,8 @@ export class WorldScene {
     (world.pirates ?? []).forEach((p, k) => {
       const r = world.routes?.[p.route];
       if (!r) return;
-      const [x1, y1, x2, y2] = this.ends(world, r.to);
-      const d = Math.hypot(ax - (x1 + (x2 - x1) * p.at), ay - (y1 + (y2 - y1) * p.at));
+      const [px, py] = this.onLane(world, r.to, p.at);
+      const d = Math.hypot(ax - px, ay - py);
       if (d < bestD) {
         bestD = d;
         best = k;
@@ -261,10 +285,15 @@ export class WorldScene {
     let best: number | null = null;
     let bestD = 7;
     (world.routes ?? []).forEach((r, i) => {
-      const [x1, y1, x2, y2] = this.ends(world, r.to);
-      const L = (x2 - x1) ** 2 + (y2 - y1) ** 2 || 1;
-      const k = Math.max(0, Math.min(1, ((ax - x1) * (x2 - x1) + (ay - y1) * (y2 - y1)) / L));
-      const d = Math.hypot(ax - (x1 + (x2 - x1) * k), ay - (y1 + (y2 - y1) * k));
+      // (Nearest any stretch of its lane.)
+      const lane = this.lane(world, r.to).map((q) => ({ x: this.sx(q.x), y: this.sy(q.y) }));
+      let d = Infinity;
+      for (let s = 1; s < lane.length; s++) {
+        const [x1, y1, x2, y2] = [lane[s - 1].x, lane[s - 1].y, lane[s].x, lane[s].y];
+        const L = (x2 - x1) ** 2 + (y2 - y1) ** 2 || 1;
+        const k = Math.max(0, Math.min(1, ((ax - x1) * (x2 - x1) + (ay - y1) * (y2 - y1)) / L));
+        d = Math.min(d, Math.hypot(ax - (x1 + (x2 - x1) * k), ay - (y1 + (y2 - y1) * k)));
+      }
       if (d < bestD) {
         bestD = d;
         best = i;
