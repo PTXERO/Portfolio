@@ -389,6 +389,21 @@ export class Scene {
     } else ctx.drawImage(this.buffer, 0, 0, this.W * this.px * this.dpr, this.H * this.px * this.dpr);
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    // At sea: the islands' names, under each.
+    if (state.current === 'sail') {
+      ctx.font = '11px "Pixelify Sans", monospace';
+      ctx.textAlign = 'center';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 3;
+      for (const l of this.world.labels) {
+        const x = Math.round(l.x * this.px);
+        const y = Math.round(l.y * this.px) + 10;
+        ctx.strokeStyle = 'rgba(10, 24, 36, 0.85)';
+        ctx.strokeText(l.text, x, y);
+        ctx.fillStyle = l.mine ? '#f2ead7' : '#c8d4dc';
+        ctx.fillText(l.text, x, y);
+      }
+    }
     ctx.font = '700 18px "Primordium Digits", "Pixelify Sans", monospace';
     ctx.textAlign = 'center';
     ctx.lineJoin = 'round';

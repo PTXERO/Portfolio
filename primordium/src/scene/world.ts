@@ -5,6 +5,7 @@
 import type { GameState } from '../economy/types';
 import type { Frame } from './paint';
 import { hash } from './paint';
+import { isleName } from '../ui/sailPanels';
 import { MASK, coastAt, gustLeft, homeOf, ours, routeDist, shipSpeed, sightFrom, type World, type WorldIsle } from '../economy/sail';
 
 export class WorldScene {
@@ -163,7 +164,14 @@ export class WorldScene {
       }
     }
     this.drawFog(b, world, t);
+    // Every island found, named (drawn sharp over the picture by the scene).
+    this.labels = world.isles
+      .filter((i) => i.found)
+      .map((i) => ({ x: this.sx(i.x), y: this.sy(i.y + i.r * 0.75) + 2, text: isleName(state, i), mine: ours(i) }))
+      .filter((l) => l.x > -40 && l.x < W + 40 && l.y > -10 && l.y < H + 10);
   }
+  /** The islands' names where they go (buffer pixels). */
+  labels: { x: number; y: number; text: string; mine: boolean }[] = [];
 
   /** Where each route's ships are along it (0 to 1 there and back), kept frame to frame. */
   private phase = new Map<number, number>();
@@ -271,7 +279,9 @@ export class WorldScene {
     if (!this.fogImg || this.fogImg.width !== W || this.fogImg.height !== H) this.fogImg = b.createImageData(W, H);
     const img = this.fogImg;
     const d = img.data;
-    const mine = world.isles.filter(ours).map((i) => ({ x: i.x, y: i.y, k: sightFrom(world, i) + i.r * 0.6 }));
+    // (Clear round your islands as far as they see, and round every island found besides: one a
+    // voyage reached sits in a pocket of open sea, out in the fog.)
+    const mine = world.isles.filter((i) => ours(i) || i.found).map((i) => ({ x: i.x, y: i.y, k: ours(i) ? sightFrom(world, i) + i.r * 0.6 : i.r * 0.8 + 14 }));
     for (let y = 0; y < H; y += 1) {
       for (let x = 0; x < W; x += 1) {
         const m = this.toMap(x, y);
