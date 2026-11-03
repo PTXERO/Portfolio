@@ -15,20 +15,20 @@ import { thunder } from '../audio/sound';
 import { storyLine } from './strike';
 import { drawMini, type CreatureLook } from '../scene/creatureLook';
 
-const DAYS = 40;
+const DAYS_0 = 40;
 /** Days a second, ordinarily; much slower through what matters. */
 const RATE = 1;
 const SLOW = 0.22;
 /** What happens, by day: [from, to). The slow-in windows are the heart of each. */
-const STORM: [number, number] = [8.5, 13];
-const STORM_IN: [number, number] = [9, 12.5];
-const CALM: [number, number] = [16.5, 21.5];
-const SICK: [number, number] = [22.5, 29.5];
-const SICK_IN: [number, number] = [23, 25];
-const STARS: [number, number] = [32.8, 35.6];
-const STARS_IN: [number, number] = [33, 35];
+const STORM_0: [number, number] = [8.5, 13];
+const STORM_IN_0: [number, number] = [9, 12.5];
+const CALM_0: [number, number] = [16.5, 21.5];
+const SICK_0: [number, number] = [22.5, 29.5];
+const SICK_IN_0: [number, number] = [23, 25];
+const STARS_0: [number, number] = [32.8, 35.6];
+const STARS_IN_0: [number, number] = [33, 35];
 /** The story's lines through the crossing, by day. */
-const LINES: [number, number, string][] = [
+const LINES_0: [number, number, string][] = [
   [0, 6, STORY.crossFirst],
   [9, 12.6, STORY.crossStorm],
   [17, 21.5, STORY.crossCalm],
@@ -42,7 +42,7 @@ const S = 2;
 const FADE = 1.4;
 /** After the fortieth day (seconds): the bird comes down; then land rises into view, the camera
  * turning to it; then the end. */
-const BIRD_FOR = 12;
+const BIRD_FOR_0 = 12;
 const LAND_AT = 3;
 /** The black bars top and bottom (a share of the height each), for the film of it. */
 const BARS = 0.1;
@@ -54,7 +54,27 @@ function within(day: number, [a, b]: [number, number], edge = 1): number {
 }
 
 /** (`from`: the day to start on; for looking at one part of it while working on it.) */
-export function playCrossing(look: CreatureLook, onDone: () => void, from = 0): void {
+/** A later crossing, island to island: a few days, one squall at most, its own lines. */
+export interface Hop {
+  days: number;
+  storm: boolean;
+  lines: [number, number, string][];
+  land: string;
+}
+
+export function playCrossing(look: CreatureLook, onDone: () => void, from = 0, hop?: Hop): void {
+  const NONE: [number, number] = [-9, -9];
+  const DAYS = hop ? hop.days : DAYS_0;
+  const STORM: [number, number] = hop ? (hop.storm ? [1.5, 3.5] : NONE) : STORM_0;
+  const STORM_IN: [number, number] = hop ? (hop.storm ? [1.8, 3.2] : NONE) : STORM_IN_0;
+  const CALM = hop ? NONE : CALM_0;
+  const SICK = hop ? NONE : SICK_0;
+  const SICK_IN = hop ? NONE : SICK_IN_0;
+  const STARS = hop ? NONE : STARS_0;
+  const STARS_IN = hop ? NONE : STARS_IN_0;
+  const LINES = hop ? hop.lines : LINES_0;
+  const BIRD_FOR = hop ? 9 : BIRD_FOR_0;
+  const BIRD_LINE = hop ? hop.land : STORY.crossBird;
   const cv = document.createElement('canvas');
   cv.id = 'strike';
   const W = Math.ceil(window.innerWidth / 3);
@@ -401,7 +421,7 @@ export function playCrossing(look: CreatureLook, onDone: () => void, from = 0): 
       counter.textContent = `Day ${dn} of ${DAYS}`;
     }
     counter.style.opacity = String(0.8 * (1 - black));
-    const line = birdAt >= 0 ? STORY.crossBird : LINES.find(([a, z]) => days >= a && days < z)?.[2] ?? '';
+    const line = birdAt >= 0 ? BIRD_LINE : LINES.find(([a, z]) => days >= a && days < z)?.[2] ?? '';
     say(t > end - FADE ? '' : line);
     if (t < end) requestAnimationFrame(frame);
     else {

@@ -2741,20 +2741,49 @@ function act(el: HTMLElement): void {
         const s = shoreOf(state);
         if (!s || !canCross(s)) break;
         modal.hidden = true;
-        const seed = destinations(s)[s.destination ?? 0].seed;
-        // (The new island's made first, before anything changes on screen.)
-        void prepareShoreIsland(seed)
-          .catch(() => shoreIsland(seed))
-          .then(() => {
-            if (!cross(state, seed)) return;
-            cue('ascend', 0.8);
-            scene.reload();
-            ui.tab = 'hearth';
-            ui.open = true;
-            panelKey = '';
-            save();
-            render();
-          });
+        const dest = destinations(s)[s.destination ?? 0];
+        const seed = dest.seed;
+        // Out to sea: down into black, a few days on the water (the new island made meanwhile),
+        // and up out of black on its shore.
+        const ready = prepareShoreIsland(seed).catch(() => shoreIsland(seed));
+        striking = true;
+        syncCine();
+        fadeTo(1, 1200);
+        window.setTimeout(() => {
+          playCrossing(
+            s.look as never,
+            () => {
+              fadeTo(1, 0);
+              void ready.then(() => {
+                striking = false;
+                syncCine();
+                if (!cross(state, seed)) {
+                  fadeTo(0, 800);
+                  return;
+                }
+                cue('ascend', 0.8);
+                scene.reload();
+                ui.tab = 'hearth';
+                ui.open = true;
+                panelKey = '';
+                save();
+                render();
+                window.setTimeout(() => fadeTo(0, 1800), 100);
+              });
+            },
+            0,
+            {
+              days: 6,
+              storm: dest.nature.id === 'stormy' || (s.crossings ?? 0) % 2 === 1,
+              lines: [
+                [0, 2.5, '[STORY] The island behind them went small.'],
+                [3.6, 6, (s.crossings ?? 0) ? '[STORY] Again, the open sea.' : '[STORY] Out where the four came from, once.'],
+              ],
+              land: `[STORY] Land. ${dest.nature.name}.`,
+            },
+          );
+          window.setTimeout(() => fadeTo(0, 0), 60);
+        }, 1300);
         break;
       }
       case 'work':
