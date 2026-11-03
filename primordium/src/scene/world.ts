@@ -163,7 +163,7 @@ export class WorldScene {
         }
       }
     }
-    this.drawFog(b, world, t);
+    this.drawFog(b, world, t, night);
     // Every island found, named (drawn sharp over the picture by the scene).
     this.labels = world.isles
       .filter((i) => i.found)
@@ -272,8 +272,10 @@ export class WorldScene {
     return best;
   }
 
-  /** The fog over what's not been seen from your islands: soft, drifting cloud. */
-  private drawFog(b: CanvasRenderingContext2D, world: World, t: number): void {
+  /** The fog over what's not been seen: New Shore's own fog of war, drawn flat. The seen edge
+   * stirred and softened, then rolling cloud in two tones over everything past it, dimmer at
+   * night. */
+  private drawFog(b: CanvasRenderingContext2D, world: World, t: number, night: number): void {
     const W = this.W;
     const H = this.H;
     if (!this.fogImg || this.fogImg.width !== W || this.fogImg.height !== H) this.fogImg = b.createImageData(W, H);
@@ -282,20 +284,33 @@ export class WorldScene {
     // (Clear round your islands as far as they see, and round every island found besides: one a
     // voyage reached sits in a pocket of open sea, out in the fog.)
     const mine = world.isles.filter((i) => ours(i) || i.found).map((i) => ({ x: i.x, y: i.y, k: ours(i) ? sightFrom(world, i) + i.r * 0.6 : i.r * 0.8 + 14 }));
+    const bright = 1 - night * 0.55;
+    const tone = 0.3 + bright * 0.72;
     for (let y = 0; y < H; y += 1) {
       for (let x = 0; x < W; x += 1) {
         const m = this.toMap(x, y);
+        // The edge stirred by the wind, as New Shore's is.
+        const qx = m.x - t * 1.2;
+        const qy = m.y - t * 0.7;
+        const jx = (fogNoise(qx * 0.03, qy * 0.03) - 0.5) * 18;
+        const jy = (fogNoise(qx * 0.03 + 9, qy * 0.03 + 9) - 0.5) * 18;
         let clear = 1e9;
-        for (const i of mine) clear = Math.min(clear, Math.hypot(i.x - m.x, i.y - m.y) - i.k);
-        // (The edge of what's seen wavers like cloud.)
-        const wob = (Math.sin(m.x * 0.03 + t * 0.15) + Math.sin(m.y * 0.037 - t * 0.11)) * 9;
-        const a = Math.max(0, Math.min(1, (clear + wob) / 40));
+        for (const i of mine) clear = Math.min(clear, Math.hypot(i.x - m.x - jx, i.y - m.y - jy) - i.k);
+        const fogA = smoothstep(-20, 20, clear);
+        // Rolling cloud: two drifts of it, crossing.
+        const fn = fogFbm(m.x * 0.03 + t * 0.02, m.y * 0.03 - t * 0.013);
+        const fn2 = fogFbm(m.x * 0.08 - t * 0.035, m.y * 0.08 - t * 0.02);
+        const fog = smoothstep(0.3, 0.7, fogA + (fn - 0.5) * 0.6 + (fn2 - 0.5) * 0.2);
         const o = (y * W + x) * 4;
-        const n = 220 + Math.sin(m.x * 0.05 + m.y * 0.04 + t * 0.2) * 14;
-        d[o] = n;
-        d[o + 1] = n + 4;
-        d[o + 2] = n + 10;
-        d[o + 3] = Math.round(a * 235);
+        if (fog <= 0) {
+          d[o + 3] = 0;
+          continue;
+        }
+        const k = smoothstep(0.3, 0.75, fn * 0.7 + fn2 * 0.3);
+        d[o] = Math.round((0.7 + 0.25 * k) * tone * 255);
+        d[o + 1] = Math.round((0.74 + 0.22 * k) * tone * 255);
+        d[o + 2] = Math.round((0.79 + 0.18 * k) * tone * 255);
+        d[o + 3] = Math.round(fog * 255);
       }
     }
     // (Laid over the picture through a canvas of its own, so it blends.)
@@ -333,4 +348,42 @@ export class WorldScene {
     }
     return best;
   }
+}
+
+// Value noise for the fog (a fixed lattice, smoothly blended), and four octaves of it.
+const LATTICE = (() => {
+  const a = new Float32Array(256 * 256);
+  let s = 12345;
+  for (let i = 0; i < a.length; i++) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    a[i] = s / 0x7fffffff;
+  }
+  return a;
+})();
+function fogNoise(x: number, y: number): number {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const fx = x - ix;
+  const fy = y - iy;
+  const ux = fx * fx * (3 - 2 * fx);
+  const uy = fy * fy * (3 - 2 * fy);
+  const at = (a: number, b: number) => LATTICE[((b & 255) << 8) | (a & 255)];
+  const a = at(ix, iy) + (at(ix + 1, iy) - at(ix, iy)) * ux;
+  const c = at(ix, iy + 1) + (at(ix + 1, iy + 1) - at(ix, iy + 1)) * ux;
+  return a + (c - a) * uy;
+}
+function fogFbm(x: number, y: number): number {
+  let v = 0;
+  let a = 0.5;
+  for (let i = 0; i < 4; i++) {
+    v += fogNoise(x, y) * a;
+    x = x * 2.03 + 17;
+    y = y * 2.03 + 17;
+    a *= 0.5;
+  }
+  return v;
+}
+function smoothstep(e0: number, e1: number, x: number): number {
+  const k = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+  return k * k * (3 - 2 * k);
 }
