@@ -6,6 +6,8 @@ import { tick } from '../src/economy/tick';
 import { D } from '../src/economy/num';
 import { deserialize, serialize } from '../src/economy/save';
 import type { TribeState } from '../src/economy/types';
+import { isleName } from '../src/ui/sailPanels';
+import { langOf } from '../src/economy/shore';
 
 function fresh() {
   const state = createState(0);
@@ -187,5 +189,20 @@ describe('The Age of Sail: the world map', () => {
     expect(pirateChance(world)).toBeLessThan(before);
     expect(pirateChance(world)).toBe(0);
     setPirateDice(Math.random);
+  });
+});
+
+describe('The Age of Sail: names', () => {
+  it('every island has a name of its own, and a repeat from an older save is renamed', () => {
+    const state = fresh();
+    const s = shoreOf(state)!;
+    const lang = langOf(s);
+    const words: Record<string, string> = { water: 'ne', wood: 'tak', stone: 'ru', sun: 'ila', fish: 'po', star: 'vey', root: 'mu', rain: 'sha', far: 'lao', big: 'do', small: 'ki', old: 'wa', warm: 'ze', cold: 'bri', good: 'yo', new: 'fen' };
+    for (const [m, f] of Object.entries(words)) lang.lex[m] = [{ f, s: 1, born: 0 }];
+    lang.places = { w3: { f: 'nelao', of: ['water', 'far'], day: 0 }, w11: { f: 'nelao', of: ['water', 'far'], day: 0 } };
+    const isles = Array.from({ length: 46 }, (_, id) => ({ id, x: 0, y: 0 }) as never);
+    const names = isles.map((i) => isleName(state, i));
+    expect(new Set(names).size).toBe(names.length);
+    expect(names[3]).toBe('Nelao');
   });
 });

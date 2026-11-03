@@ -9,6 +9,8 @@ import { D, format as formatD } from '../economy/num';
 
 const format = (n: number) => formatD(D(n));
 
+const cap = (f: string) => f.charAt(0).toUpperCase() + f.slice(1);
+
 /** How many ships a buy takes: one, ten, or as many as there's Influence for. */
 let sailMany: 1 | 10 | 0 = 1;
 export function setSailMany(n: number): void {
@@ -26,8 +28,20 @@ export function isleName(state: GameState, i: WorldIsle): string {
   const THINGS = ['water', 'wood', 'stone', 'sun', 'fish', 'star', 'root', 'rain'];
   const LOOKS = ['far', 'big', 'small', 'old', 'warm', 'cold', 'good', 'new'];
   const key = `w${i.id}`;
-  const f = lang.places?.[key]?.f ?? namePlace(lang, key, [THINGS[i.id % THINGS.length], LOOKS[(i.id * 3) % LOOKS.length]], s.day);
-  return f ? f.charAt(0).toUpperCase() + f.slice(1) : 'An island';
+  // Every island its own name: a pair of their words no other island's name was made from (an
+  // older save's repeats renamed, the first to have the name keeping it).
+  const taken = (f: string, older = false) => Object.entries(lang.places ?? {}).some(([k, p]) => k !== key && k.startsWith('w') && p.f === f && (!older || Number(k.slice(1)) < i.id));
+  const had = lang.places?.[key];
+  if (had && !taken(had.f, true)) return cap(had.f);
+  if (had) delete lang.places![key];
+  for (let n = 0; n < THINGS.length * LOOKS.length; n++) {
+    const k = i.id * 7 + n;
+    const f = namePlace(lang, key, [THINGS[k % THINGS.length], LOOKS[Math.floor(k / THINGS.length) % LOOKS.length]], s.day);
+    if (!f) continue;
+    if (!taken(f)) return cap(f);
+    delete lang.places![key];
+  }
+  return 'An island';
 }
 
 function influence(state: GameState): number {
