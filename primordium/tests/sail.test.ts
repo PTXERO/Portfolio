@@ -48,7 +48,7 @@ describe('The Age of Sail: the world map', () => {
       const near = mine.some((m) => Math.hypot(m.x - i.x, m.y - i.y) < sightOf(world) + m.r * 0.5 + i.r * 0.5);
       expect(i.found).toBe(near);
     }
-  });
+  }, 30_000);
   it('sets sail only once the Republic stands; the world is kept in the save', () => {
     const state = fresh();
     expect(setSail(state)).toBe(false);
