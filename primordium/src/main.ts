@@ -15,7 +15,7 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
-import { fightPirate, buySailUp, buyShips, conquer, giveGift, gust, openRoute, ours, sendVoyage, setSail, SAIL_UPS, upCost, voyageCost, voyageTarget, buildLighthouse, LIGHTHOUSE, LIGHTHOUSE_COST, lighthouseReady, type SailUp } from './economy/sail';
+import { fightPirate, buySailUp, buyShips, conquer, giveGift, gust, openRoute, ours, sendVoyage, setSail, SAIL_UPS, upCost, voyageCost, voyageTarget, buildLighthouse, LIGHTHOUSE, lighthouseCost, lighthouseReady, type SailUp } from './economy/sail';
 import { isleName, peopleCard, setSailMany } from './ui/sailPanels';
 import { EmberView } from './ui/emberView';
 import { HearthView } from './ui/hearthView';
@@ -1810,7 +1810,7 @@ function renderPanel(): void {
         t === 'mutate'
         ? SAIL_UPS.some((u) => have >= (upCost(world, u.id) ?? Infinity))
         : t === 'pond'
-          ? (!world.voyage && !!voyageTarget(world) && have >= voyageCost(world)) || (lighthouseReady(state) && have >= LIGHTHOUSE_COST)
+          ? (!world.voyage && !!voyageTarget(world) && have >= voyageCost(world)) || (lighthouseReady(state) && have >= lighthouseCost(state))
           : t === 'chronicle'
             ? !!shoreOf(state)?.culture?.asking
             : false

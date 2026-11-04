@@ -73,6 +73,8 @@ export interface World {
   taken?: number;
   /** The Great Lighthouse, raised at home: which way it was built. */
   lighthouse?: 'winds' | 'harbours';
+  /** Its price, set when it can first be raised (minutes of Influence, then). */
+  lighthousePrice?: number;
   /** The last island joined (seconds sailed, then): the world's won. Shown once. */
   wonAt?: number;
   wonShown?: boolean;
@@ -404,6 +406,8 @@ export function sailTick(state: GameState, dt: number): void {
     if (world.settling.left <= 0) world.settling = null;
   }
   world.fx = seaFxOf(state, world);
+  // (The Lighthouse's price, fixed the moment it can be raised.)
+  if (world.lighthousePrice === undefined && lighthouseReady(state)) world.lighthousePrice = lighthouseCost(state);
   piratesTick(state, world, dt);
   // The voyage out: home when its time's up (the island found, its people met).
   if (world.voyage) {
@@ -703,8 +707,14 @@ function seaFxOf(state: GameState, world: World): SeaFx {
   for (const k of Object.keys(lh) as (keyof SeaFx)[]) fx[k] += lh[k] ?? 0;
   return fx;
 }
-/** Influence the Great Lighthouse takes. */
+/** Influence the Great Lighthouse takes at the least; */
 export const LIGHTHOUSE_COST = 2e8;
+/** and otherwise this many seconds of Influence, as it was when it could first be raised. */
+const LIGHTHOUSE_SECS = 1200;
+export function lighthouseCost(state: GameState): number {
+  const world = state.stages.sail.world;
+  return world?.lighthousePrice ?? Math.max(LIGHTHOUSE_COST, sailRate(state) * LIGHTHOUSE_SECS);
+}
 /** Whether it can be raised: the Age of Sail's culture far enough along (four of its lanes done,
  * as every Age's Great Work asks), and not raised yet. */
 export function lighthouseReady(state: GameState): boolean {
@@ -714,7 +724,7 @@ export function lighthouseReady(state: GameState): boolean {
 }
 export function buildLighthouse(state: GameState, how: 'winds' | 'harbours'): boolean {
   const world = state.stages.sail.world;
-  if (!world || !lighthouseReady(state) || !spend(state, LIGHTHOUSE_COST)) return false;
+  if (!world || !lighthouseReady(state) || !spend(state, lighthouseCost(state))) return false;
   world.lighthouse = how;
   world.fx = seaFxOf(state, world);
   return true;

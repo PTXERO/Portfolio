@@ -892,7 +892,8 @@ div.chart-node.other { cursor: default; }
 .road-idea.done { background: rgba(70, 96, 60, 0.9); color: #f2ead7; }
 .road-idea.next { color: #e8c050; }
 .road-idea.fog { color: #6a6f80; }
-.road-bar { position: absolute; left: 0; bottom: 0; height: 2px; background: #e8c050; }
+.road-bar { position: absolute; left: 0; bottom: 0; height: 4px; background: #e8c050; }
+.road-pct { margin-left: 4px; font-size: 9px; color: #b0a070; }
 .road-step { color: #6a6f80; font-size: 11px; }
 .road-lane.focused { box-shadow: 0 0 0 2px #e8c050; }
 .road-not { color: #6a6f80; text-decoration: line-through; }

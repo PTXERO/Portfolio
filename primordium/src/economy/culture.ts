@@ -225,7 +225,7 @@ const AGE_HARDER: Record<number, number> = { 3: 3, 4: 8, 5: 20, 6: 40 };
 export const SAIL_AGE = 6;
 /** The Age of Sail's ideas cost this much more again: a whole island and the sea feed them, and
  * they're meant to last the voyage out (about half done when the Lighthouse can be raised). */
-const SAIL_COST = 25;
+const SAIL_COST = 12;
 /** A focused lane gathers this much more. */
 const FOCUS = 2;
 /** Days a fork waits for an answer before the elders give one. */

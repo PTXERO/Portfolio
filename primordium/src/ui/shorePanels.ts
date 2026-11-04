@@ -61,7 +61,7 @@ export function shoreKey(state: GameState, tab: string): string {
   }
   if (tab === 'culture') {
     const c = s.culture;
-    return JSON.stringify(['culture', c?.age, c?.done, c?.focus, c?.forks, c?.asking?.fork, c?.boosted?.length, LANES.map((l) => Math.floor((c ? laneShare(c, l.id) : 0) * 20)), greatWork(s), !!workOpen(s), s.food >= (workOpen(s)?.cost ?? Infinity), state.stages.sail.world?.lighthouse, lighthouseReady(state), chronView, state.current]);
+    return JSON.stringify(['culture', c?.age, c?.done, c?.focus, c?.forks, c?.asking?.fork, c?.boosted?.length, LANES.map((l) => Math.floor((c ? laneShare(c, l.id) : 0) * 100)), greatWork(s), !!workOpen(s), s.food >= (workOpen(s)?.cost ?? Infinity), state.stages.sail.world?.lighthouse, lighthouseReady(state), chronView, state.current]);
   }
   if (tab === 'build') {
     // (Rebuilt when what can be afforded changes: each thing's button lights as the food comes.)
@@ -664,7 +664,7 @@ function cultureLayout(state: GameState, s: ShoreState): string {
     const share = laneShare(c, l.id);
     const boost = next ? boostOf(s, state, next.id) : null;
     const steps = ideas
-      .map((i) => (c.done.includes(i.id) ? `<span class="road-idea done" title="${i.does}">${i.name}</span>` : i === next ? `<span class="road-idea next">???<i class="road-bar" style="width:${Math.round(share * 100)}%"></i></span>` : '<span class="road-idea fog">???</span>'))
+      .map((i) => (c.done.includes(i.id) ? `<span class="road-idea done" title="${i.does}">${i.name}</span>` : i === next ? `<span class="road-idea next">???<span class="road-pct">${Math.floor(share * 100)}%</span><i class="road-bar" style="width:${Math.round(share * 100)}%"></i></span>` : '<span class="road-idea fog">???</span>'))
       .join('<span class="road-step">›</span>');
     return `<div class="card px-box road-lane${c.focus === l.id ? ' focused' : ''}"><div class="info"><div class="name">${l.name}${next ? '' : ' <span class="tiny dim">· done for this Age</span>'}</div>
       <div class="road-steps">${steps}</div>${boost ? `<div class="sub tiny ${boost.met ? 'green' : 'dim'}">${boost.met ? `✓ ${boost.say}: nearer` : `Faster if: ${boost.say}`}</div>` : ''}</div>
