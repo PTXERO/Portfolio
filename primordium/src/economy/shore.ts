@@ -659,7 +659,7 @@ export function grownCount(s: ShoreState): number {
   return grown;
 }
 
-const NO_BOOSTS: Boosts = { food: 0, tap: 0, births: 0, grow: 0, speed: 0, sight: 0, gift: 0 };
+const NO_BOOSTS: Boosts = { food: 0, tap: 0, births: 0, grow: 0, speed: 0, sight: 0, gift: 0, sea: 0, sails: 0, voyage: 0, pirates: 0, trust: 0, take: 0 };
 const boostCache = new WeakMap<ShoreState, { k: [number, number, number]; b: Boosts }>();
 
 /** What the relics and the culture add up to (worked out again only when either changes). */

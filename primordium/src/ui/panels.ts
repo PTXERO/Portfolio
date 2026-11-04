@@ -261,7 +261,7 @@ export function layoutKey(state: GameState, tab: Tab): string {
       : 0,
     tab === 'roots' ? (STAGES[state.current].milestones ?? []).map((m) => milestoneMet(state, m)) : 0,
     STAGES[state.current].tribal ? tribeKey(state, tab) : 0,
-    STAGES[state.current].shore ? shoreKey(state, tab) : 0,
+    STAGES[state.current].shore || (STAGES[state.current].sail && tab === 'chronicle') ? shoreKey(state, tab) : 0,
     STAGES[state.current].sail ? sailKey(state) : 0,
     tab === 'chronicle' ? state.chronicle?.length ?? 0 : 0,
     tab === 'body' || tab === 'explore' || tab === 'family' || (tab === 'grow' && STAGES[state.current].places) ? creatureKey(state) : 0,
@@ -276,7 +276,8 @@ export function layout(state: GameState, tab: Tab): string {
   const cur = icon(CURRENCY_ICON[id], 2);
 
   if (tab === 'hearth') return '';
-  if (def.shore && tab === 'chronicle') return shoreLayout(state, tab);
+  // (At sea, the Chronicle's still the island's own: its culture goes on, the Long Road and all.)
+  if ((def.shore || def.sail) && tab === 'chronicle') return shoreLayout(state, tab);
   if (def.shore && (tab === 'grow' || tab === 'build' || tab === 'island' || tab === 'culture')) return shoreLayout(state, tab);
   if (def.tribal && tab === 'grow') return tribeLayout(state);
   if (def.sail && tab === 'grow') return routesLayout(state);
@@ -550,7 +551,8 @@ export function update(root: HTMLElement, state: GameState, tab: Tab): void {
     return;
   }
   if (STAGES[id].sail) {
-    sailUpdate(root, state);
+    if (tab === 'chronicle') shoreUpdate(root, state);
+    else sailUpdate(root, state);
     return;
   }
 

@@ -164,6 +164,7 @@ export class WorldScene {
         }
       }
     }
+    this.drawLighthouse(b, world, t, night);
     this.drawFog(b, world, t, night);
     // Every island found, named (drawn sharp over the picture by the scene).
     this.labels = world.isles
@@ -255,6 +256,46 @@ export class WorldScene {
       b.fillRect(X - Math.round(u * 0.6), Math.round(Y - u * 2), Math.max(2, Math.ceil(W + u * 1.2)), Math.max(1, Math.ceil(u * 2.2)));
       b.fillStyle = '#3a2a1a';
       if (u >= 0.6) b.fillRect(Math.round(X + W / 2 - u), Math.round(Y + H - u * 2.5), Math.ceil(u * 2), Math.ceil(u * 2.5));
+    }
+  }
+  /** The Great Lighthouse, once raised: a white tower banded red beside home's port, its lamp
+   * lit, and at night a beam sweeping round. */
+  private drawLighthouse(b: CanvasRenderingContext2D, world: World, t: number, night: number): void {
+    if (!world.lighthouse) return;
+    const home = world.isles.find((i) => i.mine === -1);
+    if (!home) return;
+    const p = portOf(world, home);
+    const shore = this.shores.get(`${world.seed}:${home.id}`) ?? p;
+    const d = Math.hypot(home.x - p.x, home.y - p.y) || 1;
+    const ix = (home.x - p.x) / d;
+    const iy = (home.y - p.y) / d;
+    // (On the shore beside the pier, to one side of the warehouse.)
+    const at = { x: shore.x + ix * 4 - iy * 14, y: shore.y + iy * 4 + ix * 14 };
+    const u = this.zoom * 2;
+    const X = Math.round(this.sx(at.x));
+    const Y = Math.round(this.sy(at.y));
+    const w = Math.max(2, Math.round(u * 2.4));
+    const h = Math.max(6, Math.round(u * 9));
+    for (let k = 0; k < h; k++) {
+      b.fillStyle = Math.floor((k / h) * 4) % 2 ? '#c84a3a' : '#f2ead7';
+      b.fillRect(X - Math.floor(w / 2), Y - k, w, 1);
+    }
+    b.fillStyle = '#3a3a44';
+    b.fillRect(X - Math.floor(w / 2) - 1, Y - h - 1, w + 2, 1);
+    const lamp = world.lighthouse === 'winds' ? '#ffd27a' : '#fff0c0';
+    b.fillStyle = lamp;
+    b.fillRect(X - Math.floor(w / 2), Y - h - Math.max(2, Math.round(u * 1.5)) - 1, w, Math.max(2, Math.round(u * 1.5)));
+    // The beam at night: a long pale wedge going round.
+    if (night > 0.05) {
+      const a = t * 0.9;
+      const r = Math.max(30, 90 * this.zoom);
+      b.fillStyle = `rgba(255, 236, 170, ${0.18 * night})`;
+      b.beginPath();
+      b.moveTo(X, Y - h - 1);
+      b.lineTo(X + Math.cos(a - 0.12) * r, Y - h - 1 + Math.sin(a - 0.12) * r);
+      b.lineTo(X + Math.cos(a + 0.12) * r, Y - h - 1 + Math.sin(a + 0.12) * r);
+      b.closePath();
+      b.fill();
     }
   }
   /** The routes as faint dotted lanes, and their ships going back and forth on them. */

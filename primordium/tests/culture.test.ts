@@ -143,10 +143,13 @@ describe('The Ages', () => {
 });
 
 describe('Culture: nothing lost, one pool, boosts', () => {
-  it('ideas have unique ids, and every idea up to the Republic has a boost', () => {
+  it('ideas have unique ids, and every idea has a boost; the Age of Sail has its own, of the sea', () => {
     const ids = IDEAS.map((i) => i.id);
     expect(new Set(ids).size).toBe(ids.length);
-    for (const i of IDEAS) if (i.age <= 5) expect(BOOSTS[i.id], i.id).toBeDefined();
+    for (const i of IDEAS) expect(BOOSTS[i.id], i.id).toBeDefined();
+    const sea = IDEAS.filter((i) => i.age === 6);
+    expect(sea.length).toBe(16);
+    expect(ageName(6)).toBe('The Age of Sail');
   });
   it('an idea left over from an Age gone stays next in its lane, at half the cost', () => {
     const { s } = village(120);

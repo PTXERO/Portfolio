@@ -2,12 +2,13 @@
 // network's upgrades), then your islands to go and see.
 
 import type { GameState } from '../economy/types';
-import { havensLeft, raided, settlingLeft, conquerCost, giftCost, giftTrust, joinedCount, kin, level, milestone, openCost, ours, routeOptions, routeRate, SAIL_UPS, shipCost, shipsAffordable, shipsOut, toWin, upCost, voyageCost, voyageTarget, voyageTime, type World, type WorldIsle } from '../economy/sail';
+import { havensLeft, raided, settlingLeft, lighthouseReady, LIGHTHOUSE, LIGHTHOUSE_COST, conquerCost, giftCost, giftTrust, joinedCount, kin, level, milestone, openCost, ours, routeOptions, routeRate, SAIL_UPS, shipCost, shipsAffordable, shipsOut, toWin, upCost, voyageCost, voyageTarget, voyageTime, type World, type WorldIsle } from '../economy/sail';
 import { langOf, shoreOf } from '../economy/shore';
 import { namePlace } from '../economy/language';
 import { D, format as formatD } from '../economy/num';
 import { nextMilestone } from '../economy/rates';
 import { icon } from '../art/sprites';
+import { lanesDone, LANES_FOR_WORK } from '../economy/culture';
 
 const format = (n: number) => formatD(D(n));
 
@@ -62,6 +63,10 @@ export function sailKey(state: GameState): string {
     !!world.voyage,
     world.voyages,
     settlingLeft(world) > 0,
+    world.lighthouse,
+    lighthouseReady(state),
+    have >= LIGHTHOUSE_COST,
+    shoreOf(state)?.culture ? lanesDone(shoreOf(state)!.culture!) : 0,
     !!world.passOff,
     (world.pirates ?? []).map((p) => p.route),
     havensLeft(world),
@@ -164,8 +169,17 @@ export function worldLayout(state: GameState): string {
   const settling = world.settling && settlingLeft(world) > 0
     ? `<div class="card px-box build"><div class="info"><div class="name">Settling ${isleName(state, world.isles[world.settling.isle])}</div><div class="sub">No other won till it's done: <span data-t="settle-left"></span></div></div></div>`
     : '';
+  // The Age's Great Work: the Great Lighthouse, raised at home, one way or the other.
+  const c = shoreOf(state)?.culture;
+  const lh = world.lighthouse
+    ? `<div class="card px-box build"><div class="info"><div class="name">The Great Lighthouse <span class="tag">${LIGHTHOUSE[world.lighthouse].name}</span></div><div class="sub">${LIGHTHOUSE[world.lighthouse].does}</div></div></div>`
+    : lighthouseReady(state)
+      ? `<div class="card px-box raid"><div class="info"><div class="name">The Great Lighthouse</div><div class="sub">The Age's Great Work, raised at home: ${format(LIGHTHOUSE_COST)}. Which way?</div>
+          ${(['winds', 'harbours'] as const).map((k) => `<div class="sub"><b>${LIGHTHOUSE[k].name}</b>: ${LIGHTHOUSE[k].does} <span class="dim">${LIGHTHOUSE[k].line}</span></div>`).join('')}</div>
+          <div class="col">${(['winds', 'harbours'] as const).map((k) => `<button class="px-btn${have >= LIGHTHOUSE_COST ? ' gold' : ''}" data-lighthouse="${k}"${have >= LIGHTHOUSE_COST ? '' : ' disabled'}>${LIGHTHOUSE[k].name}</button>`).join('')}</div></div>`
+      : `<div class="card px-box build"><div class="info"><div class="name">The Great Lighthouse</div><div class="sub">The Age's Great Work: needs ${LANES_FOR_WORK} lanes of the Age of Sail's ideas done (${c ? lanesDone(c) : 0} so far). See the Long Road in the Chronicle.</div></div></div>`;
   return `<div class="panel-head"><h2>The world</h2><span class="dim">${joinedCount(world)} joined · ${toWin(world)} to win</span></div>
-    ${settling}${voyage}${peoples ? `<div class="panel-head"><h2>Peoples</h2></div>${peoples}` : ''}
+    ${settling}${voyage}${lh}${peoples ? `<div class="panel-head"><h2>Peoples</h2></div>${peoples}` : ''}
     <div class="panel-head"><h2>Your islands</h2><span class="dim">tap to go and see</span></div>
     <div class="seg build-cats">${yours}</div>`;
 }

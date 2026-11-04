@@ -6,7 +6,8 @@ import { milestonesReached } from './rates';
 import type { GameState } from './types';
 import type { Pt } from './island';
 import { MASK, coastOfIsland, packCoast } from './coast';
-import { baseRate, shoreIsland, shoreOf, terrainReady, type PastIsland, type ShoreState } from './shore';
+import { baseRate, boosts, shoreIsland, shoreOf, terrainReady, type PastIsland, type ShoreState } from './shore';
+import { lanesDone, LANES_FOR_WORK, SAIL_AGE } from './culture';
 
 export { MASK, coastAt } from './coast';
 
@@ -66,6 +67,15 @@ export interface World {
   driven?: number;
   lost?: number;
   age?: number;
+  /** What the culture's ideas (and the Great Lighthouse) do at sea, as of the last tick. */
+  fx?: SeaFx;
+  /** Islands taken (not won over). */
+  taken?: number;
+  /** The Great Lighthouse, raised at home: which way it was built. */
+  lighthouse?: 'winds' | 'harbours';
+  /** The last island joined (seconds sailed, then): the world's won. Shown once. */
+  wonAt?: number;
+  wonShown?: boolean;
   /** Passage's harbourmaster told to stop (buying ships, opening routes, sending voyages). */
   passOff?: boolean;
   /** The island last won, still being settled (seconds left): none won till it's done. */
@@ -282,7 +292,7 @@ export function shipsAffordable(world: World, r: Route, have: number, cap = 1000
 }
 /** Map units a ship sails in a second. */
 export function shipSpeed(world: World): number {
-  return 12 * 1.3 ** level(world, 'sails');
+  return 12 * 1.3 ** level(world, 'sails') * (1 + seaFx(world).sails);
 }
 /** ×2 for each of 10, 25, 50 and 100 ships on a route, then every hundred from 200 (the Cell's
  * rule, the same as every stage). */
@@ -293,7 +303,7 @@ export function milestone(ships: number): number {
 export function tripPay(state: GameState, world: World, r: Route): number {
   // (A route to one of your own islands pays double; every island joined adds to all of them.)
   const own = ours(world.isles[r.to]) ? 2 : 1;
-  return 3 * far(routeDist(world, r.to)) ** 2 * 1.6 ** level(world, 'holds') * 1.25 ** level(world, 'fleet') * 2 ** milestone(r.ships) * 1.03 ** level(world, 'winds') * foodMult(state) * own * joinedMult(world);
+  return 3 * far(routeDist(world, r.to)) ** 2 * 1.6 ** level(world, 'holds') * 1.25 ** level(world, 'fleet') * 2 ** milestone(r.ships) * 1.03 ** level(world, 'winds') * (1 + seaFx(world).sea) * foodMult(state) * own * joinedMult(world);
 }
 /** Seconds a ship takes there and back. */
 export function tripTime(world: World, r: Route): number {
@@ -393,6 +403,7 @@ export function sailTick(state: GameState, dt: number): void {
     world.settling.left -= dt;
     if (world.settling.left <= 0) world.settling = null;
   }
+  world.fx = seaFxOf(state, world);
   piratesTick(state, world, dt);
   // The voyage out: home when its time's up (the island found, its people met).
   if (world.voyage) {
@@ -472,7 +483,7 @@ export function voyageCost(world: World): number {
 }
 /** Seconds a voyage takes: further and longer, each one (a minute at first, at most 20). */
 export function voyageTime(world: World): number {
-  return Math.min(1200, 60 * 1.3 ** (world.voyages ?? 0));
+  return Math.min(1200, 60 * 1.3 ** (world.voyages ?? 0)) / (1 + seaFx(world).voyage);
 }
 export function sendVoyage(state: GameState): boolean {
   const world = state.stages.sail.world;
@@ -501,7 +512,7 @@ export function giftCost(world: World, i: WorldIsle): number {
 }
 /** Trust a gift wins: kin twice as much; grazers give twice as well. */
 export function giftTrust(world: World, i: WorldIsle): number {
-  return 9 * (kin(world, i) ? 2 : 1) * (world.diet === 'grazer' ? 2 : 1);
+  return Math.round(9 * (kin(world, i) ? 2 : 1) * (world.diet === 'grazer' ? 2 : 1) * (1 + seaFx(world).trust));
 }
 export function giveGift(state: GameState, id: number): boolean {
   const world = state.stages.sail.world;
@@ -515,7 +526,7 @@ export function giveGift(state: GameState, id: number): boolean {
 /** What taking an island takes: Influence for the fleet, and ships enough (as many as they are
  * three times over); hunters half the Influence. */
 export function conquerCost(world: World, i: WorldIsle): { influence: number; ships: number } {
-  return { influence: Math.ceil(300 * (i.pop ?? 20) ** 1.7 * far(routeDist(world, i.id)) ** 2 * (world.diet === 'hunter' ? 0.5 : 1) * dearer(world)), ships: (i.pop ?? 20) * 3 };
+  return { influence: Math.ceil(300 * (i.pop ?? 20) ** 1.7 * far(routeDist(world, i.id)) ** 2 * (world.diet === 'hunter' ? 0.5 : 1) * dearer(world) * Math.max(0.3, 1 - seaFx(world).take)), ships: (i.pop ?? 20) * 3 };
 }
 export function shipsOut(world: World): number {
   return (world.routes ?? []).reduce((n, r) => n + r.ships, 0);
@@ -526,13 +537,14 @@ export function conquer(state: GameState, id: number): boolean {
   if (!world || !i || !i.found || ours(i) || settlingLeft(world) > 0) return false;
   const c = conquerCost(world, i);
   if (shipsOut(world) < c.ships || !spend(state, c.influence)) return false;
+  world.taken = (world.taken ?? 0) + 1;
   join(world, i);
   return true;
 }
 /** Trust a route to them wins a second (more ships, more; omnivores twice as fast). */
 export function tradeTrust(world: World, r: Route): number {
   // (Slower, as gifts and taking get dearer, the more that are yours.)
-  return (Math.min(1, 0.0012 * Math.sqrt(r.ships)) * (world.diet === 'omnivore' ? 2 : 1)) / dearer(world);
+  return (Math.min(1, 0.0012 * Math.sqrt(r.ships)) * (world.diet === 'omnivore' ? 2 : 1) * (1 + seaFx(world).trust)) / dearer(world);
 }
 function addTrust(world: World, i: WorldIsle, n: number): void {
   // (While the last is settled, trust can build, but not tip them over.)
@@ -551,6 +563,11 @@ function join(world: World, i: WorldIsle): void {
   i.trust = 100;
   world.settling = { isle: i.id, left: SETTLE_SECS };
   chart(world);
+  // (The last of them: the world's won.)
+  if (worldWon(world) && world.wonAt === undefined) {
+    world.wonAt = world.age ?? 0;
+    world.settling = null;
+  }
 }
 /** The world's still to win: every island not yet yours. */
 export function toWin(world: World): number {
@@ -590,7 +607,7 @@ const PIRATE_TAKES = 15;
 export function pirateChance(world: World): number {
   const routes = world.routes?.length ?? 0;
   if (routes < 2 || (world.age ?? 0) < 900) return 0;
-  return 0.0025 * Math.sqrt(routes) * (havensLeft(world) / 3) * (1 - 0.12 * level(world, 'guns'));
+  return 0.0025 * Math.sqrt(routes) * (havensLeft(world) / 3) * (1 - 0.12 * level(world, 'guns')) * Math.max(0.05, 1 - seaFx(world).pirates);
 }
 /** Seconds the ships take to drive pirates off by themselves (with Guns: sooner each level). */
 export function gunsTime(world: World): number {
@@ -655,4 +672,54 @@ export function fightPirate(state: GameState, k: number): number {
   if (!world || !p) return -1;
   p.hp--;
   return p.hp <= 0 ? drivenOff(state, world, p) : 0;
+}
+
+// ---- The culture at sea, and the Great Lighthouse ----
+
+/** What's done at sea by what they know: everything brought in, ships' speed, voyages, pirates,
+ * trust won, and taking (shares). */
+export interface SeaFx {
+  sea: number;
+  sails: number;
+  voyage: number;
+  pirates: number;
+  trust: number;
+  take: number;
+}
+const NO_SEA_FX: SeaFx = { sea: 0, sails: 0, voyage: 0, pirates: 0, trust: 0, take: 0 };
+export function seaFx(world: World): SeaFx {
+  return world.fx ?? NO_SEA_FX;
+}
+/** The two ways to raise the Great Lighthouse. */
+export const LIGHTHOUSE: Record<'winds' | 'harbours', { name: string; line: string; does: string; fx: Partial<SeaFx> }> = {
+  winds: { name: 'Fair winds', line: 'A light to steer by, far out: every ship home sooner, every hold fuller.', does: 'Everything at sea +50%, ships +25% faster.', fx: { sea: 0.5, sails: 0.25 } },
+  harbours: { name: 'Safe harbours', line: 'A light that warns: the rocks, the reefs, the black sails coming.', does: 'Pirates −60%, trust won +30%.', fx: { pirates: 0.6, trust: 0.3 } },
+};
+function seaFxOf(state: GameState, world: World): SeaFx {
+  const s = shoreOf(state);
+  const b = s ? boosts(s) : undefined;
+  const fx: SeaFx = { sea: b?.sea ?? 0, sails: b?.sails ?? 0, voyage: b?.voyage ?? 0, pirates: b?.pirates ?? 0, trust: b?.trust ?? 0, take: b?.take ?? 0 };
+  const lh = world.lighthouse ? LIGHTHOUSE[world.lighthouse].fx : {};
+  for (const k of Object.keys(lh) as (keyof SeaFx)[]) fx[k] += lh[k] ?? 0;
+  return fx;
+}
+/** Influence the Great Lighthouse takes. */
+export const LIGHTHOUSE_COST = 2e8;
+/** Whether it can be raised: the Age of Sail's culture far enough along (four of its lanes done,
+ * as every Age's Great Work asks), and not raised yet. */
+export function lighthouseReady(state: GameState): boolean {
+  const c = shoreOf(state)?.culture;
+  const world = state.stages.sail.world;
+  return !!world && !world.lighthouse && !!c && c.age >= SAIL_AGE && lanesDone(c) >= LANES_FOR_WORK;
+}
+export function buildLighthouse(state: GameState, how: 'winds' | 'harbours'): boolean {
+  const world = state.stages.sail.world;
+  if (!world || !lighthouseReady(state) || !spend(state, LIGHTHOUSE_COST)) return false;
+  world.lighthouse = how;
+  world.fx = seaFxOf(state, world);
+  return true;
+}
+/** The world won: every island yours, the last of the havens too. */
+export function worldWon(world: World): boolean {
+  return toWin(world) === 0;
 }

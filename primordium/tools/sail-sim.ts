@@ -3,8 +3,9 @@
 // seconds between looks in).
 import { createState } from '../src/economy/state';
 import { startShore, shoreOf, takeRaft } from '../src/economy/shore';
-import { fightPirate, havensLeft, buyShips, buySailUp, conquer, conquerCost, giftCost, giftTrust, giveGift, ours, openCost, openRoute, routeOptions, routeRate, SAIL_UPS, sailRate, sendVoyage, setSail, shipCost, shipsOut, toWin, upCost, voyageCost, voyageTarget, type SailUp } from '../src/economy/sail';
+import { buildLighthouse, lighthouseReady, LIGHTHOUSE_COST, fightPirate, havensLeft, buyShips, buySailUp, conquer, conquerCost, giftCost, giftTrust, giveGift, ours, openCost, openRoute, routeOptions, routeRate, SAIL_UPS, sailRate, sendVoyage, setSail, shipCost, shipsOut, toWin, upCost, voyageCost, voyageTarget, type SailUp } from '../src/economy/sail';
 import { tick } from '../src/economy/tick';
+import { IDEAS, lanesDone } from '../src/economy/culture';
 import type { TribeState } from '../src/economy/types';
 
 const HOURS = Number(process.env.SIM_HOURS ?? 12);
@@ -60,6 +61,10 @@ for (let t = 0; t <= HOURS * 3600; t += 2) {
     }
     // (Saving up for something worth it: the best of everything, if it's a priority and within
     // ten minutes' income, is waited for instead of spending on lesser things.)
+    if (lighthouseReady(state) && have() >= LIGHTHOUSE_COST) {
+      buildLighthouse(state, 'winds');
+      log.push(`${hm(t)} the Great Lighthouse`);
+    }
     const haven = world.isles.find((i) => i.haven && i.found && !i.joined && shipsOut(world) >= conquerCost(world, i).ships && conquerCost(world, i).influence < rate * 900);
     if (haven) {
       if (!conquer(state, haven.id)) break;
@@ -68,7 +73,7 @@ for (let t = 0; t <= HOURS * 3600; t += 2) {
     const best = opts.filter((o) => o.cost <= have()).sort((a, b) => b.gain / b.cost - a.gain / a.cost)[0];
     if (!best || !best.go()) break;
   }
-  if (t % 1800 === 0) log.push(`${hm(t)} ${sailRate(state).toExponential(2)}/s · ${world.isles.filter((i) => i.joined).length} joined, ${toWin(world)} to win, ${world.isles.filter((i) => i.found).length} found · ${havensLeft(world)} havens · lost ${world.lost ?? 0} · ${world.routes!.length} routes · ${world.routes!.reduce((n, r) => n + r.ships, 0)} ships · ups ${JSON.stringify(world.ups)}`);
+  if (t % 1800 === 0) log.push(`${hm(t)} ${sailRate(state).toExponential(2)}/s · ${world.isles.filter((i) => i.joined).length} joined, ${toWin(world)} to win, ${world.isles.filter((i) => i.found).length} found · ${havensLeft(world)} havens · lost ${world.lost ?? 0} · ${world.routes!.length} routes · ${world.routes!.reduce((n, r) => n + r.ships, 0)} ships · ups ${JSON.stringify(world.ups)} · sail ideas ${s.culture!.done.filter((id) => IDEAS.find((i) => i.id === id)?.age === 6).length}/16 lanes ${lanesDone(s.culture!)}`);
 }
 console.log(log.join('\n'));
 for (const h of world.isles.filter((i) => i.haven && !i.joined)) console.log('haven', h.id, 'found', h.found, 'pop', h.pop, 'cost', conquerCost(world, h).influence.toExponential(2), 'ships', conquerCost(world, h).ships, 'have ships', shipsOut(world));

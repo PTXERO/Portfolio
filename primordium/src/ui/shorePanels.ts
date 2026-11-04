@@ -7,8 +7,9 @@ import { type Boosts, POI_SORT, RELICS, type Find } from '../content/shore';
 import { GENS, PERKS, UPGRADES, type GenId } from '../content/idle';
 import { republicStands, bandResting, giftToday, placeName, workAgain, YEAR_DAYS, allMult, upgradeCost, destinations, natureOf, crewCandidates, crewOf, CREW_LEAST, growth, raftSeats, buyPerkOk, can, canCross, embersFor, embersLeft, perk, perkCost, EMBER_BIRTHS, EMBER_MORE, canDance, canTake, canWin, centre, chiefNear, count, CRITTER_MORE, danceLeft, DAY_SEC, foodRate, genCost, genOpen, genRate, giftCost, has, hearthMost, isAdult, maxBuy, poiDef, poiHere, poiName, poisOf, relation, room, shoreOf, shoreSeason, takeCost, tapValue, totalCritters, upgradeOpen, WON_MORE, workOpen, type Poi, type ShorePerson, type ShoreState, type Village } from '../economy/shore';
 import { genesKey, miniIcon } from '../scene/creatureLook';
-import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, boostOf, workReady, type ForkId } from '../economy/culture';
+import { AGES, ageHasIdeas, ageName, greatWork, FORKS, forkOptions, IDEAS, LANES, LANES_FOR_WORK, laneShare, lanesDone, nextIdea, boostOf, workReady, SAIL_AGE, type ForkId } from '../economy/culture';
 import type { GameState } from '../economy/types';
+import { lighthouseReady, LIGHTHOUSE } from '../economy/sail';
 import { D, format as formatD } from '../economy/num';
 import { eraName, gathered } from '../economy/chronicle';
 const format = (n: number) => formatD(D(n));
@@ -60,7 +61,7 @@ export function shoreKey(state: GameState, tab: string): string {
   }
   if (tab === 'culture') {
     const c = s.culture;
-    return JSON.stringify(['culture', c?.age, c?.done, c?.focus, c?.forks, c?.asking?.fork, c?.boosted?.length, LANES.map((l) => Math.floor((c ? laneShare(c, l.id) : 0) * 20)), greatWork(s), !!workOpen(s), s.food >= (workOpen(s)?.cost ?? Infinity)]);
+    return JSON.stringify(['culture', c?.age, c?.done, c?.focus, c?.forks, c?.asking?.fork, c?.boosted?.length, LANES.map((l) => Math.floor((c ? laneShare(c, l.id) : 0) * 20)), greatWork(s), !!workOpen(s), s.food >= (workOpen(s)?.cost ?? Infinity), state.stages.sail.world?.lighthouse, lighthouseReady(state), chronView, state.current]);
   }
   if (tab === 'build') {
     // (Rebuilt when what can be afforded changes: each thing's button lights as the food comes.)
@@ -107,7 +108,10 @@ export function shoreLayout(state: GameState, tab: string): string {
   // The Chronicle: everything to look at, a page at a time.
   const page = (id: ChronView, name: string, dot = false) => `<button class="px-btn${chronView === id ? ' on' : ''}" data-villageview="${id}">${name}${dot ? ' <i class="dot"></i>' : ''}</button>`;
   if (chronView === 'culture' && !s.culture) chronView = 'village';
-  const views = `<div class="seg build-cats chron-pages">${page('village', 'Village')}${page('people', `Critters · ${s.people.length}`)}${page('island', 'Island')}${s.culture ? page('culture', 'Culture', !!s.culture.asking) : ''}${page('story', s.writtenFrom !== undefined ? 'Record' : 'Telling')}${s.lang?.lex && Object.keys(s.lang.heard).length ? page('words', 'Words') : ''}</div>`;
+  // (At sea: no Village page, its cameras are the island's; the Long Road first.)
+  const atSea = state.current === 'sail';
+  if (atSea && chronView === 'village') chronView = s.culture ? 'culture' : 'people';
+  const views = `<div class="seg build-cats chron-pages">${atSea ? '' : page('village', 'Village')}${page('people', `Critters · ${s.people.length}`)}${page('island', 'Island')}${s.culture ? page('culture', 'Culture', !!s.culture.asking) : ''}${page('story', s.writtenFrom !== undefined ? 'Record' : 'Telling')}${s.lang?.lex && Object.keys(s.lang.heard).length ? page('words', 'Words') : ''}</div>`;
   if (chronView === 'people') return views + peopleLayout(s);
   if (chronView === 'island') return views + islandLayout(s);
   if (chronView === 'culture') return views + cultureLayout(state, s);
@@ -667,7 +671,12 @@ function cultureLayout(state: GameState, s: ShoreState): string {
       <div class="col">${next && has(s, 'lore') ? `<button class="px-btn${c.focus === l.id ? ' on' : ''}" data-focus="${c.focus === l.id ? '' : l.id}">${c.focus === l.id ? 'Focused' : 'Focus'}</button>` : ''}</div></div>`;
   }).join('');
   const asking = c.asking ? `<div class="card px-box raid"><div class="info"><div class="name">${FORKS[c.asking.fork].name}</div><div class="sub">${FORKS[c.asking.fork].ask}</div></div><div class="col"><button class="px-btn gold" data-forkcard="${c.asking.fork}">Decide</button></div></div>` : '';
-  const workCard = !work
+  // (The Age of Sail's Great Work is the Great Lighthouse, raised at sea.)
+  const world = state.stages.sail.world;
+  const lh = world?.lighthouse;
+  const workCard = c.age >= SAIL_AGE
+    ? `<div class="card px-box"><div class="info"><div class="name">The Age's Great Work: the Great Lighthouse</div><div class="sub">${lh ? `Raised, for ${LIGHTHOUSE[lh].name.toLowerCase()}.` : !world ? 'Out at sea, once you set sail.' : lighthouseReady(state) ? 'Ready: see World.' : `Needs ${LANES_FOR_WORK} lanes done (${done} so far).`}</div></div></div>`
+    : !work
     ? `<div class="card px-box"><div class="info"><div class="name">${name}</div><div class="sub">The Republic stands: New Shore's era is done. The next era, out on the sea, is coming.</div></div></div>`
     : `<div class="card px-box"><div class="info"><div class="name">The Age's Great Work: ${workName}</div><div class="sub">${workReady(s) ? `Ready: see Build.` : `Needs ${LANES_FOR_WORK} lanes done (${done} so far).`}</div></div></div>`;
   if (!ageHasIdeas(c.age)) return `<div class="panel-head"><h2>The Long Road</h2><span class="dim">${name}</span></div>${workCard}${forksCard(s)}`;

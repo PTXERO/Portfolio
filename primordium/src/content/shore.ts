@@ -80,6 +80,14 @@ export interface Boosts {
   sight: number;
   /** Share more trust a gift wins. */
   gift: number;
+  /** At sea (the Age of Sail): share more everything brings in; ships faster; voyages sooner
+   * back; fewer pirates; more trust won (gifts and trade); taking an island cheaper. */
+  sea: number;
+  sails: number;
+  voyage: number;
+  pirates: number;
+  trust: number;
+  take: number;
 }
 
 export const BUILDS: BuildDef[] = [

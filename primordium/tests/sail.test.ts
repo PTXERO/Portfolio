@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { createState } from '../src/economy/state';
 import { cross, shoreOf, startShore, takeRaft } from '../src/economy/shore';
-import { fightPirate, gunsTime, havensLeft, pirateChance, raided, setPirateDice, conquer, conquerCost, giftCost, settlingLeft, SETTLE_SECS, giveGift, joinedMult, ours, sendVoyage, voyageTarget, buySailUp, buyShips, coastAt, gust, level, makeWorld, MASK, openCost, openRoute, routeOptions, routeRate, sailRate, setSail, shipCost, sightOf } from '../src/economy/sail';
+import { buildLighthouse, lighthouseReady, LIGHTHOUSE_COST, seaFx, worldWon, fightPirate, gunsTime, havensLeft, pirateChance, raided, setPirateDice, conquer, conquerCost, giftCost, settlingLeft, SETTLE_SECS, giveGift, joinedMult, ours, sendVoyage, voyageTarget, buySailUp, buyShips, coastAt, gust, level, makeWorld, MASK, openCost, openRoute, routeOptions, routeRate, sailRate, setSail, shipCost, sightOf } from '../src/economy/sail';
 import { tick } from '../src/economy/tick';
 import { D } from '../src/economy/num';
 import { deserialize, serialize } from '../src/economy/save';
 import type { TribeState } from '../src/economy/types';
 import { isleName } from '../src/ui/sailPanels';
 import { langOf } from '../src/economy/shore';
+import { IDEAS } from '../src/economy/culture';
 
 function fresh() {
   const state = createState(0);
@@ -196,6 +197,36 @@ describe('The Age of Sail: the world map', () => {
     expect(pirateChance(world)).toBeLessThan(before);
     expect(pirateChance(world)).toBe(0);
     setPirateDice(Math.random);
+  });
+});
+
+describe('The Age of Sail: the Great Lighthouse, and the world won', () => {
+  it('raised once four lanes of the Age are done, for Influence; its choice sets the sea going', () => {
+    const state = fresh();
+    shoreOf(state)!.culture = { since: 0, age: 6, practice: {}, done: [], forks: {} };
+    expect(setSail(state)).toBe(true);
+    const world = state.stages.sail.world!;
+    expect(lighthouseReady(state)).toBe(false);
+    const c = shoreOf(state)!.culture!;
+    c.done = IDEAS.filter((i) => i.age === 6).map((i) => i.id);
+    expect(lighthouseReady(state)).toBe(true);
+    state.stages.sail.currency = D(LIGHTHOUSE_COST - 1);
+    expect(buildLighthouse(state, 'winds')).toBe(false);
+    state.stages.sail.currency = D(LIGHTHOUSE_COST);
+    expect(buildLighthouse(state, 'winds')).toBe(true);
+    expect(world.lighthouse).toBe('winds');
+    expect(seaFx(world).sea).toBeGreaterThanOrEqual(0.5);
+    expect(lighthouseReady(state)).toBe(false);
+    expect(buildLighthouse(state, 'harbours')).toBe(false);
+  });
+  it('the world is won when every island is yours', () => {
+    const state = fresh();
+    shoreOf(state)!.culture = { since: 0, age: 6, practice: {}, done: [], forks: {} };
+    setSail(state);
+    const world = state.stages.sail.world!;
+    expect(worldWon(world)).toBe(false);
+    for (const i of world.isles) if (!ours(i)) i.joined = true;
+    expect(worldWon(world)).toBe(true);
   });
 });
 

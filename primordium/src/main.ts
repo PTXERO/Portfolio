@@ -15,7 +15,7 @@ import { STORY } from './content/tribal';
 import { awaken, sealed, startTribe } from './economy/tribal';
 import { autoAssign, daysLeft, daysLeftSteps, decideFallen, DAY_SEC, eatsPlants, extinctionTick, hungerWord, jobInfo, landedSeed, launch, learnIdea, startExtinction, TRAITS, tryAgain, waitingOnChoice, WINTER } from './economy/extinction';
 import { prepareShoreIsland } from './economy/terrainStore';
-import { fightPirate, buySailUp, buyShips, conquer, giveGift, gust, openRoute, ours, sendVoyage, setSail, SAIL_UPS, upCost, voyageCost, voyageTarget, type SailUp } from './economy/sail';
+import { fightPirate, buySailUp, buyShips, conquer, giveGift, gust, openRoute, ours, sendVoyage, setSail, SAIL_UPS, upCost, voyageCost, voyageTarget, buildLighthouse, LIGHTHOUSE, LIGHTHOUSE_COST, lighthouseReady, type SailUp } from './economy/sail';
 import { isleName, peopleCard, setSailMany } from './ui/sailPanels';
 import { EmberView } from './ui/emberView';
 import { HearthView } from './ui/hearthView';
@@ -658,6 +658,13 @@ function peopleModal(id: number): void {
 function sailFrame(): void {
   const world = state.stages.sail.world;
   if (!world || state.current !== 'sail' || !modal.hidden || cine()) return;
+  // The world won: the era's end, once.
+  if (world.wonAt !== undefined && !world.wonShown && ending.hidden) {
+    world.wonShown = true;
+    save();
+    playWorldEnd();
+    return;
+  }
   const id = world.met?.shift();
   if (id === undefined) return;
   const i = world.isles[id];
@@ -1803,8 +1810,10 @@ function renderPanel(): void {
         t === 'mutate'
         ? SAIL_UPS.some((u) => have >= (upCost(world, u.id) ?? Infinity))
         : t === 'pond'
-          ? !world.voyage && !!voyageTarget(world) && have >= voyageCost(world)
-          : false
+          ? (!world.voyage && !!voyageTarget(world) && have >= voyageCost(world)) || (lighthouseReady(state) && have >= LIGHTHOUSE_COST)
+          : t === 'chronicle'
+            ? !!shoreOf(state)?.culture?.asking
+            : false
       : t === 'boosts' || t === 'mutate'
         ? boostReady(state)
         : t === 'lab'
@@ -1968,6 +1977,39 @@ function playRepublicEnd(s: ShoreState): void {
     <p class="thanks">Thank you for playing.</p>
     <div class="after" hidden><p class="stir">The sea is next.</p>
       <button class="px-btn gold pulse" data-act="set-sail">Set sail</button><button class="px-btn" data-act="keep">Keep watching</button></div>
+  </div>`;
+  ending.hidden = false;
+  requestAnimationFrame(() => ending.classList.add('in'));
+  setTimeout(() => {
+    ending.querySelector<HTMLElement>('.after')!.hidden = false;
+  }, 6500);
+}
+
+/** The last island joined: the Age of Sail's end, the world one. Then what's next. */
+function playWorldEnd(): void {
+  const world = state.stages.sail.world!;
+  const s = shoreOf(state);
+  const ships = (world.routes ?? []).reduce((n, r) => n + r.ships, 0);
+  const stats = [
+    ['At sea', formatTime(world.wonAt ?? world.age ?? 0)],
+    ['Islands', String(world.isles.length)],
+    ['Taken', String(world.taken ?? 0)],
+    ['Won over', String(world.isles.filter((i) => i.joined).length - (world.taken ?? 0))],
+    ['Routes', String(world.routes?.length ?? 0)],
+    ['Ships', String(ships)],
+    ['Ideas', String(s?.culture?.done.length ?? 0)],
+    ['The Great Lighthouse', world.lighthouse ? LIGHTHOUSE[world.lighthouse].name : 'Never raised'],
+  ];
+  record(state, 'The last island joined. From the islands they hopped to the last of the havens, the world was theirs, and the sky over it. [STORY]', 'sail');
+  scene.evolveFlash();
+  ending.innerHTML = `<div class="ending-inner">
+    <p class="label dim">The Age of Sail</p>
+    <h1>The World.</h1>
+    <p>[STORY] Every island, every people, one. And over it all, the sky.</p>
+    <dl>${stats.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+    <p class="thanks">Thank you for playing.</p>
+    <div class="after" hidden><p class="stir">Discovery is next. The story continues in a future update.</p>
+      <button class="px-btn gold" data-act="keep">Keep watching</button></div>
   </div>`;
   ending.hidden = false;
   requestAnimationFrame(() => ending.classList.add('in'));
@@ -2638,7 +2680,16 @@ function act(el: HTMLElement): void {
     if (chooseEvent(state, Number(el.dataset.choice))) panelKey = '';
     if (modal.dataset.kind === 'runin') modal.hidden = true;
   }
-  else if (el.dataset.passage) {
+  else if (el.dataset.lighthouse) {
+    if (buildLighthouse(state, el.dataset.lighthouse as 'winds' | 'harbours')) {
+      cue('ascend', 0.7);
+      scene.evolveFlash();
+      const world = state.stages.sail.world!;
+      record(state, `The Great Lighthouse was raised at home, for ${LIGHTHOUSE[world.lighthouse!].name.toLowerCase()}. [STORY]`, 'sail');
+      panelKey = '';
+      save();
+    }
+  } else if (el.dataset.passage) {
     const world = state.stages.sail.world;
     if (world) world.passOff = !world.passOff;
     panelKey = '';

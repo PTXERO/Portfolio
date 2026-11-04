@@ -127,6 +127,24 @@ export const IDEAS: Idea[] = [
   { id: 'libraries', lane: 'words', age: 5, name: 'Libraries', does: 'All food +60%.', fx: { food: 0.6 } },
   { id: 'lawcodes', lane: 'words', age: 5, name: 'Codes of law', does: 'Gift trust +50%.', fx: { gift: 0.5 } },
 
+  // The Age of Sail: what they come to know at sea, and what it does there.
+  { id: 'saltfish', lane: 'food', age: 6, name: 'Salt fish', does: 'Everything at sea +20%.', fx: { sea: 0.2 } },
+  { id: 'galleys', lane: 'food', age: 6, name: 'Ships\' galleys', does: 'Ships +15% faster.', fx: { sails: 0.15 } },
+  { id: 'keels', lane: 'crafts', age: 6, name: 'Deep keels', does: 'Ships +20% faster.', fx: { sails: 0.2 } },
+  { id: 'drydocks', lane: 'crafts', age: 6, name: 'Dry docks', does: 'Everything at sea +25%.', fx: { sea: 0.25 } },
+  { id: 'convoys', lane: 'war', age: 6, name: 'Convoys', does: 'Pirates −25%.', fx: { pirates: 0.25 } },
+  { id: 'marines', lane: 'war', age: 6, name: 'Marines', does: 'Taking an island −25%.', fx: { take: 0.25 } },
+  { id: 'admiralty', lane: 'rule', age: 6, name: 'The admiralty', does: 'Everything at sea +25%.', fx: { sea: 0.25 } },
+  { id: 'treaties', lane: 'rule', age: 6, name: 'Treaties', does: 'Trust won +25%.', fx: { trust: 0.25 } },
+  { id: 'portquarters', lane: 'kin', age: 6, name: 'Port quarters', does: 'Trust won +25%.', fx: { trust: 0.25 } },
+  { id: 'mixedcrews', lane: 'kin', age: 6, name: 'Mixed crews', does: 'Everything at sea +20%.', fx: { sea: 0.2 } },
+  { id: 'seasaints', lane: 'rites', age: 6, name: 'Saints of the sea', does: 'Pirates −25%.', fx: { pirates: 0.25 } },
+  { id: 'lanterns', lane: 'rites', age: 6, name: 'Lantern nights', does: 'Everything at sea +20%.', fx: { sea: 0.2 } },
+  { id: 'logbooks', lane: 'stories', age: 6, name: 'Ships\' logs', does: 'Voyages 25% quicker.', fx: { voyage: 0.25 } },
+  { id: 'seasagas', lane: 'stories', age: 6, name: 'Sagas of the sea', does: 'Everything at sea +25%.', fx: { sea: 0.25 } },
+  { id: 'starcharts', lane: 'words', age: 6, name: 'Star charts', does: 'Voyages 25% quicker.', fx: { voyage: 0.25 } },
+  { id: 'harbourtongue', lane: 'words', age: 6, name: 'The harbour tongue', does: 'Trust won +30%.', fx: { trust: 0.3 } },
+
 ];
 
 export const FORKS: Record<ForkId, { name: string; ask: string; options: { id: string; name: string; line: string; fx?: Partial<Boosts>; lane?: Lane; cannibal?: boolean }[] }> = {
@@ -191,7 +209,7 @@ const IDEA_MORE = 100;
  * for one left over from an Age gone by, and less again once something done has sped it. */
 export function ideaCost(c: Culture, idea: Idea): number {
   const before = IDEAS.filter((i) => i.lane === idea.lane && i.age === idea.age && IDEAS.indexOf(i) < IDEAS.indexOf(idea)).length;
-  return (IDEA_COST + before * IDEA_MORE) * (AGE_HARDER[idea.age] ?? 1) * (idea.age < c.age ? LEFTOVER : 1) * (c.boosted?.includes(idea.id) ? 1 - BOOST : 1);
+  return (IDEA_COST + before * IDEA_MORE) * (AGE_HARDER[idea.age] ?? 1) * (idea.age < c.age ? LEFTOVER : 1) * (c.boosted?.includes(idea.id) ? 1 - BOOST : 1) * (idea.age >= SAIL_AGE ? SAIL_COST : 1);
 }
 function cost(c: Culture, lane: Lane): number {
   const next = nextIdea(c, lane);
@@ -202,7 +220,12 @@ const LEFTOVER = 0.5;
 /** An idea sped by something done: this much less practice. */
 export const BOOST = 0.4;
 /** Later Ages' ideas take more practice (the village doing more, more is needed to learn). */
-const AGE_HARDER: Record<number, number> = { 3: 3, 4: 8, 5: 20 };
+const AGE_HARDER: Record<number, number> = { 3: 3, 4: 8, 5: 20, 6: 40 };
+/** The Age the sea begins with (New Shore's era is over by then). */
+export const SAIL_AGE = 6;
+/** The Age of Sail's ideas cost this much more again: a whole island and the sea feed them, and
+ * they're meant to last the voyage out (about half done when the Lighthouse can be raised). */
+const SAIL_COST = 25;
 /** A focused lane gathers this much more. */
 const FOCUS = 2;
 /** Days a fork waits for an answer before the elders give one. */
@@ -305,6 +328,9 @@ const explored = (s: ShoreState) => deeds(s, 'explored');
 const others = (s: ShoreState) => s.people.filter((p) => p.kind !== undefined).length;
 const words = (s: ShoreState) => Object.keys(s.lang?.heard ?? {}).length;
 const routes = (st: GameState) => st.stages.sail?.world?.routes?.length ?? 0;
+const sea = (st: GameState) => st.stages.sail?.world ?? undefined;
+const ships = (st: GameState) => (sea(st)?.routes ?? []).reduce((n, r) => n + r.ships, 0);
+const joinedAt = (st: GameState) => sea(st)?.isles.filter((i) => i.joined).length ?? 0;
 export const BOOSTS: Record<string, { say: string; met: (s: ShoreState, state: GameState) => boolean }> = {
   dried: { say: 'Have 10 foragers', met: (s) => count(s, 'forager' as never) >= 10 },
   grounds: { say: 'Have 3 gathering camps', met: (s) => count(s, 'camp' as never) >= 3 },
@@ -386,6 +412,23 @@ export const BOOSTS: Record<string, { say: string; met: (s: ShoreState, state: G
   theatre: { say: 'Hear 100 of their words', met: (s) => words(s) >= 100 },
   libraries: { say: 'Write down their tongue (the scribes)', met: (s) => !!s.lang?.scribed },
   lawcodes: { say: 'Borrow 10 words', met: (s) => Object.keys(s.lang?.from ?? {}).length >= 10 },
+  // The Age of Sail: things done at sea.
+  saltfish: { say: 'Sail 5 routes', met: (_s, st) => routes(st) >= 5 },
+  galleys: { say: 'Have 100 ships out', met: (_s, st) => ships(st) >= 100 },
+  keels: { say: 'Have 250 ships out', met: (_s, st) => ships(st) >= 250 },
+  drydocks: { say: 'Have 500 ships out', met: (_s, st) => ships(st) >= 500 },
+  convoys: { say: 'Drive off 5 pirates', met: (_s, st) => (sea(st)?.driven ?? 0) >= 5 },
+  marines: { say: 'Take an island', met: (_s, st) => (sea(st)?.taken ?? 0) >= 1 },
+  admiralty: { say: 'Win 5 islands', met: (_s, st) => joinedAt(st) >= 5 },
+  treaties: { say: 'Win an island without taking it', met: (_s, st) => joinedAt(st) - (sea(st)?.taken ?? 0) >= 1 },
+  portquarters: { say: 'Win 3 islands', met: (_s, st) => joinedAt(st) >= 3 },
+  mixedcrews: { say: 'Sail 10 routes', met: (_s, st) => routes(st) >= 10 },
+  seasaints: { say: 'Drive off 20 pirates', met: (_s, st) => (sea(st)?.driven ?? 0) >= 20 },
+  lanterns: { say: 'Take a pirates\' haven', met: (_s, st) => !!sea(st)?.isles.some((i) => i.haven && i.joined) },
+  logbooks: { say: 'Send 3 voyages', met: (_s, st) => (sea(st)?.voyages ?? 0) >= 3 },
+  seasagas: { say: 'Send 8 voyages', met: (_s, st) => (sea(st)?.voyages ?? 0) >= 8 },
+  starcharts: { say: 'Charts to level 3', met: (_s, st) => (sea(st)?.ups?.charts ?? 0) >= 3 },
+  harbourtongue: { say: 'Win 8 islands', met: (_s, st) => joinedAt(st) >= 8 },
 };
 /** What speeds an idea, and whether it's been done. */
 export function boostOf(s: ShoreState, state: GameState, id: string): { say: string; met: boolean } | null {
@@ -494,8 +537,9 @@ export const AGES: { name: string; work?: BuildId; workName?: string }[] = [
   { name: 'The Bronze Age', work: 'hall', workName: 'the Chief\'s Hall' },
   { name: 'The Iron Age', work: 'forum', workName: 'the Forum' },
   { name: 'The Republic', work: 'senatehouse', workName: 'the Senate House' },
-  // (New Shore's era ends with the Republic: the Senate House raised, the sea is next.)
-  { name: 'The Age of Sail' },
+  // (New Shore's era ends with the Republic: the Senate House raised, the sea is next. The Age
+  // of Sail's Great Work is raised at sea, with Influence: the Great Lighthouse.)
+  { name: 'The Age of Sail', workName: 'the Great Lighthouse' },
 ];
 export function ageName(age: number): string {
   return AGES[age]?.name ?? 'The Long Road';
@@ -527,7 +571,7 @@ export function ageOver(state: GameState, s: ShoreState): void {
   c.age++;
   c.focus = undefined;
   // The Republic's the last of New Shore's Ages: the era's done, and the sea's next.
-  if (!AGES[c.age]?.work && !ageHasIdeas(c.age)) {
+  if (c.age >= SAIL_AGE) {
     s.news.push(`${was.name} stands. The island is theirs. The sea is next.`);
     s.eraEnd = true;
     record(state, `${cap(was.workName ?? 'The Great Work')} was raised. The Republic stood, the island one people of many kinds, and they looked out to sea. [STORY]`, 'shore', shoreWhen(s));
