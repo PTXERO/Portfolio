@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>DEAD//AIR</title>
 <script src="../design-tokens.js"></script>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bungee&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
 <link rel="stylesheet" href="../shared.css">
 <style>
 html,body{height:100%;overflow:hidden;background:#050508;}
@@ -92,6 +92,25 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 .kit .chip{flex:none;font-family:var(--fmono);font-size:10px;letter-spacing:.06em;border:1px solid var(--c);color:var(--c);border-radius:2px;padding:1px 5px;min-width:44px;text-align:center;}
 .kit b{display:block;font-family:var(--fmono);font-weight:400;font-size:11px;letter-spacing:.1em;color:#fff;}
 .kit span{font-size:10.5px;line-height:1.45;color:#b9b9c6;}
+
+/* ── House style "Misprint": ink outlines, hard offset shadows, sign lettering ── */
+.logo,.ov h1{font-family:'Bungee','Bebas Neue',sans-serif;letter-spacing:.01em;}
+.logo{font-size:clamp(40px,13.5vmin,72px);text-shadow:4px 4px 0 #f542a8,-2px -2px 0 #42d4f5;}
+.ov h1{font-size:clamp(26px,8vmin,42px);text-shadow:3px 3px 0 #f542a8,-2px -2px 0 #150f24;}
+.big-btn{border:3px solid #150f24;box-shadow:5px 5px 0 #150f24;border-radius:6px;}
+.big-btn.alt{border-color:var(--acc);box-shadow:5px 5px 0 #150f24;}
+.pad button{border:3px solid #150f24;}
+#buzz{box-shadow:0 6px 0 #150f24;}#bank{box-shadow:0 6px 0 #150f24;}#slow{box-shadow:0 6px 0 #150f24;}#spin{box-shadow:0 6px 0 #150f24;}
+.card{border:3px solid #150f24;border-top:3px solid #150f24;border-radius:8px;background:#241848;box-shadow:5px 5px 0 var(--c);}
+.card:nth-child(odd){transform:rotate(-1.2deg);}.card:nth-child(even){transform:rotate(1deg);}
+.card:hover{transform:translateY(-5px) rotate(0);border-color:#150f24;}
+.card.rare{border-color:#150f24;box-shadow:5px 5px 0 #ffd24a,0 0 22px rgba(255,210,74,.5);}
+.card img{width:64px;height:64px;filter:none;}
+.kit img{width:40px;height:40px;}
+.who button{border:2px solid #150f24;background:#241848;box-shadow:3px 3px 0 #150f24;border-radius:6px;}
+.who button.on{border-color:#150f24;background:#3a2878;box-shadow:3px 3px 0 var(--acc);}
+.who button:disabled{border-style:dashed;border-color:#4a3a90;box-shadow:none;background:rgba(36,24,72,.6);}
+.onair{border:2px solid #150f24;box-shadow:3px 3px 0 #150f24;}
 </style>
 </head>
 <body>
@@ -156,7 +175,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 (function(){
   const D = DeadAir, $ = id => document.getElementById(id);
   const W = 540, H = 960, N = D.N;
-  const cv = $('cv'), ctx = cv.getContext('2d');
+  const cv = $('cv'); let ctx = cv.getContext('2d');
   if (!ctx.roundRect) CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h) { this.rect(x, y, w, h); };
   const fmt = n => Math.floor(n).toLocaleString('en-US');
   const fx1 = n => (Math.round(n * 10) / 10).toString();
@@ -226,23 +245,107 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const r = cv.getBoundingClientRect();
     scale = Math.min(2.5, Math.max(0.5, r.width * (window.devicePixelRatio || 1) / W));
     cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
+    buildCRT();
   }
   window.addEventListener('resize', resize);
 
+  // ── House style: "Misprint" ────────────────────────────────────
+  // Thick ink outlines that boil a few times a second, colour printed slightly off-register,
+  // halftone dots instead of gradients, all seen through a CRT.
+  const INK = '#150f24';
+  let noGlow = false, inkSeq = 0;
+
+  // Glows are halftone: a disc of dots that shrink toward the edge.
   const glows = {};
-  function glow(color) {
-    if (glows[color]) return glows[color];
-    const c = document.createElement('canvas'); c.width = c.height = 64;
-    const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gr.addColorStop(0, color); gr.addColorStop(0.35, color + '66'); gr.addColorStop(1, color + '00');
-    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-    return (glows[color] = c);
+  // Bigger glows use a finer sheet, so the dots stay roughly the same size on screen.
+  function glow(color, size) {
+    const key = color + size;
+    if (glows[key]) return glows[key];
+    const c = document.createElement('canvas'); c.width = c.height = size;
+    const g = c.getContext('2d'), h = size / 2; g.fillStyle = color;
+    for (let y = 4; y < size; y += 8) for (let x = 4 + ((y >> 3) % 2) * 4; x < size; x += 8) {
+      const d = Math.hypot(x - h, y - h) / h; if (d >= 1) continue;
+      g.beginPath(); g.arc(x, y, 4.6 * Math.pow(1 - d, 0.75), 0, TAU); g.fill();
+    }
+    return (glows[key] = c);
   }
   function drawGlow(x, y, r, color, a) {
-    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.max(0, a == null ? 1 : a);
-    ctx.drawImage(glow(color), x - r, y - r, r * 2, r * 2);
+    if (noGlow) return;
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.max(0, Math.min(1, (a == null ? 1 : a) * 0.8));
+    ctx.drawImage(glow(color, r <= 44 ? 128 : r <= 110 ? 256 : 512), x - r, y - r, r * 2, r * 2);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
+
+  // Deterministic wobble: the same shape gets the same jitter until the next "boil" frame.
+  function jit(k) { const h = Math.sin(inkSeq * 12.9898 + Math.floor(time * 7) * 78.233 + k * 37.719) * 43758.5453; return h - Math.floor(h) - 0.5; }
+  // Fill a shape off-register, then outline it in wobbly ink. fn adds subpaths (no beginPath).
+  function ink(fn, fill, lw) {
+    inkSeq++;
+    if (fill) { ctx.save(); ctx.translate(1.6, 1.6); ctx.fillStyle = fill; ctx.beginPath(); fn(); ctx.fill(); ctx.restore(); }
+    ctx.strokeStyle = INK; ctx.lineWidth = lw || 2.8; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.save(); ctx.translate(jit(1) * 1.3, jit(2) * 1.3); ctx.beginPath(); fn(); ctx.stroke(); ctx.restore();
+  }
+  // An outlined arm or leg.
+  function limb(x1, y1, x2, y2, col, w) {
+    inkSeq++; const jx = jit(1) * 1.2, jy = jit(2) * 1.2; ctx.lineCap = 'round';
+    ctx.strokeStyle = INK; ctx.lineWidth = w + 5; ctx.beginPath(); ctx.moveTo(x1 + jx, y1 + jy); ctx.lineTo(x2 + jx, y2 + jy); ctx.stroke();
+    ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x1 + 1, y1 + 1); ctx.lineTo(x2 + 1, y2 + 1); ctx.stroke();
+  }
+
+  // Stickers: any small drawing, turned into three boil frames with an ink outline,
+  // halftone shading and off-register colour. Built once, then just stamped.
+  const SS = 3, stickers = {};
+  const dotTile = document.createElement('canvas'); dotTile.width = dotTile.height = 9;
+  { const g = dotTile.getContext('2d'); g.fillStyle = 'rgba(21,15,36,.42)'; g.beginPath(); g.arc(4.5, 4.5, 2.7, 0, TAU); g.fill(); }
+  function makeSticker(half, paint) {
+    const L = half * 2 + 12, px = Math.round(L * SS);
+    const mk = () => { const c = document.createElement('canvas'); c.width = c.height = px; return c; };
+    const art = mk(), a = art.getContext('2d');
+    a.translate(px / 2, px / 2); a.scale(SS, SS); paint(a);
+    a.setTransform(1, 0, 0, 1, 0, 0); a.globalAlpha = 1; a.globalCompositeOperation = 'source-atop';
+    a.fillStyle = a.createPattern(dotTile, 'repeat');          // halftone shade, lower right
+    a.beginPath(); a.moveTo(px, px * 0.2); a.lineTo(px, px); a.lineTo(px * 0.2, px); a.closePath(); a.fill();
+    a.fillStyle = 'rgba(255,255,255,.14)';                     // a little sheen, upper left
+    a.beginPath(); a.moveTo(0, 0); a.lineTo(px * 0.62, 0); a.lineTo(0, px * 0.62); a.closePath(); a.fill();
+    const sil = mk(), si = sil.getContext('2d');
+    si.drawImage(art, 0, 0); si.globalCompositeOperation = 'source-in'; si.fillStyle = INK; si.fillRect(0, 0, px, px);
+    const frames = [];
+    for (let f = 0; f < 3; f++) {
+      const c = mk(), g = c.getContext('2d');
+      for (let k = 0; k < 16; k++) { const an = k / 16 * TAU, r = (2 + Math.random() * 1.2) * SS; g.drawImage(sil, Math.cos(an) * r, Math.sin(an) * r); }
+      g.drawImage(sil, 0, 0);
+      g.drawImage(art, (0.5 + Math.random() * 0.7) * SS, (0.5 + Math.random() * 0.7) * SS);
+      frames.push(c);
+    }
+    return { frames, L };
+  }
+  function stamp(st, x, y, sc, rot) {
+    const f = st.frames[Math.floor(time * 7) % 3], L = st.L * (sc || 1);
+    if (rot) { ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.drawImage(f, -L / 2, -L / 2, L, L); ctx.restore(); }
+    else ctx.drawImage(f, x - L / 2, y - L / 2, L, L);
+  }
+  function iconSticker(id) { return stickers['i:' + id] || (stickers['i:' + id] = makeSticker(21, c => drawIcon(c, id))); }
+  function prizeSticker(kind, val) {
+    const key = 'p:' + kind + (kind === 'cash' || kind === 'gold' ? ':' + val : '');
+    if (stickers[key]) return stickers[key];
+    // Paint the prize once, frozen, into the sticker canvas.
+    return (stickers[key] = makeSticker(27, c => {
+      const keep = ctx, t = time; ctx = c; time = 0; noGlow = true;
+      try { paintPrize(kind, val, 0, 0, 1, 1); } finally { ctx = keep; time = t; noGlow = false; }
+    }));
+  }
+
+  // The tube: scanlines, a vignette and rounded corners, drawn over every frame.
+  let crt = null;
+  function buildCRT() {
+    crt = document.createElement('canvas'); crt.width = cv.width; crt.height = cv.height;
+    const g = crt.getContext('2d'), w = crt.width, h = crt.height, step = Math.max(3, Math.round(3 * scale));
+    g.fillStyle = 'rgba(10,6,24,.13)'; for (let y = 0; y < h; y += step) g.fillRect(0, y, w, Math.max(1, Math.round(step / 3)));
+    const v = g.createRadialGradient(w / 2, h / 2, h * 0.42, w / 2, h / 2, h * 0.78);
+    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.34)'); g.fillStyle = v; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#050508'; g.beginPath(); g.rect(0, 0, w, h); g.roundRect(0, 0, w, h, 22 * scale); g.fill('evenodd');
+  }
+
   const font = (px, fam) => { ctx.font = `${px}px ${fam === 'mono' ? "'Share Tech Mono',monospace" : "'Bebas Neue','Arial Narrow',sans-serif"}`; };
   function text(s, x, y, color, align) { ctx.fillStyle = color; ctx.textAlign = align || 'left'; ctx.fillText(s, x, y); }
 
@@ -594,39 +697,45 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     crowd.push({ x: 18 + i * 36 + (row % 2) * 18 + rnd(-4, 4), y: 856 + row * 30, ph: rnd(0, TAU), sp: rnd(5, 8), row, hue: rnd(0, 1) });
 
   function drawBackdrop() {
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#160a2a'); g.addColorStop(0.45, '#0b0b1c'); g.addColorStop(1, '#07070a');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    const pulse = 0.3 + Math.min(1, excite) * 0.7;
-    for (let y = 150; y < 360; y += 22) for (let x = 14; x < W - 8; x += 22) {
-      const v = 0.5 + 0.5 * Math.sin(x * 0.05 + y * 0.06 - time * 2.2);
-      ctx.fillStyle = `rgba(${100 + v * 90},${60 + v * 50},210,${0.06 + v * 0.16 * pulse})`;
-      ctx.fillRect(x, y, 4, 4);
+    const ex = Math.min(1, excite);
+    ctx.fillStyle = '#2a1c5c'; ctx.fillRect(0, 0, W, H);
+    // the wall: a slow sunburst behind the prizes
+    const cx = W / 2, cy = 330, rays = 28;
+    ctx.fillStyle = ex > 0.6 ? '#4a34a0' : '#3a2880';
+    for (let i = 0; i < rays; i += 2) {
+      const a0 = i / rays * TAU + time * 0.06, a1 = a0 + TAU / rays;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a0) * 800, cy + Math.sin(a0) * 800); ctx.lineTo(cx + Math.cos(a1) * 800, cy + Math.sin(a1) * 800); ctx.fill();
     }
-    // ambient sweeping colour washes
-    ctx.globalCompositeOperation = 'lighter';
+    drawGlow(cx, cy, 280, '#7a5ae0', 0.22 + ex * 0.3);
+    // flat colour washes from the rig
     const cols = ['#42d4f5', '#f542a8', '#c8f542', '#f5a542'];
+    ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 4; i++) {
       const x0 = 40 + i * 153, a = Math.sin(time * (0.45 + i * 0.13) * (1 + Math.min(1.2, excite)) + i * 1.7) * 0.5;
-      const x1 = x0 + Math.sin(a) * 700, y1 = 116 + Math.cos(a) * 700;
-      const gr = ctx.createLinearGradient(x0, 116, x1, y1);
-      gr.addColorStop(0, cols[i] + '40'); gr.addColorStop(0.55, cols[i] + '0c'); gr.addColorStop(1, cols[i] + '00');
-      ctx.fillStyle = gr;
+      const x1 = x0 + Math.sin(a) * 620, y1 = 116 + Math.cos(a) * 620;
+      ctx.globalAlpha = 0.11 + ex * 0.06; ctx.fillStyle = cols[i];
       ctx.beginPath(); ctx.moveTo(x0 - 4, 116); ctx.lineTo(x0 + 4, 116);
-      ctx.lineTo(x1 + 60 * Math.cos(a), y1 - 60 * Math.sin(a)); ctx.lineTo(x1 - 60 * Math.cos(a), y1 + 60 * Math.sin(a));
-      ctx.closePath(); ctx.fill();
+      ctx.lineTo(x1 + 62 * Math.cos(a), y1 - 62 * Math.sin(a)); ctx.lineTo(x1 - 62 * Math.cos(a), y1 + 62 * Math.sin(a)); ctx.closePath(); ctx.fill();
     }
-    ctx.globalCompositeOperation = 'source-over';
-    // glossy stage floor
-    const fl = ctx.createLinearGradient(0, 440, 0, 800);
-    fl.addColorStop(0, '#1a1030'); fl.addColorStop(1, '#0a0812');
-    ctx.fillStyle = fl; ctx.beginPath(); ctx.moveTo(0, 470); ctx.quadraticCurveTo(W / 2, 400, W, 470); ctx.lineTo(W, 820); ctx.lineTo(0, 820); ctx.fill();
-    ctx.strokeStyle = 'rgba(245,66,168,.14)'; ctx.lineWidth = 1;
-    for (let i = -6; i <= 6; i++) { ctx.beginPath(); ctx.moveTo(W / 2 + i * 30, 440); ctx.lineTo(W / 2 + i * 95, 820); ctx.stroke(); }
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    // the stage floor, with boards running to the back
+    inkSeq = 1000;
+    ink(() => { ctx.moveTo(-6, 470); ctx.quadraticCurveTo(W / 2, 400, W + 6, 470); ctx.lineTo(W + 6, 850); ctx.lineTo(-6, 850); ctx.closePath(); }, '#1d1444', 3.5);
+    ctx.strokeStyle = 'rgba(21,15,36,.55)'; ctx.lineWidth = 2;
+    for (let i = -6; i <= 6; i++) { ctx.beginPath(); ctx.moveTo(W / 2 + i * 30, 442); ctx.lineTo(W / 2 + i * 95, 850); ctx.stroke(); }
+    drawGlow(W / 2, 640, 240, '#5a44b8', 0.22);
+    // curtains either side
+    for (const side of [0, 1]) {
+      const x0 = side ? W - 30 : 0;
+      ink(() => { ctx.moveTo(x0 - 2, 112); ctx.lineTo(x0 + 32, 112); ctx.lineTo(x0 + 32, 806); for (let k = 0; k < 4; k++) ctx.quadraticCurveTo(x0 + 28 - k * 8, 822, x0 + 24 - k * 8, 806); ctx.lineTo(x0 - 2, 806); ctx.closePath(); }, '#d4244e', 3);
+      ctx.fillStyle = '#9c1238'; for (let k = 0; k < 3; k++) ctx.fillRect(x0 + 5 + k * 9, 124, 4, 680);
+      ctx.strokeStyle = INK; ctx.lineWidth = 1.5; for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(x0 + 9 + k * 9, 124); ctx.lineTo(x0 + 9 + k * 9, 804); ctx.stroke(); }
+      ink(() => ctx.roundRect(x0 - 2, 560, 34, 12, 4), '#ffd24a', 2.5);
+    }
     // lighting rig
-    ctx.fillStyle = '#1c1c2a'; ctx.fillRect(0, 114, W, 10);
-    ctx.strokeStyle = '#34344a'; ctx.lineWidth = 1.5;
-    for (let x = 0; x < W; x += 20) { ctx.beginPath(); ctx.moveTo(x, 114); ctx.lineTo(x + 10, 124); ctx.lineTo(x + 20, 114); ctx.stroke(); }
+    ink(() => ctx.rect(-4, 112, W + 8, 12), '#3a3a5a', 3);
+    ctx.strokeStyle = INK; ctx.lineWidth = 2;
+    for (let x = 0; x < W; x += 20) { ctx.beginPath(); ctx.moveTo(x, 113); ctx.lineTo(x + 10, 123); ctx.lineTo(x + 20, 113); ctx.stroke(); }
   }
 
   function drawMarquee() {
@@ -692,7 +801,19 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   }
 
   // ── Drawing: prizes and podiums ────────────────────────────────
+  // Prizes are stamped from stickers; only the lively bits (spin, glow, static) are drawn live.
   function drawPrize(kind, val, x, y, s, alpha) {
+    const col = kind === 'burnt' ? null : C[kind] || C.cash;
+    if (col && kind !== 'cash') drawGlow(x, y, 36, col, 0.4 + 0.2 * Math.sin(time * 5 + x));
+    const rot = kind === 'spin' ? time * 3 : kind === 'hype' ? Math.sin(time * 2.5 + x) * 0.25 : kind === 'box' ? Math.sin(time * 7 + x) * 0.09 : kind === 'x2' ? Math.sin(time * 3 + x) * 0.07 : 0;
+    ctx.globalAlpha = alpha;
+    stamp(prizeSticker(kind, val), x, y, s, rot);
+    if (kind === 'dead' || kind === 'burnt') {              // the static never sits still
+      for (let i = 0; i < (kind === 'dead' ? 7 : 3); i++) { ctx.fillStyle = Math.random() < 0.5 ? C.dead : '#fff'; ctx.globalAlpha = alpha * (kind === 'dead' ? 1 : 0.4); ctx.fillRect(x - 12 + Math.random() * 18, y - 8 + Math.random() * 16, 3 + Math.random() * 7, 1.6); }
+    }
+    ctx.globalAlpha = 1;
+  }
+  function paintPrize(kind, val, x, y, s, alpha) {
     ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.globalAlpha = alpha;
     if (kind === 'cash') {
       const n = val >= 90 ? 5 : val >= 70 ? 4 : val >= 50 ? 3 : val >= 30 ? 2 : 1;
@@ -707,7 +828,6 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         ctx.fillStyle = C.gold; ctx.beginPath(); ctx.moveTo(bx - 8, by + 3); ctx.lineTo(bx - 6, by - 4); ctx.lineTo(bx + 6, by - 4); ctx.lineTo(bx + 8, by + 3); ctx.fill(); };
       bar(-7, 4); bar(7, 4); bar(0, -6);
       font(12); ctx.textBaseline = 'middle'; text('$' + val * 5, 0, 16, C.gold, 'center');
-      const k = 3 + 2 * Math.sin(time * 6 + x); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(10 - k, -12); ctx.lineTo(10 + k, -12); ctx.moveTo(10, -12 - k); ctx.lineTo(10, -12 + k); ctx.stroke();
     } else if (kind === 'hype') {
       drawGlow(0, 0, 30, C.hype, 0.6 + 0.3 * Math.sin(time * 5 + x));
       ctx.rotate(Math.sin(time * 2.5 + x) * 0.25);
@@ -773,10 +893,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       // On MYSTERY NIGHT you only see what a light is passing over.
       const covered = hidden && p.state === 'up' && !beams.some(b => Math.abs(b - i - 0.5) < 1.45) && G.phase !== 'tally';
       // pedestal
-      ctx.fillStyle = '#16162a'; ctx.beginPath(); ctx.moveTo(x - 17, y); ctx.lineTo(x + 17, y); ctx.lineTo(x + 14, y + 50); ctx.lineTo(x - 14, y + 50); ctx.fill();
+      inkSeq = 2000 + i * 3;
+      ink(() => { ctx.moveTo(x - 17, y); ctx.lineTo(x + 17, y); ctx.lineTo(x + 14, y + 52); ctx.lineTo(x - 14, y + 52); ctx.closePath(); }, '#3d2e86', 2.6);
       ctx.fillStyle = covered ? '#9d8cff' : (danger || (burnt && !ghost)) ? '#f542a8' : p.state !== 'up' ? '#34344a' : C[p.kind] || C.cash;
-      ctx.globalAlpha = burnt ? 0.5 : 1; ctx.fillRect(x - 16, y + 3, 32, 3); ctx.globalAlpha = 1;
-      ctx.fillStyle = '#2a2a44'; ctx.beginPath(); ctx.ellipse(x, y, 17, 5, 0, 0, TAU); ctx.fill();
+      ctx.globalAlpha = burnt ? 0.5 : 1; ctx.fillRect(x - 15, y + 10, 31, 7); ctx.globalAlpha = 1;
+      ctx.strokeStyle = INK; ctx.lineWidth = 1.6; ctx.strokeRect(x - 15, y + 10, 31, 7);
+      ink(() => ctx.ellipse(x, y, 17, 5.5, 0, 0, TAU), '#6a55c8', 2.4);
       // prize (on CONVEYOR it slides in from the podium it just left)
       const f = podFx[i];
       if (p.state === 'gone' || f < 0) continue;
@@ -895,98 +1017,124 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     }
   }
 
+  // A face that reacts: calm, joy when it is going well, shock on dead air.
+  function face(x, y, mood) {
+    ctx.fillStyle = INK; ctx.strokeStyle = INK; ctx.lineWidth = 2.3; ctx.lineCap = 'round';
+    if (mood === 'shock') {
+      for (const sd of [-1, 1]) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + sd * 7, y - 3, 4.6, 0, TAU); ctx.fill(); ctx.stroke(); ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(x + sd * 7, y - 3, 1.7, 0, TAU); ctx.fill(); }
+      ctx.beginPath(); ctx.ellipse(x, y + 8, 4, 5.6, 0, 0, TAU); ctx.fill();
+    } else if (mood === 'joy') {
+      for (const sd of [-1, 1]) { ctx.beginPath(); ctx.arc(x + sd * 7, y - 2, 3.6, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+      ctx.beginPath(); ctx.arc(x, y + 4, 7.5, 0, Math.PI); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ff6b8a'; ctx.beginPath(); ctx.arc(x, y + 9.5, 3.6, Math.PI, 0); ctx.fill();
+    } else {
+      for (const sd of [-1, 1]) { ctx.beginPath(); ctx.arc(x + sd * 7, y - 3, 2.3, 0, TAU); ctx.fill(); }
+      ctx.beginPath(); ctx.arc(x, y + 3, 6, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(255,80,120,.4)'; ctx.beginPath(); ctx.arc(x - 12.5, y + 4, 3.3, 0, TAU); ctx.arc(x + 12.5, y + 4, 3.3, 0, TAU); ctx.fill();
+  }
+
   function drawDesk() {
-    const x = DESK.x, y = DESK.y;
-    // host, stage left
-    drawPerson(74, 640, '#f542a8', Math.min(1, excite), true);
-    // contestant behind the desk; the arm comes down on the buzzer
-    const bob = Math.sin(time * 8) * Math.min(1, excite) * 3;
-    drawGlow(x, y - 70, 110, '#fff4c2', 0.22);
-    ctx.fillStyle = '#42d4f5'; ctx.beginPath(); ctx.roundRect(x - 24, y - 84 + bob, 48, 70, 12); ctx.fill();
-    ctx.fillStyle = '#ffe9c9'; ctx.beginPath(); ctx.arc(x, y - 100 + bob, 17, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#3a2410'; ctx.beginPath(); ctx.arc(x, y - 105 + bob, 17.5, Math.PI, TAU); ctx.fill();
-    ctx.fillStyle = '#07070a'; ctx.beginPath(); ctx.arc(x - 6, y - 99 + bob, 1.8, 0, TAU); ctx.arc(x + 6, y - 99 + bob, 1.8, 0, TAU); ctx.fill();
-    ctx.strokeStyle = '#07070a'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y - 94 + bob, 5, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
-    ctx.strokeStyle = '#42d4f5'; ctx.lineWidth = 9; ctx.lineCap = 'round';
+    const x = DESK.x, y = DESK.y, ex = Math.min(1, excite);
+    const mood = dark > 0.3 ? 'shock' : ex > 0.7 ? 'joy' : 'calm';
+    inkSeq = 3000;
+    drawHost(74, 640, ex, dark > 0.3 ? 'shock' : 'joy');
+    // the contestant, behind the desk; one arm comes down on the buzzer
+    inkSeq = 3100;
+    const bob = Math.sin(time * 8) * ex * 3, hy = y - 103 + bob;
+    drawGlow(x, y - 70, 130, '#fff4c2', 0.2);
     const up = (1 - slam) * Math.min(1, 0.25 + excite);
-    ctx.beginPath(); ctx.moveTo(x - 22, y - 70 + bob); ctx.lineTo(x - 40, y - 60 - up * 46); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x + 22, y - 70 + bob); ctx.lineTo(x + 34, y - 44 - (1 - slam) * 22); ctx.stroke();
-    ctx.fillStyle = '#ffe9c9'; ctx.beginPath(); ctx.arc(x + 34, y - 42 - (1 - slam) * 22, 6, 0, TAU); ctx.fill();
+    limb(x - 22, y - 68 + bob, x - 43, y - 58 - up * 50, '#42d4f5', 9);
+    ink(() => ctx.arc(x - 43, y - 60 - up * 50, 6.5, 0, TAU), '#ffd9b0', 2.4);
+    ink(() => ctx.roundRect(x - 26, y - 85 + bob, 52, 74, 15), '#42d4f5', 3);
+    ink(() => { ctx.moveTo(x - 9, y - 85 + bob); ctx.lineTo(x, y - 70 + bob); ctx.lineTo(x + 9, y - 85 + bob); }, null, 2.2);
+    ctx.fillStyle = '#fff'; ctx.fillRect(x - 19, y - 62 + bob, 15, 10); ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.strokeRect(x - 19, y - 62 + bob, 15, 10);
+    ctx.fillStyle = '#e8203a'; ctx.fillRect(x - 17, y - 59 + bob, 11, 2);
+    ink(() => ctx.arc(x, hy, 20, 0, TAU), '#ffd9b0', 3);
+    ink(() => { ctx.arc(x, hy - 3, 20.5, Math.PI * 1.02, Math.PI * 1.98); ctx.quadraticCurveTo(x + 8, hy - 14, x - 2, hy - 10); ctx.quadraticCurveTo(x - 14, hy - 6, x - 20.4, hy - 4); }, '#6a3a1a', 2.6);
+    face(x, hy + 3, mood);
+    limb(x + 22, y - 68 + bob, x + 35, y - 44 - (1 - slam) * 22, '#42d4f5', 9);
+    ink(() => ctx.arc(x + 35, y - 42 - (1 - slam) * 22, 6.5, 0, TAU), '#ffd9b0', 2.4);
     // cannons
-    if (G.lv('cannon')) [0, 1].forEach(s => {
-      const cx = x + (s ? 150 : -150), kick = cannonFx[s];
-      ctx.save(); ctx.translate(cx, y - 6); ctx.rotate((s ? -1 : 1) * 0.5);
-      ctx.fillStyle = '#c8f542'; ctx.fillRect(-9, -34 + kick * 10, 18, 38);
-      ctx.fillStyle = '#07070a'; ctx.fillRect(-6, -34 + kick * 10, 12, 6);
+    if (G.lv('cannon')) [0, 1].forEach(sd => {
+      const cx = x + (sd ? 150 : -150), kick = cannonFx[sd];
+      ctx.save(); ctx.translate(cx, y - 6); ctx.rotate((sd ? -1 : 1) * 0.5);
+      ink(() => ctx.rect(-9, -34 + kick * 10, 18, 38), '#c8f542', 2.6);
+      ctx.fillStyle = INK; ctx.fillRect(-6, -34 + kick * 10, 12, 6);
       ctx.restore();
-      ctx.fillStyle = '#5a6a20'; ctx.beginPath(); ctx.roundRect(cx - 14, y - 6, 28, 12, 3); ctx.fill();
+      ink(() => ctx.roundRect(cx - 14, y - 6, 28, 12, 3), '#7a8a30', 2.6);
     });
-    // desk with the pot on its front
+    // the desk, with the pot on its front
     const bump = deskBump * 4;
-    ctx.fillStyle = '#1c1c30'; ctx.strokeStyle = '#42d4f5'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.roundRect(x - 128, y - 36 - bump, 256, 96 + bump, 8); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#0a0a14'; ctx.beginPath(); ctx.roundRect(x - 118, y - 14, 236, 64, 5); ctx.fill();
+    ink(() => ctx.roundRect(x - 128, y - 36 - bump, 256, 96 + bump, 9), '#4a34a0', 3.6);
+    ctx.fillStyle = '#ffd24a'; for (let k = 0; k < 12; k++) { ctx.beginPath(); ctx.arc(x - 118 + k * 21.4, y - 26 - bump, 2.4, 0, TAU); ctx.fill(); }
+    ink(() => ctx.roundRect(x - 118, y - 14, 236, 64, 5), '#0d0a1c', 2.6);
     // buzzer
     const press = slam * 5;
-    ctx.fillStyle = '#34344a'; ctx.beginPath(); ctx.roundRect(x + 18, y - 44, 34, 9, 3); ctx.fill();
-    drawGlow(x + 35, y - 48, 26 + slam * 30, '#e8203a', 0.6 + slam * 0.4);
-    ctx.fillStyle = slam > 0.3 ? '#ff8090' : '#e8203a'; ctx.beginPath(); ctx.ellipse(x + 35, y - 45 + press, 14, 9 - press * 0.8, 0, Math.PI, TAU); ctx.fill();
+    ink(() => ctx.roundRect(x + 18, y - 45, 34, 10, 3), '#5a5a7a', 2.4);
+    drawGlow(x + 35, y - 48, 26 + slam * 34, '#e8203a', 0.5 + slam * 0.5);
+    ink(() => { ctx.ellipse(x + 35, y - 45 + press, 14, 9.5 - press * 0.8, 0, Math.PI, TAU); ctx.closePath(); }, slam > 0.3 ? '#ff8090' : '#e8203a', 2.6);
     // pot readout
     const pot = G.pot, sc = G.score();
     ctx.textBaseline = 'middle';
     font(10, 'mono'); text('CASH', x - 80, y - 2, '#8a8aa0', 'center'); text('HYPE', x - 14, y - 2, '#8a8aa0', 'center'); text('POT', x + 70, y - 2, '#8a8aa0', 'center');
-    const fit = (s, cx, px, maxW, col) => { font(px); const w = ctx.measureText(s).width; if (w > maxW) font(px * maxW / w); text(s, cx, y + 26, col, 'center'); };
+    const fit = (str, cx2, px, maxW, col) => { font(px); const w2 = ctx.measureText(str).width; if (w2 > maxW) font(px * maxW / w2); text(str, cx2, y + 26, col, 'center'); };
     fit(fmt(pot.cash), x - 80, 30, 68, C.cash);
     fit('×' + fx1(pot.hype * pot.xm), x - 14, 30, 54, pot.xm > 1 ? C.jack : C.hype);
     fit(fmt(sc), x + 70, 34 + deskBump * 8, 88, C.lime);
     if (deskBump > 0.2) drawGlow(x + 70, y + 26, 60, C.lime, deskBump * 0.5);
-    // bleeps left
+    // what is armed right now
     ctx.textBaseline = 'middle'; font(12, 'mono');
     let tagX = x + 122;
-    const chip = (label, col2) => { const w2 = ctx.measureText(label).width + 12; tagX -= w2 + 4; ctx.fillStyle = col2; ctx.beginPath(); ctx.roundRect(tagX, y - 32, w2, 14, 3); ctx.fill(); text(label, tagX + w2 / 2, y - 24.5, '#07070a', 'center'); };
+    const chip = (label, col2) => { const w2 = ctx.measureText(label).width + 12; tagX -= w2 + 4; ctx.fillStyle = col2; ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(tagX, y - 62, w2, 15, 3); ctx.fill(); ctx.stroke(); text(label, tagX + w2 / 2, y - 54, '#07070a', 'center'); };
     if (pot.next2) chip('NEXT ×2', '#fff');
     if (G.lv('streak') && G.streak > 0) chip('STREAK ×' + (G.streak + 1), '#ff7a2e');
     if (G.lv('life') && !G.lifeUsed) chip('RERUN', '#ff5a7a');
-    for (let i = 0; i < (G.bleeps || 0); i++) { ctx.fillStyle = '#7fe0ff'; ctx.beginPath(); ctx.roundRect(x - 124 + i * 12, y - 30, 9, 9, 2); ctx.fill(); }
+    for (let i = 0; i < (G.bleeps || 0); i++) { ctx.fillStyle = '#7fe0ff'; ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(x - 122 + i * 13, y - 46, 10, 10, 2); ctx.fill(); ctx.stroke(); }
   }
 
-  function drawPerson(x, y, col, arm, mic) {
-    drawGlow(x, y + 30, 80, '#f5a542', 0.22);
-    ctx.fillStyle = col; ctx.beginPath(); ctx.roundRect(x - 20, y + 14, 40, 96, 10); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x - 7, y + 14); ctx.lineTo(x + 7, y + 14); ctx.lineTo(x, y + 38); ctx.fill();
-    ctx.fillStyle = '#07070a'; ctx.fillRect(x - 6, y + 15, 12, 4);
-    ctx.fillStyle = '#ffe9c9'; ctx.beginPath(); ctx.arc(x, y, 14, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#1a1208'; ctx.beginPath(); ctx.arc(x, y - 4, 14.5, Math.PI, TAU); ctx.fill();
-    ctx.strokeStyle = col; ctx.lineWidth = 8; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(x + 19, y + 26); ctx.lineTo(x + 36 + arm * 6, y + 44 - arm * 70); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x - 19, y + 26); ctx.lineTo(x - 24, y + 8); ctx.stroke();
-    if (mic) { ctx.fillStyle = '#d8d8e0'; ctx.beginPath(); ctx.arc(x - 24, y + 4, 5, 0, TAU); ctx.fill(); }
+  // The host: pink jacket, big hair, bigger grin.
+  function drawHost(x, y, arm, mood) {
+    drawGlow(x, y + 30, 90, '#f5a542', 0.22);
+    limb(x - 19, y + 28, x - 27, y + 9, '#f542a8', 8);
+    ink(() => ctx.roundRect(x - 31, y - 6, 9, 14, 4), '#d8d8e0', 2.2);                    // microphone
+    limb(x + 19, y + 28, x + 38 + arm * 6, y + 46 - arm * 76, '#f542a8', 8);
+    ink(() => ctx.arc(x + 38 + arm * 6, y + 44 - arm * 76, 6, 0, TAU), '#ffd9b0', 2.4);
+    ink(() => ctx.roundRect(x - 22, y + 14, 44, 104, 13), '#f542a8', 3);
+    ink(() => { ctx.moveTo(x - 9, y + 14); ctx.lineTo(x + 9, y + 14); ctx.lineTo(x, y + 44); ctx.closePath(); }, '#fff', 2.2);
+    ink(() => { ctx.moveTo(x, y + 20); ctx.lineTo(x - 9, y + 15); ctx.lineTo(x - 9, y + 25); ctx.closePath(); ctx.moveTo(x, y + 20); ctx.lineTo(x + 9, y + 15); ctx.lineTo(x + 9, y + 25); ctx.closePath(); }, '#ffd24a', 2);
+    ink(() => ctx.arc(x, y, 17, 0, TAU), '#ffd9b0', 3);
+    ink(() => { ctx.moveTo(x - 17, y - 3); ctx.quadraticCurveTo(x - 20, y - 26, x + 2, y - 27); ctx.quadraticCurveTo(x + 22, y - 26, x + 17, y - 4); ctx.quadraticCurveTo(x + 6, y - 14, x - 17, y - 3); }, '#2a1a5a', 2.6);
+    face(x, y + 3, mood);
   }
 
   function drawAudience() {
-    const g = ctx.createLinearGradient(0, 800, 0, H);
-    g.addColorStop(0, 'rgba(7,7,10,0)'); g.addColorStop(0.3, '#07070a'); g.addColorStop(1, '#050508');
-    ctx.fillStyle = g; ctx.fillRect(0, 800, W, H - 800);
     const ex = Math.min(1.4, excite), lit = ex > 0.55;
-    ctx.fillStyle = lit ? '#e8203a' : '#2a0c12'; ctx.beginPath(); ctx.roundRect(W - 112, 792, 92, 17, 3); ctx.fill();
-    if (lit) drawGlow(W - 66, 800, 60, '#e8203a', 0.6);
-    font(11, 'mono'); ctx.textBaseline = 'middle'; text('APPLAUSE', W - 66, 801, lit ? '#fff' : '#5a2a34', 'center');
-    for (const c of crowd) {
+    // the lip of the stage, with footlights
+    inkSeq = 4000;
+    ink(() => ctx.rect(-6, 836, W + 12, H), '#150f24', 3);
+    for (let k = 0; k < 9; k++) { const fx2 = 30 + k * 60; drawGlow(fx2, 836, 26, '#ffd24a', 0.5 + 0.3 * Math.sin(time * 3 + k)); ink(() => { ctx.arc(fx2, 838, 7, Math.PI, 0); ctx.closePath(); }, '#ffd24a', 2); }
+    // applause sign
+    if (lit) drawGlow(W - 66, 800, 64, '#e8203a', 0.7);
+    ink(() => ctx.roundRect(W - 114, 790, 96, 20, 4), lit ? '#e8203a' : '#4a1626', 2.6);
+    font(12, 'mono'); ctx.textBaseline = 'middle'; text('APPLAUSE', W - 66, 801, lit ? '#fff' : '#8a4a5a', 'center');
+    // the crowd
+    const tones = ['#5a44b8', '#7a3a9a', '#3a56b0', '#8a4a8a'];
+    crowd.forEach((c, n) => {
+      inkSeq = 4100 + n * 4;
       const jump = Math.max(0, Math.sin(time * c.sp * (0.5 + ex * 0.6) + c.ph)) * (2 + ex * 13);
-      const x = c.x, y = c.y - jump, shade = 16 + c.row * 9;
-      const body = `rgb(${shade + 12 + c.hue * 14},${shade},${shade + 26})`;
-      ctx.fillStyle = body;
-      ctx.beginPath(); ctx.arc(x, y, 9, 0, TAU); ctx.fill();
-      ctx.beginPath(); ctx.roundRect(x - 14, y + 8, 28, 60, 8); ctx.fill();
+      const x = c.x, y = c.y - jump, col = tones[(n * 7 + c.row) % tones.length];
       if (ex > 0.45) {
         const a = 0.5 + Math.sin(time * c.sp + c.ph) * 0.25;
-        ctx.strokeStyle = body; ctx.lineWidth = 5; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(x - 11, y + 12); ctx.lineTo(x - 11 - Math.sin(a) * 14, y - 12 - ex * 6);
-        ctx.moveTo(x + 11, y + 12); ctx.lineTo(x + 11 + Math.sin(a) * 14, y - 12 - ex * 6); ctx.stroke();
+        limb(x - 11, y + 14, x - 12 - Math.sin(a) * 14, y - 13 - ex * 6, col, 5);
+        limb(x + 11, y + 14, x + 12 + Math.sin(a) * 14, y - 13 - ex * 6, col, 5);
       }
-      ctx.strokeStyle = 'rgba(245,66,168,.35)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 9, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
-    }
-    if (ex > 0.8 && Math.random() < 0.35) { const c = crowd[(Math.random() * crowd.length) | 0]; drawGlow(c.x + rnd(-8, 8), c.y - 4, rnd(14, 30), '#ffffff', 0.9); }
+      ink(() => ctx.roundRect(x - 14, y + 8, 28, 80, 9), col, 2.4);
+      ink(() => ctx.arc(x, y, 10, 0, TAU), col, 2.4);
+      ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(x - 3.5, y - 1, 1.4, 0, TAU); ctx.arc(x + 3.5, y - 1, 1.4, 0, TAU); ctx.fill();
+      if (ex > 0.6) { ctx.beginPath(); ctx.arc(x, y + 3, 3, 0, Math.PI); ctx.fill(); }
+    });
+    if (ex > 0.8 && Math.random() < 0.35) { const c = crowd[(Math.random() * crowd.length) | 0]; drawGlow(c.x + rnd(-8, 8), c.y - 4, rnd(18, 34), '#ffffff', 0.9); }
   }
 
   // ── Drawing: effects ───────────────────────────────────────────
@@ -1012,7 +1160,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     for (const f of flyers) {
       f.t += dt; const k = Math.min(1, f.t / f.dur), e = k * k;
       const x = f.x0 + (DESK.x + 70 - f.x0) * e, y = f.y0 + (DESK.y + 20 - f.y0) * e - Math.sin(k * Math.PI) * 60;
-      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 1; ctx.drawImage(glow(f.color), x - 20, y - 20, 40, 40);
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 1; ctx.drawImage(glow(f.color, 128), x - 20, y - 20, 40, 40);
       ctx.fillStyle = '#fff'; ctx.fillRect(x - 3, y - 3, 6, 6);
       if (Math.random() < 0.8) parts.push({ x, y, vx: rnd(-20, 20), vy: rnd(-20, 20), life: 0.3, max: 0.3, color: f.color, size: 3, g: 0, k: 'spark' });
       if (k >= 1) { deskBump = 1; spark(DESK.x + 70, DESK.y + 20, f.color, 5, 120, 0.3); }
@@ -1049,12 +1197,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     if (k >= 1) { callout = null; return; }
     const s = k < 0.15 ? 0.4 + (k / 0.15) * 0.75 : k < 0.25 ? 1.15 - (k - 0.15) / 0.1 * 0.15 : 1;
     ctx.save(); ctx.translate(W / 2, 250); ctx.rotate(-0.06); ctx.scale(s, s); ctx.globalAlpha = k > 0.8 ? 1 - (k - 0.8) / 0.2 : 1;
-    font(c.size);
+    ctx.font = (c.size * 0.74) + "px 'Bungee','Bebas Neue',sans-serif";
     const w = ctx.measureText(c.text).width;
     if (w > W - 50) ctx.scale((W - 50) / w, (W - 50) / w);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.lineWidth = 12; ctx.strokeStyle = '#07070a'; ctx.lineJoin = 'round'; ctx.strokeText(c.text, 0, 0);
-    ctx.fillStyle = '#f542a8'; ctx.fillText(c.text, 4, 4);
+    ctx.lineWidth = 13; ctx.strokeStyle = INK; ctx.lineJoin = 'round'; ctx.strokeText(c.text, 0, 0); ctx.strokeText(c.text, 5, 5);
+    ctx.fillStyle = '#f542a8'; ctx.fillText(c.text, 5, 5);
     ctx.fillStyle = c.color; ctx.fillText(c.text, 0, 0);
     ctx.restore(); ctx.globalAlpha = 1;
   }
@@ -1136,7 +1284,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         circ(0, 0, 17, '#fff'); circ(0, 0, 13, '#e8203a'); circ(0, 0, 9, '#fff'); circ(0, 0, 5, '#e8203a'); break;
       case 'gold': {    // gold bars
         const bar = (x, y) => { poly([[x - 11, y + 5], [x - 8, y - 5], [x + 8, y - 5], [x + 11, y + 5]], '#a07a12'); poly([[x - 8, y + 3], [x - 6, y - 4], [x + 6, y - 4], [x + 8, y + 3]], '#ffd24a'); };
-        bar(-8, 9); bar(8, 9); bar(0, -3); line([[11, -14], [17, -14]], '#fff', 1.5); line([[14, -17], [14, -11]], '#fff', 1.5); break; }
+        bar(-8, 9); bar(8, 9); bar(0, -3); break; }
       case 'budget':    // money bag
         poly([[-6, -15], [6, -15], [3, -7], [-3, -7]], '#3a9a5a'); c.fillStyle = col; c.beginPath(); c.ellipse(0, 5, 13, 12, 0, 0, TAU); c.fill();
         word('$', 19, '#0a3a1a', 6); circ(-15, 14, 4, '#ffd24a'); circ(15, 13, 4, '#ffd24a'); break;
@@ -1219,12 +1367,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     }
   }
   const iconURLs = {};
-  function iconURL(id) {
-    if (iconURLs[id]) return iconURLs[id];
-    const c2 = document.createElement('canvas'); c2.width = c2.height = 104;
-    const c = c2.getContext('2d'); c.translate(52, 52); c.scale(2.5, 2.5); drawIcon(c, id);
-    return (iconURLs[id] = c2.toDataURL());
-  }
+  function iconURL(id) { return iconURLs[id] || (iconURLs[id] = iconSticker(id).frames[0].toDataURL()); }
 
   // ── Drawing: the wheel ─────────────────────────────────────────
   function drawWheel(dt) {
@@ -1260,14 +1403,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       if (w.type === 'dead') for (let n = 0; n < 26; n++) { ctx.fillStyle = Math.random() < 0.5 ? '#f542a8' : '#fff'; ctx.globalAlpha = 0.5; const a = rnd(s.a0, s.a1), r = rnd(30, R); ctx.fillRect(Math.cos(a) * r, Math.sin(a) * r, rnd(4, 14), 2); }
       if (i === wedgeFx && wedgeFxT < 1.4) { ctx.globalAlpha = (1 - wedgeFxT / 1.4) * (0.5 + 0.5 * Math.sin(wedgeFxT * 30)); ctx.fillStyle = '#fff'; ctx.fillRect(-R, -R, R * 2, R * 2); }
       ctx.restore(); ctx.globalAlpha = 1;
-      ctx.strokeStyle = '#07070a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(s.a0) * R, Math.sin(s.a0) * R); ctx.stroke();
+      ctx.strokeStyle = INK; ctx.lineWidth = 4.5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(s.a0) * R, Math.sin(s.a0) * R); ctx.stroke();
       // the prize itself, drawn near the rim, with its name running in toward the hub
       const mid = (s.a0 + s.a1) / 2, lv = def ? G.lv(def.id) : 0;
       const arc = (s.a1 - s.a0) * (R - 44), sz = Math.max(0.7, Math.min(1.5, arc / 44));
       ctx.save(); ctx.rotate(mid); ctx.textBaseline = 'middle';
       ctx.save(); ctx.translate(R - 44, 0); ctx.rotate(Math.PI / 2);
-      ctx.fillStyle = 'rgba(7,7,10,.55)'; ctx.beginPath(); ctx.arc(0, 0, 24 * sz, 0, TAU); ctx.fill();
-      ctx.scale(sz, sz); drawIcon(ctx, def ? def.id : w.type === 'gold' ? 'goldwedge' : w.type); ctx.restore();
+      stamp(iconSticker(def ? def.id : w.type === 'gold' ? 'goldwedge' : w.type), 0, 0, sz * 1.15); ctx.restore();
       const label = def ? def.name : w.type === 'gold' ? 'GOLDEN WEDGE' : w.type === 'dead' ? 'DEAD AIR' : 'TOASTER';
       font(14); const lw = ctx.measureText(label).width, room = R - 44 - 26 * sz - 40;
       if (lw > room) font(14 * room / lw);
@@ -1371,6 +1513,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     drawCallout(dt);
     if (flashA > 0) { ctx.globalAlpha = flashA; ctx.fillStyle = flashC; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
     drawGlitch();
+    ctx.setTransform(scale, 0, 0, scale, 0, 0); ctx.globalAlpha = 1;
+    if (crt) ctx.drawImage(crt, 0, 0, W, H);
   }
 
   $('mute').textContent = stats.sound ? 'SOUND ON' : 'SOUND OFF';
