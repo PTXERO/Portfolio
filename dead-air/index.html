@@ -122,8 +122,19 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 .shop .pips{display:block;font-family:var(--fmono);font-size:9px;letter-spacing:.2em;color:#ffd24a;margin:2px 0;}
 #resume{margin-bottom:8px;background:#ffd24a;border-color:#150f24;}
 #ovDump{background:#1a1238;justify-content:flex-start;}
-#dumpBox{height:150px;display:flex;align-items:center;justify-content:center;margin:2px 0 10px;}
-.crate{width:112px;height:104px;border:4px solid #150f24;border-radius:8px;box-shadow:6px 6px 0 #150f24;position:relative;
+#ovDump{padding-bottom:0;}
+#dumpList{width:100%;}
+.dumpbar{position:sticky;bottom:0;align-self:stretch;margin:14px -6% 0;padding:9px 5% calc(10px + env(safe-area-inset-bottom,0px));
+  background:#0d0a1c;border-top:3px solid #150f24;display:flex;align-items:center;gap:9px;text-align:left;min-height:64px;z-index:2;}
+.dumpbar img{width:44px;height:44px;flex:none;}
+#dumpInfo{flex:1;min-width:0;font-size:11px;line-height:1.4;color:#b9b9c6;}
+#dumpInfo b{display:block;font-family:var(--fdisp);font-weight:400;font-size:17px;letter-spacing:.06em;color:#fff;line-height:1.1;}
+.dumpbar button{flex:none;font-family:var(--fmono);font-size:10px;letter-spacing:.1em;padding:9px 10px;border:2px solid #150f24;border-radius:4px;
+  background:#241848;color:#d8d8e0;box-shadow:3px 3px 0 #150f24;cursor:pointer;}
+#dumpUse{background:#c8f542;color:#07070a;}
+.dgrid button.sel{border-color:#fff;}
+#dumpBox{height:118px;display:flex;align-items:center;justify-content:center;margin:2px 0 10px;}
+.crate{width:96px;height:88px;border:4px solid #150f24;border-radius:8px;box-shadow:6px 6px 0 #150f24;position:relative;
   background:repeating-linear-gradient(90deg,#b9783a 0 20px,#9a5f28 20px 24px);display:flex;align-items:center;justify-content:center;}
 .crate::before{content:'';position:absolute;left:-4px;right:-4px;top:38%;height:22%;background:#ffd24a;border-block:4px solid #150f24;}
 .crate span{position:relative;font-family:'Bungee',sans-serif;font-size:38px;color:#150f24;}
@@ -135,8 +146,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 .got .tier{font-family:var(--fmono);font-size:9px;letter-spacing:.2em;padding:2px 8px;border-radius:2px;color:#07070a;}
 .got b{display:block;font-family:var(--fdisp);font-weight:400;font-size:24px;letter-spacing:.06em;color:#fff;line-height:1.05;margin-top:4px;}
 .t-common{background:#b9b9c6}.t-rare{background:#42d4f5}.t-legendary{background:#ffd24a}
-.dsec{font-family:var(--fmono);font-size:9px;letter-spacing:.2em;color:#b9b9c6;text-align:left;margin:12px 0 5px;}
-.dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:6px;}
+.dsec{font-family:var(--fmono);font-size:9px;letter-spacing:.2em;color:#b9b9c6;text-align:left;margin:10px 0 4px;}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));gap:5px;}
 .dgrid button{aspect-ratio:1/1;border:2px solid #150f24;border-radius:6px;background:#241848;padding:2px;cursor:pointer;position:relative;}
 .dgrid button img{width:100%;height:100%;display:block;}
 .dgrid button.lock{background:#120c26;border-style:dashed;border-color:#3a2878;font-family:var(--fdisp);font-size:20px;color:#3a2878;cursor:default;}
@@ -216,9 +227,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         <div class="got" id="got" hidden></div>
       </div>
       <button class="big-btn" id="dumpOpen"></button>
-      <p class="sub" id="dumpInfo" style="min-height:2.6em;margin-top:10px"></p>
       <div id="dumpList"></div>
-      <button class="big-btn alt" id="dumpClose">BACK</button>
+      <div class="dumpbar">
+        <img alt="" id="dumpPic" hidden>
+        <div id="dumpInfo"></div>
+        <button id="dumpUse" hidden></button>
+        <button id="dumpClose">BACK</button>
+      </div>
     </div>
 
     <div class="ov" id="ovShop" hidden>
@@ -835,17 +850,25 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       }).join('') + '</div>';
     }).join('');
   }
+  let picked = null;
   function describe(u) {
-    const slot = equipSlot(u), on = slot && stats.equip[slot] === u.id;
-    $('dumpInfo').innerHTML = `<b style="color:#fff">${u.name}</b>${u.desc ? ' · ' + u.desc : ''}` + (slot ? `<br><span style="color:#c8f542">${on ? 'IN USE' : 'TAP AGAIN TO USE'}</span>` : '');
+    picked = u ? u.id : null;
+    const slot = u && equipSlot(u), on = slot && stats.equip[slot] === u.id;
+    $('dumpPic').hidden = !u; if (u) $('dumpPic').src = iconURL(uIcon(u));
+    $('dumpInfo').innerHTML = u ? `<b>${u.name}</b>${u.desc}` : 'TAP AN ITEM';
+    $('dumpUse').hidden = !slot; $('dumpUse').textContent = on ? 'REMOVE' : 'USE';
+    document.querySelectorAll('#dumpList [data-u]').forEach(el => el.classList.toggle('sel', el.dataset.u === picked));
   }
-  let lastTap = null;
   $('dumpList').addEventListener('click', e => {
     const b = e.target.closest('[data-u]'); if (!b) return;
-    const u = D.byId(D.UNLOCKS, b.dataset.u), slot = equipSlot(u);
-    if (slot && lastTap === u.id) { stats.equip[slot] = stats.equip[slot] === u.id ? null : u.id; save(); applyLooks(); live = true; sfx.chime(2); live = false; paintDump(); }
-    lastTap = u.id; describe(u);
+    describe(D.byId(D.UNLOCKS, b.dataset.u));
   });
+  $('dumpUse').onclick = () => {
+    const u = D.byId(D.UNLOCKS, picked), slot = u && equipSlot(u); if (!slot) return;
+    stats.equip[slot] = stats.equip[slot] === u.id ? null : u.id; save(); applyLooks();
+    live = true; sfx.chime(2); live = false;
+    paintDump(); describe(u);
+  };
   function openCrate() {
     const left = D.UNLOCKS.filter(u => !has(u.id)), price = cratePrice();
     if (dumpBusy || !left.length || (stats.money || 0) < price) return;
@@ -866,10 +889,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       $('got').hidden = false;
       live = true; if (u.tier === 'legendary') { sfx.fanfare(); sfx.cheer(true); } else if (u.tier === 'rare') sfx.fanfare(); else sfx.chime(3); live = false;
       for (let k = 0; k < (u.tier === 'common' ? 1 : 3); k++) confetti(rnd(120, 420), 260, 40, 60, 320);
-      dumpBusy = false; lastTap = u.id; describe(u); paintDump();
+      dumpBusy = false; paintDump(); describe(u);
     }, 720);
   }
-  $('dumpBtn').onclick = () => { lastGot = null; $('got').hidden = true; $('crate').hidden = false; $('dumpInfo').textContent = ''; paintDump(); $('ovDump').hidden = false; };
+  $('dumpBtn').onclick = () => { lastGot = null; $('got').hidden = true; $('crate').hidden = false; paintDump(); describe(null); $('ovDump').hidden = false; $('ovDump').scrollTop = 0; };
   $('dumpOpen').onclick = openCrate;
   $('dumpClose').onclick = () => { $('ovDump').hidden = true; paintTitle(); };
 
