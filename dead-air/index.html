@@ -120,6 +120,28 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 .shop .saving i{display:block;height:100%;background:#ffd24a;}
 .shop .pips{display:block;font-family:var(--fmono);font-size:9px;letter-spacing:.2em;color:#ffd24a;margin:2px 0;}
 #resume{margin-bottom:8px;background:#ffd24a;border-color:#150f24;}
+#ovDump{background:#1a1238;justify-content:flex-start;}
+#dumpBox{height:150px;display:flex;align-items:center;justify-content:center;margin:2px 0 10px;}
+.crate{width:112px;height:104px;border:4px solid #150f24;border-radius:8px;box-shadow:6px 6px 0 #150f24;position:relative;
+  background:repeating-linear-gradient(90deg,#b9783a 0 20px,#9a5f28 20px 24px);display:flex;align-items:center;justify-content:center;}
+.crate::before{content:'';position:absolute;left:-4px;right:-4px;top:38%;height:22%;background:#ffd24a;border-block:4px solid #150f24;}
+.crate span{position:relative;font-family:'Bungee',sans-serif;font-size:38px;color:#150f24;}
+.crate.shake{animation:crate .7s ease-in;}
+@keyframes crate{0%,100%{transform:rotate(0)}15%{transform:rotate(-7deg) scale(1.04)}30%{transform:rotate(7deg) scale(1.08)}45%{transform:rotate(-9deg) scale(1.12)}60%{transform:rotate(9deg) scale(1.16)}80%{transform:rotate(-4deg) scale(1.3)}}
+.got{text-align:center;animation:pop .35s ease-out;}
+@keyframes pop{0%{transform:scale(.3);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1)}}
+.got img{width:96px;height:96px;display:block;margin:0 auto;}
+.got .tier{font-family:var(--fmono);font-size:9px;letter-spacing:.2em;padding:2px 8px;border-radius:2px;color:#07070a;}
+.got b{display:block;font-family:var(--fdisp);font-weight:400;font-size:24px;letter-spacing:.06em;color:#fff;line-height:1.05;margin-top:4px;}
+.t-common{background:#b9b9c6}.t-rare{background:#42d4f5}.t-legendary{background:#ffd24a}
+.dsec{font-family:var(--fmono);font-size:9px;letter-spacing:.2em;color:#b9b9c6;text-align:left;margin:12px 0 5px;}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:6px;}
+.dgrid button{aspect-ratio:1/1;border:2px solid #150f24;border-radius:6px;background:#241848;padding:2px;cursor:pointer;position:relative;}
+.dgrid button img{width:100%;height:100%;display:block;}
+.dgrid button.lock{background:#120c26;border-style:dashed;border-color:#3a2878;font-family:var(--fdisp);font-size:20px;color:#3a2878;cursor:default;}
+.dgrid button.on{border-color:#c8f542;box-shadow:0 0 0 2px #c8f542;}
+.dgrid button.new::after{content:'NEW';position:absolute;top:-6px;right:-6px;font-family:var(--fmono);font-size:7px;letter-spacing:.1em;background:#e8203a;color:#fff;border-radius:2px;padding:1px 3px;}
+@media(prefers-reduced-motion:reduce){.crate.shake,.got{animation-duration:.01s}}
 #ovShop,#ovKit{background:#1a1238;justify-content:flex-start;}
 .money{font-family:var(--fdisp);font-size:22px;letter-spacing:.06em;color:#ffd24a;margin:10px 0 0;}
 .money small{font-family:var(--fmono);font-size:9px;letter-spacing:.14em;color:#8a8aa0;display:block;}
@@ -157,6 +179,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       <button class="big-btn" id="resume" hidden></button>
       <button class="big-btn" id="start">GO ON AIR</button>
       <button class="big-btn alt" id="shopBtn">DRESSING ROOM</button>
+      <button class="big-btn alt" id="dumpBtn">MONEY DUMP</button>
       <button class="hdr-btn" id="modeBtn" style="margin-top:10px"></button>
       <p class="how">Whatever the light stops on goes in the pot: <b>cash</b> × <i>hype</i>. Every prize you take burns out into <u>dead air</u> and the light gets faster, so <b>BANK</b> before your luck, or the clock, runs out. Clear an episode to load your prize wheel and spin it: every gimmick joins the set and they all stack. Then pick tomorrow's show. No two seasons play the same.</p>
       <div class="money" id="money"></div>
@@ -186,6 +209,19 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 
     <div class="ov" id="ovEnd" hidden></div>
 
+    <div class="ov" id="ovDump" hidden>
+      <h1>MONEY DUMP</h1>
+      <p class="sub" id="dumpSub"></p>
+      <div id="dumpBox">
+        <div class="crate" id="crate"><span>?</span></div>
+        <div class="got" id="got" hidden></div>
+      </div>
+      <button class="big-btn" id="dumpOpen"></button>
+      <p class="sub" id="dumpInfo" style="min-height:2.6em;margin-top:10px"></p>
+      <div id="dumpList"></div>
+      <button class="big-btn alt" id="dumpClose">BACK</button>
+    </div>
+
     <div class="ov" id="ovShop" hidden>
       <h1>DRESSING ROOM</h1>
       <p class="sub" id="shopSub"></p>
@@ -213,7 +249,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   const fx1 = n => (Math.round(n * 10) / 10).toString();
   const rnd = (a, b) => a + Math.random() * (b - a);
   const TAU = Math.PI * 2;
-  const C = { cash: '#f5a542', gold: '#ffd24a', hype: '#42d4f5', dead: '#f542a8', jack: '#ff6bd6', spin: '#c8f542', lime: '#c8f542', box: '#9d8cff', bomb: '#ff5a3c', x2: '#ffffff', restock: '#d9a55a', car: '#ff5a7a', jp: '#ffd24a' };
+  const C = { cash: '#f5a542', gold: '#ffd24a', hype: '#42d4f5', dead: '#f542a8', jack: '#ff6bd6', spin: '#c8f542', lime: '#c8f542', box: '#9d8cff', bomb: '#ff5a3c', x2: '#ffffff', restock: '#d9a55a', car: '#ff5a7a', jp: '#ffd24a', clockp: '#7fe0ff', bleepp: '#7fe0ff', superstar: '#ffd24a', coin: '#ffd24a', broom: '#d9a55a' };
 
   // Where things are on the stage. The prize strip is a shallow arc.
   const PX = pos => 22 + pos * 41.33;
@@ -223,8 +259,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 
   // ── Saved stats ────────────────────────────────────────────────
   const KEY = 'deadair.stats';
-  let stats = { runs: 0, wins: 0, bestEp: 0, bestBank: 0, sound: true, who: 'rookie', money: 0, perks: {}, jackpot: 5000 };
+  let stats = { runs: 0, wins: 0, bestEp: 0, bestBank: 0, sound: true, who: 'rookie', money: 0, perks: {}, jackpot: 5000, unlocked: [], opened: 0, equip: {} };
   try { Object.assign(stats, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
+  const has = id => stats.unlocked.indexOf(id) >= 0;
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(stats)); } catch (e) {} };
 
   // ── Sound ──────────────────────────────────────────────────────
@@ -389,7 +426,20 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   let callout = null, tally = null, shownTotal = 0, pausedUI = false, slam = 0, deskBump = 0, ballFlash = 0;
   const cannonFx = [0, 0], droneGo = [];
   let shiftAnim = 0, slowFx = 0, coin = null, lastCombo = 0, lastTick = 0, waitBonus = false, rivalFx = 0;
-  const CONF = ['#c8f542', '#42d4f5', '#f542a8', '#f5a542', '#ffffff', '#ffd24a'];
+  let CONF = ['#c8f542', '#42d4f5', '#f542a8', '#f5a542', '#ffffff', '#ffd24a'];
+  // Wardrobe: what the set and the people are wearing. Defaults, overridden by whatever is equipped.
+  const LOOK0 = { wall: '#2a1c5c', ray: '#3a2880', floor: '#1d1444', curtain: '#d4244e', fold: '#9c1238', shirt: '#42d4f5', hair: '#6a3a1a', jacket: '#f542a8', buzzer: '#e8203a' };
+  const CONF0 = CONF.slice();
+  let LOOK = Object.assign({}, LOOK0);
+  function applyLooks() {
+    LOOK = Object.assign({}, LOOK0); CONF = CONF0.slice();
+    ['theme', 'outfit', 'host', 'buzzer', 'confetti'].forEach(slot => {
+      const l = D.byId(D.LOOKS, stats.equip[slot]); if (!l || !has(l.id)) return;
+      if (slot === 'confetti') CONF = l.colors.slice();
+      else if (slot === 'buzzer') LOOK.buzzer = l.color;
+      else Object.assign(LOOK, l);
+    });
+  }
 
   function spark(x, y, color, n, speed, life, size, grav) {
     for (let i = 0; i < n && parts.length < 800; i++) {
@@ -452,6 +502,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
           float(x, y - 22, '+$' + fmt(won), C.gold, 28); big('JACKPOT! $' + fmt(won), C.gold, 50); sfx.cheer(true); excite = 1.6;
           for (let k = 0; k < 4; k++) confetti(rnd(80, 460), 200, 40, 60, 300);
         }
+        else if (ev.kind === 'superstar') { float(x, y - 22, '+3 HYPE', C.gold, 24); big('SUPERSTAR!', C.gold); }
+        else if (ev.kind === 'clockp' || ev.kind === 'bleepp' || ev.kind === 'coin') { float(x, y - 22, ev.note, col, 20); sfx.perfect(); excite += 0.3; }
+        else if (ev.kind === 'broom') { float(x, y - 22, 'CLEAN SWEEP', col, 20); sfx.cheer(false); }
         else if (ev.kind === 'restock') { float(x, y - 22, 'RESTOCK!', C.restock, 22); sfx.cheer(false); excite += 0.3; }
         else if (ev.kind === 'box') {
           const what = { JACKPOT: '+' + ev.val, HYPE: '+2 HYPE', SPIN: '+1 SPIN', TOASTER: 'A TOASTER' }[ev.note];
@@ -460,6 +513,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         }
         else { float(x, y - 22, '+' + ev.val, col, ev.val >= 100 ? 24 : 17); sfx.win(); excite += ev.val >= 100 ? 0.2 : 0.06; }
         if (ev.doubled) float(x + 26, y - 44, '×2!', '#fff', 20);
+        if (ev.stays) { podFx[ev.i] = 0; float(x - 26, y - 44, 'STAYS!', '#42f5b0', 17); }
         if (ev.combo && time - lastCombo > 0.12) { lastCombo = time; float(DESK.x - 14, DESK.y - 22, '+0.5 HYPE', C.cash, 16); }
         if (ev.via !== 'main') rings.push({ x, y, r: 6, to: 30, life: 0.25, max: 0.25, color: VIA[ev.via] || '#fff', w: 3 });
         break;
@@ -472,6 +526,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         break;
       }
       case 'jump': sfx.tick(1200); break;
+      case 'echo': { const x = podX(ev.i), y = podY(ev.i) - 16; rings.push({ x, y, r: 8, to: 54, life: 0.4, max: 0.4, color: '#9d8cff', w: 5 }); rings.push({ x, y, r: 8, to: 80, life: 0.55, max: 0.55, color: '#9d8cff', w: 3 });
+        float(x, y - 30, 'ECHO ' + (ev.val ? '+' + ev.val : '+' + ev.gain + ' HYPE'), '#9d8cff', 19); flyers.push({ x0: x, y0: y, t: 0, dur: 0.42, color: '#9d8cff' }); sfx.win(); break; }
+      case 'fixed': { const x = podX(ev.i), y = podY(ev.i) - 16; podFx[ev.i] = 0; spark(x, y, '#d8d8e0', 12, 180, 0.5, 3); float(x, y - 26, 'FIXED!', '#d8d8e0', 17); sfx.tick(1500); break; }
+      case 'stays': podFx[ev.i] = 0; float(podX(ev.i), podY(ev.i) - 60, 'STAYS!', '#42f5b0', 18); break;
+      case 'shrink': staticBurst(podX(ev.i), podY(ev.i) - 16, 10); float(podX(ev.i), podY(ev.i) - 40, 'LIGHTS OUT', '#ff5a3c', 15); tone(160, 0.2, 'square', 0.04); break;
+      case 'shuffled': for (let i = 0; i < N; i++) podFx[i] = 0; sfx.tick(700); sfx.tick(900); break;
+      case 'note': float(DESK.x + 70, DESK.y - 30, ev.text, C.gold, 22); sfx.fanfare(); break;
       case 'rival': {
         const x = podX(ev.i), y = podY(ev.i) - 16;
         bolt(RIVAL.x - 10, RIVAL.y - 20, x, y, '#e8203a'); podFx[ev.i] = 0; rivalFx = 1;
@@ -522,7 +583,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       case 'bleep': {
         const x = podX(ev.i), y = podY(ev.i) - 16;
         rings.push({ x, y, r: 8, to: 60, life: 0.35, max: 0.35, color: '#7fe0ff', w: 6 });
-        staticBurst(x, y, 16); float(x, y - 26, 'BLEEP!', '#7fe0ff', 26); tone(1000, 0.3, 'sine', 0.09); shake = Math.max(shake, 4);
+        staticBurst(x, y, 16); float(x, y - 26, ev.lucky ? 'LUCKY!' : 'BLEEP!', ev.lucky ? '#ff6bd6' : '#7fe0ff', 26); tone(1000, 0.3, 'sine', 0.09); shake = Math.max(shake, 4);
         break;
       }
       case 'bust':
@@ -551,7 +612,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     if (!live) { if (G.phase === 'ask') G.answer(false); else if (G.phase !== 'sweep') startDemo(); return; }
     if (G.best > stats.bestBank) stats.bestBank = G.best;
     if (G.last && G.last.score > 0) {
-      const pay = Math.round(G.last.score * (1 + 0.2 * (stats.perks.agent || 0)));
+      const pay = Math.round(G.last.score * (1 + 0.2 * (stats.perks.agent || 0)) * (G.lv('charity') ? 1.5 : 1) * (G.ch('agent') ? 1.15 : 1));
       stats.money = (stats.money || 0) + pay; runMoney += pay;
     }
     save();
@@ -716,9 +777,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   }
   function newRun() {
     live = true; resetFx();
-    G = new D.Game(null, stats.who, stats.perks, stats.mode === D.PILOT ? D.PILOT : D.EPISODES);
+    G = new D.Game(null, stats.who, stats.perks, stats.mode === D.PILOT ? D.PILOT : D.EPISODES, { unlocked: stats.unlocked, charm: stats.equip.charm });
     stats.runs++; save(); runMoney = 0;
-    ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovShop', 'ovCard'].forEach(id => { $(id).hidden = true; });
+    ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovShop', 'ovCard', 'ovDump'].forEach(id => { $(id).hidden = true; });
     $('quit').hidden = false; $('kitBtn').hidden = false;
     // HEAD START: spin the wheel before the first episode.
     if (G.perk('head')) { G.spins = G.perk('head'); showLoad(); } else beginEpisode();
@@ -755,6 +816,65 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     paintShop();
   });
 
+  // ── Money Dump: pay for a crate, get one thing you do not own yet ──
+  const CATS = [['gimmick', 'GIMMICKS'], ['headliner', 'HEADLINERS'], ['format', 'SHOW FORMATS'], ['prize', 'STRIP PRIZES'], ['contestant', 'CONTESTANTS'], ['charm', 'LUCKY CHARMS · CARRY ONE'], ['look', 'WARDROBE']];
+  const uIcon = u => u.cat === 'contestant' ? 'who_' + u.id : u.cat === 'look' ? u.id : u.icon;
+  const cratePrice = () => Math.round(D.cratePrice(stats.opened || 0) * (stats.equip.charm === 'ch_coupon' && has('ch_coupon') ? 0.9 : 1));
+  let lastGot = null, dumpBusy = false;
+  function equipSlot(u) { return u.cat === 'charm' ? 'charm' : u.cat === 'look' ? u.look.slot : null; }
+  function paintDump() {
+    const left = D.UNLOCKS.filter(u => !has(u.id)).length, price = cratePrice();
+    $('dumpSub').innerHTML = `Prize money: <b style="color:#ffd24a">$${fmt(stats.money || 0)}</b> · ${100 - left} of 100 unlocked. Every crate holds something you do not own yet.`;
+    $('dumpOpen').textContent = left ? 'OPEN A CRATE · $' + fmt(price) : 'EVERYTHING UNLOCKED';
+    $('dumpOpen').disabled = !left || (stats.money || 0) < price || dumpBusy;
+    $('dumpOpen').style.filter = $('dumpOpen').disabled ? 'grayscale(1) brightness(.5)' : '';
+    $('dumpList').innerHTML = CATS.map(([cat, label]) => {
+      const items = D.UNLOCKS.filter(u => u.cat === cat);
+      return `<div class="dsec">${label} · ${items.filter(u => has(u.id)).length}/${items.length}</div><div class="dgrid">` + items.map(u => {
+        if (!has(u.id)) return '<button class="lock" disabled>?</button>';
+        const slot = equipSlot(u), on = slot && stats.equip[slot] === u.id;
+        return `<button data-u="${u.id}" class="${on ? 'on' : ''}${lastGot === u.id ? ' new' : ''}" title="${u.name}"><img alt="${u.name}" src="${iconURL(uIcon(u))}"></button>`;
+      }).join('') + '</div>';
+    }).join('');
+  }
+  function describe(u) {
+    const slot = equipSlot(u), on = slot && stats.equip[slot] === u.id;
+    $('dumpInfo').innerHTML = `<b style="color:#fff">${u.name}</b> · ${u.desc}` + (slot ? `<br><span style="color:#c8f542">${on ? 'In use. Tap it again to take it off.' : 'Tap it again to use it.'}</span>` : '');
+  }
+  let lastTap = null;
+  $('dumpList').addEventListener('click', e => {
+    const b = e.target.closest('[data-u]'); if (!b) return;
+    const u = D.byId(D.UNLOCKS, b.dataset.u), slot = equipSlot(u);
+    if (slot && lastTap === u.id) { stats.equip[slot] = stats.equip[slot] === u.id ? null : u.id; save(); applyLooks(); live = true; sfx.chime(2); live = false; paintDump(); }
+    lastTap = u.id; describe(u);
+  });
+  function openCrate() {
+    const left = D.UNLOCKS.filter(u => !has(u.id)), price = cratePrice();
+    if (dumpBusy || !left.length || (stats.money || 0) < price) return;
+    // Roll a tier first (commons most often), then anything still locked in it.
+    const tiers = { common: 60, rare: 30, legendary: 10 }, avail = Object.keys(tiers).filter(t => left.some(u => u.tier === t));
+    let r = Math.random() * avail.reduce((a, t) => a + tiers[t], 0), tier = avail[0];
+    for (const t of avail) { r -= tiers[t]; if (r < 0) { tier = t; break; } }
+    const pool = left.filter(u => u.tier === tier), u = pool[(Math.random() * pool.length) | 0];
+    stats.money -= price; stats.opened = (stats.opened || 0) + 1; stats.unlocked.push(u.id); save();
+    dumpBusy = true; lastGot = u.id;
+    $('got').hidden = true; $('crate').hidden = false;
+    $('crate').classList.remove('shake'); void $('crate').offsetWidth; $('crate').classList.add('shake');
+    live = true; for (let k = 0; k < 7; k++) sfx.tick(300 + k * 90); live = false;
+    paintDump();
+    setTimeout(() => {
+      $('crate').hidden = true;
+      $('got').innerHTML = `<img alt="" src="${iconURL(uIcon(u))}"><span class="tier t-${u.tier}">${u.tier.toUpperCase()}</span><b>${u.name}</b>`;
+      $('got').hidden = false;
+      live = true; if (u.tier === 'legendary') { sfx.fanfare(); sfx.cheer(true); } else if (u.tier === 'rare') sfx.fanfare(); else sfx.chime(3); live = false;
+      for (let k = 0; k < (u.tier === 'common' ? 1 : 3); k++) confetti(rnd(120, 420), 260, 40, 60, 320);
+      dumpBusy = false; lastTap = u.id; describe(u); paintDump();
+    }, 720);
+  }
+  $('dumpBtn').onclick = () => { lastGot = null; $('got').hidden = true; $('crate').hidden = false; $('dumpInfo').textContent = 'Tap anything you own to see what it does.'; paintDump(); $('ovDump').hidden = false; };
+  $('dumpOpen').onclick = openCrate;
+  $('dumpClose').onclick = () => { $('ovDump').hidden = true; paintTitle(); };
+
   function paintTitle() {
     const sv = savedRun();
     $('resume').hidden = !sv;
@@ -764,9 +884,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     $('money').innerHTML = stats.runs ? `$${fmt(stats.money || 0)}<small>PRIZE MONEY · JACKPOT STANDS AT $${fmt(stats.jackpot || 5000)}</small>` : '';
     $('stats').innerHTML = stats.runs
       ? `<div><b>${stats.runs}</b>RUNS</div><div><b>${stats.wins}</b>SEASONS WON</div><div><b>${stats.bestEp}</b>EPISODES CLEARED</div>${stats.bestTime ? `<div><b>${clockText(stats.bestTime)}</b>FASTEST SEASON</div>` : ''}<div><b>${fmt(stats.bestBank)}</b>BEST BANK</div>` : '';
-    const open = c => !c.ok || c.ok(stats);
+    const open = c => c.lock ? has(c.id) : !c.ok || c.ok(stats);
     if (!open(D.byId(D.CONTESTANTS, stats.who) || { ok: () => false })) stats.who = 'rookie';
-    $('who').innerHTML = D.CONTESTANTS.map(c => open(c)
+    $('who').innerHTML = D.CONTESTANTS.filter(c => !c.lock || has(c.id)).map(c => open(c)
       ? `<button data-who="${c.id}" class="${c.id === stats.who ? 'on' : ''}"><b>${c.name}</b><span>${c.desc}</span></button>`
       : `<button disabled><b>${c.name}</b><span>LOCKED · ${c.need}</span></button>`).join('');
   }
@@ -787,7 +907,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const o = savedRun(); if (!o) return;
     live = true; resetFx();
     G = D.Game.restore(o); runMoney = o.runMoney || 0;
-    ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovShop', 'ovCard'].forEach(id => { $(id).hidden = true; });
+    ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovShop', 'ovCard', 'ovDump'].forEach(id => { $(id).hidden = true; });
     $('quit').hidden = false; $('kitBtn').hidden = false;
     if (o.stage === 'wheel') showLoad(); else beginEpisode();
   }
@@ -844,14 +964,15 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 
   function drawBackdrop() {
     const ex = Math.min(1, excite);
-    ctx.fillStyle = '#2a1c5c'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = LOOK.wall; ctx.fillRect(0, 0, W, H);
     // the wall: a slow sunburst behind the prizes
     const cx = W / 2, cy = 330, rays = 28;
-    ctx.fillStyle = ex > 0.6 ? '#4a34a0' : '#3a2880';
+    ctx.fillStyle = LOOK.ray; ctx.globalAlpha = ex > 0.6 ? 1 : 0.8;
     for (let i = 0; i < rays; i += 2) {
       const a0 = i / rays * TAU + time * 0.06, a1 = a0 + TAU / rays;
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a0) * 800, cy + Math.sin(a0) * 800); ctx.lineTo(cx + Math.cos(a1) * 800, cy + Math.sin(a1) * 800); ctx.fill();
     }
+    ctx.globalAlpha = 1;
     drawGlow(cx, cy, 280, '#7a5ae0', 0.22 + ex * 0.3);
     // flat colour washes from the rig
     const cols = ['#42d4f5', '#f542a8', '#c8f542', '#f5a542'];
@@ -866,15 +987,15 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     // the stage floor, with boards running to the back
     inkSeq = 1000;
-    ink(() => { ctx.moveTo(-6, 470); ctx.quadraticCurveTo(W / 2, 400, W + 6, 470); ctx.lineTo(W + 6, 850); ctx.lineTo(-6, 850); ctx.closePath(); }, '#1d1444', 3.5);
+    ink(() => { ctx.moveTo(-6, 470); ctx.quadraticCurveTo(W / 2, 400, W + 6, 470); ctx.lineTo(W + 6, 850); ctx.lineTo(-6, 850); ctx.closePath(); }, LOOK.floor, 3.5);
     ctx.strokeStyle = 'rgba(21,15,36,.55)'; ctx.lineWidth = 2;
     for (let i = -6; i <= 6; i++) { ctx.beginPath(); ctx.moveTo(W / 2 + i * 30, 442); ctx.lineTo(W / 2 + i * 95, 850); ctx.stroke(); }
     drawGlow(W / 2, 640, 240, '#5a44b8', 0.22);
     // curtains either side
     for (const side of [0, 1]) {
       const x0 = side ? W - 30 : 0;
-      ink(() => { ctx.moveTo(x0 - 2, 112); ctx.lineTo(x0 + 32, 112); ctx.lineTo(x0 + 32, 806); for (let k = 0; k < 4; k++) ctx.quadraticCurveTo(x0 + 28 - k * 8, 822, x0 + 24 - k * 8, 806); ctx.lineTo(x0 - 2, 806); ctx.closePath(); }, '#d4244e', 3);
-      ctx.fillStyle = '#9c1238'; for (let k = 0; k < 3; k++) ctx.fillRect(x0 + 5 + k * 9, 124, 4, 680);
+      ink(() => { ctx.moveTo(x0 - 2, 112); ctx.lineTo(x0 + 32, 112); ctx.lineTo(x0 + 32, 806); for (let k = 0; k < 4; k++) ctx.quadraticCurveTo(x0 + 28 - k * 8, 822, x0 + 24 - k * 8, 806); ctx.lineTo(x0 - 2, 806); ctx.closePath(); }, LOOK.curtain, 3);
+      ctx.fillStyle = LOOK.fold; for (let k = 0; k < 3; k++) ctx.fillRect(x0 + 5 + k * 9, 124, 4, 680);
       ctx.strokeStyle = INK; ctx.lineWidth = 1.5; for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(x0 + 9 + k * 9, 124); ctx.lineTo(x0 + 9 + k * 9, 804); ctx.stroke(); }
       ink(() => ctx.roundRect(x0 - 2, 560, 34, 12, 4), '#ffd24a', 2.5);
     }
@@ -1001,6 +1122,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       for (let i = 0; i < 6; i++) { ctx.fillStyle = CONF[i]; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, 14, i * TAU / 6, (i + 1) * TAU / 6); ctx.fill(); }
       ctx.strokeStyle = '#07070a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 14, 0, TAU); ctx.stroke();
       ctx.fillStyle = '#07070a'; ctx.beginPath(); ctx.arc(0, 0, 3, 0, TAU); ctx.fill();
+    } else if (kind === 'clockp' || kind === 'bleepp' || kind === 'superstar' || kind === 'coin' || kind === 'broom') {   // Money Dump prizes share their icon art
+      ctx.scale(1.2, 1.2); drawIcon(ctx, 'p_' + kind);
     } else if (kind === 'car') {   // the showcase prize
       ctx.fillStyle = C.car; ctx.beginPath(); ctx.roundRect(-19, -2, 38, 13, 4); ctx.fill();
       ctx.beginPath(); ctx.moveTo(-11, -2); ctx.lineTo(-6, -13); ctx.lineTo(8, -13); ctx.lineTo(14, -2); ctx.closePath(); ctx.fill();
@@ -1230,16 +1353,16 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const bob = Math.sin(time * 8) * ex * 3, hy = y - 103 + bob;
     drawGlow(x, y - 70, 130, '#fff4c2', 0.2);
     const up = (1 - slam) * Math.min(1, 0.25 + excite);
-    limb(x - 22, y - 68 + bob, x - 43, y - 58 - up * 50, '#42d4f5', 9);
+    limb(x - 22, y - 68 + bob, x - 43, y - 58 - up * 50, LOOK.shirt, 9);
     ink(() => ctx.arc(x - 43, y - 60 - up * 50, 6.5, 0, TAU), '#ffd9b0', 2.4);
-    ink(() => ctx.roundRect(x - 26, y - 85 + bob, 52, 74, 15), '#42d4f5', 3);
+    ink(() => ctx.roundRect(x - 26, y - 85 + bob, 52, 74, 15), LOOK.shirt, 3);
     ink(() => { ctx.moveTo(x - 9, y - 85 + bob); ctx.lineTo(x, y - 70 + bob); ctx.lineTo(x + 9, y - 85 + bob); }, null, 2.2);
     ctx.fillStyle = '#fff'; ctx.fillRect(x - 19, y - 62 + bob, 15, 10); ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.strokeRect(x - 19, y - 62 + bob, 15, 10);
     ctx.fillStyle = '#e8203a'; ctx.fillRect(x - 17, y - 59 + bob, 11, 2);
     ink(() => ctx.arc(x, hy, 20, 0, TAU), '#ffd9b0', 3);
-    ink(() => { ctx.arc(x, hy - 3, 20.5, Math.PI * 1.02, Math.PI * 1.98); ctx.quadraticCurveTo(x + 8, hy - 14, x - 2, hy - 10); ctx.quadraticCurveTo(x - 14, hy - 6, x - 20.4, hy - 4); }, '#6a3a1a', 2.6);
+    ink(() => { ctx.arc(x, hy - 3, 20.5, Math.PI * 1.02, Math.PI * 1.98); ctx.quadraticCurveTo(x + 8, hy - 14, x - 2, hy - 10); ctx.quadraticCurveTo(x - 14, hy - 6, x - 20.4, hy - 4); }, LOOK.hair, 2.6);
     face(x, hy + 3, mood);
-    limb(x + 22, y - 68 + bob, x + 35, y - 44 - (1 - slam) * 22, '#42d4f5', 9);
+    limb(x + 22, y - 68 + bob, x + 35, y - 44 - (1 - slam) * 22, LOOK.shirt, 9);
     ink(() => ctx.arc(x + 35, y - 42 - (1 - slam) * 22, 6.5, 0, TAU), '#ffd9b0', 2.4);
     // cannons
     if (G.lv('cannon')) [0, 1].forEach(sd => {
@@ -1258,8 +1381,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     // buzzer
     const press = slam * 5;
     ink(() => ctx.roundRect(x + 18, y - 45, 34, 10, 3), '#5a5a7a', 2.4);
-    drawGlow(x + 35, y - 48, 26 + slam * 34, '#e8203a', 0.5 + slam * 0.5);
-    ink(() => { ctx.ellipse(x + 35, y - 45 + press, 14, 9.5 - press * 0.8, 0, Math.PI, TAU); ctx.closePath(); }, slam > 0.3 ? '#ff8090' : '#e8203a', 2.6);
+    drawGlow(x + 35, y - 48, 26 + slam * 34, LOOK.buzzer, 0.5 + slam * 0.5);
+    ink(() => { ctx.ellipse(x + 35, y - 45 + press, 14, 9.5 - press * 0.8, 0, Math.PI, TAU); ctx.closePath(); }, slam > 0.3 ? '#ffffff' : LOOK.buzzer, 2.6);
     // pot readout
     const pot = G.pot, sc = G.score();
     ctx.textBaseline = 'middle';
@@ -1306,11 +1429,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   // The host: pink jacket, big hair, bigger grin.
   function drawHost(x, y, arm, mood) {
     drawGlow(x, y + 30, 90, '#f5a542', 0.22);
-    limb(x - 19, y + 28, x - 27, y + 9, '#f542a8', 8);
+    limb(x - 19, y + 28, x - 27, y + 9, LOOK.jacket, 8);
     ink(() => ctx.roundRect(x - 31, y - 6, 9, 14, 4), '#d8d8e0', 2.2);                    // microphone
-    limb(x + 19, y + 28, x + 38 + arm * 6, y + 46 - arm * 76, '#f542a8', 8);
+    limb(x + 19, y + 28, x + 38 + arm * 6, y + 46 - arm * 76, LOOK.jacket, 8);
     ink(() => ctx.arc(x + 38 + arm * 6, y + 44 - arm * 76, 6, 0, TAU), '#ffd9b0', 2.4);
-    ink(() => ctx.roundRect(x - 22, y + 14, 44, 104, 13), '#f542a8', 3);
+    ink(() => ctx.roundRect(x - 22, y + 14, 44, 104, 13), LOOK.jacket, 3);
     ink(() => { ctx.moveTo(x - 9, y + 14); ctx.lineTo(x + 9, y + 14); ctx.lineTo(x, y + 44); ctx.closePath(); }, '#fff', 2.2);
     ink(() => { ctx.moveTo(x, y + 20); ctx.lineTo(x - 9, y + 15); ctx.lineTo(x - 9, y + 25); ctx.closePath(); ctx.moveTo(x, y + 20); ctx.lineTo(x + 9, y + 15); ctx.lineTo(x + 9, y + 25); ctx.closePath(); }, '#ffd24a', 2);
     ink(() => ctx.arc(x, y, 17, 0, TAU), '#ffd9b0', 3);
@@ -1465,7 +1588,86 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const line = (pts, st, w) => { c.strokeStyle = st; c.lineWidth = w; c.beginPath(); pts.forEach((q, k) => k ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1])); c.stroke(); };
     const box = (x, y, w, h, r, f) => { c.fillStyle = f; c.beginPath(); c.roundRect(x, y, w, h, r); c.fill(); };
     const word = (t, px, f, y) => { c.fillStyle = f; c.font = px + "px 'Bebas Neue','Arial Narrow',sans-serif"; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(t, 0, y); };
+    // Wardrobe pieces and contestants are drawn from their colours.
+    const look = D.byId(D.LOOKS, id);
+    if (look) {
+      if (look.slot === 'theme') { box(-18, -16, 36, 32, 3, look.wall); c.fillStyle = look.ray; for (let k = 0; k < 4; k++) { c.beginPath(); c.moveTo(0, -2); c.lineTo(-18 + k * 12, -16); c.lineTo(-12 + k * 12, -16); c.fill(); } c.fillStyle = look.floor; c.fillRect(-18, 6, 36, 10); c.fillStyle = look.curtain; c.fillRect(-18, -16, 7, 30); c.fillRect(11, -16, 7, 30); c.fillStyle = look.fold; c.fillRect(-15, -14, 2, 26); c.fillRect(14, -14, 2, 26); }
+      else if (look.slot === 'outfit') { box(-13, -1, 26, 19, 6, look.shirt); circ(0, -8, 9, '#ffd9b0'); c.fillStyle = look.hair; c.beginPath(); c.arc(0, -10, 9.5, Math.PI, 0); c.fill(); circ(-3, -7, 1.3, '#150f24'); circ(3, -7, 1.3, '#150f24'); }
+      else if (look.slot === 'host') { box(-14, -14, 28, 32, 7, look.jacket); poly([[-6, -14], [6, -14], [0, 4]], '#fff'); poly([[0, -10], [-6, -13], [-6, -7]], '#ffd24a'); poly([[0, -10], [6, -13], [6, -7]], '#ffd24a'); circ(-6, 8, 1.6, '#150f24'); circ(-6, 13, 1.6, '#150f24'); }
+      else if (look.slot === 'buzzer') { box(-17, 6, 34, 9, 3, '#5a5a7a'); c.fillStyle = look.color; c.beginPath(); c.ellipse(0, 6, 15, 17, 0, Math.PI, TAU); c.fill(); c.fillStyle = 'rgba(255,255,255,.5)'; c.beginPath(); c.ellipse(-5, -4, 4, 6, -0.5, 0, TAU); c.fill(); }
+      else { look.colors.forEach((col2, k) => { for (let n = 0; n < 3; n++) { c.save(); c.translate(-14 + ((k * 11 + n * 17) % 29), -14 + ((k * 7 + n * 13) % 28)); c.rotate(k + n); c.fillStyle = col2; c.fillRect(-4, -2, 8, 4); c.restore(); } }); }
+      return;
+    }
+    if (id.indexOf('who_') === 0) {
+      const tones = { weather: ['#42d4f5', '#fff36b'], shopping: ['#ffd24a', '#b81430'], childstar: ['#ff6bd6', '#5a3418'], quizchamp: ['#5fe08a', '#150f24'], magician: ['#2a2a3a', '#8a2ad4'], guard: ['#3a56b0', '#150f24'] }[id.slice(4)] || ['#42d4f5', '#5a3418'];
+      box(-14, 0, 28, 18, 6, tones[0]); circ(0, -7, 10, '#ffd9b0'); c.fillStyle = tones[1]; c.beginPath(); c.arc(0, -9, 10.5, Math.PI, 0); c.fill();
+      if (id === 'who_magician') { box(-9, -22, 18, 11, 1, '#150f24'); c.fillStyle = '#150f24'; c.fillRect(-13, -12, 26, 3); }
+      if (id === 'who_guard') { box(-10, -17, 20, 6, 2, '#150f24'); c.fillStyle = '#ffd24a'; c.fillRect(-2, -16, 4, 4); }
+      circ(-3.5, -6, 1.4, '#150f24'); circ(3.5, -6, 1.4, '#150f24'); line([[-3, -1], [0, 0], [3, -1]], '#150f24', 1.5);
+      return;
+    }
     switch (id) {
+      // ── Money Dump gimmicks ──
+      case 'echo':      for (let k = 1; k <= 3; k++) { c.strokeStyle = col; c.lineWidth = 3; c.globalAlpha = 1 - k * 0.22; c.beginPath(); c.arc(-10, 0, k * 8, -0.9, 0.9); c.stroke(); } c.globalAlpha = 1; circ(-10, 0, 4, '#fff'); break;
+      case 'tipline':   c.save(); c.rotate(-0.6); box(-17, -5, 34, 10, 5, col); box(-18, -9, 11, 18, 4, col); box(7, -9, 11, 18, 4, col); c.restore(); word('$', 15, '#0a3a1a', 1); break;
+      case 'opener':    box(-16, -6, 32, 22, 3, '#2a2a3a'); for (let k = 0; k < 4; k++) poly([[-16 + k * 8, -7], [-12 + k * 8, -7], [-8 + k * 8, -15], [-12 + k * 8, -15]], k % 2 ? '#2a2a3a' : '#fff'); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.strokeRect(-16, -15, 32, 8); word('1', 15, col, 6); break;
+      case 'closer':    line([[-12, -17], [-12, 18]], '#8a8aa0', 3); for (let r = 0; r < 3; r++) for (let k = 0; k < 4; k++) { c.fillStyle = (r + k) % 2 ? '#150f24' : '#fff'; c.fillRect(-10 + k * 7, -16 + r * 6, 7, 6); } break;
+      case 'residual':  [[12, '#a07a12'], [6, col], [0, '#a07a12'], [-6, col]].forEach(([yy, f]) => { c.fillStyle = f; c.beginPath(); c.ellipse(-3, yy, 12, 5, 0, 0, TAU); c.fill(); }); line([[12, 8], [12, -12]], '#fff', 2.5); poly([[7, -9], [17, -9], [12, -17]], '#fff'); break;
+      case 'edges':     poly([[-18, -16], [-6, -16], [-10, 16], [-18, 16]], col); poly([[18, -16], [6, -16], [10, 16], [18, 16]], col); poly([[-3, -4], [-3, 4], [-8, 0]], '#fff'); poly([[3, -4], [3, 4], [8, 0]], '#fff'); break;
+      case 'center':    circ(0, 2, 15, 'rgba(255,244,194,.45)'); circ(0, 2, 9, col); c.fillStyle = '#ffd24a'; c.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 3 : 7, a = -Math.PI / 2 + k * Math.PI / 5; c.lineTo(Math.cos(a) * r, 2 + Math.sin(a) * r); } c.fill(); poly([[-3, -18], [3, -18], [0, -11]], '#fff'); break;
+      case 'recycle':   c.strokeStyle = col; c.lineWidth = 4; c.beginPath(); c.arc(0, 0, 12, -2.6, 0.1); c.stroke(); c.beginPath(); c.arc(0, 0, 12, 0.55, 3.25); c.stroke(); poly([[7, -2], [17, -2], [12, 7]], col); poly([[-7, 2], [-17, 2], [-12, -7]], col); box(-5, -4, 10, 8, 2, '#f5a542'); break;
+      case 'sparks':    line([[-12, 16], [2, -2]], '#8a8aa0', 2.5); for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; line([[4 + Math.cos(a) * 4, -4 + Math.sin(a) * 4], [4 + Math.cos(a) * 12, -4 + Math.sin(a) * 12]], k % 2 ? '#fff' : col, 2.2); } circ(4, -4, 3.5, '#fff'); break;
+      case 'stoppage':  box(-4, -19, 8, 6, 2, '#8a8aa0'); circ(0, 2, 15, '#150f24'); circ(0, 2, 12.5, '#fff8e0'); line([[0, 2], [0, -7]], '#150f24', 2.2); c.fillStyle = col; c.fillRect(7, 6, 11, 4); c.fillRect(10.5, 2.5, 4, 11); break;
+      case 'antenna':   line([[0, 2], [-12, -17]], col, 2.5); line([[0, 2], [12, -17]], col, 2.5); circ(-12, -17, 3, '#fff'); circ(12, -17, 3, '#fff'); box(-10, 2, 20, 13, 3, '#3a3a52'); c.fillStyle = '#42d4f5'; c.fillRect(-7, 5, 14, 7); break;
+      case 'lucky':     c.fillStyle = col; c.beginPath(); c.moveTo(-6, -17); c.lineTo(6, -17); c.lineTo(6, 4); c.quadraticCurveTo(17, 6, 17, 13); c.lineTo(17, 16); c.lineTo(-6, 16); c.closePath(); c.fill(); c.fillStyle = '#fff'; c.fillRect(-6, -17, 12, 5); c.fillRect(-6, -6, 12, 3); break;
+      case 'ovation':   [[-10, 6], [10, 6], [0, 0]].forEach(([x, y], k) => { const f = k === 2 ? col : '#b8782a'; circ(x, y - 5, 5, f); box(x - 6, y + 1, 12, 15, 4, f); line([[x - 5, y + 4], [x - 9, y - 9]], f, 3); line([[x + 5, y + 4], [x + 9, y - 9]], f, 3); }); poly([[-3, -11], [3, -11], [0, -19]], '#fff'); break;
+      case 'thrift':    poly([[-16, 0], [-4, -13], [16, -13], [16, 13], [-4, 13]], col); circ(-7, 0, 2.6, '#150f24'); word('$10', 13, '#150f24', 1); break;
+      case 'rainy':     c.fillStyle = col; c.beginPath(); c.arc(0, -2, 17, Math.PI, 0); c.closePath(); c.fill(); line([[0, -2], [0, 14]], '#8a8aa0', 2.5); c.strokeStyle = '#8a8aa0'; c.lineWidth = 2.5; c.beginPath(); c.arc(-4, 14, 4, 0, Math.PI); c.stroke(); [[-9, 0], [9, 0]].forEach(q => line([q, [q[0], -8]], '#fff', 1.2)); break;
+      // ── Money Dump headliners ──
+      case 'allin':     [[13, '#e8203a'], [8, '#fff'], [3, '#e8203a'], [-2, '#fff'], [-7, '#e8203a']].forEach(([yy, f]) => { c.fillStyle = f; c.beginPath(); c.ellipse(-4, yy, 11, 4.5, 0, 0, TAU); c.fill(); c.strokeStyle = '#150f24'; c.lineWidth = 1; c.stroke(); }); line([[10, 10], [10, -10]], '#ffd24a', 3); poly([[5, -8], [15, -8], [10, -17]], '#ffd24a'); break;
+      case 'slowburn':  box(-6, -4, 12, 20, 2, '#fff8e0'); line([[0, -4], [0, -8]], '#150f24', 1.5); poly([[0, -19], [5, -10], [0, -6], [-5, -10]], col); poly([[0, -14], [2, -10], [0, -8], [-2, -10]], '#fff36b'); box(-10, 14, 20, 4, 2, '#8a8aa0'); break;
+      case 'bogo':      box(-17, -2, 16, 16, 2, col); box(1, -8, 16, 22, 2, '#42d4f5'); c.fillStyle = '#e8203a'; c.fillRect(-11, -2, 4, 16); c.fillRect(7, -8, 4, 22); c.fillRect(-17, 4, 16, 3); c.fillRect(1, 1, 16, 3); break;
+      case 'lastlaugh': circ(0, 0, 16, col); circ(-6, -5, 2.2, '#150f24'); circ(6, -5, 2.2, '#150f24'); c.fillStyle = '#150f24'; c.beginPath(); c.arc(0, 2, 9, 0, Math.PI); c.closePath(); c.fill(); c.fillStyle = '#ff6b8a'; c.beginPath(); c.arc(0, 8, 4, Math.PI, 0); c.fill(); break;
+      case 'charity':   c.fillStyle = col; c.beginPath(); c.moveTo(0, 16); c.bezierCurveTo(-24, 0, -15, -19, 0, -7); c.bezierCurveTo(15, -19, 24, 0, 0, 16); c.fill(); word('$', 15, '#0a3a1a', 2); break;
+      case 'greenlight':box(-8, -18, 16, 36, 5, '#2a2a3a'); circ(0, -10, 4.5, '#5a1420'); circ(0, 0, 4.5, '#5a4a10'); circ(0, 10, 5.5, col); circ(0, 10, 2.5, '#fff'); break;
+      case 'auction':   c.save(); c.rotate(-0.7); box(-9, -14, 18, 11, 2, '#8a5a22'); box(-2, -3, 4, 22, 1, '#b98a4a'); c.restore(); box(-16, 12, 22, 5, 2, col); break;
+      case 'understudy':circ(7, -4, 9, 'rgba(157,140,255,.45)'); box(-3, 5, 20, 12, 5, 'rgba(157,140,255,.45)'); circ(-5, -5, 9, '#ffd9b0'); box(-15, 4, 20, 13, 5, col); c.fillStyle = '#150f24'; c.beginPath(); c.arc(-5, -7, 9.5, Math.PI, 0); c.fill(); break;
+      case 'telethon':  box(-15, 2, 30, 14, 4, col); circ(0, 9, 5, '#150f24'); circ(0, 9, 2, '#fff'); c.strokeStyle = '#150f24'; c.lineWidth = 6; c.beginPath(); c.arc(0, 0, 14, Math.PI * 1.1, Math.PI * 1.9); c.stroke(); circ(-13, -3, 4.5, '#150f24'); circ(13, -3, 4.5, '#150f24'); break;
+      case 'vip':       box(-16, -12, 5, 28, 2, '#ffd24a'); box(11, -12, 5, 28, 2, '#ffd24a'); circ(-13.5, -13, 4, '#ffd24a'); circ(13.5, -13, 4, '#ffd24a'); c.strokeStyle = col; c.lineWidth = 5; c.beginPath(); c.moveTo(-13, -6); c.quadraticCurveTo(0, 12, 13, -6); c.stroke(); break;
+      // ── Money Dump formats ──
+      case 'f_reflect': poly([[-3, -14], [-3, 14], [-17, 14]], '#42d4f5'); poly([[3, -14], [3, 14], [17, 14]], '#d8d8e0'); line([[0, -18], [0, 18]], '#fff', 1.5); break;
+      case 'f_shrink':  box(-6, -10, 12, 20, 2, '#ff5a3c'); line([[-18, 0], [-10, 0]], '#fff', 3); poly([[-11, -5], [-11, 5], [-6, 0]], '#fff'); line([[18, 0], [10, 0]], '#fff', 3); poly([[11, -5], [11, 5], [6, 0]], '#fff'); break;
+      case 'f_shuffle': c.strokeStyle = '#c8f542'; c.lineWidth = 3.5; c.beginPath(); c.moveTo(-16, -8); c.bezierCurveTo(-2, -8, 2, 8, 12, 8); c.stroke(); c.strokeStyle = '#fff'; c.beginPath(); c.moveTo(-16, 8); c.bezierCurveTo(-2, 8, 2, -8, 12, -8); c.stroke(); poly([[11, 3], [11, 13], [18, 8]], '#c8f542'); poly([[11, -13], [11, -3], [18, -8]], '#fff'); break;
+      case 'f_jitters': line([[-16, 8], [-8, -8], [0, 8], [8, -8], [14, 2]], '#ff6bd6', 3.5); poly([[10, 6], [18, 6], [15, -3]], '#ff6bd6'); break;
+      case 'f_cashonly':box(-17, -10, 34, 20, 3, '#5fe08a'); c.strokeStyle = '#0a3a1a'; c.lineWidth = 1.5; c.strokeRect(-14, -7, 28, 14); word('$', 17, '#0a3a1a', 1); break;
+      case 'f_onetake': box(-16, -6, 32, 22, 3, '#2a2a3a'); for (let k = 0; k < 4; k++) poly([[-16 + k * 8, -7], [-12 + k * 8, -7], [-8 + k * 8, -15], [-12 + k * 8, -15]], k % 2 ? '#2a2a3a' : '#fff'); word('40', 15, '#7fe0ff', 6); break;
+      // ── Money Dump strip prizes (also drawn on the podiums) ──
+      case 'p_clockp':  box(-4, -19, 8, 6, 2, '#8a8aa0'); circ(0, 2, 15, '#150f24'); circ(0, 2, 12.5, '#fff8e0'); c.fillStyle = '#42d4f5'; c.beginPath(); c.moveTo(0, 2); c.arc(0, 2, 12.5, -Math.PI / 2, 1.2); c.closePath(); c.fill(); word('+5', 12, '#150f24', 3); break;
+      case 'p_bleepp':  box(-17, -14, 34, 22, 6, '#e9fbff'); poly([[-8, 7], [-1, 7], [-10, 17]], '#e9fbff'); c.fillStyle = '#07070a'; c.fillRect(-12, -7, 16, 8); c.fillStyle = '#7fe0ff'; c.fillRect(7, -5, 8, 3); c.fillRect(9.5, -7.5, 3, 8); break;
+      case 'p_superstar': c.fillStyle = '#ffd24a'; c.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 8 : 19, a = -Math.PI / 2 + k * Math.PI / 5; c.lineTo(Math.cos(a) * r, Math.sin(a) * r); } c.fill(); circ(0, 0, 4.5, '#fff'); circ(14, -14, 2.5, '#fff'); circ(-15, 10, 2, '#fff'); break;
+      case 'p_coin':    circ(0, 0, 17, '#a07a12'); c.fillStyle = '#ffd24a'; c.beginPath(); c.arc(0, 0, 14, Math.PI / 2, -Math.PI / 2); c.fill(); c.fillStyle = '#d8d8e0'; c.beginPath(); c.arc(0, 0, 14, -Math.PI / 2, Math.PI / 2); c.fill(); word('H T', 11, '#150f24', 1); break;
+      case 'p_broom':   c.save(); c.rotate(0.5); box(-2, -20, 4, 24, 1, '#b98a4a'); poly([[-10, 4], [10, 4], [13, 18], [-13, 18]], '#ffd24a'); for (let k = -2; k <= 2; k++) line([[k * 4, 6], [k * 5, 17]], '#a07a12', 1.2); c.fillStyle = '#e8203a'; c.fillRect(-10, 2, 20, 3); c.restore(); break;
+      // ── Lucky charms ──
+      case 'ch_penny':   circ(0, 0, 16, '#8a4a1c'); circ(0, 0, 13, '#d9843a'); word('1', 18, '#5a2a0c', 1); break;
+      case 'ch_watch':   circ(0, 3, 14, '#a07a12'); circ(0, 3, 11, '#fff8e0'); line([[0, 3], [0, -4]], '#150f24', 2); line([[0, 3], [5, 6]], '#150f24', 2); box(-3, -16, 6, 6, 2, '#ffd24a'); line([[3, -15], [15, -17]], '#ffd24a', 2); break;
+      case 'ch_lozenge': c.save(); c.rotate(-0.5); box(-15, -7, 30, 14, 7, '#ff6b8a'); c.fillStyle = '#fff'; c.beginPath(); c.roundRect(0, -7, 15, 14, [0, 7, 7, 0]); c.fill(); c.restore(); break;
+      case 'ch_foot':    c.fillStyle = '#f4f4ff'; c.beginPath(); c.ellipse(0, 4, 9, 14, 0, 0, TAU); c.fill(); box(-7, -17, 14, 9, 3, '#ffd24a'); line([[-4, 12], [-4, 16]], '#b9b9c6', 1.5); line([[0, 13], [0, 17]], '#b9b9c6', 1.5); line([[4, 12], [4, 16]], '#b9b9c6', 1.5); break;
+      case 'ch_headshot':box(-14, -17, 28, 34, 2, '#fff'); c.fillStyle = '#42d4f5'; c.fillRect(-11, -14, 22, 22); circ(0, -6, 6, '#ffd9b0'); box(-8, 1, 16, 7, 3, '#f542a8'); line([[-8, 13], [-2, 11], [3, 14], [9, 11]], '#150f24', 1.4); break;
+      case 'ch_clover':  [[-6, -6], [6, -6], [-6, 6], [6, 6]].forEach(q => circ(q[0], q[1] - 2, 7, '#2a9a5a')); line([[0, 2], [5, 18]], '#2a9a5a', 2.5); circ(0, -2, 2.5, '#5fe08a'); break;
+      case 'ch_battery': box(-9, -13, 18, 30, 3, '#5fe08a'); box(-4, -18, 8, 5, 1, '#8a8aa0'); c.fillStyle = '#150f24'; c.fillRect(-9, -13, 18, 8); poly([[2, -2], [-5, 6], [0, 6], [-2, 13], [5, 4], [0, 4]], '#fff36b'); break;
+      case 'ch_agent':   c.save(); c.rotate(-0.15); box(-17, -11, 34, 22, 2, '#fff'); c.fillStyle = '#150f24'; c.fillRect(-13, -6, 16, 3); c.fillStyle = '#8a8aa0'; c.fillRect(-13, 1, 22, 2); c.fillRect(-13, 5, 14, 2); circ(11, -4, 3.5, '#ffd24a'); c.restore(); break;
+      case 'ch_sticky':  c.save(); c.rotate(0.1); box(-14, -14, 28, 28, 1, '#fff36b'); poly([[14, 14], [14, 4], [4, 14]], '#d9c83a'); c.fillStyle = '#8a7a1c'; c.fillRect(-10, -8, 20, 2); c.fillRect(-10, -2, 16, 2); c.fillRect(-10, 4, 10, 2); c.restore(); break;
+      case 'ch_plugs':   c.strokeStyle = '#42d4f5'; c.lineWidth = 2; c.beginPath(); c.moveTo(-9, 2); c.quadraticCurveTo(0, 20, 9, 2); c.stroke(); [[-9, -4], [9, -4]].forEach(q => { c.fillStyle = '#ff9a2e'; c.beginPath(); c.moveTo(q[0] - 5, q[1] + 8); c.lineTo(q[0] + 5, q[1] + 8); c.lineTo(q[0] + 3, q[1] - 10); c.lineTo(q[0] - 3, q[1] - 10); c.fill(); }); break;
+      case 'ch_script':  box(-10, -15, 24, 30, 1, '#b9b9c6'); box(-14, -12, 24, 30, 1, '#fff8e0'); c.fillStyle = '#150f24'; for (let k = 0; k < 5; k++) c.fillRect(-10, -7 + k * 5, k % 2 ? 12 : 16, 1.6); break;
+      case 'ch_coffee':  box(-13, -6, 22, 22, 4, '#fff'); c.strokeStyle = '#fff'; c.lineWidth = 3.5; c.beginPath(); c.arc(10, 5, 6, -1.2, 1.2); c.stroke(); c.fillStyle = '#5a3418'; c.fillRect(-10, -3, 16, 5); line([[-5, -11], [-3, -17]], '#b9b9c6', 2); line([[2, -11], [4, -17]], '#b9b9c6', 2); break;
+      case 'ch_tooth':   c.fillStyle = '#ffd24a'; c.beginPath(); c.moveTo(-12, -12); c.quadraticCurveTo(0, -18, 12, -12); c.quadraticCurveTo(15, 0, 8, 16); c.lineTo(3, 4); c.lineTo(-3, 4); c.lineTo(-8, 16); c.quadraticCurveTo(-15, 0, -12, -12); c.fill(); circ(-5, -7, 2.5, '#fff'); break;
+      case 'ch_mints':   box(-16, -11, 32, 22, 6, '#7fe0ff'); box(-13, -8, 26, 16, 4, '#e9fbff'); [[-6, -2], [3, -3], [-1, 4], [8, 3]].forEach(q => circ(q[0], q[1], 3, '#fff')); c.strokeStyle = '#42d4f5'; c.lineWidth = 1; [[-6, -2], [3, -3], [-1, 4], [8, 3]].forEach(q => { c.beginPath(); c.arc(q[0], q[1], 3, 0, TAU); c.stroke(); }); break;
+      case 'ch_coupon':  box(-17, -10, 34, 20, 2, '#f5a542'); circ(-17, 0, 4, '#150f24'); circ(17, 0, 4, '#150f24'); c.setLineDash([2, 2]); line([[5, -9], [5, 9]], '#150f24', 1.2); c.setLineDash([]); word('%', 15, '#150f24', 1); break;
+      case 'ch_cue':     box(-9, -15, 24, 17, 2, '#b9b9c6'); box(-13, -8, 24, 17, 2, '#fff'); c.fillStyle = '#150f24'; c.fillRect(-10, -4, 18, 2.5); c.fillRect(-10, 1, 12, 2.5); break;
+      case 'ch_pass':    line([[-8, -18], [0, -4], [8, -18]], '#e8203a', 2.5); box(-10, -5, 20, 23, 2, '#fff'); c.fillStyle = '#42d4f5'; c.fillRect(-7, -2, 14, 9); c.fillStyle = '#150f24'; c.fillRect(-7, 10, 14, 2); c.fillRect(-7, 14, 9, 2); break;
+      case 'ch_foil':    poly([[0, -18], [14, 14], [-14, 14]], '#d8d8e0'); poly([[0, -18], [4, 14], [-6, 14]], '#f4f4ff'); line([[-17, 14], [17, 14]], '#8a8aa0', 3); line([[-4, -2], [6, 2]], '#8a8aa0', 1); line([[-7, 6], [4, 9]], '#8a8aa0', 1); break;
+      case 'ch_tie':     poly([[-5, -18], [5, -18], [3, -11], [-3, -11]], '#e8203a'); poly([[-3, -11], [3, -11], [7, 10], [0, 18], [-7, 10]], '#e8203a'); line([[-4, -2], [4, -6]], '#ffd24a', 2); line([[-5, 6], [5, 2]], '#ffd24a', 2); break;
+      case 'ch_fanmail': box(-16, -10, 32, 22, 2, '#fff'); c.strokeStyle = '#b9b9c6'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(-16, -10); c.lineTo(0, 3); c.lineTo(16, -10); c.stroke(); c.fillStyle = '#e8203a'; c.beginPath(); c.moveTo(0, 12); c.bezierCurveTo(-10, 5, -6, -3, 0, 3); c.bezierCurveTo(6, -3, 10, 5, 0, 12); c.fill(); break;
       case 'twin':      // two spotlights
         poly([[-12, -12], [-4, -12], [2, 16], [-18, 16]], 'rgba(66,212,245,.55)'); poly([[4, -12], [12, -12], [18, 16], [-2, 16]], 'rgba(255,244,194,.6)');
         box(-13, -18, 10, 8, 2, '#3a3a52'); box(3, -18, 10, 8, 2, '#3a3a52'); c.fillStyle = col; c.fillRect(-12, -11, 8, 2.5); c.fillStyle = '#fff4c2'; c.fillRect(4, -11, 8, 2.5); break;
@@ -1691,7 +1893,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     }
     if (live && G.phase !== 'wheel') { const sl = $('slow'), can = G.phase === 'sweep' && G.slowLeft > 0 && !(G.slowT > 0); if (sl.disabled === can) sl.disabled = !can; const t = '×' + (G.slowLeft || 0) + ' · S'; if ($('slowSub').textContent !== t) $('slowSub').textContent = t; }
     if (wantBank && G.phase !== 'resolve') { wantBank = false; if (live && G.phase === 'sweep' && G.bank()) sfx.chime(2); }
-    if (live && G.phase !== 'wheel') { const b = $('bank'); const can = (G.phase === 'sweep' || G.phase === 'resolve') && G.buzzes > 0 && !wantBank; if (b.disabled === can) b.disabled = !can; const bz = $('buzz'), cb = G.phase === 'sweep' || !!tally; if (bz.disabled === cb) bz.disabled = !cb; }
+    if (live && G.phase !== 'wheel') { const b = $('bank'); const can = (G.phase === 'sweep' || G.phase === 'resolve') && G.buzzes > 0 && !wantBank && !G.lv('allin'); if (b.disabled === can) b.disabled = !can; const bz = $('buzz'), cb = G.phase === 'sweep' || !!tally; if (bz.disabled === cb) bz.disabled = !cb; }
     for (let i = 0; i < N; i++) podFx[i] = Math.min(1, podFx[i] + dt);
     for (const [id, f] of badgeFx) { if (f > 1.3) badgeFx.delete(id); else badgeFx.set(id, f + dt); }
     cannonFx[0] = Math.max(0, cannonFx[0] - dt * 5); cannonFx[1] = Math.max(0, cannonFx[1] - dt * 5);
@@ -1749,6 +1951,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   }
 
   $('mute').textContent = stats.sound ? 'SOUND ON' : 'SOUND OFF';
+  if (!Array.isArray(stats.unlocked)) stats.unlocked = [];
+  if (!stats.equip) stats.equip = {};
+  applyLooks();
   resize(); paintTitle(); startDemo();
   requestAnimationFrame(frame);
   window.__deadair = () => G;   // handy for poking at a run from the console
