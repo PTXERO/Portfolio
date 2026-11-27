@@ -639,7 +639,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     G.next();
     if (!live) { if (G.phase === 'ask') G.answer(false); else if (G.phase !== 'sweep') startDemo(); return; }
     if (G.best > stats.bestBank) stats.bestBank = G.best;
-    if (G.last && G.last.score > 0) {
+    if (G.last && G.last.score > 0 && !G.endless) {      // endless is for glory: no prize money
       const pay = Math.round(G.last.score * (1 + 0.2 * (stats.perks.agent || 0)) * (G.lv('charity') ? 1.5 : 1) * (G.ch('agent') ? 1.15 : 1));
       stats.money = (stats.money || 0) + pay; runMoney += pay;
     }
@@ -775,7 +775,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     $('ovEnd').innerHTML = won
       ? `<h1>SEASON WRAPPED</h1>
          <div class="rows"><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>RUN TIME</span><b>${clockText(G.elapsed)}</b></div><div class="row"><span>PRIZE MONEY SO FAR</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
-         <button class="big-btn" id="endA">KEEP GOING (ENDLESS)</button><button class="big-btn alt" id="endB">TAKE THE WIN</button>`
+         <button class="big-btn" id="endA">ENDLESS · NO PRIZE MONEY</button><button class="big-btn alt" id="endB">TAKE THE WIN</button>`
       : `<h1 class="bad">CANCELLED</h1><p class="sub">EPISODE ${G.ep} · ${fmt(G.total)} / ${fmt(G.target(G.ep))}</p>
          <div class="rows"><div class="row"><span>EPISODES CLEARED</span><b>${G.ep - 1}</b></div><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>RUN TIME</span><b>${clockText(G.elapsed)}</b></div><div class="row"><span>PRIZE MONEY EARNED</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
          <button class="big-btn" id="endA">NEW RUN</button><button class="big-btn alt" id="endB">BACK TO TITLE</button>`;

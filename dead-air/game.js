@@ -337,7 +337,7 @@
     this.voteKind = this.special === 'vote' ? (this.rand() < 0.5 ? 'cash' : 'hype') : null;
     this.rareLeft = [];
     if (this.ep >= 2 && this.rand() < CAR_CHANCE * (this.lv('vip') ? 3 : 1)) this.rareLeft.push('car');
-    if (this.rand() < JACKPOT_CHANCE * (this.lv('vip') ? 5 : 1)) this.rareLeft.push('jp');
+    if (!this.endless && this.rand() < JACKPOT_CHANCE * (this.lv('vip') ? 5 : 1)) this.rareLeft.push('jp');
     this.rivalT = 3.4;
     this.specialsLeft = (this.ep >= 4 ? 1 : 0) + (this.ep >= 2 && this.rand() < 0.6 ? 1 : 0) + (this.ep >= 8 && this.rand() < 0.5 ? 1 : 0);
     const order = this.shuffle(this.strip.slice());
