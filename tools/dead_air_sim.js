@@ -29,7 +29,9 @@ function playRound(g) {
     const pool = safe.length ? safe : up;
     const best = pool[g.pick(pool.length)];
     if (dark >= 4) g.slowmo();
-    g.clock -= g.is('strobe') ? 0.5 + g.rand() * 2 : 0.6 + g.rand() * 0.9;      // time spent waiting for the light
+    const wait = g.is('strobe') ? 0.5 + g.rand() * 2 : 0.6 + g.rand() * 0.9;    // time spent waiting for the light
+    g.clock -= wait; g.storm(wait);
+    if (!g.isUp(best)) continue;                                               // interference took it first
     // Hidden prizes and a jumping light are harder to time: a wider error, and sometimes the wrong podium.
     const hard = g.is('mystery') ? 1.5 : g.is('conveyor') ? 1.25 : 1;
     let hit = best + 0.5 + gauss(g) * ERR * hard * g.speed();

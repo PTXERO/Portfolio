@@ -20,12 +20,12 @@
     { id: 'cannon', tag: 'CN', color: '#c8f542', max: 5, name: 'T-SHIRT CANNONS', d: l => `When you bank, the cannons shoot ${l} more prize${l > 1 ? 's' : ''} into the pot first.` },
     { id: 'crowd',  tag: 'CR', color: '#f5a542', max: 4, name: 'CROWD PLEASER',   d: l => `After every buzz the audience throws ${l} fresh prize${l > 1 ? 's' : ''} onto burnt-out podiums.` },
     { id: 'bleep',  tag: 'BL', color: '#7fe0ff', max: 4, name: 'BLEEP BUTTON',    d: l => `The first ${l > 1 ? l + ' dead air stops' : 'dead air stop'} each round ${l > 1 ? 'are' : 'is'} bleeped out.` },
-    { id: 'wide',   tag: 'WD', color: '#ffffff', max: 4, name: 'FOLLOW SPOT',     d: l => `The PERFECT zone is ${['', 'bigger', 'much bigger', 'huge', 'nearly the whole podium'][l]}. PERFECT stops pay double.` },
+    { id: 'wide',   tag: 'WD', color: '#ffffff', max: 4, name: 'FOLLOW SPOT',     d: l => `The PERFECT zone is ${['', 'bigger', 'much bigger', 'huge', 'nearly the whole podium'][Math.min(l, 4)]}. PERFECT stops pay double.` },
     { id: 'gold',   tag: 'AU', color: '#ffd24a', max: 4, name: 'GOLD RUSH',       d: l => `${l} gold prize${l > 1 ? 's' : ''} on every strip, worth five times as much.` },
     { id: 'budget', tag: '$$', color: '#5fe08a', max: 5, name: 'PRIZE BUDGET',    d: l => 'A bigger prize pool: every cash and gold prize is worth $' + (10 * l) + ' more.' },
     { id: 'jack',   tag: 'JK', color: '#ff6bd6', max: 4, name: 'DIAMOND PODIUM',  d: l => `Once a round, a diamond that multiplies the whole pot by ${1.5 + 0.5 * l}.` },
     { id: 'hypeman',tag: 'HY', color: '#42d4f5', max: 5, name: 'HYPE MAN',        d: l => `Hype prizes give +${1 + l} instead of +1.` },
-    { id: 'net',    tag: 'SN', color: '#42f5b0', max: 3, name: 'SAFETY NET',      d: l => `Dead air still banks ${25 * l}% of the pot.` },
+    { id: 'net',    tag: 'SN', color: '#42f5b0', max: 3, name: 'SAFETY NET',      d: l => `Dead air still banks ${Math.min(100, 25 * l)}% of the pot.` },
     { id: 'encore', tag: '+1', color: '#c8f542', max: 3, name: 'ENCORE',          d: l => `+${l} round${l > 1 ? 's' : ''} every episode.` },
     { id: 'clock',  tag: 'XT', color: '#ffd24a', max: 4, name: 'EXTENDED CUT',    d: l => `+${4 * l} seconds on the clock every round.` },
     { id: 'slowmo', tag: 'SL', color: '#7fe0ff', max: 3, name: 'DRAMATIC PAUSE',  d: l => `+${l} slow-mo use${l > 1 ? 's' : ''} every round.` },
@@ -71,6 +71,17 @@
     { id: 'diva',   name: 'THE DIVA',    desc: 'Starts with ENCORE and CROWD PLEASER.', start: ['encore', 'crowd'], need: 'Win a season', ok: st => st.wins >= 1 },
   ];
 
+  // Dressing room: permanent upgrades bought with prize money. cost(l) = price of level l + 1.
+  const PERKS = [
+    { id: 'head',   icon: 'spin',    max: 3, name: 'HEAD START',         cost: l => [6000, 15000, 30000][l], d: l => `Start every season with ${l} spin${l > 1 ? 's' : ''} on the wheel.` },
+    { id: 'time',   icon: 'clock',   max: 5, name: 'LONGER SLOT',        cost: l => 3000 * (l + 1),          d: l => `+${l} second${l > 1 ? 's' : ''} on the clock every round.` },
+    { id: 'warm',   icon: 'hypeman', max: 4, name: 'WARM-UP ACT',        cost: l => 5000 * (l + 1),          d: l => `Every round starts with +${0.5 * l} hype.` },
+    { id: 'budget', icon: 'budget',  max: 5, name: 'BIGGER BUDGET',      cost: l => 2500 * (l + 1),          d: l => `Every cash and gold prize is worth $${5 * l} more.` },
+    { id: 'trim',   icon: 'trim',    max: 3, name: 'LOADED WHEEL',       cost: l => 8000 * (l + 1),          d: l => `Your wheel starts with ${l} fewer toaster${l > 1 ? 's' : ''}.` },
+    { id: 'censor', icon: 'bleep',   max: 2, name: 'CENSOR ON RETAINER', cost: l => [12000, 30000][l],       d: l => `${l} free bleep${l > 1 ? 's' : ''} every round.` },
+    { id: 'agent',  icon: 'gold',    max: 5, name: 'A BETTER AGENT',     cost: l => 4000 * (l + 1),          d: l => `+${20 * l}% prize money from everything you bank.` },
+  ];
+
   const byId = (list, id) => list.find(x => x.id === id);
 
   function mulberry(seed) {
@@ -84,7 +95,8 @@
     };
   }
 
-  function Game(seed, who) {
+  function Game(seed, who, perks) {
+    this.perks = perks || {};
     this.rand = seed == null ? Math.random : mulberry(seed);
     this.who = who || 'rookie';
     this.ep = 0; this.total = 0;
@@ -100,7 +112,7 @@
     // The wheel you start with: four gimmicks, three toasters and one dead air wedge.
     const pool = this.shuffle(GIMMICKS.filter(g => common(g) && !start.includes(g.id))).slice(0, 4 - start.length).map(g => g.id);
     this.wheel = start.concat(pool).map(id => ({ type: 'g', id, w: 1 }));
-    for (let i = 0; i < 3; i++) this.wheel.push({ type: 'junk', w: 1 });
+    for (let i = 0; i < 3 - (this.perks.trim || 0); i++) this.wheel.push({ type: 'junk', w: 1 });
     this.wheel.push({ type: 'dead', w: 1 });
     this.shuffle(this.wheel);
   }
@@ -112,6 +124,9 @@
     return a;
   };
   P.lv = function (id) { return this.levels[id] || 0; };
+  P.perk = function (id) { return this.perks[id] || 0; };
+  // In endless the level caps come off (headliners stay one-offs).
+  P.capOf = function (g) { return this.endless && !g.rare ? 99 : g.max; };
   P.emit = function (o) { if (this.events.length < 2000) this.events.push(o); };
   P.later = function (dt, fn) { this.q.push({ at: this.t + dt, fn }); };
   P.target = function (ep) {
@@ -119,6 +134,15 @@
     return Math.round(TARGETS[EPISODES - 1] * Math.pow(1.6, ep - EPISODES) / 100) * 100;
   };
   P.gain = function (id) { this.levels[id] = this.lv(id) + 1; };
+  // Interference: from episode 5 static strikes burn prizes off the strip, faster every episode.
+  P.stormEvery = function () { return this.ep < 5 ? Infinity : Math.max(0.9, 5.5 - 0.5 * (this.ep - 5)); };
+  P.storm = function (dt) {
+    this.stormT -= dt;
+    if (this.stormT > 0) return;
+    this.stormT = this.stormEvery();
+    const up = this.upList();
+    if (up.length > 1) { const i = up[this.pick(up.length)]; this.strip[i].state = 'burnt'; this.emit({ t: 'storm', i }); }
+  };
   P.is = function (id) { return !!this.format && this.format.id === id; };
   P.deadCount = function () {
     return Math.min(7, 1 + Math.ceil(this.ep / 2) + (this.is('goldnight') ? 1 : 0) + (this.is('censors') ? 2 : 0));
@@ -147,10 +171,11 @@
     for (let i = 0; i < this.deadCount(); i++) order[i].kind = 'dead';
     this.dress(order.slice(this.deadCount()));
     const tvs = this.strip.filter(q => q.kind === 'dead').length;
-    this.pot = { cash: 10 * this.toasters, hype: 1 + (this.is('high') ? 2 : 0) + (this.lv('static') ? tvs : 0), xm: 1, next2: false };
-    this.buzzes = 0; this.bleeps = this.lv('bleep') + (this.is('censors') ? 1 : 0);
+    this.pot = { cash: 10 * this.toasters, hype: 1 + 0.5 * this.perk('warm') + (this.is('high') ? 2 : 0) + (this.lv('static') ? tvs : 0), xm: 1, next2: false };
+    this.buzzes = 0; this.bleeps = this.lv('bleep') + this.perk('censor') + (this.is('censors') ? 1 : 0);
     this.slowLeft = 1 + this.lv('slowmo'); this.slowT = 0;
-    this.clockMax = ROUND_TIME + 4 * this.lv('clock'); this.clock = this.clockMax;
+    this.clockMax = ROUND_TIME + 4 * this.lv('clock') + this.perk('time'); this.clock = this.clockMax;
+    this.stormT = this.stormEvery();
     this.streak = 0; this.inBuzz = false;
     this.convT = 1.4; this.strobeT = 0.6;
     this.u = this.rand() * 2 * N;
@@ -177,7 +202,7 @@
   };
 
   // What a cash prize pays, including the PRIZE BUDGET top-up.
-  P.cashVal = function (p) { return (p.val + 10 * this.lv('budget')) * (this.is('turbo') ? 2 : 1); };
+  P.cashVal = function (p) { return (p.val + 10 * this.lv('budget') + 5 * this.perk('budget')) * (this.is('turbo') ? 2 : 1); };
   P.isUp = function (i) { const p = this.strip[i]; return !!p && p.state === 'up' && p.kind !== 'dead'; };
   P.upList = function () { const o = []; for (let i = 0; i < N; i++) if (this.isUp(i)) o.push(i); return o; };
   P.speed = function () {                                   // podiums per second
@@ -218,6 +243,7 @@
     }
     const slow = this.slowT > 0 ? 0.35 : 1;
     if (this.slowT > 0) this.slowT -= dt;
+    this.storm(dt * slow);
     if (this.is('strobe')) {
       // The light jumps from podium to podium instead of sweeping.
       this.strobeT -= dt * slow;
@@ -318,7 +344,7 @@
           this.later(0.9, () => { this.inBuzz = false; this.phase = 'sweep'; });
           return true;
         }
-        const kept = Math.floor(this.score() * 0.25 * this.lv('net'));
+        const kept = Math.floor(this.score() * Math.min(1, 0.25 * this.lv('net')));
         this.emit({ t: 'bust', i, kept });
         this.later(0.2, () => this.endRound(kept, true));
       }
@@ -393,6 +419,7 @@
   P.endRound = function (score, bust) {
     const pot = this.pot;
     this.total += score;
+    this.banked = (this.banked || 0) + score;
     if (score > this.best) this.best = score;
     this.roundsLeft--;
     this.last = { cash: pot.cash, hype: pot.hype, xm: pot.xm, score, bust };
@@ -419,7 +446,7 @@
   // After an episode: pick one of three things to bolt onto the wheel.
   P.openWheel = function () {
     if (this.phase === 'won') this.endless = true;
-    const gs = this.shuffle(GIMMICKS.filter(g => common(g) && this.lv(g.id) < g.max)).slice(0, 2);
+    const gs = this.shuffle(GIMMICKS.filter(g => common(g) && this.lv(g.id) < this.capOf(g))).slice(0, 2);
     // Now and then a headliner turns up in place of an ordinary wedge.
     const rares = this.shuffle(GIMMICKS.filter(g => g.rare && !this.lv(g.id) && !this.wheel.some(w => w.id === g.id)));
     if (rares.length && this.ep >= 2 && this.rand() < 0.45) gs[this.pick(gs.length)] = rares[0];
@@ -464,14 +491,14 @@
     const w = this.wheel[index], res = { index, type: w.type, got: [], frac: 0.15 + this.rand() * 0.7 };
     const give = id => {
       const g = byId(GIMMICKS, id);
-      if (this.lv(id) < g.max) { this.gain(id); res.got.push(g); return; }
+      if (this.lv(id) < this.capOf(g)) { this.gain(id); res.got.push(g); return; }
       // Already maxed: the wedge pays out some other gimmick instead.
-      const pool = GIMMICKS.filter(o => common(o) && this.lv(o.id) < o.max);
+      const pool = GIMMICKS.filter(o => common(o) && this.lv(o.id) < this.capOf(o));
       res.maxed = g;
       if (pool.length) { const o = pool[this.pick(pool.length)]; this.gain(o.id); res.got.push(o); }
     };
     if (w.type === 'g') give(w.id);
-    else if (w.type === 'gold') this.shuffle(GIMMICKS.filter(g => common(g) && this.lv(g.id) < g.max)).slice(0, 2).forEach(g => give(g.id));
+    else if (w.type === 'gold') this.shuffle(GIMMICKS.filter(g => common(g) && this.lv(g.id) < this.capOf(g))).slice(0, 2).forEach(g => give(g.id));
     else if (w.type === 'junk') this.toasters++;
     return res;
   };
@@ -490,7 +517,7 @@
     return true;
   };
 
-  const api = { Game, N, EPISODES, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, byId };
+  const api = { Game, N, EPISODES, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, byId };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DeadAir = api;
 })(typeof window !== 'undefined' ? window : globalThis);

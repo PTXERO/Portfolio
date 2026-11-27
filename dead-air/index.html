@@ -111,6 +111,15 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 .who button.on{border-color:#150f24;background:#3a2878;box-shadow:3px 3px 0 var(--acc);}
 .who button:disabled{border-style:dashed;border-color:#4a3a90;box-shadow:none;background:rgba(36,24,72,.6);}
 .onair{border:2px solid #150f24;box-shadow:3px 3px 0 #150f24;}
+.shop div{align-items:center;}
+.shop p{flex:1;}
+.shop button{flex:none;font-family:var(--fmono);font-size:10px;letter-spacing:.08em;padding:6px 8px;border:2px solid #150f24;border-radius:4px;
+  background:#ffd24a;color:#07070a;box-shadow:3px 3px 0 #150f24;cursor:pointer;min-width:74px;}
+.shop button:disabled{background:#3a2878;color:#8a8aa0;box-shadow:none;cursor:not-allowed;}
+.shop .pips{display:block;font-family:var(--fmono);font-size:9px;letter-spacing:.2em;color:#ffd24a;margin:2px 0;}
+#ovShop,#ovKit{background:#1a1238;justify-content:flex-start;}
+.money{font-family:var(--fdisp);font-size:22px;letter-spacing:.06em;color:#ffd24a;margin:10px 0 0;}
+.money small{font-family:var(--fmono);font-size:9px;letter-spacing:.14em;color:#8a8aa0;display:block;}
 </style>
 </head>
 <body>
@@ -143,7 +152,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       <p class="pitch">You're tonight's contestant. A spotlight sweeps the prizes. Hit the buzzer to stop it, and don't stop it on dead air.</p>
       <div class="who" id="who"></div>
       <button class="big-btn" id="start">GO ON AIR</button>
+      <button class="big-btn alt" id="shopBtn">DRESSING ROOM</button>
       <p class="how">Whatever the light stops on goes in the pot: <b>cash</b> × <i>hype</i>. Every prize you take burns out into <u>dead air</u> and the light gets faster, so <b>BANK</b> before your luck, or the clock, runs out. Clear an episode to load your prize wheel and spin it: every gimmick joins the set and they all stack. Then pick tomorrow's show. No two seasons play the same.</p>
+      <div class="money" id="money"></div>
       <div class="stats" id="stats"></div>
     </div>
 
@@ -160,6 +171,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     </div>
 
     <div class="ov" id="ovEnd" hidden></div>
+
+    <div class="ov" id="ovShop" hidden>
+      <h1>DRESSING ROOM</h1>
+      <p class="sub" id="shopSub"></p>
+      <div class="kit shop" id="shopList"></div>
+      <button class="big-btn" id="shopClose">BACK</button>
+    </div>
 
     <div class="ov" id="ovKit" hidden>
       <h1>YOUR GIMMICKS</h1>
@@ -191,7 +209,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 
   // ── Saved stats ────────────────────────────────────────────────
   const KEY = 'deadair.stats';
-  let stats = { runs: 0, wins: 0, bestEp: 0, bestBank: 0, sound: true, who: 'rookie' };
+  let stats = { runs: 0, wins: 0, bestEp: 0, bestBank: 0, sound: true, who: 'rookie', money: 0, perks: {} };
   try { Object.assign(stats, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(stats)); } catch (e) {} };
 
@@ -433,6 +451,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         break;
       }
       case 'jump': sfx.tick(1200); break;
+      case 'storm': {
+        const x = podX(ev.i), y = podY(ev.i) - 16;
+        bolt(x + rnd(-60, 60), 126, x, y, '#f542a8'); staticBurst(x, y, 14); podFx[ev.i] = 0;
+        float(x, y - 26, 'INTERFERENCE', C.dead, 15); glitch = Math.max(glitch, 0.18); shake = Math.max(shake, 3);
+        noise(0.18, 0.12, 2600, 0.5);
+        break;
+      }
       case 'timeup': shout("TIME'S UP!", '#ffd24a', 60, 1.2); sfx.buzz(); tone(880, 0.5, 'square', 0.06, 0, 220); shake = Math.max(shake, 6); break;
       case 'shift': shiftAnim = 1; sfx.tick(240); break;
       case 'slow': slowFx = 1; tone(500, 0.6, 'sine', 0.07, 0, 120); break;
@@ -488,7 +513,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   function afterTally() {
     G.next();
     if (!live) { if (G.phase !== 'sweep') startDemo(); return; }
-    if (G.best > stats.bestBank) { stats.bestBank = G.best; save(); }
+    if (G.best > stats.bestBank) stats.bestBank = G.best;
+    if (G.last && G.last.score > 0) {
+      const pay = Math.round(G.last.score * (1 + 0.2 * (stats.perks.agent || 0)));
+      stats.money = (stats.money || 0) + pay; runMoney += pay;
+    }
+    save();
     if (G.phase === 'cleared' || G.phase === 'won') {
       stats.bestEp = Math.max(stats.bestEp, G.ep);
       if (G.phase === 'won') stats.wins++;
@@ -591,10 +621,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const kit = Object.values(G.levels).reduce((a, b) => a + b, 0);
     $('ovEnd').innerHTML = won
       ? `<h1>SEASON WRAPPED</h1><p class="sub">Eight episodes and you're still on the air. Take the win, or keep the cameras rolling.</p>
-         <div class="rows"><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div></div>
+         <div class="rows"><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>PRIZE MONEY SO FAR</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
          <button class="big-btn" id="endA">KEEP GOING (ENDLESS)</button><button class="big-btn alt" id="endB">TAKE THE WIN</button>`
       : `<h1 class="bad">CANCELLED</h1><p class="sub">Episode ${G.ep} needed ${fmt(G.target(G.ep))}. You finished on ${fmt(G.total)}.</p>
-         <div class="rows"><div class="row"><span>EPISODES CLEARED</span><b>${G.ep - 1}</b></div><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div></div>
+         <div class="rows"><div class="row"><span>EPISODES CLEARED</span><b>${G.ep - 1}</b></div><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>PRIZE MONEY EARNED</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
          <button class="big-btn" id="endA">NEW RUN</button><button class="big-btn alt" id="endB">BACK TO TITLE</button>`;
     $('ovEnd').hidden = false; syncPads();
     $('endA').onclick = () => { $('ovEnd').hidden = true; won ? showLoad() : newRun(); };
@@ -609,17 +639,19 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     G.startEpisode();
     shownTotal = 0; tally = null;
     shout('EPISODE ' + G.ep, '#fff', 64, 1.1);
+    if (G.ep === 5) setTimeout(() => { if (G && live) shout('THE SIGNAL IS BREAKING UP', C.dead, 44, 1.6); }, 2700);
     const f = G.format; if (f.id !== 'classic') setTimeout(() => { if (G && G.format === f) shout(f.name, f.color, 56, 1.4); }, 1150);
     sfx.cheer(false); excite = 0.8;
     syncPads();
   }
   function newRun() {
     live = true; resetFx();
-    G = new D.Game(null, stats.who);
-    stats.runs++; save();
-    ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit', 'ovPick'].forEach(id => { $(id).hidden = true; });
+    G = new D.Game(null, stats.who, stats.perks);
+    stats.runs++; save(); runMoney = 0;
+    ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovShop'].forEach(id => { $(id).hidden = true; });
     $('quit').hidden = false; $('kitBtn').hidden = false;
-    beginEpisode();
+    // HEAD START: spin the wheel before the first episode.
+    if (G.perk('head')) { G.spins = G.perk('head'); showLoad(); } else beginEpisode();
   }
   function startDemo() {
     live = false; resetFx();
@@ -634,7 +666,27 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     paintTitle(); $('ovTitle').hidden = false;
     startDemo();
   }
+  function paintShop() {
+    $('shopSub').innerHTML = `Prize money: <b style="color:#ffd24a">$${fmt(stats.money || 0)}</b>. Everything you bank on air is paid in here, and what you buy lasts for every season.`;
+    $('shopList').innerHTML = D.PERKS.map(pk => {
+      const lv = stats.perks[pk.id] || 0, maxed = lv >= pk.max, cost = maxed ? 0 : pk.cost(lv);
+      return `<div style="--c:#ffd24a"><img alt="" src="${iconURL(pk.icon)}"><p><b>${pk.name}</b><span class="pips">${'●'.repeat(lv)}${'○'.repeat(pk.max - lv)}</span><span>${pk.d(Math.min(pk.max, lv + 1))}</span></p>
+        <button data-perk="${pk.id}" ${maxed || (stats.money || 0) < cost ? 'disabled' : ''}>${maxed ? 'MAXED' : '$' + fmt(cost)}</button></div>`;
+    }).join('');
+  }
+  $('shopBtn').onclick = () => { paintShop(); $('ovShop').hidden = false; };
+  $('shopClose').onclick = () => { $('ovShop').hidden = true; paintTitle(); };
+  $('shopList').addEventListener('click', e => {
+    const b = e.target.closest('[data-perk]'); if (!b || b.disabled) return;
+    const pk = D.byId(D.PERKS, b.dataset.perk), lv = stats.perks[pk.id] || 0;
+    if (lv >= pk.max || (stats.money || 0) < pk.cost(lv)) return;
+    stats.money -= pk.cost(lv); stats.perks[pk.id] = lv + 1; save();
+    live = true; sfx.fanfare(); live = false;
+    paintShop();
+  });
+
   function paintTitle() {
+    $('money').innerHTML = stats.runs ? `$${fmt(stats.money || 0)}<small>PRIZE MONEY</small>` : '';
     $('stats').innerHTML = stats.runs
       ? `<div><b>${stats.runs}</b>RUNS</div><div><b>${stats.wins}</b>SEASONS WON</div><div><b>${stats.bestEp}</b>EPISODES CLEARED</div><div><b>${fmt(stats.bestBank)}</b>BEST BANK</div>` : '';
     const open = c => !c.ok || c.ok(stats);
@@ -650,6 +702,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     if (tally) { tally.t = Math.max(tally.t, 9); return; }
     if (G.phase === 'sweep') G.buzz();
   }
+  let runMoney = 0;            // prize money earned this run
   let wantBank = false;       // BANK pressed while a buzz is still playing out: bank as soon as it settles
   function doBank() {
     if (!live || !G || pausedUI || tally) return;
@@ -756,7 +809,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const ew = ctx.measureText(String(G.ep)).width;
     font(13); text(G.ep > D.EPISODES ? 'ENDLESS' : '/ ' + D.EPISODES, 24 + ew, 44, '#8a8aa0');
     font(11, 'mono'); text('ROUNDS', W - 18, 18, '#8a8aa0', 'right');
-    for (let i = 0; i < G.rounds; i++) {
+    for (let i = 0; i < Math.min(6, G.rounds); i++) {
       const x = W - 28 - i * 20, used = i < G.rounds - G.roundsLeft, now = i === G.rounds - G.roundsLeft && G.phase !== 'tally';
       ctx.fillStyle = used ? '#2a2a3a' : '#42d4f5';
       if (now) drawGlow(x, 40, 14, '#42d4f5', 0.5 + 0.4 * Math.sin(time * 6));
@@ -990,7 +1043,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     }
     // drones
     for (let k = 0; k < G.lv('drone'); k++) {
-      const go = droneGo[k]; let x = 80 + k * 125 + Math.sin(time * 1.3 + k * 2) * 30, y = 268 + Math.cos(time * 1.7 + k) * 10;
+      const go = droneGo[k]; let x = 80 + (k % 4) * 125 + Math.sin(time * 1.3 + k * 2) * 30, y = 268 - ((k / 4) | 0) * 30 + Math.cos(time * 1.7 + k) * 10;
       if (go) { go.t += dt; const m = Math.sin(Math.min(1, go.t / 0.5) * Math.PI); x += (podX(go.i) - x) * m; y += (300 - y) * m; if (go.t > 0.5) droneGo[k] = null; }
       drawGlow(x, y, 18, '#9d8cff', 0.6);
       ctx.strokeStyle = '#9d8cff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - 12, y - 3); ctx.lineTo(x + 12, y - 3); ctx.stroke();
