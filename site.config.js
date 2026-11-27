@@ -90,6 +90,15 @@ const SITE = {
       url:    './reel-vault/',
       status: 'live',
     },
+    {
+      id:     'dead-air',
+      title:  'DEAD//AIR',
+      sub:    'v1.0',
+      desc:   'A small game-show roguelike. Flip panels, build the pot, bank it before you hit dead air. Sign sponsors between episodes and survive an eight-episode season.',
+      tags:   ['game', 'roguelike', 'push your luck'],
+      url:    './dead-air/',
+      status: 'live',
+    },
     // Project Template:
     // {
     //   id:     'my-project',

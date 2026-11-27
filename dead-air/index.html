@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEAD//AIR</title>
+<script src="../design-tokens.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap">
+<link rel="stylesheet" href="../shared.css">
+<style>
+body{-webkit-tap-highlight-color:transparent;}
+button{font:inherit;color:inherit;}
+[hidden]{display:none!important;}
+.da{max-width:540px;margin:0 auto;padding:14px 14px 70px;}
+.hdr-btn{font-family:var(--fmono);font-size:10px;letter-spacing:.12em;color:var(--dim);
+  background:none;border:1px solid var(--b2);border-radius:2px;padding:4px 9px;cursor:pointer;}
+.hdr-btn:hover{color:var(--acc);border-color:var(--acc);}
+.lbl{font-family:var(--fmono);font-size:10px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;}
+
+/* ── Title ─────────────────────────────────────────────── */
+.title{text-align:center;padding:34px 0 10px;}
+.onair{display:inline-block;font-family:var(--fmono);font-size:10px;letter-spacing:.3em;
+  color:var(--acc3);border:1px solid var(--acc3);border-radius:2px;padding:3px 10px;
+  animation:blink 1.6s steps(2) infinite;}
+@keyframes blink{50%{opacity:.35}}
+.logo{font-family:var(--fdisp);font-size:clamp(64px,22vw,112px);line-height:.95;letter-spacing:.06em;
+  color:var(--txt);margin:14px 0 6px;}
+.logo em{font-style:normal;color:var(--acc);}
+.pitch{font-size:12px;line-height:1.8;color:var(--dim);max-width:380px;margin:0 auto 22px;}
+.big-btn{display:block;width:100%;font-family:var(--fdisp);font-size:26px;letter-spacing:.14em;
+  padding:12px 10px 9px;border:1px solid var(--acc);border-radius:3px;cursor:pointer;
+  background:var(--acc);color:#07070a;transition:transform .08s,filter .15s;}
+.big-btn:hover{filter:brightness(1.1);}
+.big-btn:active{transform:translateY(2px);}
+.big-btn:disabled{background:none;color:var(--mut);border-color:var(--b2);cursor:not-allowed;filter:none;}
+.big-btn.alt{background:none;color:var(--acc);}
+.stats{display:flex;justify-content:center;gap:22px;margin:18px 0 26px;}
+.stats div{font-family:var(--fmono);font-size:10px;letter-spacing:.15em;color:var(--dim);}
+.stats b{display:block;font-family:var(--fdisp);font-size:26px;font-weight:400;color:var(--txt);letter-spacing:.06em;}
+.how{text-align:left;border:1px solid var(--border);border-radius:3px;background:var(--panel);padding:14px 16px;}
+.how li{list-style:none;font-size:12px;line-height:1.7;color:var(--txt);padding:5px 0 5px 22px;position:relative;}
+.how li::before{content:attr(data-n);position:absolute;left:0;font-family:var(--fmono);color:var(--acc);}
+.how .c{color:var(--acc4)}.how .h{color:var(--acc2)}.how .d{color:var(--acc3)}
+
+/* ── HUD ───────────────────────────────────────────────── */
+.hud{display:flex;align-items:flex-end;gap:10px;margin-bottom:8px;}
+.hud-ep{font-family:var(--fdisp);font-size:26px;letter-spacing:.1em;line-height:1;}
+.hud-ep small{font-size:15px;color:var(--dim);}
+.hud-money{margin-left:auto;font-family:var(--fdisp);font-size:26px;line-height:1;color:var(--acc4);letter-spacing:.06em;}
+.twist{font-family:var(--fmono);font-size:10px;letter-spacing:.1em;color:var(--acc3);
+  border:1px solid rgba(245,66,168,.4);background:rgba(245,66,168,.07);border-radius:2px;
+  padding:5px 8px;margin-bottom:8px;line-height:1.5;}
+.twist b{font-weight:400;letter-spacing:.2em;}
+.goal{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;}
+.goal-n{font-family:var(--fmono);font-size:13px;color:var(--txt);letter-spacing:.06em;}
+.goal-n span{color:var(--dim);}
+.bar{height:8px;background:var(--panel);border:1px solid var(--b2);border-radius:2px;overflow:hidden;position:relative;}
+.bar i{display:block;height:100%;background:var(--acc);width:0;transition:width .5s ease;}
+.bar u{position:absolute;top:0;bottom:0;background:rgba(200,245,66,.3);transition:left .5s ease,width .2s ease;}
+.segs{display:flex;gap:5px;align-items:center;}
+.segs s{width:16px;height:6px;border:1px solid var(--b2);border-radius:1px;text-decoration:none;}
+.segs s.left{background:var(--acc2);border-color:var(--acc2);}
+.segs s.now{background:var(--acc2);border-color:var(--acc2);animation:blink 1s steps(2) infinite;}
+
+/* ── Pot ───────────────────────────────────────────────── */
+.pot{display:flex;align-items:center;justify-content:center;gap:8px;margin:12px 0 4px;}
+.pot div{text-align:center;min-width:64px;}
+.pot b{display:block;font-family:var(--fdisp);font-weight:400;font-size:38px;line-height:1;letter-spacing:.04em;}
+.pot .op{min-width:0;font-family:var(--fdisp);font-size:24px;color:var(--dim);padding-top:12px;}
+.pot .cash b{color:var(--acc4)}.pot .hype b{color:var(--acc2)}.pot .sum b{color:var(--acc)}
+.bump{animation:bump .22s ease;}
+@keyframes bump{40%{transform:scale(1.25)}}
+.mults{min-height:20px;text-align:center;margin-bottom:6px;}
+.mults span{display:inline-block;font-family:var(--fmono);font-size:10px;letter-spacing:.1em;color:var(--acc);
+  border:1px solid rgba(200,245,66,.35);border-radius:2px;padding:1px 6px;margin:0 2px;}
+
+/* ── Board ─────────────────────────────────────────────── */
+.board-top{display:flex;justify-content:space-between;margin-bottom:5px;}
+.board-top .d{color:var(--acc3);}
+.board{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;position:relative;touch-action:manipulation;}
+.board.shake{animation:shake .4s;}
+@keyframes shake{20%{transform:translate(-6px,2px)}40%{transform:translate(5px,-3px)}60%{transform:translate(-4px,-2px)}80%{transform:translate(3px,2px)}}
+.tile{aspect-ratio:1/1;position:relative;border:1px solid var(--b2);border-radius:3px;cursor:pointer;
+  background:var(--panel);display:flex;flex-direction:column;align-items:center;justify-content:center;
+  user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;overflow:hidden;padding:0;
+  transition:border-color .12s,background .12s;}
+.tile.hid{background:
+  repeating-linear-gradient(135deg,transparent 0 6px,rgba(255,255,255,.025) 6px 12px),var(--panel);}
+.tile.hid:hover{border-color:var(--acc);}
+.tile.hid::after{content:'?';font-family:var(--fdisp);font-size:26px;color:var(--mut);}
+.tile.flag::after{content:'⚑';font-family:var(--fmono);color:var(--acc4);font-size:24px;}
+.tile.flag{border-color:var(--acc4);}
+.tile .n{font-family:var(--fdisp);font-size:clamp(26px,9vw,40px);line-height:1;}
+.tile .v{position:absolute;top:3px;left:0;right:0;text-align:center;font-family:var(--fmono);font-size:10px;letter-spacing:.04em;}
+.tile.open{background:var(--bg);cursor:default;}
+.tile.cash .v{color:var(--acc4)}
+.tile.hype{border-color:rgba(66,212,245,.5)}.tile.hype .v{color:var(--acc2)}
+.tile.x{border-color:rgba(200,245,66,.5)}.tile.x .v{color:var(--acc)}
+.n0{color:var(--mut)}.n1{color:var(--acc2)}.n2{color:var(--acc4)}.n3{color:var(--acc3)}
+.tile.dead{border-color:var(--acc3);cursor:default;background:
+  repeating-linear-gradient(0deg,rgba(245,66,168,.22) 0 2px,transparent 2px 5px),var(--bg);}
+.tile.dead .n{font-size:11px;font-family:var(--fmono);letter-spacing:.1em;color:var(--acc3);text-align:center;line-height:1.3;}
+.tile.known{border-style:dashed;}
+.tile.ghost{opacity:.42;}
+.tile.pop{animation:flip .2s ease;}
+@keyframes flip{0%{transform:scaleY(.1)}100%{transform:scaleY(1)}}
+.float{position:absolute;pointer-events:none;font-family:var(--fdisp);font-size:22px;letter-spacing:.05em;
+  transform:translate(-50%,-50%);animation:rise .8s ease-out forwards;z-index:5;white-space:nowrap;
+  text-shadow:0 0 6px #07070a,0 0 2px #07070a;}
+@keyframes rise{to{transform:translate(-50%,-190%);opacity:0}}
+.noise{position:fixed;inset:0;pointer-events:none;z-index:90;opacity:0;
+  background:repeating-linear-gradient(0deg,rgba(245,66,168,.16) 0 2px,transparent 2px 4px);}
+.noise.on{animation:noise .45s steps(6);}
+@keyframes noise{0%{opacity:1;transform:translateY(-3px)}50%{opacity:.6;transform:translateY(2px)}100%{opacity:0}}
+
+/* ── Actions / result ──────────────────────────────────── */
+.actions{display:flex;gap:8px;margin-top:12px;}
+.actions .big-btn{flex:1;}
+.flag-btn{width:74px;border:1px solid var(--b2);border-radius:3px;background:none;cursor:pointer;
+  font-family:var(--fmono);font-size:10px;letter-spacing:.12em;color:var(--dim);line-height:1.5;}
+.flag-btn.on{border-color:var(--acc4);color:var(--acc4);background:rgba(245,165,66,.08);}
+.result{margin-top:12px;border:1px solid var(--b2);border-radius:3px;background:var(--panel);padding:14px;text-align:center;}
+.result h2{font-family:var(--fdisp);font-weight:400;font-size:34px;letter-spacing:.1em;line-height:1;}
+.result.good{border-color:var(--acc)}.result.good h2{color:var(--acc)}
+.result.bad{border-color:var(--acc3)}.result.bad h2{color:var(--acc3)}
+.result p{font-size:12px;color:var(--dim);line-height:1.7;margin:6px 0 10px;}
+.result .rows{margin:8px auto 12px;max-width:300px;}
+.row{display:flex;justify-content:space-between;font-family:var(--fmono);font-size:11px;letter-spacing:.08em;color:var(--dim);padding:2px 0;}
+.row b{font-weight:400;color:var(--txt);}
+.row.tot{border-top:1px solid var(--b2);margin-top:4px;padding-top:5px;color:var(--txt);}
+.row.tot b{color:var(--acc4);}
+
+/* ── Rack: lifelines + sponsors ────────────────────────── */
+.rack{margin-top:16px;}
+.rack .lbl{display:block;margin:12px 0 5px;}
+.life{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.chip{border:1px solid var(--b2);border-radius:3px;background:var(--panel);padding:7px 9px;text-align:left;min-height:48px;}
+button.chip{cursor:pointer;}
+button.chip:hover:not(:disabled){border-color:var(--acc2);}
+button.chip:disabled{opacity:.45;cursor:not-allowed;}
+.chip b{display:block;font-family:var(--fmono);font-weight:400;font-size:11px;letter-spacing:.12em;color:var(--txt);}
+.chip span{display:block;font-size:10.5px;line-height:1.45;color:var(--dim);margin-top:2px;}
+.chip.life-c b{color:var(--acc2)}
+.chip.empty{border-style:dashed;display:flex;align-items:center;justify-content:center;
+  font-family:var(--fmono);font-size:10px;letter-spacing:.15em;color:var(--mut);}
+.spons{display:grid;grid-template-columns:1fr;gap:6px;}
+.spons .chip{min-height:0;display:flex;gap:10px;align-items:center;}
+.spons .chip div{flex:1;}
+.spons .chip b{color:var(--acc)}
+.spons .armed{font-family:var(--fmono);font-size:9px;letter-spacing:.1em;color:var(--acc);border:1px solid var(--acc);border-radius:2px;padding:1px 5px;}
+.spons .armed.off{color:var(--mut);border-color:var(--mut);}
+
+/* ── Green room ────────────────────────────────────────── */
+.shop-head{display:flex;align-items:flex-end;justify-content:space-between;margin:6px 0 10px;}
+.shop-head h1{font-family:var(--fdisp);font-weight:400;font-size:40px;letter-spacing:.1em;line-height:1;color:var(--acc);}
+.next{border:1px solid var(--border);border-radius:3px;background:var(--panel);padding:10px 12px;margin-bottom:12px;
+  font-family:var(--fmono);font-size:11px;letter-spacing:.08em;line-height:1.7;color:var(--dim);}
+.next b{font-weight:400;color:var(--txt);}
+.next .tw{color:var(--acc3);}
+.items{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.item{border:1px solid var(--b2);border-radius:3px;background:var(--panel);padding:10px;display:flex;flex-direction:column;gap:5px;}
+.item .k{font-family:var(--fmono);font-size:9px;letter-spacing:.2em;}
+.item.sponsor .k{color:var(--acc)}.item.lifeline .k{color:var(--acc2)}.item.upgrade .k{color:var(--acc4)}
+.item b{font-family:var(--fdisp);font-weight:400;font-size:21px;letter-spacing:.08em;line-height:1.05;color:var(--txt);}
+.item p{font-size:11px;line-height:1.5;color:var(--dim);flex:1;}
+.item.sold{opacity:.35;}
+.buy{font-family:var(--fmono);font-size:11px;letter-spacing:.12em;padding:7px;border:1px solid var(--acc4);
+  border-radius:2px;background:none;color:var(--acc4);cursor:pointer;}
+.buy:hover:not(:disabled){background:rgba(245,165,66,.1);}
+.buy:disabled{border-color:var(--b2);color:var(--mut);cursor:not-allowed;}
+.shop-row{display:flex;gap:8px;margin:10px 0 0;}
+.shop-row .buy{flex:1;}
+.deck{font-family:var(--fmono);font-size:11px;letter-spacing:.06em;line-height:1.8;color:var(--dim);
+  border:1px solid var(--border);border-radius:3px;background:var(--panel);padding:8px 12px;}
+.deck .c{color:var(--acc4)}.deck .h{color:var(--acc2)}.deck .d{color:var(--acc3)}.deck .x{color:var(--acc)}
+.sell{font-family:var(--fmono);font-size:9px;letter-spacing:.1em;color:var(--dim);background:none;
+  border:1px solid var(--b2);border-radius:2px;padding:3px 7px;cursor:pointer;white-space:nowrap;}
+.sell:hover{color:var(--acc3);border-color:var(--acc3);}
+#shop .big-btn{margin-top:16px;}
+@media(max-width:380px){.pot b{font-size:32px}.pot div{min-width:54px}}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01s!important;transition-duration:.01s!important}}
+</style>
+</head>
+<body>
+
+<header class="page-header">
+  <a class="page-back btn-back" href="../">← BACK</a>
+  <div class="page-title">DEAD//AIR</div>
+  <button class="hdr-btn" id="quit" hidden>QUIT</button>
+  <button class="hdr-btn" id="mute">SOUND ON</button>
+</header>
+
+<main class="da">
+
+  <!-- Title -->
+  <section id="title" class="title">
+    <span class="onair">● ON AIR</span>
+    <div class="logo">DEAD<em>//</em>AIR</div>
+    <p class="pitch">You are tonight's contestant. Flip panels, build the pot, and bank it before the signal dies. Survive eight episodes and the show is yours.</p>
+    <button class="big-btn" id="start">GO ON AIR</button>
+    <div class="stats" id="stats"></div>
+    <ul class="how">
+      <li data-n="1">Flip panels. <span class="c">Cash</span> adds to the pot, <span class="h">hype</span> multiplies it. Pot = cash × hype.</li>
+      <li data-n="2">Each flipped panel shows how many <span class="d">dead air</span> panels touch it, diagonals included.</li>
+      <li data-n="3">Hit <span class="d">dead air</span> and the pot is gone. Press BANK any time to keep it and end the segment.</li>
+      <li data-n="4">Beat the target before you run out of segments, or the show is cancelled.</li>
+      <li data-n="5">Between episodes, spend your fee on sponsors, lifelines and better panels.</li>
+      <li data-n="⚑">Right-click or long-press a panel to flag it.</li>
+    </ul>
+  </section>
+
+  <!-- Play -->
+  <section id="play" hidden>
+    <div class="hud">
+      <div class="hud-ep" id="hudEp"></div>
+      <div class="hud-money" id="hudMoney"></div>
+    </div>
+    <div class="twist" id="twist" hidden></div>
+    <div class="goal">
+      <div class="goal-n" id="goalN"></div>
+      <div class="segs" id="segs"></div>
+    </div>
+    <div class="bar"><i id="barFill"></i><u id="barPot"></u></div>
+
+    <div class="pot">
+      <div class="cash"><span class="lbl">CASH</span><b id="potCash">0</b></div>
+      <div class="op">×</div>
+      <div class="hype"><span class="lbl">HYPE</span><b id="potHype">1</b></div>
+      <div class="op">=</div>
+      <div class="sum"><span class="lbl">POT</span><b id="potSum">0</b></div>
+    </div>
+    <div class="mults" id="mults"></div>
+
+    <div class="board-top">
+      <span class="lbl" id="segLbl"></span>
+      <span class="lbl d" id="deadLbl"></span>
+    </div>
+    <div class="board" id="board"></div>
+
+    <div class="actions" id="actions">
+      <button class="big-btn" id="bank">BANK</button>
+      <button class="flag-btn" id="flagBtn">⚑ FLAG<br>OFF</button>
+    </div>
+    <div class="result" id="result" hidden></div>
+
+    <div class="rack">
+      <span class="lbl">LIFELINES</span>
+      <div class="life" id="life"></div>
+      <span class="lbl">SPONSORS</span>
+      <div class="spons" id="spons"></div>
+    </div>
+  </section>
+
+  <!-- Green room -->
+  <section id="shop" hidden>
+    <div class="shop-head">
+      <h1>GREEN ROOM</h1>
+      <div class="hud-money" id="shopMoney"></div>
+    </div>
+    <div class="next" id="next"></div>
+    <div class="items" id="items"></div>
+    <div class="shop-row"><button class="buy" id="reroll"></button></div>
+    <div class="rack">
+      <span class="lbl" id="sponsLbl"></span>
+      <div class="spons" id="shopSpons"></div>
+      <span class="lbl" id="lifeLbl"></span>
+      <div class="life" id="shopLife"></div>
+      <span class="lbl">YOUR BOARD</span>
+      <div class="deck" id="deck"></div>
+    </div>
+    <button class="big-btn" id="goAir">GO ON AIR</button>
+  </section>
+</main>
+
+<div class="noise" id="noise"></div>
+
+<script src="game.js"></script>
+<script>
+(function(){
+  const D = DeadAir, $ = id => document.getElementById(id);
+  const fmt = n => Math.floor(n).toLocaleString('en-US');
+  const fx = n => (Math.round(n * 100) / 100).toString();
+  let g = null, flagMode = false, busy = false;
+
+  // ── Saved stats ────────────────────────────────────────────────
+  const KEY = 'deadair.stats';
+  let stats = { runs: 0, wins: 0, bestEp: 0, bestBank: 0, sound: true };
+  try { Object.assign(stats, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(stats)); } catch (e) {} };
+
+  // ── Sound ──────────────────────────────────────────────────────
+  let ac = null;
+  function tone(freq, dur, type, vol, when) {
+    if (!stats.sound) return;
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      const t = ac.currentTime + (when || 0), o = ac.createOscillator(), v = ac.createGain();
+      o.type = type || 'triangle'; o.frequency.value = freq;
+      v.gain.setValueAtTime(vol || 0.08, t);
+      v.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(v).connect(ac.destination); o.start(t); o.stop(t + dur);
+    } catch (e) {}
+  }
+  function hiss() {
+    if (!stats.sound) return;
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      const len = ac.sampleRate * 0.45, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      const src = ac.createBufferSource(), v = ac.createGain();
+      v.gain.value = 0.16; src.buffer = buf; src.connect(v).connect(ac.destination); src.start();
+    } catch (e) {}
+  }
+  const sfx = {
+    cash: n => tone(280 + Math.min(n, 16) * 36, 0.12, 'triangle'),
+    hype: () => { tone(660, 0.1, 'square', 0.05); tone(990, 0.16, 'square', 0.05, 0.08); },
+    bank: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.16, 'triangle', 0.08, i * 0.07)),
+    win:  () => [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => tone(f, 0.22, 'triangle', 0.08, i * 0.09)),
+    bust: () => { hiss(); tone(110, 0.45, 'sawtooth', 0.07); },
+    save: () => { tone(300, 0.1, 'square', 0.05); tone(450, 0.2, 'square', 0.05, 0.1); },
+    buy:  () => { tone(880, 0.07, 'square', 0.04); tone(1320, 0.1, 'square', 0.04, 0.06); },
+    no:   () => tone(150, 0.12, 'square', 0.04),
+  };
+
+  // ── Screens ────────────────────────────────────────────────────
+  function show(name) {
+    ['title', 'play', 'shop'].forEach(s => { $(s).hidden = s !== name; });
+    $('quit').hidden = name === 'title';
+    window.scrollTo(0, 0);
+  }
+
+  function paintTitle() {
+    $('stats').innerHTML = stats.runs
+      ? `<div><b>${stats.runs}</b>RUNS</div><div><b>${stats.wins}</b>SEASONS WON</div>` +
+        `<div><b>${stats.bestEp}/${D.EPISODES}</b>BEST EPISODE</div><div><b>${fmt(stats.bestBank)}</b>BEST BANK</div>`
+      : '';
+  }
+
+  // ── Board ──────────────────────────────────────────────────────
+  const tiles = [];
+  let lastPointer = 'mouse', pressTimer = null, longPressed = false;
+  for (let i = 0; i < D.N; i++) {
+    const b = document.createElement('button');
+    b.className = 'tile';
+    b.addEventListener('pointerdown', e => {
+      lastPointer = e.pointerType; longPressed = false;
+      if (e.pointerType !== 'mouse') {
+        clearTimeout(pressTimer);
+        pressTimer = setTimeout(() => { longPressed = true; flag(i); }, 420);
+      }
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, () => clearTimeout(pressTimer)));
+    b.addEventListener('click', () => { if (longPressed) { longPressed = false; return; } flagMode ? flag(i) : flip(i); });
+    b.addEventListener('contextmenu', e => { e.preventDefault(); if (lastPointer === 'mouse') flag(i); });
+    $('board').appendChild(b);
+    tiles.push(b);
+  }
+
+  function tileHTML(i) {
+    const s = g.seg, p = s.panels[i];
+    if (p.t === 'dead') return `<span class="n">DEAD<br>AIR</span>`;
+    const h = s.hint[i];
+    const hideHint = p.t === 'hype' && g.twist('static');
+    const top = p.t === 'cash' ? '$' + p.v : p.t === 'hype' ? '+' + p.v + ' HYPE' : '×' + p.v;
+    return `<span class="v">${top}</span><span class="n n${Math.min(h, 3)}">${hideHint ? '~' : h}</span>`;
+  }
+
+  function paintBoard() {
+    const s = g.seg;
+    for (let i = 0; i < D.N; i++) {
+      const t = tiles[i], p = s.panels[i];
+      const open = s.shown[i], known = s.known[i], ghost = s.done && !open && !known;
+      let cls = 'tile';
+      if (open || known || ghost) {
+        cls += ' open ' + p.t + (known ? ' known' : '') + (ghost ? ' ghost' : '');
+        t.innerHTML = tileHTML(i);
+      } else {
+        cls += ' hid' + (s.flags[i] ? ' flag' : '');
+        t.innerHTML = '';
+      }
+      if (t.dataset.cls !== cls) { t.className = cls; t.dataset.cls = cls; }
+      t.setAttribute('aria-label', open || known ? p.t : s.flags[i] ? 'flagged panel' : 'hidden panel');
+    }
+  }
+
+  function floatText(i, text, color) {
+    const t = tiles[i], f = document.createElement('div');
+    f.className = 'float'; f.textContent = text; f.style.color = color;
+    f.style.left = (t.offsetLeft + t.offsetWidth / 2) + 'px';
+    f.style.top = (t.offsetTop + t.offsetHeight / 2) + 'px';
+    $('board').appendChild(f);
+    setTimeout(() => f.remove(), 800);
+  }
+  function bump(id) { const el = $(id); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+  function pop(i) { const t = tiles[i]; t.classList.remove('pop'); void t.offsetWidth; t.classList.add('pop'); }
+
+  // ── HUD ────────────────────────────────────────────────────────
+  let shownTotal = 0, tween = null;
+  function setTotal(to) {
+    const from = shownTotal, t0 = performance.now(), e = g.episode;
+    cancelAnimationFrame(tween);
+    (function step(now) {
+      const k = Math.min(1, (now - t0) / 500);
+      shownTotal = from + (to - from) * k;
+      $('goalN').innerHTML = `${fmt(shownTotal)} <span>/ ${fmt(e.target)}</span>`;
+      if (k < 1) tween = requestAnimationFrame(step);
+    })(t0);
+    if (to === from) $('goalN').innerHTML = `${fmt(to)} <span>/ ${fmt(e.target)}</span>`;
+  }
+
+  function paintHud() {
+    const e = g.episode, s = g.seg;
+    $('hudEp').innerHTML = `EPISODE ${g.ep}<small> / ${D.EPISODES}</small>`;
+    $('hudMoney').textContent = '$' + g.money;
+    $('twist').hidden = !e.twist;
+    if (e.twist) $('twist').innerHTML = `<b>SPECIAL: ${e.twist.name}</b> — ${e.twist.desc}`;
+    setTotal(e.total);
+    const r = g.score(false);
+    const pct = v => Math.min(100, 100 * v / e.target);
+    $('barFill').style.width = pct(e.total) + '%';
+    $('barPot').style.left = pct(e.total) + '%';
+    $('barPot').style.width = (s.done ? 0 : Math.max(0, pct(e.total + r.score) - pct(e.total))) + '%';
+
+    const used = e.segs - e.segsLeft;
+    let pips = '';
+    for (let i = 0; i < e.segs; i++) pips += `<s class="${i < used ? '' : i === used && !s.done ? 'now' : 'left'}"></s>`;
+    $('segs').innerHTML = pips;
+    $('segLbl').textContent = `SEGMENT ${Math.min(s.index + 1, e.segs)} OF ${e.segs}`;
+    const deadLeft = g.deadCount() - s.known.filter(Boolean).length;
+    $('deadLbl').textContent = `▓ ${deadLeft} DEAD AIR HIDDEN`;
+
+    $('potCash').textContent = fmt(s.cash);
+    $('potHype').textContent = fx(s.hype);
+    $('potSum').textContent = fmt(r.score);
+    let m = r.parts.map(p => `<span>${p[0]} ×${fx(p[1])}</span>`).join('');
+    if (s.shield) m += '<span>STUNT DOUBLE READY</span>';
+    $('mults').innerHTML = m;
+
+    $('bank').disabled = s.flips === 0 || s.done;
+    $('bank').textContent = s.flips === 0 ? 'FLIP A PANEL' : 'BANK ' + fmt(r.score);
+    $('flagBtn').className = 'flag-btn' + (flagMode ? ' on' : '');
+    $('flagBtn').innerHTML = '⚑ FLAG<br>' + (flagMode ? 'ON' : 'OFF');
+    paintRack();
+  }
+
+  function sponsorChips(inShop) {
+    if (!g.sponsors.length) return '<div class="chip empty">NO SPONSORS YET</div>';
+    return g.sponsors.map((sp, i) => {
+      const d = D.byId(D.SPONSORS, sp.id);
+      let tag = '';
+      if (!inShop && sp.id === 'edge') tag = `<span class="armed ${g.episode.shield ? '' : 'off'}">${g.episode.shield ? 'ARMED' : 'USED'}</span>`;
+      if (inShop) tag = `<button class="sell" data-sell="${i}">SELL $${g.sellValue(i)}</button>`;
+      return `<div class="chip"><div><b>${d.name}</b><span>${d.desc}</span></div>${tag}</div>`;
+    }).join('');
+  }
+  function lifelineChips(inShop) {
+    let h = '';
+    for (let i = 0; i < D.LIFELINE_SLOTS; i++) {
+      const id = g.lifelines[i];
+      if (!id) { h += '<div class="chip empty">EMPTY</div>'; continue; }
+      const d = D.byId(D.LIFELINES, id);
+      h += inShop
+        ? `<div class="chip life-c"><b>${d.name}</b><span>${d.desc}</span></div>`
+        : `<button class="chip life-c" data-life="${i}" ${g.canUse(id) ? '' : 'disabled'}><b>${d.name}</b><span>${d.desc}</span></button>`;
+    }
+    return h;
+  }
+  function paintRack() {
+    $('life').innerHTML = lifelineChips(false);
+    $('spons').innerHTML = sponsorChips(false);
+  }
+
+  // ── Play actions ───────────────────────────────────────────────
+  function flag(i) {
+    if (!g || g.phase !== 'play' || g.seg.done) return;
+    g.toggleFlag(i); tone(500, 0.05, 'square', 0.03);
+    paintBoard();
+  }
+
+  function showFlip(ev) {
+    const i = ev.i;
+    if (ev.kind === 'saved') {
+      sfx.save(); floatText(i, ev.notes[0] + '!', 'var(--acc)');
+    } else if (ev.kind === 'dead') {
+      sfx.bust();
+      $('board').classList.remove('shake'); void $('board').offsetWidth; $('board').classList.add('shake');
+      $('noise').classList.remove('on'); void $('noise').offsetWidth; $('noise').classList.add('on');
+    } else if (ev.kind === 'cash') {
+      sfx.cash(g.seg.flips); floatText(i, '+' + ev.gain, 'var(--acc4)'); bump('potCash');
+    } else if (ev.kind === 'hype') {
+      sfx.hype(); floatText(i, '+' + ev.gain + ' HYPE', 'var(--acc2)'); bump('potHype');
+    } else if (ev.kind === 'x') {
+      sfx.hype(); floatText(i, '×' + ev.gain, 'var(--acc)'); bump('potSum');
+    }
+    if (ev.kind !== 'saved' && ev.kind !== 'dead' && ev.notes.length) {
+      setTimeout(() => floatText(i, ev.notes.filter(n => !n.startsWith('TIP')).join(' · '), 'var(--acc)'), 180);
+      if (ev.notes.some(n => n.includes('HYPE'))) bump('potHype');
+    }
+  }
+
+  function flip(i) {
+    if (!g || busy) return;
+    const ev = g.flip(i);
+    if (!ev) { if (g.phase === 'play' && g.seg.flags[i]) sfx.no(); return; }
+    paintBoard(); pop(i); showFlip(ev);
+    afterEvent(ev);
+  }
+
+  function bank() {
+    if (!g || busy) return;
+    const ev = g.bank();
+    if (!ev) return;
+    paintBoard();
+    afterEvent(ev);
+  }
+
+  function useLifeline(idx) {
+    if (!g || busy) return;
+    const ev = g.useLifeline(idx);
+    if (!ev) return;
+    sfx.buy();
+    paintBoard();
+    if (ev.id === 'cue') { pop(ev.i); floatText(ev.i, 'DEAD AIR', 'var(--acc3)'); }
+    if (ev.id === 'mic') bump('potHype');
+    if (ev.id === 'ad') { sfx.bank(); if (ev.wrap) return afterEvent(ev.wrap); }
+    if (ev.id === 'intern' && ev.flip) { pop(ev.flip.i); showFlip(ev.flip); return afterEvent(ev.flip); }
+    paintHud();
+  }
+
+  function afterEvent(ev) {
+    paintHud();
+    if (!ev.end) return;
+    if (ev.end !== 'bust') (ev.episode === 'win' ? sfx.win : sfx.bank)();
+    if (g.best > stats.bestBank) stats.bestBank = g.best;
+    showResult(ev);
+  }
+
+  function showResult(ev) {
+    const e = g.episode, r = $('result');
+    const rows = ev.parts.map(p => `<div class="row"><span>${p[0]}</span><b>×${fx(p[1])}</b></div>`).join('');
+    const headline = { bank: 'BANKED', sweep: 'CLEAN SWEEP', clock: 'HARD OUT', bust: 'DEAD AIR' }[ev.end];
+    let h = '', btn = '', cls = ev.end === 'bust' ? 'bad' : 'good';
+
+    if (ev.episode === 'win') {
+      const final = g.phase === 'won';
+      const pay = ev.pay.map(p => `<div class="row"><span>${p[0]}</span><b>+$${p[1]}</b></div>`).join('');
+      h = `<h2>${final ? 'SEASON WRAPPED' : 'EPISODE ' + g.ep + ' CLEARED'}</h2>
+        <p>${ev.end === 'bust' ? 'Dead air, but the severance carried you over.' : headline + ' ' + fmt(ev.score) + '.'}
+        ${final ? ' Eight episodes, still on the air. The network is renewing you.' : ' ' + fmt(e.total) + ' against a target of ' + fmt(e.target) + '.'}</p>
+        <div class="rows">${pay}<div class="row tot"><span>IN YOUR POCKET</span><b>$${g.money}</b></div></div>`;
+      btn = final ? 'NEW SEASON' : 'TO THE GREEN ROOM';
+      cls = 'good';
+      if (final) { stats.wins++; stats.bestEp = D.EPISODES; }
+      else stats.bestEp = Math.max(stats.bestEp, g.ep);
+      save();
+    } else if (ev.episode === 'lose') {
+      h = `<h2>CANCELLED</h2>
+        <p>${ev.end === 'bust' ? 'The signal died on your last segment.' : 'Banked ' + fmt(ev.score) + ', but it was not enough.'}
+        You needed ${fmt(e.target)} and finished on ${fmt(e.total)}.</p>
+        <div class="rows"><div class="row"><span>REACHED</span><b>EPISODE ${g.ep} OF ${D.EPISODES}</b></div>
+        <div class="row"><span>BIGGEST BANK</span><b>${fmt(g.best)}</b></div></div>`;
+      btn = 'NEW RUN'; cls = 'bad';
+      stats.bestEp = Math.max(stats.bestEp, g.ep - 1); save();
+    } else {
+      const need = e.target - e.total;
+      h = `<h2>${headline}${ev.end === 'bust' && !ev.score ? '' : ' ' + fmt(ev.score)}</h2>
+        ${ev.end === 'bust' ? `<p>${ev.score ? 'Severance paid out half the pot.' : 'The pot is gone.'}</p>` : ''}
+        ${rows ? `<div class="rows"><div class="row"><span>CASH × HYPE</span><b>${fmt(ev.cash)} × ${fx(ev.hype)}</b></div>${rows}</div>` : ''}
+        <p>${fmt(need)} to go. ${e.segsLeft} segment${e.segsLeft === 1 ? '' : 's'} left.</p>`;
+      btn = 'NEXT SEGMENT';
+    }
+    r.className = 'result ' + cls;
+    r.innerHTML = h + `<button class="big-btn" id="cont">${btn}</button>`;
+    r.hidden = false; $('actions').hidden = true;
+    // Short lock so a fast flipper does not skip the result by accident.
+    busy = true; $('cont').disabled = true;
+    setTimeout(() => { busy = false; const c = $('cont'); if (c) c.disabled = false; }, 450);
+    $('cont').onclick = proceed;
+  }
+
+  function proceed() {
+    if (busy) return;
+    $('result').hidden = true; $('actions').hidden = false;
+    if (g.phase === 'payout') { g.openShop(); paintShop(); show('shop'); }
+    else if (g.phase === 'over' || g.phase === 'won') newRun();
+    else { g.nextSegment(); flagMode = false; paintBoard(); paintHud(); }
+  }
+
+  // ── Green room ─────────────────────────────────────────────────
+  function paintShop() {
+    $('shopMoney').textContent = '$' + g.money;
+    const nextEp = g.ep + 1, tw = g.twistFor(nextEp);
+    $('next').innerHTML = `NEXT: <b>EPISODE ${nextEp} OF ${D.EPISODES}</b> · TARGET <b>${fmt(D.TARGETS[nextEp - 1])}</b>` +
+      (nextEp === 4 || nextEp === 7 ? `<br><span class="tw">The network adds 1 more dead air from here on.</span>` : '') +
+      (tw ? `<br><span class="tw">SPECIAL: ${tw.name} — ${tw.desc}</span>` : '');
+    const kinds = { sponsor: 'SPONSOR', lifeline: 'LIFELINE', upgrade: 'BOARD UPGRADE' };
+    $('items').innerHTML = g.shop.items.map((it, i) => {
+      const full = !it.sold && it.kind === 'sponsor' && g.sponsors.length >= D.SPONSOR_SLOTS ? 'SLOTS FULL'
+        : !it.sold && it.kind === 'lifeline' && g.lifelines.length >= D.LIFELINE_SLOTS ? 'SLOTS FULL' : '';
+      return `<div class="item ${it.kind}${it.sold ? ' sold' : ''}">
+        <span class="k">${kinds[it.kind]}</span><b>${it.def.name}</b><p>${it.def.desc}</p>
+        <button class="buy" data-buy="${i}" ${g.canBuy(it) ? '' : 'disabled'}>${it.sold ? 'SOLD' : full || 'BUY $' + g.price(it.def)}</button>
+      </div>`;
+    }).join('');
+    $('reroll').textContent = `NEW OFFERS $${g.shop.reroll}`;
+    $('reroll').disabled = g.money < g.shop.reroll;
+    $('sponsLbl').textContent = `SPONSORS ${g.sponsors.length}/${D.SPONSOR_SLOTS}`;
+    $('lifeLbl').textContent = `LIFELINES ${g.lifelines.length}/${D.LIFELINE_SLOTS}`;
+    $('shopSpons').innerHTML = sponsorChips(true);
+    $('shopLife').innerHTML = lifelineChips(true);
+    const d = g.deck, n = t => d.filter(p => p.t === t);
+    const cash = n('cash').map(p => p.v).sort((a, b) => a - b);
+    $('deck').innerHTML =
+      `<span class="d">▓ ${n('dead').length} DEAD AIR</span> · <span class="h">${n('hype').length} HYPE</span>` +
+      (n('x').length ? ` · <span class="x">${n('x').length} JACKPOT ×1.5</span>` : '') +
+      `<br><span class="c">CASH ${cash.join(' ')}</span>`;
+  }
+
+  $('items').addEventListener('click', e => {
+    const b = e.target.closest('[data-buy]'); if (!b) return;
+    if (g.buy(+b.dataset.buy)) { sfx.buy(); paintShop(); } else sfx.no();
+  });
+  $('shopSpons').addEventListener('click', e => {
+    const b = e.target.closest('[data-sell]'); if (!b) return;
+    if (g.sell(+b.dataset.sell)) { sfx.buy(); paintShop(); }
+  });
+  $('reroll').onclick = () => { if (g.reroll()) { sfx.buy(); paintShop(); } };
+  $('goAir').onclick = () => { startEpisode(); };
+  $('life').addEventListener('click', e => {
+    const b = e.target.closest('[data-life]'); if (b) useLifeline(+b.dataset.life);
+  });
+
+  // ── Run flow ───────────────────────────────────────────────────
+  function startEpisode() {
+    g.startEpisode();
+    flagMode = false; shownTotal = 0;
+    $('result').hidden = true; $('actions').hidden = false;
+    show('play'); paintBoard(); paintHud();
+  }
+  function newRun() {
+    g = new D.Game();
+    stats.runs++; save();
+    startEpisode();
+  }
+
+  $('start').onclick = newRun;
+  $('bank').onclick = bank;
+  $('flagBtn').onclick = () => { flagMode = !flagMode; paintHud(); };
+  $('quit').onclick = () => {
+    if (g && (g.phase === 'play' || g.phase === 'shop' || g.phase === 'payout') && !confirm('Walk off the set? This run will be lost.')) return;
+    g = null; busy = false; paintTitle(); show('title');
+  };
+  $('mute').onclick = () => { stats.sound = !stats.sound; save(); paintMute(); };
+  function paintMute() { $('mute').textContent = stats.sound ? 'SOUND ON' : 'SOUND OFF'; }
+
+  document.addEventListener('keydown', e => {
+    if (!g || e.target.tagName === 'INPUT') return;
+    const k = e.key.toLowerCase();
+    if (!$('result').hidden && !$('play').hidden) { if (k === 'enter' || k === ' ') { e.preventDefault(); proceed(); } return; }
+    if ($('play').hidden) return;
+    if (k === 'b' || k === ' ') { e.preventDefault(); bank(); }
+    if (k === 'f') { flagMode = !flagMode; paintHud(); }
+  });
+
+  paintMute(); paintTitle();
+  window.__deadair = () => g;   // handy for poking at a run from the console
+})();
+</script>
+</body>
+</html>
