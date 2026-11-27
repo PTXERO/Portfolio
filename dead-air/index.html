@@ -507,7 +507,15 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 
   $('start').onclick = newRun;
   $('who').addEventListener('click', e => { const b = e.target.closest('[data-who]'); if (b) { stats.who = b.dataset.who; save(); paintTitle(); } });
-  $('quit').onclick = () => { if (G.phase !== 'over' && !confirm('Walk off the set? This run will be lost.')) return; toTitle(); };
+  let quitArmed = 0;       // QUIT asks for a second tap instead of a dialog
+  $('quit').onclick = () => {
+    if (G.phase !== 'over' && performance.now() - quitArmed > 3000) {
+      quitArmed = performance.now(); $('quit').textContent = 'SURE?';
+      setTimeout(() => { $('quit').textContent = 'QUIT'; }, 3000);
+      return;
+    }
+    quitArmed = 0; $('quit').textContent = 'QUIT'; toTitle();
+  };
   $('mute').onclick = () => { stats.sound = !stats.sound; save(); $('mute').textContent = stats.sound ? 'SOUND ON' : 'SOUND OFF'; };
   $('kitBtn').onclick = () => {
     const own = D.GIMMICKS.filter(g => G.lv(g.id));
