@@ -7,7 +7,7 @@
   const N = 12;                 // prize podiums on the strip
   const EPISODES = 8;
   const ROUND_TIME = 16;        // seconds of moving light per round
-  const TARGETS = [300, 600, 1040, 1640, 2400, 3400, 4800, 6600];
+  const TARGETS = [2000, 3000, 4200, 6000, 8500, 12000, 17000, 24000];
 
   // Every gimmick is something you can see on the set. d(lv) = what it does at that level.
   const GIMMICKS = [

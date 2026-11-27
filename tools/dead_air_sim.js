@@ -1,29 +1,35 @@
 // Balance check for DEAD//AIR: a bot plays N seeded seasons headless.
-//   node tools/dead_air_sim.js [runs] [timing error in ms] [contestant]
-// The bot aims for the best prize and misses by a human-sized timing error.
+//   node tools/dead_air_sim.js [runs] [timing error ms] [contestant]            win rates against the targets
+//   node tools/dead_air_sim.js [runs] [timing error ms] --potential             what a round is worth, target ignored
+//
+// The bot is modelled on how a practised person plays: it buzzes about once a second,
+// takes whichever safe prize is coming rather than waiting for a favourite, uses slow-mo
+// when the strip gets dangerous, and keeps going until the clock runs out.
 const D = require('../dead-air/game.js');
-const RUNS = +process.argv[2] || 300, ERR = (+process.argv[3] || 45) / 1000, WHO = process.argv[4];
+const RUNS = +process.argv[2] || 300, ERR = (+process.argv[3] || 45) / 1000;
+const POTENTIAL = process.argv.includes('--potential');
+const WHO = process.argv[4] && !process.argv[4].startsWith('--') ? process.argv[4] : undefined;
 const DT = 1 / 60, N = D.N;
 
 function gauss(g) { return Math.sqrt(-2 * Math.log(1 - g.rand())) * Math.cos(2 * Math.PI * g.rand()); }
-const worth = p => p.kind === 'gold' ? p.val * 5 : p.kind === 'cash' ? p.val : p.kind === 'spin' ? 60 : p.kind === 'box' ? 70 : 45;
 const bad = (g, i) => i < 0 || i >= N ? false : !g.isUp(i);
 
 function playRound(g) {
   while (g.phase === 'sweep' || g.phase === 'resolve') {
     if (g.phase === 'resolve') { g.step(DT); continue; }
     const up = g.upList(), need = g.target(g.ep) - g.total, pot = g.score();
-    const dark = N - up.length;
-    const last = g.roundsLeft === 1;
-    // Bank once the strip is mostly burnt out or the target is covered, unless it is now or never.
+    const dark = N - up.length, last = g.roundsLeft === 1;
     if (g.clock <= 0) { if (!g.bank()) g.endRound(g.score(), false); continue; }
-    if (g.buzzes > 0 && (pot >= need || (!(last && pot < need) && dark >= 6 + Math.min(2, g.bleeps)))) { g.bank(); continue; }
-    // Prefer valuable prizes whose neighbours are safe.
-    let best = up[0], bestS = -1e9;
-    for (const i of up) { const s = worth(g.strip[i]) - (bad(g, i - 1) ? 25 : 0) - (bad(g, i + 1) ? 25 : 0); if (s > bestS) { bestS = s; best = i; } }
-    if (dark >= 3) g.slowmo();
-    // Waiting for the light to come round to the prize you want: up to one pass of the strip.
-    g.clock -= (g.is('strobe') ? 0.6 * (1 + g.rand() * 5) : (0.25 + g.rand() * 0.9) * 2 * N / g.speed());
+    // Bank when the target is covered (unless measuring potential), or when almost nothing safe is left.
+    const covered = !POTENTIAL && pot >= need;
+    const tooHot = dark >= 9 + Math.min(2, g.bleeps) && !(last && pot < need && !POTENTIAL);
+    if (g.buzzes > 0 && (covered || tooHot)) { g.bank(); continue; }
+    // Take a prize with safe neighbours if there is one, otherwise whatever is left.
+    const safe = up.filter(i => !bad(g, i - 1) && !bad(g, i + 1));
+    const pool = safe.length ? safe : up;
+    const best = pool[g.pick(pool.length)];
+    if (dark >= 4) g.slowmo();
+    g.clock -= g.is('strobe') ? 0.5 + g.rand() * 2 : 0.6 + g.rand() * 0.9;      // time spent waiting for the light
     // Hidden prizes and a jumping light are harder to time: a wider error, and sometimes the wrong podium.
     const hard = g.is('mystery') ? 1.5 : g.is('conveyor') ? 1.25 : 1;
     let hit = best + 0.5 + gauss(g) * ERR * hard * g.speed();
@@ -33,23 +39,48 @@ function playRound(g) {
   }
 }
 
-const scores = Array.from({ length: D.EPISODES }, () => []);
+const q = (a, f) => a.length ? a.slice().sort((x, y) => x - y)[Math.floor(a.length * f)] : 0;
+const pad = (v, n) => String(v).padStart(n);
+const rounds = Array.from({ length: D.EPISODES }, () => []), totals = Array.from({ length: D.EPISODES }, () => []);
 const died = new Array(D.EPISODES).fill(0), reached = new Array(D.EPISODES).fill(0);
 let wins = 0, kit = 0;
+
 for (let r = 0; r < RUNS; r++) {
   const g = new D.Game(7000 + r, WHO);
   for (;;) {
     g.startEpisode(); reached[g.ep - 1]++;
-    while (g.phase !== 'cleared' && g.phase !== 'won' && g.phase !== 'over') { playRound(g); g.events.length = 0; g.next(); }
-    scores[g.ep - 1].push(g.total);
-    if (g.phase === 'over') { died[g.ep - 1]++; break; }
-    if (g.phase === 'won') { wins++; kit += Object.values(g.levels).reduce((a, b) => a + b, 0); break; }
+    let over = false;
+    for (;;) {
+      playRound(g); g.events.length = 0;
+      rounds[g.ep - 1].push(g.last.score);
+      if (POTENTIAL) {                       // play every round out, whatever the target says
+        if (g.roundsLeft <= 0) break;
+        g.startRound(); continue;
+      }
+      g.next();
+      if (g.phase === 'cleared' || g.phase === 'won' || g.phase === 'over') break;
+    }
+    totals[g.ep - 1].push(g.total);
+    if (POTENTIAL) {
+      if (g.ep >= D.EPISODES) break;
+      g.spins += 1 + (g.total >= 2 * g.target(g.ep) ? 1 : 0) + g.format.spins;   // roughly what a clear would have paid
+      g.phase = 'cleared';
+    } else {
+      if (g.phase === 'over') { died[g.ep - 1]++; break; }
+      if (g.phase === 'won') { wins++; kit += Object.values(g.levels).reduce((a, b) => a + b, 0); break; }
+    }
     g.openWheel(); g.takeOffer(g.pick(3));
     while (g.spins > 0) g.spin();
     g.wheelDone(); g.pickFormat(g.pick(2));
   }
 }
-const q = (a, f) => a.length ? a.slice().sort((x, y) => x - y)[Math.floor(a.length * f)] : 0;
-console.log(`runs ${RUNS}  timing error ${ERR * 1000}ms  season wins ${(100 * wins / RUNS).toFixed(1)}%  gimmick levels at a win ${(kit / (wins || 1)).toFixed(1)}`);
-for (let e = 0; e < D.EPISODES; e++)
-  console.log(`ep${e + 1}  target ${String(D.TARGETS[e]).padStart(6)}  reached ${String(reached[e]).padStart(4)}  cancelled ${String(died[e]).padStart(4)}  score p25 ${String(q(scores[e], .25)).padStart(6)}  p50 ${String(q(scores[e], .5)).padStart(6)}  p75 ${String(q(scores[e], .75)).padStart(7)}`);
+
+if (POTENTIAL) {
+  console.log(`runs ${RUNS}  timing error ${ERR * 1000}ms  POTENTIAL (target ignored, every round played out)`);
+  for (let e = 0; e < D.EPISODES; e++)
+    console.log(`ep${e + 1}  one round: p25 ${pad(q(rounds[e], .25), 6)}  median ${pad(q(rounds[e], .5), 6)}  p75 ${pad(q(rounds[e], .75), 7)}   whole episode: p25 ${pad(q(totals[e], .25), 6)}  median ${pad(q(totals[e], .5), 7)}`);
+} else {
+  console.log(`runs ${RUNS}  timing error ${ERR * 1000}ms  season wins ${(100 * wins / RUNS).toFixed(1)}%  gimmick levels at a win ${(kit / (wins || 1)).toFixed(1)}`);
+  for (let e = 0; e < D.EPISODES; e++)
+    console.log(`ep${e + 1}  target ${pad(D.TARGETS[e], 6)}  reached ${pad(reached[e], 4)}  cancelled ${pad(died[e], 4)}`);
+}
