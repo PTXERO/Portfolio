@@ -43,22 +43,22 @@
     { id: 'double', rare: true, tag: 'DN', color: '#ffd24a', max: 1, name: 'DOUBLE OR NOTHING', d: () => 'Banking flips a coin: x2.5 or half.' },
     { id: 'static', rare: true, tag: 'ST', color: '#f542a8', max: 1, name: 'STATIC CLING',     d: () => '+1 starting hype per dead air TV.' },
 
-    // ── Unlocked from the Money Dump (lock: true). Until unlocked they never appear. ──
-    { id: 'echo',     lock: true, tag: 'EC', color: '#9d8cff', max: 3, name: 'ECHO CHAMBER',   d: l => `Every ${['', '4th', '3rd', '2nd'][l]} buzz pays twice.` },
-    { id: 'tipline',  lock: true, tag: 'TL', color: '#5fe08a', max: 5, name: 'TIP LINE',       d: l => `+$${5 * l} per prize a gimmick wins.` },
-    { id: 'opener',   lock: true, tag: 'CO', color: '#42d4f5', max: 3, name: 'COLD OPEN',      d: l => `First buzz x${1 + l}.` },
-    { id: 'closer',   lock: true, tag: 'BF', color: '#ff9a2e', max: 4, name: 'BIG FINISH',     d: l => `Bank in the last 3 seconds: x${1 + 0.25 * l}.` },
-    { id: 'residual', lock: true, tag: 'RS', color: '#ffd24a', max: 4, name: 'RESIDUALS',      d: l => `Start with ${5 * l}% of the last bank.` },
-    { id: 'edges',    lock: true, tag: 'SW', color: '#d4244e', max: 3, name: 'STAGE WINGS',    d: l => `End podiums x${1 + l}.` },
-    { id: 'center',   lock: true, tag: 'CS', color: '#fff4c2', max: 3, name: 'CENTRE STAGE',   d: l => `Middle podiums x${1 + l}.` },
-    { id: 'recycle',  lock: true, tag: 'RC', color: '#42f5b0', max: 3, name: 'REPEAT SHOWING', d: l => `${15 * l}% chance a prize stays.` },
-    { id: 'sparks',   lock: true, tag: 'SK', color: '#fff36b', max: 4, name: 'SPARKLERS',      d: l => `PERFECT: +${0.25 * l} hype.` },
-    { id: 'stoppage', lock: true, tag: 'ST', color: '#7fe0ff', max: 4, name: 'STOPPAGE TIME',  d: l => `PERFECT: +${0.5 * l}s.` },
-    { id: 'antenna',  lock: true, tag: 'RE', color: '#d8d8e0', max: 4, name: 'RABBIT EARS',    d: l => `${10 * l}% to fix a TV next door.` },
-    { id: 'lucky',    lock: true, tag: 'LS', color: '#ff6bd6', max: 3, name: 'LUCKY SOCKS',    d: l => `${12 * l}% chance dead air is ignored.` },
-    { id: 'ovation',  lock: true, tag: 'SO', color: '#f5a542', max: 4, name: 'STANDING OVATION', d: l => `Stage clear: +${2 + l} hype.` },
-    { id: 'thrift',   lock: true, tag: 'BB', color: '#b98a4a', max: 4, name: 'BARGAIN BIN',    d: l => `$10 prizes +$${15 * l}.` },
-    { id: 'rainy',    lock: true, tag: 'RD', color: '#42d4f5', max: 4, name: 'RAINY DAY FUND', d: l => `Dead air still banks $${100 * l}.` },
+    // ── More gimmicks ──
+    { id: 'echo',     tag: 'EC', color: '#9d8cff', max: 3, name: 'ECHO CHAMBER',   d: l => `Every ${['', '4th', '3rd', '2nd'][l]} buzz pays twice.` },
+    { id: 'tipline',  tag: 'TL', color: '#5fe08a', max: 5, name: 'TIP LINE',       d: l => `+$${5 * l} per prize a gimmick wins.` },
+    { id: 'opener',   tag: 'CO', color: '#42d4f5', max: 3, name: 'COLD OPEN',      d: l => `First buzz x${1 + l}.` },
+    { id: 'closer',   tag: 'BF', color: '#ff9a2e', max: 4, name: 'BIG FINISH',     d: l => `Bank in the last 3 seconds: x${1 + 0.25 * l}.` },
+    { id: 'residual', tag: 'RS', color: '#ffd24a', max: 4, name: 'RESIDUALS',      d: l => `Start with ${5 * l}% of the last bank.` },
+    { id: 'edges',    tag: 'SW', color: '#d4244e', max: 3, name: 'STAGE WINGS',    d: l => `End podiums x${1 + l}.` },
+    { id: 'center',   tag: 'CS', color: '#fff4c2', max: 3, name: 'CENTRE STAGE',   d: l => `Middle podiums x${1 + l}.` },
+    { id: 'recycle',  tag: 'RC', color: '#42f5b0', max: 3, name: 'REPEAT SHOWING', d: l => `${15 * l}% chance a prize stays.` },
+    { id: 'sparks',   tag: 'SK', color: '#fff36b', max: 4, name: 'SPARKLERS',      d: l => `PERFECT: +${0.25 * l} hype.` },
+    { id: 'stoppage', tag: 'ST', color: '#7fe0ff', max: 4, name: 'STOPPAGE TIME',  d: l => `PERFECT: +${0.5 * l}s.` },
+    { id: 'antenna',  tag: 'RE', color: '#d8d8e0', max: 4, name: 'RABBIT EARS',    d: l => `${10 * l}% to fix a TV next door.` },
+    { id: 'lucky',    tag: 'LS', color: '#ff6bd6', max: 3, name: 'LUCKY SOCKS',    d: l => `${12 * l}% chance dead air is ignored.` },
+    { id: 'ovation',  tag: 'SO', color: '#f5a542', max: 4, name: 'STANDING OVATION', d: l => `Stage clear: +${2 + l} hype.` },
+    { id: 'thrift',   tag: 'BB', color: '#b98a4a', max: 4, name: 'BARGAIN BIN',    d: l => `$10 prizes +$${15 * l}.` },
+    { id: 'rainy',    tag: 'RD', color: '#42d4f5', max: 4, name: 'RAINY DAY FUND', d: l => `Dead air still banks $${100 * l}.` },
 
     { id: 'allin',     lock: true, rare: true, tag: 'AI', color: '#e8203a', max: 1, name: 'ALL IN',            d: () => 'No banking. The pot doubles at time.' },
     { id: 'slowburn',  lock: true, rare: true, tag: 'SB', color: '#ff9a2e', max: 1, name: 'SLOW BURN',         d: () => 'Half speed, but speeds up twice as fast.' },
@@ -249,12 +249,13 @@
     this.events = []; this.q = [];
     this.t = 0; this.spins = 0; this.toasters = 0;
     this.best = 0; this.endless = false; this.droneT = [];
-    const rares = GIMMICKS.filter(g => g.rare);
+    const rares = GIMMICKS.filter(g => g.rare && this.open(g));
     const start = (byId(CONTESTANTS, this.who) || CONTESTANTS[0]).start.map(id => id === '?rare' ? rares[this.pick(rares.length)].id : id);
     start.forEach(id => { this.levels[id] = (this.levels[id] || 0) + 1; });
     // The wheel you start with: BIGGER STAGE, four more gimmicks, three toasters and one dead air wedge.
-    const pool = this.shuffle(GIMMICKS.filter(g => common(g) && this.open(g) && g.id !== 'stage' && !start.includes(g.id))).slice(0, 4 - start.length).map(g => g.id);
-    this.wheel = Array.from(new Set(start)).concat(pool, start.includes('stage') ? [] : ['stage']).map(id => ({ type: 'g', id, w: 1 }));
+    const pool = this.shuffle(GIMMICKS.filter(g => common(g) && this.open(g) && g.id !== 'stage' && !start.includes(g.id))).slice(0, Math.max(0, 4 - start.filter(id => !byId(GIMMICKS, id).rare).length)).map(g => g.id);
+    // Headliners are never wedges: the wheel is for upgrades you choose.
+    this.wheel = Array.from(new Set(start)).filter(id => !byId(GIMMICKS, id).rare).concat(pool, start.includes('stage') ? [] : ['stage']).map(id => ({ type: 'g', id, w: 1 }));
     if (this.charm === 'ch_sticky') { const extra = GIMMICKS.filter(g => common(g) && this.open(g) && !this.wheel.some(w => w.id === g.id)); if (extra.length) this.wheel.push({ type: 'g', id: extra[this.pick(extra.length)].id, w: 1 }); }
     for (let i = 0; i < 3 - (this.perks.trim || 0); i++) this.wheel.push({ type: 'junk', w: 1 });
     this.wheel.push({ type: 'dead', w: 1 });
@@ -705,6 +706,10 @@
       if (this.ch('headshot') && this.ep === 1) this.earned.push(['SIGNED HEADSHOT', 1]);
       if (this.isFinale() && this.ep < this.episodes) this.earned.push(['ACT ' + this.act() + ' WRAPPED', 1]);
       this.earned.forEach(e => { this.spins += e[1]; });
+      if (this.isFinale()) {                       // the network books a headliner: given, not chosen
+        const pool = GIMMICKS.filter(g => g.rare && this.open(g) && !this.lv(g.id));
+        if (pool.length) { this.booked = pool[this.pick(pool.length)]; this.gain(this.booked.id); }
+      }
       const done = this.ep === this.episodes && !this.endless ? 'won' : 'cleared';
       if (this.special === 'bonus') { this.afterBonus = done; this.startBonus(); } else this.phase = done;
     } else if (this.roundsLeft <= 0) this.phase = 'over';
@@ -756,9 +761,6 @@
   P.openWheel = function () {
     if (this.phase === 'won') this.endless = true;
     const gs = this.shuffle(GIMMICKS.filter(g => common(g) && this.open(g) && this.lv(g.id) < this.capOf(g))).slice(0, 2);
-    // Now and then a headliner turns up in place of an ordinary wedge.
-    const rares = this.shuffle(GIMMICKS.filter(g => g.rare && this.open(g) && !this.lv(g.id) && !this.wheel.some(w => w.id === g.id)));
-    if (rares.length && this.ep >= 2 && this.rand() < 0.45) gs[this.pick(gs.length)] = rares[0];
     const ups = this.shuffle(WHEEL_UPS.filter(u => u.ok(this)));
     this.offers = gs.map(g => ({ type: 'g', def: g }));
     this.offers.push({ type: 'up', def: ups[0] });
@@ -836,7 +838,7 @@
     CHARMS.map(c => ({ id: c.id, cat: 'charm', tier: 'common', name: c.name, desc: c.desc, icon: c.id })),
     LOOKS.map(l => ({ id: l.id, cat: 'look', tier: 'common', name: l.name, desc: '', icon: 'look', look: l })));
   // Crate price: starts modest and climbs with every crate opened.
-  const cratePrice = opened => 50000 + 5000 * opened;
+  const cratePrice = opened => 50000 + 6000 * opened;
 
   const api = { UNLOCKS, CHARMS, LOOKS, XPRIZES, cratePrice, Game, N, EPISODES, PILOT, ACT, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, EVENTS, byId };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -126,7 +126,14 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 .shop .pips{display:block;font-family:var(--fmono);font-size:9px;letter-spacing:.2em;color:#ffd24a;margin:2px 0;}
 #resume{margin-bottom:8px;background:#ffd24a;border-color:#150f24;}
 #ovDump{background:#1a1238;justify-content:flex-start;}
-#ovDump{padding-bottom:0;}
+.row3{display:flex;gap:6px;width:100%;max-width:380px;margin:8px auto 0;}
+.row3 .big-btn{flex:1;margin:0;font-size:15px;letter-spacing:.06em;padding:11px 2px 9px;line-height:1.1;}
+#ovDump,#ovLog{padding-bottom:0;}
+#ovLog{background:#1a1238;justify-content:flex-start;z-index:7;}
+#logList{width:100%;}
+#logInfo{flex:1;min-width:0;font-size:11px;line-height:1.4;color:#b9b9c6;}
+#logInfo b{display:block;font-family:var(--fdisp);font-weight:400;font-size:17px;letter-spacing:.06em;color:#fff;line-height:1.1;}
+#logInfo i{font-style:normal;color:#ffd24a;}
 #dumpList{width:100%;}
 .dumpbar{position:sticky;bottom:0;align-self:stretch;margin:14px -6% 0;padding:9px 5% calc(10px + env(safe-area-inset-bottom,0px));
   background:#0d0a1c;border-top:3px solid #150f24;display:flex;align-items:center;gap:9px;text-align:left;min-height:64px;z-index:2;}
@@ -190,8 +197,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       <div class="who" id="who"></div>
       <button class="big-btn" id="resume" hidden></button>
       <button class="big-btn" id="start">GO ON AIR</button>
-      <button class="big-btn alt" id="shopBtn">DRESSING ROOM</button>
-      <button class="big-btn alt" id="dumpBtn">MONEY DUMP</button>
+      <div class="row3">
+        <button class="big-btn alt" id="shopBtn">DRESSING ROOM</button>
+        <button class="big-btn alt" id="dumpBtn">MONEY DUMP</button>
+        <button class="big-btn alt" id="logBtn">LOGBOOK</button>
+      </div>
       <button class="hdr-btn" id="modeBtn" style="margin-top:10px"></button>
       <div class="money" id="money"></div>
       <div class="stats" id="stats"></div>
@@ -236,6 +246,17 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       </div>
     </div>
 
+    <div class="ov" id="ovLog" hidden>
+      <h1>LOGBOOK</h1>
+      <p class="sub" id="logSub"></p>
+      <div id="logList"></div>
+      <div class="dumpbar">
+        <img alt="" id="logPic" hidden>
+        <div id="logInfo"></div>
+        <button id="logClose">BACK</button>
+      </div>
+    </div>
+
     <div class="ov" id="ovShop" hidden>
       <h1>DRESSING ROOM</h1>
       <p class="sub" id="shopSub"></p>
@@ -248,6 +269,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       <div style="height:14px"></div>
       <button class="big-btn" id="pauseClose">BACK TO THE SHOW</button>
       <button class="big-btn alt" id="kitBtn" hidden>GIMMICKS</button>
+      <button class="big-btn alt" id="logBtn2">LOGBOOK</button>
       <button class="big-btn alt" id="mute">SOUND ON</button>
       <button class="big-btn alt" id="quit" hidden>QUIT</button>
       <a class="sitelink" href="../">← PTXERO</a>
@@ -283,9 +305,15 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 
   // ── Saved stats ────────────────────────────────────────────────
   const KEY = 'deadair.stats';
-  let stats = { runs: 0, wins: 0, bestEp: 0, bestBank: 0, sound: true, who: 'rookie', money: 0, perks: {}, jackpot: 5000, unlocked: [], opened: 0, equip: {} };
+  let stats = { runs: 0, wins: 0, bestEp: 0, bestBank: 0, sound: true, who: 'rookie', money: 0, perks: {}, jackpot: 5000, unlocked: [], opened: 0, equip: {}, seen: {} };
   try { Object.assign(stats, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   const has = id => stats.unlocked.indexOf(id) >= 0;
+  // Logbook: a gimmick or headliner is discovered the first time you get it, and stays discovered.
+  function discover(id, lv) {
+    if (!live) return;
+    const e = stats.seen[id] || (stats.seen[id] = { n: 0, lv: 0 });
+    e.n++; e.lv = Math.max(e.lv, lv || 1);
+  }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(stats)); } catch (e) {} };
 
   // ── Sound ──────────────────────────────────────────────────────
@@ -665,7 +693,15 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     for (let i = 0; i < 4; i++) confetti(rnd(60, 480), 160, 45, 60, 260);
     sfx.cheer(true); sfx.fanfare(); excite = 1.6;
     const won = G.phase === 'won';
-    setTimeout(() => { if (!G || !live) return; won ? showEnd(true) : showLoad(); }, 1700);
+    setTimeout(() => {
+      if (!G || !live) return;
+      const go = () => { won ? showEnd(true) : showLoad(); };
+      const h = G.booked; G.booked = null;
+      if (!h) return go();
+      // Clearing an act finale: the network books a headliner for you.
+      discover(h.id, 1); save(); badgeFx.set(h.id, 0); sfx.fanfare(); sfx.cheer(true);
+      showCard({ icon: h.id, kick: 'HEADLINER BOOKED', title: h.name, text: h.d(1), color: h.color, yes: 'OK', onYes: go });
+    }, 1700);
   }
 
   // One card, one thing to read. The show waits until it is answered.
@@ -754,7 +790,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     $('spin').disabled = false;
     wedgeFx = res.index; wedgeFxT = 0;
     if (res.got.length) {
-      res.got.forEach(g => badgeFx.set(g.id, 0));
+      res.got.forEach(g => { badgeFx.set(g.id, 0); discover(g.id, G.lv(g.id)); }); save();
       const g = res.got[0];
       shout(g.name + '!', g.color, 54, 1.6); sfx.fanfare(); sfx.cheer(true); excite = 1.6;
       for (let i = 0; i < 3; i++) confetti(rnd(100, 440), 250, 40, 60, 300);
@@ -806,6 +842,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   function newRun() {
     live = true; resetFx();
     G = new D.Game(null, stats.who, stats.perks, stats.mode === D.PILOT ? D.PILOT : D.EPISODES, { unlocked: stats.unlocked, charm: stats.equip.charm });
+    Object.keys(G.levels).forEach(id => discover(id, G.levels[id]));
     stats.runs++; save(); runMoney = 0;
     ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovShop', 'ovCard', 'ovDump'].forEach(id => { $(id).hidden = true; });
     $('quit').hidden = false; $('kitBtn').hidden = false;
@@ -852,12 +889,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   function equipSlot(u) { return u.cat === 'charm' ? 'charm' : u.cat === 'look' ? u.look.slot : null; }
   function paintDump() {
     const left = D.UNLOCKS.filter(u => !has(u.id)).length, price = cratePrice();
-    $('dumpSub').innerHTML = `<b style="color:#ffd24a">$${fmt(stats.money || 0)}</b> · ${100 - left}/100`;
+    $('dumpSub').innerHTML = `<b style="color:#ffd24a">$${fmt(stats.money || 0)}</b> · ${D.UNLOCKS.length - left}/${D.UNLOCKS.length}`;
     $('dumpOpen').textContent = left ? 'OPEN A CRATE · $' + fmt(price) : 'EVERYTHING UNLOCKED';
     $('dumpOpen').disabled = !left || (stats.money || 0) < price || dumpBusy;
     $('dumpOpen').style.filter = $('dumpOpen').disabled ? 'grayscale(1) brightness(.5)' : '';
     $('dumpList').innerHTML = CATS.map(([cat, label]) => {
       const items = D.UNLOCKS.filter(u => u.cat === cat);
+      if (!items.length) return '';
       return `<div class="dsec">${label} · ${items.filter(u => has(u.id)).length}/${items.length}</div><div class="dgrid">` + items.map(u => {
         if (!has(u.id)) return '<button class="lock" disabled>?</button>';
         const slot = equipSlot(u), on = slot && stats.equip[slot] === u.id;
@@ -1021,6 +1059,26 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('dumpBtn').onclick = () => { lastGot = null; paintDump(); describe(null); $('ovDump').hidden = false; $('ovDump').scrollTop = 0; };
   $('dumpOpen').onclick = openCrate;
   $('dumpClose').onclick = () => { $('ovDump').hidden = true; paintTitle(); };
+
+  // ── Logbook ────────────────────────────────────────────────────
+  let logFromRun = false;
+  function paintLog(pick) {
+    const all = D.GIMMICKS, found = all.filter(g => stats.seen[g.id]).length;
+    $('logSub').innerHTML = `<b style="color:#ffd24a">${found}</b> / ${all.length} DISCOVERED`;
+    $('logList').innerHTML = [['GIMMICKS', g => !g.rare], ['HEADLINERS', g => g.rare]].map(([label, f]) => {
+      const items = all.filter(f);
+      return `<div class="dsec">${label} · ${items.filter(g => stats.seen[g.id]).length}/${items.length}</div><div class="dgrid">` + items.map(g =>
+        stats.seen[g.id] ? `<button data-g="${g.id}" class="${pick === g.id ? 'sel' : ''}"><img alt="${g.name}" src="${iconURL(g.id)}"></button>` : '<button class="lock" disabled>?</button>').join('') + '</div>';
+    }).join('');
+    const g = pick && D.byId(all, pick), e = g && stats.seen[g.id];
+    $('logPic').hidden = !g; if (g) $('logPic').src = iconURL(g.id);
+    $('logInfo').innerHTML = g ? `<b>${g.name}</b>${g.d(1)}<br><i>${g.rare ? 'BOOKED' : 'WON'} ${e.n}×${g.rare ? '' : ' · BEST LEVEL ' + e.lv}</i>` : 'TAP AN ITEM';
+  }
+  function openLog(fromRun) { logFromRun = fromRun; paintLog(null); $('ovLog').hidden = false; $('ovLog').scrollTop = 0; }
+  $('logList').addEventListener('click', e => { const b = e.target.closest('[data-g]'); if (b) paintLog(b.dataset.g); });
+  $('logBtn').onclick = () => openLog(false);
+  $('logBtn2').onclick = () => openLog(true);
+  $('logClose').onclick = () => { $('ovLog').hidden = true; };
 
   function paintTitle() {
     const sv = savedRun();
@@ -2119,6 +2177,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('mute').textContent = stats.sound ? 'SOUND ON' : 'SOUND OFF';
   if (!Array.isArray(stats.unlocked)) stats.unlocked = [];
   if (!stats.equip) stats.equip = {};
+  if (!stats.seen) stats.seen = {};
   applyLooks();
   resize(); paintTitle(); startDemo();
   requestAnimationFrame(frame);
