@@ -93,8 +93,8 @@ const SITE = {
     {
       id:     'dead-air',
       title:  'DEAD//AIR',
-      sub:    'v1.0',
-      desc:   'A small game-show roguelike. Flip panels, build the pot, bank it before you hit dead air. Sign sponsors between episodes and survive an eight-episode season.',
+      sub:    'v1.1',
+      desc:   'A small game-show roguelike. Flip panels, build the pot, bank it before you hit dead air. Zeros set off chain reactions, sponsors stack, and every cleared episode opens a prize door. Survive an eight-episode season, then go endless.',
       tags:   ['game', 'roguelike', 'push your luck'],
       url:    './dead-air/',
       status: 'live',

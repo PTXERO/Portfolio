@@ -48,7 +48,9 @@ function playSegment(g) {
 }
 
 function shop(g) {
-  g.openShop();
+  g.openDoors();
+  const want = ['sponsor', 'upgrade', 'lifeline', 'cash'];
+  g.pickDoor(g.doors.map((d, i) => [want.indexOf(d.kind), i]).sort((x, y) => x[0] - y[0])[0][1]);
   for (let pass = 0; pass < 2; pass++) {
     g.shop.items.forEach((it, i) => { if (g.canBuy(it)) g.buy(i); });
     if (pass === 0 && g.money >= g.shop.reroll + 5) g.reroll();
@@ -58,7 +60,7 @@ function shop(g) {
 const died = new Array(D.EPISODES + 1).fill(0), ratio = new Array(D.EPISODES).fill(0), reached = new Array(D.EPISODES).fill(0);
 let wins = 0;
 for (let r = 0; r < RUNS; r++) {
-  const g = new D.Game(1000 + r);
+  const g = new D.Game(1000 + r, process.argv[4]);
   while (true) {
     g.startEpisode();
     while (g.phase === 'play') { playSegment(g); g.nextSegment(); }

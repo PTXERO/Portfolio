@@ -42,6 +42,33 @@ button{font:inherit;color:inherit;}
 .how li::before{content:attr(data-n);position:absolute;left:0;font-family:var(--fmono);color:var(--acc);}
 .how .c{color:var(--acc4)}.how .h{color:var(--acc2)}.how .d{color:var(--acc3)}
 
+.who{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 0 14px;text-align:left;}
+.who button{border:1px solid var(--b2);border-radius:3px;background:var(--panel);padding:8px 9px;cursor:pointer;text-align:left;}
+.who button b{display:block;font-family:var(--fmono);font-weight:400;font-size:11px;letter-spacing:.12em;color:var(--txt);}
+.who button span{display:block;font-size:10.5px;line-height:1.45;color:var(--dim);margin-top:2px;}
+.who button.on{border-color:var(--acc);background:rgba(200,245,66,.05);}
+.who button.on b{color:var(--acc);}
+.who button:disabled{cursor:not-allowed;border-style:dashed;}
+.who button:disabled b{color:var(--dim);}
+
+/* ── Prize doors ───────────────────────────────────────── */
+.doors-head{text-align:center;margin:10px 0 16px;}
+.doors-head h1{font-family:var(--fdisp);font-weight:400;font-size:44px;letter-spacing:.1em;line-height:1;color:var(--acc);}
+.doors-head p{font-size:12px;color:var(--dim);margin-top:6px;}
+.doors{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.door{border:1px solid var(--b2);border-radius:3px 3px 0 0;border-bottom:4px solid var(--b2);cursor:pointer;
+  background:repeating-linear-gradient(90deg,transparent 0 18px,rgba(255,255,255,.02) 18px 19px),var(--panel);
+  padding:12px 9px 16px;min-height:230px;display:flex;flex-direction:column;gap:6px;text-align:left;
+  transition:border-color .12s,transform .12s;}
+.door:hover{border-color:var(--acc);transform:translateY(-3px);}
+.door .num{font-family:var(--fdisp);font-size:44px;line-height:1;color:var(--mut);}
+.door .k{font-family:var(--fmono);font-size:9px;letter-spacing:.16em;}
+.door.sponsor .k{color:var(--acc)}.door.lifeline .k{color:var(--acc2)}.door.upgrade .k,.door.cash .k{color:var(--acc4)}
+.door b{font-family:var(--fdisp);font-weight:400;font-size:20px;letter-spacing:.07em;line-height:1.05;color:var(--txt);}
+.door p{font-size:11px;line-height:1.5;color:var(--dim);}
+.lvl{font-family:var(--fmono);font-size:9px;letter-spacing:.1em;color:var(--acc4);border:1px solid var(--acc4);border-radius:2px;padding:0 4px;margin-left:6px;vertical-align:1px;}
+.result .big-btn+.big-btn{margin-top:8px;}
+
 /* ── HUD ───────────────────────────────────────────────── */
 .hud{display:flex;align-items:flex-end;gap:10px;margin-bottom:8px;}
 .hud-ep{font-family:var(--fdisp);font-size:26px;letter-spacing:.1em;line-height:1;}
@@ -197,14 +224,16 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
     <span class="onair">● ON AIR</span>
     <div class="logo">DEAD<em>//</em>AIR</div>
     <p class="pitch">You are tonight's contestant. Flip panels, build the pot, and bank it before the signal dies. Survive eight episodes and the show is yours.</p>
+    <div class="who" id="who"></div>
     <button class="big-btn" id="start">GO ON AIR</button>
     <div class="stats" id="stats"></div>
     <ul class="how">
       <li data-n="1">Flip panels. <span class="c">Cash</span> adds to the pot, <span class="h">hype</span> multiplies it. Pot = cash × hype.</li>
       <li data-n="2">Each flipped panel shows how many <span class="d">dead air</span> panels touch it, diagonals included.</li>
+      <li data-n="↯">A panel showing 0 sets off a chain reaction: its neighbours flip for free, each paying $5 more than the last.</li>
       <li data-n="3">Hit <span class="d">dead air</span> and the pot is gone. Press BANK any time to keep it and end the segment.</li>
       <li data-n="4">Beat the target before you run out of segments, or the show is cancelled.</li>
-      <li data-n="5">Between episodes, spend your fee on sponsors, lifelines and better panels.</li>
+      <li data-n="5">Clear an episode to pick a free prize door, then spend your fee on sponsors, lifelines and better panels. Sign a sponsor twice to level it up.</li>
       <li data-n="⚑">Right-click or long-press a panel to flag it.</li>
     </ul>
   </section>
@@ -251,6 +280,12 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
     </div>
   </section>
 
+  <!-- Prize doors -->
+  <section id="doors" hidden>
+    <div class="doors-head"><h1>PICK A DOOR</h1><p>Episode cleared. One prize is yours, on the house.</p></div>
+    <div class="doors" id="doorList"></div>
+  </section>
+
   <!-- Green room -->
   <section id="shop" hidden>
     <div class="shop-head">
@@ -284,7 +319,7 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
 
   // ── Saved stats ────────────────────────────────────────────────
   const KEY = 'deadair.stats';
-  let stats = { runs: 0, wins: 0, bestEp: 0, bestBank: 0, sound: true };
+  let stats = { runs: 0, wins: 0, bestEp: 0, bestBank: 0, sound: true, who: 'rookie' };
   try { Object.assign(stats, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(stats)); } catch (e) {} };
 
@@ -324,7 +359,7 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
 
   // ── Screens ────────────────────────────────────────────────────
   function show(name) {
-    ['title', 'play', 'shop'].forEach(s => { $(s).hidden = s !== name; });
+    ['title', 'play', 'doors', 'shop'].forEach(s => { $(s).hidden = s !== name; });
     $('quit').hidden = name === 'title';
     window.scrollTo(0, 0);
   }
@@ -332,8 +367,13 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
   function paintTitle() {
     $('stats').innerHTML = stats.runs
       ? `<div><b>${stats.runs}</b>RUNS</div><div><b>${stats.wins}</b>SEASONS WON</div>` +
-        `<div><b>${stats.bestEp}/${D.EPISODES}</b>BEST EPISODE</div><div><b>${fmt(stats.bestBank)}</b>BEST BANK</div>`
+        `<div><b>${stats.bestEp}</b>EPISODES CLEARED</div><div><b>${fmt(stats.bestBank)}</b>BEST BANK</div>`
       : '';
+    const open = c => !c.ok || c.ok(stats);
+    if (!open(D.byId(D.CONTESTANTS, stats.who) || {})) stats.who = 'rookie';
+    $('who').innerHTML = D.CONTESTANTS.map(c => open(c)
+      ? `<button data-who="${c.id}" class="${c.id === stats.who ? 'on' : ''}"><b>${c.name}</b><span>${c.desc}</span></button>`
+      : `<button disabled><b>${c.name}</b><span>LOCKED · ${c.need}</span></button>`).join('');
   }
 
   // ── Board ──────────────────────────────────────────────────────
@@ -365,11 +405,12 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
     return `<span class="v">${top}</span><span class="n n${Math.min(h, 3)}">${hideHint ? '~' : h}</span>`;
   }
 
+  let veil = new Set();   // panels flipped by a chain reaction that have not popped on screen yet
   function paintBoard() {
     const s = g.seg;
     for (let i = 0; i < D.N; i++) {
       const t = tiles[i], p = s.panels[i];
-      const open = s.shown[i], known = s.known[i], ghost = s.done && !open && !known;
+      const open = s.shown[i] && !veil.has(i), known = s.known[i], ghost = s.done && !open && !known && !veil.has(i);
       let cls = 'tile';
       if (open || known || ghost) {
         cls += ' open ' + p.t + (known ? ' known' : '') + (ghost ? ' ghost' : '');
@@ -410,7 +451,7 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
 
   function paintHud() {
     const e = g.episode, s = g.seg;
-    $('hudEp').innerHTML = `EPISODE ${g.ep}<small> / ${D.EPISODES}</small>`;
+    $('hudEp').innerHTML = `EPISODE ${g.ep}<small> ${g.ep > D.EPISODES ? '· ENDLESS' : '/ ' + D.EPISODES}</small>`;
     $('hudMoney').textContent = '$' + g.money;
     $('twist').hidden = !e.twist;
     if (e.twist) $('twist').innerHTML = `<b>SPECIAL: ${e.twist.name}</b> — ${e.twist.desc}`;
@@ -448,9 +489,9 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
     return g.sponsors.map((sp, i) => {
       const d = D.byId(D.SPONSORS, sp.id);
       let tag = '';
-      if (!inShop && sp.id === 'edge') tag = `<span class="armed ${g.episode.shield ? '' : 'off'}">${g.episode.shield ? 'ARMED' : 'USED'}</span>`;
+      if (!inShop && sp.id === 'edge') tag = `<span class="armed ${g.episode.shield ? '' : 'off'}">${g.episode.shield ? 'ARMED' + (g.episode.shield > 1 ? ' ×' + g.episode.shield : '') : 'USED'}</span>`;
       if (inShop) tag = `<button class="sell" data-sell="${i}">SELL $${g.sellValue(i)}</button>`;
-      return `<div class="chip"><div><b>${d.name}</b><span>${d.desc}</span></div>${tag}</div>`;
+      return `<div class="chip"><div><b>${d.name}${sp.lv > 1 ? `<i class="lvl">LV ${sp.lv}</i>` : ''}</b><span>${d.d(sp.lv)}</span></div>${tag}</div>`;
     }).join('');
   }
   function lifelineChips(inShop) {
@@ -477,7 +518,7 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
     paintBoard();
   }
 
-  function showFlip(ev) {
+  function showFlip(ev, pitch) {
     const i = ev.i;
     if (ev.kind === 'saved') {
       sfx.save(); floatText(i, ev.notes[0] + '!', 'var(--acc)');
@@ -486,15 +527,15 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
       $('board').classList.remove('shake'); void $('board').offsetWidth; $('board').classList.add('shake');
       $('noise').classList.remove('on'); void $('noise').offsetWidth; $('noise').classList.add('on');
     } else if (ev.kind === 'cash') {
-      sfx.cash(g.seg.flips); floatText(i, '+' + ev.gain, 'var(--acc4)'); bump('potCash');
+      sfx.cash(pitch); floatText(i, '+' + ev.gain, 'var(--acc4)'); bump('potCash');
     } else if (ev.kind === 'hype') {
       sfx.hype(); floatText(i, '+' + ev.gain + ' HYPE', 'var(--acc2)'); bump('potHype');
     } else if (ev.kind === 'x') {
       sfx.hype(); floatText(i, '×' + ev.gain, 'var(--acc)'); bump('potSum');
     }
     if (ev.kind !== 'saved' && ev.kind !== 'dead' && ev.notes.length) {
-      setTimeout(() => floatText(i, ev.notes.filter(n => !n.startsWith('TIP')).join(' · '), 'var(--acc)'), 180);
-      if (ev.notes.some(n => n.includes('HYPE'))) bump('potHype');
+      const notes = ev.notes.filter(n => !n.startsWith('TIP'));
+      if (notes.length) { setTimeout(() => floatText(i, notes.join(' · '), 'var(--acc)'), 180); bump('potHype'); }
     }
   }
 
@@ -502,8 +543,27 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
     if (!g || busy) return;
     const ev = g.flip(i);
     if (!ev) { if (g.phase === 'play' && g.seg.flags[i]) sfx.no(); return; }
-    paintBoard(); pop(i); showFlip(ev);
-    afterEvent(ev);
+    playFlip(ev);
+  }
+
+  // Show a flip, then pop any chain reaction one panel at a time.
+  function playFlip(ev) {
+    const steps = ev.steps || [], base = g.seg.flips - steps.length;
+    if (!steps.length) { paintBoard(); pop(ev.i); showFlip(ev, base); return afterEvent(ev); }
+    busy = true;
+    veil = new Set(steps.map(st => st.i));
+    paintBoard(); pop(ev.i); showFlip(ev, base);
+    const pot = e => { $('potCash').textContent = fmt(e.cashNow); $('potHype').textContent = fx(e.hypeNow); $('potSum').textContent = fmt(e.cashNow * e.hypeNow * g.seg.xm); };
+    pot(ev);
+    steps.forEach((st, k) => setTimeout(() => {
+      veil.delete(st.i);
+      paintBoard(); pop(st.i); showFlip(st, base + k + 1);
+      pot(st);
+      if (k === steps.length - 1) {
+        if (steps.length >= 3) setTimeout(() => floatText(ev.i, 'CHAIN ×' + steps.length, 'var(--acc)'), 120);
+        busy = false; afterEvent(ev);
+      }
+    }, 90 * (k + 1)));
   }
 
   function bank() {
@@ -523,7 +583,7 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
     if (ev.id === 'cue') { pop(ev.i); floatText(ev.i, 'DEAD AIR', 'var(--acc3)'); }
     if (ev.id === 'mic') bump('potHype');
     if (ev.id === 'ad') { sfx.bank(); if (ev.wrap) return afterEvent(ev.wrap); }
-    if (ev.id === 'intern' && ev.flip) { pop(ev.flip.i); showFlip(ev.flip); return afterEvent(ev.flip); }
+    if (ev.id === 'intern' && ev.flip) return playFlip(ev.flip);
     paintHud();
   }
 
@@ -537,6 +597,7 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
 
   function showResult(ev) {
     const e = g.episode, r = $('result');
+    $('result').dataset.won = '';
     const rows = ev.parts.map(p => `<div class="row"><span>${p[0]}</span><b>×${fx(p[1])}</b></div>`).join('');
     const headline = { bank: 'BANKED', sweep: 'CLEAN SWEEP', clock: 'HARD OUT', bust: 'DEAD AIR' }[ev.end];
     let h = '', btn = '', cls = ev.end === 'bust' ? 'bad' : 'good';
@@ -546,12 +607,12 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
       const pay = ev.pay.map(p => `<div class="row"><span>${p[0]}</span><b>+$${p[1]}</b></div>`).join('');
       h = `<h2>${final ? 'SEASON WRAPPED' : 'EPISODE ' + g.ep + ' CLEARED'}</h2>
         <p>${ev.end === 'bust' ? 'Dead air, but the severance carried you over.' : headline + ' ' + fmt(ev.score) + '.'}
-        ${final ? ' Eight episodes, still on the air. The network is renewing you.' : ' ' + fmt(e.total) + ' against a target of ' + fmt(e.target) + '.'}</p>
+        ${final ? ' Eight episodes, still on the air. You can take the win, or keep the cameras rolling.' : ' ' + fmt(e.total) + ' against a target of ' + fmt(e.target) + '.'}</p>
         <div class="rows">${pay}<div class="row tot"><span>IN YOUR POCKET</span><b>$${g.money}</b></div></div>`;
-      btn = final ? 'NEW SEASON' : 'TO THE GREEN ROOM';
+      btn = final ? 'KEEP GOING (ENDLESS)' : 'PICK A PRIZE DOOR';
       cls = 'good';
-      if (final) { stats.wins++; stats.bestEp = D.EPISODES; }
-      else stats.bestEp = Math.max(stats.bestEp, g.ep);
+      if (final) stats.wins++;
+      stats.bestEp = Math.max(stats.bestEp, g.ep);
       save();
     } else if (ev.episode === 'lose') {
       h = `<h2>CANCELLED</h2>
@@ -570,7 +631,9 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
       btn = 'NEXT SEGMENT';
     }
     r.className = 'result ' + cls;
-    r.innerHTML = h + `<button class="big-btn" id="cont">${btn}</button>`;
+    r.innerHTML = h + `<button class="big-btn" id="cont">${btn}</button>` +
+      (g.phase === 'won' ? '<button class="big-btn alt" id="wrap">TAKE THE WIN</button>' : '');
+    if (g.phase === 'won') $('wrap').onclick = () => { if (!busy) toTitle(); };
     r.hidden = false; $('actions').hidden = true;
     // Short lock so a fast flipper does not skip the result by accident.
     busy = true; $('cont').disabled = true;
@@ -581,24 +644,43 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
   function proceed() {
     if (busy) return;
     $('result').hidden = true; $('actions').hidden = false;
-    if (g.phase === 'payout') { g.openShop(); paintShop(); show('shop'); }
-    else if (g.phase === 'over' || g.phase === 'won') newRun();
+    if (g.phase === 'won') g.goEndless();
+    if (g.phase === 'payout') { g.openDoors(); paintDoors(); show('doors'); }
+    else if (g.phase === 'over') newRun();
     else { g.nextSegment(); flagMode = false; paintBoard(); paintHud(); }
   }
 
-  // ── Green room ─────────────────────────────────────────────────
+  // ── Prize doors / green room ───────────────────────────────────
+  const KINDS = { sponsor: 'SPONSOR', lifeline: 'LIFELINE', upgrade: 'BOARD UPGRADE', cash: 'CASH' };
+  // Label + description for an offer; owned sponsors show what the next level does.
+  function offer(it) {
+    if (it.kind !== 'sponsor') return { k: KINDS[it.kind], desc: it.def.desc };
+    const lv = g.lv(it.def.id);
+    return { k: lv ? `SPONSOR · LEVEL UP TO ${lv + 1}` : 'SPONSOR', desc: it.def.d(lv + 1) };
+  }
+  function paintDoors() {
+    $('doorList').innerHTML = g.doors.map((it, i) => {
+      const o = offer(it);
+      return `<button class="door ${it.kind}" data-door="${i}"><span class="num">${i + 1}</span>
+        <span class="k">${o.k}</span><b>${it.def.name}</b><p>${o.desc}</p></button>`;
+    }).join('');
+  }
+  $('doorList').addEventListener('click', e => {
+    const b = e.target.closest('[data-door]'); if (!b) return;
+    if (g.pickDoor(+b.dataset.door)) { sfx.win(); paintShop(); show('shop'); }
+  });
+
   function paintShop() {
     $('shopMoney').textContent = '$' + g.money;
     const nextEp = g.ep + 1, tw = g.twistFor(nextEp);
-    $('next').innerHTML = `NEXT: <b>EPISODE ${nextEp} OF ${D.EPISODES}</b> · TARGET <b>${fmt(D.TARGETS[nextEp - 1])}</b>` +
-      (nextEp === 4 || nextEp === 7 ? `<br><span class="tw">The network adds 1 more dead air from here on.</span>` : '') +
+    $('next').innerHTML = `NEXT: <b>EPISODE ${nextEp}${nextEp > D.EPISODES ? ' (ENDLESS)' : ' OF ' + D.EPISODES}</b> · TARGET <b>${fmt(g.target(nextEp))}</b>` +
+      ([4, 7, 10, 13].includes(nextEp) ? `<br><span class="tw">The network adds 1 more dead air from here on.</span>` : '') +
       (tw ? `<br><span class="tw">SPECIAL: ${tw.name} — ${tw.desc}</span>` : '');
-    const kinds = { sponsor: 'SPONSOR', lifeline: 'LIFELINE', upgrade: 'BOARD UPGRADE' };
     $('items').innerHTML = g.shop.items.map((it, i) => {
-      const full = !it.sold && it.kind === 'sponsor' && g.sponsors.length >= D.SPONSOR_SLOTS ? 'SLOTS FULL'
-        : !it.sold && it.kind === 'lifeline' && g.lifelines.length >= D.LIFELINE_SLOTS ? 'SLOTS FULL' : '';
+      const full = !it.sold && it.kind !== 'upgrade' && !g.fits(it) ? 'SLOTS FULL' : '';
+      const o = it.sold ? { k: KINDS[it.kind], desc: it.kind === 'sponsor' ? it.def.d(g.lv(it.def.id) || 1) : it.def.desc } : offer(it);
       return `<div class="item ${it.kind}${it.sold ? ' sold' : ''}">
-        <span class="k">${kinds[it.kind]}</span><b>${it.def.name}</b><p>${it.def.desc}</p>
+        <span class="k">${o.k}</span><b>${it.def.name}</b><p>${o.desc}</p>
         <button class="buy" data-buy="${i}" ${g.canBuy(it) ? '' : 'disabled'}>${it.sold ? 'SOLD' : full || 'BUY $' + g.price(it.def)}</button>
       </div>`;
     }).join('');
@@ -638,7 +720,7 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
     show('play'); paintBoard(); paintHud();
   }
   function newRun() {
-    g = new D.Game();
+    g = new D.Game(null, stats.who);
     stats.runs++; save();
     startEpisode();
   }
@@ -647,9 +729,14 @@ button.chip:disabled{opacity:.45;cursor:not-allowed;}
   $('bank').onclick = bank;
   $('flagBtn').onclick = () => { flagMode = !flagMode; paintHud(); };
   $('quit').onclick = () => {
-    if (g && (g.phase === 'play' || g.phase === 'shop' || g.phase === 'payout') && !confirm('Walk off the set? This run will be lost.')) return;
-    g = null; busy = false; paintTitle(); show('title');
+    if (g && g.phase !== 'over' && g.phase !== 'won' && !confirm('Walk off the set? This run will be lost.')) return;
+    toTitle();
   };
+  function toTitle() { g = null; busy = false; veil.clear(); paintTitle(); show('title'); }
+  $('who').addEventListener('click', e => {
+    const b = e.target.closest('[data-who]'); if (!b) return;
+    stats.who = b.dataset.who; save(); paintTitle();
+  });
   $('mute').onclick = () => { stats.sound = !stats.sound; save(); paintMute(); };
   function paintMute() { $('mute').textContent = stats.sound ? 'SOUND ON' : 'SOUND OFF'; }
 
