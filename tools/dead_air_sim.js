@@ -9,16 +9,16 @@ const D = require('../dead-air/game.js');
 const RUNS = +process.argv[2] || 300, ERR = (+process.argv[3] || 45) / 1000;
 const POTENTIAL = process.argv.includes('--potential');
 const WHO = process.argv[4] && !process.argv[4].startsWith('--') ? process.argv[4] : undefined;
-const DT = 1 / 60, N = D.N;
+const DT = 1 / 60;
 
 function gauss(g) { return Math.sqrt(-2 * Math.log(1 - g.rand())) * Math.cos(2 * Math.PI * g.rand()); }
-const bad = (g, i) => i < 0 || i >= N ? false : !g.isUp(i);
+const bad = (g, i) => i < 0 || i >= g.n ? false : !g.isUp(i);
 
 function playRound(g) {
   while (g.phase === 'sweep' || g.phase === 'resolve') {
     if (g.phase === 'resolve') { g.step(DT); continue; }
     const up = g.upList(), need = g.target(g.ep) - g.total, pot = g.score();
-    const dark = N - up.length, last = g.roundsLeft === 1;
+    const N = g.n, dark = N - up.length, last = g.roundsLeft === 1;
     if (g.clock <= 0) { if (!g.bank()) g.endRound(g.score(), false); continue; }
     // Bank when the target is covered (unless measuring potential), or when almost nothing safe is left.
     const covered = !POTENTIAL && pot >= need;

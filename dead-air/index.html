@@ -265,7 +265,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 <script>
 (function(){
   const D = DeadAir, $ = id => document.getElementById(id);
-  const W = 540, H = 960, N = D.N;
+  const W = 540, H = 960;
+  let N = D.N;                  // podiums on the strip right now; follows the game
   const cv = $('cv'); let ctx = cv.getContext('2d');
   if (!ctx.roundRect) CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h) { this.rect(x, y, w, h); };
   const fmt = n => Math.floor(n).toLocaleString('en-US');
@@ -275,7 +276,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   const C = { cash: '#f5a542', gold: '#ffd24a', hype: '#42d4f5', dead: '#f542a8', jack: '#ff6bd6', spin: '#c8f542', lime: '#c8f542', box: '#9d8cff', bomb: '#ff5a3c', x2: '#ffffff', restock: '#d9a55a', car: '#ff5a7a', jp: '#ffd24a', clockp: '#7fe0ff', bleepp: '#7fe0ff', superstar: '#ffd24a', coin: '#ffd24a', broom: '#d9a55a' };
 
   // Where things are on the stage. The prize strip is a shallow arc.
-  const PX = pos => 22 + pos * 41.33;
+  const PX = pos => 22 + pos * (496 / N);
   const PY = pos => 424 - 50 * Math.sin(Math.PI * pos / N);
   const RIG = [270, 110, 430, 190];        // x of each spotlight on the lighting rig
   const DESK = { x: 270, y: 706 };
@@ -449,7 +450,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   let crateShow = null;         // a Money Dump crate being opened: takes over the whole stage
   let G = null;                 // the game on screen (a real run, or the attract-mode demo)
   let parts = [], bolts = [], rings = [], floats = [], flyers = [], rays = [], jets = [], tosses = [], shots = [], lasers = [];
-  const podFx = new Array(N).fill(1), badgeFx = new Map();
+  const podFx = new Array(24).fill(1), badgeFx = new Map();
   let shake = 0, flashA = 0, flashC = '#fff', glitch = 0, excite = 0, time = 0, dark = 0;
   let callout = null, tally = null, shownTotal = 0, pausedUI = false, slam = 0, deskBump = 0, ballFlash = 0;
   const cannonFx = [0, 0], droneGo = [];
@@ -1334,28 +1335,38 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       const danger = p.state === 'up' && p.kind === 'dead', burnt = p.state === 'burnt';
       // On MYSTERY NIGHT you only see what a light is passing over.
       const covered = hidden && p.state === 'up' && !beams.some(b => Math.abs(b - i - 0.5) < 1.45) && G.phase !== 'tally';
-      // pedestal
+      // pedestal (everything shrinks a little when BIGGER STAGE adds podiums)
+      const K = Math.min(1, 12 / N);
+      ctx.save(); ctx.translate(x, y); ctx.scale(K, K); ctx.translate(-x, -y);
       inkSeq = 2000 + i * 3;
       ink(() => { ctx.moveTo(x - 17, y); ctx.lineTo(x + 17, y); ctx.lineTo(x + 14, y + 52); ctx.lineTo(x - 14, y + 52); ctx.closePath(); }, '#3d2e86', 2.6);
       ctx.fillStyle = covered ? '#9d8cff' : (danger || (burnt && !ghost)) ? '#f542a8' : p.state !== 'up' ? '#34344a' : C[p.kind] || C.cash;
       ctx.globalAlpha = burnt ? 0.5 : 1; ctx.fillRect(x - 15, y + 10, 31, 7); ctx.globalAlpha = 1;
       ctx.strokeStyle = INK; ctx.lineWidth = 1.6; ctx.strokeRect(x - 15, y + 10, 31, 7);
       ink(() => ctx.ellipse(x, y, 17, 5.5, 0, 0, TAU), '#6a55c8', 2.4);
+      ctx.restore();
       // prize (on CONVEYOR it slides in from the podium it just left)
       const f = podFx[i];
       if (p.state === 'gone' || f < 0) continue;
       const sp = i + 0.5 - shiftAnim, px = PX(sp), py = PY(Math.max(0, Math.min(N, sp)));
       const pop = f < 0.25 ? 1 + (1 - f / 0.25) * 0.5 : 1;
       const bob = p.state === 'up' && !danger ? Math.sin(time * 3 + i) * 2 : 0;
+      ctx.save(); ctx.translate(px, py); ctx.scale(K, K); ctx.translate(-px, -py);
+      drawOnPodium(p, px, py, pop, bob, covered, burnt, ghost);
+      ctx.restore();
+    }
+  }
+  function drawOnPodium(p, px, py, pop, bob, covered, burnt, ghost) {
+    {
       if (covered) {
         ctx.fillStyle = '#4a3a90'; ctx.beginPath(); ctx.moveTo(px - 17, py - 2); ctx.quadraticCurveTo(px - 15, py - 40, px, py - 40); ctx.quadraticCurveTo(px + 15, py - 40, px + 17, py - 2); ctx.fill();
         ctx.fillStyle = '#6a58c8'; ctx.beginPath(); ctx.moveTo(px - 9, py - 4); ctx.quadraticCurveTo(px - 8, py - 36, px, py - 38); ctx.quadraticCurveTo(px - 2, py - 20, px - 3, py - 4); ctx.fill();
         font(17); ctx.textBaseline = 'middle'; text('?', px + 4, py - 19, '#e4dcff', 'center');
-        continue;
+        return;
       }
       if (burnt && ghost) {                       // GHOST LIGHT: burnt podiums are just empty
         if (Math.random() < 0.05) parts.push({ x: px + rnd(-6, 6), y: py - 6, vx: rnd(-8, 8), vy: -26, life: 0.9, max: 0.9, color: '#8a8aa0', size: 3, g: -20, k: 'spark' });
-        continue;
+        return;
       }
       drawPrize(burnt ? 'burnt' : p.kind, G.cashVal(p), px, py - 18 + bob, pop, burnt ? 0.75 : 1);
       if (burnt && Math.random() < 0.04) parts.push({ x: px + rnd(-6, 6), y: py - 30, vx: rnd(-8, 8), vy: -30, life: 0.9, max: 0.9, color: '#5a5a70', size: 4, g: -20, k: 'spark' });
@@ -1376,7 +1387,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       ctx.globalAlpha = a * 1.4; ctx.fillStyle = col;
       ctx.beginPath(); ctx.ellipse(x, y + 8, 25, 8, 0, 0, TAU); ctx.fill();
       if (k === 0) {            // the hot core: stop with this on the middle of a podium for PERFECT
-        const z = G.perfectZone() * 41.33;
+        const z = G.perfectZone() * (496 / N);
         ctx.globalAlpha = 0.9 * (1 - dark); ctx.fillStyle = '#fff';
         ctx.beginPath(); ctx.moveTo(rx - 1, 124); ctx.lineTo(rx + 1, 124); ctx.lineTo(x + 2.5, y + 6); ctx.lineTo(x - 2.5, y + 6); ctx.fill();
         ctx.globalAlpha = 0.35 * (1 - dark) * (stopped ? 1 : 0.6);
@@ -1866,6 +1877,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       case 'clock':     // stopwatch
         box(-4, -19, 8, 6, 2, '#8a8aa0'); circ(0, 2, 15, '#150f24'); circ(0, 2, 12.5, '#fff8e0');
         c.fillStyle = col; c.beginPath(); c.moveTo(0, 2); c.arc(0, 2, 12.5, -Math.PI / 2, 0.9); c.closePath(); c.fill(); line([[0, 2], [0, -7]], '#150f24', 2.2); line([[0, 2], [6, 5]], '#150f24', 2.2); break;
+      case 'stage':     // one more podium
+        for (const px of [-13, 0]) { poly([[px - 6, -4], [px + 6, -4], [px + 5, 14], [px - 5, 14]], '#3d2e86'); c.fillStyle = '#6a55c8'; c.beginPath(); c.ellipse(px, -4, 6, 2.5, 0, 0, TAU); c.fill(); c.fillStyle = '#f5a542'; c.fillRect(px - 5, 1, 10, 3); }
+        poly([[7, -4], [19, -4], [18, 14], [8, 14]], '#c8f542'); c.fillStyle = '#e9ffb0'; c.beginPath(); c.ellipse(13, -4, 6, 2.5, 0, 0, TAU); c.fill(); word('+', 15, '#150f24', 6); c.fillStyle = '#fff'; c.fillRect(11.6, -17, 2.8, 9); c.fillRect(8.5, -13.9, 9, 2.8); break;
       case 'slowmo':    // hourglass
         c.fillStyle = '#3a3a52'; c.fillRect(-12, -18, 24, 4); c.fillRect(-12, 14, 24, 4);
         poly([[-10, -14], [10, -14], [0, 0]], col); poly([[0, 0], [10, 14], [-10, 14]], '#e9fbff'); poly([[-6, 14], [6, 14], [0, 6]], col); break;
@@ -2026,6 +2040,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
     if (!G) return;
     time += dt;
+    N = G.n || D.N;
     if (crateShow) { drawCrateShow(dt); return; }
     if (live) G.elapsed = (G.elapsed || 0) + dt;
     const onWheel = G.phase === 'load' || G.phase === 'wheel' || G.phase === 'pick' || G.phase === 'ready';

@@ -4,7 +4,7 @@
 //  tools/dead_air_sim.js runs it headless to check the difficulty.
 // ─────────────────────────────────────────────────────────────────
 (function (root) {
-  const N = 12;                 // prize podiums on the strip
+  const N = 12;                 // prize podiums on the strip to start with (BIGGER STAGE adds more)
   const EPISODES = 15;          // a full season: three acts of five episodes
   const PILOT = 5;              // the short game: act one only
   const ACT = 5;
@@ -29,6 +29,7 @@
     { id: 'hypeman',tag: 'HY', color: '#42d4f5', max: 5, name: 'HYPE MAN',        d: l => `Hype prizes give +${1 + l}.` },
     { id: 'net',    tag: 'SN', color: '#42f5b0', max: 3, name: 'SAFETY NET',      d: l => `Dead air keeps ${Math.min(100, 25 * l)}%.` },
     { id: 'encore', tag: '+1', color: '#c8f542', max: 3, name: 'ENCORE',          d: l => `+${l} round${l > 1 ? 's' : ''}.` },
+    { id: 'stage',  tag: 'BS', color: '#6a55c8', max: 4, name: 'BIGGER STAGE',    d: l => `+${l} podium${l > 1 ? 's' : ''}.` },
     { id: 'clock',  tag: 'XT', color: '#ffd24a', max: 4, name: 'EXTENDED CUT',    d: l => `+${4 * l} seconds.` },
     { id: 'slowmo', tag: 'SL', color: '#7fe0ff', max: 3, name: 'DRAMATIC PAUSE',  d: l => `+${l} slow-mo.` },
 
@@ -237,6 +238,7 @@
     this.charm = (opts && opts.charm) || null;                  // the one lucky charm carried this run
     this.episodes = episodes === PILOT ? PILOT : EPISODES;
     this.elapsed = 0;           // seconds on air this run, kept by the UI
+    this.n = N;                 // podiums on the strip right now
     this.rand = seed == null ? Math.random : mulberry(seed);
     this.who = who || 'rookie';
     this.ep = 0; this.total = 0;
@@ -250,9 +252,9 @@
     const rares = GIMMICKS.filter(g => g.rare);
     const start = (byId(CONTESTANTS, this.who) || CONTESTANTS[0]).start.map(id => id === '?rare' ? rares[this.pick(rares.length)].id : id);
     start.forEach(id => { this.levels[id] = (this.levels[id] || 0) + 1; });
-    // The wheel you start with: four gimmicks, three toasters and one dead air wedge.
-    const pool = this.shuffle(GIMMICKS.filter(g => common(g) && this.open(g) && !start.includes(g.id))).slice(0, 4 - start.length).map(g => g.id);
-    this.wheel = Array.from(new Set(start)).concat(pool).map(id => ({ type: 'g', id, w: 1 }));
+    // The wheel you start with: BIGGER STAGE, four more gimmicks, three toasters and one dead air wedge.
+    const pool = this.shuffle(GIMMICKS.filter(g => common(g) && this.open(g) && g.id !== 'stage' && !start.includes(g.id))).slice(0, 4 - start.length).map(g => g.id);
+    this.wheel = Array.from(new Set(start)).concat(pool, start.includes('stage') ? [] : ['stage']).map(id => ({ type: 'g', id, w: 1 }));
     if (this.charm === 'ch_sticky') { const extra = GIMMICKS.filter(g => common(g) && this.open(g) && !this.wheel.some(w => w.id === g.id)); if (extra.length) this.wheel.push({ type: 'g', id: extra[this.pick(extra.length)].id, w: 1 }); }
     for (let i = 0; i < 3 - (this.perks.trim || 0); i++) this.wheel.push({ type: 'junk', w: 1 });
     this.wheel.push({ type: 'dead', w: 1 });
@@ -298,7 +300,7 @@
   // Save and resume. A run is saved between episodes: either about to go on air, or about to spin.
   P.snapshot = function (stage) {
     return { v: 1, stage, who: this.who, perks: this.perks, episodes: this.episodes, ep: this.ep, levels: this.levels, wheel: this.wheel,
-      spins: this.spins, toasters: this.toasters, best: this.best, banked: this.banked || 0, endless: this.endless,
+      n: this.n, spins: this.spins, toasters: this.toasters, best: this.best, banked: this.banked || 0, endless: this.endless,
       nextFormat: this.nextFormat || null, earned: this.earned || [], elapsed: this.elapsed, total: this.total,
       unlocked: Array.from(this.unlocked), charm: this.charm };
   };
@@ -331,8 +333,9 @@
   };
 
   P.startRound = function () {
+    this.n = N + this.lv('stage');
     this.strip = [];
-    for (let i = 0; i < N; i++) this.strip.push({ kind: 'cash', val: 10, state: 'up' });
+    for (let i = 0; i < this.n; i++) this.strip.push({ kind: 'cash', val: 10, state: 'up' });
     this.jackOut = false;
     this.voteKind = this.special === 'vote' ? (this.rand() < 0.5 ? 'cash' : 'hype') : null;
     this.rareLeft = [];
@@ -343,7 +346,7 @@
     const order = this.shuffle(this.strip.slice());
     for (let i = 0; i < this.deadCount(); i++) order[i].kind = 'dead';
     this.dress(order.slice(this.deadCount()));
-    if (this.is('reflect')) for (let i = 0; i < N / 2; i++) this.strip[N - 1 - i] = Object.assign({}, this.strip[i]);   // MIRROR IMAGE
+    if (this.is('reflect')) for (let i = 0; i < Math.floor(this.n / 2); i++) this.strip[this.n - 1 - i] = Object.assign({}, this.strip[i]);   // MIRROR IMAGE
     const tvs = this.strip.filter(q => q.kind === 'dead').length;
     const first = this.roundsLeft === this.rounds;
     this.pot = { cash: 10 * this.toasters + (this.ch('fanmail') ? 20 : 0) + Math.min(400 * this.lv('residual'), Math.floor(this.prevScore * 0.05 * this.lv('residual'))),
@@ -357,7 +360,7 @@
     this.streak = 0; this.inBuzz = false;
     this.tossLeft = this.lv('crowd') ? 3 : 0;
     this.convT = 1.4; this.strobeT = 0.6;
-    this.u = this.rand() * 2 * N;
+    this.u = this.rand() * 2 * this.n;
     this.droneT = [];
     for (let i = 0; i < this.lv('drone'); i++) this.droneT.push(2 + i * 1.1);
     this.q = [];
@@ -387,7 +390,7 @@
       (this.is('turbo') ? 2 : 1) * (this.is('cashonly') ? 2 : 1) * (this.dealIs('fast') ? 1.5 : 1));
   };
   P.isUp = function (i) { const p = this.strip[i]; return !!p && p.state === 'up' && p.kind !== 'dead'; };
-  P.upList = function () { const o = []; for (let i = 0; i < N; i++) if (this.isUp(i)) o.push(i); return o; };
+  P.upList = function () { const o = []; for (let i = 0; i < this.n; i++) if (this.isUp(i)) o.push(i); return o; };
   P.speed = function () {                                   // podiums per second
     return (3.6 + 0.24 * Math.min(this.ep, 18)) * (this.lv('slowburn') ? 0.5 : 1) * (1 + (this.lv('steady') ? 0 : (this.lv('slowburn') ? 0.18 : 0.09) * this.buzzes)) *
       (this.ch('coffee') ? 0.92 : 1) * (this.lv('telethon') ? 1.1 : 1) * (this.is('turbo') ? 1.35 : 1) * (this.dealIs('fast') ? 1.25 : 1) * (this.slowT > 0 ? 0.35 : 1);
@@ -399,11 +402,11 @@
     this.emit({ t: 'slow' });
     return true;
   };
-  P.fold = function (u) { u = ((u % (2 * N)) + 2 * N) % (2 * N); return u < N ? u : 2 * N - u; };
+  P.fold = function (u) { u = ((u % (2 * this.n)) + 2 * this.n) % (2 * this.n); return u < this.n ? u : 2 * this.n - u; };
   // Where every spotlight is right now, main beam first.
   P.beams = function () {
     const n = this.lv('twin') + 1, out = [];
-    for (let k = 0; k < n; k++) out.push(this.fold(this.u + k * 2 * N / n));
+    for (let k = 0; k < n; k++) out.push(this.fold(this.u + k * 2 * this.n / n));
     return out;
   };
   P.score = function () {
@@ -443,16 +446,16 @@
       // The light jumps from podium to podium instead of sweeping.
       this.strobeT -= dt * slow;
       if (this.strobeT <= 0) {
-        this.u = this.pick(N) + 0.2 + this.rand() * 0.6;
+        this.u = this.pick(this.n) + 0.2 + this.rand() * 0.6;
         this.strobeT = Math.max(0.4, 0.72 - 0.012 * this.ep) / (1 + (this.lv('steady') ? 0 : 0.05 * this.buzzes));
         this.emit({ t: 'jump' });
       }
     } else if (this.is('pendulum')) {
-      this.u += this.speed() * (0.4 + 1.5 * Math.sin(Math.PI * this.fold(this.u) / N)) * dt;
+      this.u += this.speed() * (0.4 + 1.5 * Math.sin(Math.PI * this.fold(this.u) / this.n)) * dt;
     } else {
       if (this.is('jitters')) {                     // STAGE FRIGHT: the light turns round at random
         this.jitT -= dt * slow;
-        if (this.jitT <= 0) { this.jitT = 0.7 + this.rand() * 1.6; this.u = 2 * N - (((this.u % (2 * N)) + 2 * N) % (2 * N)); }
+        if (this.jitT <= 0) { this.jitT = 0.7 + this.rand() * 1.6; this.u = 2 * this.n - (((this.u % (2 * this.n)) + 2 * this.n) % (2 * this.n)); }
       }
       this.u += this.speed() * dt;
     }
@@ -461,7 +464,7 @@
       if (this.shrinkT <= 0) {
         this.shrinkT = 4;
         const idx = [];
-        for (let k = 0; k < N; k++) idx.push(this.shrinkSide ? N - 1 - k : k);
+        for (let k = 0; k < this.n; k++) idx.push(this.shrinkSide ? this.n - 1 - k : k);
         const i = idx.find(j => this.strip[j].state !== 'gone');
         this.shrinkSide = 1 - this.shrinkSide;
         if (i != null && this.strip.filter(q => q.state !== 'gone').length > 4) { this.strip[i].state = 'gone'; this.emit({ t: 'shrink', i }); this.refillIfEmpty(false); }
@@ -491,8 +494,8 @@
     const voted = this.voteKind === 'cash' ? (p.kind === 'cash' || p.kind === 'gold') : this.voteKind === 'hype' && p.kind === 'hype';
     if (voted) mult *= 2;
     const money = p.kind === 'cash' || p.kind === 'gold';
-    if (money && (i === 0 || i === N - 1)) mult *= 1 + this.lv('edges');
-    if (money && (i === N / 2 - 1 || i === N / 2)) mult *= 1 + this.lv('center');
+    if (money && (i === 0 || i === this.n - 1)) mult *= 1 + this.lv('edges');
+    if (money && (i === Math.floor((this.n - 1) / 2) || i === Math.ceil((this.n - 1) / 2))) mult *= 1 + this.lv('center');
     if (p.kind === 'cash') { val = this.cashVal(p) * mult; pot.cash += val; }
     else if (p.kind === 'gold') { val = this.cashVal(p) * (this.lv('auction') ? 8 : 5) * mult; pot.cash += val; }
     else if (p.kind === 'hype') { gain = (1 + this.lv('hypeman')) * mult; pot.hype += gain; }
@@ -525,7 +528,7 @@
     else if (p.kind === 'superstar') { gain = 3; pot.hype += 3; }
     else if (p.kind === 'coin') { const up = this.rand() < 0.5; pot.cash = Math.round(pot.cash * (up ? 1.5 : 0.75)); note = up ? 'HEADS! CASH +50%' : 'TAILS. CASH -25%'; }
     else if (p.kind === 'broom') {
-      this.later(0.1, () => { for (let j = 0; j < N; j++) if (this.isUp(j) && this.strip[j].kind === 'cash' && this.strip[j].val <= 20) this.win(j, 'broom', 1); });
+      this.later(0.1, () => { for (let j = 0; j < this.n; j++) if (this.isUp(j) && this.strip[j].kind === 'cash' && this.strip[j].val <= 20) this.win(j, 'broom', 1); });
     }
     if (via !== 'main' && this.lv('tipline')) { const tip = 5 * this.lv('tipline'); pot.cash += tip; val += tip; }
     if (this.lv('antenna')) for (const j of [i - 1, i + 1]) {          // RABBIT EARS
@@ -555,7 +558,7 @@
     if (this.phase !== 'sweep') return false;
     this.phase = 'resolve';
     this.buzzes++;
-    const beams = this.beams(), pos = Math.min(N - 0.001, beams[0]);
+    const beams = this.beams(), pos = Math.min(this.n - 0.001, beams[0]);
     const i = Math.floor(pos), frac = pos - i, p = this.strip[i];
     const perfect = Math.abs(frac - 0.5) < this.perfectZone();
     this.emit({ t: 'buzz', i, perfect, hit: this.isUp(i) });
@@ -612,7 +615,7 @@
     });
 
     for (let k = 1; k < beams.length; k++) {
-      const j = Math.min(N - 1, Math.floor(beams[k]));
+      const j = Math.min(this.n - 1, Math.floor(beams[k]));
       add(0.12, () => this.win(j, 'twin', 1));
     }
     if (perfect) for (let d = 1; d <= this.lv('pyro'); d++) {
@@ -729,13 +732,14 @@
 
   // Bonus round: one buzz at four wheel tokens among eight dead air. Nothing to lose.
   P.startBonus = function () {
+    this.n = N + this.lv('stage');
     this.strip = [];
-    for (let i = 0; i < N; i++) this.strip.push({ kind: 'dead', val: 10, state: 'up' });
+    for (let i = 0; i < this.n; i++) this.strip.push({ kind: 'dead', val: 10, state: 'up' });
     this.shuffle(this.strip.slice()).slice(0, 4).forEach(p => { p.kind = 'spin'; });
     this.pot = { cash: 0, hype: 1, xm: 1, next2: false };
     this.buzzes = 0; this.bleeps = 0; this.slowLeft = 0; this.slowT = 0;
     this.clockMax = 8; this.clock = 8; this.stormT = Infinity; this.droneT = []; this.q = [];
-    this.voteKind = null; this.u = this.rand() * 2 * N;
+    this.voteKind = null; this.u = this.rand() * 2 * this.n;
     this.bonus = true; this.phase = 'sweep';
     this.emit({ t: 'bonus' });
   };
