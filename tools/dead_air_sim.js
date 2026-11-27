@@ -60,6 +60,7 @@ for (let r = 0; r < RUNS; r++) {
         g.startRound(); continue;
       }
       g.next();
+      if (g.phase === 'ask') g.answer(g.rand() < 0.5);
       if (g.phase === 'cleared' || g.phase === 'won' || g.phase === 'over') break;
     }
     totals[g.ep - 1].push(g.total);

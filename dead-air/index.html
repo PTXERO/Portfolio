@@ -170,6 +170,15 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       <div class="cards two" id="pickList"></div>
     </div>
 
+    <div class="ov" id="ovCard" hidden>
+      <span class="onair" id="cardKick">TONIGHT ONLY</span>
+      <img alt="" id="cardIcon" style="width:96px;height:96px;margin:10px 0 2px">
+      <h1 id="cardTitle"></h1>
+      <p class="sub" id="cardText"></p>
+      <button class="big-btn" id="cardYes"></button>
+      <button class="big-btn alt" id="cardNo"></button>
+    </div>
+
     <div class="ov" id="ovEnd" hidden></div>
 
     <div class="ov" id="ovShop" hidden>
@@ -199,7 +208,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   const fx1 = n => (Math.round(n * 10) / 10).toString();
   const rnd = (a, b) => a + Math.random() * (b - a);
   const TAU = Math.PI * 2;
-  const C = { cash: '#f5a542', gold: '#ffd24a', hype: '#42d4f5', dead: '#f542a8', jack: '#ff6bd6', spin: '#c8f542', lime: '#c8f542', box: '#9d8cff', bomb: '#ff5a3c', x2: '#ffffff', restock: '#d9a55a' };
+  const C = { cash: '#f5a542', gold: '#ffd24a', hype: '#42d4f5', dead: '#f542a8', jack: '#ff6bd6', spin: '#c8f542', lime: '#c8f542', box: '#9d8cff', bomb: '#ff5a3c', x2: '#ffffff', restock: '#d9a55a', car: '#ff5a7a', jp: '#ffd24a' };
 
   // Where things are on the stage. The prize strip is a shallow arc.
   const PX = pos => 22 + pos * 41.33;
@@ -209,7 +218,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 
   // ── Saved stats ────────────────────────────────────────────────
   const KEY = 'deadair.stats';
-  let stats = { runs: 0, wins: 0, bestEp: 0, bestBank: 0, sound: true, who: 'rookie', money: 0, perks: {} };
+  let stats = { runs: 0, wins: 0, bestEp: 0, bestBank: 0, sound: true, who: 'rookie', money: 0, perks: {}, jackpot: 5000 };
   try { Object.assign(stats, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(stats)); } catch (e) {} };
 
@@ -374,7 +383,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   let shake = 0, flashA = 0, flashC = '#fff', glitch = 0, excite = 0, time = 0, dark = 0;
   let callout = null, tally = null, shownTotal = 0, pausedUI = false, slam = 0, deskBump = 0, ballFlash = 0;
   const cannonFx = [0, 0], droneGo = [];
-  let shiftAnim = 0, slowFx = 0, coin = null, lastCombo = 0, lastTick = 0;
+  let shiftAnim = 0, slowFx = 0, coin = null, lastCombo = 0, lastTick = 0, waitBonus = false, rivalFx = 0;
   const CONF = ['#c8f542', '#42d4f5', '#f542a8', '#f5a542', '#ffffff', '#ffd24a'];
 
   function spark(x, y, color, n, speed, life, size, grav) {
@@ -431,6 +440,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         else if (ev.kind === 'spin') { float(x, y - 22, '+1 SPIN', C.spin, 22); big('WHEEL SPIN!', C.spin); }
         else if (ev.kind === 'x2') { float(x, y - 22, 'NEXT PRIZE ×2', '#fff', 20); sfx.perfect(); excite += 0.2; }
         else if (ev.kind === 'bomb') { float(x, y - 22, 'FIREWORKS!', C.bomb, 20); }
+        else if (ev.kind === 'car') { float(x, y - 22, '+' + ev.val, C.car, 26); big('A BRAND NEW CAR!', C.car, 52); sfx.cheer(true); excite = 1.6; }
+        else if (ev.kind === 'jp') {
+          const won = stats.jackpot || 5000;
+          if (live) { stats.money = (stats.money || 0) + won; runMoney += won; stats.jackpot = 5000; save(); }
+          float(x, y - 22, '+$' + fmt(won), C.gold, 28); big('JACKPOT! $' + fmt(won), C.gold, 50); sfx.cheer(true); excite = 1.6;
+          for (let k = 0; k < 4; k++) confetti(rnd(80, 460), 200, 40, 60, 300);
+        }
         else if (ev.kind === 'restock') { float(x, y - 22, 'RESTOCK!', C.restock, 22); sfx.cheer(false); excite += 0.3; }
         else if (ev.kind === 'box') {
           const what = { JACKPOT: '+' + ev.val, HYPE: '+2 HYPE', SPIN: '+1 SPIN', TOASTER: 'A TOASTER' }[ev.note];
@@ -451,6 +467,18 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         break;
       }
       case 'jump': sfx.tick(1200); break;
+      case 'rival': {
+        const x = podX(ev.i), y = podY(ev.i) - 16;
+        bolt(RIVAL.x - 10, RIVAL.y - 20, x, y, '#e8203a'); podFx[ev.i] = 0; rivalFx = 1;
+        float(x, y - 26, 'STOLEN!', '#e8203a', 18); tone(320, 0.18, 'sawtooth', 0.05, 0, 160);
+        break;
+      }
+      case 'bonus': for (let i = 0; i < N; i++) podFx[i] = -0.1 - i * 0.04; dark = 0; break;
+      case 'bonusEnd':
+        waitBonus = true;
+        if (ev.hit) { shout('BONUS SPIN!', C.spin, 64, 1.4); sfx.fanfare(); sfx.cheer(true); excite = 1.6; for (let k = 0; k < 3; k++) confetti(rnd(100, 440), 220, 40, 60, 300); }
+        else { shout('NO BONUS', '#8a8aa0', 56, 1.2); sfx.trombone(); staticBurst(W / 2, 400, 20); }
+        break;
       case 'storm': {
         const x = podX(ev.i), y = podY(ev.i) - 16;
         bolt(x + rnd(-60, 60), 126, x, y, '#f542a8'); staticBurst(x, y, 14); podFx[ev.i] = 0;
@@ -493,6 +521,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         break;
       }
       case 'bust':
+        if (live && ev.lost > 0) { stats.jackpot = (stats.jackpot || 5000) + Math.round(ev.lost * 0.1); save(); }   // busted pots feed the jackpot
         staticBurst(podX(ev.i), podY(ev.i) - 16, 40); shake = 14; flashA = 0.4; flashC = C.dead; glitch = 0.9; dark = 1; excite = 0;
         shout('DEAD AIR', C.dead, 90, 1.4); sfx.dead(); sfx.ooh();
         break;
@@ -500,7 +529,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         for (let i = 0; i < N; i++) podFx[i] = -i * 0.03;
         if (ev.bonus) { shout('STAGE CLEARED! +2 HYPE', '#fff', 44, 1.3); flashA = 0.3; flashC = '#fff'; confetti(W / 2, 300, 70, 220, 300); sfx.cheer(true); sfx.fanfare(); excite = 1.6; }
         break;
-      case 'round': for (let i = 0; i < N; i++) podFx[i] = -0.1 - i * 0.04; dark = 0; break;
+      case 'round': for (let i = 0; i < N; i++) podFx[i] = -0.1 - i * 0.04; dark = 0;
+        if (G.voteKind && live) setTimeout(() => { if (G && G.voteKind) { shout('THE CROWD WANTS ' + G.voteKind.toUpperCase() + '!', '#f5a542', 46, 1.3); sfx.cheer(false); excite = 1; } }, G.roundsLeft === G.rounds ? 4200 : 300);
+        break;
       case 'roundEnd':
         coin = null;
         tally = { ...ev, t: 0, done: false };
@@ -512,28 +543,55 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   // ── Flow ───────────────────────────────────────────────────────
   function afterTally() {
     G.next();
-    if (!live) { if (G.phase !== 'sweep') startDemo(); return; }
+    if (!live) { if (G.phase === 'ask') G.answer(false); else if (G.phase !== 'sweep') startDemo(); return; }
     if (G.best > stats.bestBank) stats.bestBank = G.best;
     if (G.last && G.last.score > 0) {
       const pay = Math.round(G.last.score * (1 + 0.2 * (stats.perks.agent || 0)));
       stats.money = (stats.money || 0) + pay; runMoney += pay;
     }
     save();
-    if (G.phase === 'cleared' || G.phase === 'won') {
-      stats.bestEp = Math.max(stats.bestEp, G.ep);
-      if (G.phase === 'won') stats.wins++;
-      save();
-      shout(G.phase === 'won' ? 'SEASON WRAPPED!' : 'EPISODE CLEARED!', C.lime, 60, 1.6);
-      for (let i = 0; i < 4; i++) confetti(rnd(60, 480), 160, 45, 60, 260);
-      sfx.cheer(true); sfx.fanfare(); excite = 1.6;
-      const won = G.phase === 'won';
-      setTimeout(() => { if (!G || !live) return; won ? showEnd(true) : showLoad(); }, 1700);
-    } else if (G.phase === 'over') {
+    if (G.phase === 'cleared' || G.phase === 'won') onCleared();
+    else if (G.phase === 'over') {
       stats.bestEp = Math.max(stats.bestEp, G.ep - 1); save();
       glitch = 1.2; dark = 1; sfx.dead();
       setTimeout(() => { if (G && live) showEnd(false); }, 1200);
+    } else if (G.phase === 'ask') showAsk();
+    else if (G.bonus) {
+      shout('EPISODE CLEARED!', C.lime, 56, 1.2); sfx.cheer(true); excite = 1.6;
+      showCard({ icon: 'e_bonus', kick: 'BONUS ROUND', title: 'ONE BUZZ', text: 'Four wheel tokens, eight dead air, eight seconds. Hit a token for an extra spin. Miss and you lose nothing.', color: '#ffd24a', yes: "LET'S GO" });
     }
     syncPads();
+  }
+
+  function onCleared() {
+    stats.bestEp = Math.max(stats.bestEp, G.ep);
+    if (G.phase === 'won') stats.wins++;
+    save();
+    shout(G.phase === 'won' ? 'SEASON WRAPPED!' : 'EPISODE CLEARED!', C.lime, 60, 1.6);
+    for (let i = 0; i < 4; i++) confetti(rnd(60, 480), 160, 45, 60, 260);
+    sfx.cheer(true); sfx.fanfare(); excite = 1.6;
+    const won = G.phase === 'won';
+    setTimeout(() => { if (!G || !live) return; won ? showEnd(true) : showLoad(); }, 1700);
+  }
+
+  // One card, one thing to read. The show waits until it is answered.
+  function showCard(o) {
+    $('cardKick').textContent = o.kick || 'TONIGHT ONLY';
+    $('cardIcon').src = iconURL(o.icon);
+    $('cardTitle').textContent = o.title; $('cardTitle').style.color = o.color || '';
+    $('cardText').textContent = o.text;
+    $('cardYes').textContent = o.yes; $('cardNo').textContent = o.no || ''; $('cardNo').hidden = !o.no;
+    const close = fn => () => { $('ovCard').hidden = true; pausedUI = false; if (fn) fn(); syncPads(); };
+    $('cardYes').onclick = close(o.onYes); $('cardNo').onclick = close(o.onNo);
+    $('ovCard').hidden = false; pausedUI = true;
+  }
+  function showAsk() {
+    const a = G.ask;
+    if (a.type === 'offer') showCard({ icon: 'e_offer', kick: "THE HOST'S OFFER", title: '$' + fmt(a.amount) + ' TO SIT OUT', color: '#c8f542',
+      text: 'Take ' + fmt(a.amount) + ' now and skip the next round, or play it and see what you can make. You need ' + fmt(Math.max(0, G.target(G.ep) - G.total)) + ' more with ' + G.roundsLeft + ' round' + (G.roundsLeft === 1 ? '' : 's') + ' left.',
+      yes: 'TAKE THE MONEY', no: 'PLAY ON', onYes: () => { G.answer(true); sfx.chime(4); }, onNo: () => G.answer(false) });
+    else showCard({ icon: 'e_ad', kick: 'COMMERCIAL BREAK', title: a.deal.name, color: '#42d4f5', text: a.deal.desc,
+      yes: 'SIGN THE DEAL', no: 'NO THANKS', onYes: () => { G.answer(true); sfx.fanfare(); }, onNo: () => G.answer(false) });
   }
 
   function syncPads() {
@@ -643,12 +701,14 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const f = G.format; if (f.id !== 'classic') setTimeout(() => { if (G && G.format === f) shout(f.name, f.color, 56, 1.4); }, 1150);
     sfx.cheer(false); excite = 0.8;
     syncPads();
+    const sp = G.special && D.byId(D.EVENTS, G.special);
+    if (sp && live) showCard({ icon: 'e_' + sp.id, title: sp.name, text: sp.desc, color: sp.color, yes: 'ON WITH THE SHOW' });
   }
   function newRun() {
     live = true; resetFx();
     G = new D.Game(null, stats.who, stats.perks);
     stats.runs++; save(); runMoney = 0;
-    ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovShop'].forEach(id => { $(id).hidden = true; });
+    ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovShop', 'ovCard'].forEach(id => { $(id).hidden = true; });
     $('quit').hidden = false; $('kitBtn').hidden = false;
     // HEAD START: spin the wheel before the first episode.
     if (G.perk('head')) { G.spins = G.perk('head'); showLoad(); } else beginEpisode();
@@ -661,7 +721,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     syncPads();
   }
   function toTitle() {
-    ['ovEnd', 'ovLoad', 'ovKit', 'ovPick'].forEach(id => { $(id).hidden = true; });
+    ['ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovCard'].forEach(id => { $(id).hidden = true; });
     $('quit').hidden = true; $('kitBtn').hidden = true; pausedUI = false;
     paintTitle(); $('ovTitle').hidden = false;
     startDemo();
@@ -686,7 +746,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   });
 
   function paintTitle() {
-    $('money').innerHTML = stats.runs ? `$${fmt(stats.money || 0)}<small>PRIZE MONEY</small>` : '';
+    $('money').innerHTML = stats.runs ? `$${fmt(stats.money || 0)}<small>PRIZE MONEY · JACKPOT STANDS AT $${fmt(stats.jackpot || 5000)}</small>` : '';
     $('stats').innerHTML = stats.runs
       ? `<div><b>${stats.runs}</b>RUNS</div><div><b>${stats.wins}</b>SEASONS WON</div><div><b>${stats.bestEp}</b>EPISODES CLEARED</div><div><b>${fmt(stats.bestBank)}</b>BEST BANK</div>` : '';
     const open = c => !c.ok || c.ok(stats);
@@ -833,6 +893,14 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     font(11, 'mono'); text('TARGET ' + fmt(tgt), bx + bw / 2, 68, '#fff', 'center');
     text('×2 = BONUS SPIN', bx + bw, 68, shownTotal >= tgt * 2 ? C.lime : '#8a8aa0', 'right');
     drawBadges(97);
+    const note = G.bonus ? ['BONUS ROUND: ONE BUZZ', '#ffd24a'] : G.voteKind ? ['CROWD VOTE: ' + G.voteKind.toUpperCase() + ' ×2', '#f5a542'] : G.deal ? ['SPONSOR: ' + G.deal.name, '#42d4f5'] : null;
+    if (note) {
+      font(13); ctx.textBaseline = 'middle';
+      const w3 = ctx.measureText(note[0]).width + 18;
+      ctx.fillStyle = 'rgba(7,7,10,.8)'; ctx.strokeStyle = note[1]; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(40, 154, w3, 19, 4); ctx.fill(); ctx.stroke();
+      text(note[0], 40 + w3 / 2, 164, note[1], 'center');
+    }
     if (G.format && G.format.id !== 'classic') {
       font(15); ctx.textBaseline = 'middle';
       const lbl = 'TONIGHT: ' + G.format.name, w2 = ctx.measureText(lbl).width + 22;
@@ -900,6 +968,20 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       for (let i = 0; i < 6; i++) { ctx.fillStyle = CONF[i]; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, 14, i * TAU / 6, (i + 1) * TAU / 6); ctx.fill(); }
       ctx.strokeStyle = '#07070a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 14, 0, TAU); ctx.stroke();
       ctx.fillStyle = '#07070a'; ctx.beginPath(); ctx.arc(0, 0, 3, 0, TAU); ctx.fill();
+    } else if (kind === 'car') {   // the showcase prize
+      ctx.fillStyle = C.car; ctx.beginPath(); ctx.roundRect(-19, -2, 38, 13, 4); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-11, -2); ctx.lineTo(-6, -13); ctx.lineTo(8, -13); ctx.lineTo(14, -2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#d9f4ff'; ctx.beginPath(); ctx.moveTo(-7, -3); ctx.lineTo(-4, -10); ctx.lineTo(0, -10); ctx.lineTo(0, -3); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(2, -3); ctx.lineTo(2, -10); ctx.lineTo(7, -10); ctx.lineTo(10, -3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#fff36b'; ctx.fillRect(15, 1, 4, 4);
+      for (const wx of [-10, 10]) { ctx.fillStyle = '#150f24'; ctx.beginPath(); ctx.arc(wx, 11, 6, 0, TAU); ctx.fill(); ctx.fillStyle = '#d8d8e0'; ctx.beginPath(); ctx.arc(wx, 11, 2.5, 0, TAU); ctx.fill(); }
+      ctx.fillStyle = '#ffd24a'; ctx.beginPath(); ctx.moveTo(-6, -15); ctx.lineTo(0, -24); ctx.lineTo(6, -15); ctx.closePath(); ctx.fill();   // the bow
+    } else if (kind === 'jp') {    // the progressive jackpot
+      ctx.fillStyle = C.gold; ctx.beginPath();
+      for (let i = 0; i < 24; i++) { const r = i % 2 ? 15 : 22, a = i * Math.PI / 12; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#e8203a'; ctx.beginPath(); ctx.arc(0, 0, 13, 0, TAU); ctx.fill();
+      font(22); ctx.textBaseline = 'middle'; text('$', 0, 1.5, '#fff', 'center');
     } else if (kind === 'box') {   // mystery box
       drawGlow(0, 0, 32, C.box, 0.6 + 0.3 * Math.sin(time * 6 + x));
       ctx.rotate(Math.sin(time * 7 + x) * 0.08);
@@ -1109,6 +1191,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const mood = dark > 0.3 ? 'shock' : ex > 0.7 ? 'joy' : 'calm';
     inkSeq = 3000;
     drawHost(74, 640, ex, dark > 0.3 ? 'shock' : 'joy');
+    if (G.special === 'rival') drawRival();
     // the contestant, behind the desk; one arm comes down on the buzzer
     inkSeq = 3100;
     const bob = Math.sin(time * 8) * ex * 3, hy = y - 103 + bob;
@@ -1161,6 +1244,30 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     if (G.lv('streak') && G.streak > 0) chip('STREAK ×' + (G.streak + 1), '#ff7a2e');
     if (G.lv('life') && !G.lifeUsed) chip('RERUN', '#ff5a7a');
     for (let i = 0; i < (G.bleeps || 0); i++) { ctx.fillStyle = '#7fe0ff'; ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(x - 122 + i * 13, y - 46, 10, 10, 2); ctx.fill(); ctx.stroke(); }
+  }
+
+  // The rival: a returning champion in red, stage right, with their own running score.
+  const RIVAL = { x: 468, y: 640 };
+  function drawRival() {
+    const x = RIVAL.x, y = RIVAL.y, reach = rivalFx;
+    inkSeq = 3300;
+    drawGlow(x, y + 30, 90, '#e8203a', 0.25 + reach * 0.4);
+    limb(x - 19, y + 28, x - 36 - reach * 10, y + 40 - reach * 60, '#e8203a', 8);
+    ink(() => ctx.arc(x - 36 - reach * 10, y + 38 - reach * 60, 6, 0, TAU), '#ffd9b0', 2.4);
+    limb(x + 19, y + 28, x + 26, y + 52, '#e8203a', 8);
+    ink(() => ctx.roundRect(x - 22, y + 14, 44, 104, 13), '#e8203a', 3);
+    ink(() => { ctx.moveTo(x - 9, y + 14); ctx.lineTo(x + 9, y + 14); ctx.lineTo(x, y + 40); ctx.closePath(); }, '#150f24', 2.2);
+    ink(() => ctx.arc(x, y, 17, 0, TAU), '#ffd9b0', 3);
+    ink(() => { ctx.moveTo(x - 18, y - 2); ctx.lineTo(x - 14, y - 22); ctx.lineTo(x - 5, y - 14); ctx.lineTo(x + 2, y - 26); ctx.lineTo(x + 8, y - 14); ctx.lineTo(x + 16, y - 22); ctx.lineTo(x + 18, y - 2); ctx.quadraticCurveTo(x, y - 12, x - 18, y - 2); }, '#150f24', 2.4);
+    // a smirk and a raised eyebrow
+    ctx.strokeStyle = INK; ctx.lineWidth = 2.3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x - 10, y - 5); ctx.lineTo(x - 4, y - 3); ctx.moveTo(x + 4, y - 6); ctx.lineTo(x + 10, y - 8); ctx.stroke();
+    ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(x - 6.5, y, 2, 0, TAU); ctx.arc(x + 6.5, y - 1, 2, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x - 5, y + 8); ctx.quadraticCurveTo(x + 3, y + 11, x + 8, y + 5); ctx.stroke();
+    // their score card
+    ink(() => ctx.roundRect(x - 26, y + 62, 52, 26, 4), '#150f24', 2.4);
+    font(9, 'mono'); ctx.textBaseline = 'middle'; text('RIVAL', x, y + 69, '#e8203a', 'center');
+    font(15); text(fmt(G.rivalScore || 0), x, y + 80, '#fff', 'center');
   }
 
   // The host: pink jacket, big hair, bigger grin.
@@ -1398,6 +1505,20 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         word('?', 18, '#07070a', 1); break;
       case 'static':    // TV with a bolt
         box(-16, -12, 32, 26, 4, '#3a3a52'); c.fillStyle = '#0a060c'; c.fillRect(-13, -9, 26, 19); poly([[3, -8], [-6, 2], [0, 2], [-3, 9], [7, -1], [1, -1]], col); break;
+      case 'e_rival':   // a smirking face in red
+        circ(0, 0, 17, '#e8203a'); circ(0, 1, 13, '#ffd9b0'); poly([[-13, -2], [-9, -15], [-3, -8], [1, -17], [5, -8], [11, -15], [13, -2], [0, -8]], '#150f24');
+        circ(-5, 2, 1.8, '#150f24'); circ(5, 1, 1.8, '#150f24'); line([[-4, 8], [2, 10], [7, 6]], '#150f24', 2); break;
+      case 'e_vote':    // hands up, holding signs
+        box(-17, -17, 15, 11, 2, '#f5a542'); box(2, -14, 15, 11, 2, '#42d4f5'); line([[-9, -6], [-9, 6]], '#8a8aa0', 2.5); line([[9, -3], [9, 8]], '#8a8aa0', 2.5);
+        circ(-9, 11, 6, '#b8782a'); circ(9, 13, 6, '#5a44b8'); break;
+      case 'e_offer':   // a briefcase of cash
+        box(-17, -6, 34, 22, 3, '#8a5a22'); c.strokeStyle = '#8a5a22'; c.lineWidth = 3; c.beginPath(); c.moveTo(-6, -6); c.lineTo(-6, -12); c.lineTo(6, -12); c.lineTo(6, -6); c.stroke();
+        c.fillStyle = '#c8f542'; c.fillRect(-13, -2, 26, 9); word('$', 15, '#0a3a1a', 3); c.fillStyle = '#ffd24a'; c.fillRect(-3, 9, 6, 4); break;
+      case 'e_ad':      // a TV showing an ad
+        box(-17, -13, 34, 26, 4, '#3a3a52'); c.fillStyle = '#42d4f5'; c.fillRect(-14, -10, 28, 20); word('AD', 16, '#150f24', 1); line([[-6, 13], [-9, 18]], '#8a8aa0', 2.5); line([[6, 13], [9, 18]], '#8a8aa0', 2.5); break;
+      case 'e_bonus':   // a starburst
+        c.fillStyle = '#ffd24a'; c.beginPath(); for (let k = 0; k < 20; k++) { const r = k % 2 ? 12 : 19, a = k * Math.PI / 10; c.lineTo(Math.cos(a) * r, Math.sin(a) * r); } c.closePath(); c.fill();
+        circ(0, 0, 10, '#e8203a'); word('+1', 13, '#fff', 1); break;
       case 'f_classic': // ticket
         box(-17, -10, 34, 20, 3, '#c8f542'); circ(-17, 0, 4, '#07070a'); circ(17, 0, 4, '#07070a'); line([[6, -8], [6, 8]], '#07070a', 1.5); word('TV', 13, '#07070a', 1); break;
       case 'f_turbo':   // fast forward
@@ -1540,6 +1661,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     for (let i = 0; i < N; i++) podFx[i] = Math.min(1, podFx[i] + dt);
     for (const [id, f] of badgeFx) { if (f > 1.3) badgeFx.delete(id); else badgeFx.set(id, f + dt); }
     cannonFx[0] = Math.max(0, cannonFx[0] - dt * 5); cannonFx[1] = Math.max(0, cannonFx[1] - dt * 5);
+    rivalFx = Math.max(0, rivalFx - dt * 2.5);
+    if (waitBonus && live && (G.phase === 'cleared' || G.phase === 'won')) { waitBonus = false; onCleared(); }
+    if (!live && G.phase === 'ask') G.answer(false);
     shiftAnim = Math.max(0, shiftAnim - dt * 4.5); slowFx = Math.max(0, slowFx - dt * 2);
     slam = Math.max(0, slam - dt * 5); deskBump = Math.max(0, deskBump - dt * 6); ballFlash = Math.max(0, ballFlash - dt * 4);
     excite = Math.max(0, Math.min(1.6, excite) - dt * 0.35);

@@ -56,6 +56,22 @@
   ];
   const SPECIALS = ['box', 'bomb', 'x2', 'restock'];
 
+  // Rare events. An episode carries at most one, and most carry none.
+  const SPECIAL_CHANCE = 0.06;                   // per episode, from episode 2
+  const CAR_CHANCE = 0.02, JACKPOT_CHANCE = 0.008;   // per round
+  const EVENTS = [
+    { id: 'rival', color: '#e8203a', name: 'RIVAL CONTESTANT', desc: 'A returning champion is on stage tonight. Every few seconds they snatch a prize off the strip. Clear the episode anyway and you get an extra wheel spin.' },
+    { id: 'vote',  color: '#f5a542', name: 'AUDIENCE VOTE',    desc: 'Before every round tonight the crowd votes for cash or for hype. Whatever they pick pays double that round.' },
+    { id: 'offer', color: '#c8f542', name: "THE HOST'S OFFER", desc: 'After the first round the host will offer you cash to sit the next round out.' },
+    { id: 'ad',    color: '#42d4f5', name: 'COMMERCIAL BREAK', desc: 'After the first round a sponsor will offer you a deal for the rest of the episode.' },
+    { id: 'bonus', color: '#ffd24a', name: 'BONUS ROUND',      desc: 'Clear tonight and you play a bonus round: one buzz, four wheel tokens, eight dead air. Hit a token for an extra spin. Miss and you lose nothing.' },
+  ];
+  const DEALS = [
+    { id: 'fast', name: 'ENERGY DRINK',  desc: 'For the rest of the episode the light is 25% faster, and cash and gold pay 50% more.' },
+    { id: 'tvs',  name: 'CABLE PACKAGE', desc: 'Two extra dead air TVs on every strip for the rest of the episode, but every round starts with +2 hype.' },
+    { id: 'time', name: 'EXTENDED AD',   desc: 'The ad runs long: 5 seconds off the clock for the rest of the episode, and one extra wheel spin.' },
+  ];
+
   // Things you can do to the wheel itself.
   const WHEEL_UPS = [
     { id: 'trim', tag: 'CUT', color: '#f542a8', name: 'TRIM THE WHEEL', desc: 'Remove the DEAD AIR wedge, or a toaster if it is already gone.', ok: g => g.wheel.some(w => w.type === 'dead' || w.type === 'junk') },
@@ -143,9 +159,10 @@
     const up = this.upList();
     if (up.length > 1) { const i = up[this.pick(up.length)]; this.strip[i].state = 'burnt'; this.emit({ t: 'storm', i }); }
   };
+  P.dealIs = function (id) { return !!this.deal && this.deal.id === id; };
   P.is = function (id) { return !!this.format && this.format.id === id; };
   P.deadCount = function () {
-    return Math.min(7, 1 + Math.ceil(this.ep / 2) + (this.is('goldnight') ? 1 : 0) + (this.is('censors') ? 2 : 0));
+    return Math.min(8, 1 + Math.ceil(this.ep / 2) + (this.is('goldnight') ? 1 : 0) + (this.is('censors') ? 2 : 0) + (this.dealIs('tvs') ? 2 : 0));
   };
 
   // ── Episode / round ─────────────────────────────────────────────
@@ -155,6 +172,9 @@
     this.format = byId(FORMATS, formatId || this.nextFormat) || FORMATS[0];
     this.nextFormat = null;
     this.lifeUsed = false;
+    this.deal = null; this.asked = false; this.ask = null; this.bonus = false; this.rivalScore = 0;
+    this.special = this.ep >= 2 && this.rand() < SPECIAL_CHANCE ? EVENTS[this.pick(EVENTS.length)].id : null;
+    if (this.forceSpecial !== undefined) { this.special = this.forceSpecial; this.forceSpecial = undefined; }   // for tests
     this.rounds = Math.max(2, 3 + this.lv('encore') - (this.is('high') ? 1 : 0));
     this.roundsLeft = this.rounds;
     this.tokenOut = this.rand() < 0.5;        // a wheel token only turns up in about half the episodes
@@ -166,15 +186,20 @@
     this.strip = [];
     for (let i = 0; i < N; i++) this.strip.push({ kind: 'cash', val: 10, state: 'up' });
     this.jackOut = false;
+    this.voteKind = this.special === 'vote' ? (this.rand() < 0.5 ? 'cash' : 'hype') : null;
+    this.rareLeft = [];
+    if (this.ep >= 2 && this.rand() < CAR_CHANCE) this.rareLeft.push('car');
+    if (this.rand() < JACKPOT_CHANCE) this.rareLeft.push('jp');
+    this.rivalT = 3.4;
     this.specialsLeft = (this.ep >= 4 ? 1 : 0) + (this.ep >= 2 && this.rand() < 0.6 ? 1 : 0) + (this.ep >= 6 && this.rand() < 0.5 ? 1 : 0);
     const order = this.shuffle(this.strip.slice());
     for (let i = 0; i < this.deadCount(); i++) order[i].kind = 'dead';
     this.dress(order.slice(this.deadCount()));
     const tvs = this.strip.filter(q => q.kind === 'dead').length;
-    this.pot = { cash: 10 * this.toasters, hype: 1 + 0.5 * this.perk('warm') + (this.is('high') ? 2 : 0) + (this.lv('static') ? tvs : 0), xm: 1, next2: false };
+    this.pot = { cash: 10 * this.toasters, hype: 1 + 0.5 * this.perk('warm') + (this.dealIs('tvs') ? 2 : 0) + (this.is('high') ? 2 : 0) + (this.lv('static') ? tvs : 0), xm: 1, next2: false };
     this.buzzes = 0; this.bleeps = this.lv('bleep') + this.perk('censor') + (this.is('censors') ? 1 : 0);
     this.slowLeft = 1 + this.lv('slowmo'); this.slowT = 0;
-    this.clockMax = ROUND_TIME + 4 * this.lv('clock') + this.perk('time'); this.clock = this.clockMax;
+    this.clockMax = Math.max(6, ROUND_TIME + 4 * this.lv('clock') + this.perk('time') - (this.dealIs('time') ? 5 : 0)); this.clock = this.clockMax;
     this.stormT = this.stormEvery();
     this.streak = 0; this.inBuzz = false;
     this.convT = 1.4; this.strobeT = 0.6;
@@ -198,16 +223,17 @@
     if (this.lv('jack') && !this.jackOut && list.length > 3) { take(1, 'jack'); this.jackOut = true; }   // one diamond a round
     take(this.lv('gold') + (this.is('goldnight') ? 3 : 0), 'gold');
     // Oddities: a mystery box, a firework crate, a x2 card or a restock crate.
+    while (this.rareLeft && this.rareLeft.length && k < list.length - 1) take(1, this.rareLeft.pop());   // a showcase car, the jackpot
     while (this.specialsLeft > 0 && k < list.length - 1) { take(1, SPECIALS[this.pick(SPECIALS.length)]); this.specialsLeft--; }
   };
 
   // What a cash prize pays, including the PRIZE BUDGET top-up.
-  P.cashVal = function (p) { return (p.val + 10 * this.lv('budget') + 5 * this.perk('budget')) * (this.is('turbo') ? 2 : 1); };
+  P.cashVal = function (p) { return Math.round((p.val + 10 * this.lv('budget') + 5 * this.perk('budget')) * (this.is('turbo') ? 2 : 1) * (this.dealIs('fast') ? 1.5 : 1)); };
   P.isUp = function (i) { const p = this.strip[i]; return !!p && p.state === 'up' && p.kind !== 'dead'; };
   P.upList = function () { const o = []; for (let i = 0; i < N; i++) if (this.isUp(i)) o.push(i); return o; };
   P.speed = function () {                                   // podiums per second
     return (3.6 + 0.4 * Math.min(this.ep, 12)) * (1 + (this.lv('steady') ? 0 : 0.09 * this.buzzes)) *
-      (this.is('turbo') ? 1.35 : 1) * (this.slowT > 0 ? 0.35 : 1);
+      (this.is('turbo') ? 1.35 : 1) * (this.dealIs('fast') ? 1.25 : 1) * (this.slowT > 0 ? 0.35 : 1);
   };
   // Slow-motion: a couple of seconds of a much slower light. A few uses per round.
   P.slowmo = function () {
@@ -237,6 +263,7 @@
     this.clock -= dt;
     if (this.clock <= 0) {
       this.clock = 0;
+      if (this.bonus) { this.endBonus(false, null); return; }
       this.emit({ t: 'timeup' });
       if (!this.bank()) { this.phase = 'resolve'; this.later(0.6, () => this.endRound(this.score(), false)); }
       return;
@@ -244,6 +271,14 @@
     const slow = this.slowT > 0 ? 0.35 : 1;
     if (this.slowT > 0) this.slowT -= dt;
     this.storm(dt * slow);
+    if (this.special === 'rival' && !this.bonus) {
+      this.rivalT -= dt * slow;
+      if (this.rivalT <= 0) {
+        this.rivalT = 3.4;
+        const up = this.upList();
+        if (up.length > 1) { const i = up[this.pick(up.length)]; this.rivalScore += this.strip[i].kind === 'cash' ? this.cashVal(this.strip[i]) : 50; this.strip[i].state = 'burnt'; this.emit({ t: 'rival', i }); }
+      }
+    }
     if (this.is('strobe')) {
       // The light jumps from podium to podium instead of sweeping.
       this.strobeT -= dt * slow;
@@ -276,12 +311,16 @@
     let val = 0, gain = 0, note = '';
     const doubled = pot.next2 && (p.kind === 'cash' || p.kind === 'gold' || p.kind === 'hype');
     if (doubled) { mult *= 2; pot.next2 = false; }
+    const voted = this.voteKind === 'cash' ? (p.kind === 'cash' || p.kind === 'gold') : this.voteKind === 'hype' && p.kind === 'hype';
+    if (voted) mult *= 2;
     if (p.kind === 'cash') { val = this.cashVal(p) * mult; pot.cash += val; }
     else if (p.kind === 'gold') { val = this.cashVal(p) * 5 * mult; pot.cash += val; }
     else if (p.kind === 'hype') { gain = (1 + this.lv('hypeman')) * mult; pot.hype += gain; }
     else if (p.kind === 'jack') { gain = 1.5 + 0.5 * this.lv('jack'); pot.xm *= gain; }
     else if (p.kind === 'spin') { this.spins++; }
     else if (p.kind === 'x2') { pot.next2 = true; }
+    else if (p.kind === 'car') { val = 300 + 30 * this.lv('budget'); pot.cash += val; }          // the showcase prize
+    else if (p.kind === 'jp') { note = 'JACKPOT'; }                                                // paid out as prize money by the UI
     else if (p.kind === 'box') {
       // Mystery box: could be anything.
       const r = this.rand();
@@ -324,6 +363,7 @@
     const i = Math.floor(pos), frac = pos - i, p = this.strip[i];
     const perfect = Math.abs(frac - 0.5) < this.perfectZone();
     this.emit({ t: 'buzz', i, perfect, hit: this.isUp(i) });
+    if (this.bonus) { this.endBonus(this.isUp(i), i); return true; }
 
     this.inBuzz = true;
     if (!this.isUp(i)) {
@@ -345,7 +385,7 @@
           return true;
         }
         const kept = Math.floor(this.score() * Math.min(1, 0.25 * this.lv('net')));
-        this.emit({ t: 'bust', i, kept });
+        this.emit({ t: 'bust', i, kept, lost: this.score() - kept });
         this.later(0.2, () => this.endRound(kept, true));
       }
       return true;
@@ -436,10 +476,51 @@
       this.earned = [['EPISODE CLEARED', 1]];
       if (this.total >= 2 * tgt) this.earned.push(['DOUBLED THE TARGET', 1]);
       if (this.format.spins) this.earned.push([this.format.name, this.format.spins]);
+      if (this.special === 'rival') this.earned.push(['BEAT THE RIVAL', 1]);
       this.earned.forEach(e => { this.spins += e[1]; });
-      this.phase = this.ep === EPISODES && !this.endless ? 'won' : 'cleared';
+      const done = this.ep === EPISODES && !this.endless ? 'won' : 'cleared';
+      if (this.special === 'bonus') { this.afterBonus = done; this.startBonus(); } else this.phase = done;
     } else if (this.roundsLeft <= 0) this.phase = 'over';
-    else this.startRound();
+    else if ((this.special === 'offer' || this.special === 'ad') && !this.asked) {
+      // The host's offer / the sponsor's deal: a question for the player before the next round.
+      this.asked = true;
+      this.ask = this.special === 'offer'
+        ? { type: 'offer', amount: Math.max(50, Math.round(0.3 * tgt / 50) * 50) }
+        : { type: 'ad', deal: DEALS[this.pick(DEALS.length)] };
+      this.phase = 'ask';
+    } else this.startRound();
+  };
+
+  P.answer = function (yes) {
+    if (this.phase !== 'ask') return;
+    const a = this.ask; this.ask = null;
+    if (yes && a.type === 'offer') {              // take the money, sit the round out
+      this.pot = { cash: a.amount, hype: 1, xm: 1, next2: false };
+      this.endRound(a.amount, false);
+      return;
+    }
+    if (yes && a.type === 'ad') { this.deal = a.deal; if (a.deal.id === 'time') this.spins++; }
+    this.startRound();
+  };
+
+  // Bonus round: one buzz at four wheel tokens among eight dead air. Nothing to lose.
+  P.startBonus = function () {
+    this.strip = [];
+    for (let i = 0; i < N; i++) this.strip.push({ kind: 'dead', val: 10, state: 'up' });
+    this.shuffle(this.strip.slice()).slice(0, 4).forEach(p => { p.kind = 'spin'; });
+    this.pot = { cash: 0, hype: 1, xm: 1, next2: false };
+    this.buzzes = 0; this.bleeps = 0; this.slowLeft = 0; this.slowT = 0;
+    this.clockMax = 8; this.clock = 8; this.stormT = Infinity; this.droneT = []; this.q = [];
+    this.voteKind = null; this.u = this.rand() * 2 * N;
+    this.bonus = true; this.phase = 'sweep';
+    this.emit({ t: 'bonus' });
+  };
+  P.endBonus = function (hit, i) {
+    this.bonus = false;
+    if (hit) { this.spins++; this.earned.push(['BONUS ROUND', 1]); this.strip[i].state = 'burnt'; }
+    this.phase = 'resolve';
+    this.emit({ t: 'bonusEnd', hit, i });
+    this.later(1.3, () => { this.phase = this.afterBonus; });
   };
 
   // ── The wheel ───────────────────────────────────────────────────
@@ -517,7 +598,7 @@
     return true;
   };
 
-  const api = { Game, N, EPISODES, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, byId };
+  const api = { Game, N, EPISODES, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, EVENTS, byId };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DeadAir = api;
 })(typeof window !== 'undefined' ? window : globalThis);
