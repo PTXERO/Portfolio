@@ -540,8 +540,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
           if (ev.note === 'TOASTER') { shout('A TOASTER.', '#8a8aa0', 50); sfx.trombone(); } else big('MYSTERY BOX!', C.box);
         }
         else { float(x, y - 22, '+' + ev.val, col, ev.val >= 100 ? 24 : 17); sfx.win(); excite += ev.val >= 100 ? 0.2 : 0.06; }
-        if (ev.doubled) float(x + 26, y - 44, '×2!', '#fff', 20);
-        if (ev.stays) { podFx[ev.i] = 0; float(x - 26, y - 44, 'STAYS!', '#42f5b0', 17); }
+        if (ev.doubled) float(x + 26, y - 44, '×2!', '#fff', 20);        if (ev.stays) { podFx[ev.i] = 0; float(x - 26, y - 44, 'STAYS!', '#42f5b0', 17); }
         if (ev.combo && time - lastCombo > 0.12) { lastCombo = time; float(DESK.x - 14, DESK.y - 22, '+0.5 HYPE', C.cash, 16); }
         if (ev.via !== 'main') rings.push({ x, y, r: 6, to: 30, life: 0.25, max: 0.25, color: VIA[ev.via] || '#fff', w: 3 });
         break;

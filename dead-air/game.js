@@ -20,7 +20,7 @@
     { id: 'laser',  tag: 'LZ', color: '#f542a8', max: 4, name: 'LASER SHOW',      d: l => `Every 3rd buzz, a laser wins ${l + 1}.` },
     { id: 'drone',  tag: 'DR', color: '#9d8cff', max: 4, name: 'CAMERA DRONE',    d: l => `${l} drone${l > 1 ? 's' : ''} collect cash.` },
     { id: 'cannon', tag: 'CN', color: '#c8f542', max: 5, name: 'T-SHIRT CANNONS', d: l => `Banking fires ${l} extra prize${l > 1 ? 's' : ''}.` },
-    { id: 'crowd',  tag: 'CR', color: '#f5a542', max: 4, name: 'CROWD PLEASER',   d: l => `Crowd restocks ${l} podium${l > 1 ? 's' : ''} per buzz.` },
+    { id: 'crowd',  tag: 'CR', color: '#f5a542', max: 4, name: 'CROWD PLEASER',   d: l => `Crowd throws on 3 extra prizes per stage${l > 1 ? ', worth x' + l : ''}.` },
     { id: 'bleep',  tag: 'BL', color: '#7fe0ff', max: 4, name: 'BLEEP BUTTON',    d: l => `${l} dead air stop${l > 1 ? 's' : ''} ignored per round.` },
     { id: 'wide',   tag: 'WD', color: '#ffffff', max: 4, name: 'FOLLOW SPOT',     d: l => `Bigger PERFECT zone (level ${l}).` },
     { id: 'gold',   tag: 'AU', color: '#ffd24a', max: 4, name: 'GOLD RUSH',       d: l => `${l} gold prize${l > 1 ? 's' : ''} per strip.` },
@@ -355,6 +355,7 @@
     this.clock = this.clockMax; this.timeAdded = 0; this.shrinkT = 4; this.shrinkSide = 0; this.jitT = 1.2;
     this.stormT = this.stormEvery();
     this.streak = 0; this.inBuzz = false;
+    this.tossLeft = this.lv('crowd') ? 3 : 0;
     this.convT = 1.4; this.strobeT = 0.6;
     this.u = this.rand() * 2 * N;
     this.droneT = [];
@@ -544,6 +545,7 @@
   P.refillIfEmpty = function (bonus) {
     if (this.upList().length) return;
     this.dress(this.strip.filter(p => !(p.kind === 'dead' && p.state === 'up')));
+    this.tossLeft = this.lv('crowd') ? 3 : 0;       // a fresh stage, a fresh armful for the crowd
     if (bonus) this.pot.hype += 2 + this.lv('ovation');
     this.emit({ t: 'refill', bonus });
   };
@@ -635,12 +637,16 @@
         this.win(fromLeft ? up[0] : up[up.length - 1], 'laser', 1);
       });
     }
-    for (let k = 0; k < this.lv('crowd'); k++) add(0.14, () => {
+    // CROWD PLEASER: one extra prize after a buzz, up to three per stage. Because the
+    // supply is fixed, the stage always runs out and refills; the crowd can never stall a round.
+    if (this.lv('crowd')) add(0.14, () => {
+      if (this.tossLeft <= 0 || !this.upList().length) return;     // out of prizes to throw, or that buzz just cleared the stage
       const dark = []; this.strip.forEach((q, j) => { if (q.state !== 'up') dark.push(j); });
       if (!dark.length) return;
       const j = dark[this.pick(dark.length)], q = this.strip[j];
-      const vals = [10, 20, 20, 30, 50];
-      q.kind = 'cash'; q.val = vals[this.pick(vals.length)]; q.state = 'up';
+      const vals = [20, 20, 30, 50, 50];
+      q.kind = 'cash'; q.val = vals[this.pick(vals.length)] * this.lv('crowd'); q.state = 'up';   // higher levels throw better prizes, not more of them
+      this.tossLeft--;
       this.emit({ t: 'toss', i: j });
     });
     add(0.3, () => {
