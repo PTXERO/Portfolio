@@ -93,9 +93,9 @@ const SITE = {
     {
       id:     'dead-air',
       title:  'DEAD//AIR',
-      sub:    'v1.1',
-      desc:   'A small game-show roguelike. Flip panels, build the pot, bank it before you hit dead air. Zeros set off chain reactions, sponsors stack, and every cleared episode opens a prize door. Survive an eight-episode season, then go endless.',
-      tags:   ['game', 'roguelike', 'push your luck'],
+      sub:    'v2.0',
+      desc:   'A game-show roguelike. A spotlight sweeps the prizes: hit the buzzer to stop it, bank the pot before you land on dead air. Clear an episode to load and spin your prize wheel. Every gimmick it gives you joins the set, and they all stack.',
+      tags:   ['game', 'roguelike', 'timing', 'push your luck'],
       url:    './dead-air/',
       status: 'live',
     },
