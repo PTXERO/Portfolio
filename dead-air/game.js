@@ -21,6 +21,7 @@
     { id: 'bleep',  tag: 'BL', color: '#7fe0ff', max: 4, name: 'BLEEP BUTTON',    d: l => `The first ${l > 1 ? l + ' dead air stops' : 'dead air stop'} each round ${l > 1 ? 'are' : 'is'} bleeped out.` },
     { id: 'wide',   tag: 'WD', color: '#ffffff', max: 4, name: 'FOLLOW SPOT',     d: l => `The PERFECT zone is ${['', 'bigger', 'much bigger', 'huge', 'nearly the whole podium'][l]}. PERFECT stops pay double.` },
     { id: 'gold',   tag: 'AU', color: '#ffd24a', max: 4, name: 'GOLD RUSH',       d: l => `${l} gold prize${l > 1 ? 's' : ''} on every strip, worth five times as much.` },
+    { id: 'budget', tag: '$$', color: '#5fe08a', max: 5, name: 'PRIZE BUDGET',    d: l => 'A bigger prize pool: every cash and gold prize is worth $' + (10 * l) + ' more.' },
     { id: 'jack',   tag: 'JK', color: '#ff6bd6', max: 4, name: 'DIAMOND PODIUM',  d: l => `Once a round, a diamond that multiplies the whole pot by ${1.5 + 0.5 * l}.` },
     { id: 'hypeman',tag: 'HY', color: '#42d4f5', max: 5, name: 'HYPE MAN',        d: l => `Hype prizes give +${1 + l} instead of +1.` },
     { id: 'net',    tag: 'SN', color: '#42f5b0', max: 3, name: 'SAFETY NET',      d: l => `Dead air still banks ${25 * l}% of the pot.` },
@@ -133,6 +134,8 @@
     take(this.lv('gold'), 'gold');
   };
 
+  // What a cash prize pays, including the PRIZE BUDGET top-up.
+  P.cashVal = function (p) { return p.val + 10 * this.lv('budget'); };
   P.isUp = function (i) { const p = this.strip[i]; return !!p && p.state === 'up' && p.kind !== 'dead'; };
   P.upList = function () { const o = []; for (let i = 0; i < N; i++) if (this.isUp(i)) o.push(i); return o; };
   P.speed = function () { return (3.6 + 0.4 * Math.min(this.ep, 12)) * (1 + 0.09 * this.buzzes); };   // podiums per second
@@ -169,8 +172,8 @@
     if (!this.isUp(i)) return false;
     const p = this.strip[i], pot = this.pot;
     let val = 0, gain = 0;
-    if (p.kind === 'cash') { val = p.val * mult; pot.cash += val; }
-    else if (p.kind === 'gold') { val = p.val * 5 * mult; pot.cash += val; }
+    if (p.kind === 'cash') { val = this.cashVal(p) * mult; pot.cash += val; }
+    else if (p.kind === 'gold') { val = this.cashVal(p) * 5 * mult; pot.cash += val; }
     else if (p.kind === 'hype') { gain = (1 + this.lv('hypeman')) * mult; pot.hype += gain; }
     else if (p.kind === 'jack') { gain = 1.5 + 0.5 * this.lv('jack'); pot.xm *= gain; }
     else if (p.kind === 'spin') { this.spins++; }

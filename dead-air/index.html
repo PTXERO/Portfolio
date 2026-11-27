@@ -75,7 +75,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 .card{border:1px solid var(--b2);border-top:3px solid var(--c);border-radius:3px;background:rgba(16,16,21,.95);padding:9px 7px 10px;
   cursor:pointer;text-align:center;transition:transform .12s,border-color .12s;min-height:150px;}
 .card:hover{transform:translateY(-4px);border-color:var(--c);}
-.card .tag{display:inline-block;font-family:var(--fdisp);font-size:26px;line-height:1;color:#07070a;background:var(--c);border-radius:3px;padding:5px 9px 2px;box-shadow:0 0 14px var(--c);}
+.card img{width:52px;height:52px;display:block;margin:0 auto;filter:drop-shadow(0 0 8px var(--c));}
+.kit img{flex:none;width:34px;height:34px;}
 .card .k{display:block;font-family:var(--fmono);font-size:9px;letter-spacing:.14em;color:var(--c);margin-top:8px;}
 .card b{display:block;font-family:var(--fdisp);font-weight:400;font-size:18px;letter-spacing:.06em;line-height:1.05;color:#fff;margin:3px 0 4px;}
 .card p{font-size:10.5px;line-height:1.45;color:#b9b9c6;}
@@ -374,7 +375,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     $('offerList').innerHTML = G.offers.map((o, i) => {
       const d = o.def, lv = o.type === 'g' ? G.lv(d.id) : 0;
       return `<button class="card" data-offer="${i}" style="--c:${d.color}">
-        <span class="tag">${d.tag}</span><span class="k">${o.type === 'g' ? 'NEW WEDGE' : 'WHEEL UPGRADE'}</span>
+        <img alt="" src="${iconURL(o.type === 'g' ? d.id : d.id === 'gold' ? 'goldwedge' : d.id)}"><span class="k">${o.type === 'g' ? 'NEW WEDGE' : 'WHEEL UPGRADE'}</span>
         <b>${d.name}</b><p>${o.type === 'g' ? d.d(Math.min(d.max, lv + 1)) : d.desc}</p></button>`;
     }).join('');
     $('ovLoad').hidden = false; $('result').hidden = true;
@@ -519,9 +520,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('mute').onclick = () => { stats.sound = !stats.sound; save(); $('mute').textContent = stats.sound ? 'SOUND ON' : 'SOUND OFF'; };
   $('kitBtn').onclick = () => {
     const own = D.GIMMICKS.filter(g => G.lv(g.id));
-    $('kitList').innerHTML = (own.length ? own.map(g => `<div style="--c:${g.color}"><span class="chip">${g.tag} · ${G.lv(g.id)}</span><p><b>${g.name}</b><span>${g.d(G.lv(g.id))}</span></p></div>`).join('')
+    $('kitList').innerHTML = (own.length ? own.map(g => `<div style="--c:${g.color}"><img alt="" src="${iconURL(g.id)}"><span class="chip">LEVEL ${G.lv(g.id)}</span><p><b>${g.name}</b><span>${g.d(G.lv(g.id))}</span></p></div>`).join('')
       : '<div><span>Nothing yet. Clear an episode and spin the wheel.</span></div>') +
-      (G.toasters ? `<div style="--c:#8a8aa0"><span class="chip">×${G.toasters}</span><p><b>TOASTERS</b><span>Start every round with $${10 * G.toasters} in the pot.</span></p></div>` : '');
+      (G.toasters ? `<div style="--c:#8a8aa0"><img alt="" src="${iconURL('junk')}"><span class="chip">×${G.toasters}</span><p><b>TOASTERS</b><span>Start every round with $${10 * G.toasters} in the pot.</span></p></div>` : '');
     $('ovKit').hidden = false; pausedUI = true;
   };
   $('kitClose').onclick = () => { $('ovKit').hidden = true; pausedUI = false; };
@@ -626,7 +627,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   function drawPrize(kind, val, x, y, s, alpha) {
     ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.globalAlpha = alpha;
     if (kind === 'cash') {
-      const n = val >= 50 ? 3 : val >= 30 ? 2 : 1;
+      const n = val >= 90 ? 5 : val >= 70 ? 4 : val >= 50 ? 3 : val >= 30 ? 2 : 1;
       for (let i = n - 1; i >= 0; i--) {
         ctx.fillStyle = '#7a4a14'; ctx.beginPath(); ctx.roundRect(-15, -9 - i * 4, 30, 17, 3); ctx.fill();
         ctx.fillStyle = C.cash; ctx.beginPath(); ctx.roundRect(-13.5, -7.5 - i * 4, 27, 14, 2); ctx.fill();
@@ -686,7 +687,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       if (f < 0) continue;                                   // not popped in yet
       const pop = f < 0.25 ? 1 + (1 - f / 0.25) * 0.5 : 1;
       const bob = p.state === 'up' && !danger ? Math.sin(time * 3 + i) * 2 : 0;
-      drawPrize(burnt ? 'burnt' : p.kind, p.val, x, y - 18 + bob, pop, burnt ? 0.75 : 1);
+      drawPrize(burnt ? 'burnt' : p.kind, G.cashVal(p), x, y - 18 + bob, pop, burnt ? 0.75 : 1);
       if (burnt && Math.random() < 0.04) parts.push({ x: x + rnd(-6, 6), y: y - 30, vx: rnd(-8, 8), vy: -30, life: 0.9, max: 0.9, color: '#5a5a70', size: 4, g: -20, k: 'spark' });
     }
   }
@@ -985,6 +986,89 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     for (let y = (time * 300) % 6; y < H; y += 6) ctx.fillRect(0, y, W, 2);
   }
 
+  // ── Icons: one small drawing per wedge, used on the wheel, the offer cards and the gimmick list ──
+  function drawIcon(c, id) {       // centred on 0,0, fits inside about ±18
+    const col = (D.byId(D.GIMMICKS, id) || {}).color || '#fff';
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    const circ = (x, y, r, f) => { c.fillStyle = f; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); };
+    const poly = (pts, f) => { c.fillStyle = f; c.beginPath(); pts.forEach((q, k) => k ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1])); c.closePath(); c.fill(); };
+    const line = (pts, st, w) => { c.strokeStyle = st; c.lineWidth = w; c.beginPath(); pts.forEach((q, k) => k ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1])); c.stroke(); };
+    const box = (x, y, w, h, r, f) => { c.fillStyle = f; c.beginPath(); c.roundRect(x, y, w, h, r); c.fill(); };
+    const word = (t, px, f, y) => { c.fillStyle = f; c.font = px + "px 'Bebas Neue','Arial Narrow',sans-serif"; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(t, 0, y); };
+    switch (id) {
+      case 'twin':      // two spotlights
+        poly([[-12, -12], [-4, -12], [2, 16], [-18, 16]], 'rgba(66,212,245,.55)'); poly([[4, -12], [12, -12], [18, 16], [-2, 16]], 'rgba(255,244,194,.6)');
+        box(-13, -18, 10, 8, 2, '#3a3a52'); box(3, -18, 10, 8, 2, '#3a3a52'); c.fillStyle = col; c.fillRect(-12, -11, 8, 2.5); c.fillStyle = '#fff4c2'; c.fillRect(4, -11, 8, 2.5); break;
+      case 'mirror':    // mirror ball
+        line([[0, -18], [0, -11]], '#8a8aa0', 2); circ(0, 3, 13, '#8a8aa0');
+        c.save(); c.beginPath(); c.arc(0, 3, 13, 0, TAU); c.clip();
+        for (let r = -2; r <= 2; r++) for (let k = -2; k <= 2; k++) { c.fillStyle = (r + k) % 2 ? '#ffffff' : '#c9d6ff'; c.globalAlpha = 0.3 + 0.3 * ((r * 3 + k * 5 + 10) % 3); c.fillRect(k * 6 - 2.5, 3 + r * 6 - 2.5, 5, 5); }
+        c.restore(); c.globalAlpha = 1; line([[12, -11], [17, -16]], '#fff', 2); line([[-13, -8], [-17, -12]], '#fff', 2); break;
+      case 'pyro':      // flame
+        poly([[0, -18], [9, -4], [13, 6], [8, 16], [-8, 16], [-13, 6], [-7, -2], [-4, 4]], '#ff9a2e'); poly([[0, -4], [5, 5], [4, 13], [-4, 13], [-6, 6]], '#fff36b'); break;
+      case 'wire':      // lightning bolt
+        poly([[4, -18], [-10, 2], [-1, 2], [-5, 18], [11, -4], [2, -4]], col); break;
+      case 'laser':     // emitter and beam
+        line([[-8, 0], [17, 0]], 'rgba(245,66,168,.55)', 9); line([[-8, 0], [17, 0]], '#fff', 2.5); box(-18, -7, 11, 14, 2, '#3a3a52'); circ(15, 0, 5, col); break;
+      case 'drone':
+        line([[-12, -4], [12, -4]], col, 2.5); line([[-17, -8], [-7, -8]], '#fff', 2); line([[7, -8], [17, -8]], '#fff', 2);
+        box(-8, -5, 16, 12, 3, '#2a2648'); c.strokeStyle = col; c.lineWidth = 1.5; c.stroke(); circ(0, 1, 3, '#ff4060'); line([[-5, 7], [-8, 13]], col, 2); line([[5, 7], [8, 13]], col, 2); break;
+      case 'cannon':
+        c.save(); c.rotate(0.6); c.fillStyle = col; c.fillRect(-6, -18, 12, 27); c.fillStyle = '#07070a'; c.fillRect(-4, -18, 8, 5); c.restore();
+        box(-13, 9, 26, 8, 3, '#5a6a20'); circ(15, -15, 3, '#fff'); circ(10, -18, 2, '#fff'); break;
+      case 'crowd':     // three fans, arms up
+        [[-11, 5, '#b8782a'], [11, 5, '#b8782a'], [0, -1, col]].forEach(([x, y, f]) => { circ(x, y - 6, 5, f); box(x - 6, y, 12, 13, 4, f); line([[x - 5, y + 3], [x - 9, y - 10]], f, 3); line([[x + 5, y + 3], [x + 9, y - 10]], f, 3); }); break;
+      case 'bleep':     // censored speech bubble
+        box(-17, -14, 34, 22, 6, '#e9fbff'); poly([[-8, 7], [-1, 7], [-10, 17]], '#e9fbff'); c.fillStyle = '#07070a'; c.fillRect(-12, -7, 24, 8); c.fillStyle = col; c.fillRect(-12, -7, 24, 2); break;
+      case 'wide':      // bullseye
+        circ(0, 0, 17, '#fff'); circ(0, 0, 13, '#e8203a'); circ(0, 0, 9, '#fff'); circ(0, 0, 5, '#e8203a'); break;
+      case 'gold': {    // gold bars
+        const bar = (x, y) => { poly([[x - 11, y + 5], [x - 8, y - 5], [x + 8, y - 5], [x + 11, y + 5]], '#a07a12'); poly([[x - 8, y + 3], [x - 6, y - 4], [x + 6, y - 4], [x + 8, y + 3]], '#ffd24a'); };
+        bar(-8, 9); bar(8, 9); bar(0, -3); line([[11, -14], [17, -14]], '#fff', 1.5); line([[14, -17], [14, -11]], '#fff', 1.5); break; }
+      case 'budget':    // money bag
+        poly([[-6, -15], [6, -15], [3, -7], [-3, -7]], '#3a9a5a'); c.fillStyle = col; c.beginPath(); c.ellipse(0, 5, 13, 12, 0, 0, TAU); c.fill();
+        word('$', 19, '#0a3a1a', 6); circ(-15, 14, 4, '#ffd24a'); circ(15, 13, 4, '#ffd24a'); break;
+      case 'jack':      // diamond
+        poly([[0, 16], [-16, -3], [-9, -13], [9, -13], [16, -3]], col); poly([[0, 16], [-5, -3], [5, -3]], '#ffd6f4'); c.fillStyle = '#fff'; c.fillRect(-9, -13, 18, 3); break;
+      case 'hypeman':   // megaphone
+        poly([[-14, -5], [-4, -5], [11, -14], [11, 14], [-4, 5], [-14, 5]], col); c.fillStyle = '#e4fbff'; c.fillRect(-14, -5, 4, 10); line([[-8, 6], [-6, 13]], col, 4);
+        line([[15, -6], [18, -8]], '#fff', 2); line([[15, 0], [19, 0]], '#fff', 2); line([[15, 6], [18, 8]], '#fff', 2); break;
+      case 'net':       // safety net between two poles
+        line([[-16, -12], [-16, 14]], '#8a8aa0', 3); line([[16, -12], [16, 14]], '#8a8aa0', 3);
+        c.strokeStyle = col; c.lineWidth = 2; c.beginPath(); c.moveTo(-16, -8); c.quadraticCurveTo(0, 22, 16, -8); c.lineTo(-16, -8); c.stroke();
+        for (let k = -2; k <= 2; k++) line([[k * 5.5, -8], [k * 5, 6 - Math.abs(k) * 4]], col, 1.5);
+        break;
+      case 'encore':    // stage curtains
+        poly([[-18, -15], [-3, -15], [-9, 16], [-18, 16]], '#e8203a'); poly([[18, -15], [3, -15], [9, 16], [18, 16]], '#e8203a');
+        c.fillStyle = '#ffd24a'; c.fillRect(-18, -18, 36, 4); word('+1', 17, col, 3); break;
+      case 'junk':      // toaster
+        box(-9, -17, 7, 12, 2, '#e8c38a'); box(2, -17, 7, 12, 2, '#e8c38a'); box(-15, -8, 30, 22, 5, '#b9b9c6'); c.fillStyle = '#6a6a80'; c.fillRect(-11, -8, 22, 3);
+        c.fillStyle = '#3a3a48'; c.fillRect(10, -2, 3, 10); circ(11.5, -2, 2.5, '#e8203a'); c.fillStyle = '#6a6a80'; c.fillRect(-13, 14, 6, 3); c.fillRect(7, 14, 6, 3); break;
+      case 'dead':      // a TV full of static
+        line([[-5, -12], [-10, -18]], '#8a8aa0', 1.5); line([[5, -12], [10, -18]], '#8a8aa0', 1.5); box(-16, -12, 32, 26, 4, '#3a3a52'); c.fillStyle = '#0a060c'; c.fillRect(-13, -9, 26, 19);
+        for (let k = 0; k < 10; k++) { c.fillStyle = k % 2 ? '#f542a8' : '#fff'; c.fillRect(-12 + ((k * 7) % 17), -8 + ((k * 5) % 17), 4 + ((k * 3) % 6), 1.6); } break;
+      case 'goldwedge': // star: two prizes at once
+        c.fillStyle = '#ffd24a'; c.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 8.5 : 18, a = -Math.PI / 2 + k * Math.PI / 5; c.lineTo(Math.cos(a) * r, Math.sin(a) * r); } c.closePath(); c.fill();
+        word('×2', 13, '#4a3a08', 1); break;
+      case 'trim':      // scissors
+        line([[-12, -15], [8, 9]], '#d8d8e0', 3); line([[12, -15], [-8, 9]], '#d8d8e0', 3); c.strokeStyle = '#f542a8'; c.lineWidth = 3;
+        c.beginPath(); c.arc(11, 13, 4.5, 0, TAU); c.stroke(); c.beginPath(); c.arc(-11, 13, 4.5, 0, TAU); c.stroke(); break;
+      case 'fat':       // a wheel with one fat wedge
+        circ(0, 0, 16, '#2a2a3a'); c.fillStyle = '#42d4f5'; c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, 16, -2.3, 0.3); c.closePath(); c.fill();
+        c.strokeStyle = '#d8d8e0'; c.lineWidth = 2; c.beginPath(); c.arc(0, 0, 16, 0, TAU); c.stroke(); circ(0, 0, 3, '#d8d8e0'); break;
+      case 'spin':      // two arrows chasing round
+        c.strokeStyle = '#c8f542'; c.lineWidth = 4; c.beginPath(); c.arc(0, 0, 12, -2.6, 0.1); c.stroke(); c.beginPath(); c.arc(0, 0, 12, 0.55, 3.25); c.stroke();
+        poly([[7, -2], [17, -2], [12, 7]], '#c8f542'); poly([[-7, 2], [-17, 2], [-12, -7]], '#c8f542'); break;
+    }
+  }
+  const iconURLs = {};
+  function iconURL(id) {
+    if (iconURLs[id]) return iconURLs[id];
+    const c2 = document.createElement('canvas'); c2.width = c2.height = 104;
+    const c = c2.getContext('2d'); c.translate(52, 52); c.scale(2.5, 2.5); drawIcon(c, id);
+    return (iconURLs[id] = c2.toDataURL());
+  }
+
   // ── Drawing: the wheel ─────────────────────────────────────────
   function drawWheel(dt) {
     const cx = 270, cy = 372, R = 196;
@@ -1009,18 +1093,30 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, R, s.a0, s.a1); ctx.closePath();
       ctx.fillStyle = w.type === 'dead' ? '#1a0812' : w.type === 'junk' ? '#1c1c26' : w.type === 'gold' ? '#4a3a08' : '#12121c'; ctx.fill();
       ctx.save(); ctx.clip();
-      ctx.globalAlpha = w.type === 'g' ? 0.3 : 0.16; ctx.fillStyle = col; ctx.fillRect(-R, -R, R * 2, R * 2); ctx.globalAlpha = 1;
+      // colour deepening toward the rim, a sunburst sheen, and a solid rim band
+      const wg = ctx.createRadialGradient(0, 0, 20, 0, 0, R);
+      wg.addColorStop(0, col + '10'); wg.addColorStop(0.75, col + (w.type === 'junk' ? '30' : '70')); wg.addColorStop(1, col + (w.type === 'junk' ? '50' : 'c0'));
+      ctx.fillStyle = wg; ctx.fillRect(-R, -R, R * 2, R * 2);
+      ctx.fillStyle = 'rgba(255,255,255,.05)';
+      for (let a = s.a0; a < s.a1; a += 0.14) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, R, a, Math.min(s.a1, a + 0.07)); ctx.closePath(); ctx.fill(); }
+      ctx.strokeStyle = col; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(0, 0, R - 5, s.a0, s.a1); ctx.stroke();
       if (w.type === 'dead') for (let n = 0; n < 26; n++) { ctx.fillStyle = Math.random() < 0.5 ? '#f542a8' : '#fff'; ctx.globalAlpha = 0.5; const a = rnd(s.a0, s.a1), r = rnd(30, R); ctx.fillRect(Math.cos(a) * r, Math.sin(a) * r, rnd(4, 14), 2); }
       if (i === wedgeFx && wedgeFxT < 1.4) { ctx.globalAlpha = (1 - wedgeFxT / 1.4) * (0.5 + 0.5 * Math.sin(wedgeFxT * 30)); ctx.fillStyle = '#fff'; ctx.fillRect(-R, -R, R * 2, R * 2); }
       ctx.restore(); ctx.globalAlpha = 1;
       ctx.strokeStyle = '#07070a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(s.a0) * R, Math.sin(s.a0) * R); ctx.stroke();
-      // label, written from the rim inward
-      const mid = (s.a0 + s.a1) / 2;
+      // the prize itself, drawn near the rim, with its name running in toward the hub
+      const mid = (s.a0 + s.a1) / 2, lv = def ? G.lv(def.id) : 0;
+      const arc = (s.a1 - s.a0) * (R - 44), sz = Math.max(0.7, Math.min(1.5, arc / 44));
       ctx.save(); ctx.rotate(mid); ctx.textBaseline = 'middle';
-      const lv = def ? G.lv(def.id) : 0;
-      font(30); text(def ? def.tag : w.type === 'gold' ? '×2' : w.type === 'dead' ? '✕' : '▭', R - 14, 1, col, 'right');
-      font(15); text(def ? def.name : w.type === 'gold' ? 'GOLDEN WEDGE' : w.type === 'dead' ? 'DEAD AIR' : 'TOASTER', R - 52, 1, '#fff', 'right');
-      if (def && lv) { font(10, 'mono'); text('LV ' + lv, 44, 1, col, 'left'); }
+      ctx.save(); ctx.translate(R - 44, 0); ctx.rotate(Math.PI / 2);
+      ctx.fillStyle = 'rgba(7,7,10,.55)'; ctx.beginPath(); ctx.arc(0, 0, 24 * sz, 0, TAU); ctx.fill();
+      ctx.scale(sz, sz); drawIcon(ctx, def ? def.id : w.type === 'gold' ? 'goldwedge' : w.type); ctx.restore();
+      const label = def ? def.name : w.type === 'gold' ? 'GOLDEN WEDGE' : w.type === 'dead' ? 'DEAD AIR' : 'TOASTER';
+      font(14); const lw = ctx.measureText(label).width, room = R - 44 - 26 * sz - 40;
+      if (lw > room) font(14 * room / lw);
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(7,7,10,.8)'; ctx.textAlign = 'right'; ctx.strokeText(label, R - 44 - 28 * sz, 1);
+      text(label, R - 44 - 28 * sz, 1, '#fff', 'right');
+      for (let k = 0; k < lv; k++) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(R - 5, (k - (lv - 1) / 2) * 9, 3.2, 0, TAU); ctx.fill(); ctx.strokeStyle = '#07070a'; ctx.lineWidth = 1.5; ctx.stroke(); }
       ctx.restore();
     });
     ctx.strokeStyle = '#34344a'; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(0, 0, R + 3, 0, TAU); ctx.stroke();
