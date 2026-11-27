@@ -5,9 +5,11 @@
 // ─────────────────────────────────────────────────────────────────
 (function (root) {
   const N = 12;                 // prize podiums on the strip
-  const EPISODES = 8;
+  const EPISODES = 15;          // a full season: three acts of five episodes
+  const PILOT = 5;              // the short game: act one only
+  const ACT = 5;
   const ROUND_TIME = 16;        // seconds of moving light per round
-  const TARGETS = [2000, 3000, 4200, 6000, 8500, 12000, 17000, 24000];
+  const TARGETS = [2000, 2300, 2700, 3200, 4200, 5200, 6500, 8200, 11000, 15000, 19000, 24000, 31000, 40000, 55000];
 
   // Every gimmick is something you can see on the set. d(lv) = what it does at that level.
   const GIMMICKS = [
@@ -111,8 +113,10 @@
     };
   }
 
-  function Game(seed, who, perks) {
+  function Game(seed, who, perks, episodes) {
     this.perks = perks || {};
+    this.episodes = episodes === PILOT ? PILOT : EPISODES;
+    this.elapsed = 0;           // seconds on air this run, kept by the UI
     this.rand = seed == null ? Math.random : mulberry(seed);
     this.who = who || 'rookie';
     this.ep = 0; this.total = 0;
@@ -146,12 +150,12 @@
   P.emit = function (o) { if (this.events.length < 2000) this.events.push(o); };
   P.later = function (dt, fn) { this.q.push({ at: this.t + dt, fn }); };
   P.target = function (ep) {
-    if (ep <= EPISODES) return TARGETS[ep - 1];
-    return Math.round(TARGETS[EPISODES - 1] * Math.pow(1.6, ep - EPISODES) / 100) * 100;
+    if (ep <= this.episodes) return TARGETS[ep - 1];
+    return Math.round(TARGETS[this.episodes - 1] * Math.pow(1.5, ep - this.episodes) / 100) * 100;
   };
   P.gain = function (id) { this.levels[id] = this.lv(id) + 1; };
-  // Interference: from episode 5 static strikes burn prizes off the strip, faster every episode.
-  P.stormEvery = function () { return this.ep < 5 ? Infinity : Math.max(0.9, 5.5 - 0.5 * (this.ep - 5)); };
+  // Interference: from act two static strikes burn prizes off the strip, faster every episode.
+  P.stormEvery = function () { return this.ep <= ACT ? Infinity : Math.max(0.9, 5.5 - 0.3 * (this.ep - ACT - 1)); };
   P.storm = function (dt) {
     this.stormT -= dt;
     if (this.stormT > 0) return;
@@ -160,9 +164,24 @@
     if (up.length > 1) { const i = up[this.pick(up.length)]; this.strip[i].state = 'burnt'; this.emit({ t: 'storm', i }); }
   };
   P.dealIs = function (id) { return !!this.deal && this.deal.id === id; };
+  P.act = function () { return Math.ceil(Math.max(1, this.ep) / ACT); };
+  P.isFinale = function () { return this.ep > 0 && this.ep % ACT === 0 && this.ep <= this.episodes; };
+
+  // Save and resume. A run is saved between episodes: either about to go on air, or about to spin.
+  P.snapshot = function (stage) {
+    return { v: 1, stage, who: this.who, perks: this.perks, episodes: this.episodes, ep: this.ep, levels: this.levels, wheel: this.wheel,
+      spins: this.spins, toasters: this.toasters, best: this.best, banked: this.banked || 0, endless: this.endless,
+      nextFormat: this.nextFormat || null, earned: this.earned || [], elapsed: this.elapsed, total: this.total };
+  };
+  Game.restore = function (o) {
+    const g = new Game(null, o.who, o.perks, o.episodes);
+    ['ep', 'levels', 'wheel', 'spins', 'toasters', 'best', 'banked', 'endless', 'nextFormat', 'earned', 'elapsed', 'total'].forEach(k => { g[k] = o[k]; });
+    g.phase = o.stage === 'wheel' ? 'cleared' : 'ready';
+    return g;
+  };
   P.is = function (id) { return !!this.format && this.format.id === id; };
   P.deadCount = function () {
-    return Math.min(8, 1 + Math.ceil(this.ep / 2) + (this.is('goldnight') ? 1 : 0) + (this.is('censors') ? 2 : 0) + (this.dealIs('tvs') ? 2 : 0));
+    return Math.min(8, 1 + Math.ceil(this.ep / 3) + (this.is('goldnight') ? 1 : 0) + (this.is('censors') ? 2 : 0) + (this.dealIs('tvs') ? 2 : 0));
   };
 
   // ── Episode / round ─────────────────────────────────────────────
@@ -191,7 +210,7 @@
     if (this.ep >= 2 && this.rand() < CAR_CHANCE) this.rareLeft.push('car');
     if (this.rand() < JACKPOT_CHANCE) this.rareLeft.push('jp');
     this.rivalT = 3.4;
-    this.specialsLeft = (this.ep >= 4 ? 1 : 0) + (this.ep >= 2 && this.rand() < 0.6 ? 1 : 0) + (this.ep >= 6 && this.rand() < 0.5 ? 1 : 0);
+    this.specialsLeft = (this.ep >= 4 ? 1 : 0) + (this.ep >= 2 && this.rand() < 0.6 ? 1 : 0) + (this.ep >= 8 && this.rand() < 0.5 ? 1 : 0);
     const order = this.shuffle(this.strip.slice());
     for (let i = 0; i < this.deadCount(); i++) order[i].kind = 'dead';
     this.dress(order.slice(this.deadCount()));
@@ -232,7 +251,7 @@
   P.isUp = function (i) { const p = this.strip[i]; return !!p && p.state === 'up' && p.kind !== 'dead'; };
   P.upList = function () { const o = []; for (let i = 0; i < N; i++) if (this.isUp(i)) o.push(i); return o; };
   P.speed = function () {                                   // podiums per second
-    return (3.6 + 0.4 * Math.min(this.ep, 12)) * (1 + (this.lv('steady') ? 0 : 0.09 * this.buzzes)) *
+    return (3.6 + 0.24 * Math.min(this.ep, 18)) * (1 + (this.lv('steady') ? 0 : 0.09 * this.buzzes)) *
       (this.is('turbo') ? 1.35 : 1) * (this.dealIs('fast') ? 1.25 : 1) * (this.slowT > 0 ? 0.35 : 1);
   };
   // Slow-motion: a couple of seconds of a much slower light. A few uses per round.
@@ -284,7 +303,7 @@
       this.strobeT -= dt * slow;
       if (this.strobeT <= 0) {
         this.u = this.pick(N) + 0.2 + this.rand() * 0.6;
-        this.strobeT = Math.max(0.4, 0.72 - 0.02 * this.ep) / (1 + (this.lv('steady') ? 0 : 0.05 * this.buzzes));
+        this.strobeT = Math.max(0.4, 0.72 - 0.012 * this.ep) / (1 + (this.lv('steady') ? 0 : 0.05 * this.buzzes));
         this.emit({ t: 'jump' });
       }
     } else if (this.is('pendulum')) {
@@ -477,8 +496,9 @@
       if (this.total >= 2 * tgt) this.earned.push(['DOUBLED THE TARGET', 1]);
       if (this.format.spins) this.earned.push([this.format.name, this.format.spins]);
       if (this.special === 'rival') this.earned.push(['BEAT THE RIVAL', 1]);
+      if (this.isFinale() && this.ep < this.episodes) this.earned.push(['ACT ' + this.act() + ' WRAPPED', 1]);
       this.earned.forEach(e => { this.spins += e[1]; });
-      const done = this.ep === EPISODES && !this.endless ? 'won' : 'cleared';
+      const done = this.ep === this.episodes && !this.endless ? 'won' : 'cleared';
       if (this.special === 'bonus') { this.afterBonus = done; this.startBonus(); } else this.phase = done;
     } else if (this.roundsLeft <= 0) this.phase = 'over';
     else if ((this.special === 'offer' || this.special === 'ad') && !this.asked) {
@@ -598,7 +618,7 @@
     return true;
   };
 
-  const api = { Game, N, EPISODES, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, EVENTS, byId };
+  const api = { Game, N, EPISODES, PILOT, ACT, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, EVENTS, byId };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DeadAir = api;
 })(typeof window !== 'undefined' ? window : globalThis);

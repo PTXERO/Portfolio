@@ -117,6 +117,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   background:#ffd24a;color:#07070a;box-shadow:3px 3px 0 #150f24;cursor:pointer;min-width:74px;}
 .shop button:disabled{background:#3a2878;color:#8a8aa0;box-shadow:none;cursor:not-allowed;}
 .shop .pips{display:block;font-family:var(--fmono);font-size:9px;letter-spacing:.2em;color:#ffd24a;margin:2px 0;}
+#resume{margin-bottom:8px;background:#ffd24a;border-color:#150f24;}
 #ovShop,#ovKit{background:#1a1238;justify-content:flex-start;}
 .money{font-family:var(--fdisp);font-size:22px;letter-spacing:.06em;color:#ffd24a;margin:10px 0 0;}
 .money small{font-family:var(--fmono);font-size:9px;letter-spacing:.14em;color:#8a8aa0;display:block;}
@@ -151,8 +152,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       <div class="logo">DEAD<em>//</em>AIR</div>
       <p class="pitch">You're tonight's contestant. A spotlight sweeps the prizes. Hit the buzzer to stop it, and don't stop it on dead air.</p>
       <div class="who" id="who"></div>
+      <button class="big-btn" id="resume" hidden></button>
       <button class="big-btn" id="start">GO ON AIR</button>
       <button class="big-btn alt" id="shopBtn">DRESSING ROOM</button>
+      <button class="hdr-btn" id="modeBtn" style="margin-top:10px"></button>
       <p class="how">Whatever the light stops on goes in the pot: <b>cash</b> × <i>hype</i>. Every prize you take burns out into <u>dead air</u> and the light gets faster, so <b>BANK</b> before your luck, or the clock, runs out. Clear an episode to load your prize wheel and spin it: every gimmick joins the set and they all stack. Then pick tomorrow's show. No two seasons play the same.</p>
       <div class="money" id="money"></div>
       <div class="stats" id="stats"></div>
@@ -565,7 +568,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 
   function onCleared() {
     stats.bestEp = Math.max(stats.bestEp, G.ep);
-    if (G.phase === 'won') stats.wins++;
+    if (G.phase === 'won') { stats.wins++; if (G.episodes === D.EPISODES) { stats.lastTime = Math.round(G.elapsed); stats.bestTime = Math.min(stats.bestTime || 1e9, stats.lastTime); } }
     save();
     shout(G.phase === 'won' ? 'SEASON WRAPPED!' : 'EPISODE CLEARED!', C.lime, 60, 1.6);
     for (let i = 0; i < 4; i++) confetti(rnd(60, 480), 160, 45, 60, 260);
@@ -605,6 +608,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   let wheelA = 0, spinAnim = null, lastWedge = -1, pointerKick = 0, wedgeFx = -1, wedgeFxT = 0;
   function showLoad() {
     G.openWheel();
+    saveRun('wheel');
     const earned = (G.earned || []).map(e => `${e[0]} +${e[1]}`).join(' · ');
     $('loadSub').innerHTML = `You have <b style="color:#ffd24a">${G.spins} spin${G.spins === 1 ? '' : 's'}</b>${earned ? ' (' + earned + ')' : ''}.<br>First, bolt one of these onto your wheel.`;
     $('offerList').innerHTML = G.offers.map((o, i) => {
@@ -678,15 +682,16 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   function showEnd(won) {
     const kit = Object.values(G.levels).reduce((a, b) => a + b, 0);
     $('ovEnd').innerHTML = won
-      ? `<h1>SEASON WRAPPED</h1><p class="sub">Eight episodes and you're still on the air. Take the win, or keep the cameras rolling.</p>
-         <div class="rows"><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>PRIZE MONEY SO FAR</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
+      ? `<h1>SEASON WRAPPED</h1><p class="sub">${G.episodes} episodes and you're still on the air. Take the win, or keep the cameras rolling.</p>
+         <div class="rows"><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>RUN TIME</span><b>${clockText(G.elapsed)}</b></div><div class="row"><span>PRIZE MONEY SO FAR</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
          <button class="big-btn" id="endA">KEEP GOING (ENDLESS)</button><button class="big-btn alt" id="endB">TAKE THE WIN</button>`
       : `<h1 class="bad">CANCELLED</h1><p class="sub">Episode ${G.ep} needed ${fmt(G.target(G.ep))}. You finished on ${fmt(G.total)}.</p>
-         <div class="rows"><div class="row"><span>EPISODES CLEARED</span><b>${G.ep - 1}</b></div><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>PRIZE MONEY EARNED</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
+         <div class="rows"><div class="row"><span>EPISODES CLEARED</span><b>${G.ep - 1}</b></div><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>RUN TIME</span><b>${clockText(G.elapsed)}</b></div><div class="row"><span>PRIZE MONEY EARNED</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
          <button class="big-btn" id="endA">NEW RUN</button><button class="big-btn alt" id="endB">BACK TO TITLE</button>`;
     $('ovEnd').hidden = false; syncPads();
     $('endA').onclick = () => { $('ovEnd').hidden = true; won ? showLoad() : newRun(); };
-    $('endB').onclick = toTitle;
+    $('endB').onclick = () => { clearRun(); toTitle(); };
+    if (!won) clearRun();
   }
 
   function resetFx() {
@@ -694,10 +699,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     tally = null; callout = null; shake = 0; glitch = 0; flashA = 0; dark = 0; spinAnim = null; droneGo.length = 0;
   }
   function beginEpisode() {
+    saveRun('episode');
     G.startEpisode();
     shownTotal = 0; tally = null;
     shout('EPISODE ' + G.ep, '#fff', 64, 1.1);
-    if (G.ep === 5) setTimeout(() => { if (G && live) shout('THE SIGNAL IS BREAKING UP', C.dead, 44, 1.6); }, 2700);
+    const actName = G.ep === 6 ? 'ACT II: PRIME TIME' : G.ep === 11 ? 'ACT III: LIVE FINALE' : G.isFinale() ? 'ACT FINALE' : '';
+    if (actName && G.ep <= G.episodes) setTimeout(() => { if (G && live) shout(actName, '#ffd24a', 50, 1.5); }, 2700);
+    if (G.ep === 6) setTimeout(() => { if (G && live) shout('THE SIGNAL IS BREAKING UP', C.dead, 44, 1.6); }, 4400);
     const f = G.format; if (f.id !== 'classic') setTimeout(() => { if (G && G.format === f) shout(f.name, f.color, 56, 1.4); }, 1150);
     sfx.cheer(false); excite = 0.8;
     syncPads();
@@ -706,7 +714,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   }
   function newRun() {
     live = true; resetFx();
-    G = new D.Game(null, stats.who, stats.perks);
+    G = new D.Game(null, stats.who, stats.perks, stats.mode === D.PILOT ? D.PILOT : D.EPISODES);
     stats.runs++; save(); runMoney = 0;
     ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovShop', 'ovCard'].forEach(id => { $(id).hidden = true; });
     $('quit').hidden = false; $('kitBtn').hidden = false;
@@ -746,9 +754,14 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   });
 
   function paintTitle() {
+    const sv = savedRun();
+    $('resume').hidden = !sv;
+    if (sv) $('resume').textContent = 'RESUME · EPISODE ' + (sv.stage === 'wheel' ? sv.ep + ' WHEEL' : sv.ep + 1) + ' · ' + clockText(sv.elapsed);
+    $('start').textContent = sv ? 'NEW SEASON' : 'GO ON AIR';
+    $('modeBtn').textContent = stats.mode === D.PILOT ? 'LENGTH: PILOT · 5 EPISODES · ABOUT 12 MIN' : 'LENGTH: FULL SEASON · 15 EPISODES · ABOUT 40 MIN';
     $('money').innerHTML = stats.runs ? `$${fmt(stats.money || 0)}<small>PRIZE MONEY · JACKPOT STANDS AT $${fmt(stats.jackpot || 5000)}</small>` : '';
     $('stats').innerHTML = stats.runs
-      ? `<div><b>${stats.runs}</b>RUNS</div><div><b>${stats.wins}</b>SEASONS WON</div><div><b>${stats.bestEp}</b>EPISODES CLEARED</div><div><b>${fmt(stats.bestBank)}</b>BEST BANK</div>` : '';
+      ? `<div><b>${stats.runs}</b>RUNS</div><div><b>${stats.wins}</b>SEASONS WON</div><div><b>${stats.bestEp}</b>EPISODES CLEARED</div>${stats.bestTime ? `<div><b>${clockText(stats.bestTime)}</b>FASTEST SEASON</div>` : ''}<div><b>${fmt(stats.bestBank)}</b>BEST BANK</div>` : '';
     const open = c => !c.ok || c.ok(stats);
     if (!open(D.byId(D.CONTESTANTS, stats.who) || { ok: () => false })) stats.who = 'rookie';
     $('who').innerHTML = D.CONTESTANTS.map(c => open(c)
@@ -763,6 +776,21 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     if (G.phase === 'sweep') G.buzz();
   }
   let runMoney = 0;            // prize money earned this run
+  // A run is saved between episodes, so closing the tab costs at most the episode in progress.
+  const RUN_KEY = 'deadair.run';
+  function saveRun(stage) { if (!live || !G) return; try { localStorage.setItem(RUN_KEY, JSON.stringify(Object.assign(G.snapshot(stage), { runMoney }))); } catch (e) {} }
+  function clearRun() { try { localStorage.removeItem(RUN_KEY); } catch (e) {} }
+  function savedRun() { try { const o = JSON.parse(localStorage.getItem(RUN_KEY) || 'null'); return o && o.v === 1 ? o : null; } catch (e) { return null; } }
+  function resumeRun() {
+    const o = savedRun(); if (!o) return;
+    live = true; resetFx();
+    G = D.Game.restore(o); runMoney = o.runMoney || 0;
+    ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovShop', 'ovCard'].forEach(id => { $(id).hidden = true; });
+    $('quit').hidden = false; $('kitBtn').hidden = false;
+    if (o.stage === 'wheel') showLoad(); else beginEpisode();
+  }
+  const clockText = sec => { sec = Math.floor(sec || 0); return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); };
+  const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
   let wantBank = false;       // BANK pressed while a buzz is still playing out: bank as soon as it settles
   function doBank() {
     if (!live || !G || pausedUI || tally) return;
@@ -785,6 +813,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   });
 
   $('start').onclick = newRun;
+  $('resume').onclick = resumeRun;
+  $('modeBtn').onclick = () => { stats.mode = stats.mode === D.PILOT ? D.EPISODES : D.PILOT; save(); paintTitle(); };
   $('who').addEventListener('click', e => { const b = e.target.closest('[data-who]'); if (b) { stats.who = b.dataset.who; save(); paintTitle(); } });
   let quitArmed = 0;       // QUIT asks for a second tap instead of a dialog
   $('quit').onclick = () => {
@@ -793,7 +823,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       setTimeout(() => { $('quit').textContent = 'QUIT'; }, 3000);
       return;
     }
-    quitArmed = 0; $('quit').textContent = 'QUIT'; toTitle();
+    quitArmed = 0; $('quit').textContent = 'QUIT'; clearRun(); toTitle();
   };
   $('mute').onclick = () => { stats.sound = !stats.sound; save(); $('mute').textContent = stats.sound ? 'SOUND ON' : 'SOUND OFF'; };
   $('kitBtn').onclick = () => {
@@ -867,7 +897,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     font(11, 'mono'); text('EPISODE', 18, 18, '#8a8aa0');
     font(30); text(String(G.ep), 18, 40, '#fff');
     const ew = ctx.measureText(String(G.ep)).width;
-    font(13); text(G.ep > D.EPISODES ? 'ENDLESS' : '/ ' + D.EPISODES, 24 + ew, 44, '#8a8aa0');
+    font(13); text(G.ep > G.episodes ? 'ENDLESS' : '/ ' + G.episodes, 24 + ew, 44, '#8a8aa0');
+    font(10, 'mono'); text((G.ep > G.episodes ? 'ENDLESS' : 'ACT ' + ROMAN[G.act()]) + ' · ' + clockText(G.elapsed), W - 18, 57, '#b9b9c6', 'right');
     font(11, 'mono'); text('ROUNDS', W - 18, 18, '#8a8aa0', 'right');
     for (let i = 0; i < Math.min(6, G.rounds); i++) {
       const x = W - 28 - i * 20, used = i < G.rounds - G.roundsLeft, now = i === G.rounds - G.roundsLeft && G.phase !== 'tally';
@@ -893,7 +924,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     font(11, 'mono'); text('TARGET ' + fmt(tgt), bx + bw / 2, 68, '#fff', 'center');
     text('×2 = BONUS SPIN', bx + bw, 68, shownTotal >= tgt * 2 ? C.lime : '#8a8aa0', 'right');
     drawBadges(97);
-    const note = G.bonus ? ['BONUS ROUND: ONE BUZZ', '#ffd24a'] : G.voteKind ? ['CROWD VOTE: ' + G.voteKind.toUpperCase() + ' ×2', '#f5a542'] : G.deal ? ['SPONSOR: ' + G.deal.name, '#42d4f5'] : null;
+    const note = G.bonus ? ['BONUS ROUND: ONE BUZZ', '#ffd24a'] : G.voteKind ? ['CROWD VOTE: ' + G.voteKind.toUpperCase() + ' ×2', '#f5a542'] : G.deal ? ['SPONSOR: ' + G.deal.name, '#42d4f5'] : G.isFinale() ? ['ACT ' + ROMAN[G.act()] + ' FINALE', '#ffd24a'] : null;
     if (note) {
       font(13); ctx.textBaseline = 'middle';
       const w3 = ctx.measureText(note[0]).width + 18;
@@ -1641,6 +1672,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
     if (!G) return;
     time += dt;
+    if (live) G.elapsed = (G.elapsed || 0) + dt;
     const onWheel = G.phase === 'load' || G.phase === 'wheel' || G.phase === 'pick' || G.phase === 'ready';
     if (!pausedUI && !onWheel) {
       acc += dt;
