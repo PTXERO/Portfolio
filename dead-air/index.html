@@ -116,6 +116,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 .shop button{flex:none;font-family:var(--fmono);font-size:10px;letter-spacing:.08em;padding:6px 8px;border:2px solid #150f24;border-radius:4px;
   background:#ffd24a;color:#07070a;box-shadow:3px 3px 0 #150f24;cursor:pointer;min-width:74px;}
 .shop button:disabled{background:#3a2878;color:#8a8aa0;box-shadow:none;cursor:not-allowed;}
+.shop .saving{display:block;height:5px;margin-top:5px;border:1px solid #150f24;border-radius:3px;background:#0d0a1c;overflow:hidden;}
+.shop .saving i{display:block;height:100%;background:#ffd24a;}
 .shop .pips{display:block;font-family:var(--fmono);font-size:9px;letter-spacing:.2em;color:#ffd24a;margin:2px 0;}
 #resume{margin-bottom:8px;background:#ffd24a;border-color:#150f24;}
 #ovShop,#ovKit{background:#1a1238;justify-content:flex-start;}
@@ -735,10 +737,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     startDemo();
   }
   function paintShop() {
-    $('shopSub').innerHTML = `Prize money: <b style="color:#ffd24a">$${fmt(stats.money || 0)}</b>. Everything you bank on air is paid in here, and what you buy lasts for every season.`;
+    $('shopSub').innerHTML = `Prize money: <b style="color:#ffd24a">$${fmt(stats.money || 0)}</b>. Everything you bank on air is paid in here. These are long-term investments: what you buy lasts for every season.`;
     $('shopList').innerHTML = D.PERKS.map(pk => {
       const lv = stats.perks[pk.id] || 0, maxed = lv >= pk.max, cost = maxed ? 0 : pk.cost(lv);
-      return `<div style="--c:#ffd24a"><img alt="" src="${iconURL(pk.icon)}"><p><b>${pk.name}</b><span class="pips">${'●'.repeat(lv)}${'○'.repeat(pk.max - lv)}</span><span>${pk.d(Math.min(pk.max, lv + 1))}</span></p>
+      return `<div style="--c:#ffd24a"><img alt="" src="${iconURL(pk.icon)}"><p><b>${pk.name}</b><span class="pips">${'●'.repeat(lv)}${'○'.repeat(pk.max - lv)}</span><span>${pk.d(Math.min(pk.max, lv + 1))}</span>${maxed ? '' : `<span class="saving"><i style="width:${Math.min(100, Math.floor(100 * (stats.money || 0) / cost))}%"></i></span>`}</p>
         <button data-perk="${pk.id}" ${maxed || (stats.money || 0) < cost ? 'disabled' : ''}>${maxed ? 'MAXED' : '$' + fmt(cost)}</button></div>`;
     }).join('');
   }

@@ -90,14 +90,15 @@
   ];
 
   // Dressing room: permanent upgrades bought with prize money. cost(l) = price of level l + 1.
+  // These are long-term investments: a first level is about one good full season, a last level is a dozen or more.
   const PERKS = [
-    { id: 'head',   icon: 'spin',    max: 3, name: 'HEAD START',         cost: l => [6000, 15000, 30000][l], d: l => `Start every season with ${l} spin${l > 1 ? 's' : ''} on the wheel.` },
-    { id: 'time',   icon: 'clock',   max: 5, name: 'LONGER SLOT',        cost: l => 3000 * (l + 1),          d: l => `+${l} second${l > 1 ? 's' : ''} on the clock every round.` },
-    { id: 'warm',   icon: 'hypeman', max: 4, name: 'WARM-UP ACT',        cost: l => 5000 * (l + 1),          d: l => `Every round starts with +${0.5 * l} hype.` },
-    { id: 'budget', icon: 'budget',  max: 5, name: 'BIGGER BUDGET',      cost: l => 2500 * (l + 1),          d: l => `Every cash and gold prize is worth $${5 * l} more.` },
-    { id: 'trim',   icon: 'trim',    max: 3, name: 'LOADED WHEEL',       cost: l => 8000 * (l + 1),          d: l => `Your wheel starts with ${l} fewer toaster${l > 1 ? 's' : ''}.` },
-    { id: 'censor', icon: 'bleep',   max: 2, name: 'CENSOR ON RETAINER', cost: l => [12000, 30000][l],       d: l => `${l} free bleep${l > 1 ? 's' : ''} every round.` },
-    { id: 'agent',  icon: 'gold',    max: 5, name: 'A BETTER AGENT',     cost: l => 4000 * (l + 1),          d: l => `+${20 * l}% prize money from everything you bank.` },
+    { id: 'head',   icon: 'spin',    max: 3, name: 'HEAD START',         cost: l => [500000, 2000000, 7000000][l], d: l => `Start every season with ${l} spin${l > 1 ? 's' : ''} on the wheel.` },
+    { id: 'time',   icon: 'clock',   max: 5, name: 'LONGER SLOT',        cost: l => [125000, 300000, 750000, 2000000, 5000000][l],          d: l => `+${l} second${l > 1 ? 's' : ''} on the clock every round.` },
+    { id: 'warm',   icon: 'hypeman', max: 4, name: 'WARM-UP ACT',        cost: l => [200000, 600000, 1750000, 5000000][l],          d: l => `Every round starts with +${0.5 * l} hype.` },
+    { id: 'budget', icon: 'budget',  max: 5, name: 'BIGGER BUDGET',      cost: l => [100000, 250000, 600000, 1500000, 4000000][l],          d: l => `Every cash and gold prize is worth $${5 * l} more.` },
+    { id: 'trim',   icon: 'trim',    max: 3, name: 'LOADED WHEEL',       cost: l => [300000, 1250000, 4000000][l],          d: l => `Your wheel starts with ${l} fewer toaster${l > 1 ? 's' : ''}.` },
+    { id: 'censor', icon: 'bleep',   max: 2, name: 'CENSOR ON RETAINER', cost: l => [1000000, 5000000][l],       d: l => `${l} free bleep${l > 1 ? 's' : ''} every round.` },
+    { id: 'agent',  icon: 'gold',    max: 5, name: 'A BETTER AGENT',     cost: l => [150000, 400000, 1000000, 2500000, 6000000][l],          d: l => `+${20 * l}% prize money from everything you bank.` },
   ];
 
   const byId = (list, id) => list.find(x => x.id === id);
