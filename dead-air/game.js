@@ -6,7 +6,8 @@
 (function (root) {
   const N = 12;                 // prize podiums on the strip
   const EPISODES = 8;
-  const TARGETS = [150, 550, 1500, 3500, 7000, 13000, 24000, 45000];
+  const ROUND_TIME = 16;        // seconds of moving light per round
+  const TARGETS = [150, 300, 520, 820, 1200, 1700, 2400, 3300];
 
   // Every gimmick is something you can see on the set. d(lv) = what it does at that level.
   const GIMMICKS = [
@@ -26,6 +27,7 @@
     { id: 'hypeman',tag: 'HY', color: '#42d4f5', max: 5, name: 'HYPE MAN',        d: l => `Hype prizes give +${1 + l} instead of +1.` },
     { id: 'net',    tag: 'SN', color: '#42f5b0', max: 3, name: 'SAFETY NET',      d: l => `Dead air still banks ${25 * l}% of the pot.` },
     { id: 'encore', tag: '+1', color: '#c8f542', max: 3, name: 'ENCORE',          d: l => `+${l} round${l > 1 ? 's' : ''} every episode.` },
+    { id: 'clock',  tag: 'XT', color: '#ffd24a', max: 4, name: 'EXTENDED CUT',    d: l => `+${4 * l} seconds on the clock every round.` },
     { id: 'slowmo', tag: 'SL', color: '#7fe0ff', max: 3, name: 'DRAMATIC PAUSE',  d: l => `+${l} slow-mo use${l > 1 ? 's' : ''} every round.` },
 
     // Headliners: rare, one level only, and each one changes a rule instead of a number.
@@ -59,7 +61,7 @@
     { id: 'trim', tag: 'CUT', color: '#f542a8', name: 'TRIM THE WHEEL', desc: 'Remove the DEAD AIR wedge, or a toaster if it is already gone.', ok: g => g.wheel.some(w => w.type === 'dead' || w.type === 'junk') },
     { id: 'fat',  tag: 'FAT', color: '#42d4f5', name: 'WEIGHTED WHEEL', desc: 'Every gimmick wedge gets 30% wider.', ok: () => true },
     { id: 'gold', tag: 'x2',  color: '#ffd24a', name: 'GOLDEN WEDGE',   desc: 'Add a golden wedge: land on it for two random gimmicks at once.', ok: g => g.wheel.filter(w => w.type === 'gold').length < 2 },
-    { id: 'spin', tag: '+2',  color: '#c8f542', name: 'FREE SPINS',     desc: '+2 spins, right now.', ok: () => true },
+    { id: 'spin', tag: '+1',  color: '#c8f542', name: 'FREE SPIN',      desc: '+1 spin, right now.', ok: () => true },
   ];
 
   const CONTESTANTS = [
@@ -131,7 +133,7 @@
     this.lifeUsed = false;
     this.rounds = Math.max(2, 3 + this.lv('encore') - (this.is('high') ? 1 : 0));
     this.roundsLeft = this.rounds;
-    this.tokenOut = false;
+    this.tokenOut = this.rand() < 0.5;        // a wheel token only turns up in about half the episodes
     this.startRound();
     this.emit({ t: 'episode' });
   };
@@ -148,6 +150,7 @@
     this.pot = { cash: 10 * this.toasters, hype: 1 + (this.is('high') ? 2 : 0) + (this.lv('static') ? tvs : 0), xm: 1, next2: false };
     this.buzzes = 0; this.bleeps = this.lv('bleep') + (this.is('censors') ? 1 : 0);
     this.slowLeft = 1 + this.lv('slowmo'); this.slowT = 0;
+    this.clockMax = ROUND_TIME + 4 * this.lv('clock'); this.clock = this.clockMax;
     this.streak = 0; this.inBuzz = false;
     this.convT = 1.4; this.strobeT = 0.6;
     this.u = this.rand() * 2 * N;
@@ -205,6 +208,14 @@
       if (due.length) { this.q = this.q.filter(a => a.at > this.t); due.sort((a, b) => a.at - b.at).forEach(a => a.fn()); }
     }
     if (this.phase !== 'sweep') return;
+    // The round clock only runs while the light is moving. Slow-mo does not slow it.
+    this.clock -= dt;
+    if (this.clock <= 0) {
+      this.clock = 0;
+      this.emit({ t: 'timeup' });
+      if (!this.bank()) { this.phase = 'resolve'; this.later(0.6, () => this.endRound(this.score(), false)); }
+      return;
+    }
     const slow = this.slowT > 0 ? 0.35 : 1;
     if (this.slowT > 0) this.slowT -= dt;
     if (this.is('strobe')) {
@@ -250,7 +261,7 @@
       const r = this.rand();
       if (r < 0.4) { val = (100 + 20 * this.lv('budget')) * (this.is('turbo') ? 2 : 1); pot.cash += val; note = 'JACKPOT'; }
       else if (r < 0.65) { gain = 2; pot.hype += 2; note = 'HYPE'; }
-      else if (r < 0.8) { this.spins++; note = 'SPIN'; }
+      else if (r < 0.73) { this.spins++; note = 'SPIN'; }
       else { this.toasters++; note = 'TOASTER'; }
     } else if (p.kind === 'bomb') {
       // Firework crate: takes out the prizes either side of it (and sets off other crates).
@@ -394,9 +405,8 @@
     if (this.phase !== 'tally') return;
     const tgt = this.target(this.ep);
     if (this.total >= tgt) {
-      // Spins: one for clearing, one per round you did not need, one for doubling the target.
+      // Spins: one for clearing, one for doubling the target, one if the format was a tough one.
       this.earned = [['EPISODE CLEARED', 1]];
-      if (this.roundsLeft > 0) this.earned.push(['ROUNDS TO SPARE', this.roundsLeft]);
       if (this.total >= 2 * tgt) this.earned.push(['DOUBLED THE TARGET', 1]);
       if (this.format.spins) this.earned.push([this.format.name, this.format.spins]);
       this.earned.forEach(e => { this.spins += e[1]; });
@@ -430,7 +440,7 @@
       if (k >= 0) this.wheel.splice(k, 1);
     } else if (o.def.id === 'fat') this.wheel.forEach(w => { if (w.type === 'g' || w.type === 'gold') w.w *= 1.3; });
     else if (o.def.id === 'gold') at = this.addWedge({ type: 'gold', w: 1 });
-    else if (o.def.id === 'spin') this.spins += 2;
+    else if (o.def.id === 'spin') this.spins += 1;
     this.offers = null;
     this.phase = 'wheel';
     return { offer: o, at };

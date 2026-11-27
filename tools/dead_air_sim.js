@@ -16,11 +16,14 @@ function playRound(g) {
     const dark = N - up.length;
     const last = g.roundsLeft === 1;
     // Bank once the strip is mostly burnt out or the target is covered, unless it is now or never.
+    if (g.clock <= 0) { if (!g.bank()) g.endRound(g.score(), false); continue; }
     if (g.buzzes > 0 && (pot >= need || (!(last && pot < need) && dark >= 6 + Math.min(2, g.bleeps)))) { g.bank(); continue; }
     // Prefer valuable prizes whose neighbours are safe.
     let best = up[0], bestS = -1e9;
     for (const i of up) { const s = worth(g.strip[i]) - (bad(g, i - 1) ? 25 : 0) - (bad(g, i + 1) ? 25 : 0); if (s > bestS) { bestS = s; best = i; } }
     if (dark >= 3) g.slowmo();
+    // Waiting for the light to come round to the prize you want: up to one pass of the strip.
+    g.clock -= (g.is('strobe') ? 0.6 * (1 + g.rand() * 5) : (0.25 + g.rand() * 0.9) * 2 * N / g.speed());
     // Hidden prizes and a jumping light are harder to time: a wider error, and sometimes the wrong podium.
     const hard = g.is('mystery') ? 1.5 : g.is('conveyor') ? 1.25 : 1;
     let hit = best + 0.5 + gauss(g) * ERR * hard * g.speed();

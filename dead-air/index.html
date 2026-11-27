@@ -143,7 +143,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       <p class="pitch">You're tonight's contestant. A spotlight sweeps the prizes. Hit the buzzer to stop it, and don't stop it on dead air.</p>
       <div class="who" id="who"></div>
       <button class="big-btn" id="start">GO ON AIR</button>
-      <p class="how">Whatever the light stops on goes in the pot: <b>cash</b> × <i>hype</i>. Every prize you take burns out into <u>dead air</u> and the light gets faster, so <b>BANK</b> before your luck runs out. Clear an episode to load your prize wheel and spin it: every gimmick joins the set and they all stack. Then pick tomorrow's show. No two seasons play the same.</p>
+      <p class="how">Whatever the light stops on goes in the pot: <b>cash</b> × <i>hype</i>. Every prize you take burns out into <u>dead air</u> and the light gets faster, so <b>BANK</b> before your luck, or the clock, runs out. Clear an episode to load your prize wheel and spin it: every gimmick joins the set and they all stack. Then pick tomorrow's show. No two seasons play the same.</p>
       <div class="stats" id="stats"></div>
     </div>
 
@@ -356,7 +356,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   let shake = 0, flashA = 0, flashC = '#fff', glitch = 0, excite = 0, time = 0, dark = 0;
   let callout = null, tally = null, shownTotal = 0, pausedUI = false, slam = 0, deskBump = 0, ballFlash = 0;
   const cannonFx = [0, 0], droneGo = [];
-  let shiftAnim = 0, slowFx = 0, coin = null, lastCombo = 0;
+  let shiftAnim = 0, slowFx = 0, coin = null, lastCombo = 0, lastTick = 0;
   const CONF = ['#c8f542', '#42d4f5', '#f542a8', '#f5a542', '#ffffff', '#ffd24a'];
 
   function spark(x, y, color, n, speed, life, size, grav) {
@@ -433,6 +433,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         break;
       }
       case 'jump': sfx.tick(1200); break;
+      case 'timeup': shout("TIME'S UP!", '#ffd24a', 60, 1.2); sfx.buzz(); tone(880, 0.5, 'square', 0.06, 0, 220); shake = Math.max(shake, 6); break;
       case 'shift': shiftAnim = 1; sfx.tick(240); break;
       case 'slow': slowFx = 1; tone(500, 0.6, 'sine', 0.07, 0, 120); break;
       case 'whiff': float(podX(ev.i), podY(ev.i) - 40, 'NOTHING THERE', '#e9e9ff', 18); tone(200, 0.2, 'sine', 0.05, 0, 120); break;
@@ -971,6 +972,22 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         ctx.strokeStyle = '#42d4f5'; ctx.lineWidth = 12; ctx.globalAlpha = a * 0.35; ctx.stroke(); }
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     }
+    // the round clock
+    if (G.clockMax) {
+      const cx = 478, cy = 176, k = Math.max(0, G.clock / G.clockMax), low = G.clock <= 5 && G.phase === 'sweep';
+      const pulse = low ? 1 + 0.12 * Math.sin(time * 18) : 1;
+      inkSeq = 5000;
+      ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx, 124); ctx.lineTo(cx, cy - 22); ctx.stroke();
+      if (low) drawGlow(cx, cy, 52, '#e8203a', 0.7);
+      ctx.save(); ctx.translate(cx, cy); ctx.scale(pulse, pulse);
+      ink(() => ctx.roundRect(-5, -31, 10, 8, 2), '#8a8aa0', 2.2);
+      ink(() => ctx.arc(0, 0, 24, 0, TAU), '#fff8e0', 3);
+      ctx.fillStyle = low ? '#e8203a' : '#42d4f5'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, 20, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#fff8e0'; ctx.beginPath(); ctx.arc(0, 0, 12.5, 0, TAU); ctx.fill();
+      font(19); ctx.textBaseline = 'middle'; text(String(Math.ceil(G.clock)), 0, 1.5, low ? '#e8203a' : INK, 'center');
+      ctx.restore();
+      if (low && live && Math.ceil(G.clock) !== lastTick) { lastTick = Math.ceil(G.clock); sfx.tick(G.clock <= 2 ? 1400 : 1000); }
+    }
     // drones
     for (let k = 0; k < G.lv('drone'); k++) {
       const go = droneGo[k]; let x = 80 + k * 125 + Math.sin(time * 1.3 + k * 2) * 30, y = 268 + Math.cos(time * 1.7 + k) * 10;
@@ -1301,6 +1318,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       case 'encore':    // stage curtains
         poly([[-18, -15], [-3, -15], [-9, 16], [-18, 16]], '#e8203a'); poly([[18, -15], [3, -15], [9, 16], [18, 16]], '#e8203a');
         c.fillStyle = '#ffd24a'; c.fillRect(-18, -18, 36, 4); word('+1', 17, col, 3); break;
+      case 'clock':     // stopwatch
+        box(-4, -19, 8, 6, 2, '#8a8aa0'); circ(0, 2, 15, '#150f24'); circ(0, 2, 12.5, '#fff8e0');
+        c.fillStyle = col; c.beginPath(); c.moveTo(0, 2); c.arc(0, 2, 12.5, -Math.PI / 2, 0.9); c.closePath(); c.fill(); line([[0, 2], [0, -7]], '#150f24', 2.2); line([[0, 2], [6, 5]], '#150f24', 2.2); break;
       case 'slowmo':    // hourglass
         c.fillStyle = '#3a3a52'; c.fillRect(-12, -18, 24, 4); c.fillRect(-12, 14, 24, 4);
         poly([[-10, -14], [10, -14], [0, 0]], col); poly([[0, 0], [10, 14], [-10, 14]], '#e9fbff'); poly([[-6, 14], [6, 14], [0, 6]], col); break;
