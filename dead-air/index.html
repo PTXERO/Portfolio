@@ -28,8 +28,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 .pad button small{display:block;font-family:var(--fmono);font-size:2.6cqw;letter-spacing:.14em;margin-top:.8cqw;opacity:.75;}
 .pad button:active{transform:translateY(3px);}
 .pad button:disabled{filter:grayscale(1) brightness(.45);cursor:not-allowed;}
-#buzz{flex:1.5;background:#e8203a;color:#fff;box-shadow:0 5px 0 #7a0c1a,0 0 30px rgba(232,32,58,.5);}
+#buzz{flex:1.3;background:#e8203a;color:#fff;box-shadow:0 5px 0 #7a0c1a,0 0 30px rgba(232,32,58,.5);}
 #bank{flex:1;background:var(--acc);color:#07070a;box-shadow:0 5px 0 #5a6a20,0 0 24px rgba(200,245,66,.35);}
+#slow{flex:.62;background:#7fe0ff;color:#07070a;box-shadow:0 5px 0 #2a6a80,0 0 20px rgba(127,224,255,.35);}
+.cards.two{grid-template-columns:1fr 1fr;}
+.card.rare{border-color:#ffd24a;box-shadow:0 0 18px rgba(255,210,74,.35);}
+.card .plus{display:inline-block;font-family:var(--fmono);font-size:9px;letter-spacing:.12em;color:#07070a;background:#ffd24a;border-radius:2px;padding:1px 6px;margin-top:6px;}
 #spin{flex:1;background:#ffd24a;color:#07070a;box-shadow:0 5px 0 #8a6a10,0 0 30px rgba(255,210,74,.45);}
 .result{position:absolute;left:5%;right:5%;bottom:15%;text-align:center;pointer-events:none;}
 .result b{display:block;font-family:var(--fdisp);font-weight:400;font-size:8cqw;letter-spacing:.08em;line-height:1;color:#fff;text-shadow:0 0 14px #000,2px 2px 0 #f542a8;}
@@ -105,8 +109,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     <canvas id="cv" aria-label="Game show stage"></canvas>
 
     <div class="pad" id="padStage" hidden>
-      <button id="buzz">BUZZ<small>STOP THE LIGHT · SPACE</small></button>
-      <button id="bank">BANK<small id="bankSub">KEEP THE POT · B</small></button>
+      <button id="buzz">BUZZ<small>STOP · SPACE</small></button>
+      <button id="bank">BANK<small id="bankSub">KEEP · B</small></button>
+      <button id="slow">SLOW<small id="slowSub">×1 · S</small></button>
     </div>
     <div class="result" id="result" hidden></div>
     <div class="pad" id="padWheel" hidden>
@@ -119,7 +124,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       <p class="pitch">You're tonight's contestant. A spotlight sweeps the prizes. Hit the buzzer to stop it, and don't stop it on dead air.</p>
       <div class="who" id="who"></div>
       <button class="big-btn" id="start">GO ON AIR</button>
-      <p class="how">Whatever the light stops on goes in the pot: <b>cash</b> × <i>hype</i>. Every prize you take burns out into <u>dead air</u> and the light gets faster, so <b>BANK</b> before your luck runs out. Clear an episode to load your prize wheel and spin it: every gimmick it gives you joins the set, and they all stack.</p>
+      <p class="how">Whatever the light stops on goes in the pot: <b>cash</b> × <i>hype</i>. Every prize you take burns out into <u>dead air</u> and the light gets faster, so <b>BANK</b> before your luck runs out. Clear an episode to load your prize wheel and spin it: every gimmick joins the set and they all stack. Then pick tomorrow's show. No two seasons play the same.</p>
       <div class="stats" id="stats"></div>
     </div>
 
@@ -127,6 +132,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       <h1>LOAD THE WHEEL</h1>
       <p class="sub" id="loadSub"></p>
       <div class="cards" id="offerList"></div>
+    </div>
+
+    <div class="ov low" id="ovPick" hidden>
+      <h1>TOMORROW'S SHOW</h1>
+      <p class="sub" id="pickSub"></p>
+      <div class="cards two" id="pickList"></div>
     </div>
 
     <div class="ov" id="ovEnd" hidden></div>
@@ -151,7 +162,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   const fx1 = n => (Math.round(n * 10) / 10).toString();
   const rnd = (a, b) => a + Math.random() * (b - a);
   const TAU = Math.PI * 2;
-  const C = { cash: '#f5a542', gold: '#ffd24a', hype: '#42d4f5', dead: '#f542a8', jack: '#ff6bd6', spin: '#c8f542', lime: '#c8f542' };
+  const C = { cash: '#f5a542', gold: '#ffd24a', hype: '#42d4f5', dead: '#f542a8', jack: '#ff6bd6', spin: '#c8f542', lime: '#c8f542', box: '#9d8cff', bomb: '#ff5a3c', x2: '#ffffff', restock: '#d9a55a' };
 
   // Where things are on the stage. The prize strip is a shallow arc.
   const PX = pos => 22 + pos * 41.33;
@@ -242,6 +253,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   let shake = 0, flashA = 0, flashC = '#fff', glitch = 0, excite = 0, time = 0, dark = 0;
   let callout = null, tally = null, shownTotal = 0, pausedUI = false, slam = 0, deskBump = 0, ballFlash = 0;
   const cannonFx = [0, 0], droneGo = [];
+  let shiftAnim = 0, slowFx = 0, coin = null, lastCombo = 0;
   const CONF = ['#c8f542', '#42d4f5', '#f542a8', '#f5a542', '#ffffff', '#ffd24a'];
 
   function spark(x, y, color, n, speed, life, size, grav) {
@@ -292,13 +304,43 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         podFx[ev.i] = 0;
         spark(x, y, col, 9, 220, 0.5);
         flyers.push({ x0: x, y0: y, t: 0, dur: 0.42, color: col, kind: ev.kind });
+        const big = (word, c, size) => { shout(word, c, size || 56); sfx.fanfare(); confetti(x, y, 30, 10, 500); excite += 0.5; };
         if (ev.kind === 'hype') { float(x, y - 22, '+' + ev.gain + ' HYPE', C.hype, 19); sfx.hype(); excite += 0.12; }
-        else if (ev.kind === 'jack') { float(x, y - 22, 'POT ×' + fx1(ev.gain), C.jack, 24); sfx.fanfare(); shout('DIAMOND!', C.jack, 60); confetti(x, y, 30, 10, 500); excite += 0.6; }
-        else if (ev.kind === 'spin') { float(x, y - 22, '+1 SPIN', C.spin, 22); sfx.fanfare(); shout('WHEEL SPIN!', C.spin, 56); confetti(x, y, 30, 10, 500); excite += 0.5; }
+        else if (ev.kind === 'jack') { float(x, y - 22, 'POT ×' + fx1(ev.gain), C.jack, 24); big('DIAMOND!', C.jack, 60); }
+        else if (ev.kind === 'spin') { float(x, y - 22, '+1 SPIN', C.spin, 22); big('WHEEL SPIN!', C.spin); }
+        else if (ev.kind === 'x2') { float(x, y - 22, 'NEXT PRIZE ×2', '#fff', 20); sfx.perfect(); excite += 0.2; }
+        else if (ev.kind === 'bomb') { float(x, y - 22, 'FIREWORKS!', C.bomb, 20); }
+        else if (ev.kind === 'restock') { float(x, y - 22, 'RESTOCK!', C.restock, 22); sfx.cheer(false); excite += 0.3; }
+        else if (ev.kind === 'box') {
+          const what = { JACKPOT: '+' + ev.val, HYPE: '+2 HYPE', SPIN: '+1 SPIN', TOASTER: 'A TOASTER' }[ev.note];
+          float(x, y - 22, what, C.box, 24);
+          if (ev.note === 'TOASTER') { shout('A TOASTER.', '#8a8aa0', 50); sfx.trombone(); } else big('MYSTERY BOX!', C.box);
+        }
         else { float(x, y - 22, '+' + ev.val, col, ev.val >= 100 ? 24 : 17); sfx.win(); excite += ev.val >= 100 ? 0.2 : 0.06; }
+        if (ev.doubled) float(x + 26, y - 44, '×2!', '#fff', 20);
+        if (ev.combo && time - lastCombo > 0.12) { lastCombo = time; float(DESK.x - 14, DESK.y - 22, '+0.5 HYPE', C.cash, 16); }
         if (ev.via !== 'main') rings.push({ x, y, r: 6, to: 30, life: 0.25, max: 0.25, color: VIA[ev.via] || '#fff', w: 3 });
         break;
       }
+      case 'boom': {
+        const x = podX(ev.i), y = podY(ev.i) - 16;
+        rings.push({ x, y, r: 10, to: 80, life: 0.35, max: 0.35, color: '#ff9a2e', w: 10 });
+        for (let k = 0; k < 4; k++) spark(x + rnd(-30, 30), y - rnd(20, 90), CONF[(Math.random() * CONF.length) | 0], 14, 260, 0.7, 3, 160);
+        shake = Math.max(shake, 9); flashA = Math.max(flashA, 0.18); flashC = '#ff9a2e'; sfx.fire(); excite += 0.25;
+        break;
+      }
+      case 'jump': sfx.tick(1200); break;
+      case 'shift': shiftAnim = 1; sfx.tick(240); break;
+      case 'slow': slowFx = 1; tone(500, 0.6, 'sine', 0.07, 0, 120); break;
+      case 'whiff': float(podX(ev.i), podY(ev.i) - 40, 'NOTHING THERE', '#e9e9ff', 18); tone(200, 0.2, 'sine', 0.05, 0, 120); break;
+      case 'midas': { const x = podX(ev.i), y = podY(ev.i) - 16; podFx[ev.i] = 0; spark(x, y, C.gold, 14, 200, 0.6, 3); float(x, y - 24, 'GOLD!', C.gold, 17); sfx.tick(1500); break; }
+      case 'rerun':
+        staticBurst(podX(ev.i), podY(ev.i) - 16, 30); glitch = 0.5; shake = 8; flashA = 0.3; flashC = C.dead;
+        shout('RERUN! HALF THE CASH', '#ff5a7a', 46, 1.4); sfx.dead(); sfx.cheer(false);
+        break;
+      case 'coin':
+        coin = { up: ev.up, t: 0 }; for (let k = 0; k < 8; k++) sfx.tick(600 + k * 90);
+        break;
       case 'ray': rays.push({ i: ev.i, life: 0.3, max: 0.3 }); ballFlash = 1; sfx.tick(1600); break;
       case 'bolt': bolt(podX(ev.a), podY(ev.a) - 18, podX(ev.b), podY(ev.b) - 18, '#fff36b'); sfx.zap(); break;
       case 'pyro':
@@ -331,6 +373,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         break;
       case 'round': for (let i = 0; i < N; i++) podFx[i] = -0.1 - i * 0.04; dark = 0; break;
       case 'roundEnd':
+        coin = null;
         tally = { ...ev, t: 0, done: false };
         if (!ev.bust) { sfx.chime(4); if (ev.score >= G.target(G.ep) * 0.4) { sfx.cheer(true); excite = 1.5; confetti(W / 2, 200, 60, 240, 200); } }
         break;
@@ -374,8 +417,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     $('loadSub').innerHTML = `You have <b style="color:#ffd24a">${G.spins} spin${G.spins === 1 ? '' : 's'}</b>${earned ? ' (' + earned + ')' : ''}.<br>First, bolt one of these onto your wheel.`;
     $('offerList').innerHTML = G.offers.map((o, i) => {
       const d = o.def, lv = o.type === 'g' ? G.lv(d.id) : 0;
-      return `<button class="card" data-offer="${i}" style="--c:${d.color}">
-        <img alt="" src="${iconURL(o.type === 'g' ? d.id : d.id === 'gold' ? 'goldwedge' : d.id)}"><span class="k">${o.type === 'g' ? 'NEW WEDGE' : 'WHEEL UPGRADE'}</span>
+      return `<button class="card${d.rare ? ' rare' : ''}" data-offer="${i}" style="--c:${d.color}">
+        <img alt="" src="${iconURL(o.type === 'g' ? d.id : d.id === 'gold' ? 'goldwedge' : d.id)}"><span class="k">${d.rare ? 'HEADLINER' : o.type === 'g' ? 'NEW WEDGE' : 'WHEEL UPGRADE'}</span>
         <b>${d.name}</b><p>${o.type === 'g' ? d.d(Math.min(d.max, lv + 1)) : d.desc}</p></button>`;
     }).join('');
     $('ovLoad').hidden = false; $('result').hidden = true;
@@ -391,13 +434,27 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     syncPads();
   });
 
+  function showPick() {
+    $('pickSub').textContent = 'Episode ' + (G.ep + 1) + ' needs ' + fmt(G.target(G.ep + 1)) + '. Choose how it is played.';
+    $('pickList').innerHTML = G.formats.map((f, i) => `<button class="card" data-format="${i}" style="--c:${f.color}">
+        <img alt="" src="${iconURL('f_' + f.id)}"><span class="k">SHOW FORMAT</span><b>${f.name}</b><p>${f.desc}</p>
+        ${f.spins ? '<span class="plus">+' + f.spins + ' SPIN IF YOU CLEAR IT</span>' : ''}</button>`).join('');
+    $('ovPick').hidden = false; $('result').hidden = true; $('padWheel').hidden = true;
+  }
+  $('pickList').addEventListener('click', e => {
+    const b = e.target.closest('[data-format]'); if (!b) return;
+    if (!G.pickFormat(+b.dataset.format)) return;
+    $('ovPick').hidden = true; sfx.chime(3);
+    beginEpisode();
+  });
+
   function wedgeSpans() {
     const tot = G.wheelTotal(); let a = 0;
     return G.wheel.map(w => { const s = { a0: a, a1: a + w.w / tot * TAU, w }; a = s.a1; return s; });
   }
   function doSpin() {
     if (spinAnim) return;
-    if (G.spins <= 0) { if (G.wheelDone()) { syncPads(); beginEpisode(); } return; }
+    if (G.spins <= 0) { if (G.wheelDone()) showPick(); return; }
     const spans = wedgeSpans(), res = G.spin(); if (!res) return;
     const s = spans[res.index], mid = s.a0 + (s.a1 - s.a0) * res.frac;
     const base = -Math.PI / 2 - mid;
@@ -447,7 +504,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   function beginEpisode() {
     G.startEpisode();
     shownTotal = 0; tally = null;
-    shout('EPISODE ' + G.ep, '#fff', 64, 1.2);
+    shout('EPISODE ' + G.ep, '#fff', 64, 1.1);
+    const f = G.format; if (f.id !== 'classic') setTimeout(() => { if (G && G.format === f) shout(f.name, f.color, 56, 1.4); }, 1150);
     sfx.cheer(false); excite = 0.8;
     syncPads();
   }
@@ -455,7 +513,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     live = true; resetFx();
     G = new D.Game(null, stats.who);
     stats.runs++; save();
-    ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit'].forEach(id => { $(id).hidden = true; });
+    ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit', 'ovPick'].forEach(id => { $(id).hidden = true; });
     $('quit').hidden = false; $('kitBtn').hidden = false;
     beginEpisode();
   }
@@ -463,11 +521,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     live = false; resetFx();
     G = new D.Game();
     Object.assign(G.levels, { twin: 1, mirror: 2, wire: 2, pyro: 1, drone: 2, gold: 1, crowd: 1, wide: 2, laser: 1 });
-    G.ep = 1; G.startEpisode(); shownTotal = 0; demoT = 1;
+    G.ep = 1; G.startEpisode(['classic', 'conveyor', 'pendulum', 'goldnight'][(Math.random() * 4) | 0]); shownTotal = 0; demoT = 1;
     syncPads();
   }
   function toTitle() {
-    ['ovEnd', 'ovLoad', 'ovKit'].forEach(id => { $(id).hidden = true; });
+    ['ovEnd', 'ovLoad', 'ovKit', 'ovPick'].forEach(id => { $(id).hidden = true; });
     $('quit').hidden = true; $('kitBtn').hidden = true; pausedUI = false;
     paintTitle(); $('ovTitle').hidden = false;
     startDemo();
@@ -497,6 +555,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   cv.addEventListener('pointerdown', e => { e.preventDefault(); if (G && G.phase === 'wheel') return; doBuzz(); });
   $('buzz').addEventListener('pointerdown', e => { e.preventDefault(); doBuzz(); });
   $('bank').addEventListener('pointerdown', e => { e.preventDefault(); doBank(); });
+  function doSlow() { if (live && G && !pausedUI && !tally) G.slowmo(); }
+  $('slow').addEventListener('pointerdown', e => { e.preventDefault(); doSlow(); });
   $('spin').onclick = doSpin;
   document.addEventListener('keydown', e => {
     if (!live || !G || e.repeat) return;
@@ -504,6 +564,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     if (G.phase === 'wheel') { if ((k === ' ' || k === 'enter') && e.target.tagName !== 'BUTTON') { e.preventDefault(); doSpin(); } return; }
     if (k === ' ' || k === 'enter') { if (e.target.tagName === 'BUTTON' && e.target.id !== 'buzz' && e.target.id !== 'bank') return; e.preventDefault(); doBuzz(); }
     else if (k === 'b') doBank();
+    else if (k === 's') doSlow();
   });
 
   $('start').onclick = newRun;
@@ -609,6 +670,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     font(11, 'mono'); text('TARGET ' + fmt(tgt), bx + bw / 2, 68, '#fff', 'center');
     text('×2 = BONUS SPIN', bx + bw, 68, shownTotal >= tgt * 2 ? C.lime : '#8a8aa0', 'right');
     drawBadges(97);
+    if (G.format && G.format.id !== 'classic') {
+      font(15); ctx.textBaseline = 'middle';
+      const lbl = 'TONIGHT: ' + G.format.name, w2 = ctx.measureText(lbl).width + 22;
+      ctx.fillStyle = 'rgba(7,7,10,.75)'; ctx.strokeStyle = G.format.color; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(W / 2 - w2 / 2, 130, w2, 20, 4); ctx.fill(); ctx.stroke();
+      text(lbl, W / 2, 141, G.format.color, 'center');
+    }
   }
 
   function drawBadges(y) {
@@ -658,6 +726,31 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       for (let i = 0; i < 6; i++) { ctx.fillStyle = CONF[i]; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, 14, i * TAU / 6, (i + 1) * TAU / 6); ctx.fill(); }
       ctx.strokeStyle = '#07070a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 14, 0, TAU); ctx.stroke();
       ctx.fillStyle = '#07070a'; ctx.beginPath(); ctx.arc(0, 0, 3, 0, TAU); ctx.fill();
+    } else if (kind === 'box') {   // mystery box
+      drawGlow(0, 0, 32, C.box, 0.6 + 0.3 * Math.sin(time * 6 + x));
+      ctx.rotate(Math.sin(time * 7 + x) * 0.08);
+      ctx.fillStyle = '#5a48c0'; ctx.beginPath(); ctx.roundRect(-14, -8, 28, 22, 3); ctx.fill();
+      ctx.fillStyle = C.box; ctx.beginPath(); ctx.roundRect(-16, -13, 32, 8, 2); ctx.fill();
+      ctx.fillStyle = C.lime; ctx.fillRect(-2.5, -13, 5, 27);
+      font(17); ctx.textBaseline = 'middle'; text('?', -8, 5, '#fff', 'center'); text('?', 8, 5, '#fff', 'center');
+    } else if (kind === 'bomb') {  // firework crate
+      drawGlow(0, 0, 28, C.bomb, 0.4 + 0.3 * Math.sin(time * 10 + x));
+      ctx.fillStyle = '#7a2a18'; ctx.beginPath(); ctx.roundRect(-15, -4, 30, 18, 2); ctx.fill();
+      ctx.strokeStyle = '#3a1208'; ctx.lineWidth = 1.5; ctx.strokeRect(-15, -4, 30, 18);
+      [[-8, '#42d4f5'], [0, C.bomb], [8, '#c8f542']].forEach(([rx, c]) => { ctx.fillStyle = c; ctx.fillRect(rx - 3, -15, 6, 13); ctx.beginPath(); ctx.moveTo(rx - 4, -15); ctx.lineTo(rx, -22); ctx.lineTo(rx + 4, -15); ctx.fill(); });
+      ctx.fillStyle = Math.sin(time * 16 + x) > 0 ? '#fff36b' : '#fff'; ctx.beginPath(); ctx.arc(0, -24, 2.6, 0, TAU); ctx.fill();
+    } else if (kind === 'x2') {    // double card
+      drawGlow(0, 0, 30, '#ffffff', 0.45 + 0.25 * Math.sin(time * 5 + x));
+      ctx.rotate(-0.14 + Math.sin(time * 3 + x) * 0.06);
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(-13, -17, 26, 34, 4); ctx.fill();
+      ctx.strokeStyle = C.hype; ctx.lineWidth = 2.5; ctx.stroke();
+      font(21); ctx.textBaseline = 'middle'; text('×2', 0, 1, '#07070a', 'center');
+    } else if (kind === 'restock') { // crate of fresh prizes
+      drawGlow(0, 0, 28, C.restock, 0.4);
+      ctx.fillStyle = '#8a5a22'; ctx.beginPath(); ctx.roundRect(-15, -6, 30, 20, 2); ctx.fill();
+      ctx.strokeStyle = '#4a2e0c'; ctx.lineWidth = 1.5; ctx.strokeRect(-15, -6, 30, 20); ctx.beginPath(); ctx.moveTo(-15, 4); ctx.lineTo(15, 4); ctx.stroke();
+      ctx.fillStyle = C.cash; ctx.fillRect(-10, -12, 9, 7); ctx.fillStyle = C.hype; ctx.fillRect(1, -14, 9, 9);
+      const b2 = Math.sin(time * 6) * 2; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(0, -26 + b2); ctx.lineTo(-6, -18 + b2); ctx.lineTo(6, -18 + b2); ctx.fill();
     } else {                       // dead air: a TV full of static
       const live2 = kind === 'dead';
       if (live2) drawGlow(0, 0, 30, C.dead, 0.45 + Math.random() * 0.3);
@@ -672,23 +765,36 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   }
 
   function drawStrip() {
+    const beams = G.beams(), hidden = G.is('mystery'), ghost = G.lv('ghost') > 0;
     for (let i = 0; i < N; i++) {
       const p = G.strip[i]; if (!p) continue;
       const x = podX(i), y = podY(i);
       const danger = p.state === 'up' && p.kind === 'dead', burnt = p.state === 'burnt';
+      // On MYSTERY NIGHT you only see what a light is passing over.
+      const covered = hidden && p.state === 'up' && !beams.some(b => Math.abs(b - i - 0.5) < 1.45) && G.phase !== 'tally';
       // pedestal
       ctx.fillStyle = '#16162a'; ctx.beginPath(); ctx.moveTo(x - 17, y); ctx.lineTo(x + 17, y); ctx.lineTo(x + 14, y + 50); ctx.lineTo(x - 14, y + 50); ctx.fill();
-      ctx.fillStyle = danger || burnt ? '#f542a8' : p.state === 'gone' ? '#34344a' : C[p.kind] || C.cash;
+      ctx.fillStyle = covered ? '#9d8cff' : (danger || (burnt && !ghost)) ? '#f542a8' : p.state !== 'up' ? '#34344a' : C[p.kind] || C.cash;
       ctx.globalAlpha = burnt ? 0.5 : 1; ctx.fillRect(x - 16, y + 3, 32, 3); ctx.globalAlpha = 1;
       ctx.fillStyle = '#2a2a44'; ctx.beginPath(); ctx.ellipse(x, y, 17, 5, 0, 0, TAU); ctx.fill();
-      // prize
+      // prize (on CONVEYOR it slides in from the podium it just left)
       const f = podFx[i];
-      if (p.state === 'gone') continue;
-      if (f < 0) continue;                                   // not popped in yet
+      if (p.state === 'gone' || f < 0) continue;
+      const sp = i + 0.5 - shiftAnim, px = PX(sp), py = PY(Math.max(0, Math.min(N, sp)));
       const pop = f < 0.25 ? 1 + (1 - f / 0.25) * 0.5 : 1;
       const bob = p.state === 'up' && !danger ? Math.sin(time * 3 + i) * 2 : 0;
-      drawPrize(burnt ? 'burnt' : p.kind, G.cashVal(p), x, y - 18 + bob, pop, burnt ? 0.75 : 1);
-      if (burnt && Math.random() < 0.04) parts.push({ x: x + rnd(-6, 6), y: y - 30, vx: rnd(-8, 8), vy: -30, life: 0.9, max: 0.9, color: '#5a5a70', size: 4, g: -20, k: 'spark' });
+      if (covered) {
+        ctx.fillStyle = '#4a3a90'; ctx.beginPath(); ctx.moveTo(px - 17, py - 2); ctx.quadraticCurveTo(px - 15, py - 40, px, py - 40); ctx.quadraticCurveTo(px + 15, py - 40, px + 17, py - 2); ctx.fill();
+        ctx.fillStyle = '#6a58c8'; ctx.beginPath(); ctx.moveTo(px - 9, py - 4); ctx.quadraticCurveTo(px - 8, py - 36, px, py - 38); ctx.quadraticCurveTo(px - 2, py - 20, px - 3, py - 4); ctx.fill();
+        font(17); ctx.textBaseline = 'middle'; text('?', px + 4, py - 19, '#e4dcff', 'center');
+        continue;
+      }
+      if (burnt && ghost) {                       // GHOST LIGHT: burnt podiums are just empty
+        if (Math.random() < 0.05) parts.push({ x: px + rnd(-6, 6), y: py - 6, vx: rnd(-8, 8), vy: -26, life: 0.9, max: 0.9, color: '#8a8aa0', size: 3, g: -20, k: 'spark' });
+        continue;
+      }
+      drawPrize(burnt ? 'burnt' : p.kind, G.cashVal(p), px, py - 18 + bob, pop, burnt ? 0.75 : 1);
+      if (burnt && Math.random() < 0.04) parts.push({ x: px + rnd(-6, 6), y: py - 30, vx: rnd(-8, 8), vy: -30, life: 0.9, max: 0.9, color: '#5a5a70', size: 4, g: -20, k: 'spark' });
     }
   }
 
@@ -835,6 +941,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     fit(fmt(sc), x + 70, 34 + deskBump * 8, 88, C.lime);
     if (deskBump > 0.2) drawGlow(x + 70, y + 26, 60, C.lime, deskBump * 0.5);
     // bleeps left
+    ctx.textBaseline = 'middle'; font(12, 'mono');
+    let tagX = x + 122;
+    const chip = (label, col2) => { const w2 = ctx.measureText(label).width + 12; tagX -= w2 + 4; ctx.fillStyle = col2; ctx.beginPath(); ctx.roundRect(tagX, y - 32, w2, 14, 3); ctx.fill(); text(label, tagX + w2 / 2, y - 24.5, '#07070a', 'center'); };
+    if (pot.next2) chip('NEXT ×2', '#fff');
+    if (G.lv('streak') && G.streak > 0) chip('STREAK ×' + (G.streak + 1), '#ff7a2e');
+    if (G.lv('life') && !G.lifeUsed) chip('RERUN', '#ff5a7a');
     for (let i = 0; i < (G.bleeps || 0); i++) { ctx.fillStyle = '#7fe0ff'; ctx.beginPath(); ctx.roundRect(x - 124 + i * 12, y - 30, 9, 9, 2); ctx.fill(); }
   }
 
@@ -1041,6 +1153,51 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       case 'encore':    // stage curtains
         poly([[-18, -15], [-3, -15], [-9, 16], [-18, 16]], '#e8203a'); poly([[18, -15], [3, -15], [9, 16], [18, 16]], '#e8203a');
         c.fillStyle = '#ffd24a'; c.fillRect(-18, -18, 36, 4); word('+1', 17, col, 3); break;
+      case 'slowmo':    // hourglass
+        c.fillStyle = '#3a3a52'; c.fillRect(-12, -18, 24, 4); c.fillRect(-12, 14, 24, 4);
+        poly([[-10, -14], [10, -14], [0, 0]], col); poly([[0, 0], [10, 14], [-10, 14]], '#e9fbff'); poly([[-6, 14], [6, 14], [0, 6]], col); break;
+      case 'ghost':     // a ghost
+        c.fillStyle = col; c.beginPath(); c.arc(0, -4, 13, Math.PI, 0); c.lineTo(13, 15); c.lineTo(7, 10); c.lineTo(2, 15); c.lineTo(-3, 10); c.lineTo(-8, 15); c.lineTo(-13, 11); c.closePath(); c.fill();
+        circ(-5, -4, 3, '#07070a'); circ(5, -4, 3, '#07070a'); break;
+      case 'streak':    // rising chevrons
+        poly([[-12, 16], [0, 6], [12, 16], [12, 10], [0, 0], [-12, 10]], '#ffd24a'); poly([[-12, 5], [0, -5], [12, 5], [12, -1], [0, -11], [-12, -1]], '#ff9a2e'); poly([[-12, -6], [0, -16], [12, -6], [12, -11], [0, -19], [-12, -11]], '#ff5a3c'); break;
+      case 'combo':     // rising bars
+        box(-16, 4, 9, 12, 2, '#b8782a'); box(-5, -4, 9, 20, 2, col); box(6, -14, 9, 30, 2, '#ffd24a'); line([[-14, -8], [8, -18]], '#fff', 2); poly([[8, -18], [2, -18], [7, -12]], '#fff'); break;
+      case 'midas':     // crown
+        poly([[-16, 12], [-16, -8], [-8, 2], [0, -14], [8, 2], [16, -8], [16, 12]], col); c.fillStyle = '#a07a12'; c.fillRect(-16, 8, 32, 5);
+        circ(0, -14, 3, '#fff'); circ(-16, -8, 2.5, '#fff'); circ(16, -8, 2.5, '#fff'); circ(0, 3, 3, '#e8203a'); break;
+      case 'steady':    // camera on a tripod
+        box(-13, -14, 20, 15, 3, col); poly([[7, -10], [16, -15], [16, 0], [7, -4]], '#d8d8e0'); circ(-4, -7, 4, '#07070a'); circ(-4, -7, 2, '#7fe0ff');
+        line([[-3, 1], [-12, 17]], '#8a8aa0', 2.5); line([[-3, 1], [-3, 17]], '#8a8aa0', 2.5); line([[-3, 1], [7, 17]], '#8a8aa0', 2.5); break;
+      case 'life':      // heart
+        c.fillStyle = col; c.beginPath(); c.moveTo(0, 15); c.bezierCurveTo(-22, 0, -14, -18, 0, -6); c.bezierCurveTo(14, -18, 22, 0, 0, 15); c.fill();
+        circ(-6, -5, 2.5, '#ffd0d8'); break;
+      case 'double':    // a coin, half gold, half grey
+        circ(0, 0, 17, '#a07a12'); c.fillStyle = '#ffd24a'; c.beginPath(); c.arc(0, 0, 14, Math.PI / 2, -Math.PI / 2); c.fill(); c.fillStyle = '#8a8aa0'; c.beginPath(); c.arc(0, 0, 14, -Math.PI / 2, Math.PI / 2); c.fill();
+        word('?', 18, '#07070a', 1); break;
+      case 'static':    // TV with a bolt
+        box(-16, -12, 32, 26, 4, '#3a3a52'); c.fillStyle = '#0a060c'; c.fillRect(-13, -9, 26, 19); poly([[3, -8], [-6, 2], [0, 2], [-3, 9], [7, -1], [1, -1]], col); break;
+      case 'f_classic': // ticket
+        box(-17, -10, 34, 20, 3, '#c8f542'); circ(-17, 0, 4, '#07070a'); circ(17, 0, 4, '#07070a'); line([[6, -8], [6, 8]], '#07070a', 1.5); word('TV', 13, '#07070a', 1); break;
+      case 'f_turbo':   // fast forward
+        poly([[-16, -13], [-1, 0], [-16, 13]], '#ff9a2e'); poly([[0, -13], [15, 0], [0, 13]], '#ffd24a'); break;
+      case 'f_mystery': // prize under a cloth
+        c.fillStyle = '#6a58c8'; c.beginPath(); c.moveTo(-16, 15); c.quadraticCurveTo(-14, -18, 0, -18); c.quadraticCurveTo(14, -18, 16, 15); c.fill(); word('?', 22, '#fff', 2); break;
+      case 'f_conveyor': // belt
+        box(-18, 2, 36, 12, 6, '#3a3a52'); circ(-11, 8, 3.5, '#42d4f5'); circ(0, 8, 3.5, '#42d4f5'); circ(11, 8, 3.5, '#42d4f5');
+        box(-13, -10, 10, 10, 2, '#f5a542'); box(2, -10, 10, 10, 2, '#c8f542'); line([[-14, -16], [10, -16]], '#fff', 2); poly([[10, -20], [16, -16], [10, -12]], '#fff'); break;
+      case 'f_strobe':  // flash burst
+        for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; line([[Math.cos(a) * 9, Math.sin(a) * 9], [Math.cos(a) * 18, Math.sin(a) * 18]], k % 2 ? '#42d4f5' : '#fff', 3); } circ(0, 0, 7, '#fff'); break;
+      case 'f_pendulum': // swinging bob
+        c.fillStyle = '#8a8aa0'; c.fillRect(-12, -18, 24, 3); line([[0, -16], [10, 8]], '#d8d8e0', 2); circ(10, 10, 6, '#42f5b0');
+        c.globalAlpha = 0.35; line([[0, -16], [-10, 8]], '#d8d8e0', 2); circ(-10, 10, 6, '#42f5b0'); c.globalAlpha = 1; break;
+      case 'f_high':    // chips
+        [[10, '#ff6bd6'], [4, '#fff'], [-2, '#ff6bd6'], [-8, '#fff']].forEach(([yy, f]) => { c.fillStyle = f; c.beginPath(); c.ellipse(0, yy, 14, 5, 0, 0, TAU); c.fill(); c.strokeStyle = '#07070a'; c.lineWidth = 1; c.stroke(); }); break;
+      case 'f_goldnight': // moon and a gold star
+        circ(-4, 0, 14, '#ffd24a'); circ(2, -4, 12, '#12121c');
+        c.fillStyle = '#fff'; c.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 3 : 7, a = -Math.PI / 2 + k * Math.PI / 5; c.lineTo(9 + Math.cos(a) * r, -8 + Math.sin(a) * r); } c.closePath(); c.fill(); break;
+      case 'f_censors': // stop sign
+        c.fillStyle = '#e8203a'; c.beginPath(); for (let k = 0; k < 8; k++) { const a = Math.PI / 8 + k * Math.PI / 4; c.lineTo(Math.cos(a) * 17, Math.sin(a) * 17); } c.closePath(); c.fill(); c.fillStyle = '#fff'; c.fillRect(-11, -3.5, 22, 7); break;
       case 'junk':      // toaster
         box(-9, -17, 7, 12, 2, '#e8c38a'); box(2, -17, 7, 12, 2, '#e8c38a'); box(-15, -8, 30, 22, 5, '#b9b9c6'); c.fillStyle = '#6a6a80'; c.fillRect(-11, -8, 22, 3);
         c.fillStyle = '#3a3a48'; c.fillRect(10, -2, 3, 10); circ(11.5, -2, 2.5, '#e8203a'); c.fillStyle = '#6a6a80'; c.fillRect(-13, 14, 6, 3); c.fillRect(7, 14, 6, 3); break;
@@ -1148,7 +1305,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
     if (!G) return;
     time += dt;
-    const onWheel = G.phase === 'load' || G.phase === 'wheel' || G.phase === 'ready';
+    const onWheel = G.phase === 'load' || G.phase === 'wheel' || G.phase === 'pick' || G.phase === 'ready';
     if (!pausedUI && !onWheel) {
       acc += dt;
       while (acc >= DT) { G.step(DT); acc -= DT; }
@@ -1162,11 +1319,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         }
       }
     }
+    if (live && G.phase !== 'wheel') { const sl = $('slow'), can = G.phase === 'sweep' && G.slowLeft > 0 && !(G.slowT > 0); if (sl.disabled === can) sl.disabled = !can; const t = '×' + (G.slowLeft || 0) + ' · S'; if ($('slowSub').textContent !== t) $('slowSub').textContent = t; }
     if (wantBank && G.phase !== 'resolve') { wantBank = false; if (live && G.phase === 'sweep' && G.bank()) sfx.chime(2); }
     if (live && G.phase !== 'wheel') { const b = $('bank'); const can = (G.phase === 'sweep' || G.phase === 'resolve') && G.buzzes > 0 && !wantBank; if (b.disabled === can) b.disabled = !can; const bz = $('buzz'), cb = G.phase === 'sweep' || !!tally; if (bz.disabled === cb) bz.disabled = !cb; }
     for (let i = 0; i < N; i++) podFx[i] = Math.min(1, podFx[i] + dt);
     for (const [id, f] of badgeFx) { if (f > 1.3) badgeFx.delete(id); else badgeFx.set(id, f + dt); }
     cannonFx[0] = Math.max(0, cannonFx[0] - dt * 5); cannonFx[1] = Math.max(0, cannonFx[1] - dt * 5);
+    shiftAnim = Math.max(0, shiftAnim - dt * 4.5); slowFx = Math.max(0, slowFx - dt * 2);
     slam = Math.max(0, slam - dt * 5); deskBump = Math.max(0, deskBump - dt * 6); ballFlash = Math.max(0, ballFlash - dt * 4);
     excite = Math.max(0, Math.min(1.6, excite) - dt * 0.35);
     shake = Math.max(0, shake - dt * 30); flashA = Math.max(0, flashA - dt * 1.4); glitch = Math.max(0, glitch - dt);
@@ -1189,6 +1348,22 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       drawFx(dt);
       ctx.restore();
       if (dark > 0) { ctx.fillStyle = `rgba(3,3,6,${0.7 * dark})`; ctx.fillRect(0, 112, W, H); }
+      if (G.slowT > 0 || slowFx > 0) {
+        const a = Math.max(slowFx * 0.3, G.slowT > 0 ? 0.14 : 0);
+        ctx.fillStyle = `rgba(127,224,255,${a})`; ctx.fillRect(0, 112, W, H);
+        if (G.slowT > 0) { font(22); ctx.textBaseline = 'middle'; text('SLOW-MO', W / 2, 470, '#7fe0ff', 'center'); ctx.fillStyle = '#7fe0ff'; ctx.fillRect(W / 2 - 60, 486, 120 * G.slowT / 2.4, 3); }
+      }
+      if (coin) {
+        coin.t += dt;
+        const k = Math.min(1, coin.t / 0.8), cy = 520 - Math.sin(k * Math.PI) * 170, flip = k < 1 ? Math.cos(coin.t * 30) : 1;
+        drawGlow(W / 2, cy, 80, '#ffd24a', 0.7);
+        ctx.save(); ctx.translate(W / 2, cy); ctx.scale(1, Math.max(0.12, Math.abs(flip)));
+        ctx.fillStyle = '#a07a12'; ctx.beginPath(); ctx.arc(0, 0, 40, 0, TAU); ctx.fill();
+        ctx.fillStyle = k >= 1 && !coin.up ? '#8a8aa0' : '#ffd24a'; ctx.beginPath(); ctx.arc(0, 0, 34, 0, TAU); ctx.fill();
+        if (k >= 1) { font(30); ctx.textBaseline = 'middle'; text(coin.up ? '×2.5' : '×½', 0, 2, '#07070a', 'center'); }
+        ctx.restore();
+        if (k >= 1 && !coin.said) { coin.said = true; if (coin.up) { shout('DOUBLE!', C.gold, 70); sfx.fanfare(); sfx.cheer(true); confetti(W / 2, 520, 50, 60, 500); excite = 1.6; } else { shout('NOTHING...', '#8a8aa0', 60); sfx.trombone(); excite = 0; } }
+      }
       drawAudience();
       drawMarquee();
       drawTally(dt);

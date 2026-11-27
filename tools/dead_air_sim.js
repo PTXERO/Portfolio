@@ -6,7 +6,7 @@ const RUNS = +process.argv[2] || 300, ERR = (+process.argv[3] || 45) / 1000, WHO
 const DT = 1 / 60, N = D.N;
 
 function gauss(g) { return Math.sqrt(-2 * Math.log(1 - g.rand())) * Math.cos(2 * Math.PI * g.rand()); }
-const worth = p => p.kind === 'gold' ? p.val * 5 : p.kind === 'cash' ? p.val : p.kind === 'spin' ? 60 : 45;
+const worth = p => p.kind === 'gold' ? p.val * 5 : p.kind === 'cash' ? p.val : p.kind === 'spin' ? 60 : p.kind === 'box' ? 70 : 45;
 const bad = (g, i) => i < 0 || i >= N ? false : !g.isUp(i);
 
 function playRound(g) {
@@ -20,7 +20,11 @@ function playRound(g) {
     // Prefer valuable prizes whose neighbours are safe.
     let best = up[0], bestS = -1e9;
     for (const i of up) { const s = worth(g.strip[i]) - (bad(g, i - 1) ? 25 : 0) - (bad(g, i + 1) ? 25 : 0); if (s > bestS) { bestS = s; best = i; } }
-    const hit = best + 0.5 + gauss(g) * ERR * g.speed();
+    if (dark >= 3) g.slowmo();
+    // Hidden prizes and a jumping light are harder to time: a wider error, and sometimes the wrong podium.
+    const hard = g.is('mystery') ? 1.5 : g.is('conveyor') ? 1.25 : 1;
+    let hit = best + 0.5 + gauss(g) * ERR * hard * g.speed();
+    if (g.is('strobe')) hit = g.rand() < 0.78 ? best + 0.2 + g.rand() * 0.6 : g.pick(N) + 0.5;
     g.u = Math.max(0.001, Math.min(N - 0.001, hit));
     g.buzz();
   }
@@ -39,7 +43,7 @@ for (let r = 0; r < RUNS; r++) {
     if (g.phase === 'won') { wins++; kit += Object.values(g.levels).reduce((a, b) => a + b, 0); break; }
     g.openWheel(); g.takeOffer(g.pick(3));
     while (g.spins > 0) g.spin();
-    g.wheelDone();
+    g.wheelDone(); g.pickFormat(g.pick(2));
   }
 }
 const q = (a, f) => a.length ? a.slice().sort((x, y) => x - y)[Math.floor(a.length * f)] : 0;
