@@ -44,7 +44,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   padding:5% 6%;text-align:center;overflow-y:auto;
   background:radial-gradient(ellipse at 50% 35%,rgba(7,7,10,.72),rgba(7,7,10,.93));}
 .ov.low{justify-content:flex-end;padding-bottom:4%;background:linear-gradient(rgba(7,7,10,0) 30%,rgba(7,7,10,.9) 52%);}
-#ovTitle{background:radial-gradient(ellipse at 50% 40%,rgba(7,7,10,.6),rgba(7,7,10,.86));}
+#ovTitle{background:radial-gradient(ellipse at 50% 40%,rgba(10,6,24,.9),rgba(10,6,24,.96));}
+.logo{margin-bottom:16px;}
 .onair{font-family:var(--fmono);font-size:10px;letter-spacing:.3em;color:#fff;background:#e8203a;
   border-radius:2px;padding:3px 10px;box-shadow:0 0 18px #e8203a;animation:blink 1.6s steps(2) infinite;}
 @keyframes blink{50%{opacity:.45}}
@@ -174,14 +175,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     <div class="ov" id="ovTitle">
       <span class="onair">● ON AIR</span>
       <div class="logo">DEAD<em>//</em>AIR</div>
-      <p class="pitch">You're tonight's contestant. A spotlight sweeps the prizes. Hit the buzzer to stop it, and don't stop it on dead air.</p>
       <div class="who" id="who"></div>
       <button class="big-btn" id="resume" hidden></button>
       <button class="big-btn" id="start">GO ON AIR</button>
       <button class="big-btn alt" id="shopBtn">DRESSING ROOM</button>
       <button class="big-btn alt" id="dumpBtn">MONEY DUMP</button>
       <button class="hdr-btn" id="modeBtn" style="margin-top:10px"></button>
-      <p class="how">Whatever the light stops on goes in the pot: <b>cash</b> × <i>hype</i>. Every prize you take burns out into <u>dead air</u> and the light gets faster, so <b>BANK</b> before your luck, or the clock, runs out. Clear an episode to load your prize wheel and spin it: every gimmick joins the set and they all stack. Then pick tomorrow's show. No two seasons play the same.</p>
       <div class="money" id="money"></div>
       <div class="stats" id="stats"></div>
     </div>
@@ -231,7 +230,6 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 
     <div class="ov" id="ovKit" hidden>
       <h1>YOUR GIMMICKS</h1>
-      <p class="sub">Everything you've brought onto the set.</p>
       <div class="kit" id="kitList"></div>
       <button class="big-btn" id="kitClose">BACK TO THE SHOW</button>
     </div>
@@ -624,7 +622,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     } else if (G.phase === 'ask') showAsk();
     else if (G.bonus) {
       shout('EPISODE CLEARED!', C.lime, 56, 1.2); sfx.cheer(true); excite = 1.6;
-      showCard({ icon: 'e_bonus', kick: 'BONUS ROUND', title: 'ONE BUZZ', text: 'Four wheel tokens, eight dead air, eight seconds. Hit a token for an extra spin. Miss and you lose nothing.', color: '#ffd24a', yes: "LET'S GO" });
+      showCard({ icon: 'e_bonus', kick: 'BONUS ROUND', title: 'ONE BUZZ', text: 'Hit a wheel token: +1 spin.', color: '#ffd24a', yes: "LET'S GO" });
     }
     syncPads();
   }
@@ -654,7 +652,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   function showAsk() {
     const a = G.ask;
     if (a.type === 'offer') showCard({ icon: 'e_offer', kick: "THE HOST'S OFFER", title: '$' + fmt(a.amount) + ' TO SIT OUT', color: '#c8f542',
-      text: 'Take ' + fmt(a.amount) + ' now and skip the next round, or play it and see what you can make. You need ' + fmt(Math.max(0, G.target(G.ep) - G.total)) + ' more with ' + G.roundsLeft + ' round' + (G.roundsLeft === 1 ? '' : 's') + ' left.',
+      text: fmt(Math.max(0, G.target(G.ep) - G.total)) + ' TO GO · ' + G.roundsLeft + ' ROUND' + (G.roundsLeft === 1 ? '' : 'S') + ' LEFT',
       yes: 'TAKE THE MONEY', no: 'PLAY ON', onYes: () => { G.answer(true); sfx.chime(4); }, onNo: () => G.answer(false) });
     else showCard({ icon: 'e_ad', kick: 'COMMERCIAL BREAK', title: a.deal.name, color: '#42d4f5', text: a.deal.desc,
       yes: 'SIGN THE DEAL', no: 'NO THANKS', onYes: () => { G.answer(true); sfx.fanfare(); }, onNo: () => G.answer(false) });
@@ -673,7 +671,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     G.openWheel();
     saveRun('wheel');
     const earned = (G.earned || []).map(e => `${e[0]} +${e[1]}`).join(' · ');
-    $('loadSub').innerHTML = `You have <b style="color:#ffd24a">${G.spins} spin${G.spins === 1 ? '' : 's'}</b>${earned ? ' (' + earned + ')' : ''}.<br>First, bolt one of these onto your wheel.`;
+    $('loadSub').innerHTML = `<b style="color:#ffd24a">${G.spins} SPIN${G.spins === 1 ? '' : 'S'}</b> · ADD ONE TO THE WHEEL`;
     $('offerList').innerHTML = G.offers.map((o, i) => {
       const d = o.def, lv = o.type === 'g' ? G.lv(d.id) : 0;
       return `<button class="card${d.rare ? ' rare' : ''}" data-offer="${i}" style="--c:${d.color}">
@@ -689,12 +687,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     $('ovLoad').hidden = true;
     if (r.at >= 0) { wedgeFx = r.at; wedgeFxT = 0; }
     sfx.fanfare();
-    $('result').innerHTML = `<b>${r.offer.def.name}</b><span>${r.offer.type === 'g' ? 'is on the wheel. Now spin for it.' : 'done. Now spin.'}</span>`;
+    $('result').innerHTML = `<b>${r.offer.def.name}</b>`;
     syncPads();
   });
 
   function showPick() {
-    $('pickSub').textContent = 'Episode ' + (G.ep + 1) + ' needs ' + fmt(G.target(G.ep + 1)) + '. Choose how it is played.';
+    $('pickSub').textContent = 'EPISODE ' + (G.ep + 1) + ' · TARGET ' + fmt(G.target(G.ep + 1));
     $('pickList').innerHTML = G.formats.map((f, i) => `<button class="card" data-format="${i}" style="--c:${f.color}">
         <img alt="" src="${iconURL('f_' + f.id)}"><span class="k">SHOW FORMAT</span><b>${f.name}</b><p>${f.desc}</p>
         ${f.spins ? '<span class="plus">+' + f.spins + ' SPIN IF YOU CLEAR IT</span>' : ''}</button>`).join('');
@@ -731,24 +729,24 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       shout(g.name + '!', g.color, 54, 1.6); sfx.fanfare(); sfx.cheer(true); excite = 1.6;
       for (let i = 0; i < 3; i++) confetti(rnd(100, 440), 250, 40, 60, 300);
       $('result').innerHTML = res.got.map(g => `<b style="color:${g.color}">${g.name} · LEVEL ${G.lv(g.id)}</b><span>${g.d(G.lv(g.id))}</span>`).join('') +
-        (res.maxed ? `<span>${res.maxed.name} is maxed, so the wheel paid out something else.</span>` : '');
+        '';
     } else if (res.type === 'junk') {
       shout('A TOASTER.', '#8a8aa0', 54, 1.4); sfx.trombone(); excite = 0.2;
-      $('result').innerHTML = `<b>A TOASTER</b><span>The consolation prize. You start every round with $10 more in the pot.</span>`;
+      $('result').innerHTML = `<b>A TOASTER</b><span>+$10 starting pot</span>`;
     } else if (res.type === 'dead') {
       shout('DEAD AIR', C.dead, 80, 1.3); sfx.dead(); glitch = 0.7; excite = 0;
-      $('result').innerHTML = `<b style="color:#f542a8">DEAD AIR</b><span>Nothing. Trim that wedge off the wheel when you get the chance.</span>`;
-    } else $('result').innerHTML = `<b>EVERYTHING IS MAXED</b><span>There is nothing left to win. Incredible.</span>`;
+      $('result').innerHTML = `<b style="color:#f542a8">DEAD AIR</b>`;
+    } else $('result').innerHTML = `<b>EVERYTHING IS MAXED</b>`;
     syncPads();
   }
 
   function showEnd(won) {
     const kit = Object.values(G.levels).reduce((a, b) => a + b, 0);
     $('ovEnd').innerHTML = won
-      ? `<h1>SEASON WRAPPED</h1><p class="sub">${G.episodes} episodes and you're still on the air. Take the win, or keep the cameras rolling.</p>
+      ? `<h1>SEASON WRAPPED</h1>
          <div class="rows"><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>RUN TIME</span><b>${clockText(G.elapsed)}</b></div><div class="row"><span>PRIZE MONEY SO FAR</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
          <button class="big-btn" id="endA">KEEP GOING (ENDLESS)</button><button class="big-btn alt" id="endB">TAKE THE WIN</button>`
-      : `<h1 class="bad">CANCELLED</h1><p class="sub">Episode ${G.ep} needed ${fmt(G.target(G.ep))}. You finished on ${fmt(G.total)}.</p>
+      : `<h1 class="bad">CANCELLED</h1><p class="sub">EPISODE ${G.ep} · ${fmt(G.total)} / ${fmt(G.target(G.ep))}</p>
          <div class="rows"><div class="row"><span>EPISODES CLEARED</span><b>${G.ep - 1}</b></div><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>RUN TIME</span><b>${clockText(G.elapsed)}</b></div><div class="row"><span>PRIZE MONEY EARNED</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
          <button class="big-btn" id="endA">NEW RUN</button><button class="big-btn alt" id="endB">BACK TO TITLE</button>`;
     $('ovEnd').hidden = false; syncPads();
@@ -798,7 +796,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     startDemo();
   }
   function paintShop() {
-    $('shopSub').innerHTML = `Prize money: <b style="color:#ffd24a">$${fmt(stats.money || 0)}</b>. Everything you bank on air is paid in here. These are long-term investments: what you buy lasts for every season.`;
+    $('shopSub').innerHTML = `<b style="color:#ffd24a">$${fmt(stats.money || 0)}</b>`;
     $('shopList').innerHTML = D.PERKS.map(pk => {
       const lv = stats.perks[pk.id] || 0, maxed = lv >= pk.max, cost = maxed ? 0 : pk.cost(lv);
       return `<div style="--c:#ffd24a"><img alt="" src="${iconURL(pk.icon)}"><p><b>${pk.name}</b><span class="pips">${'●'.repeat(lv)}${'○'.repeat(pk.max - lv)}</span><span>${pk.d(Math.min(pk.max, lv + 1))}</span>${maxed ? '' : `<span class="saving"><i style="width:${Math.min(100, Math.floor(100 * (stats.money || 0) / cost))}%"></i></span>`}</p>
@@ -824,7 +822,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   function equipSlot(u) { return u.cat === 'charm' ? 'charm' : u.cat === 'look' ? u.look.slot : null; }
   function paintDump() {
     const left = D.UNLOCKS.filter(u => !has(u.id)).length, price = cratePrice();
-    $('dumpSub').innerHTML = `Prize money: <b style="color:#ffd24a">$${fmt(stats.money || 0)}</b> · ${100 - left} of 100 unlocked. Every crate holds something you do not own yet.`;
+    $('dumpSub').innerHTML = `<b style="color:#ffd24a">$${fmt(stats.money || 0)}</b> · ${100 - left}/100`;
     $('dumpOpen').textContent = left ? 'OPEN A CRATE · $' + fmt(price) : 'EVERYTHING UNLOCKED';
     $('dumpOpen').disabled = !left || (stats.money || 0) < price || dumpBusy;
     $('dumpOpen').style.filter = $('dumpOpen').disabled ? 'grayscale(1) brightness(.5)' : '';
@@ -839,7 +837,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   }
   function describe(u) {
     const slot = equipSlot(u), on = slot && stats.equip[slot] === u.id;
-    $('dumpInfo').innerHTML = `<b style="color:#fff">${u.name}</b> · ${u.desc}` + (slot ? `<br><span style="color:#c8f542">${on ? 'In use. Tap it again to take it off.' : 'Tap it again to use it.'}</span>` : '');
+    $('dumpInfo').innerHTML = `<b style="color:#fff">${u.name}</b>${u.desc ? ' · ' + u.desc : ''}` + (slot ? `<br><span style="color:#c8f542">${on ? 'IN USE' : 'TAP AGAIN TO USE'}</span>` : '');
   }
   let lastTap = null;
   $('dumpList').addEventListener('click', e => {
@@ -871,7 +869,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       dumpBusy = false; lastTap = u.id; describe(u); paintDump();
     }, 720);
   }
-  $('dumpBtn').onclick = () => { lastGot = null; $('got').hidden = true; $('crate').hidden = false; $('dumpInfo').textContent = 'Tap anything you own to see what it does.'; paintDump(); $('ovDump').hidden = false; };
+  $('dumpBtn').onclick = () => { lastGot = null; $('got').hidden = true; $('crate').hidden = false; $('dumpInfo').textContent = ''; paintDump(); $('ovDump').hidden = false; };
   $('dumpOpen').onclick = openCrate;
   $('dumpClose').onclick = () => { $('ovDump').hidden = true; paintTitle(); };
 
@@ -880,8 +878,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     $('resume').hidden = !sv;
     if (sv) $('resume').textContent = 'RESUME · EPISODE ' + (sv.stage === 'wheel' ? sv.ep + ' WHEEL' : sv.ep + 1) + ' · ' + clockText(sv.elapsed);
     $('start').textContent = sv ? 'NEW SEASON' : 'GO ON AIR';
-    $('modeBtn').textContent = stats.mode === D.PILOT ? 'LENGTH: PILOT · 5 EPISODES · ABOUT 12 MIN' : 'LENGTH: FULL SEASON · 15 EPISODES · ABOUT 40 MIN';
-    $('money').innerHTML = stats.runs ? `$${fmt(stats.money || 0)}<small>PRIZE MONEY · JACKPOT STANDS AT $${fmt(stats.jackpot || 5000)}</small>` : '';
+    $('modeBtn').textContent = stats.mode === D.PILOT ? 'PILOT · 5 EPISODES' : 'FULL SEASON · 15 EPISODES';
+    $('money').innerHTML = stats.runs ? `$${fmt(stats.money || 0)}<small>PRIZE MONEY · JACKPOT $${fmt(stats.jackpot || 5000)}</small>` : '';
     $('stats').innerHTML = stats.runs
       ? `<div><b>${stats.runs}</b>RUNS</div><div><b>${stats.wins}</b>SEASONS WON</div><div><b>${stats.bestEp}</b>EPISODES CLEARED</div>${stats.bestTime ? `<div><b>${clockText(stats.bestTime)}</b>FASTEST SEASON</div>` : ''}<div><b>${fmt(stats.bestBank)}</b>BEST BANK</div>` : '';
     const open = c => c.lock ? has(c.id) : !c.ok || c.ok(stats);
@@ -951,7 +949,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('kitBtn').onclick = () => {
     const own = D.GIMMICKS.filter(g => G.lv(g.id));
     $('kitList').innerHTML = (own.length ? own.map(g => `<div style="--c:${g.color}"><img alt="" src="${iconURL(g.id)}"><span class="chip">LEVEL ${G.lv(g.id)}</span><p><b>${g.name}</b><span>${g.d(G.lv(g.id))}</span></p></div>`).join('')
-      : '<div><span>Nothing yet. Clear an episode and spin the wheel.</span></div>') +
+      : '<div><span>Nothing yet.</span></div>') +
       (G.toasters ? `<div style="--c:#8a8aa0"><img alt="" src="${iconURL('junk')}"><span class="chip">×${G.toasters}</span><p><b>TOASTERS</b><span>Start every round with $${10 * G.toasters} in the pot.</span></p></div>` : '');
     $('ovKit').hidden = false; pausedUI = true;
   };
