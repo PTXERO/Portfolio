@@ -162,6 +162,42 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 .dots i{width:6px;height:6px;border-radius:50%;background:#3a2878;}
 .dots i.ok{background:#6a55c8;}
 .dots i.on{background:#c8f542;}
+#ovTitle{justify-content:flex-start;padding-top:10px;overflow-y:auto;}
+.topbar{display:flex;justify-content:space-between;align-items:center;width:100%;max-width:380px;margin:0 auto 10px;padding-left:44px;}
+.wallet{display:flex;align-items:center;gap:6px;background:#150f24;border:2px solid #ffd24a;border-radius:20px;padding:2px 12px 2px 3px;box-shadow:3px 3px 0 #150f24;}
+.wallet img{width:26px;height:26px;}
+.wallet b{font-family:var(--fdisp);font-weight:400;font-size:19px;letter-spacing:.04em;color:#ffd24a;}
+.jackp{text-align:right;line-height:1.1;}
+.jackp small{display:block;font-family:var(--fmono);font-size:8px;letter-spacing:.2em;color:#8a8aa0;}
+.jackp b{font-family:var(--fdisp);font-weight:400;font-size:15px;letter-spacing:.04em;color:#ff6bd6;}
+#ovTitle .logo{margin-bottom:10px;font-size:clamp(40px,13.5vmin,58px);}
+#ovTitle::before,#ovTitle::after{content:'';flex:1 0 0;}
+.setup #heatBtn{border-color:#150f24;color:inherit;}
+.setup{display:grid;grid-template-columns:repeat(3,1fr);width:100%;max-width:380px;margin:0 auto;border:2px solid #150f24;border-radius:6px;overflow:hidden;box-shadow:3px 3px 0 #150f24;}
+.setup button{border:0;border-right:2px solid #150f24;background:#241848;padding:6px 2px 5px;cursor:pointer;line-height:1.15;}
+.setup button:last-child{border-right:0;}
+.setup button:active{background:#3a2878;}
+.setup small{display:block;font-family:var(--fmono);font-size:8px;letter-spacing:.2em;color:#8a8aa0;}
+.setup b{display:block;font-family:var(--fdisp);font-weight:400;font-size:15px;letter-spacing:.05em;color:#fff;white-space:nowrap;}
+.setup button.hot b{color:#ff9a2e;}
+.setup button.off{cursor:default;}
+.setup button.off b{color:#5a4a90;font-size:11px;font-family:var(--fmono);letter-spacing:.08em;padding-top:3px;}
+#ovTitle .heatinfo{min-height:0;margin:4px 0 8px;max-width:380px;line-height:1.4;}
+#ovTitle .heatinfo:empty{margin:0 0 10px;}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;max-width:380px;margin:10px auto 0;}
+.tile{position:relative;display:grid;grid-template-columns:44px 1fr;grid-template-rows:auto auto;column-gap:8px;align-items:center;text-align:left;border:2px solid #150f24;border-radius:6px;
+  background:#241848;box-shadow:4px 4px 0 #150f24;padding:7px 8px;cursor:pointer;}
+.tile:active{transform:translate(2px,2px);box-shadow:2px 2px 0 #150f24;}
+.tile img{grid-row:1 / 3;width:44px;height:44px;}
+.tile b{font-family:var(--fdisp);font-weight:400;font-size:15px;letter-spacing:.05em;line-height:1.05;color:#c8f542;align-self:end;}
+.tile span{font-family:var(--fmono);font-size:9px;letter-spacing:.08em;color:#b9b9c6;align-self:start;white-space:nowrap;}
+.tile.can{border-color:#ffd24a;}
+.tile.can::after{content:'!';position:absolute;right:-7px;top:-8px;width:19px;height:19px;border-radius:50%;background:#ffd24a;color:#07070a;border:2px solid #150f24;
+  font-family:var(--fdisp);font-size:13px;line-height:17px;text-align:center;animation:pip 1s ease-in-out infinite;}
+@keyframes pip{50%{transform:scale(1.2);}}
+#ovTitle .stats{gap:14px;margin-top:12px;}
+#ovTitle .stats b{font-size:17px;}
+#ovTitle .stats div{font-size:8px;}
 .grid4{flex-wrap:wrap;}
 .grid4 .big-btn{flex:1 1 46%;}
 .opts{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:10px;}
@@ -254,6 +290,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     </div>
 
     <div class="ov" id="ovTitle">
+      <div class="topbar"><div class="wallet"><img alt="" id="walletPic"><b id="money"></b></div><div class="jackp"><small>JACKPOT</small><b id="jackpot"></b></div></div>
       <span class="onair">● ON AIR</span>
       <div class="logo">DEAD<em>//</em>AIR</div>
       <div class="pick1" id="who">
@@ -265,21 +302,20 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         <button class="arr" id="whoNext" aria-label="Next contestant">▶</button>
       </div>
       <div class="dots" id="whoDots"></div>
-      <button class="big-btn" id="resume" hidden></button>
-      <button class="big-btn" id="start">GO ON AIR</button>
-      <div class="row3 grid4">
-        <button class="big-btn alt" id="shopBtn">THE CONTRACT</button>
-        <button class="big-btn alt" id="dumpBtn">PRIZE VAULT</button>
-        <button class="big-btn alt" id="dressBtn">DRESSING ROOM</button>
-        <button class="big-btn alt" id="logBtn">LOGBOOK</button>
-      </div>
-      <div class="opts">
-        <button class="hdr-btn" id="modeBtn"></button>
-        <button class="hdr-btn" id="heatBtn" hidden></button>
-        <button class="hdr-btn" id="codeBtn">CHALLENGE</button>
+      <div class="setup">
+        <button id="modeBtn"><small>SEASON</small><b id="modeTxt"></b></button>
+        <button id="heatBtn"><small>HEAT</small><b id="heatTxt"></b></button>
+        <button id="codeBtn"><small>CHALLENGE</small><b id="codeTxt"></b></button>
       </div>
       <div class="heatinfo" id="heatInfo"></div>
-      <div class="money" id="money"></div>
+      <button class="big-btn" id="resume" hidden></button>
+      <button class="big-btn" id="start">GO ON AIR</button>
+      <div class="tiles">
+        <button class="tile" id="shopBtn"><img alt="" id="tiShop"><b>THE CONTRACT</b><span id="tsShop"></span></button>
+        <button class="tile" id="dumpBtn"><img alt="" id="tiDump"><b>PRIZE VAULT</b><span id="tsDump"></span></button>
+        <button class="tile" id="dressBtn"><img alt="" id="tiDress"><b>DRESSING ROOM</b><span id="tsDress"></span></button>
+        <button class="tile" id="logBtn"><img alt="" id="tiLog"><b>LOGBOOK</b><span id="tsLog"></span></button>
+      </div>
       <div class="stats" id="stats"></div>
     </div>
 
@@ -1369,9 +1405,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('dressClose').onclick = () => { $('ovDress').hidden = true; paintTitle(); };
 
   // ── Heat ───────────────────────────────────────────────────────
-  $('heatBtn').onclick = () => { const max = Math.min(D.HEAT.length, stats.heatBest + 1); stats.heat = ((stats.heat || 0) + 1) % (max + 1); save(); paintTitle(); };
+  $('heatBtn').onclick = () => { if (stats.heatBest < 0) return; const max = Math.min(D.HEAT.length, stats.heatBest + 1); stats.heat = ((stats.heat || 0) + 1) % (max + 1); save(); paintTitle(); };
 
   // ── Challenge codes ────────────────────────────────────────────
+  function dailyCode() { const d = new Date(); return 'D' + d.getUTCFullYear() + String(d.getUTCMonth() + 1).padStart(2, '0') + String(d.getUTCDate()).padStart(2, '0'); }
   const cleanCode = v => v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
   function paintCode() {
     const c = cleanCode($('codeIn').value), best = stats.codes[c];
@@ -1379,10 +1416,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     $('codePlay').disabled = c.length < 3; $('codePlay').style.filter = c.length < 3 ? 'grayscale(1) brightness(.5)' : '';
   }
   $('codeIn').addEventListener('input', () => { $('codeIn').value = cleanCode($('codeIn').value); paintCode(); });
-  $('codeDaily').onclick = () => { const d = new Date(); $('codeIn').value = 'D' + d.getUTCFullYear() + String(d.getUTCMonth() + 1).padStart(2, '0') + String(d.getUTCDate()).padStart(2, '0'); paintCode(); };
+  $('codeDaily').onclick = () => { $('codeIn').value = dailyCode(); paintCode(); };
   $('codeRandom').onclick = () => { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let c = ''; for (let i = 0; i < 6; i++) c += A[(Math.random() * A.length) | 0]; $('codeIn').value = c; paintCode(); };
-  $('codeBtn').onclick = () => { paintCode(); $('ovCode').hidden = false; };
-  $('codeClose').onclick = () => { $('ovCode').hidden = true; };
+  $('codeBtn').onclick = () => { if (!$('codeIn').value) $('codeIn').value = dailyCode(); paintCode(); $('ovCode').hidden = false; };
+  $('codeClose').onclick = () => { $('ovCode').hidden = true; paintTitle(); };
   $('codePlay').onclick = () => { const c = cleanCode($('codeIn').value); if (c.length >= 3) { clearRun(); newRun(c); } };
 
   // Contestants you can see on the title: everyone except vault characters you have not found.
@@ -1395,15 +1432,30 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('whoPrev').onclick = () => whoStep(-1); $('whoNext').onclick = () => whoStep(1);
   function paintTitle() {
     const maxHeat = Math.min(D.HEAT.length, stats.heatBest + 1), heat = Math.min(stats.heat || 0, maxHeat);
-    $('heatBtn').hidden = stats.heatBest < 0;
-    $('heatBtn').textContent = 'HEAT ' + heat + (heat ? ' · +' + Math.round(heat * D.HEAT_PAY * 100) + '% PAY' : '');
+    const noHeat = stats.heatBest < 0;
+    $('heatBtn').className = noHeat ? 'off' : heat ? 'hot' : '';
+    $('heatTxt').textContent = noHeat ? 'WIN A SEASON' : heat + (heat ? ' · +' + Math.round(heat * D.HEAT_PAY * 100) + '%' : '');
+    const today = dailyCode(), td = stats.codes[today];
+    $('codeTxt').textContent = td ? 'DAILY ✓ ' + td.eps : 'DAILY';
+    // the four rooms: how far along each is, and whether there is something to buy
+    const money0 = stats.money || 0;
+    const perkLv = D.PERKS.reduce((n, k) => n + (stats.perks[k.id] || 0), 0), perkMax = D.PERKS.reduce((n, k) => n + k.max, 0);
+    const perkCan = D.PERKS.some(k => (stats.perks[k.id] || 0) < k.max && money0 >= k.cost(stats.perks[k.id] || 0));
+    const vaultHave = D.UNLOCKS.filter(u => has(u.id)).length, vaultLeft = D.UNLOCKS.length - vaultHave;
+    const looksHave = D.LOOKS.filter(l => has(l.id)).length;
+    const tile = (id, icon, txt, can) => { $('ti' + id).src = iconURL(icon); $('ts' + id).textContent = txt; $(id === 'Shop' ? 'shopBtn' : id === 'Dump' ? 'dumpBtn' : id === 'Dress' ? 'dressBtn' : 'logBtn').className = 'tile' + (can ? ' can' : ''); };
+    tile('Shop', 'm_contract', perkLv + '/' + perkMax + ' UPGRADES', perkCan);
+    tile('Dump', 'm_vault', vaultLeft ? vaultHave + '/' + D.UNLOCKS.length + ' · $' + Math.round(cratePrice() / 1000) + 'K' : 'EMPTIED', vaultLeft > 0 && money0 >= cratePrice());
+    tile('Dress', 'm_dress', looksHave + '/' + D.LOOKS.length + ' PIECES', false);
+    tile('Log', 'm_log', D.GIMMICKS.filter(x => stats.seen[x.id]).length + '/' + D.GIMMICKS.length + ' · ★' + TROPHIES.filter(t => stats.trophies[t.id]).length + '/' + TROPHIES.length, false);
+    $('walletPic').src = iconURL('m_coin'); $('jackpot').textContent = '$' + fmt(stats.jackpot || 5000);
     $('heatInfo').textContent = heat ? D.HEAT.slice(0, heat).join(' ').toUpperCase() : '';
     const sv = savedRun();
     $('resume').hidden = !sv;
     if (sv) $('resume').textContent = 'RESUME · EPISODE ' + (sv.stage === 'wheel' ? sv.ep + ' WHEEL' : sv.ep + 1) + ' · ' + clockText(sv.elapsed);
     $('start').textContent = sv ? 'NEW SEASON' : 'GO ON AIR';
-    $('modeBtn').textContent = stats.mode === D.PILOT ? 'PILOT · 5 EPISODES' : 'FULL SEASON · 15 EPISODES';
-    $('money').innerHTML = stats.runs ? `$${fmt(stats.money || 0)}<small>PRIZE MONEY · JACKPOT $${fmt(stats.jackpot || 5000)}</small>` : '';
+    $('modeTxt').textContent = stats.mode === D.PILOT ? 'PILOT · 5' : 'FULL · 15';
+    $('money').textContent = '$' + fmt(stats.money || 0);
     $('stats').innerHTML = stats.runs
       ? `<div><b>${stats.runs}</b>RUNS</div><div><b>${stats.wins}</b>SEASONS WON</div><div><b>${stats.bestEp}</b>EPISODES CLEARED</div>${stats.bestTime ? `<div><b>${clockText(stats.bestTime)}</b>FASTEST SEASON</div>` : ''}<div><b>${fmt(stats.bestBank)}</b>BEST BANK</div>` : '';
     const cast = whoList(), c = D.byId(D.CONTESTANTS, stats.whoView) || D.byId(D.CONTESTANTS, stats.who) || cast[0], ok = whoOpen(c);
@@ -2391,6 +2443,26 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         box(-13, -18, 26, 36, 3, '#d8d8e0'); box(-9, -14, 18, 9, 1, '#150f24'); for (let k = 0; k < 9; k++) box(-9 + (k % 3) * 7, -1 + Math.floor(k / 3) * 6, 4.5, 4, 1, k === 8 ? '#e8203a' : '#5fe08a'); break;
       case 'b_critic':  // one star out of three
         for (let n = 0; n < 3; n++) { c.fillStyle = n === 0 ? '#ffd24a' : '#3a2f6a'; c.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 3.4 : 8, a = -Math.PI / 2 + k * Math.PI / 5; c.lineTo((n - 1) * 15 + Math.cos(a) * r, Math.sin(a) * r); } c.closePath(); c.fill(); c.strokeStyle = '#150f24'; c.lineWidth = 2; c.stroke(); } break;
+      case 'm_coin':    // prize money
+        c.strokeStyle = '#150f24'; c.lineWidth = 2.4; circ(0, 0, 13, '#ffd24a'); c.beginPath(); c.arc(0, 0, 13, 0, TAU); c.stroke(); circ(0, 0, 9, '#e0a92e'); word('$', 17, '#fff4c2', 1); break;
+      case 'm_contract': // a signed contract with a seal
+        c.strokeStyle = '#150f24'; c.lineWidth = 2.2; c.save(); c.rotate(-0.1);
+        box(-12, -17, 24, 32, 2, '#fff4c2'); c.strokeRect(-12, -17, 24, 32);
+        line([[-8, -11], [8, -11]], '#8a8aa0', 2); line([[-8, -6], [8, -6]], '#8a8aa0', 2); line([[-8, -1], [3, -1]], '#8a8aa0', 2);
+        line([[-8, 9], [-4, 5], [-1, 9], [3, 4], [7, 8]], '#3a56b0', 2); c.restore();
+        circ(9, 11, 7, '#e8203a'); c.strokeStyle = '#150f24'; c.lineWidth = 2; c.beginPath(); c.arc(9, 11, 7, 0, TAU); c.stroke(); circ(9, 11, 3, '#ff7a8a'); break;
+      case 'm_vault':   // a vault door
+        c.strokeStyle = '#150f24'; c.lineWidth = 2.4; box(-17, -17, 34, 34, 5, '#6a55c8'); c.strokeRect(-17, -17, 34, 34);
+        circ(0, 0, 11, '#d8d8e0'); c.beginPath(); c.arc(0, 0, 11, 0, TAU); c.stroke(); circ(0, 0, 3.5, '#150f24');
+        for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + 0.5; line([[Math.cos(a) * 4, Math.sin(a) * 4], [Math.cos(a) * 10, Math.sin(a) * 10]], '#150f24', 2.4); }
+        circ(-13, -13, 1.6, '#ffd24a'); circ(13, -13, 1.6, '#ffd24a'); circ(-13, 13, 1.6, '#ffd24a'); circ(13, 13, 1.6, '#ffd24a'); break;
+      case 'm_dress':   // a jacket on a hanger
+        line([[0, -17], [0, -13]], '#d8d8e0', 2.4); c.strokeStyle = '#d8d8e0'; c.lineWidth = 2.2; c.beginPath(); c.arc(2.5, -17, 2.5, Math.PI, Math.PI * 2.4); c.stroke();
+        c.strokeStyle = '#150f24'; c.lineWidth = 2.2; poly([[0, -13], [15, -4], [11, 2], [9, 0], [9, 17], [-9, 17], [-9, 0], [-11, 2], [-15, -4]], '#f542a8'); c.stroke();
+        poly([[0, -13], [5, -9], [0, 3], [-5, -9]], '#fff'); c.stroke(); circ(0, 8, 1.6, '#ffd24a'); circ(0, 13, 1.6, '#ffd24a'); break;
+      case 'm_log':     // a book with a star on it
+        c.strokeStyle = '#150f24'; c.lineWidth = 2.2; box(-13, -16, 27, 32, 3, '#fff4c2'); c.strokeRect(-13, -16, 27, 32); box(-15, -17, 26, 32, 3, '#2a9a5a'); c.strokeRect(-15, -17, 26, 32);
+        box(-15, -17, 6, 32, 2, '#1a6a3a'); c.fillStyle = '#ffd24a'; c.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 3 : 7, a = -Math.PI / 2 + k * Math.PI / 5; c.lineTo(2 + Math.cos(a) * r, -2 + Math.sin(a) * r); } c.closePath(); c.fill(); c.stroke(); break;
       case 'trophy':    // a gold cup
         c.strokeStyle = '#150f24'; c.lineWidth = 2.4; c.lineJoin = 'round';
         c.fillStyle = '#ffd24a'; c.beginPath(); c.moveTo(-11, -16); c.lineTo(11, -16); c.quadraticCurveTo(11, 4, 0, 6); c.quadraticCurveTo(-11, 4, -11, -16); c.closePath(); c.fill(); c.stroke();
