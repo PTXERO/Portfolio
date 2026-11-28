@@ -133,6 +133,18 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 #toast img{width:30px;height:30px;}
 #toast b{font-family:var(--fdisp);font-weight:400;font-size:15px;display:block;line-height:1.1;}
 @keyframes toastIn{from{transform:translateX(-50%) translateY(-30px) scale(.7);opacity:0;}}
+.build{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;max-width:330px;margin:0 auto 12px;}
+.build span{position:relative;width:30px;height:30px;}
+.build img{width:30px;height:30px;display:block;}
+.build i{position:absolute;right:-2px;bottom:-3px;font-style:normal;font-family:var(--fmono);font-size:8px;line-height:1;color:#fff;background:#150f24;border-radius:2px;padding:1px 2px;}
+.build i.evo{background:#ffd24a;color:#07070a;}
+.hist{font-family:var(--fmono);font-size:9.5px;letter-spacing:.06em;color:#b9b9c6;text-align:left;display:flex;gap:8px;padding:4px 0;border-bottom:1px solid #2a2050;}
+.hist b{font-weight:400;color:#fff;min-width:74px;}
+.hist b.won{color:#c8f542;}
+.hist span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.kit .evohint{display:flex;align-items:center;gap:3px;margin-top:2px;color:#ffd24a;font-family:var(--fmono);font-size:8.5px;letter-spacing:.08em;}
+.kit .evohint img{width:17px;height:17px;}
+.who button b i{font-style:normal;color:#ffd24a;margin-left:4px;}
 .grid4{flex-wrap:wrap;}
 .grid4 .big-btn{flex:1 1 46%;}
 .opts{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:10px;}
@@ -947,13 +959,26 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     setTimeout(() => { const c = $('copyRes'); if (c) c.onclick = () => { const done = () => { c.textContent = 'COPIED'; }; try { navigator.clipboard.writeText(line).then(done, () => { c.textContent = line; }); } catch (e) { c.textContent = line; } }; }, 0);
     return `<div class="row"><span>CODE</span><b style="color:#ffd24a">${G.code}</b></div><div class="row"><span>RESULT</span><b>CLEARED ${eps} · ${fmt(banked)}</b></div>`;
   }
+  function buildRow() {
+    return '<div class="build">' + D.GIMMICKS.filter(x => G.lv(x.id)).map(x => `<span><img alt="${x.name}" src="${iconURL(x.id)}"><i class="${G.evo[x.id] ? 'evo' : ''}">${G.evo[x.id] ? '★' : G.lv(x.id)}</i></span>`).join('') + '</div>';
+  }
+  function logRun(won) {
+    if (G._logged) return; G._logged = true;
+    stats.history = [{ who: G.who, ep: won ? G.episodes : G.ep - 1, of: G.episodes, won, heat: G.heat, t: Math.round(G.elapsed), code: G.code || '' }].concat(stats.history || []).slice(0, 12);
+    if (won && !G.code && G.episodes === D.EPISODES) {
+      stats.marks[G.who] = Math.max(stats.marks[G.who] || 0, G.heat + 1);
+      if (Object.keys(stats.marks).length >= 4) trophy('cast');
+    }
+    save();
+  }
   function showEnd(won) {
+    logRun(won);
     const kit = Object.values(G.levels).reduce((a, b) => a + b, 0);
     $('ovEnd').innerHTML = won
-      ? `<h1>SEASON WRAPPED</h1>
+      ? `<h1>SEASON WRAPPED</h1>${buildRow()}
          <div class="rows"><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>RUN TIME</span><b>${clockText(G.elapsed)}</b></div>${codeResult(true)}<div class="row"><span>PRIZE MONEY BANKED</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
          <button class="big-btn" id="endA">PLAY ON FOR FUN</button><button class="big-btn alt" id="endB">FINISH</button>`
-      : `<h1 class="bad">CANCELLED</h1><p class="sub">EPISODE ${G.ep} · ${fmt(G.total)} / ${fmt(G.target(G.ep))}</p>
+      : `<h1 class="bad">CANCELLED</h1><p class="sub">EPISODE ${G.ep} · ${fmt(G.total)} / ${fmt(G.target(G.ep))}</p>${buildRow()}
          <div class="rows"><div class="row"><span>EPISODES CLEARED</span><b>${G.ep - 1}</b></div><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>RUN TIME</span><b>${clockText(G.elapsed)}</b></div>${codeResult(false)}<div class="row"><span>PRIZE MONEY EARNED</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
          <button class="big-btn" id="endA">NEW RUN</button><button class="big-btn alt" id="endB">BACK TO TITLE</button>`;
     if (G.code) $('ovEnd').insertAdjacentHTML('beforeend', '<button class="hdr-btn" id="copyRes" style="margin-top:12px">COPY RESULT</button>');
@@ -1222,7 +1247,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         stats.seen[g.id] ? `<button data-g="${g.id}" class="${pick === g.id ? 'sel' : ''}"><img alt="${g.name}" src="${iconURL(g.id)}"></button>` : '<button class="lock" disabled>?</button>').join('') + '</div>';
     }).join('') +
       `<div class="dsec">TROPHIES · ${TROPHIES.filter(t => stats.trophies[t.id]).length}/${TROPHIES.length}</div><div class="dgrid">` +
-      TROPHIES.map(t => `<button data-g="t:${t.id}" class="${stats.trophies[t.id] ? '' : 'shop'}${pick === 't:' + t.id ? ' sel' : ''}"><img alt="${t.name}" src="${iconURL('trophy')}"></button>`).join('') + '</div>';
+      TROPHIES.map(t => `<button data-g="t:${t.id}" class="${stats.trophies[t.id] ? '' : 'shop'}${pick === 't:' + t.id ? ' sel' : ''}"><img alt="${t.name}" src="${iconURL('trophy')}"></button>`).join('') + '</div>' +
+      (stats.history.length ? '<div class="dsec">LAST RUNS</div>' + stats.history.map(h => { const c = D.byId(D.CONTESTANTS, h.who);
+        return `<div class="hist"><b class="${h.won ? 'won' : ''}">${h.won ? 'WON' : 'EP ' + h.ep + '/' + h.of}</b><span>${c ? c.name.replace('THE ', '') : ''}${h.heat ? ' · HEAT ' + h.heat : ''}${h.code ? ' · ' + h.code : ''}</span><span style="flex:none">${clockText(h.t)}</span></div>`; }).join('') : '');
     if (pick && pick.startsWith('t:')) {
       const t = D.byId(TROPHIES, pick.slice(2));
       $('logPic').hidden = false; $('logPic').src = iconURL('trophy');
@@ -1257,6 +1284,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     { id: 'set',     pay: 40000,   name: 'DEPARTMENT HEAD',    how: 'Complete a set.' },
     { id: 'bet',     pay: 30000,   name: 'HIGH ROLLER',        how: 'Win a side bet.' },
     { id: 'gigs',    pay: 50000,   name: 'MOONLIGHTER',        how: 'Finish 5 side gigs.' },
+    { id: 'cast',    pay: 300000,  name: 'ENSEMBLE CAST',      how: 'Win a full season with 4 contestants.' },
+    { id: 'toast',   pay: 30000,   name: 'BREAKFAST CLUB',     how: 'Hold 5 toasters.' },
     { id: 'ep20',    pay: 150000,  name: 'SYNDICATION',        how: 'Reach episode 20 in endless.' },
   ];
   const toasts = []; let toastT = 0;
@@ -1340,7 +1369,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const open = c => c.lock ? has(c.id) : !c.ok || c.ok(stats);
     if (!open(D.byId(D.CONTESTANTS, stats.who) || { ok: () => false })) stats.who = 'rookie';
     $('who').innerHTML = D.CONTESTANTS.filter(c => !c.lock || has(c.id)).map(c => open(c)
-      ? `<button data-who="${c.id}" class="${c.id === stats.who ? 'on' : ''}"><b>${c.name}</b><span>${c.desc}</span></button>`
+      ? `<button data-who="${c.id}" class="${c.id === stats.who ? 'on' : ''}"><b>${c.name}${stats.marks[c.id] ? '<i>★' + (stats.marks[c.id] > 1 ? stats.marks[c.id] - 1 : '') + '</i>' : ''}</b><span>${c.desc}</span></button>`
       : `<button disabled><b>${c.name}</b><span>LOCKED · ${c.need}</span></button>`).join('');
   }
 
@@ -1407,11 +1436,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('kitBtn').onclick = () => {
     $('ovPause').hidden = true;
     const own = D.GIMMICKS.filter(g => G.lv(g.id));
-    $('kitList').innerHTML = (own.length ? own.map(g => `<div style="--c:${g.color}"><img alt="" src="${iconURL(g.id)}"><span class="chip"${G.evo[g.id] ? ' style="background:#ffd24a;color:#07070a;border-color:#ffd24a"' : ''}>${G.evo[g.id] ? 'EVOLVED' : 'LEVEL ' + G.lv(g.id)}</span><p><b>${G.evo[g.id] ? D.byId(D.EVOS, g.id).name : g.name}</b><span>${g.d(G.lv(g.id))}${G.evo[g.id] ? ' ' + D.byId(D.EVOS, g.id).desc : ''}</span></p></div>`).join('')
+    $('kitList').innerHTML = (own.length ? own.map(g => `<div style="--c:${g.color}"><img alt="" src="${iconURL(g.id)}"><span class="chip"${G.evo[g.id] ? ' style="background:#ffd24a;color:#07070a;border-color:#ffd24a"' : ''}>${G.evo[g.id] ? 'EVOLVED' : 'LEVEL ' + G.lv(g.id)}</span><p><b>${G.evo[g.id] ? D.byId(D.EVOS, g.id).name : g.name}</b><span>${g.d(G.lv(g.id))}${G.evo[g.id] ? ' ' + D.byId(D.EVOS, g.id).desc : ''}</span>${!G.evo[g.id] && D.byId(D.EVOS, g.id) ? '<span class="evohint">★ MAX +' + D.byId(D.EVOS, g.id).need.map(id => `<img alt="${D.byId(D.GIMMICKS, id).name}" title="${D.byId(D.GIMMICKS, id).name}" src="${iconURL(id)}">`).join('OR') + '</span>' : ''}</p></div>`).join('')
       : '<div><span>Nothing yet.</span></div>') +
       D.SETS.map(t => { const have = t.of.filter(id => G.lv(id)); return have.length < 2 ? '' :
         `<div style="--c:${t.color}"><img alt="" src="${iconURL(have[0])}"><span class="chip"${G.sets[t.id] ? ` style="background:${t.color};color:#07070a"` : ''}>${G.sets[t.id] ? 'SET' : have.length + '/3'}</span><p><b>${t.name}</b><span>${t.desc}</span></p></div>`; }).join('') +
-      (G.toasters ? `<div style="--c:#8a8aa0"><img alt="" src="${iconURL('junk')}"><span class="chip">×${G.toasters}</span><p><b>TOASTERS</b><span>Start every round with $${10 * G.toasters} in the pot.</span></p></div>` : '');
+      (G.toasters ? `<div style="--c:#8a8aa0"><img alt="" src="${iconURL('junk')}"><span class="chip">×${G.toasters}</span><p><b>${G.toasters >= 5 ? 'BREAKFAST CLUB' : 'TOASTERS'}</b><span>Start every round with $${(G.toasters >= 5 ? 50 : 10) * G.toasters} in the pot.${G.toasters < 5 ? ' Five are worth $50 each.' : ''}</span></p></div>` : '');
     $('ovKit').hidden = false; pausedUI = true;
   };
   $('kitClose').onclick = () => { $('ovKit').hidden = true; pausedUI = false; };
@@ -2420,6 +2449,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     if (crateShow) { drawCrateShow(dt); return; }
     if (live) G.elapsed = (G.elapsed || 0) + dt;
     const onWheel = G.phase === 'load' || G.phase === 'wheel' || G.phase === 'pick' || G.phase === 'ready';
+    if (live && G.toasters >= 5 && !G._club) { G._club = true; trophy('toast'); toast('junk', '<b>BREAKFAST CLUB</b>TOASTERS NOW $50 EACH'); }
     if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').hidden = true; }
     else if (toasts.length) { const t = toasts.shift(); $('toastPic').src = iconURL(t[0]); $('toastText').innerHTML = t[1]; $('toast').hidden = false; toastT = 2.6; }
     if (live && G.newEvos && G.newEvos.length && !pausedUI && !spinAnim && $('ovCard').hidden && G.newEvos[0].set) {
@@ -2512,6 +2542,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   if (!stats.seen) stats.seen = {};
   if (!stats.codes) stats.codes = {};
   if (!stats.trophies) stats.trophies = {};
+  if (!stats.marks) stats.marks = {};
+  if (!stats.history) stats.history = [];
   if (stats.heatBest == null) stats.heatBest = stats.wins > 0 ? 0 : -1;
   if ((stats.v || 0) < 2) {       // the vault no longer sells wardrobe: price it by the gameplay unlocks actually owned
     stats.opened = D.UNLOCKS.filter(u => has(u.id)).length; stats.v = 2; save();

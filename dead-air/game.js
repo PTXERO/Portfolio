@@ -445,7 +445,7 @@
     if (this.is('reflect')) for (let i = 0; i < Math.floor(this.n / 2); i++) this.strip[this.n - 1 - i] = Object.assign({}, this.strip[i]);   // MIRROR IMAGE
     const tvs = this.strip.filter(q => q.kind === 'dead').length;
     const first = this.roundsLeft === this.rounds;
-    this.pot = { cash: 10 * this.toasters + (this.ch('fanmail') ? 20 : 0) + Math.min(400 * this.lv('residual'), Math.floor(this.prevScore * 0.05 * this.lv('residual'))),
+    this.pot = { cash: (this.toasters >= 5 ? 50 : 10) * this.toasters + (this.ch('fanmail') ? 20 : 0) + Math.min(400 * this.lv('residual'), Math.floor(this.prevScore * 0.05 * this.lv('residual'))),
       hype: 1 + 0.5 * this.perk('warm') + this.mods.hype + (this.sets.crowd ? 1 : 0) + (this.ch('lozenge') ? 0.5 : 0) + (this.dealIs('tvs') ? 2 : 0) + (this.is('high') ? 2 : 0) + (this.lv('static') ? tvs : 0), xm: 1, next2: false };
     this.buzzes = 0; this.bleeps = this.lv('bleep') + (this.sets.safety ? 1 : 0) + this.perk('censor') + this.mods.bleep + (this.is('censors') ? 1 : 0) + (this.ch('pass') && this.ep <= ACT ? 1 : 0);
     this.slowLeft = 1 + this.lv('slowmo') + this.mods.slow + (this.ch('battery') ? 1 : 0); this.slowT = 0;
