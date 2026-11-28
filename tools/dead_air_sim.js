@@ -74,7 +74,11 @@ for (let r = 0; r < RUNS; r++) {
     }
     g.openWheel(); g.takeOffer(g.pick(3));
     while (g.spins > 0) g.spin();
-    g.wheelDone(); g.pickFormat(g.pick(2));
+    g.wheelDone();
+    if (g.phase === 'pick') { const lanes = [0, 1, 2].filter(l => g.canReach(l)); g.pickFormat(lanes[g.pick(lanes.length)]); }
+    if (g.phase === 'event') g.answerEvent(g.rand() < 0.5);
+    while (g.phase === 'wheel' && g.spins > 0) g.spin();
+    g.wheelDone();
   }
 }
 

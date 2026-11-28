@@ -216,7 +216,24 @@
     { id: 'budget', icon: 'budget',  max: 5, name: 'BIGGER BUDGET',      cost: l => [100000, 250000, 600000, 1500000, 4000000][l],          d: l => `Prizes +$${5 * l}.` },
     { id: 'trim',   icon: 'trim',    max: 3, name: 'LOADED WHEEL',       cost: l => [300000, 1250000, 4000000][l],          d: l => `${l} fewer toaster${l > 1 ? 's' : ''}.` },
     { id: 'censor', icon: 'bleep',   max: 2, name: 'CENSOR ON RETAINER', cost: l => [1000000, 5000000][l],       d: l => `${l} free bleep${l > 1 ? 's' : ''}.` },
-    { id: 'agent',  icon: 'gold',    max: 5, name: 'A BETTER AGENT',     cost: l => [150000, 400000, 1000000, 2500000, 6000000][l],          d: l => `+${20 * l}% prize money.` },
+    { id: 'agent',  icon: 'gold',    max: 5, name: 'BIGGER CUT',         cost: l => [150000, 400000, 1000000, 2500000, 6000000][l],          d: l => `+${20 * l}% prize money.` },
+  ];
+
+  // Heat: after a win, stack harder rules for more prize money. Level n has every rule up to n.
+  const HEAT = [
+    'Light 10% faster.', '-2 seconds on the clock.', '+1 dead air.', 'Targets +20%.', 'Interference from episode 1.',
+    'One fewer round.', 'Light another 10% faster.', 'Targets another +20%.', 'Another -2 seconds.', 'Another +1 dead air.',
+  ];
+  const HEAT_PAY = 0.15;        // extra prize money per heat level
+
+  // Backstage events: a choice with a trade-off, booked on the schedule.
+  const BACKSTAGE = [
+    { id: 'censor',  name: "THE CENSOR'S FAVOUR", a: ['+1 bleep a round. Next target +15%.', { bleep: 1, target: 1.15 }], b: ['Walk away.', {}] },
+    { id: 'envelope',name: 'A SPONSOR ENVELOPE',  a: ['+1 spin, +1 toaster.', { spins: 1, toasters: 1 }],                b: ['Walk away.', {}] },
+    { id: 'late',    name: 'THE HOST IS LATE',    a: ['+0.5 hype all season. -2s next episode.', { hype: 0.5, clock: -2 }], b: ['Not my problem.', {}] },
+    { id: 'props',   name: 'THE PROP CUPBOARD',   a: ['A random gimmick.', { gimmick: 1 }],                              b: ['+1 spin.', { spins: 1 }] },
+    { id: 'focus',   name: 'FOCUS GROUP',         a: ['Next target -15%.', { target: 0.85 }],                            b: ['+3s next episode.', { clock: 3 }] },
+    { id: 'union',   name: 'UNION BREAK',         a: ['+1 round next episode.', { rounds: 1 }],                          b: ['+1 slow-mo all season.', { slow: 1 }] },
   ];
 
   const byId = (list, id) => list.find(x => x.id === id);
@@ -239,7 +256,14 @@
     this.episodes = episodes === PILOT ? PILOT : EPISODES;
     this.elapsed = 0;           // seconds on air this run, kept by the UI
     this.n = N;                 // podiums on the strip right now
+    this.seed = seed == null ? null : seed >>> 0;
     this.rand = seed == null ? Math.random : mulberry(seed);
+    this.heat = Math.max(0, Math.min(HEAT.length, (opts && opts.heat) | 0));
+    this.code = (opts && opts.code) || null;                    // challenge code, if this is a shared season
+    this.mods = { bleep: 0, hype: 0, slow: 0 };                 // season-long changes from backstage events
+    this.nextMods = { target: 1, clock: 0, rounds: 0 };         // next episode only
+    this.epMods = { target: 1, clock: 0, rounds: 0 };
+    this.lane = 1; this.spinN = 0;
     this.who = who || 'rookie';
     this.ep = 0; this.total = 0;
     this.levels = {};
@@ -270,6 +294,13 @@
   };
   P.lv = function (id) { return this.levels[id] || 0; };
   P.perk = function (id) { return this.perks[id] || 0; };
+  // Restart the random stream for one named part of the season (only when the season has a seed).
+  P.reseed = function (tag) {
+    if (this.seed == null) return;
+    let h = this.seed;
+    for (const ch of String(tag)) h = Math.imul(h ^ ch.charCodeAt(0), 2654435761) >>> 0;
+    this.rand = mulberry(h);
+  };
   // Time can be won back, but only 10 seconds of it per round, so a round always ends.
   P.addTime = function (sec) { const add = Math.max(0, Math.min(sec, 10 - (this.timeAdded || 0))); this.timeAdded = (this.timeAdded || 0) + add; this.clock += add; };
   P.open = function (x) { return !x.lock || this.unlocked.has(x.id); };
@@ -279,12 +310,14 @@
   P.emit = function (o) { if (this.events.length < 2000) this.events.push(o); };
   P.later = function (dt, fn) { this.q.push({ at: this.t + dt, fn }); };
   P.target = function (ep) {
-    if (ep <= this.episodes) return TARGETS[ep - 1];
-    return Math.round(TARGETS[this.episodes - 1] * Math.pow(1.5, ep - this.episodes) / 100) * 100;
+    const base = ep <= this.episodes ? TARGETS[ep - 1] : TARGETS[this.episodes - 1] * Math.pow(1.5, ep - this.episodes);
+    const heat = (this.heat >= 4 ? 1.2 : 1) * (this.heat >= 8 ? 1.2 : 1);
+    const mod = ep === this.ep ? this.epMods.target : ep === this.ep + 1 ? this.nextMods.target : 1;
+    return Math.round(base * heat * mod / 50) * 50;
   };
   P.gain = function (id) { this.levels[id] = this.lv(id) + 1; };
   // Interference: from act two static strikes burn prizes off the strip, faster every episode.
-  P.stormEvery = function () { return this.ep <= ACT ? Infinity : Math.max(0.9, 5.5 - 0.3 * (this.ep - ACT - 1)) * (this.ch('plugs') ? 1.45 : 1); };
+  P.stormEvery = function () { return this.ep <= ACT && this.heat < 5 ? Infinity : Math.max(0.9, 5.5 - 0.3 * Math.max(0, this.ep - ACT - 1)) * (this.ch('plugs') ? 1.45 : 1); };
   // UNDERSTUDY: half of anything the storm or a rival takes still reaches the pot.
   P.salvage = function (i) { const q = this.strip[i]; if (this.lv('understudy')) this.pot.cash += Math.round((q.kind === 'cash' ? this.cashVal(q) : q.kind === 'gold' ? this.cashVal(q) * 5 : 40) / 2); };
   P.storm = function (dt) {
@@ -303,30 +336,34 @@
     return { v: 1, stage, who: this.who, perks: this.perks, episodes: this.episodes, ep: this.ep, levels: this.levels, wheel: this.wheel,
       n: this.n, spins: this.spins, toasters: this.toasters, best: this.best, banked: this.banked || 0, endless: this.endless,
       nextFormat: this.nextFormat || null, earned: this.earned || [], elapsed: this.elapsed, total: this.total,
-      unlocked: Array.from(this.unlocked), charm: this.charm };
+      unlocked: Array.from(this.unlocked), charm: this.charm, seed: this.seed, heat: this.heat, code: this.code,
+      mods: this.mods, nextMods: this.nextMods, lane: this.lane, spinN: this.spinN, nextSpecial: this.nextSpecial || null, mapSalt: this.mapSalt || 0 };
   };
   Game.restore = function (o) {
-    const g = new Game(null, o.who, o.perks, o.episodes, { unlocked: o.unlocked, charm: o.charm });
+    const g = new Game(o.seed == null ? null : o.seed, o.who, o.perks, o.episodes, { unlocked: o.unlocked, charm: o.charm, heat: o.heat, code: o.code });
+    ['mods', 'nextMods', 'lane', 'spinN', 'nextSpecial', 'mapSalt'].forEach(k => { if (o[k] != null) g[k] = o[k]; });
     ['ep', 'levels', 'wheel', 'spins', 'toasters', 'best', 'banked', 'endless', 'nextFormat', 'earned', 'elapsed', 'total'].forEach(k => { g[k] = o[k]; });
     g.phase = o.stage === 'wheel' ? 'cleared' : 'ready';
     return g;
   };
   P.is = function (id) { return !!this.format && this.format.id === id; };
   P.deadCount = function () {
-    return Math.max(1, Math.min(8, 1 + Math.ceil(this.ep / 3) + (this.is('goldnight') ? 1 : 0) + (this.is('censors') ? 2 : 0) + (this.dealIs('tvs') ? 2 : 0)) - (this.ch('foil') ? 1 : 0));
+    return Math.max(1, Math.min(8, 1 + Math.ceil(this.ep / 3) + (this.is('goldnight') ? 1 : 0) + (this.is('censors') ? 2 : 0) + (this.dealIs('tvs') ? 2 : 0) + (this.heat >= 3 ? 1 : 0) + (this.heat >= 10 ? 1 : 0)) - (this.ch('foil') ? 1 : 0));
   };
 
   // ── Episode / round ─────────────────────────────────────────────
   P.startEpisode = function (formatId) {
     this.ep++;
     this.total = 0;
+    this.epMods = this.nextMods; this.nextMods = { target: 1, clock: 0, rounds: 0 };
     this.format = byId(FORMATS, formatId || this.nextFormat) || FORMATS[0];
     this.nextFormat = null;
+    this.reseed('e' + this.ep);
     this.lifeUsed = false; this.footUsed = false; this.prevScore = 0;
     this.deal = null; this.asked = false; this.ask = null; this.bonus = false; this.rivalScore = 0;
-    this.special = this.ep >= 2 && this.rand() < SPECIAL_CHANCE * (this.ch('mints') ? 2 : 1) ? EVENTS[this.pick(EVENTS.length)].id : null;
+    this.special = this.nextSpecial || null; this.nextSpecial = null;          // specials are booked on the schedule now
     if (this.forceSpecial !== undefined) { this.special = this.forceSpecial; this.forceSpecial = undefined; }   // for tests
-    this.rounds = this.is('onetake') ? 1 : Math.max(2, 3 + this.lv('encore') - (this.is('high') ? 1 : 0));
+    this.rounds = this.is('onetake') ? 1 : Math.max(2, 3 + this.lv('encore') - (this.is('high') ? 1 : 0) - (this.heat >= 6 ? 1 : 0) + this.epMods.rounds);
     this.roundsLeft = this.rounds;
     this.tokenOut = this.rand() < 0.5;        // a wheel token only turns up in about half the episodes
     this.startRound();
@@ -334,6 +371,7 @@
   };
 
   P.startRound = function () {
+    this.reseed('r' + this.ep + '.' + (this.rounds - this.roundsLeft));
     this.n = N + this.lv('stage');
     this.strip = [];
     for (let i = 0; i < this.n; i++) this.strip.push({ kind: 'cash', val: 10, state: 'up' });
@@ -351,11 +389,12 @@
     const tvs = this.strip.filter(q => q.kind === 'dead').length;
     const first = this.roundsLeft === this.rounds;
     this.pot = { cash: 10 * this.toasters + (this.ch('fanmail') ? 20 : 0) + Math.min(400 * this.lv('residual'), Math.floor(this.prevScore * 0.05 * this.lv('residual'))),
-      hype: 1 + 0.5 * this.perk('warm') + (this.ch('lozenge') ? 0.5 : 0) + (this.dealIs('tvs') ? 2 : 0) + (this.is('high') ? 2 : 0) + (this.lv('static') ? tvs : 0), xm: 1, next2: false };
-    this.buzzes = 0; this.bleeps = this.lv('bleep') + this.perk('censor') + (this.is('censors') ? 1 : 0) + (this.ch('pass') && this.ep <= ACT ? 1 : 0);
-    this.slowLeft = 1 + this.lv('slowmo') + (this.ch('battery') ? 1 : 0); this.slowT = 0;
+      hype: 1 + 0.5 * this.perk('warm') + this.mods.hype + (this.ch('lozenge') ? 0.5 : 0) + (this.dealIs('tvs') ? 2 : 0) + (this.is('high') ? 2 : 0) + (this.lv('static') ? tvs : 0), xm: 1, next2: false };
+    this.buzzes = 0; this.bleeps = this.lv('bleep') + this.perk('censor') + this.mods.bleep + (this.is('censors') ? 1 : 0) + (this.ch('pass') && this.ep <= ACT ? 1 : 0);
+    this.slowLeft = 1 + this.lv('slowmo') + this.mods.slow + (this.ch('battery') ? 1 : 0); this.slowT = 0;
     this.clockMax = Math.max(6, (this.is('onetake') ? 40 : ROUND_TIME) + 4 * this.lv('clock') + this.perk('time') - (this.dealIs('time') ? 5 : 0) +
-      (this.ch('watch') ? 2 : 0) + (this.ch('script') && first ? 4 : 0) + (this.lv('telethon') ? 8 : 0));
+      (this.ch('watch') ? 2 : 0) + (this.ch('script') && first ? 4 : 0) + (this.lv('telethon') ? 8 : 0) +
+      this.epMods.clock - (this.heat >= 2 ? 2 : 0) - (this.heat >= 9 ? 2 : 0));
     this.clock = this.clockMax; this.timeAdded = 0; this.shrinkT = 4; this.shrinkSide = 0; this.jitT = 1.2;
     this.stormT = this.stormEvery();
     this.streak = 0; this.inBuzz = false;
@@ -393,7 +432,7 @@
   P.isUp = function (i) { const p = this.strip[i]; return !!p && p.state === 'up' && p.kind !== 'dead'; };
   P.upList = function () { const o = []; for (let i = 0; i < this.n; i++) if (this.isUp(i)) o.push(i); return o; };
   P.speed = function () {                                   // podiums per second
-    return (3.6 + 0.24 * Math.min(this.ep, 18)) * (this.lv('slowburn') ? 0.5 : 1) * (1 + (this.lv('steady') ? 0 : (this.lv('slowburn') ? 0.18 : 0.09) * this.buzzes)) *
+    return (3.6 + 0.24 * Math.min(this.ep, 18)) * (1 + (this.heat >= 1 ? 0.1 : 0) + (this.heat >= 7 ? 0.1 : 0)) * (this.lv('slowburn') ? 0.5 : 1) * (1 + (this.lv('steady') ? 0 : (this.lv('slowburn') ? 0.18 : 0.09) * this.buzzes)) *
       (this.ch('coffee') ? 0.92 : 1) * (this.lv('telethon') ? 1.1 : 1) * (this.is('turbo') ? 1.35 : 1) * (this.dealIs('fast') ? 1.25 : 1) * (this.slowT > 0 ? 0.35 : 1);
   };
   // Slow-motion: a couple of seconds of a much slower light. A few uses per round.
@@ -737,6 +776,7 @@
 
   // Bonus round: one buzz at four wheel tokens among eight dead air. Nothing to lose.
   P.startBonus = function () {
+    this.reseed('b' + this.ep);
     this.n = N + this.lv('stage');
     this.strip = [];
     for (let i = 0; i < this.n; i++) this.strip.push({ kind: 'dead', val: 10, state: 'up' });
@@ -760,6 +800,7 @@
   // After an episode: pick one of three things to bolt onto the wheel.
   P.openWheel = function () {
     if (this.phase === 'won') this.endless = true;
+    this.reseed('o' + this.ep);
     const gs = this.shuffle(GIMMICKS.filter(g => common(g) && this.open(g) && this.lv(g.id) < this.capOf(g))).slice(0, 2);
     const ups = this.shuffle(WHEEL_UPS.filter(u => u.ok(this)));
     this.offers = gs.map(g => ({ type: 'g', def: g }));
@@ -796,6 +837,7 @@
   // Spin once. The result is decided and applied here; the UI just has to land on `index`.
   P.spin = function () {
     if (this.phase !== 'wheel' || this.spins <= 0) return null;
+    this.reseed('s' + this.ep + '.' + (this.spinN++));
     this.spins--;
     let r = this.rand() * this.wheelTotal(), index = 0;
     for (; index < this.wheel.length - 1; index++) { r -= this.wheel[index].w; if (r < 0) break; }
@@ -814,18 +856,57 @@
     return res;
   };
 
-  // Spins spent: now choose tomorrow's show from two formats.
+  // The schedule. Each episode has three bookings, one per lane; from your lane you can reach
+  // the same lane or the one next to it. A booking is a format, sometimes with something extra.
+  P.bookings = function (ep) {
+    const keep = this.rand;
+    if (this.seed != null) this.reseed('m' + ep); else this.rand = mulberry((this.mapSalt = this.mapSalt || (Math.random() * 1e9) | 0) + ep * 7919);
+    const formats = this.shuffle(FORMATS.filter(f => this.open(f))).slice(0, 3);
+    const extras = ['rival', 'vote', 'offer', 'ad', 'bonus', 'event', 'event'];
+    const chance = 0.3 * (this.ch('mints') ? 2 : 1);
+    const out = formats.map(f => ({ format: f.id, extra: ep >= 2 && this.rand() < chance ? extras[this.pick(extras.length)] : null }));
+    this.rand = keep;
+    return out;
+  };
+  P.canReach = function (lane) { return Math.abs(lane - this.lane) <= 1; };
+
+  // Spins spent: now choose your next booking.
   P.wheelDone = function () {
     if (this.phase !== 'wheel' || this.spins > 0) return false;
-    this.formats = this.shuffle(FORMATS.filter(f => f !== this.format && this.open(f))).slice(0, 2);
+    if (this.nextFormat) { this.phase = 'ready'; return true; }       // already booked (spins came from backstage)
+    this.choices = this.bookings(this.ep + 1);
     this.phase = 'pick';
     return true;
   };
-  P.pickFormat = function (i) {
-    if (this.phase !== 'pick' || !this.formats[i]) return false;
-    this.nextFormat = this.formats[i].id; this.formats = null;
-    this.phase = 'ready';
+  P.pickFormat = function (lane) {
+    const node = this.phase === 'pick' && this.choices && this.choices[lane];
+    if (!node || !this.canReach(lane)) return false;
+    this.lane = lane; this.choices = null;
+    this.nextFormat = node.format;
+    this.nextSpecial = EVENTS.some(e => e.id === node.extra) ? node.extra : null;
+    if (node.extra === 'event') {                 // something happens backstage first
+      this.reseed('v' + this.ep);
+      this.event = BACKSTAGE[this.pick(BACKSTAGE.length)];
+      this.phase = 'event';
+    } else this.phase = 'ready';
     return true;
+  };
+  P.answerEvent = function (takeA) {
+    if (this.phase !== 'event') return null;
+    const fx = (takeA ? this.event.a : this.event.b)[1], res = { fx, got: null };
+    if (fx.bleep) this.mods.bleep += fx.bleep;
+    if (fx.hype) this.mods.hype += fx.hype;
+    if (fx.slow) this.mods.slow += fx.slow;
+    if (fx.target) this.nextMods.target *= fx.target;
+    if (fx.clock) this.nextMods.clock += fx.clock;
+    if (fx.rounds) this.nextMods.rounds += fx.rounds;
+    if (fx.spins) this.spins += fx.spins;
+    if (fx.toasters) this.toasters += fx.toasters;
+    if (fx.gimmick) { const pool = GIMMICKS.filter(g => common(g) && this.open(g) && this.lv(g.id) < this.capOf(g)); if (pool.length) { res.got = pool[this.pick(pool.length)]; this.gain(res.got.id); } }
+    this.event = null;
+    // Spins handed out backstage are spent on the wheel before going on air.
+    this.phase = this.spins > 0 ? 'wheel' : 'ready';
+    return res;
   };
 
   // Everything the Money Dump can hand out. tier decides how often a crate rolls it.
@@ -836,11 +917,13 @@
     XPRIZES.map(x => ({ id: x.id, cat: 'prize', tier: 'rare', name: x.name, desc: x.desc, icon: 'p_' + x.id })),
     CONTESTANTS.filter(c => c.lock).map(c => ({ id: c.id, cat: 'contestant', tier: 'legendary', name: c.name, desc: c.desc, icon: 'who' })),
     CHARMS.map(c => ({ id: c.id, cat: 'charm', tier: 'common', name: c.name, desc: c.desc, icon: c.id })),
-    LOOKS.map(l => ({ id: l.id, cat: 'look', tier: 'common', name: l.name, desc: '', icon: 'look', look: l })));
+    []);
+  // Wardrobe is bought directly in the dressing room.
+  const LOOK_PRICE = { theme: 75000, outfit: 30000, host: 40000, buzzer: 20000, confetti: 20000 };
   // Crate price: starts modest and climbs with every crate opened.
-  const cratePrice = opened => 50000 + 6000 * opened;
+  const cratePrice = opened => 60000 + 10000 * opened;
 
-  const api = { UNLOCKS, CHARMS, LOOKS, XPRIZES, cratePrice, Game, N, EPISODES, PILOT, ACT, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, EVENTS, byId };
+  const api = { UNLOCKS, CHARMS, LOOKS, LOOK_PRICE, XPRIZES, HEAT, HEAT_PAY, BACKSTAGE, cratePrice, Game, N, EPISODES, PILOT, ACT, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, EVENTS, byId };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DeadAir = api;
 })(typeof window !== 'undefined' ? window : globalThis);

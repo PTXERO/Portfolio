@@ -128,6 +128,34 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 #ovDump{background:#1a1238;justify-content:flex-start;}
 .row3{display:flex;gap:6px;width:100%;max-width:380px;margin:8px auto 0;}
 .row3 .big-btn{flex:1;margin:0;font-size:15px;letter-spacing:.06em;padding:11px 2px 9px;line-height:1.1;}
+.grid4{flex-wrap:wrap;}
+.grid4 .big-btn{flex:1 1 46%;}
+.opts{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:10px;}
+.heatinfo{font-family:var(--fmono);font-size:10px;letter-spacing:.08em;color:#ff9a2e;min-height:1.4em;margin-top:5px;}
+#heatBtn{color:#ff9a2e;border-color:#ff9a2e;}
+#codeIn{font-family:'Bungee','Bebas Neue',sans-serif;font-size:30px;letter-spacing:.12em;text-align:center;text-transform:uppercase;width:100%;max-width:300px;
+  padding:10px 6px;border:3px solid #150f24;border-radius:6px;background:#0d0a1c;color:#ffd24a;box-shadow:5px 5px 0 #150f24;outline:none;margin-bottom:4px;}
+#codeIn:focus{border-color:#ffd24a;}
+#ovDress,#ovCode{background:#1a1238;z-index:6;}
+#ovDress{justify-content:flex-start;padding-bottom:0;}
+#dressList{width:100%;}
+#dressInfo{flex:1;min-width:0;font-size:11px;line-height:1.4;color:#b9b9c6;}
+#dressInfo b{display:block;font-family:var(--fdisp);font-weight:400;font-size:17px;letter-spacing:.06em;color:#fff;line-height:1.1;}
+#dressInfo i{font-style:normal;color:#ffd24a;}
+#dressUse{background:#c8f542;color:#07070a;}
+.dgrid button.shop{opacity:.5;}
+.dgrid button .tagp{position:absolute;left:0;right:0;bottom:-1px;font-family:var(--fmono);font-size:7px;letter-spacing:.04em;color:#ffd24a;background:rgba(13,10,28,.85);}
+.cards.three .card{min-height:0;padding:8px 5px 9px;}
+.cards.three .card img{width:48px;height:48px;}
+.cards.three .card b{font-size:15px;}
+.cards.three .card p{font-size:10px;}
+.card:disabled{opacity:.3;cursor:not-allowed;transform:none;box-shadow:none;}
+.extra{display:flex;align-items:center;justify-content:center;gap:4px;margin-top:6px;font-family:var(--fmono);font-size:8.5px;letter-spacing:.06em;color:#07070a;background:#ffd24a;border-radius:3px;padding:2px 3px;}
+.extra img{width:18px!important;height:18px!important;margin:0!important;}
+.ahead{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%;margin-top:10px;}
+.ahead div{font-family:var(--fmono);font-size:8.5px;letter-spacing:.06em;line-height:1.5;color:#b9b9c6;border:1px dashed #4a3a90;border-radius:4px;padding:4px 2px;}
+.ahead div b{font-weight:400;color:#ffd24a;}
+.aheadlbl{font-family:var(--fmono);font-size:9px;letter-spacing:.2em;color:#8a8aa0;margin-top:12px;}
 #ovDump,#ovLog{padding-bottom:0;}
 #ovLog{background:#1a1238;justify-content:flex-start;z-index:7;}
 #logList{width:100%;}
@@ -197,12 +225,18 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       <div class="who" id="who"></div>
       <button class="big-btn" id="resume" hidden></button>
       <button class="big-btn" id="start">GO ON AIR</button>
-      <div class="row3">
-        <button class="big-btn alt" id="shopBtn">DRESSING ROOM</button>
-        <button class="big-btn alt" id="dumpBtn">MONEY DUMP</button>
+      <div class="row3 grid4">
+        <button class="big-btn alt" id="shopBtn">THE CONTRACT</button>
+        <button class="big-btn alt" id="dumpBtn">PRIZE VAULT</button>
+        <button class="big-btn alt" id="dressBtn">DRESSING ROOM</button>
         <button class="big-btn alt" id="logBtn">LOGBOOK</button>
       </div>
-      <button class="hdr-btn" id="modeBtn" style="margin-top:10px"></button>
+      <div class="opts">
+        <button class="hdr-btn" id="modeBtn"></button>
+        <button class="hdr-btn" id="heatBtn" hidden></button>
+        <button class="hdr-btn" id="codeBtn">CHALLENGE</button>
+      </div>
+      <div class="heatinfo" id="heatInfo"></div>
       <div class="money" id="money"></div>
       <div class="stats" id="stats"></div>
     </div>
@@ -216,7 +250,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     <div class="ov low" id="ovPick" hidden>
       <h1>TOMORROW'S SHOW</h1>
       <p class="sub" id="pickSub"></p>
-      <div class="cards two" id="pickList"></div>
+      <div class="cards three" id="pickList"></div>
+      <div class="aheadlbl">AFTER THAT</div>
+      <div class="ahead" id="pickAhead"></div>
     </div>
 
     <div class="ov" id="ovCard" hidden>
@@ -231,7 +267,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     <div class="ov" id="ovEnd" hidden></div>
 
     <div class="ov" id="ovDump" hidden>
-      <h1>MONEY DUMP</h1>
+      <h1>PRIZE VAULT</h1>
       <p class="sub" id="dumpSub"></p>
       <div id="dumpBox">
         <div class="crate" id="crate"><span>?</span></div>
@@ -257,8 +293,33 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       </div>
     </div>
 
-    <div class="ov" id="ovShop" hidden>
+    <div class="ov" id="ovDress" hidden>
       <h1>DRESSING ROOM</h1>
+      <p class="sub" id="dressSub"></p>
+      <div id="dressList"></div>
+      <div class="dumpbar">
+        <img alt="" id="dressPic" hidden>
+        <div id="dressInfo"></div>
+        <button id="dressUse" hidden></button>
+        <button id="dressClose">BACK</button>
+      </div>
+    </div>
+
+    <div class="ov" id="ovCode" hidden>
+      <h1>CHALLENGE</h1>
+      <p class="sub">SAME CODE, SAME SEASON</p>
+      <input id="codeIn" maxlength="10" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Challenge code">
+      <div class="opts">
+        <button class="hdr-btn" id="codeDaily">TODAY'S SHOW</button>
+        <button class="hdr-btn" id="codeRandom">NEW CODE</button>
+      </div>
+      <p class="sub" id="codeBest" style="min-height:1.6em"></p>
+      <button class="big-btn" id="codePlay">PLAY</button>
+      <button class="big-btn alt" id="codeClose">BACK</button>
+    </div>
+
+    <div class="ov" id="ovShop" hidden>
+      <h1>THE CONTRACT</h1>
       <p class="sub" id="shopSub"></p>
       <div class="kit shop" id="shopList"></div>
       <button class="big-btn" id="shopClose">BACK</button>
@@ -305,7 +366,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 
   // ── Saved stats ────────────────────────────────────────────────
   const KEY = 'deadair.stats';
-  let stats = { runs: 0, wins: 0, bestEp: 0, bestBank: 0, sound: true, who: 'rookie', money: 0, perks: {}, jackpot: 5000, unlocked: [], opened: 0, equip: {}, seen: {} };
+  let stats = { runs: 0, wins: 0, bestEp: 0, bestBank: 0, sound: true, who: 'rookie', money: 0, perks: {}, jackpot: 5000, unlocked: [], opened: 0, equip: {}, seen: {}, heat: 0, codes: {} };
   try { Object.assign(stats, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   const has = id => stats.unlocked.indexOf(id) >= 0;
   // Logbook: a gimmick or headliner is discovered the first time you get it, and stays discovered.
@@ -668,7 +729,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     if (!live) { if (G.phase === 'ask') G.answer(false); else if (G.phase !== 'sweep') startDemo(); return; }
     if (G.best > stats.bestBank) stats.bestBank = G.best;
     if (G.last && G.last.score > 0 && !G.endless) {      // endless is for glory: no prize money
-      const pay = Math.round(G.last.score * (1 + 0.2 * (stats.perks.agent || 0)) * (G.lv('charity') ? 1.5 : 1) * (G.ch('agent') ? 1.15 : 1));
+      const pay = Math.round(G.last.score * (1 + 0.2 * (stats.perks.agent || 0)) * (1 + D.HEAT_PAY * G.heat) * (G.lv('charity') ? 1.5 : 1) * (G.ch('agent') ? 1.15 : 1));
       stats.money = (stats.money || 0) + pay; runMoney += pay;
     }
     save();
@@ -687,7 +748,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 
   function onCleared() {
     stats.bestEp = Math.max(stats.bestEp, G.ep);
-    if (G.phase === 'won') { stats.wins++; if (G.episodes === D.EPISODES) { stats.lastTime = Math.round(G.elapsed); stats.bestTime = Math.min(stats.bestTime || 1e9, stats.lastTime); } }
+    if (G.phase === 'won') { stats.wins++; if (!G.code) stats.heatBest = Math.max(stats.heatBest, G.heat); if (G.episodes === D.EPISODES) { stats.lastTime = Math.round(G.elapsed); stats.bestTime = Math.min(stats.bestTime || 1e9, stats.lastTime); } }
     save();
     shout(G.phase === 'won' ? 'SEASON WRAPPED!' : 'EPISODE CLEARED!', C.lime, 60, 1.6);
     for (let i = 0; i < 4; i++) confetti(rnd(60, 480), 160, 45, 60, 260);
@@ -709,7 +770,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     $('cardKick').textContent = o.kick || 'TONIGHT ONLY';
     $('cardIcon').src = iconURL(o.icon);
     $('cardTitle').textContent = o.title; $('cardTitle').style.color = o.color || '';
-    $('cardText').textContent = o.text;
+    if (o.html) $('cardText').innerHTML = o.html; else $('cardText').textContent = o.text;
     $('cardYes').textContent = o.yes; $('cardNo').textContent = o.no || ''; $('cardNo').hidden = !o.no;
     const close = fn => () => { $('ovCard').hidden = true; pausedUI = false; if (fn) fn(); syncPads(); };
     $('cardYes').onclick = close(o.onYes); $('cardNo').onclick = close(o.onNo);
@@ -757,18 +818,44 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     syncPads();
   });
 
+  const EXTRA = { rival: 'RIVAL · +1 SPIN', vote: 'AUDIENCE VOTE', offer: "HOST'S OFFER", ad: 'SPONSOR DEAL', bonus: 'BONUS ROUND', event: 'BACKSTAGE' };
   function showPick() {
-    $('pickSub').textContent = 'EPISODE ' + (G.ep + 1) + ' · TARGET ' + fmt(G.target(G.ep + 1));
-    $('pickList').innerHTML = G.formats.map((f, i) => `<button class="card" data-format="${i}" style="--c:${f.color}">
-        <img alt="" src="${iconURL('f_' + f.id)}"><span class="k">SHOW FORMAT</span><b>${f.name}</b><p>${f.desc}</p>
-        ${f.spins ? '<span class="plus">+' + f.spins + ' SPIN IF YOU CLEAR IT</span>' : ''}</button>`).join('');
+    const ep = G.ep + 1, after = G.bookings(ep + 1);
+    $('pickSub').textContent = 'EPISODE ' + ep + ' · TARGET ' + fmt(G.target(ep));
+    $('pickList').className = 'cards three';
+    $('pickList').innerHTML = G.choices.map((n, i) => {
+      const f = D.byId(D.FORMATS, n.format), ok = G.canReach(i);
+      return `<button class="card" data-format="${i}" style="--c:${f.color}" ${ok ? '' : 'disabled'}>
+        <img alt="" src="${iconURL('f_' + f.id)}"><b>${f.name}</b><p>${f.desc}</p>
+        ${f.spins ? '<span class="plus">+' + f.spins + ' SPIN</span>' : ''}
+        ${n.extra ? `<span class="extra"><img alt="" src="${iconURL('e_' + n.extra)}">${EXTRA[n.extra]}</span>` : ''}</button>`;
+    }).join('') ;
+    $('pickAhead').innerHTML = after.map(n => `<div>${D.byId(D.FORMATS, n.format).name}${n.extra ? '<br><b>' + EXTRA[n.extra] + '</b>' : ''}</div>`).join('');
     $('ovPick').hidden = false; $('result').hidden = true; $('padWheel').hidden = true;
   }
+  // After a booking (and anything backstage), either spend spins or go on air.
+  function afterBooking() {
+    if (G.phase === 'event') return showEvent();
+    if (G.phase === 'wheel' && G.spins > 0) { $('result').hidden = false; $('result').innerHTML = `<b>${G.spins} SPIN${G.spins === 1 ? '' : 'S'}</b>`; syncPads(); return; }
+    if (G.phase === 'wheel') G.wheelDone();
+    beginEpisode();
+  }
+  function showEvent() {
+    const ev = G.event;
+    showCard({ icon: 'e_event', kick: 'BACKSTAGE', title: ev.name, color: '#ffd24a', html: '1 · ' + ev.a[0] + '<br>2 · ' + ev.b[0], yes: 'OPTION 1', no: 'OPTION 2',
+      onYes: () => resolveEvent(true), onNo: () => resolveEvent(false) });
+  }
+  function resolveEvent(a) {
+    const r = G.answerEvent(a);
+    if (r && r.got) { discover(r.got.id, G.lv(r.got.id)); save(); badgeFx.set(r.got.id, 0); shout(r.got.name + '!', r.got.color, 50, 1.4); }
+    sfx.chime(3);
+    afterBooking();
+  }
   $('pickList').addEventListener('click', e => {
-    const b = e.target.closest('[data-format]'); if (!b) return;
+    const b = e.target.closest('[data-format]'); if (!b || b.disabled) return;
     if (!G.pickFormat(+b.dataset.format)) return;
     $('ovPick').hidden = true; sfx.chime(3);
-    beginEpisode();
+    afterBooking();
   });
 
   function wedgeSpans() {
@@ -777,7 +864,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   }
   function doSpin() {
     if (spinAnim) return;
-    if (G.spins <= 0) { if (G.wheelDone()) showPick(); return; }
+    if (G.spins <= 0) { if (G.wheelDone()) { if (G.phase === 'pick') showPick(); else beginEpisode(); } return; }
     const spans = wedgeSpans(), res = G.spin(); if (!res) return;
     const s = spans[res.index], mid = s.a0 + (s.a1 - s.a0) * res.frac;
     const base = -Math.PI / 2 - mid;
@@ -806,15 +893,24 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     syncPads();
   }
 
+  function codeResult(won) {
+    if (!G.code) return '';
+    const eps = won ? Math.max(G.episodes, G.ep) : G.ep - 1, banked = G.banked || 0, old = stats.codes[G.code];
+    if (!old || eps > old.eps || (eps === old.eps && banked > old.banked)) { stats.codes[G.code] = { eps, banked }; save(); }
+    const line = 'DEAD//AIR ' + G.code + ' · CLEARED ' + eps + ' · BANKED ' + fmt(banked);
+    setTimeout(() => { const c = $('copyRes'); if (c) c.onclick = () => { const done = () => { c.textContent = 'COPIED'; }; try { navigator.clipboard.writeText(line).then(done, () => { c.textContent = line; }); } catch (e) { c.textContent = line; } }; }, 0);
+    return `<div class="row"><span>CODE</span><b style="color:#ffd24a">${G.code}</b></div><div class="row"><span>RESULT</span><b>CLEARED ${eps} · ${fmt(banked)}</b></div>`;
+  }
   function showEnd(won) {
     const kit = Object.values(G.levels).reduce((a, b) => a + b, 0);
     $('ovEnd').innerHTML = won
       ? `<h1>SEASON WRAPPED</h1>
-         <div class="rows"><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>RUN TIME</span><b>${clockText(G.elapsed)}</b></div><div class="row"><span>PRIZE MONEY BANKED</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
+         <div class="rows"><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>RUN TIME</span><b>${clockText(G.elapsed)}</b></div>${codeResult(true)}<div class="row"><span>PRIZE MONEY BANKED</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
          <button class="big-btn" id="endA">PLAY ON FOR FUN</button><button class="big-btn alt" id="endB">FINISH</button>`
       : `<h1 class="bad">CANCELLED</h1><p class="sub">EPISODE ${G.ep} · ${fmt(G.total)} / ${fmt(G.target(G.ep))}</p>
-         <div class="rows"><div class="row"><span>EPISODES CLEARED</span><b>${G.ep - 1}</b></div><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>RUN TIME</span><b>${clockText(G.elapsed)}</b></div><div class="row"><span>PRIZE MONEY EARNED</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
+         <div class="rows"><div class="row"><span>EPISODES CLEARED</span><b>${G.ep - 1}</b></div><div class="row"><span>BIGGEST BANK</span><b>${fmt(G.best)}</b></div><div class="row"><span>GIMMICK LEVELS</span><b>${kit}</b></div><div class="row"><span>RUN TIME</span><b>${clockText(G.elapsed)}</b></div>${codeResult(false)}<div class="row"><span>PRIZE MONEY EARNED</span><b style="color:#ffd24a">+$${fmt(runMoney)}</b></div></div>
          <button class="big-btn" id="endA">NEW RUN</button><button class="big-btn alt" id="endB">BACK TO TITLE</button>`;
+    if (G.code) $('ovEnd').insertAdjacentHTML('beforeend', '<button class="hdr-btn" id="copyRes" style="margin-top:12px">COPY RESULT</button>');
     $('ovEnd').hidden = false; syncPads();
     $('endA').onclick = () => { $('ovEnd').hidden = true; won ? showLoad() : newRun(); };
     $('endB').onclick = () => { clearRun(); toTitle(); };
@@ -839,12 +935,17 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const sp = G.special && D.byId(D.EVENTS, G.special);
     if (sp && live) showCard({ icon: 'e_' + sp.id, title: sp.name, text: sp.desc, color: sp.color, yes: 'ON WITH THE SHOW' });
   }
-  function newRun() {
+  // A challenge code is hashed into a seed. Coded seasons use a standard kit so two people get the same show.
+  function codeSeed(code) { let h = 2166136261; for (const ch of code) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0; return h || 1; }
+  function newRun(code) {
     live = true; resetFx();
-    G = new D.Game(null, stats.who, stats.perks, stats.mode === D.PILOT ? D.PILOT : D.EPISODES, { unlocked: stats.unlocked, charm: stats.equip.charm });
+    code = typeof code === 'string' && code ? code : null;
+    G = code
+      ? new D.Game(codeSeed(code), 'rookie', {}, D.EPISODES, { unlocked: D.UNLOCKS.map(u => u.id), charm: null, heat: 0, code })
+      : new D.Game(null, stats.who, stats.perks, stats.mode === D.PILOT ? D.PILOT : D.EPISODES, { unlocked: stats.unlocked, charm: stats.equip.charm, heat: Math.min(stats.heat || 0, stats.heatBest + 1) });
     Object.keys(G.levels).forEach(id => discover(id, G.levels[id]));
     stats.runs++; save(); runMoney = 0;
-    ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovShop', 'ovCard', 'ovDump'].forEach(id => { $(id).hidden = true; });
+    ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovShop', 'ovCard', 'ovDump', 'ovDress', 'ovCode', 'ovLog'].forEach(id => { $(id).hidden = true; });
     $('quit').hidden = false; $('kitBtn').hidden = false;
     // HEAD START: spin the wheel before the first episode.
     if (G.perk('head')) { G.spins = G.perk('head'); showLoad(); } else beginEpisode();
@@ -857,7 +958,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     syncPads();
   }
   function toTitle() {
-    ['ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovCard'].forEach(id => { $(id).hidden = true; });
+    ['ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovCard', 'ovDress', 'ovCode'].forEach(id => { $(id).hidden = true; });
     $('quit').hidden = true; $('kitBtn').hidden = true; pausedUI = false;
     paintTitle(); $('ovTitle').hidden = false;
     startDemo();
@@ -882,11 +983,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   });
 
   // ── Money Dump: pay for a crate, get one thing you do not own yet ──
-  const CATS = [['gimmick', 'GIMMICKS'], ['headliner', 'HEADLINERS'], ['format', 'SHOW FORMATS'], ['prize', 'STRIP PRIZES'], ['contestant', 'CONTESTANTS'], ['charm', 'LUCKY CHARMS · CARRY ONE'], ['look', 'WARDROBE']];
+  const CATS = [['gimmick', 'GIMMICKS'], ['headliner', 'HEADLINERS'], ['format', 'SHOW FORMATS'], ['prize', 'STRIP PRIZES'], ['contestant', 'CONTESTANTS'], ['charm', 'LUCKY CHARMS']];
   const uIcon = u => u.cat === 'contestant' ? 'who_' + u.id : u.cat === 'look' ? u.id : u.icon;
   const cratePrice = () => Math.round(D.cratePrice(stats.opened || 0) * (stats.equip.charm === 'ch_coupon' && has('ch_coupon') ? 0.9 : 1));
   let lastGot = null, dumpBusy = false;
-  function equipSlot(u) { return u.cat === 'charm' ? 'charm' : u.cat === 'look' ? u.look.slot : null; }
+  function equipSlot(u) { return null; }     // nothing is equipped from the vault any more
   function paintDump() {
     const left = D.UNLOCKS.filter(u => !has(u.id)).length, price = cratePrice();
     $('dumpSub').innerHTML = `<b style="color:#ffd24a">$${fmt(stats.money || 0)}</b> · ${D.UNLOCKS.length - left}/${D.UNLOCKS.length}`;
@@ -1080,7 +1181,67 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('logBtn2').onclick = () => openLog(true);
   $('logClose').onclick = () => { $('ovLog').hidden = true; };
 
+  // ── Dressing room: buy wardrobe, choose your charm ─────────────
+  const SLOTS = [['theme', 'SETS'], ['outfit', 'OUTFITS'], ['host', 'HOST JACKETS'], ['buzzer', 'BUZZERS'], ['confetti', 'CONFETTI']];
+  let dressPick = null;
+  function dressItem(id) {
+    const look = D.byId(D.LOOKS, id);
+    if (look) return { id, name: look.name, desc: '', slot: look.slot, price: D.LOOK_PRICE[look.slot], icon: id };
+    const ch = D.byId(D.CHARMS, id);
+    return { id, name: ch.name, desc: ch.desc, slot: 'charm', price: 0, icon: id };
+  }
+  function paintDress() {
+    $('dressSub').innerHTML = `<b style="color:#ffd24a">$${fmt(stats.money || 0)}</b>`;
+    const tile = it => {
+      const own = has(it.id), on = stats.equip[it.slot] === it.id;
+      return `<button data-d="${it.id}" class="${own ? '' : 'shop'}${on ? ' on' : ''}${dressPick === it.id ? ' sel' : ''}"><img alt="${it.name}" src="${iconURL(it.icon)}">${own ? '' : `<span class="tagp">$${it.price / 1000}K</span>`}</button>`;
+    };
+    const charms = D.CHARMS.filter(c => has(c.id));
+    $('dressList').innerHTML =
+      `<div class="dsec">LUCKY CHARM · CARRY ONE · ${charms.length}/${D.CHARMS.length}</div><div class="dgrid">` +
+        (charms.length ? charms.map(c => tile(dressItem(c.id))).join('') : '<button class="lock" disabled>?</button>') + '</div>' +
+      SLOTS.map(([slot, label]) => `<div class="dsec">${label}</div><div class="dgrid">` + D.LOOKS.filter(l => l.slot === slot).map(l => tile(dressItem(l.id))).join('') + '</div>').join('');
+    const it = dressPick && dressItem(dressPick);
+    $('dressPic').hidden = !it; if (it) $('dressPic').src = iconURL(it.icon);
+    if (!it) { $('dressInfo').innerHTML = charms.length ? 'TAP AN ITEM' : 'CHARMS ARE FOUND IN THE PRIZE VAULT'; $('dressUse').hidden = true; return; }
+    const own = has(it.id), on = stats.equip[it.slot] === it.id;
+    $('dressInfo').innerHTML = `<b>${it.name}</b>${it.desc}${own ? '' : (it.desc ? '<br>' : '') + '<i>$' + fmt(it.price) + '</i>'}`;
+    $('dressUse').hidden = false; $('dressUse').textContent = own ? (on ? 'REMOVE' : 'USE') : 'BUY';
+    $('dressUse').disabled = !own && (stats.money || 0) < it.price;
+    $('dressUse').style.filter = $('dressUse').disabled ? 'grayscale(1) brightness(.5)' : '';
+  }
+  $('dressList').addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (b) { dressPick = b.dataset.d; paintDress(); } });
+  $('dressUse').onclick = () => {
+    const it = dressPick && dressItem(dressPick); if (!it) return;
+    if (!has(it.id)) { if ((stats.money || 0) < it.price) return; stats.money -= it.price; stats.unlocked.push(it.id); stats.equip[it.slot] = it.id; }
+    else stats.equip[it.slot] = stats.equip[it.slot] === it.id ? null : it.id;
+    save(); applyLooks(); live = true; sfx.chime(3); live = false; paintDress();
+  };
+  $('dressBtn').onclick = () => { dressPick = null; paintDress(); $('ovDress').hidden = false; $('ovDress').scrollTop = 0; };
+  $('dressClose').onclick = () => { $('ovDress').hidden = true; paintTitle(); };
+
+  // ── Heat ───────────────────────────────────────────────────────
+  $('heatBtn').onclick = () => { const max = Math.min(D.HEAT.length, stats.heatBest + 1); stats.heat = ((stats.heat || 0) + 1) % (max + 1); save(); paintTitle(); };
+
+  // ── Challenge codes ────────────────────────────────────────────
+  const cleanCode = v => v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+  function paintCode() {
+    const c = cleanCode($('codeIn').value), best = stats.codes[c];
+    $('codeBest').textContent = best ? 'YOUR BEST: CLEARED ' + best.eps + ' · ' + fmt(best.banked) : '';
+    $('codePlay').disabled = c.length < 3; $('codePlay').style.filter = c.length < 3 ? 'grayscale(1) brightness(.5)' : '';
+  }
+  $('codeIn').addEventListener('input', () => { $('codeIn').value = cleanCode($('codeIn').value); paintCode(); });
+  $('codeDaily').onclick = () => { const d = new Date(); $('codeIn').value = 'D' + d.getUTCFullYear() + String(d.getUTCMonth() + 1).padStart(2, '0') + String(d.getUTCDate()).padStart(2, '0'); paintCode(); };
+  $('codeRandom').onclick = () => { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let c = ''; for (let i = 0; i < 6; i++) c += A[(Math.random() * A.length) | 0]; $('codeIn').value = c; paintCode(); };
+  $('codeBtn').onclick = () => { paintCode(); $('ovCode').hidden = false; };
+  $('codeClose').onclick = () => { $('ovCode').hidden = true; };
+  $('codePlay').onclick = () => { const c = cleanCode($('codeIn').value); if (c.length >= 3) { clearRun(); newRun(c); } };
+
   function paintTitle() {
+    const maxHeat = Math.min(D.HEAT.length, stats.heatBest + 1), heat = Math.min(stats.heat || 0, maxHeat);
+    $('heatBtn').hidden = stats.heatBest < 0;
+    $('heatBtn').textContent = 'HEAT ' + heat + (heat ? ' · +' + Math.round(heat * D.HEAT_PAY * 100) + '% PAY' : '');
+    $('heatInfo').textContent = heat ? D.HEAT.slice(0, heat).join(' ').toUpperCase() : '';
     const sv = savedRun();
     $('resume').hidden = !sv;
     if (sv) $('resume').textContent = 'RESUME · EPISODE ' + (sv.stage === 'wheel' ? sv.ep + ' WHEEL' : sv.ep + 1) + ' · ' + clockText(sv.elapsed);
@@ -1140,7 +1301,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     else if (k === 's') doSlow();
   });
 
-  $('start').onclick = newRun;
+  $('start').onclick = () => newRun();
   $('resume').onclick = resumeRun;
   $('modeBtn').onclick = () => { stats.mode = stats.mode === D.PILOT ? D.EPISODES : D.PILOT; save(); paintTitle(); };
   $('who').addEventListener('click', e => { const b = e.target.closest('[data-who]'); if (b) { stats.who = b.dataset.who; save(); paintTitle(); } });
@@ -1230,7 +1391,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     font(30); text(String(G.ep), 18, 40, '#fff');
     const ew = ctx.measureText(String(G.ep)).width;
     font(13); text(G.ep > G.episodes ? 'ENDLESS' : '/ ' + G.episodes, 24 + ew, 44, '#8a8aa0');
-    font(10, 'mono'); text((G.ep > G.episodes ? 'ENDLESS' : 'ACT ' + ROMAN[G.act()]) + ' · ' + clockText(G.elapsed), W - 18, 57, '#b9b9c6', 'right');
+    font(10, 'mono'); text((G.ep > G.episodes ? 'ENDLESS' : 'ACT ' + ROMAN[G.act()]) + ' · ' + clockText(G.elapsed) + (G.heat ? ' · HEAT ' + G.heat : '') + (G.code ? ' · ' + G.code : ''), W - 18, 57, G.heat ? '#ff9a2e' : '#b9b9c6', 'right');
     font(11, 'mono'); text('ROUNDS', W - 18, 18, '#8a8aa0', 'right');
     for (let i = 0; i < Math.min(6, G.rounds); i++) {
       const x = W - 28 - i * 20, used = i < G.rounds - G.roundsLeft, now = i === G.rounds - G.roundsLeft && G.phase !== 'tally';
@@ -1976,6 +2137,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       case 'e_bonus':   // a starburst
         c.fillStyle = '#ffd24a'; c.beginPath(); for (let k = 0; k < 20; k++) { const r = k % 2 ? 12 : 19, a = k * Math.PI / 10; c.lineTo(Math.cos(a) * r, Math.sin(a) * r); } c.closePath(); c.fill();
         circ(0, 0, 10, '#e8203a'); word('+1', 13, '#fff', 1); break;
+      case 'e_event':   // a stage door
+        box(-13, -18, 26, 36, 2, '#8a5524'); box(-10, -15, 20, 30, 1, '#b9783a'); circ(6, 2, 2.5, '#ffd24a'); c.fillStyle = '#ffd24a'; c.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 3 : 7, a = -Math.PI / 2 + k * Math.PI / 5; c.lineTo(Math.cos(a) * r, -6 + Math.sin(a) * r); } c.fill(); break;
       case 'f_classic': // ticket
         box(-17, -10, 34, 20, 3, '#c8f542'); circ(-17, 0, 4, '#07070a'); circ(17, 0, 4, '#07070a'); line([[6, -8], [6, 8]], '#07070a', 1.5); word('TV', 13, '#07070a', 1); break;
       case 'f_turbo':   // fast forward
@@ -2178,6 +2341,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   if (!Array.isArray(stats.unlocked)) stats.unlocked = [];
   if (!stats.equip) stats.equip = {};
   if (!stats.seen) stats.seen = {};
+  if (!stats.codes) stats.codes = {};
+  if (stats.heatBest == null) stats.heatBest = stats.wins > 0 ? 0 : -1;
+  if ((stats.v || 0) < 2) {       // the vault no longer sells wardrobe: price it by the gameplay unlocks actually owned
+    stats.opened = D.UNLOCKS.filter(u => has(u.id)).length; stats.v = 2; save();
+  }
   applyLooks();
   resize(); paintTitle(); startDemo();
   requestAnimationFrame(frame);
