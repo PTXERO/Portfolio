@@ -453,7 +453,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   </div>
 </div>
 
-<script src="game.js?v=1795878599"></script>
+<script src="game.js?v=1795878762"></script>
 <script>
 (function(){
   const D = DeadAir, $ = id => document.getElementById(id);
@@ -1173,7 +1173,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('pickList').addEventListener('click', e => {
     const b = e.target.closest('[data-format]'); if (!b || b.disabled) return;
     if (!G.pickFormat(+b.dataset.format)) return;
-    if (trkEp) trkEp.pick = G.lane + ':' + G.nextFormat + (G.nextSpecial ? '+' + G.nextSpecial : G.phase === 'event' ? '+event' : ''); trkEp.pickSecs = trkEp._tPick ? r1((Date.now() - trkEp._tPick) / 1000) : 0; trkEp.betNext = pickStake || 0; trackSave(); teleEpisode(trkEp);
+    if (trkEp) {
+      trkEp.pick = G.lane + ':' + G.nextFormat + (G.nextSpecial ? '+' + G.nextSpecial : G.phase === 'event' ? '+event' : '');
+      trkEp.pickSecs = trkEp._tPick ? r1((Date.now() - trkEp._tPick) / 1000) : 0; trkEp.betNext = pickStake || 0; trackSave(); teleEpisode(trkEp);
+    }
     if (pickStake && G.setWager(pickStake)) { stats.money -= pickStake; save(); }
     $('ovPick').hidden = true; sfx.chime(3);
     afterBooking();
@@ -2989,7 +2992,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   applyLooks();
   // Pick up a newer build without the player having to know about browser caches.
   // Only ever checked from the title screen, so a run in progress is never interrupted.
-  const BUILD = '1795878599';
+  const BUILD = '1795878762';
   let buildChecked = 0;
   function checkBuild() {
     if (live || !/^https?:$/.test(location.protocol) || Date.now() - buildChecked < 60000) return;
