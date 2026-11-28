@@ -272,7 +272,7 @@
     { id: 'perfect', n: 6,  name: '6 PERFECTS' },
     { id: 'gold',    n: 3,  name: 'WIN 3 GOLD' },                 // only offered when there is gold on the strip
     { id: 'clear',   n: 1,  name: 'CLEAR THE STAGE' },
-    { id: 'hype',    n: 4,  name: 'WIN 4 HYPE PRIZES' },
+    { id: 'hype',    n: 2,  name: 'WIN 2 HYPE PRIZES' },
     { id: 'prizes',  n: 20, name: 'WIN 20 PRIZES' },
   ];
   const GIG_PAY = 3000;         // per episode number
@@ -526,7 +526,8 @@
     list.forEach(p => { p.kind = 'cash'; p.val = vals[this.pick(vals.length)]; p.state = 'up'; if (this.evo.gold && p.val === 50) p.kind = 'gold'; });
     let k = 0;
     const take = (n, kind) => { for (let i = 0; i < n && k < list.length; i++) list[k++].kind = kind; };
-    if (!this.is('cashonly')) take(Math.min(2, list.length - 1), 'hype');
+    // Hype stars are not a given: about half of stages get one, and two is rare.
+    if (!this.is('cashonly')) { const r = this.rand(); take(Math.min(r < 0.12 ? 2 : r < 0.6 ? 1 : 0, list.length - 1), 'hype'); }
     if (!this.tokenOut && list.length > 3) { take(1, 'spin'); this.tokenOut = true; }
     if (this.lv('jack') && !this.jackOut && list.length > 3) { take(1, 'jack'); this.jackOut = true; }   // one diamond a round
     take(this.lv('gold') + (this.sets.money ? 1 : 0) + (this.is('goldnight') ? 3 : 0) + (this.ch('tooth') ? 1 : 0), 'gold');
