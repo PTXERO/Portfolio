@@ -253,6 +253,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       <div class="cards three" id="pickList"></div>
       <div class="aheadlbl">AFTER THAT</div>
       <div class="ahead" id="pickAhead"></div>
+      <div class="aheadlbl" id="betLbl">SIDE BET · CLEAR IN ROUND 1 · PAYS DOUBLE</div>
+      <div class="opts" id="pickBet" style="margin-top:6px"></div>
     </div>
 
     <div class="ov" id="ovCard" hidden>
@@ -543,7 +545,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   let shake = 0, flashA = 0, flashC = '#fff', glitch = 0, excite = 0, time = 0, dark = 0;
   let callout = null, tally = null, shownTotal = 0, pausedUI = false, slam = 0, deskBump = 0, ballFlash = 0;
   const cannonFx = [0, 0], droneGo = [];
-  let shiftAnim = 0, slowFx = 0, coin = null, lastCombo = 0, lastTick = 0, waitBonus = false, rivalFx = 0;
+  let shiftAnim = 0, slowFx = 0, coin = null, lastCombo = 0, lastTick = 0, waitBonus = false, rivalFx = 0, bossFx = 0, pickStake = 0;
   let CONF = ['#c8f542', '#42d4f5', '#f542a8', '#f5a542', '#ffffff', '#ffd24a'];
   // Wardrobe: what the set and the people are wearing. Defaults, overridden by whatever is equipped.
   const LOOK0 = { wall: '#2a1c5c', ray: '#3a2880', floor: '#1d1444', curtain: '#d4244e', fold: '#9c1238', shirt: '#42d4f5', hair: '#6a3a1a', jacket: '#f542a8', buzzer: '#e8203a' };
@@ -601,6 +603,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         slam = 1; combo = 0; sfx.buzz();
         rings.push({ x: podX(ev.i), y: podY(ev.i) - 14, r: 8, to: 46, life: 0.3, max: 0.3, color: '#fff', w: 5 });
         if (ev.perfect && ev.hit) { float(podX(ev.i), podY(ev.i) - 62, 'PERFECT! ×2', '#fff', 22); sfx.perfect(); spark(podX(ev.i), podY(ev.i) - 14, '#fff', 16, 320, 0.5, 3); excite += 0.2; }
+        else if (ev.hit && G.boss && G.boss.id === 'critic' && !G.bonus) { float(podX(ev.i), podY(ev.i) - 62, 'MEH. HALF.', '#9d8cff', 17); bossFx = 1; }
         break;
       case 'win': {
         const x = podX(ev.i), y = podY(ev.i) - 16, col = C[ev.kind] || C.cash;
@@ -643,6 +646,16 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         break;
       }
       case 'jump': sfx.tick(1200); break;
+      case 'bossmove':
+        [ev.a, ev.b].forEach(i => { podFx[i] = 0; staticBurst(podX(i), podY(i) - 16, 10); });
+        bolt(BOSS.x - 10, BOSS.y - 20, podX(ev.a), podY(ev.a) - 16, '#e8203a');
+        float(podX(ev.a), podY(ev.a) - 44, 'CUT!', '#e8203a', 18); bossFx = 1; glitch = Math.max(glitch, 0.12); tone(240, 0.16, 'square', 0.05, 0, 120);
+        break;
+      case 'skim':
+        float(DESK.x - 70, DESK.y - 36, '-' + fmt(ev.cut), '#5fe08a', 20); bossFx = 1;
+        shots.push({ x0: DESK.x, y0: DESK.y - 30, x1: BOSS.x, y1: BOSS.y + 30, t: 0 }); sfx.tick(420); sfx.tick(300);
+        break;
+      case 'sharp': float(podX(ev.i), podY(ev.i) - 62, 'PERFECT! ×2', '#42d4f5', 18); spark(podX(ev.i), podY(ev.i) - 14, '#42d4f5', 10, 260, 0.4, 3); break;
       case 'echo': { const x = podX(ev.i), y = podY(ev.i) - 16; rings.push({ x, y, r: 8, to: 54, life: 0.4, max: 0.4, color: '#9d8cff', w: 5 }); rings.push({ x, y, r: 8, to: 80, life: 0.55, max: 0.55, color: '#9d8cff', w: 3 });
         float(x, y - 30, 'ECHO ' + (ev.val ? '+' + ev.val : '+' + ev.gain + ' HYPE'), '#9d8cff', 19); flyers.push({ x0: x, y0: y, t: 0, dur: 0.42, color: '#9d8cff' }); sfx.win(); break; }
       case 'fixed': { const x = podX(ev.i), y = podY(ev.i) - 16; podFx[ev.i] = 0; spark(x, y, '#d8d8e0', 12, 180, 0.5, 3); float(x, y - 26, 'FIXED!', '#d8d8e0', 17); sfx.tick(1500); break; }
@@ -700,7 +713,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       case 'bleep': {
         const x = podX(ev.i), y = podY(ev.i) - 16;
         rings.push({ x, y, r: 8, to: 60, life: 0.35, max: 0.35, color: '#7fe0ff', w: 6 });
-        staticBurst(x, y, 16); float(x, y - 26, ev.lucky ? 'LUCKY!' : 'BLEEP!', ev.lucky ? '#ff6bd6' : '#7fe0ff', 26); tone(1000, 0.3, 'sine', 0.09); shake = Math.max(shake, 4);
+        staticBurst(x, y, 16); float(x, y - 26, ev.lucky ? 'LUCKY!' : ev.prize ? 'BLEEP! +100' : 'BLEEP!', ev.lucky ? '#ff6bd6' : '#7fe0ff', 26); if (ev.prize) podFx[ev.i] = 0; tone(1000, 0.3, 'sine', 0.09); shake = Math.max(shake, 4);
         break;
       }
       case 'bust':
@@ -731,6 +744,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     if (G.last && G.last.score > 0 && !G.endless) {      // endless is for glory: no prize money
       const pay = Math.round(G.last.score * (1 + 0.2 * (stats.perks.agent || 0)) * (1 + D.HEAT_PAY * G.heat) * (G.lv('charity') ? 1.5 : 1) * (G.ch('agent') ? 1.15 : 1));
       stats.money = (stats.money || 0) + pay; runMoney += pay;
+    }
+    if (G.wagerResult) {
+      const w = G.wagerResult; G.wagerResult = null;
+      if (w.won) { stats.money += 2 * w.stake; runMoney += w.stake; }
+      setTimeout(() => { if (!G || !live) return; float(DESK.x, DESK.y - 150, w.won ? 'SIDE BET WON +$' + fmt(w.stake) : 'SIDE BET LOST -$' + fmt(w.stake), w.won ? C.gold : '#8a8aa0', 26); if (w.won) sfx.fanfare(); else sfx.trombone(); }, 700);
     }
     save();
     if (G.phase === 'cleared' || G.phase === 'won') onCleared();
@@ -831,8 +849,16 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         ${n.extra ? `<span class="extra"><img alt="" src="${iconURL('e_' + n.extra)}">${EXTRA[n.extra]}</span>` : ''}</button>`;
     }).join('') ;
     $('pickAhead').innerHTML = after.map(n => `<div>${D.byId(D.FORMATS, n.format).name}${n.extra ? '<br><b>' + EXTRA[n.extra] + '</b>' : ''}</div>`).join('');
+    paintBet();
     $('ovPick').hidden = false; $('result').hidden = true; $('padWheel').hidden = true;
   }
+  function paintBet() {
+    const can = !G.code && !G.endless && G.ep < G.episodes;
+    if (!can || pickStake > (stats.money || 0)) pickStake = 0;
+    $('betLbl').hidden = $('pickBet').hidden = !can;
+    $('pickBet').innerHTML = D.WAGERS.map(w => `<button class="hdr-btn" data-bet="${w}" ${w > (stats.money || 0) ? 'disabled style="opacity:.3"' : pickStake === w ? 'style="background:#ffd24a;color:#07070a;border-color:#ffd24a"' : ''}>${w ? '$' + w / 1000 + 'K' : 'NO BET'}</button>`).join('');
+  }
+  $('pickBet').addEventListener('click', e => { const b = e.target.closest('[data-bet]'); if (b && !b.disabled) { pickStake = +b.dataset.bet; paintBet(); } });
   // After a booking (and anything backstage), either spend spins or go on air.
   function afterBooking() {
     if (G.phase === 'event') return showEvent();
@@ -854,6 +880,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('pickList').addEventListener('click', e => {
     const b = e.target.closest('[data-format]'); if (!b || b.disabled) return;
     if (!G.pickFormat(+b.dataset.format)) return;
+    if (pickStake && G.setWager(pickStake)) { stats.money -= pickStake; save(); }
     $('ovPick').hidden = true; sfx.chime(3);
     afterBooking();
   });
@@ -933,7 +960,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     sfx.cheer(false); excite = 0.8;
     syncPads();
     const sp = G.special && D.byId(D.EVENTS, G.special);
-    if (sp && live) showCard({ icon: 'e_' + sp.id, title: sp.name, text: sp.desc, color: sp.color, yes: 'ON WITH THE SHOW' });
+    const boss = G.boss;
+    const spCard = () => { if (sp && live) showCard({ icon: 'e_' + sp.id, title: sp.name, text: sp.desc, color: sp.color, yes: 'ON WITH THE SHOW' }); };
+    if (boss && live) showCard({ icon: 'b_' + boss.id, kick: 'THE NETWORK SENDS', title: boss.name, text: boss.desc, color: boss.color, yes: 'BRING IT ON', onYes: spCard });
+    else spCard();
   }
   // A challenge code is hashed into a seed. Coded seasons use a standard kit so two people get the same show.
   function codeSeed(code) { let h = 2166136261; for (const ch of code) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0; return h || 1; }
@@ -1320,7 +1350,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('kitBtn').onclick = () => {
     $('ovPause').hidden = true;
     const own = D.GIMMICKS.filter(g => G.lv(g.id));
-    $('kitList').innerHTML = (own.length ? own.map(g => `<div style="--c:${g.color}"><img alt="" src="${iconURL(g.id)}"><span class="chip">LEVEL ${G.lv(g.id)}</span><p><b>${g.name}</b><span>${g.d(G.lv(g.id))}</span></p></div>`).join('')
+    $('kitList').innerHTML = (own.length ? own.map(g => `<div style="--c:${g.color}"><img alt="" src="${iconURL(g.id)}"><span class="chip"${G.evo[g.id] ? ' style="background:#ffd24a;color:#07070a;border-color:#ffd24a"' : ''}>${G.evo[g.id] ? 'EVOLVED' : 'LEVEL ' + G.lv(g.id)}</span><p><b>${G.evo[g.id] ? D.byId(D.EVOS, g.id).name : g.name}</b><span>${g.d(G.lv(g.id))}${G.evo[g.id] ? ' ' + D.byId(D.EVOS, g.id).desc : ''}</span></p></div>`).join('')
       : '<div><span>Nothing yet.</span></div>') +
       (G.toasters ? `<div style="--c:#8a8aa0"><img alt="" src="${iconURL('junk')}"><span class="chip">×${G.toasters}</span><p><b>TOASTERS</b><span>Start every round with $${10 * G.toasters} in the pot.</span></p></div>` : '');
     $('ovKit').hidden = false; pausedUI = true;
@@ -1391,7 +1421,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     font(30); text(String(G.ep), 18, 40, '#fff');
     const ew = ctx.measureText(String(G.ep)).width;
     font(13); text(G.ep > G.episodes ? 'ENDLESS' : '/ ' + G.episodes, 24 + ew, 44, '#8a8aa0');
-    font(10, 'mono'); text((G.ep > G.episodes ? 'ENDLESS' : 'ACT ' + ROMAN[G.act()]) + ' · ' + clockText(G.elapsed) + (G.heat ? ' · HEAT ' + G.heat : '') + (G.code ? ' · ' + G.code : ''), W - 18, 57, G.heat ? '#ff9a2e' : '#b9b9c6', 'right');
+    font(10, 'mono'); text((G.ep > G.episodes ? 'ENDLESS' : 'ACT ' + ROMAN[G.act()]) + ' · ' + clockText(G.elapsed) + (G.heat ? ' · HEAT ' + G.heat : '') + (G.code ? ' · ' + G.code : '') + (G.wager ? ' · BET $' + G.wager / 1000 + 'K' : ''), W - 18, 57, G.heat ? '#ff9a2e' : '#b9b9c6', 'right');
     font(11, 'mono'); text('ROUNDS', W - 18, 18, '#8a8aa0', 'right');
     for (let i = 0; i < Math.min(6, G.rounds); i++) {
       const x = W - 28 - i * 20, used = i < G.rounds - G.roundsLeft, now = i === G.rounds - G.roundsLeft && G.phase !== 'tally';
@@ -1417,7 +1447,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     font(11, 'mono'); text('TARGET ' + fmt(tgt), bx + bw / 2, 68, '#fff', 'center');
     text('×2 = BONUS SPIN', bx + bw, 68, shownTotal >= tgt * 2 ? C.lime : '#8a8aa0', 'right');
     drawBadges(97);
-    const note = G.bonus ? ['BONUS ROUND: ONE BUZZ', '#ffd24a'] : G.voteKind ? ['CROWD VOTE: ' + G.voteKind.toUpperCase() + ' ×2', '#f5a542'] : G.deal ? ['SPONSOR: ' + G.deal.name, '#42d4f5'] : G.isFinale() ? ['ACT ' + ROMAN[G.act()] + ' FINALE', '#ffd24a'] : null;
+    const note = G.bonus ? ['BONUS ROUND: ONE BUZZ', '#ffd24a'] : G.voteKind ? ['CROWD VOTE: ' + G.voteKind.toUpperCase() + ' ×2', '#f5a542'] : G.deal ? ['SPONSOR: ' + G.deal.name, '#42d4f5'] : G.boss ? ['FINALE: ' + G.boss.name, G.boss.color] : G.isFinale() ? ['ACT ' + ROMAN[G.act()] + ' FINALE', '#ffd24a'] : null;
     if (note) {
       font(13); ctx.textBaseline = 'middle';
       const w3 = ctx.measureText(note[0]).width + 18;
@@ -1442,7 +1472,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       if (hot) drawGlow(x + 15, y + 8, 34, g.color, 1 - f / 1.2);
       ctx.fillStyle = hot ? g.color : '#0b0b12'; ctx.strokeStyle = g.color; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.roundRect(x, y, 30, 15, 2); ctx.fill(); ctx.stroke();
-      text(g.tag + G.lv(g.id), x + 15, y + 8, hot ? '#07070a' : g.color, 'center');
+      const evo = G.evo && G.evo[g.id];
+      if (evo) { ctx.fillStyle = '#ffd24a'; ctx.beginPath(); ctx.roundRect(x, y, 30, 15, 2); ctx.fill(); if (!hot) drawGlow(x + 15, y + 8, 20, '#ffd24a', 0.35 + 0.2 * Math.sin(time * 4 + i)); }
+      text(g.tag + (evo ? '★' : G.lv(g.id)), x + 15, y + 8, hot || evo ? '#07070a' : g.color, 'center');
     });
   }
 
@@ -1727,7 +1759,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const mood = dark > 0.3 ? 'shock' : ex > 0.7 ? 'joy' : 'calm';
     inkSeq = 3000;
     drawHost(74, 640, ex, dark > 0.3 ? 'shock' : 'joy');
-    if (G.special === 'rival') drawRival();
+    if (G.boss) drawBoss(); else if (G.special === 'rival') drawRival();
     // the contestant, behind the desk; one arm comes down on the buzzer
     inkSeq = 3100;
     const bob = Math.sin(time * 8) * ex * 3, hy = y - 103 + bob;
@@ -1783,6 +1815,51 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   }
 
   // The rival: a returning champion in red, stage right, with their own running score.
+  // The network's person on the floor for an act finale.
+  const BOSS = { x: 468, y: 640 };
+  function drawBoss() {
+    const x = BOSS.x, y = BOSS.y, b = G.boss, r = bossFx, suit = b.id === 'censor' ? '#2a2438' : b.id === 'accountant' ? '#3d6b52' : '#5a4a8a';
+    inkSeq = 3300;
+    drawGlow(x, y + 30, 96, b.color, 0.25 + r * 0.45);
+    // one arm points at the stage when they act
+    limb(x - 19, y + 28, x - 38 - r * 10, y + 44 - r * 62, suit, 8);
+    ink(() => ctx.arc(x - 38 - r * 10, y + 42 - r * 62, 6, 0, TAU), '#ffd9b0', 2.4);
+    limb(x + 19, y + 28, x + 24, y + 54, suit, 8);
+    ink(() => ctx.roundRect(x - 23, y + 14, 46, 104, 12), suit, 3);
+    ink(() => { ctx.moveTo(x - 9, y + 14); ctx.lineTo(x + 9, y + 14); ctx.lineTo(x, y + 42); ctx.closePath(); }, '#fff', 2.2);
+    ink(() => { ctx.moveTo(x - 3, y + 16); ctx.lineTo(x + 3, y + 16); ctx.lineTo(x + 4, y + 40); ctx.lineTo(x, y + 46); ctx.lineTo(x - 4, y + 40); ctx.closePath(); }, b.color, 2);
+    ink(() => ctx.arc(x, y, 17, 0, TAU), '#ffd9b0', 3);
+    ctx.strokeStyle = INK; ctx.lineWidth = 2.3; ctx.lineCap = 'round'; ctx.fillStyle = INK;
+    if (b.id === 'censor') {
+      // slicked hair, and a black bar where the eyes should be
+      ink(() => { ctx.moveTo(x - 17, y - 4); ctx.quadraticCurveTo(x - 16, y - 24, x + 4, y - 22); ctx.quadraticCurveTo(x + 18, y - 20, x + 17, y - 6); ctx.quadraticCurveTo(x, y - 12, x - 17, y - 4); }, '#150f24', 2.4);
+      ink(() => ctx.rect(x - 20, y - 6, 40, 9), '#07070a', 2);
+      ctx.beginPath(); ctx.moveTo(x - 6, y + 9); ctx.lineTo(x + 6, y + 9); ctx.stroke();
+      // the red stamp
+      ink(() => ctx.roundRect(x + 14, y + 44, 22, 14, 3), '#e8203a', 2.2);
+    } else if (b.id === 'accountant') {
+      // a green visor, round glasses, a calculator
+      ink(() => { ctx.moveTo(x - 20, y - 6); ctx.quadraticCurveTo(x, y - 30, x + 20, y - 6); ctx.quadraticCurveTo(x, y - 12, x - 20, y - 6); }, '#5fe08a', 2.4);
+      for (const sd of [-1, 1]) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + sd * 7, y, 5, 0, TAU); ctx.fill(); ctx.stroke(); ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(x + sd * 7, y, 1.6, 0, TAU); ctx.fill(); }
+      ctx.beginPath(); ctx.moveTo(x - 2, y); ctx.lineTo(x + 2, y); ctx.moveTo(x - 5, y + 10); ctx.lineTo(x + 5, y + 10); ctx.stroke();
+      ink(() => ctx.roundRect(x + 13, y + 40, 20, 26, 3), '#d8d8e0', 2.2);
+      ctx.fillStyle = '#150f24'; ctx.fillRect(x + 16, y + 43, 14, 6);
+      ctx.fillStyle = '#5fe08a'; for (let k = 0; k < 6; k++) ctx.fillRect(x + 16 + (k % 3) * 5, y + 52 + Math.floor(k / 3) * 6, 3.4, 3.4);
+    } else {
+      // a beret, a monocle, a raised eyebrow, a notebook
+      ink(() => { ctx.ellipse(x - 3, y - 17, 20, 9, -0.2, 0, TAU); }, '#150f24', 2.4);
+      ink(() => ctx.arc(x + 4, y - 26, 2.6, 0, TAU), '#150f24', 2);
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + 7, y - 1, 5.4, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(x + 7, y - 1, 1.7, 0, TAU); ctx.arc(x - 7, y - 1, 1.9, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 12, y + 2); ctx.lineTo(x + 15, y + 16); ctx.moveTo(x - 11, y - 7); ctx.lineTo(x - 4, y - 5); ctx.moveTo(x - 5, y + 10); ctx.quadraticCurveTo(x, y + 7, x + 5, y + 10); ctx.stroke();
+      ink(() => ctx.roundRect(x + 13, y + 40, 20, 26, 2), '#fff4c2', 2.2);
+      ctx.strokeStyle = '#8a8aa0'; ctx.lineWidth = 1.4; ctx.beginPath(); for (let k = 0; k < 4; k++) { ctx.moveTo(x + 16, y + 46 + k * 5); ctx.lineTo(x + 30, y + 46 + k * 5); } ctx.stroke();
+    }
+    // name plate
+    ink(() => ctx.roundRect(x - 34, y + 66, 68, 18, 4), '#150f24', 2.4);
+    font(9, 'mono'); ctx.textBaseline = 'middle'; text(b.name.replace('THE ', ''), x, y + 75, b.color, 'center');
+  }
+
   const RIVAL = { x: 468, y: 640 };
   function drawRival() {
     const x = RIVAL.x, y = RIVAL.y, reach = rivalFx;
@@ -2137,6 +2214,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       case 'e_bonus':   // a starburst
         c.fillStyle = '#ffd24a'; c.beginPath(); for (let k = 0; k < 20; k++) { const r = k % 2 ? 12 : 19, a = k * Math.PI / 10; c.lineTo(Math.cos(a) * r, Math.sin(a) * r); } c.closePath(); c.fill();
         circ(0, 0, 10, '#e8203a'); word('+1', 13, '#fff', 1); break;
+      case 'b_censor':  // a black bar and a red stamp
+        box(-19, -12, 38, 13, 2, '#07070a'); box(-12, -8, 6, 5, 1, '#fff'); box(-2, -8, 6, 5, 1, '#fff'); box(8, -8, 6, 5, 1, '#fff'); box(-9, 5, 26, 13, 3, '#e8203a'); box(-4, 9, 16, 4, 1, '#fff'); break;
+      case 'b_accountant': // a calculator
+        box(-13, -18, 26, 36, 3, '#d8d8e0'); box(-9, -14, 18, 9, 1, '#150f24'); for (let k = 0; k < 9; k++) box(-9 + (k % 3) * 7, -1 + Math.floor(k / 3) * 6, 4.5, 4, 1, k === 8 ? '#e8203a' : '#5fe08a'); break;
+      case 'b_critic':  // one star out of three
+        for (let n = 0; n < 3; n++) { c.fillStyle = n === 0 ? '#ffd24a' : '#3a2f6a'; c.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 3.4 : 8, a = -Math.PI / 2 + k * Math.PI / 5; c.lineTo((n - 1) * 15 + Math.cos(a) * r, Math.sin(a) * r); } c.closePath(); c.fill(); c.strokeStyle = '#150f24'; c.lineWidth = 2; c.stroke(); } break;
       case 'e_event':   // a stage door
         box(-13, -18, 26, 36, 2, '#8a5524'); box(-10, -15, 20, 30, 1, '#b9783a'); circ(6, 2, 2.5, '#ffd24a'); c.fillStyle = '#ffd24a'; c.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 3 : 7, a = -Math.PI / 2 + k * Math.PI / 5; c.lineTo(Math.cos(a) * r, -6 + Math.sin(a) * r); } c.fill(); break;
       case 'f_classic': // ticket
@@ -2265,6 +2348,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     if (crateShow) { drawCrateShow(dt); return; }
     if (live) G.elapsed = (G.elapsed || 0) + dt;
     const onWheel = G.phase === 'load' || G.phase === 'wheel' || G.phase === 'pick' || G.phase === 'ready';
+    if (live && G.newEvos && G.newEvos.length && !pausedUI && !spinAnim && $('ovCard').hidden) {
+      const ev = G.newEvos.shift();
+      badgeFx.set(ev.id, 0); sfx.fanfare(); sfx.cheer(true); excite = 1.6; flashA = 0.35; flashC = ev.color;
+      for (let k = 0; k < 4; k++) confetti(rnd(80, 460), 220, 45, 60, 300);
+      showCard({ icon: ev.id, kick: D.byId(D.GIMMICKS, ev.id).name + ' EVOLVED', title: ev.name, text: ev.desc, color: ev.color, yes: 'OK' });
+    }
     if (!pausedUI && !onWheel) {
       acc += dt;
       while (acc >= DT) { G.step(DT); acc -= DT; }
@@ -2284,7 +2373,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     for (let i = 0; i < N; i++) podFx[i] = Math.min(1, podFx[i] + dt);
     for (const [id, f] of badgeFx) { if (f > 1.3) badgeFx.delete(id); else badgeFx.set(id, f + dt); }
     cannonFx[0] = Math.max(0, cannonFx[0] - dt * 5); cannonFx[1] = Math.max(0, cannonFx[1] - dt * 5);
-    rivalFx = Math.max(0, rivalFx - dt * 2.5);
+    rivalFx = Math.max(0, rivalFx - dt * 2.5); bossFx = Math.max(0, bossFx - dt * 2.2);
     if (waitBonus && live && (G.phase === 'cleared' || G.phase === 'won')) { waitBonus = false; onCleared(); }
     if (!live && G.phase === 'ask') G.answer(false);
     shiftAnim = Math.max(0, shiftAnim - dt * 4.5); slowFx = Math.max(0, slowFx - dt * 2);
