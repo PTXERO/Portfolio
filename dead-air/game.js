@@ -286,6 +286,9 @@
     { id: 'black',  ep: 13, pilot: 6, color: '#9d8cff', name: 'POWER CUTS',      desc: 'The house lights keep cutting out.' },
   ];
 
+  // Overshoot milestones: clear the episode by this many times its target and each one pays a spin.
+  const MILESTONES = [5, 10, 25];
+
   // Act finales: the network sends someone down to the studio floor.
   const BOSSES = [
     { id: 'censor',     color: '#e8203a', name: 'THE CENSOR',     desc: 'The dead air moves.' },
@@ -932,9 +935,9 @@
     if (this.phase !== 'tally') return;
     const tgt = this.target(this.ep);
     if (this.total >= tgt) {
-      // Spins: one for clearing, one for doubling the target, one if the format was a tough one.
+      // Spins: one for clearing, one for each overshoot milestone, one if the format was a tough one.
       this.earned = [['EPISODE CLEARED', 1]];
-      if (this.total >= 2 * tgt) this.earned.push(['DOUBLED THE TARGET', 1]);
+      MILESTONES.forEach(m => { if (this.total >= m * tgt) this.earned.push(['TARGET ×' + m, 1]); });        // overshoot milestones: a spin each
       if (this.format.spins) this.earned.push([this.format.name, this.format.spins]);
       if (this.special === 'rival') this.earned.push(['BEAT THE RIVAL', 1]);
       if (this.ch('headshot') && this.ep === 1) this.earned.push(['SIGNED HEADSHOT', 1]);
@@ -1136,7 +1139,7 @@
   // Crate price: starts modest and climbs with every crate opened.
   const cratePrice = opened => 60000 + 10000 * opened;
 
-  const api = { FIXTURES, WAGER_PAYS, SETS, GIGS, GIG_PAY, EVOS, BOSSES, WAGERS, UNLOCKS, CHARMS, LOOKS, LOOK_PRICE, XPRIZES, HEAT, HEAT_PAY, BACKSTAGE, cratePrice, Game, N, EPISODES, PILOT, ACT, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, EVENTS, byId };
+  const api = { MILESTONES, FIXTURES, WAGER_PAYS, SETS, GIGS, GIG_PAY, EVOS, BOSSES, WAGERS, UNLOCKS, CHARMS, LOOKS, LOOK_PRICE, XPRIZES, HEAT, HEAT_PAY, BACKSTAGE, cratePrice, Game, N, EPISODES, PILOT, ACT, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, EVENTS, byId };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DeadAir = api;
 })(typeof window !== 'undefined' ? window : globalThis);

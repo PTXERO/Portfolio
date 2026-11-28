@@ -453,7 +453,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   </div>
 </div>
 
-<script src="game.js?v=1795880238"></script>
+<script src="game.js?v=1795888286"></script>
 <script>
 (function(){
   const D = DeadAir, $ = id => document.getElementById(id);
@@ -1858,7 +1858,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     ctx.fillStyle = '#fff'; ctx.fillRect(bx + bw / 2 - 1, by - 3, 2, 18);
     font(24); text(fmt(shownTotal), bx, 68, cleared ? C.lime : '#fff');
     font(11, 'mono'); text('TARGET ' + fmt(tgt), bx + bw / 2, 68, '#fff', 'center');
-    text('×2 = BONUS SPIN', bx + bw, 68, shownTotal >= tgt * 2 ? C.lime : '#8a8aa0', 'right');
+    {   // the next overshoot milestone, counting what is in the pot right now
+      const have = shownTotal + (live && (G.phase === 'sweep' || G.phase === 'resolve') ? G.score() : 0);
+      const nextM = D.MILESTONES.find(m => have < m * tgt), got = D.MILESTONES.filter(m => have >= m * tgt).length;
+      text(nextM ? '×' + nextM + ' = ' + (got ? 'ANOTHER SPIN' : 'BONUS SPIN') : 'ALL ' + D.MILESTONES.length + ' BONUS SPINS', bx + bw, 68, got ? C.lime : '#8a8aa0', 'right');
+    }
     drawBadges(97);
     const note = G.bonus ? ['BONUS ROUND: ONE BUZZ', '#ffd24a'] : G.voteKind ? ['CROWD VOTE: ' + G.voteKind.toUpperCase() + ' ×2', '#f5a542'] : G.deal ? ['SPONSOR: ' + G.deal.name, '#42d4f5'] : G.boss ? ['FINALE: ' + G.boss.name, G.boss.color] : G.isFinale() ? ['ACT ' + ROMAN[G.act()] + ' FINALE', '#ffd24a'] : null;
     if (note) {
@@ -2915,9 +2919,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     if (live && G.phase !== 'wheel') {
       // BANK says so when banking right now would clear the episode, or double the target
       const need = G.target(G.ep) - G.total, pot = G.phase === 'sweep' || G.phase === 'resolve' ? G.score() : 0, canBank = G.buzzes > 0 && !G.bonus && !(G.lv('allin') && G.clock > 0);
-      const st = !canBank || pot <= 0 ? '' : G.total + pot >= 2 * G.target(G.ep) ? 'x2' : pot >= need ? 'clr' : '';
-      const bk = $('bank'), lbl = st === 'x2' ? 'TARGET ×2!' : st === 'clr' ? 'CLEARS IT!' : 'KEEP · B';
-      if (bk.dataset.st !== st) { bk.dataset.st = st; bk.className = st; $('bankSub').textContent = lbl; if (st && live) { sfx.chime(st === 'x2' ? 5 : 3); } }
+      const mile = D.MILESTONES.filter(m => G.total + pot >= m * G.target(G.ep)).pop() || 0;      // the biggest milestone banking now would reach
+      const st = !canBank || pot <= 0 ? '' : mile ? 'm' + mile : pot >= need ? 'clr' : '';
+      const bk = $('bank'), lbl = mile && st ? '×' + mile + ' · +' + D.MILESTONES.filter(m => m <= mile).length + ' SPIN' + (mile > D.MILESTONES[0] ? 'S' : '') : st === 'clr' ? 'CLEARS IT!' : 'KEEP · B';
+      if (bk.dataset.st !== st) {
+        bk.dataset.st = st; bk.className = st === 'clr' ? 'clr' : st ? 'x2' : ''; $('bankSub').textContent = lbl;
+        if (st && live) { sfx.chime(st === 'clr' ? 3 : 5); if (st !== 'clr') { shout('TARGET ×' + mile + '!', '#fff', 46, 0.9); excite = Math.max(excite, 1.2); } }
+      }
     }
     if (live && G.phase !== 'wheel') { const sl = $('slow'), can = G.phase === 'sweep' && G.slowLeft > 0 && !(G.slowT > 0); if (sl.disabled === can) sl.disabled = !can; const t = '×' + (G.slowLeft || 0) + ' · S'; if ($('slowSub').textContent !== t) $('slowSub').textContent = t; }
     if (wantBank && G.phase !== 'resolve') { wantBank = false; if (live && G.phase === 'sweep' && G.bank()) sfx.chime(2); }
@@ -2993,7 +3001,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   applyLooks();
   // Pick up a newer build without the player having to know about browser caches.
   // Only ever checked from the title screen, so a run in progress is never interrupted.
-  const BUILD = '1795880238';
+  const BUILD = '1795888286';
   let buildChecked = 0;
   function checkBuild() {
     if (live || !/^https?:$/.test(location.protocol) || Date.now() - buildChecked < 60000) return;

@@ -68,7 +68,7 @@ for (let r = 0; r < RUNS; r++) {
     totals[g.ep - 1].push(g.total);
     if (POTENTIAL) {
       if (g.ep >= D.EPISODES) break;
-      g.spins += 1 + (g.total >= 2 * g.target(g.ep) ? 1 : 0) + g.format.spins;   // roughly what a clear would have paid
+      g.spins += 1 + D.MILESTONES.filter(m => g.total >= m * g.target(g.ep)).length + g.format.spins;   // roughly what a clear would have paid
       g.phase = 'cleared';
     } else {
       if (g.phase === 'over') { died[g.ep - 1]++; break; }
