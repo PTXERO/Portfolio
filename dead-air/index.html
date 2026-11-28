@@ -219,6 +219,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 .ov,#toast{zoom:var(--u,1);}
 #trackOut{width:100%;max-width:380px;height:90px;margin-top:8px;font-family:var(--fmono);font-size:9px;background:#0d0a1c;color:#b9b9c6;border:2px solid #4a3a90;border-radius:6px;padding:6px;}
 #trackBtn.on{border-color:#ffd24a;color:#ffd24a;}
+.datanote{font-family:var(--fmono);font-size:8px;letter-spacing:.1em;color:#6a5aa8;margin-top:8px;}
 .grid4{flex-wrap:wrap;}
 .grid4 .big-btn{flex:1 1 46%;}
 .opts{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:10px;}
@@ -338,6 +339,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         <button class="tile" id="logBtn"><img alt="" id="tiLog"><b>LOGBOOK</b><span id="tsLog"></span></button>
       </div>
       <div class="stats" id="stats"></div>
+      <div class="datanote" id="dataNote" hidden></div>
     </div>
 
     <div class="ov low" id="ovLoad" hidden>
@@ -435,6 +437,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       <button class="big-btn alt" id="kitBtn" hidden>GIMMICKS</button>
       <button class="big-btn alt" id="logBtn2">LOGBOOK</button>
       <button class="big-btn alt" id="mute">SOUND ON</button>
+      <button class="big-btn alt" id="shareBtn">PLAY DATA ON</button>
       <button class="big-btn alt" id="trackBtn">RUN TRACKER OFF</button>
       <button class="big-btn alt" id="trackCopy" hidden>COPY RUN LOG</button>
       <textarea id="trackOut" readonly hidden aria-label="Run log"></textarea>
@@ -450,7 +453,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   </div>
 </div>
 
-<script src="game.js?v=1795844626"></script>
+<script src="game.js?v=1795875931"></script>
 <script>
 (function(){
   const D = DeadAir, $ = id => document.getElementById(id);
@@ -701,6 +704,53 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   }
   const podX = i => PX(i + 0.5), podY = i => PY(i + 0.5);
 
+  // ── Play data ──────────────────────────────────────────────────
+  // Anonymous game data for balancing: one row per run start, episode, run end and purchase.
+  // It goes to the project's own Supabase table (insert only; this key cannot read anything back).
+  // No names, emails or anything typed by the player: a random ID made on this device, and what happened on stage.
+  // Leave url/key empty and nothing is ever sent. Players can switch it off in the menu.
+  const TELEMETRY = { url: '', key: '', table: 'deadair_events' };
+  const TELE_Q = 'deadair.teleq';
+  const teleOn = () => !!TELEMETRY.url && !!TELEMETRY.key && stats.share !== false && /^https?:$/.test(location.protocol);
+  function telePlayer() {
+    if (!stats.pid) { stats.pid = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 12)); save(); }
+    return stats.pid;
+  }
+  function telePost(rows) {
+    return fetch(TELEMETRY.url.replace(/\/$/, '') + '/rest/v1/' + TELEMETRY.table, { method: 'POST', keepalive: true,
+      headers: { apikey: TELEMETRY.key, Authorization: 'Bearer ' + TELEMETRY.key, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(rows) });
+  }
+  // Send one event; anything that fails waits on this device and goes with the next one.
+  function tele(kind, data, ep) {
+    if (!teleOn()) return;
+    let q = []; try { q = JSON.parse(localStorage.getItem(TELE_Q)) || []; } catch (e) {}
+    q.push({ player: telePlayer(), run: trk ? String(trk.id) : null, kind, build: typeof BUILD === 'string' ? BUILD : '', ep: ep == null ? null : ep, data });
+    q = q.slice(-60);
+    try { localStorage.setItem(TELE_Q, JSON.stringify(q)); } catch (e) {}
+    teleFlush();
+  }
+  // One send at a time, so a row is never in two requests at once; whatever arrived meanwhile goes next.
+  let teleBusy = false;
+  function teleFlush() {
+    if (teleBusy || !teleOn()) return;
+    let q = []; try { q = JSON.parse(localStorage.getItem(TELE_Q)) || []; } catch (e) {}
+    if (!q.length) return;
+    const n = q.length; teleBusy = true;
+    const done = again => { teleBusy = false; if (again) teleFlush(); };
+    try {
+      telePost(q).then(r => {
+        if (!r.ok && r.status >= 500) return done(false);                    // their side is down: keep the rows for next time
+        let now = []; try { now = JSON.parse(localStorage.getItem(TELE_Q)) || []; } catch (e) {}
+        try { localStorage.setItem(TELE_Q, JSON.stringify(now.slice(n))); } catch (e) {}     // stored, or refused outright: either way do not resend
+        done(now.length > n);
+      }).catch(() => done(false));
+    } catch (e) { done(false); }
+  }
+  const teleDevice = () => ({ view: Math.round(innerWidth) + 'x' + Math.round(innerHeight), dpr: window.devicePixelRatio || 1, touch: 'ontouchstart' in window ? 1 : 0,
+    lang: (navigator.language || '').slice(0, 5), tz: -new Date().getTimezoneOffset() / 60, sound: stats.sound ? 1 : 0, host: location.hostname });
+  const teleMeta = () => ({ runs: stats.runs, wins: stats.wins, bestEp: stats.bestEp, bank: stats.money || 0, perks: stats.perks, vault: (stats.unlocked || []).length,
+    trophies: Object.keys(stats.trophies || {}).length, heatBest: stats.heatBest, marks: stats.marks, mode: stats.mode === D.PILOT ? 'pilot' : 'full' });
+
   // ── Run tracker (debug): a compact log of every round, for studying pacing ──
   // Off by default. Logs live in localStorage; COPY RUN LOG puts the recent ones on the clipboard.
   const TRACK_KEY = 'deadair.track';
@@ -713,10 +763,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   }
   function trackStart() {
     trk = trkEp = trkRd = null;
-    if (!stats.debug) return;
+    if (!stats.debug && !teleOn()) return;
     trk = { id: Date.now(), build: typeof BUILD === 'string' ? BUILD : '', date: new Date().toISOString().slice(0, 16), who: G.who, heat: G.heat, code: G.code || '', of: G.episodes,
       perks: stats.perks, charm: G.charm || '', runs: stats.runs, wins: stats.wins, bank: stats.money || 0, dpr: window.devicePixelRatio || 1, touch: 'ontouchstart' in window ? 1 : 0, view: Math.round(innerWidth) + 'x' + Math.round(innerHeight), eps: [], end: null };
     trackSave();
+    tele('start', { who: G.who, heat: G.heat, code: G.code || '', of: G.episodes, charm: G.charm || '', wheel: G.wheel.map(w => w.id || w.type), kit: trackKit(), device: teleDevice(), meta: teleMeta() }, 0);
   }
   function trackKit() { const o = {}; Object.keys(G.levels).forEach(id => { o[id] = G.evo[id] ? G.levels[id] + '*' : G.levels[id]; }); return o; }
   function track(ev) {
@@ -729,15 +780,18 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         trk.eps.push(trkEp);
         break;
       case 'round':       // (an episode's first round is announced just before the episode itself)
-        trkRd = { bz: 0, pf: 0, miss: 0, bl: 0, sl: 0, clr: 0, lost: 0, gaps: [], t0: G.elapsed, last: G.elapsed, bonus: !!G.bonus, errs: [], misses: [], via: {}, hy: {}, how: 'bank', peak: 0 };
+        trkRd = { bz: 0, pf: 0, miss: 0, bl: 0, sl: 0, clr: 0, lost: 0, gaps: [], t0: G.elapsed, last: G.elapsed, bonus: !!G.bonus, errs: [], misses: [], via: {}, hy: {}, how: 'bank', peak: 0, buzzes: [], first: 0 };
         break;
       case 'buzz':
         if (!trkRd) break;
         trkRd.bz++; if (ev.perfect && ev.hit) trkRd.pf++; if (!ev.hit) trkRd.miss++;
+        if (trkRd.bz === 1) trkRd.first = r1(G.elapsed - trkRd.t0);
         trkRd.gaps.push(r1(G.elapsed - trkRd.last)); trkRd.last = G.elapsed;
         {
           // how far from the middle of the podium the light stopped, as time: negative is early, positive late
           const pos = Math.min(G.n - 0.001, G.beams()[0]), off = pos - Math.floor(pos) - 0.5, ms = Math.round(off / G.speed() * 1000);
+          const q0 = G.strip[ev.i] || {};
+          trkRd.buzzes.push([r1(G.elapsed - trkRd.t0), ms, ev.hit ? (ev.perfect ? 2 : 1) : 0, G.down(ev.i) ? 'trap' : q0.kind || '', r1(G.speed())]);
           if (ev.hit) trkRd.errs.push(ms);
           else {
             const q = G.strip[ev.i] || {}, nb = d => G.isUp(ev.i + d) ? 1 : 0;
@@ -769,7 +823,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
           how: trkRd.how, peak: trkRd.peak, lostPot: trkRd.lostPot || 0, dark: G.n - G.upList().length,
           aim: trkRd.errs.length ? Math.round(trkRd.errs.reduce((a, b) => a + Math.abs(b), 0) / trkRd.errs.length) : 0,
           bias: trkRd.errs.length ? Math.round(trkRd.errs.reduce((a, b) => a + b, 0) / trkRd.errs.length) : 0,
-          via: trkRd.via, hy: trkRd.hy, misses: trkRd.misses });
+          via: trkRd.via, hy: trkRd.hy, misses: trkRd.misses, first: trkRd.first, buzzes: trkRd.buzzes });
         trkRd = null;
         break;
     }
@@ -785,10 +839,17 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       trkWall = Date.now(); trackSave();
     }
   }
+  // An episode's row goes out when its wheel and booking are done (or straight away if the run ended there).
+  function teleEpisode(e) {
+    if (!e || e._sent) return; e._sent = 1;
+    const o = {}; Object.keys(e).forEach(k => { if (k[0] !== '_') o[k] = e[k]; });
+    tele('episode', o, e.ep);
+  }
   function trackEnd(won) {
     if (!trk) return;
     trk.end = { won: won ? 1 : 0, ep: G.ep, t: Math.round(G.elapsed), money: runMoney, best: G.best, kit: trackKit(), sets: Object.keys(G.sets), evo: Object.keys(G.evo) };
     trackSave();
+    if (!trk._ended) { trk._ended = 1; teleEpisode(trkEp); tele('end', Object.assign({ who: G.who, heat: G.heat, code: G.code || '', of: G.episodes, endless: G.endless ? 1 : 0, wall: Math.round((Date.now() - trk.id) / 1000) }, trk.end), G.ep); }
   }
   function trackText() { trackSave(); return 'DEADAIR-LOG ' + JSON.stringify(trackLoad()); }
 
@@ -1037,7 +1098,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   let wheelA = 0, spinAnim = null, lastWedge = -1, pointerKick = 0, wedgeFx = -1, wedgeFxT = 0;
   function showLoad() {
     G.openWheel();
-    if (trkEp && G.offers) { trkEp.offers = G.offers.map(o => o.def.id); trackSave(); }
+    if (trkEp && G.offers) { trkEp.offers = G.offers.map(o => o.def.id); trkEp._tOffer = Date.now(); trackSave(); }
     saveRun('wheel');
     const earned = (G.earned || []).map(e => `${e[0]} +${e[1]}`).join(' · ');
     $('loadSub').innerHTML = `<b style="color:#ffd24a">${G.spins} SPIN${G.spins === 1 ? '' : 'S'}</b> · ADD ONE TO THE WHEEL`;
@@ -1053,7 +1114,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('offerList').addEventListener('click', e => {
     const b = e.target.closest('[data-offer]'); if (!b) return;
     const r = G.takeOffer(+b.dataset.offer); if (!r) return;
-    if (trkEp) trkEp.offer = r.offer.def.id;
+    if (trkEp) { trkEp.offer = r.offer.def.id; trkEp.offerSecs = trkEp._tOffer ? r1((Date.now() - trkEp._tOffer) / 1000) : 0; trkEp._tWheel = Date.now(); }
     $('ovLoad').hidden = true;
     if (r.at >= 0) { wedgeFx = r.at; wedgeFxT = 0; }
     sfx.fanfare();
@@ -1065,7 +1126,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   function showPick() {
     const ep = G.ep + 1;
     $('pickSub').textContent = 'EPISODE ' + ep + ' · TARGET ' + fmt(G.target(ep));
-    if (trkEp) { trkEp.opts = G.choices.map((n, i) => (G.canReach(i) ? '' : 'x') + n.format + (n.extra ? '+' + n.extra : '')); trackSave(); }
+    if (trkEp) { trkEp._tPick = Date.now(); if (trkEp._tWheel) trkEp.wheelSecs = r1((Date.now() - trkEp._tWheel) / 1000); trkEp.opts = G.choices.map((n, i) => (G.canReach(i) ? '' : 'x') + n.format + (n.extra ? '+' + n.extra : '')); trackSave(); }
     $('pickList').className = 'cards three';
     $('pickList').innerHTML = G.choices.map((n, i) => {
       const f = D.byId(D.FORMATS, n.format), ok = G.canReach(i);
@@ -1110,7 +1171,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('pickList').addEventListener('click', e => {
     const b = e.target.closest('[data-format]'); if (!b || b.disabled) return;
     if (!G.pickFormat(+b.dataset.format)) return;
-    if (trkEp) trkEp.pick = G.lane + ':' + G.nextFormat + (G.nextSpecial ? '+' + G.nextSpecial : G.phase === 'event' ? '+event' : ''); trackSave();
+    if (trkEp) trkEp.pick = G.lane + ':' + G.nextFormat + (G.nextSpecial ? '+' + G.nextSpecial : G.phase === 'event' ? '+event' : ''); trkEp.pickSecs = trkEp._tPick ? r1((Date.now() - trkEp._tPick) / 1000) : 0; trkEp.betNext = pickStake || 0; trackSave(); teleEpisode(trkEp);
     if (pickStake && G.setWager(pickStake)) { stats.money -= pickStake; save(); }
     $('ovPick').hidden = true; sfx.chime(3);
     afterBooking();
@@ -1239,7 +1300,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   function toTitle() {
     ['ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovCard', 'ovDress', 'ovCode'].forEach(id => { $(id).hidden = true; });
     $('quit').hidden = true; $('kitBtn').hidden = true; pausedUI = false;
-    if (trk && !trk.end) { trk.end = { quit: 1, ep: G ? G.ep : 0, t: G ? Math.round(G.elapsed) : 0 }; trackSave(); }
+    if (trk && !trk.end) { trk.end = { quit: 1, ep: G ? G.ep : 0, t: G ? Math.round(G.elapsed) : 0 }; trackSave(); teleEpisode(trkEp); tele('end', Object.assign({ who: G ? G.who : '', wall: Math.round((Date.now() - trk.id) / 1000) }, trk.end), G ? G.ep : 0); }
     trk = trkEp = trkRd = null;
     paintTitle(); $('ovTitle').hidden = false;
     startDemo();
@@ -1260,6 +1321,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const pk = D.byId(D.PERKS, b.dataset.perk), lv = stats.perks[pk.id] || 0;
     if (lv >= pk.max || (stats.money || 0) < pk.cost(lv)) return;
     stats.money -= pk.cost(lv); stats.perks[pk.id] = lv + 1; save();
+    tele('buy', { what: 'contract', id: pk.id, level: lv + 1, price: pk.cost(lv), left: stats.money, meta: teleMeta() });
     live = true; sfx.fanfare(); live = false;
     paintShop();
   });
@@ -1314,6 +1376,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     for (const t of avail) { r -= tiers[t]; if (r < 0) { tier = t; break; } }
     const pool = left.filter(u => u.tier === tier), u = pool[(Math.random() * pool.length) | 0];
     stats.money -= price; stats.opened = (stats.opened || 0) + 1; stats.unlocked.push(u.id); save();
+    tele('buy', { what: 'vault', id: u.id, cat: u.cat, price, left: stats.money, meta: teleMeta() });
     lastGot = u.id;
     startCrateShow(u);
   }
@@ -1536,7 +1599,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('dressList').addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (b) { dressPick = b.dataset.d; paintDress(); } });
   $('dressUse').onclick = () => {
     const it = dressPick && dressItem(dressPick); if (!it) return;
-    if (!has(it.id)) { if ((stats.money || 0) < it.price) return; stats.money -= it.price; stats.unlocked.push(it.id); stats.equip[it.slot] = it.id; }
+    if (!has(it.id)) { if ((stats.money || 0) < it.price) return; stats.money -= it.price; stats.unlocked.push(it.id); stats.equip[it.slot] = it.id; tele('buy', { what: 'wardrobe', id: it.id, price: it.price, left: stats.money }); }
     else stats.equip[it.slot] = stats.equip[it.slot] === it.id ? null : it.id;
     save(); applyLooks(); live = true; sfx.chime(3); live = false; paintDress();
   };
@@ -1587,6 +1650,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     tile('Dump', 'm_vault', vaultLeft ? vaultHave + '/' + D.UNLOCKS.length + ' · $' + Math.round(cratePrice() / 1000) + 'K' : 'EMPTIED', vaultLeft > 0 && money0 >= cratePrice());
     tile('Dress', 'm_dress', looksHave + '/' + D.LOOKS.length + ' PIECES', false);
     tile('Log', 'm_log', D.GIMMICKS.filter(x => stats.seen[x.id]).length + '/' + D.GIMMICKS.length + ' · ★' + TROPHIES.filter(t => stats.trophies[t.id]).length + '/' + TROPHIES.length, false);
+    $('dataNote').hidden = !TELEMETRY.url; $('dataNote').textContent = stats.share === false ? 'PLAY DATA SHARING IS OFF' : 'ANONYMOUS PLAY DATA HELPS BALANCE THE GAME · SWITCH IT OFF IN THE MENU';
     $('walletPic').src = iconURL('m_coin'); $('jackpot').textContent = '$' + fmt(stats.jackpot || 5000);
     $('heatInfo').textContent = heat ? D.HEAT.slice(0, heat).join(' ').toUpperCase() : '';
     const sv = savedRun();
@@ -1628,7 +1692,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     G = D.Game.restore(o); runMoney = o.runMoney || 0;
     // pick the unfinished log back up, or start a new one marked as resumed
     trk = trkEp = trkRd = null; trkWall = 0;
-    if (stats.debug) { const last = trackLoad().pop(); if (last && !last.end && last.who === G.who) { trk = last; trk.resumed = (trk.resumed || 0) + 1; trkEp = trk.eps[trk.eps.length - 1] || null; } else { trackStart(); if (trk) trk.resumedAt = G.ep; } }
+    if (stats.debug || teleOn()) { const last = trackLoad().pop(); if (last && !last.end && last.who === G.who) { trk = last; trk.resumed = (trk.resumed || 0) + 1; trkEp = trk.eps[trk.eps.length - 1] || null; } else { trackStart(); if (trk) trk.resumedAt = G.ep; } }
     ['ovTitle', 'ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovShop', 'ovCard', 'ovDump'].forEach(id => { $(id).hidden = true; });
     $('quit').hidden = false; $('kitBtn').hidden = false;
     if (o.stage === 'wheel') showLoad(); else beginEpisode();
@@ -1674,8 +1738,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     $('trackBtn').textContent = 'RUN TRACKER ' + (stats.debug ? 'ON' : 'OFF'); $('trackBtn').className = 'big-btn alt' + (stats.debug ? ' on' : '');
     $('trackCopy').hidden = !n; $('trackCopy').textContent = 'COPY RUN LOG · ' + n + ' RUN' + (n === 1 ? '' : 'S');
     $('trackOut').hidden = true;
+    $('shareBtn').hidden = !TELEMETRY.url; $('shareBtn').textContent = 'PLAY DATA ' + (stats.share === false ? 'OFF' : 'ON'); $('shareBtn').className = 'big-btn alt' + (stats.share === false ? '' : ' on');
   }
   $('trackBtn').onclick = () => { stats.debug = !stats.debug; save(); paintTrack(); };
+  $('shareBtn').onclick = () => { stats.share = stats.share === false; save(); paintTrack(); paintTitle(); };
   $('trackCopy').onclick = () => {
     const txt = trackText(), ok = () => { $('trackCopy').textContent = 'COPIED · PASTE IT TO CLAUDE'; };
     const manual = () => { $('trackOut').hidden = false; $('trackOut').value = txt; $('trackOut').focus(); $('trackOut').select(); $('trackCopy').textContent = 'SELECT ALL AND COPY'; };
@@ -2911,7 +2977,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   applyLooks();
   // Pick up a newer build without the player having to know about browser caches.
   // Only ever checked from the title screen, so a run in progress is never interrupted.
-  const BUILD = '1795844626';
+  const BUILD = '1795875931';
   let buildChecked = 0;
   function checkBuild() {
     if (live || !/^https?:$/.test(location.protocol) || Date.now() - buildChecked < 60000) return;
@@ -2924,7 +2990,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     } catch (e) {}
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkBuild(); });
-  resize(); paintTitle(); startDemo(); checkBuild();
+  addEventListener('pagehide', () => { if (live && trk && !trk.end && !trk._left) { trk._left = 1; tele('leave', { ep: G.ep, phase: G.phase, t: Math.round(G.elapsed), total: G.total, tgt: G.target(G.ep) }, G.ep); } });
+  resize(); paintTitle(); startDemo(); checkBuild(); teleFlush();
   requestAnimationFrame(frame);
   window.__deadair = () => G;   // handy for poking at a run from the console
 })();
