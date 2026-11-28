@@ -9,7 +9,8 @@
   const PILOT = 5;              // the short game: act one only
   const ACT = 5;
   const ROUND_TIME = 16;        // seconds of moving light per round
-  const TARGETS = [2000, 2300, 2700, 3200, 4200, 5200, 6500, 8200, 11000, 15000, 19000, 24000, 31000, 40000, 55000];
+  // Act one is gentle; from act two the targets assume the player has built something ridiculous.
+  const TARGETS = [2000, 2300, 2700, 3200, 4200, 7000, 10000, 14000, 20000, 28000, 42000, 62000, 90000, 130000, 200000];
 
   // Every gimmick is something you can see on the set. d(lv) = what it does at that level.
   const GIMMICKS = [
@@ -943,11 +944,14 @@
       this.revived = true; this.roundsLeft = 1; this.rounds++;          // ONE MORE TAKE
       this.startRound(); this.emit({ t: 'revive' });
     } else if (this.roundsLeft <= 0) { if (this.wager) this.wagerResult = { stake: this.wager, won: false }; this.phase = 'over'; }
-    else if ((this.special === 'offer' || this.special === 'ad') && !this.asked) {
+    else if ((this.special === 'offer' || this.special === 'ad') && !this.asked && !(this.special === 'offer' && this.roundsLeft < 2)) {
       // The host's offer / the sponsor's deal: a question for the player before the next round.
+      // The offer is half of what is still needed (never less than 30% of the target), and it is only made
+      // while a round would still be left afterwards, so taking it can never end the run on the spot.
       this.asked = true;
+      const need = Math.max(0, tgt - this.total);
       this.ask = this.special === 'offer'
-        ? { type: 'offer', amount: Math.max(50, Math.round(0.3 * tgt / 50) * 50) }
+        ? { type: 'offer', amount: Math.max(50, Math.round(Math.max(0.3 * tgt, 0.5 * need) / 50) * 50) }
         : { type: 'ad', deal: DEALS[this.pick(DEALS.length)] };
       this.phase = 'ask';
     } else this.startRound();

@@ -453,7 +453,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   </div>
 </div>
 
-<script src="game.js?v=1795878300"></script>
+<script src="game.js?v=1795878599"></script>
 <script>
 (function(){
   const D = DeadAir, $ = id => document.getElementById(id);
@@ -1083,7 +1083,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   function showAsk() {
     const a = G.ask;
     if (a.type === 'offer') showCard({ icon: 'e_offer', kick: "THE HOST'S OFFER", title: '$' + fmt(a.amount) + ' TO SIT OUT', color: '#c8f542',
-      text: fmt(Math.max(0, G.target(G.ep) - G.total)) + ' TO GO · ' + G.roundsLeft + ' ROUND' + (G.roundsLeft === 1 ? '' : 'S') + ' LEFT',
+      text: 'LEAVES ' + fmt(Math.max(0, G.target(G.ep) - G.total - a.amount)) + ' TO GO IN ' + (G.roundsLeft - 1) + ' ROUND' + (G.roundsLeft - 1 === 1 ? '' : 'S'),
       yes: 'TAKE THE MONEY', no: 'PLAY ON', onYes: () => { G.answer(true); sfx.chime(4); }, onNo: () => G.answer(false) });
     else showCard({ icon: 'e_ad', kick: 'COMMERCIAL BREAK', title: a.deal.name, color: '#42d4f5', text: a.deal.desc,
       yes: 'SIGN THE DEAL', no: 'NO THANKS', onYes: () => { G.answer(true); sfx.fanfare(); }, onNo: () => G.answer(false) });
@@ -2989,7 +2989,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   applyLooks();
   // Pick up a newer build without the player having to know about browser caches.
   // Only ever checked from the title screen, so a run in progress is never interrupted.
-  const BUILD = '1795878300';
+  const BUILD = '1795878599';
   let buildChecked = 0;
   function checkBuild() {
     if (live || !/^https?:$/.test(location.protocol) || Date.now() - buildChecked < 60000) return;
