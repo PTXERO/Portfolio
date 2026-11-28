@@ -261,10 +261,11 @@
   ];
   // Side gigs: now and then an episode comes with a job on the side. It pays prize money, not points.
   const GIGS = [
-    { id: 'perfect', n: 5, name: '5 PERFECTS' },
-    { id: 'gold',    n: 3, name: 'WIN 3 GOLD' },
-    { id: 'clear',   n: 2, name: 'CLEAR THE STAGE TWICE' },
-    { id: 'hype',    n: 4, name: 'WIN 4 HYPE PRIZES' },
+    { id: 'perfect', n: 6,  name: '6 PERFECTS' },
+    { id: 'gold',    n: 3,  name: 'WIN 3 GOLD' },                 // only offered when there is gold on the strip
+    { id: 'clear',   n: 1,  name: 'CLEAR THE STAGE' },
+    { id: 'hype',    n: 4,  name: 'WIN 4 HYPE PRIZES' },
+    { id: 'prizes',  n: 20, name: 'WIN 20 PRIZES' },
   ];
   const GIG_PAY = 3000;         // per episode number
 
@@ -274,7 +275,8 @@
     { id: 'accountant', color: '#5fe08a', name: 'THE ACCOUNTANT', desc: 'Skims 8% of your cash every 4 seconds.' },
     { id: 'critic',     color: '#9d8cff', name: 'THE CRITIC',     desc: 'Only PERFECT pays in full.' },
   ];
-  const WAGERS = [0, 10000, 50000, 200000];   // side bet: clear the episode in round one, get it back doubled
+  const WAGERS = [0, 10000, 50000, 200000];   // side bet: clear the episode in round one
+  const WAGER_PAYS = 4;         // what a won bet returns, stake included (round-one clears are rare)
 
   function mulberry(seed) {
     let a = seed >>> 0;
@@ -419,7 +421,8 @@
     this.roundsLeft = this.rounds;
     this.tokenOut = this.rand() < 0.5;        // a wheel token only turns up in about half the episodes
     this.gig = null; this.gigN = 0; this.gigDone = false;
-    if (this.ep >= 2 && !this.endless && this.rand() < 0.35) { const pool = GIGS.filter(q => !(q.id === 'hype' && this.is('cashonly'))); this.gig = pool[this.pick(pool.length)]; }
+    if (this.ep >= 2 && !this.endless && this.rand() < 0.35) { const gold = this.lv('gold') || this.sets.money || this.evo.gold || this.is('goldnight') || this.ch('tooth');
+      const pool = GIGS.filter(q => !(q.id === 'hype' && this.is('cashonly')) && !(q.id === 'gold' && !gold)); this.gig = pool[this.pick(pool.length)]; }
     this.boss = this.isFinale() ? byId(BOSSES, this.bossOrder[(this.act() - 1) % this.bossOrder.length]) : null;
     this.wager = this.nextWager || 0; this.nextWager = 0; this.wagerResult = null;
     if (this.boss && this.special === 'rival') this.special = 'bonus';
@@ -611,6 +614,7 @@
     if (voted) mult *= 2;
     const money = p.kind === 'cash' || p.kind === 'gold';
     if (p.kind === 'gold') this.gigTick('gold'); else if (p.kind === 'hype') this.gigTick('hype');
+    this.gigTick('prizes');
     if (money && via !== 'main' && this.sets.fx) mult *= 1.5;
     if (money && (i === 0 || i === this.n - 1)) mult *= 1 + this.lv('edges');
     if (money && (i === Math.floor((this.n - 1) / 2) || i === Math.ceil((this.n - 1) / 2))) mult *= 1 + this.lv('center');
@@ -1016,7 +1020,7 @@
   // Crate price: starts modest and climbs with every crate opened.
   const cratePrice = opened => 60000 + 10000 * opened;
 
-  const api = { SETS, GIGS, GIG_PAY, EVOS, BOSSES, WAGERS, UNLOCKS, CHARMS, LOOKS, LOOK_PRICE, XPRIZES, HEAT, HEAT_PAY, BACKSTAGE, cratePrice, Game, N, EPISODES, PILOT, ACT, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, EVENTS, byId };
+  const api = { WAGER_PAYS, SETS, GIGS, GIG_PAY, EVOS, BOSSES, WAGERS, UNLOCKS, CHARMS, LOOKS, LOOK_PRICE, XPRIZES, HEAT, HEAT_PAY, BACKSTAGE, cratePrice, Game, N, EPISODES, PILOT, ACT, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, EVENTS, byId };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DeadAir = api;
 })(typeof window !== 'undefined' ? window : globalThis);

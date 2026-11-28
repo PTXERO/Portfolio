@@ -270,7 +270,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       <div class="cards three" id="pickList"></div>
       <div class="aheadlbl">AFTER THAT</div>
       <div class="ahead" id="pickAhead"></div>
-      <div class="aheadlbl" id="betLbl">SIDE BET · CLEAR IN ROUND 1 · PAYS DOUBLE</div>
+      <div class="aheadlbl" id="betLbl">SIDE BET · CLEAR IN ROUND 1 · PAYS ×4</div>
       <div class="opts" id="pickBet" style="margin-top:6px"></div>
     </div>
 
@@ -771,8 +771,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     }
     if (G.wagerResult) {
       const w = G.wagerResult; G.wagerResult = null;
-      if (w.won) { stats.money += 2 * w.stake; runMoney += w.stake; trophy('bet'); }
-      setTimeout(() => { if (!G || !live) return; float(DESK.x, DESK.y - 150, w.won ? 'SIDE BET WON +$' + fmt(w.stake) : 'SIDE BET LOST -$' + fmt(w.stake), w.won ? C.gold : '#8a8aa0', 26); if (w.won) sfx.fanfare(); else sfx.trombone(); }, 700);
+      const gain = (D.WAGER_PAYS - 1) * w.stake;
+      if (w.won) { stats.money += D.WAGER_PAYS * w.stake; runMoney += gain; trophy('bet'); }
+      setTimeout(() => { if (!G || !live) return; float(DESK.x, DESK.y - 150, w.won ? 'SIDE BET WON +$' + fmt(gain) : 'SIDE BET LOST -$' + fmt(w.stake), w.won ? C.gold : '#8a8aa0', 26); if (w.won) sfx.fanfare(); else sfx.trombone(); }, 700);
     }
     save();
     if (G.phase === 'cleared' || G.phase === 'won') onCleared();
