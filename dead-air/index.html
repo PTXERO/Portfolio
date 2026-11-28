@@ -198,6 +198,19 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 #ovTitle .stats{gap:14px;margin-top:12px;}
 #ovTitle .stats b{font-size:17px;}
 #ovTitle .stats div{font-size:8px;}
+.betbox{width:100%;margin-top:14px;border:2px solid #150f24;border-radius:6px;background:#1a1238;box-shadow:4px 4px 0 #150f24;padding:7px 8px 8px;}
+.bethead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
+.bethead b{font-family:var(--fdisp);font-weight:400;font-size:15px;letter-spacing:.06em;color:#ffd24a;}
+.bethead span{font-family:var(--fmono);font-size:9px;letter-spacing:.14em;color:#b9b9c6;}
+.bets{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.bets button{border:2px solid #4a3a90;border-radius:6px;background:#241848;padding:8px 2px 6px;cursor:pointer;line-height:1.1;min-height:46px;}
+.bets button b{display:block;font-family:var(--fdisp);font-weight:400;font-size:17px;letter-spacing:.04em;color:#fff;}
+.bets button span{display:block;font-family:var(--fmono);font-size:8px;letter-spacing:.06em;color:#c8f542;margin-top:2px;white-space:nowrap;}
+.bets button.on{background:#ffd24a;border-color:#150f24;box-shadow:3px 3px 0 #150f24;}
+.bets button.on b,.bets button.on span{color:#07070a;}
+.bets button:disabled{cursor:not-allowed;border-style:dashed;background:transparent;}
+.bets button:disabled b{color:#5a4a90;}
+.bets button:disabled span{color:#5a4a90;}
 .grid4{flex-wrap:wrap;}
 .grid4 .big-btn{flex:1 1 46%;}
 .opts{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:10px;}
@@ -329,10 +342,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       <h1>TOMORROW'S SHOW</h1>
       <p class="sub" id="pickSub"></p>
       <div class="cards three" id="pickList"></div>
-      <div class="aheadlbl">AFTER THAT</div>
-      <div class="ahead" id="pickAhead"></div>
-      <div class="aheadlbl" id="betLbl">SIDE BET · CLEAR IN ROUND 1 · PAYS ×4</div>
-      <div class="opts" id="pickBet" style="margin-top:6px"></div>
+      <div class="betbox" id="betBox">
+        <div class="bethead"><b>SIDE BET</b><span>CLEAR IT IN ROUND 1</span></div>
+        <div class="bets" id="pickBet"></div>
+      </div>
     </div>
 
     <div id="toast" hidden><img alt="" id="toastPic"><span id="toastText"></span></div>
@@ -937,7 +950,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 
   const EXTRA = { rival: 'RIVAL · +1 SPIN', vote: 'AUDIENCE VOTE', offer: "HOST'S OFFER", ad: 'SPONSOR DEAL', bonus: 'BONUS ROUND', event: 'BACKSTAGE' };
   function showPick() {
-    const ep = G.ep + 1, after = G.bookings(ep + 1);
+    const ep = G.ep + 1;
     $('pickSub').textContent = 'EPISODE ' + ep + ' · TARGET ' + fmt(G.target(ep));
     $('pickList').className = 'cards three';
     $('pickList').innerHTML = G.choices.map((n, i) => {
@@ -947,15 +960,18 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         ${f.spins ? '<span class="plus">+' + f.spins + ' SPIN</span>' : ''}
         ${n.extra ? `<span class="extra"><img alt="" src="${iconURL('e_' + n.extra)}">${EXTRA[n.extra]}</span>` : ''}</button>`;
     }).join('') ;
-    $('pickAhead').innerHTML = after.map(n => `<div>${D.byId(D.FORMATS, n.format).name}${n.extra ? '<br><b>' + EXTRA[n.extra] + '</b>' : ''}</div>`).join('');
     paintBet();
     $('ovPick').hidden = false; $('result').hidden = true; $('padWheel').hidden = true;
   }
   function paintBet() {
     const can = !G.code && !G.endless && G.ep < G.episodes;
     if (!can || pickStake > (stats.money || 0)) pickStake = 0;
-    $('betLbl').hidden = $('pickBet').hidden = !can;
-    $('pickBet').innerHTML = D.WAGERS.map(w => `<button class="hdr-btn" data-bet="${w}" ${w > (stats.money || 0) ? 'disabled style="opacity:.3"' : pickStake === w ? 'style="background:#ffd24a;color:#07070a;border-color:#ffd24a"' : ''}>${w ? '$' + w / 1000 + 'K' : 'NO BET'}</button>`).join('');
+    $('betBox').hidden = !can;
+    const k = v => v >= 1e6 ? '$' + v / 1e6 + 'M' : '$' + v / 1000 + 'K';
+    $('pickBet').innerHTML = D.WAGERS.map(w => {
+      const poor = w > (stats.money || 0);
+      return `<button data-bet="${w}" class="${pickStake === w ? 'on' : ''}" ${poor ? 'disabled' : ''}>${w ? `<b>${k(w)}</b><span>${poor ? "CAN'T AFFORD" : 'WINS ' + k(w * D.WAGER_PAYS)}</span>` : '<b>NO BET</b><span>&nbsp;</span>'}</button>`;
+    }).join('');
   }
   $('pickBet').addEventListener('click', e => { const b = e.target.closest('[data-bet]'); if (b && !b.disabled) { pickStake = +b.dataset.bet; paintBet(); } });
   // After a booking (and anything backstage), either spend spins or go on air.
