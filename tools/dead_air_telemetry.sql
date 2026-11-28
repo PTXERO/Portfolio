@@ -76,6 +76,20 @@ from public.deadair_events e,
 where e.kind = 'episode';
 
 
+-- The views are for the dashboard only. Views run with their owner's rights unless told otherwise, which would
+-- let the public key read the data through them, so: make them respect the caller's rights and take away access.
+alter view public.deadair_runs     set (security_invoker = true);
+alter view public.deadair_episodes set (security_invoker = true);
+alter view public.deadair_rounds   set (security_invoker = true);
+alter view public.deadair_buzzes   set (security_invoker = true);
+revoke all on public.deadair_runs, public.deadair_episodes, public.deadair_rounds, public.deadair_buzzes from anon, authenticated;
+-- The public key adds rows and nothing else.
+revoke all on public.deadair_events from anon, authenticated;
+grant insert on public.deadair_events to anon, authenticated;
+drop policy if exists "signed-in players can add events" on public.deadair_events;
+create policy "signed-in players can add events" on public.deadair_events for insert to authenticated with check (true);
+
+
 -- ── Questions worth asking ─────────────────────────────────────────────────────────
 
 -- Where do runs end?
