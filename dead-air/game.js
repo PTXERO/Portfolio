@@ -278,11 +278,11 @@
 
   // Stage machinery: as the season goes on the set itself gains moving parts, and they stay.
   const FIXTURES = [
-    { id: 'screen', ep: 3,  color: '#ffd24a', name: 'THE BIG SCREEN',  desc: 'The prize on screen pays x3.' },
-    { id: 'trap',   ep: 5,  color: '#ff9a2e', name: 'TRAPDOORS',       desc: 'Two podiums take turns dropping out of sight.' },
-    { id: 'turn',   ep: 8,  color: '#42d4f5', name: 'THE TURNTABLE',   desc: 'The whole stage turns.' },
-    { id: 'rogue',  ep: 11, color: '#f542a8', name: 'THE ROGUE LIGHT', desc: 'Buzz where the two lights cross: x3.' },
-    { id: 'black',  ep: 13, color: '#9d8cff', name: 'POWER CUTS',      desc: 'The house lights keep cutting out.' },
+    { id: 'screen', ep: 3,  pilot: 2,  color: '#ffd24a', name: 'THE BIG SCREEN',  desc: 'The prize on screen pays x3.' },
+    { id: 'trap',   ep: 5,  pilot: 3,  color: '#ff9a2e', name: 'TRAPDOORS',       desc: 'Two podiums take turns dropping out of sight.' },
+    { id: 'turn',   ep: 8,  pilot: 4,  color: '#42d4f5', name: 'THE TURNTABLE',   desc: 'The whole stage turns.' },
+    { id: 'rogue',  ep: 11, pilot: 5, color: '#f542a8', name: 'THE ROGUE LIGHT', desc: 'Buzz where the two lights cross: x3.' },
+    { id: 'black',  ep: 13, pilot: 6, color: '#9d8cff', name: 'POWER CUTS',      desc: 'The house lights keep cutting out.' },
   ];
 
   // Act finales: the network sends someone down to the studio floor.
@@ -353,9 +353,14 @@
   };
   P.lv = function (id) { return this.levels[id] || 0; };
   P.tr = function (id) { return this.who === id; };          // contestant trait
-  P.fix = function (id) { return this.ep >= byId(FIXTURES, id).ep; };          // is this piece of stage machinery running yet
-  P.fixtures = function () { return FIXTURES.filter(f => this.ep >= f.ep); };
-  P.down = function (i) { return !!this.traps && this.traps.length > 0 && this.traps[this.trapOn] === i; };     // a podium below the stage right now
+  // A pilot season is short, so its machinery arrives an episode apart; it still gets everything if you play on.
+  P.fixEp = function (f) { return this.episodes === PILOT ? f.pilot : f.ep; };
+  P.fix = function (id) { return this.ep >= this.fixEp(byId(FIXTURES, id)); };          // is this piece of stage machinery running yet
+  P.fixtures = function () { return FIXTURES.filter(f => this.ep >= this.fixEp(f)); };
+  // Trapdoors come in pairs that take turns; traps = [a1, b1, a2, b2, ...].
+  P.down = function (i) { if (!this.traps) return false; for (let k = this.trapOn; k < this.traps.length; k += 2) if (this.traps[k] === i) return true; return false; };
+  // Overdrive: in endless the machinery winds up a notch every three episodes.
+  P.overdrive = function () { return this.ep > this.episodes ? Math.floor((this.ep - this.episodes) / 3) : 0; };
   P.perk = function (id) { return this.perks[id] || 0; };
   // Restart the random stream for one named part of the season (only when the season has a seed).
   P.reseed = function (tag) {
@@ -441,7 +446,8 @@
     this.roundsLeft = this.rounds;
     this.tokenOut = this.rand() < 0.5;        // a wheel token only turns up in about half the episodes
     this.gig = null; this.gigN = 0; this.gigDone = false;
-    this.newFix = this.endless ? null : FIXTURES.find(f => f.ep === this.ep) || null;
+    this.newFix = FIXTURES.find(f => this.fixEp(f) === this.ep) || null;
+    this.newOd = this.ep > this.episodes && (this.ep - this.episodes) % 3 === 0 ? this.overdrive() : 0;
     if (this.ep >= 2 && !this.endless && this.rand() < 0.35) { const gold = this.lv('gold') || this.sets.money || this.evo.gold || this.is('goldnight') || this.ch('tooth');
       const pool = GIGS.filter(q => !(q.id === 'hype' && this.is('cashonly')) && !(q.id === 'gold' && !gold)); this.gig = pool[this.pick(pool.length)]; }
     this.boss = this.isFinale() ? byId(BOSSES, this.bossOrder[(this.act() - 1) % this.bossOrder.length]) : null;
@@ -484,7 +490,10 @@
     // stage machinery for this round
     this.feat = -1; this.featT = 1.2; this.turnT = 2.6; this.blackT = 5; this.black = 0;
     this.traps = []; this.trapOn = 0; this.trapT = 2.5;
-    if (this.fix('trap')) { const a = this.pick(this.n); this.traps = [a, (a + 3 + this.pick(this.n - 5)) % this.n]; }
+    if (this.fix('trap')) {                         // one pair, plus one more per overdrive level (three pairs at most)
+      const spots = this.shuffle(Array.from({ length: this.n }, (_, k) => k)).slice(0, 2 * Math.min(3, 1 + this.overdrive()));
+      this.traps = spots;
+    }
     this.u = this.rand() * 2 * this.n; this.v = this.rand() * 2 * this.n;
     this.droneT = [];
     for (let i = 0; i < this.lv('drone'); i++) this.droneT.push(2 + i * 1.1);
@@ -590,16 +599,20 @@
       }
       if (this.traps.length) {                      // TRAPDOORS: the two take turns
         this.trapT -= dt * slow;
-        if (this.trapT <= 0) { this.trapT = 2.5; this.emit({ t: 'trap', up: this.traps[this.trapOn], i: this.traps[1 - this.trapOn] }); this.trapOn = 1 - this.trapOn; }
+        if (this.trapT <= 0) {
+          this.trapT = 2.5;
+          for (let k = 0; k < this.traps.length; k += 2) this.emit({ t: 'trap', up: this.traps[k + this.trapOn], i: this.traps[k + 1 - this.trapOn] });
+          this.trapOn = 1 - this.trapOn;
+        }
       }
       if (this.fix('turn') && !this.is('conveyor')) {     // THE TURNTABLE
         this.turnT -= dt * slow;
-        if (this.turnT <= 0) { this.turnT = 2.6; this.strip.unshift(this.strip.pop()); if (this.feat >= 0) this.feat = (this.feat + 1) % this.n; this.emit({ t: 'shift' }); }
+        if (this.turnT <= 0) { this.turnT = Math.max(1.2, 2.6 / (1 + 0.25 * this.overdrive())); this.strip.unshift(this.strip.pop()); if (this.feat >= 0) this.feat = (this.feat + 1) % this.n; this.emit({ t: 'shift' }); }
       }
-      if (this.fix('rogue')) this.v -= this.speed() * 0.6 * dt;       // THE ROGUE LIGHT sweeps the other way
+      if (this.fix('rogue')) this.v -= this.speed() * Math.min(1, 0.6 + 0.1 * this.overdrive()) * dt;       // THE ROGUE LIGHT sweeps the other way
       if (this.fix('black')) {                      // POWER CUTS
         if (this.black > 0) this.black -= dt;
-        else { this.blackT -= dt; if (this.blackT <= 0) { this.blackT = 6; this.black = 1.2; this.emit({ t: 'black' }); } }
+        else { this.blackT -= dt; if (this.blackT <= 0) { this.blackT = Math.max(3, 6 - this.overdrive()); this.black = 1.2; this.emit({ t: 'black' }); } }
       }
     }
     if (this.tr('exacct') && !this.bonus) {

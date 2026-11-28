@@ -450,7 +450,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   </div>
 </div>
 
-<script src="game.js?v=1795842376"></script>
+<script src="game.js?v=1795844626"></script>
 <script>
 (function(){
   const D = DeadAir, $ = id => document.getElementById(id);
@@ -1210,7 +1210,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const spCard = () => { if (sp && live) showCard({ icon: 'e_' + sp.id, title: sp.name, text: sp.desc, color: sp.color, yes: 'ON WITH THE SHOW' }); };
     const bossCard = () => { if (boss && live) showCard({ icon: 'b_' + boss.id, kick: 'THE NETWORK SENDS', title: boss.name, text: boss.desc, color: boss.color, yes: 'BRING IT ON', onYes: spCard }); else spCard(); };
     const nf = G.newFix;
-    if (nf && live) { sfx.fanfare(); showCard({ icon: 'x_' + nf.id, kick: 'NEW ON SET', title: nf.name, text: nf.desc, color: nf.color, yes: 'ROLL CAMERAS', onYes: bossCard }); }
+    if (!nf && G.newOd && live) { sfx.fanfare(); showCard({ icon: 'x_turn', kick: 'ENDLESS', title: 'OVERDRIVE ' + G.newOd, text: 'The machinery winds up: more trapdoors, a faster turntable, more power cuts.', color: '#e8203a', yes: 'KEEP ROLLING', onYes: bossCard }); }
+    else if (nf && live) { sfx.fanfare(); showCard({ icon: 'x_' + nf.id, kick: 'NEW ON SET', title: nf.name, text: nf.desc, color: nf.color, yes: 'ROLL CAMERAS', onYes: bossCard }); }
     else bossCard();
   }
   // A challenge code is hashed into a seed. Coded seasons use a standard kit so two people get the same show.
@@ -1688,6 +1689,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const own = D.GIMMICKS.filter(g => G.lv(g.id));
     $('kitList').innerHTML = (own.length ? own.map(g => `<div style="--c:${g.color}"><img alt="" src="${iconURL(g.id)}"><span class="chip"${G.evo[g.id] ? ' style="background:#ffd24a;color:#07070a;border-color:#ffd24a"' : ''}>${G.evo[g.id] ? 'EVOLVED' : 'LEVEL ' + G.lv(g.id)}</span><p><b>${G.evo[g.id] ? D.byId(D.EVOS, g.id).name : g.name}</b><span>${g.d(G.lv(g.id))}${G.evo[g.id] ? ' ' + D.byId(D.EVOS, g.id).desc : ''}</span>${!G.evo[g.id] && D.byId(D.EVOS, g.id) ? '<span class="evohint">★ MAX +' + D.byId(D.EVOS, g.id).need.map(id => `<img alt="${D.byId(D.GIMMICKS, id).name}" title="${D.byId(D.GIMMICKS, id).name}" src="${iconURL(id)}">`).join('OR') + '</span>' : ''}</p></div>`).join('')
       : '<div><span>Nothing yet.</span></div>') +
+      (G.overdrive() ? `<div style="--c:#e8203a"><img alt="" src="${iconURL('x_turn')}"><span class="chip">×${G.overdrive()}</span><p><b>OVERDRIVE</b><span>More trapdoors, a faster turntable, more power cuts.</span></p></div>` : '') +
       (G.fixtures().length ? G.fixtures().map(f => `<div style="--c:${f.color}"><img alt="" src="${iconURL('x_' + f.id)}"><span class="chip">ON SET</span><p><b>${f.name}</b><span>${f.desc}</span></p></div>`).join('') : '') +
       D.SETS.map(t => { const have = t.of.filter(id => G.lv(id)); return have.length < 2 ? '' :
         `<div style="--c:${t.color}"><img alt="" src="${iconURL(have[0])}"><span class="chip"${G.sets[t.id] ? ` style="background:${t.color};color:#07070a"` : ''}>${G.sets[t.id] ? 'SET' : have.length + '/3'}</span><p><b>${t.name}</b><span>${t.desc}</span></p></div>`; }).join('') +
@@ -2909,7 +2911,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   applyLooks();
   // Pick up a newer build without the player having to know about browser caches.
   // Only ever checked from the title screen, so a run in progress is never interrupted.
-  const BUILD = '1795842376';
+  const BUILD = '1795844626';
   let buildChecked = 0;
   function checkBuild() {
     if (live || !/^https?:$/.test(location.protocol) || Date.now() - buildChecked < 60000) return;
