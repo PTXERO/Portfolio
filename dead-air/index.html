@@ -453,7 +453,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   </div>
 </div>
 
-<script src="game.js?v=1795879596"></script>
+<script src="game.js?v=1795880238"></script>
 <script>
 (function(){
   const D = DeadAir, $ = id => document.getElementById(id);
@@ -908,6 +908,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         break;
       }
       case 'jump': sfx.tick(1200); break;
+      case 'traphold': if (ev.on) { G.traps.forEach(i => { podFx[i] = 0; spark(podX(i), podY(i), '#ffd24a', 8, 140, 0.4, 3); }); tone(220, 0.15, 'square', 0.05); } break;
       case 'feat': rings.push({ x: podX(ev.i), y: podY(ev.i) - 22, r: 40, to: 16, life: 0.3, max: 0.3, color: '#ffd24a', w: 4 }); sfx.tick(1400); break;
       case 'trap': [ev.i, ev.up].forEach(i => { spark(podX(i), podY(i), '#ff9a2e', 6, 120, 0.4, 3); }); podFx[ev.up] = 0; trapAnim = 1; tone(140, 0.12, 'square', 0.05); break;
       case 'cross': float(podX(ev.i), podY(ev.i) - 86, 'CROSSFIRE ×3', '#f542a8', 22); rings.push({ x: podX(ev.i), y: podY(ev.i) - 14, r: 10, to: 70, life: 0.4, max: 0.4, color: '#f542a8', w: 7 }); sfx.fanfare(); excite += 0.4; break;
@@ -2992,7 +2993,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   applyLooks();
   // Pick up a newer build without the player having to know about browser caches.
   // Only ever checked from the title screen, so a run in progress is never interrupted.
-  const BUILD = '1795879596';
+  const BUILD = '1795880238';
   let buildChecked = 0;
   function checkBuild() {
     if (live || !/^https?:$/.test(location.protocol) || Date.now() - buildChecked < 60000) return;

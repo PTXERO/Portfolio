@@ -366,7 +366,7 @@
     return Math.min(pool, n);
   };
   // Trapdoors come in pairs that take turns; traps = [a1, b1, a2, b2, ...].
-  P.down = function (i) { if (!this.traps) return false; for (let k = this.trapOn; k < this.traps.length; k += 2) if (this.traps[k] === i) return true; return false; };
+  P.down = function (i) { if (!this.traps || this.trapHold) return false; for (let k = this.trapOn; k < this.traps.length; k += 2) if (this.traps[k] === i) return true; return false; };
   // Overdrive: in endless the machinery winds up a notch every three episodes.
   P.overdrive = function () { return this.ep > this.episodes ? Math.floor((this.ep - this.episodes) / 3) : 0; };
   P.perk = function (id) { return this.perks[id] || 0; };
@@ -506,7 +506,7 @@
     this.convT = 1.4; this.strobeT = 0.6;
     // stage machinery for this round
     this.feat = -1; this.featT = 1.2; this.turnT = 2.6; this.blackT = 5; this.black = 0;
-    this.traps = []; this.trapOn = 0; this.trapT = 2.5;
+    this.traps = []; this.trapOn = 0; this.trapT = 3.2; this.trapHold = false;
     if (this.fix('trap')) {                         // one pair, plus one more per overdrive level (three pairs at most)
       const spots = this.shuffle(Array.from({ length: this.n }, (_, k) => k)).slice(0, 2 * Math.min(3, 1 + this.overdrive()));
       this.traps = spots;
@@ -616,9 +616,15 @@
         }
       }
       if (this.traps.length) {                      // TRAPDOORS: the two take turns
-        this.trapT -= dt * slow;
+        // If the only prizes left are the ones on trapdoors, the doors stay shut (everything up) until the stage
+        // is cleared: a prize that is down half the time can fall out of step with the light and never be reachable.
+        let elsewhere = 0;
+        for (let j = 0; j < this.n; j++) { const q = this.strip[j]; if (q.state === 'up' && q.kind !== 'dead' && this.traps.indexOf(j) < 0) elsewhere++; }
+        const hold = elsewhere === 0;
+        if (hold !== !!this.trapHold) { this.trapHold = hold; this.emit({ t: 'traphold', on: hold }); }
+        if (!hold) this.trapT -= dt * slow;
         if (this.trapT <= 0) {
-          this.trapT = 2.5;
+          this.trapT = 3.2;
           for (let k = 0; k < this.traps.length; k += 2) this.emit({ t: 'trap', up: this.traps[k + this.trapOn], i: this.traps[k + 1 - this.trapOn] });
           this.trapOn = 1 - this.trapOn;
         }
