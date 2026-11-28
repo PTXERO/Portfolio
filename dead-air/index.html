@@ -445,7 +445,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   </div>
 </div>
 
-<script src="game.js?v=1795835679"></script>
+<script src="game.js?v=1795837586"></script>
 <script>
 (function(){
   const D = DeadAir, $ = id => document.getElementById(id);
@@ -1002,6 +1002,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   let wheelA = 0, spinAnim = null, lastWedge = -1, pointerKick = 0, wedgeFx = -1, wedgeFxT = 0;
   function showLoad() {
     G.openWheel();
+    if (trkEp && G.offers) { trkEp.offers = G.offers.map(o => o.def.id); trackSave(); }
     saveRun('wheel');
     const earned = (G.earned || []).map(e => `${e[0]} +${e[1]}`).join(' · ');
     $('loadSub').innerHTML = `<b style="color:#ffd24a">${G.spins} SPIN${G.spins === 1 ? '' : 'S'}</b> · ADD ONE TO THE WHEEL`;
@@ -1029,6 +1030,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   function showPick() {
     const ep = G.ep + 1;
     $('pickSub').textContent = 'EPISODE ' + ep + ' · TARGET ' + fmt(G.target(ep));
+    if (trkEp) { trkEp.opts = G.choices.map((n, i) => (G.canReach(i) ? '' : 'x') + n.format + (n.extra ? '+' + n.extra : '')); trackSave(); }
     $('pickList').className = 'cards three';
     $('pickList').innerHTML = G.choices.map((n, i) => {
       const f = D.byId(D.FORMATS, n.format), ok = G.canReach(i);
@@ -2811,7 +2813,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   applyLooks();
   // Pick up a newer build without the player having to know about browser caches.
   // Only ever checked from the title screen, so a run in progress is never interrupted.
-  const BUILD = '1795835679';
+  const BUILD = '1795837586';
   let buildChecked = 0;
   function checkBuild() {
     if (live || !/^https?:$/.test(location.protocol) || Date.now() - buildChecked < 60000) return;
