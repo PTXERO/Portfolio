@@ -453,7 +453,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   </div>
 </div>
 
-<script src="game.js?v=1795876178"></script>
+<script src="game.js?v=1795877417"></script>
 <script>
 (function(){
   const D = DeadAir, $ = id => document.getElementById(id);
@@ -2030,7 +2030,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       ctx.save(); ctx.translate(px, py); ctx.scale(K, K); ctx.translate(-px, -py);
       drawOnPodium(p, px, py + (isTrap ? trapAnim * 26 : 0), pop, bob, covered, burnt, ghost);
       ctx.restore();
-      if (i === G.feat && p.state === 'up' && !covered) {       // THE BIG SCREEN's pick: a gold frame and a ×3 tag
+      if (i === G.feat && p.state === 'up' && !covered && !G.bonus && (G.phase === 'sweep' || G.phase === 'resolve')) {       // THE BIG SCREEN's pick: a gold frame and a ×3 tag
         const fy = py - 20 + bob, pulse = 1 + 0.06 * Math.sin(time * 9);
         drawGlow(px, fy, 46, '#ffd24a', 0.55 + 0.25 * Math.sin(time * 9));
         ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 3; ctx.lineJoin = 'round';
@@ -2257,7 +2257,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     ctx.textBaseline = 'middle'; font(12, 'mono');
     let tagX = x + 122;
     const chip = (label, col2) => { const w2 = ctx.measureText(label).width + 12; tagX -= w2 + 4; ctx.fillStyle = col2; ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(tagX, y - 62, w2, 15, 3); ctx.fill(); ctx.stroke(); text(label, tagX + w2 / 2, y - 54, '#07070a', 'center'); };
-    if (pot.next2) chip('NEXT ×2', '#fff');
+    if (pot.next2 && (G.phase === 'sweep' || G.phase === 'resolve')) chip('NEXT ×2', '#fff');
     if (G.lv('streak') && G.streak > 0) chip('STREAK ×' + (G.streak + 1), '#ff7a2e');
     if (G.lv('life') && !G.lifeUsed) chip('RERUN', '#ff5a7a');
     for (let i = 0; i < (G.bleeps || 0); i++) { ctx.fillStyle = '#7fe0ff'; ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(x - 122 + i * 13, y - 46, 10, 10, 2); ctx.fill(); ctx.stroke(); }
@@ -2979,7 +2979,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   applyLooks();
   // Pick up a newer build without the player having to know about browser caches.
   // Only ever checked from the title screen, so a run in progress is never interrupted.
-  const BUILD = '1795876178';
+  const BUILD = '1795877417';
   let buildChecked = 0;
   function checkBuild() {
     if (live || !/^https?:$/.test(location.protocol) || Date.now() - buildChecked < 60000) return;

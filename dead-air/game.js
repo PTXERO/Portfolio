@@ -898,6 +898,8 @@
     this.roundsLeft--;
     this.last = { cash: pot.cash, hype: pot.hype, xm: pot.xm, score, bust };
     this.phase = 'tally';
+    // the round is over: nothing left over from it should still look switched on
+    pot.next2 = false; this.feat = -1; this.black = 0; this.slowT = 0;
     this.emit({ t: 'roundEnd', cash: pot.cash, hype: pot.hype, xm: pot.xm, score, bust });
   };
 
@@ -958,6 +960,7 @@
     this.buzzes = 0; this.bleeps = 0; this.slowLeft = 0; this.slowT = 0;
     this.clockMax = 8; this.clock = 8; this.stormT = Infinity; this.droneT = []; this.q = [];
     this.voteKind = null; this.u = this.rand() * 2 * this.n;
+    this.feat = -1; this.traps = []; this.black = 0;      // no stage machinery in the bonus round
     this.bonus = true; this.phase = 'sweep';
     this.emit({ t: 'bonus' });
   };
