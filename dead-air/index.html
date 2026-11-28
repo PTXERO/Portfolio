@@ -453,7 +453,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   </div>
 </div>
 
-<script src="game.js?v=1795875931"></script>
+<script src="game.js?v=1795876178"></script>
 <script>
 (function(){
   const D = DeadAir, $ = id => document.getElementById(id);
@@ -709,9 +709,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   // It goes to the project's own Supabase table (insert only; this key cannot read anything back).
   // No names, emails or anything typed by the player: a random ID made on this device, and what happened on stage.
   // Leave url/key empty and nothing is ever sent. Players can switch it off in the menu.
-  const TELEMETRY = { url: '', key: '', table: 'deadair_events' };
+  // The site's existing Supabase project (the same public key the rest of the site already ships).
+  const TELEMETRY = { url: 'https://tfquiunqquuctgkpmiba.supabase.co', key: 'sb_publishable_-PRQWq6Bv6NrJuqpMkymgw_zORhf-mE', table: 'deadair_events' };
   const TELE_Q = 'deadair.teleq';
-  const teleOn = () => !!TELEMETRY.url && !!TELEMETRY.key && stats.share !== false && /^https?:$/.test(location.protocol);
+  const teleOn = () => !!TELEMETRY.url && !!TELEMETRY.key && stats.share !== false && /^https?:$/.test(location.protocol) &&
+    (!/^(localhost|127\.|\[::1\])/.test(location.hostname) || /[?&]tele=1/.test(location.search));      // never from a developer's own machine, unless asked
   function telePlayer() {
     if (!stats.pid) { stats.pid = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 12)); save(); }
     return stats.pid;
@@ -739,7 +741,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const done = again => { teleBusy = false; if (again) teleFlush(); };
     try {
       telePost(q).then(r => {
-        if (!r.ok && r.status >= 500) return done(false);                    // their side is down: keep the rows for next time
+        if (!r.ok && (r.status >= 500 || r.status === 404)) return done(false);     // their side is down, or the table is not there yet: keep the rows for next time
         let now = []; try { now = JSON.parse(localStorage.getItem(TELE_Q)) || []; } catch (e) {}
         try { localStorage.setItem(TELE_Q, JSON.stringify(now.slice(n))); } catch (e) {}     // stored, or refused outright: either way do not resend
         done(now.length > n);
@@ -2977,7 +2979,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   applyLooks();
   // Pick up a newer build without the player having to know about browser caches.
   // Only ever checked from the title screen, so a run in progress is never interrupted.
-  const BUILD = '1795875931';
+  const BUILD = '1795876178';
   let buildChecked = 0;
   function checkBuild() {
     if (live || !/^https?:$/.test(location.protocol) || Date.now() - buildChecked < 60000) return;
