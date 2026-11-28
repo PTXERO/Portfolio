@@ -355,8 +355,15 @@
   P.tr = function (id) { return this.who === id; };          // contestant trait
   // A pilot season is short, so its machinery arrives an episode apart; it still gets everything if you play on.
   P.fixEp = function (f) { return this.episodes === PILOT ? f.pilot : f.ep; };
-  P.fix = function (id) { return this.ep >= this.fixEp(byId(FIXTURES, id)); };          // is this piece of stage machinery running yet
-  P.fixtures = function () { return FIXTURES.filter(f => this.ep >= this.fixEp(f)); };
+  // Machinery is booked per episode: tonight's set runs some of it, and tomorrow's may be different.
+  P.fix = function (id) { return !!this.fixOn && this.fixOn.indexOf(id) >= 0; };          // is this piece of stage machinery running tonight
+  P.fixtures = function () { return FIXTURES.filter(f => this.fix(f.id)); };
+  // How many pieces run at once: one in act one, two in act two, three in act three, and one more per overdrive level in endless.
+  P.fixCount = function (pool) {
+    if (!pool) return 0;
+    const n = this.ep > this.episodes ? 3 + this.overdrive() : this.episodes === PILOT ? (this.ep >= PILOT ? 2 : 1) : this.act();
+    return Math.min(pool, n);
+  };
   // Trapdoors come in pairs that take turns; traps = [a1, b1, a2, b2, ...].
   P.down = function (i) { if (!this.traps) return false; for (let k = this.trapOn; k < this.traps.length; k += 2) if (this.traps[k] === i) return true; return false; };
   // Overdrive: in endless the machinery winds up a notch every three episodes.
@@ -416,11 +423,11 @@
       nextFormat: this.nextFormat || null, earned: this.earned || [], elapsed: this.elapsed, total: this.total,
       unlocked: Array.from(this.unlocked), charm: this.charm, seed: this.seed, heat: this.heat, code: this.code,
       mods: this.mods, nextMods: this.nextMods, lane: this.lane, spinN: this.spinN, nextSpecial: this.nextSpecial || null, mapSalt: this.mapSalt || 0,
-      evo: this.evo, sets: this.sets, revived: !!this.revived, bossOrder: this.bossOrder, nextWager: this.nextWager };
+      evo: this.evo, sets: this.sets, revived: !!this.revived, fixPrev: this.fixPrev || [], bossOrder: this.bossOrder, nextWager: this.nextWager };
   };
   Game.restore = function (o) {
     const g = new Game(o.seed == null ? null : o.seed, o.who, o.perks, o.episodes, { unlocked: o.unlocked, charm: o.charm, heat: o.heat, code: o.code });
-    ['mods', 'nextMods', 'lane', 'spinN', 'nextSpecial', 'mapSalt', 'evo', 'sets', 'revived', 'bossOrder', 'nextWager'].forEach(k => { if (o[k] != null) g[k] = o[k]; });
+    ['mods', 'nextMods', 'lane', 'spinN', 'nextSpecial', 'mapSalt', 'evo', 'sets', 'revived', 'fixPrev', 'bossOrder', 'nextWager'].forEach(k => { if (o[k] != null) g[k] = o[k]; });
     ['ep', 'levels', 'wheel', 'spins', 'toasters', 'best', 'banked', 'endless', 'nextFormat', 'earned', 'elapsed', 'total'].forEach(k => { g[k] = o[k]; });
     g.phase = o.stage === 'wheel' ? 'cleared' : 'ready';
     return g;
@@ -447,6 +454,15 @@
     this.tokenOut = this.rand() < 0.5;        // a wheel token only turns up in about half the episodes
     this.gig = null; this.gigN = 0; this.gigDone = false;
     this.newFix = FIXTURES.find(f => this.fixEp(f) === this.ep) || null;
+    // tonight's machinery: drawn from what has been introduced so far; a piece always runs on the night it is introduced
+    {
+      const seen = FIXTURES.filter(f => this.fixEp(f) <= this.ep).map(f => f.id), n = this.fixCount(seen.length);
+      // nothing runs two episodes in a row, so the set really does change (and some nights it is bare)
+      const prev = this.fixPrev || [];
+      const rest = this.shuffle(seen.filter(id => (!this.newFix || id !== this.newFix.id) && prev.indexOf(id) < 0));
+      this.fixOn = (this.newFix ? [this.newFix.id] : []).concat(rest).slice(0, n);
+      this.fixPrev = this.fixOn.slice();
+    }
     this.newOd = this.ep > this.episodes && (this.ep - this.episodes) % 3 === 0 ? this.overdrive() : 0;
     if (this.ep >= 2 && !this.endless && this.rand() < 0.35) { const gold = this.lv('gold') || this.sets.money || this.evo.gold || this.is('goldnight') || this.ch('tooth');
       const pool = GIGS.filter(q => !(q.id === 'hype' && this.is('cashonly')) && !(q.id === 'gold' && !gold)); this.gig = pool[this.pick(pool.length)]; }

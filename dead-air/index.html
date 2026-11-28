@@ -453,7 +453,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   </div>
 </div>
 
-<script src="game.js?v=1795877417"></script>
+<script src="game.js?v=1795878300"></script>
 <script>
 (function(){
   const D = DeadAir, $ = id => document.getElementById(id);
@@ -1273,8 +1273,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const spCard = () => { if (sp && live) showCard({ icon: 'e_' + sp.id, title: sp.name, text: sp.desc, color: sp.color, yes: 'ON WITH THE SHOW' }); };
     const bossCard = () => { if (boss && live) showCard({ icon: 'b_' + boss.id, kick: 'THE NETWORK SENDS', title: boss.name, text: boss.desc, color: boss.color, yes: 'BRING IT ON', onYes: spCard }); else spCard(); };
     const nf = G.newFix;
-    if (!nf && G.newOd && live) { sfx.fanfare(); showCard({ icon: 'x_turn', kick: 'ENDLESS', title: 'OVERDRIVE ' + G.newOd, text: 'The machinery winds up: more trapdoors, a faster turntable, more power cuts.', color: '#e8203a', yes: 'KEEP ROLLING', onYes: bossCard }); }
-    else if (nf && live) { sfx.fanfare(); showCard({ icon: 'x_' + nf.id, kick: 'NEW ON SET', title: nf.name, text: nf.desc, color: nf.color, yes: 'ROLL CAMERAS', onYes: bossCard }); }
+    if (!nf && G.newOd && live) { sfx.fanfare(); showCard({ icon: 'x_turn', kick: 'ENDLESS', title: 'OVERDRIVE ' + G.newOd, text: 'More machinery at once, and it runs faster.', color: '#e8203a', yes: 'KEEP ROLLING', onYes: bossCard }); }
+    else if (nf && live) { sfx.fanfare(); showCard({ icon: 'x_' + nf.id, kick: 'ON SET TONIGHT', title: nf.name, text: nf.desc + ' Tonight only: the set changes every episode.', color: nf.color, yes: 'ROLL CAMERAS', onYes: bossCard }); }
     else bossCard();
   }
   // A challenge code is hashed into a seed. Coded seasons use a standard kit so two people get the same show.
@@ -1757,8 +1757,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const own = D.GIMMICKS.filter(g => G.lv(g.id));
     $('kitList').innerHTML = (own.length ? own.map(g => `<div style="--c:${g.color}"><img alt="" src="${iconURL(g.id)}"><span class="chip"${G.evo[g.id] ? ' style="background:#ffd24a;color:#07070a;border-color:#ffd24a"' : ''}>${G.evo[g.id] ? 'EVOLVED' : 'LEVEL ' + G.lv(g.id)}</span><p><b>${G.evo[g.id] ? D.byId(D.EVOS, g.id).name : g.name}</b><span>${g.d(G.lv(g.id))}${G.evo[g.id] ? ' ' + D.byId(D.EVOS, g.id).desc : ''}</span>${!G.evo[g.id] && D.byId(D.EVOS, g.id) ? '<span class="evohint">★ MAX +' + D.byId(D.EVOS, g.id).need.map(id => `<img alt="${D.byId(D.GIMMICKS, id).name}" title="${D.byId(D.GIMMICKS, id).name}" src="${iconURL(id)}">`).join('OR') + '</span>' : ''}</p></div>`).join('')
       : '<div><span>Nothing yet.</span></div>') +
-      (G.overdrive() ? `<div style="--c:#e8203a"><img alt="" src="${iconURL('x_turn')}"><span class="chip">×${G.overdrive()}</span><p><b>OVERDRIVE</b><span>More trapdoors, a faster turntable, more power cuts.</span></p></div>` : '') +
-      (G.fixtures().length ? G.fixtures().map(f => `<div style="--c:${f.color}"><img alt="" src="${iconURL('x_' + f.id)}"><span class="chip">ON SET</span><p><b>${f.name}</b><span>${f.desc}</span></p></div>`).join('') : '') +
+      (G.overdrive() ? `<div style="--c:#e8203a"><img alt="" src="${iconURL('x_turn')}"><span class="chip">×${G.overdrive()}</span><p><b>OVERDRIVE</b><span>More machinery at once, and it runs faster.</span></p></div>` : '') +
+      (G.fixtures().length ? G.fixtures().map(f => `<div style="--c:${f.color}"><img alt="" src="${iconURL('x_' + f.id)}"><span class="chip">TONIGHT</span><p><b>${f.name}</b><span>${f.desc}</span></p></div>`).join('') : '') +
       D.SETS.map(t => { const have = t.of.filter(id => G.lv(id)); return have.length < 2 ? '' :
         `<div style="--c:${t.color}"><img alt="" src="${iconURL(have[0])}"><span class="chip"${G.sets[t.id] ? ` style="background:${t.color};color:#07070a"` : ''}>${G.sets[t.id] ? 'SET' : have.length + '/3'}</span><p><b>${t.name}</b><span>${t.desc}</span></p></div>`; }).join('') +
       (G.toasters ? `<div style="--c:#8a8aa0"><img alt="" src="${iconURL('junk')}"><span class="chip">×${G.toasters}</span><p><b>${G.toasters >= 5 ? 'BREAKFAST CLUB' : 'TOASTERS'}</b><span>Start every round with $${(G.toasters >= 5 ? 50 : 10) * G.toasters} in the pot.${G.toasters < 5 ? ' Five are worth $50 each.' : ''}</span></p></div>` : '');
@@ -1863,6 +1863,16 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       ctx.fillStyle = 'rgba(7,7,10,.8)'; ctx.strokeStyle = note[1]; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.roundRect(40, 154, w3, 19, 4); ctx.fill(); ctx.stroke();
       text(note[0], 40 + w3 / 2, 164, note[1], 'center');
+    }
+    const fxs = G.bonus ? [] : G.fixtures();
+    if (fxs.length) {                               // tonight's machinery, as small badges under the chips
+      const fy = 154 + (note ? 23 : 0) + (G.gig ? 21 : 0);
+      font(10, 'mono'); ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(7,7,10,.8)'; ctx.strokeStyle = '#8a7ae0'; ctx.lineWidth = 1.5;
+      const w5 = 66 + fxs.length * 24;
+      ctx.beginPath(); ctx.roundRect(40, fy, w5, 22, 4); ctx.fill(); ctx.stroke();
+      text('ON SET', 48, fy + 11.5, '#b9a8ff', 'left');
+      fxs.forEach((f, k) => stamp(iconSticker('x_' + f.id), 106 + k * 24, fy + 11, 0.5, 0));
     }
     if (G.gig && !G.bonus) {
       font(11, 'mono'); ctx.textBaseline = 'middle';
@@ -2979,7 +2989,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   applyLooks();
   // Pick up a newer build without the player having to know about browser caches.
   // Only ever checked from the title screen, so a run in progress is never interrupted.
-  const BUILD = '1795877417';
+  const BUILD = '1795878300';
   let buildChecked = 0;
   function checkBuild() {
     if (live || !/^https?:$/.test(location.protocol) || Date.now() - buildChecked < 60000) return;
