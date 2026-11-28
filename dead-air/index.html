@@ -145,6 +145,23 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 .kit .evohint{display:flex;align-items:center;gap:3px;margin-top:2px;color:#ffd24a;font-family:var(--fmono);font-size:8.5px;letter-spacing:.08em;}
 .kit .evohint img{width:17px;height:17px;}
 .who button b i{font-style:normal;color:#ffd24a;margin-left:4px;}
+.pick1{display:flex;align-items:stretch;gap:6px;width:100%;max-width:380px;margin:0 auto 4px;}
+.pick1 .arr{flex:none;width:34px;border:2px solid #150f24;border-radius:6px;background:#241848;color:#c8f542;font-size:15px;cursor:pointer;box-shadow:3px 3px 0 #150f24;}
+.pcard{flex:1;min-width:0;display:flex;align-items:center;gap:8px;text-align:left;border:2px solid #150f24;border-radius:6px;background:#3a2878;box-shadow:3px 3px 0 var(--acc);padding:6px 8px;min-height:86px;}
+.pcard.locked{background:rgba(36,24,72,.6);box-shadow:none;border-style:dashed;border-color:#4a3a90;}
+.pcard.locked img{filter:brightness(0) opacity(.45);}
+.pcard>img{flex:none;width:66px;height:66px;}
+.ptxt{min-width:0;}
+.ptxt b{display:block;font-family:var(--fdisp);font-weight:400;font-size:17px;letter-spacing:.05em;line-height:1.05;color:#fff;}
+.ptxt b i{font-style:normal;color:#ffd24a;margin-left:5px;font-size:13px;}
+.ptxt em{display:block;font-style:normal;font-family:var(--fmono);font-size:9px;letter-spacing:.14em;color:#c8f542;margin-top:3px;}
+.ptxt span{display:block;font-size:10.5px;line-height:1.35;color:#d8d8e8;}
+#whoKit{display:flex;gap:3px;margin-top:3px;min-height:20px;}
+#whoKit img{width:20px;height:20px;}
+.dots{display:flex;gap:4px;justify-content:center;margin:5px 0 10px;}
+.dots i{width:6px;height:6px;border-radius:50%;background:#3a2878;}
+.dots i.ok{background:#6a55c8;}
+.dots i.on{background:#c8f542;}
 .grid4{flex-wrap:wrap;}
 .grid4 .big-btn{flex:1 1 46%;}
 .opts{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:10px;}
@@ -239,7 +256,15 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     <div class="ov" id="ovTitle">
       <span class="onair">● ON AIR</span>
       <div class="logo">DEAD<em>//</em>AIR</div>
-      <div class="who" id="who"></div>
+      <div class="pick1" id="who">
+        <button class="arr" id="whoPrev" aria-label="Previous contestant">◀</button>
+        <div class="pcard">
+          <img alt="" id="whoPic">
+          <div class="ptxt"><b id="whoName"></b><em id="whoTrait"></em><span id="whoDesc"></span><div id="whoKit"></div></div>
+        </div>
+        <button class="arr" id="whoNext" aria-label="Next contestant">▶</button>
+      </div>
+      <div class="dots" id="whoDots"></div>
       <button class="big-btn" id="resume" hidden></button>
       <button class="big-btn" id="start">GO ON AIR</button>
       <div class="row3 grid4">
@@ -621,8 +646,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       case 'buzz':
         slam = 1; combo = 0; sfx.buzz();
         rings.push({ x: podX(ev.i), y: podY(ev.i) - 14, r: 8, to: 46, life: 0.3, max: 0.3, color: '#fff', w: 5 });
-        if (ev.perfect && ev.hit) { float(podX(ev.i), podY(ev.i) - 62, 'PERFECT! ×2', '#fff', 22); sfx.perfect(); spark(podX(ev.i), podY(ev.i) - 14, '#fff', 16, 320, 0.5, 3); excite += 0.2; }
-        else if (ev.hit && G.boss && G.boss.id === 'critic' && !G.bonus) { float(podX(ev.i), podY(ev.i) - 62, 'MEH. HALF.', '#9d8cff', 17); bossFx = 1; }
+        if (ev.perfect && ev.hit) { float(podX(ev.i), podY(ev.i) - 62, 'PERFECT! ×' + (G.tr('stunt') ? 2.5 : G.tr('excritic') ? 3 : 2), '#fff', 22); sfx.perfect(); spark(podX(ev.i), podY(ev.i) - 14, '#fff', 16, 320, 0.5, 3); excite += 0.2; }
+        else if (ev.hit && ((G.boss && G.boss.id === 'critic') || G.tr('excritic')) && !G.bonus) { float(podX(ev.i), podY(ev.i) - 62, 'MEH. HALF.', '#9d8cff', 17); bossFx = 1; }
         break;
       case 'win': {
         const x = podX(ev.i), y = podY(ev.i) - 16, col = C[ev.kind] || C.cash;
@@ -665,6 +690,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         break;
       }
       case 'jump': sfx.tick(1200); break;
+      case 'interest': float(DESK.x - 70, DESK.y - 36, '+' + fmt(ev.add) + ' INTEREST', '#5fe08a', 18); sfx.tick(1300); break;
+      case 'roll': float(podX(ev.i) + 30, podY(ev.i) - 84, 'ON A ROLL +0.25', C.hype, 16); break;
+      case 'revive':
+        shout('ONE MORE TAKE!', C.gold, 60, 1.6); sfx.fanfare(); sfx.cheer(true); excite = 1.6; flashA = 0.4; flashC = '#ffd24a'; dark = 0;
+        for (let k = 0; k < 4; k++) confetti(rnd(80, 460), 200, 45, 60, 300);
+        break;
       case 'gig':
         if (live) { stats.money = (stats.money || 0) + ev.pay; runMoney += ev.pay; stats.gigs = (stats.gigs || 0) + 1; save(); if (stats.gigs >= 5) trophy('gigs'); }
         toast('e_ad', '<b>SIDE GIG DONE</b>+$' + fmt(ev.pay)); sfx.chime(4); confetti(W / 2, 200, 30, 120, 200);
@@ -736,7 +767,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       case 'bleep': {
         const x = podX(ev.i), y = podY(ev.i) - 16;
         rings.push({ x, y, r: 8, to: 60, life: 0.35, max: 0.35, color: '#7fe0ff', w: 6 });
-        staticBurst(x, y, 16); float(x, y - 26, ev.lucky ? 'LUCKY!' : ev.prize ? 'BLEEP! +100' : 'BLEEP!', ev.lucky ? '#ff6bd6' : '#7fe0ff', 26); if (ev.prize) podFx[ev.i] = 0; tone(1000, 0.3, 'sine', 0.09); shake = Math.max(shake, 4);
+        staticBurst(x, y, 16); float(x, y - 26, ev.lucky ? (G.tr('rookie') && G.luckUsed && !G.lv('lucky') ? "BEGINNER'S LUCK!" : 'LUCKY!') : ev.prize ? 'BLEEP! +100' : 'BLEEP!', ev.lucky ? '#ff6bd6' : '#7fe0ff', 26); if (ev.prize) podFx[ev.i] = 0; tone(1000, 0.3, 'sine', 0.09); shake = Math.max(shake, 4);
         break;
       }
       case 'bust':
@@ -766,7 +797,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     if (G.best > stats.bestBank) stats.bestBank = G.best;
     if (G.best >= 100000) trophy('bank100k'); if (G.best >= 1000000) trophy('bank1m');
     if (G.last && G.last.score > 0 && !G.endless) {      // endless is for glory: no prize money
-      const pay = Math.round(G.last.score * (1 + 0.2 * (stats.perks.agent || 0)) * (1 + D.HEAT_PAY * G.heat) * (G.lv('charity') ? 1.5 : 1) * (G.ch('agent') ? 1.15 : 1));
+      const pay = Math.round(G.last.score * (1 + 0.2 * (stats.perks.agent || 0)) * (1 + D.HEAT_PAY * G.heat) * (G.tr('intern') ? 0.5 : 1) * (G.lv('charity') ? 1.5 : 1) * (G.ch('agent') ? 1.15 : 1));
       stats.money = (stats.money || 0) + pay; runMoney += pay;
     }
     if (G.wagerResult) {
@@ -1354,6 +1385,14 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('codeClose').onclick = () => { $('ovCode').hidden = true; };
   $('codePlay').onclick = () => { const c = cleanCode($('codeIn').value); if (c.length >= 3) { clearRun(); newRun(c); } };
 
+  // Contestants you can see on the title: everyone except vault characters you have not found.
+  const whoOpen = c => c.lock ? has(c.id) : !c.ok || c.ok(stats);
+  const whoList = () => D.CONTESTANTS.filter(c => !c.lock || has(c.id));
+  function whoStep(d) {
+    const cast = whoList(), cur = stats.whoView || stats.who, i = Math.max(0, cast.findIndex(c => c.id === cur));
+    stats.whoView = cast[(i + d + cast.length) % cast.length].id; save(); live = true; sfx.tick(900); live = false; paintTitle();
+  }
+  $('whoPrev').onclick = () => whoStep(-1); $('whoNext').onclick = () => whoStep(1);
   function paintTitle() {
     const maxHeat = Math.min(D.HEAT.length, stats.heatBest + 1), heat = Math.min(stats.heat || 0, maxHeat);
     $('heatBtn').hidden = stats.heatBest < 0;
@@ -1367,11 +1406,17 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     $('money').innerHTML = stats.runs ? `$${fmt(stats.money || 0)}<small>PRIZE MONEY · JACKPOT $${fmt(stats.jackpot || 5000)}</small>` : '';
     $('stats').innerHTML = stats.runs
       ? `<div><b>${stats.runs}</b>RUNS</div><div><b>${stats.wins}</b>SEASONS WON</div><div><b>${stats.bestEp}</b>EPISODES CLEARED</div>${stats.bestTime ? `<div><b>${clockText(stats.bestTime)}</b>FASTEST SEASON</div>` : ''}<div><b>${fmt(stats.bestBank)}</b>BEST BANK</div>` : '';
-    const open = c => c.lock ? has(c.id) : !c.ok || c.ok(stats);
-    if (!open(D.byId(D.CONTESTANTS, stats.who) || { ok: () => false })) stats.who = 'rookie';
-    $('who').innerHTML = D.CONTESTANTS.filter(c => !c.lock || has(c.id)).map(c => open(c)
-      ? `<button data-who="${c.id}" class="${c.id === stats.who ? 'on' : ''}"><b>${c.name}${stats.marks[c.id] ? '<i>★' + (stats.marks[c.id] > 1 ? stats.marks[c.id] - 1 : '') + '</i>' : ''}</b><span>${c.desc}</span></button>`
-      : `<button disabled><b>${c.name}</b><span>LOCKED · ${c.need}</span></button>`).join('');
+    const cast = whoList(), c = D.byId(D.CONTESTANTS, stats.whoView) || D.byId(D.CONTESTANTS, stats.who) || cast[0], ok = whoOpen(c);
+    if (!whoOpen(D.byId(D.CONTESTANTS, stats.who) || { lock: true })) stats.who = 'rookie';
+    if (ok) stats.who = c.id;
+    $('whoPic').src = iconURL('who_' + c.id);
+    document.querySelector('.pcard').className = 'pcard' + (ok ? '' : ' locked');
+    $('whoName').innerHTML = c.name + (stats.marks[c.id] ? '<i>★' + (stats.marks[c.id] > 1 ? stats.marks[c.id] - 1 : '') + '</i>' : '');
+    $('whoTrait').textContent = ok ? c.trait : 'LOCKED';
+    $('whoDesc').textContent = ok ? c.desc : c.need.toUpperCase();
+    $('whoKit').innerHTML = ok ? c.start.map(id => id === '?rare' ? '<img alt="A headliner" src="' + iconURL('e_bonus') + '">' : `<img alt="${D.byId(D.GIMMICKS, id).name}" src="${iconURL(id)}">`).join('') : '';
+    $('whoDots').innerHTML = cast.map(x => `<i class="${x.id === c.id ? 'on' : whoOpen(x) ? 'ok' : ''}"></i>`).join('');
+    $('start').disabled = !ok && !sv; $('start').style.filter = !ok ? 'grayscale(1) brightness(.6)' : '';
   }
 
   // ── Input ──────────────────────────────────────────────────────
@@ -1418,10 +1463,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     else if (k === 's') doSlow();
   });
 
-  $('start').onclick = () => newRun();
+  $('start').onclick = () => { const c = D.byId(D.CONTESTANTS, stats.whoView); if (c && !whoOpen(c)) return; newRun(); };
   $('resume').onclick = resumeRun;
   $('modeBtn').onclick = () => { stats.mode = stats.mode === D.PILOT ? D.EPISODES : D.PILOT; save(); paintTitle(); };
-  $('who').addEventListener('click', e => { const b = e.target.closest('[data-who]'); if (b) { stats.who = b.dataset.who; save(); paintTitle(); } });
   let quitArmed = 0;       // QUIT asks for a second tap instead of a dialog
   $('quit').onclick = () => {
     if (G.phase !== 'over' && performance.now() - quitArmed > 3000) {
@@ -1858,19 +1902,21 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     if (G.boss) drawBoss(); else if (G.special === 'rival') drawRival();
     // the contestant, behind the desk; one arm comes down on the buzzer
     inkSeq = 3100;
+    const who = (D.byId(D.CONTESTANTS, G.who) || D.CONTESTANTS[0]).look, worn = D.byId(D.LOOKS, stats.equip.outfit) && has(stats.equip.outfit), shirtC = worn ? LOOK.shirt : who.shirt, hairC = worn ? LOOK.hair : who.hair;
     const bob = Math.sin(time * 8) * ex * 3, hy = y - 103 + bob;
     drawGlow(x, y - 70, 130, '#fff4c2', 0.2);
     const up = (1 - slam) * Math.min(1, 0.25 + excite);
-    limb(x - 22, y - 68 + bob, x - 43, y - 58 - up * 50, LOOK.shirt, 9);
+    limb(x - 22, y - 68 + bob, x - 43, y - 58 - up * 50, shirtC, 9);
     ink(() => ctx.arc(x - 43, y - 60 - up * 50, 6.5, 0, TAU), '#ffd9b0', 2.4);
-    ink(() => ctx.roundRect(x - 26, y - 85 + bob, 52, 74, 15), LOOK.shirt, 3);
+    ink(() => ctx.roundRect(x - 26, y - 85 + bob, 52, 74, 15), shirtC, 3);
     ink(() => { ctx.moveTo(x - 9, y - 85 + bob); ctx.lineTo(x, y - 70 + bob); ctx.lineTo(x + 9, y - 85 + bob); }, null, 2.2);
     ctx.fillStyle = '#fff'; ctx.fillRect(x - 19, y - 62 + bob, 15, 10); ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.strokeRect(x - 19, y - 62 + bob, 15, 10);
     ctx.fillStyle = '#e8203a'; ctx.fillRect(x - 17, y - 59 + bob, 11, 2);
     ink(() => ctx.arc(x, hy, 20, 0, TAU), '#ffd9b0', 3);
-    ink(() => { ctx.arc(x, hy - 3, 20.5, Math.PI * 1.02, Math.PI * 1.98); ctx.quadraticCurveTo(x + 8, hy - 14, x - 2, hy - 10); ctx.quadraticCurveTo(x - 14, hy - 6, x - 20.4, hy - 4); }, LOOK.hair, 2.6);
+    ink(() => { ctx.arc(x, hy - 3, 20.5, Math.PI * 1.02, Math.PI * 1.98); ctx.quadraticCurveTo(x + 8, hy - 14, x - 2, hy - 10); ctx.quadraticCurveTo(x - 14, hy - 6, x - 20.4, hy - 4); }, hairC, 2.6);
+    drawProp(ctx, who.prop, x, hy, 20);
     face(x, hy + 3, mood);
-    limb(x + 22, y - 68 + bob, x + 35, y - 44 - (1 - slam) * 22, LOOK.shirt, 9);
+    limb(x + 22, y - 68 + bob, x + 35, y - 44 - (1 - slam) * 22, shirtC, 9);
     ink(() => ctx.arc(x + 35, y - 42 - (1 - slam) * 22, 6.5, 0, TAU), '#ffd9b0', 2.4);
     // cannons
     if (G.lv('cannon')) [0, 1].forEach(sd => {
@@ -2133,6 +2179,33 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   }
 
   // ── Icons: one small drawing per wedge, used on the wheel, the offer cards and the gimmick list ──
+  // What a contestant wears on their head. x,y is the centre of the head, r its radius.
+  function drawProp(c, prop, x, y, r) {
+    if (!prop) return;
+    const u = r / 10, INKC = '#150f24';
+    c.save(); c.translate(x, y); c.scale(u, u); c.lineWidth = 2; c.strokeStyle = INKC; c.lineJoin = 'round'; c.lineCap = 'round';
+    const fs = (f) => { c.fillStyle = f; c.fill(); c.stroke(); };
+    switch (prop) {
+      case 'helmet': c.beginPath(); c.arc(0, -1.5, 11, Math.PI, 0); c.closePath(); fs('#e8203a'); c.fillStyle = '#fff'; c.fillRect(-1.5, -12, 3, 10); break;
+      case 'glasses': case 'specs':
+        for (const sd of [-1, 1]) { c.beginPath(); if (prop === 'glasses') c.rect(sd * 4 - 3, -1.5, 6, 4.5); else c.arc(sd * 4, 1, 3.2, 0, TAU); c.fillStyle = 'rgba(255,255,255,.75)'; c.fill(); c.stroke(); }
+        c.beginPath(); c.moveTo(-1, 1); c.lineTo(1, 1); c.stroke(); break;
+      case 'tiara': c.beginPath(); c.moveTo(-8, -7); c.lineTo(-7, -13); c.lineTo(-3.5, -9.5); c.lineTo(0, -15); c.lineTo(3.5, -9.5); c.lineTo(7, -13); c.lineTo(8, -7); c.closePath(); fs('#ffd24a'); c.fillStyle = '#ff6bd6'; c.beginPath(); c.arc(0, -10.5, 1.5, 0, TAU); c.fill(); break;
+      case 'lanyard': c.beginPath(); c.moveTo(-5, 9); c.lineTo(0, 16); c.lineTo(5, 9); c.strokeStyle = '#e8203a'; c.stroke(); c.strokeStyle = INKC; c.beginPath(); c.rect(-3, 15, 6, 7); fs('#fff'); break;
+      case 'shades': c.beginPath(); c.roundRect(-8.5, -1.5, 7.5, 5, 1.5); fs('#150f24'); c.beginPath(); c.roundRect(1, -1.5, 7.5, 5, 1.5); fs('#150f24'); c.beginPath(); c.moveTo(-1, 0); c.lineTo(1, 0); c.stroke(); break;
+      case 'bar': c.beginPath(); c.rect(-11.5, -1.5, 23, 5); fs('#07070a'); break;
+      case 'visor': c.beginPath(); c.moveTo(-11, -2.5); c.quadraticCurveTo(0, -15, 11, -2.5); c.quadraticCurveTo(0, -6, -11, -2.5); c.closePath(); fs('#5fe08a'); break;
+      case 'beret': c.beginPath(); c.ellipse(-1.5, -8.5, 11, 5, -0.2, 0, TAU); fs('#150f24'); c.beginPath(); c.arc(2, -13.5, 1.4, 0, TAU); fs('#150f24'); break;
+      case 'star': c.beginPath(); for (let k = 0; k < 10; k++) { const rr = k % 2 ? 2.4 : 5.6, a = -Math.PI / 2 + k * Math.PI / 5; c.lineTo(Math.cos(a) * rr, -15 + Math.sin(a) * rr); } c.closePath(); fs('#ffd24a'); break;
+      case 'cloud': c.beginPath(); c.arc(-4, -15, 3.6, 0, TAU); c.arc(0, -17, 4.4, 0, TAU); c.arc(4.5, -15, 3.6, 0, TAU); fs('#fff'); break;
+      case 'headset': c.beginPath(); c.arc(0, -1, 11, Math.PI * 1.05, Math.PI * 1.95); c.lineWidth = 2.6; c.stroke(); c.lineWidth = 2; c.beginPath(); c.roundRect(-13, -2, 4.5, 7, 2); fs('#150f24'); c.beginPath(); c.moveTo(-10, 5); c.quadraticCurveTo(-9, 9, -4, 8); c.stroke(); break;
+      case 'bow': c.beginPath(); c.moveTo(0, -10); c.lineTo(-7, -14); c.lineTo(-7, -6); c.closePath(); fs('#ff3a8a'); c.beginPath(); c.moveTo(0, -10); c.lineTo(7, -14); c.lineTo(7, -6); c.closePath(); fs('#ff3a8a'); c.beginPath(); c.arc(0, -10, 1.8, 0, TAU); fs('#ff3a8a'); break;
+      case 'tophat': c.beginPath(); c.rect(-7, -20, 14, 12); fs('#150f24'); c.beginPath(); c.rect(-11, -9, 22, 3); fs('#150f24'); c.fillStyle = '#8a2ad4'; c.fillRect(-7, -12, 14, 2.5); break;
+      case 'cap': c.beginPath(); c.roundRect(-10, -13, 20, 7, 2); fs('#150f24'); c.beginPath(); c.rect(-11, -7, 15, 2.5); fs('#150f24'); c.fillStyle = '#ffd24a'; c.fillRect(-2, -12, 4, 4); break;
+    }
+    c.restore();
+  }
+
   function drawIcon(c, id) {       // centred on 0,0, fits inside about ±18
     const col = (D.byId(D.GIMMICKS, id) || {}).color || '#fff';
     c.lineCap = 'round'; c.lineJoin = 'round';
@@ -2152,11 +2225,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       return;
     }
     if (id.indexOf('who_') === 0) {
-      const tones = { weather: ['#42d4f5', '#fff36b'], shopping: ['#ffd24a', '#b81430'], childstar: ['#ff6bd6', '#5a3418'], quizchamp: ['#5fe08a', '#150f24'], magician: ['#2a2a3a', '#8a2ad4'], guard: ['#3a56b0', '#150f24'] }[id.slice(4)] || ['#42d4f5', '#5a3418'];
-      box(-14, 0, 28, 18, 6, tones[0]); circ(0, -7, 10, '#ffd9b0'); c.fillStyle = tones[1]; c.beginPath(); c.arc(0, -9, 10.5, Math.PI, 0); c.fill();
-      if (id === 'who_magician') { box(-9, -22, 18, 11, 1, '#150f24'); c.fillStyle = '#150f24'; c.fillRect(-13, -12, 26, 3); }
-      if (id === 'who_guard') { box(-10, -17, 20, 6, 2, '#150f24'); c.fillStyle = '#ffd24a'; c.fillRect(-2, -16, 4, 4); }
-      circ(-3.5, -6, 1.4, '#150f24'); circ(3.5, -6, 1.4, '#150f24'); line([[-3, -1], [0, 0], [3, -1]], '#150f24', 1.5);
+      const cl = (D.byId(D.CONTESTANTS, id.slice(4)) || D.CONTESTANTS[0]).look;
+      c.strokeStyle = '#150f24'; c.lineWidth = 2;
+      c.fillStyle = cl.shirt; c.beginPath(); c.roundRect(-14, 3, 28, 16, 6); c.fill(); c.stroke();
+      c.fillStyle = '#ffd9b0'; c.beginPath(); c.arc(0, -5, 10, 0, TAU); c.fill(); c.stroke();
+      c.fillStyle = cl.hair; c.beginPath(); c.arc(0, -6.5, 10.3, Math.PI * 1.02, Math.PI * 1.98); c.quadraticCurveTo(4, -9, -1, -8); c.quadraticCurveTo(-7, -6, -10.2, -7); c.closePath(); c.fill(); c.stroke();
+      circ(-3.5, -3.5, 1.4, '#150f24'); circ(3.5, -3.5, 1.4, '#150f24'); line([[-3, 1], [0, 2.2], [3, 1]], '#150f24', 1.5);
+      drawProp(c, cl.prop, 0, -5, 10);
       return;
     }
     switch (id) {

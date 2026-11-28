@@ -193,18 +193,25 @@
     { id: 'spin', tag: '+1',  color: '#c8f542', name: 'FREE SPIN',      desc: '+1 spin.', ok: () => true },
   ];
 
+  // Contestants: each one has a trait that bends a rule, a couple of starting gimmicks, and a look.
   const CONTESTANTS = [
-    { id: 'rookie', name: 'THE ROOKIE',  desc: '', start: [], need: null },
-    { id: 'stunt',  name: 'THE STUNT COORDINATOR', desc: 'PYROTECHNICS + FOLLOW SPOT', start: ['pyro', 'wide'], need: 'Clear episode 3', ok: st => st.bestEp >= 3 },
-    { id: 'nerd',   name: 'THE AV NERD', desc: 'LIVE WIRE + CAMERA DRONE', start: ['wire', 'drone'], need: 'Clear episode 5', ok: st => st.bestEp >= 5 },
-    // Unlocked from the Money Dump.
-    { id: 'weather',   lock: true, name: 'THE WEATHER PRESENTER', desc: 'LIVE WIRE + DRAMATIC PAUSE', start: ['wire', 'slowmo'] },
-    { id: 'shopping',  lock: true, name: 'THE SHOPPING HOST',     desc: 'PRIZE BUDGET + GOLD RUSH', start: ['budget', 'gold'] },
-    { id: 'childstar', lock: true, name: 'THE CHILD STAR',        desc: 'ENCORE + SAFETY NET', start: ['encore', 'net'] },
-    { id: 'quizchamp', lock: true, name: 'THE QUIZ CHAMP',        desc: 'FOLLOW SPOT x2', start: ['wide', 'wide'] },
-    { id: 'magician',  lock: true, name: 'THE STAGE MAGICIAN',    desc: 'MIRROR BALL + a headliner', start: ['mirror', '?rare'] },
-    { id: 'guard',     lock: true, name: 'THE NIGHT GUARD',       desc: 'BLEEP BUTTON x2', start: ['bleep', 'bleep'] },
-    { id: 'diva',   name: 'THE DIVA',    desc: 'ENCORE + CROWD PLEASER', start: ['encore', 'crowd'], need: 'Win a season', ok: st => st.wins >= 1 },
+    { id: 'rookie',    name: 'THE ROOKIE',            trait: "BEGINNER'S LUCK",  desc: 'First dead air each episode is ignored.', start: [], look: { shirt: '#42d4f5', hair: '#6a3a1a', prop: null } },
+    { id: 'stunt',     name: 'THE STUNT COORDINATOR', trait: 'DAREDEVIL',        desc: 'PERFECT pays x2.5.', start: ['pyro', 'wide'], look: { shirt: '#ff7a2e', hair: '#2a1a10', prop: 'helmet' }, need: 'Clear episode 3', ok: st => st.bestEp >= 3 },
+    { id: 'nerd',      name: 'THE AV NERD',           trait: 'TINKERER',         desc: 'Cash won by gimmicks +25%.', start: ['wire', 'drone'], look: { shirt: '#5fe08a', hair: '#150f24', prop: 'glasses' }, need: 'Clear episode 5', ok: st => st.bestEp >= 5 },
+    { id: 'diva',      name: 'THE DIVA',              trait: 'SPOTLIGHT HOG',    desc: '+1 starting hype. -4 seconds.', start: ['crowd'], look: { shirt: '#b81ad4', hair: '#ffd24a', prop: 'tiara' }, need: 'Win a season', ok: st => st.wins >= 1 },
+    { id: 'intern',    name: 'THE INTERN',            trait: 'FOR EXPOSURE',     desc: '+1 round. Half prize money.', start: ['opener'], look: { shirt: '#d8d8e0', hair: '#b9783a', prop: 'lanyard' }, need: 'Play 10 runs', ok: st => st.runs >= 10 },
+    { id: 'gambler',   name: 'THE GAMBLER',           trait: 'HOUSE EDGE',       desc: 'A losing coin flip costs nothing.', start: ['double'], look: { shirt: '#1a6a3a', hair: '#150f24', prop: 'shades' }, need: 'Win a side bet', ok: st => !!(st.trophies && st.trophies.bet) },
+    { id: 'excensor',  name: 'THE EX-CENSOR',         trait: 'RED PEN',          desc: '+2 bleeps. No slow-mo.', start: ['bleep', 'lucky'], look: { shirt: '#2a2438', hair: '#150f24', prop: 'bar' }, need: 'Beat The Censor', ok: st => !!(st.trophies && st.trophies.b_censor) },
+    { id: 'exacct',    name: 'THE EX-ACCOUNTANT',     trait: 'COMPOUND INTEREST', desc: 'Pot cash +3% every 4 seconds.', start: ['budget', 'residual'], look: { shirt: '#3d6b52', hair: '#8a8aa0', prop: 'visor' }, need: 'Beat The Accountant', ok: st => !!(st.trophies && st.trophies.b_accountant) },
+    { id: 'excritic',  name: 'THE EX-CRITIC',         trait: 'HIGH STANDARDS',   desc: 'PERFECT pays x3. Anything else pays half.', start: ['wide', 'sparks'], look: { shirt: '#5a4a8a', hair: '#150f24', prop: 'beret' }, need: 'Beat The Critic', ok: st => !!(st.trophies && st.trophies.b_critic) },
+    { id: 'legend',    name: 'THE LEGEND',            trait: 'ONE MORE TAKE',    desc: 'Once a season, a cancelled show gets another round.', start: ['?rare'], look: { shirt: '#ffd24a', hair: '#e9e9ff', prop: 'star' }, need: 'Win at heat 3', ok: st => (st.heatBest || 0) >= 3 },
+    // Found in the Prize Vault.
+    { id: 'weather',   lock: true, name: 'THE WEATHER PRESENTER', trait: 'CLEAR SKIES',    desc: 'No interference.', start: ['wire', 'slowmo'], look: { shirt: '#42a0f5', hair: '#fff36b', prop: 'cloud' } },
+    { id: 'shopping',  lock: true, name: 'THE SHOPPING HOST',     trait: 'MARK-UP',        desc: 'Cash prizes +$5.', start: ['budget', 'thrift'], look: { shirt: '#ffd24a', hair: '#b81430', prop: 'headset' } },
+    { id: 'childstar', lock: true, name: 'THE CHILD STAR',        trait: 'COMEBACK KID',   desc: 'The last round pays x1.5.', start: ['encore', 'net'], look: { shirt: '#ff6bd6', hair: '#5a3418', prop: 'bow' } },
+    { id: 'quizchamp', lock: true, name: 'THE QUIZ CHAMP',        trait: 'ON A ROLL',      desc: 'PERFECTs in a row: +0.25 hype each.', start: ['wide', 'wide'], look: { shirt: '#5fe08a', hair: '#150f24', prop: 'specs' } },
+    { id: 'magician',  lock: true, name: 'THE STAGE MAGICIAN',    trait: 'VANISHING ACT',  desc: 'One less dead air TV.', start: ['?rare'], look: { shirt: '#2a2a3a', hair: '#8a2ad4', prop: 'tophat' } },
+    { id: 'guard',     lock: true, name: 'THE NIGHT GUARD',       trait: 'NIGHT SHIFT',    desc: 'Slow-mo lasts twice as long.', start: ['bleep', 'slowmo'], look: { shirt: '#3a56b0', hair: '#150f24', prop: 'cap' } },
   ];
 
   // Dressing room: permanent upgrades bought with prize money. cost(l) = price of level l + 1.
@@ -336,6 +343,7 @@
     return a;
   };
   P.lv = function (id) { return this.levels[id] || 0; };
+  P.tr = function (id) { return this.who === id; };          // contestant trait
   P.perk = function (id) { return this.perks[id] || 0; };
   // Restart the random stream for one named part of the season (only when the season has a seed).
   P.reseed = function (tag) {
@@ -370,7 +378,7 @@
     });
   };
   // Interference: from act two static strikes burn prizes off the strip, faster every episode.
-  P.stormEvery = function () { return this.ep <= ACT && this.heat < 5 ? Infinity : Math.max(0.9, 5.5 - 0.3 * Math.max(0, this.ep - ACT - 1)) * (this.ch('plugs') ? 1.45 : 1); };
+  P.stormEvery = function () { return this.tr('weather') || (this.ep <= ACT && this.heat < 5) ? Infinity : Math.max(0.9, 5.5 - 0.3 * Math.max(0, this.ep - ACT - 1)) * (this.ch('plugs') ? 1.45 : 1); };
   // UNDERSTUDY: half of anything the storm or a rival takes still reaches the pot.
   P.salvage = function (i) { const q = this.strip[i]; if (this.lv('understudy')) this.pot.cash += Math.round((q.kind === 'cash' ? this.cashVal(q) : q.kind === 'gold' ? this.cashVal(q) * 5 : 40) / 2); };
   P.storm = function (dt) {
@@ -391,18 +399,18 @@
       nextFormat: this.nextFormat || null, earned: this.earned || [], elapsed: this.elapsed, total: this.total,
       unlocked: Array.from(this.unlocked), charm: this.charm, seed: this.seed, heat: this.heat, code: this.code,
       mods: this.mods, nextMods: this.nextMods, lane: this.lane, spinN: this.spinN, nextSpecial: this.nextSpecial || null, mapSalt: this.mapSalt || 0,
-      evo: this.evo, sets: this.sets, bossOrder: this.bossOrder, nextWager: this.nextWager };
+      evo: this.evo, sets: this.sets, revived: !!this.revived, bossOrder: this.bossOrder, nextWager: this.nextWager };
   };
   Game.restore = function (o) {
     const g = new Game(o.seed == null ? null : o.seed, o.who, o.perks, o.episodes, { unlocked: o.unlocked, charm: o.charm, heat: o.heat, code: o.code });
-    ['mods', 'nextMods', 'lane', 'spinN', 'nextSpecial', 'mapSalt', 'evo', 'sets', 'bossOrder', 'nextWager'].forEach(k => { if (o[k] != null) g[k] = o[k]; });
+    ['mods', 'nextMods', 'lane', 'spinN', 'nextSpecial', 'mapSalt', 'evo', 'sets', 'revived', 'bossOrder', 'nextWager'].forEach(k => { if (o[k] != null) g[k] = o[k]; });
     ['ep', 'levels', 'wheel', 'spins', 'toasters', 'best', 'banked', 'endless', 'nextFormat', 'earned', 'elapsed', 'total'].forEach(k => { g[k] = o[k]; });
     g.phase = o.stage === 'wheel' ? 'cleared' : 'ready';
     return g;
   };
   P.is = function (id) { return !!this.format && this.format.id === id; };
   P.deadCount = function () {
-    return Math.max(1, Math.min(8, 1 + Math.ceil(this.ep / 3) + (this.is('goldnight') ? 1 : 0) + (this.is('censors') ? 2 : 0) + (this.dealIs('tvs') ? 2 : 0) + (this.heat >= 3 ? 1 : 0) + (this.heat >= 10 ? 1 : 0)) - (this.ch('foil') ? 1 : 0));
+    return Math.max(1, Math.min(8, 1 + Math.ceil(this.ep / 3) + (this.is('goldnight') ? 1 : 0) + (this.is('censors') ? 2 : 0) + (this.dealIs('tvs') ? 2 : 0) + (this.heat >= 3 ? 1 : 0) + (this.heat >= 10 ? 1 : 0)) - (this.ch('foil') ? 1 : 0) - (this.tr('magician') ? 1 : 0));
   };
 
   // ── Episode / round ─────────────────────────────────────────────
@@ -413,11 +421,11 @@
     this.format = byId(FORMATS, formatId || this.nextFormat) || FORMATS[0];
     this.nextFormat = null;
     this.reseed('e' + this.ep);
-    this.lifeUsed = false; this.footUsed = false; this.prevScore = 0;
+    this.lifeUsed = false; this.footUsed = false; this.luckUsed = false; this.prevScore = 0;
     this.deal = null; this.asked = false; this.ask = null; this.bonus = false; this.rivalScore = 0;
     this.special = this.nextSpecial || null; this.nextSpecial = null;          // specials are booked on the schedule now
     if (this.forceSpecial !== undefined) { this.special = this.forceSpecial; this.forceSpecial = undefined; }   // for tests
-    this.rounds = this.is('onetake') ? 1 : Math.max(2, 3 + this.lv('encore') - (this.is('high') ? 1 : 0) - (this.heat >= 6 ? 1 : 0) + this.epMods.rounds);
+    this.rounds = this.is('onetake') ? 1 : Math.max(2, 3 + this.lv('encore') - (this.is('high') ? 1 : 0) - (this.heat >= 6 ? 1 : 0) + this.epMods.rounds + (this.tr('intern') ? 1 : 0));
     this.roundsLeft = this.rounds;
     this.tokenOut = this.rand() < 0.5;        // a wheel token only turns up in about half the episodes
     this.gig = null; this.gigN = 0; this.gigDone = false;
@@ -449,14 +457,14 @@
     const tvs = this.strip.filter(q => q.kind === 'dead').length;
     const first = this.roundsLeft === this.rounds;
     this.pot = { cash: (this.toasters >= 5 ? 50 : 10) * this.toasters + (this.ch('fanmail') ? 20 : 0) + Math.min(400 * this.lv('residual'), Math.floor(this.prevScore * 0.05 * this.lv('residual'))),
-      hype: 1 + 0.5 * this.perk('warm') + this.mods.hype + (this.sets.crowd ? 1 : 0) + (this.ch('lozenge') ? 0.5 : 0) + (this.dealIs('tvs') ? 2 : 0) + (this.is('high') ? 2 : 0) + (this.lv('static') ? tvs : 0), xm: 1, next2: false };
-    this.buzzes = 0; this.bleeps = this.lv('bleep') + (this.sets.safety ? 1 : 0) + this.perk('censor') + this.mods.bleep + (this.is('censors') ? 1 : 0) + (this.ch('pass') && this.ep <= ACT ? 1 : 0);
-    this.slowLeft = 1 + this.lv('slowmo') + this.mods.slow + (this.ch('battery') ? 1 : 0); this.slowT = 0;
+      hype: 1 + 0.5 * this.perk('warm') + this.mods.hype + (this.sets.crowd ? 1 : 0) + (this.tr('diva') ? 1 : 0) + (this.ch('lozenge') ? 0.5 : 0) + (this.dealIs('tvs') ? 2 : 0) + (this.is('high') ? 2 : 0) + (this.lv('static') ? tvs : 0), xm: 1, next2: false };
+    this.buzzes = 0; this.bleeps = this.lv('bleep') + (this.sets.safety ? 1 : 0) + (this.tr('excensor') ? 2 : 0) + this.perk('censor') + this.mods.bleep + (this.is('censors') ? 1 : 0) + (this.ch('pass') && this.ep <= ACT ? 1 : 0);
+    this.slowLeft = this.tr('excensor') ? 0 : 1 + this.lv('slowmo') + this.mods.slow + (this.ch('battery') ? 1 : 0); this.slowT = 0;
     this.clockMax = Math.max(6, (this.is('onetake') ? 40 : ROUND_TIME) + 4 * this.lv('clock') + (this.sets.timing ? 3 : 0) + this.perk('time') - (this.dealIs('time') ? 5 : 0) +
       (this.ch('watch') ? 2 : 0) + (this.ch('script') && first ? 4 : 0) + (this.lv('telethon') ? 8 : 0) +
-      this.epMods.clock - (this.heat >= 2 ? 2 : 0) - (this.heat >= 9 ? 2 : 0));
+      this.epMods.clock - (this.tr('diva') ? 4 : 0) - (this.heat >= 2 ? 2 : 0) - (this.heat >= 9 ? 2 : 0));
     this.clock = this.clockMax; this.timeAdded = 0; this.shrinkT = 4; this.shrinkSide = 0; this.jitT = 1.2;
-    this.stormT = this.stormEvery(); this.bossT = 3;
+    this.stormT = this.stormEvery(); this.bossT = 3; this.intT = 4;
     this.streak = 0; this.inBuzz = false;
     this.tossLeft = this.lv('crowd') ? 3 : 0;
     this.convT = 1.4; this.strobeT = 0.6;
@@ -486,7 +494,7 @@
 
   // What a cash prize pays, including the PRIZE BUDGET top-up.
   P.cashVal = function (p) {
-    return Math.round((p.val + (p.val === 10 ? 15 * this.lv('thrift') : 0) + 10 * this.lv('budget') + 5 * this.perk('budget') + (this.ch('penny') ? 5 : 0)) *
+    return Math.round((p.val + (p.val === 10 ? 15 * this.lv('thrift') : 0) + 10 * this.lv('budget') + 5 * this.perk('budget') + (this.ch('penny') ? 5 : 0) + (this.tr('shopping') ? 5 : 0)) *
       (this.is('turbo') ? 2 : 1) * (this.is('cashonly') ? 2 : 1) * (this.dealIs('fast') ? 1.5 : 1));
   };
   P.isUp = function (i) { const p = this.strip[i]; return !!p && p.state === 'up' && p.kind !== 'dead'; };
@@ -498,7 +506,7 @@
   // Slow-motion: a couple of seconds of a much slower light. A few uses per round.
   P.slowmo = function () {
     if (this.phase !== 'sweep' || this.slowLeft <= 0 || this.slowT > 0) return false;
-    this.slowLeft--; this.slowT = 2.4;
+    this.slowLeft--; this.slowT = this.tr('guard') ? 4.8 : 2.4;
     this.emit({ t: 'slow' });
     return true;
   };
@@ -511,7 +519,7 @@
   };
   P.score = function () {
     const last = this.roundsLeft === 1;
-    return Math.floor(this.pot.cash * this.pot.hype * this.pot.xm * (last && this.lv('lastlaugh') ? 2 : 1) * (last && this.ch('tie') ? 1.1 : 1));
+    return Math.floor(this.pot.cash * this.pot.hype * this.pot.xm * (last && this.lv('lastlaugh') ? 2 : 1) * (last && this.ch('tie') ? 1.1 : 1) * (last && this.tr('childstar') ? 1.5 : 1));
   };
   P.perfectZone = function () { return Math.min(0.45, 0.15 + 0.075 * this.lv('wide') + (this.ch('cue') ? 0.04 : 0)); };
 
@@ -552,6 +560,10 @@
           if (cut > 0) { this.pot.cash -= cut; this.emit({ t: 'skim', cut }); }
         }
       }
+    }
+    if (this.tr('exacct') && !this.bonus) {
+      this.intT -= dt * slow;
+      if (this.intT <= 0) { this.intT = 4; const add = Math.floor(this.pot.cash * 0.03); if (add > 0) { this.pot.cash += add; this.emit({ t: 'interest', add }); } }
     }
     if (this.special === 'rival' && !this.bonus) {
       this.rivalT -= dt * slow;
@@ -616,6 +628,7 @@
     if (p.kind === 'gold') this.gigTick('gold'); else if (p.kind === 'hype') this.gigTick('hype');
     this.gigTick('prizes');
     if (money && via !== 'main' && this.sets.fx) mult *= 1.5;
+    if (money && via !== 'main' && this.tr('nerd')) mult *= 1.25;
     if (money && (i === 0 || i === this.n - 1)) mult *= 1 + this.lv('edges');
     if (money && (i === Math.floor((this.n - 1) / 2) || i === Math.ceil((this.n - 1) / 2))) mult *= 1 + this.lv('center');
     if (p.kind === 'cash') { val = this.cashVal(p) * mult; pot.cash += val; }
@@ -648,7 +661,7 @@
     else if (p.kind === 'clockp') { this.addTime(5); note = '+5 SECONDS'; }
     else if (p.kind === 'bleepp') { this.bleeps++; note = '+1 BLEEP'; }
     else if (p.kind === 'superstar') { gain = 3; pot.hype += 3; }
-    else if (p.kind === 'coin') { const up = this.rand() < 0.5; pot.cash = Math.round(pot.cash * (up ? 1.5 : 0.75)); note = up ? 'HEADS! CASH +50%' : 'TAILS. CASH -25%'; }
+    else if (p.kind === 'coin') { const up = this.rand() < 0.5; pot.cash = Math.round(pot.cash * (up ? 1.5 : this.tr('gambler') ? 1 : 0.75)); note = up ? 'HEADS! CASH +50%' : (this.tr('gambler') ? 'TAILS. NO LOSS' : 'TAILS. CASH -25%'); }
     else if (p.kind === 'broom') {
       this.later(0.1, () => { for (let j = 0; j < this.n; j++) if (this.isUp(j) && this.strip[j].kind === 'cash' && this.strip[j].val <= 20) this.win(j, 'broom', 1); });
     }
@@ -698,9 +711,9 @@
         // GHOST LIGHT: a burnt-out podium is just an empty podium.
         this.emit({ t: 'whiff', i });
         this.later(0.35, () => { this.inBuzz = false; this.phase = 'sweep'; });
-      } else if (this.rand() < 0.12 * this.lv('lucky') || (this.ch('foot') && !this.footUsed)) {
-        // LUCKY SOCKS / RABBIT'S FOOT: this one does not count.
-        if (this.ch('foot')) this.footUsed = true;
+      } else if (this.rand() < 0.12 * this.lv('lucky') || (this.ch('foot') && !this.footUsed) || (this.tr('rookie') && !this.luckUsed)) {
+        // LUCKY SOCKS / RABBIT'S FOOT / BEGINNER'S LUCK: this one does not count.
+        if (this.ch('foot') && !this.footUsed) this.footUsed = true; else if (this.tr('rookie')) this.luckUsed = true;
         p.state = 'gone';
         this.emit({ t: 'bleep', i, lucky: true });
         this.later(0.45, () => { this.inBuzz = false; this.phase = 'sweep'; });
@@ -728,8 +741,9 @@
     const add = (dt, fn) => { at += dt; this.later(at, fn); };
     const kind = p.kind;
     this.streak = perfect ? this.streak + 1 : 0;
-    this.win(i, 'main', (perfect ? (this.lv('streak') ? 1 + this.streak : 2) : this.boss && this.boss.id === 'critic' ? 0.5 : 1) * (this.buzzes === 1 ? 1 + this.lv('opener') : 1));
+    this.win(i, 'main', (perfect ? (this.lv('streak') ? 1 + this.streak : 2) * (this.tr('stunt') ? 1.25 : this.tr('excritic') ? 1.5 : 1) : (this.boss && this.boss.id === 'critic') || this.tr('excritic') ? 0.5 : 1) * (this.buzzes === 1 ? 1 + this.lv('opener') : 1));
     if (perfect && this.lv('sparks')) this.pot.hype += 0.25 * this.lv('sparks');
+    if (perfect && this.streak >= 2 && this.tr('quizchamp')) { this.pot.hype += 0.25; this.emit({ t: 'roll', i }); }
     if (perfect && this.lv('stoppage')) this.addTime(0.5 * this.lv('stoppage'));
     if ((this.lv('bogo') && this.buzzes === 1) || (perfect && this.lv('greenlight') && this.rand() < 0.5)) { p.state = 'up'; this.emit({ t: 'stays', i }); }
     if (this.lv('echo') && this.buzzes % Math.max(2, 5 - this.lv('echo')) === 0) add(0.14, () => {
@@ -804,7 +818,7 @@
     }
     if (this.lv('double')) {
       at += 0.3;
-      this.later(at, () => { const up = this.rand() < 0.5; this.pot.xm *= up ? 2.5 : 0.5; this.emit({ t: 'coin', up }); });
+      this.later(at, () => { const up = this.rand() < 0.5; this.pot.xm *= up ? 2.5 : this.tr('gambler') ? 1 : 0.5; this.emit({ t: 'coin', up }); });
       at += 1.0;
     }
     this.later(at + 0.25, () => this.endRound(this.score(), false));
@@ -843,6 +857,9 @@
       }
       const done = this.ep === this.episodes && !this.endless ? 'won' : 'cleared';
       if (this.special === 'bonus') { this.afterBonus = done; this.startBonus(); } else this.phase = done;
+    } else if (this.roundsLeft <= 0 && this.tr('legend') && !this.revived) {
+      this.revived = true; this.roundsLeft = 1; this.rounds++;          // ONE MORE TAKE
+      this.startRound(); this.emit({ t: 'revive' });
     } else if (this.roundsLeft <= 0) { if (this.wager) this.wagerResult = { stake: this.wager, won: false }; this.phase = 'over'; }
     else if ((this.special === 'offer' || this.special === 'ad') && !this.asked) {
       // The host's offer / the sponsor's deal: a question for the player before the next round.
@@ -1012,7 +1029,7 @@
     GIMMICKS.filter(g => g.lock && g.rare).map(g => ({ id: g.id, cat: 'headliner', tier: 'legendary', name: g.name, desc: g.d(1), icon: g.id })),
     FORMATS.filter(f => f.lock).map(f => ({ id: f.id, cat: 'format', tier: 'rare', name: f.name, desc: f.desc, icon: 'f_' + f.id })),
     XPRIZES.map(x => ({ id: x.id, cat: 'prize', tier: 'rare', name: x.name, desc: x.desc, icon: 'p_' + x.id })),
-    CONTESTANTS.filter(c => c.lock).map(c => ({ id: c.id, cat: 'contestant', tier: 'legendary', name: c.name, desc: c.desc, icon: 'who' })),
+    CONTESTANTS.filter(c => c.lock).map(c => ({ id: c.id, cat: 'contestant', tier: 'legendary', name: c.name, desc: c.trait + ': ' + c.desc, icon: 'who' })),
     CHARMS.map(c => ({ id: c.id, cat: 'charm', tier: 'common', name: c.name, desc: c.desc, icon: c.id })),
     []);
   // Wardrobe is bought directly in the dressing room.
