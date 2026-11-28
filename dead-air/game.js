@@ -9,7 +9,7 @@
   const PILOT = 5;              // the short game: act one only
   const ACT = 5;
   const ROUND_TIME = 16;        // seconds of moving light per round
-  const TARGETS = [2000, 2300, 2700, 3200, 4200, 5200, 6500, 8200, 11000, 15000, 19000, 24000, 31000, 40000, 55000];
+  const TARGETS = [1700, 1750, 1950, 2200, 2700, 4000, 5000, 6500, 10000, 14000, 22000, 30000, 40000, 60000, 90000];
 
   // Every gimmick is something you can see on the set. d(lv) = what it does at that level.
   const GIMMICKS = [
