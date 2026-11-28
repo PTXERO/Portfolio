@@ -249,6 +249,25 @@
     { id: 'bleep',  need: ['net', 'lucky'],      color: '#7fe0ff', name: 'SEVEN SECOND DELAY', desc: 'A bleeped TV becomes a $100 prize.' },
     { id: 'twin',   need: ['wide', 'mirror'],    color: '#42d4f5', name: 'FLOODLIGHTS',        desc: 'Every spotlight can hit PERFECT.' },
   ];
+  // Sets: own three gimmicks from the same department and the department chips in.
+  const SETS = [
+    { id: 'lights', color: '#42d4f5', name: 'LIGHTING RIG',    of: ['twin', 'mirror', 'laser', 'wide'],                 desc: 'PERFECT: +1 stray beam.' },
+    { id: 'fx',     color: '#ff9a2e', name: 'SPECIAL EFFECTS', of: ['pyro', 'cannon', 'sparks', 'wire'],                desc: 'Cash won by gimmicks x1.5.' },
+    { id: 'crowd',  color: '#f5a542', name: 'FULL HOUSE',      of: ['crowd', 'hypeman', 'ovation', 'tipline', 'echo'],  desc: '+1 starting hype.' },
+    { id: 'money',  color: '#ffd24a', name: 'DEEP POCKETS',    of: ['gold', 'budget', 'thrift', 'rainy', 'residual'],   desc: '+1 gold per strip.' },
+    { id: 'safety', color: '#7fe0ff', name: 'LEGAL TEAM',      of: ['bleep', 'net', 'lucky', 'antenna'],                desc: '+1 bleep.' },
+    { id: 'timing', color: '#c8f542', name: 'RUNNING ORDER',   of: ['clock', 'slowmo', 'stoppage', 'closer', 'opener'], desc: '+3 seconds.' },
+    { id: 'stage',  color: '#9d8cff', name: 'SET BUILDERS',    of: ['stage', 'edges', 'center', 'recycle', 'encore'],   desc: '+1 podium.' },
+  ];
+  // Side gigs: now and then an episode comes with a job on the side. It pays prize money, not points.
+  const GIGS = [
+    { id: 'perfect', n: 5, name: '5 PERFECTS' },
+    { id: 'gold',    n: 3, name: 'WIN 3 GOLD' },
+    { id: 'clear',   n: 2, name: 'CLEAR THE STAGE TWICE' },
+    { id: 'hype',    n: 4, name: 'WIN 4 HYPE PRIZES' },
+  ];
+  const GIG_PAY = 3000;         // per episode number
+
   // Act finales: the network sends someone down to the studio floor.
   const BOSSES = [
     { id: 'censor',     color: '#e8203a', name: 'THE CENSOR',     desc: 'The dead air moves.' },
@@ -303,7 +322,7 @@
     for (let i = 0; i < 3 - (this.perks.trim || 0); i++) this.wheel.push({ type: 'junk', w: 1 });
     this.wheel.push({ type: 'dead', w: 1 });
     this.shuffle(this.wheel);
-    this.evo = {}; this.newEvos = [];
+    this.evo = {}; this.newEvos = []; this.sets = {};
     this.bossOrder = this.shuffle(BOSSES.map(b => b.id));
     this.wager = 0; this.nextWager = 0;
   }
@@ -343,6 +362,10 @@
       if (this.evo[e.id] || this.lv(e.id) < byId(GIMMICKS, e.id).max || !e.need.some(id => this.lv(id))) return;
       this.evo[e.id] = true; this.newEvos.push(e);
     });
+    SETS.forEach(t => {
+      if (this.sets[t.id] || t.of.filter(id => this.lv(id)).length < 3) return;
+      this.sets[t.id] = true; this.newEvos.push(Object.assign({ set: true }, t));
+    });
   };
   // Interference: from act two static strikes burn prizes off the strip, faster every episode.
   P.stormEvery = function () { return this.ep <= ACT && this.heat < 5 ? Infinity : Math.max(0.9, 5.5 - 0.3 * Math.max(0, this.ep - ACT - 1)) * (this.ch('plugs') ? 1.45 : 1); };
@@ -366,11 +389,11 @@
       nextFormat: this.nextFormat || null, earned: this.earned || [], elapsed: this.elapsed, total: this.total,
       unlocked: Array.from(this.unlocked), charm: this.charm, seed: this.seed, heat: this.heat, code: this.code,
       mods: this.mods, nextMods: this.nextMods, lane: this.lane, spinN: this.spinN, nextSpecial: this.nextSpecial || null, mapSalt: this.mapSalt || 0,
-      evo: this.evo, bossOrder: this.bossOrder, nextWager: this.nextWager };
+      evo: this.evo, sets: this.sets, bossOrder: this.bossOrder, nextWager: this.nextWager };
   };
   Game.restore = function (o) {
     const g = new Game(o.seed == null ? null : o.seed, o.who, o.perks, o.episodes, { unlocked: o.unlocked, charm: o.charm, heat: o.heat, code: o.code });
-    ['mods', 'nextMods', 'lane', 'spinN', 'nextSpecial', 'mapSalt', 'evo', 'bossOrder', 'nextWager'].forEach(k => { if (o[k] != null) g[k] = o[k]; });
+    ['mods', 'nextMods', 'lane', 'spinN', 'nextSpecial', 'mapSalt', 'evo', 'sets', 'bossOrder', 'nextWager'].forEach(k => { if (o[k] != null) g[k] = o[k]; });
     ['ep', 'levels', 'wheel', 'spins', 'toasters', 'best', 'banked', 'endless', 'nextFormat', 'earned', 'elapsed', 'total'].forEach(k => { g[k] = o[k]; });
     g.phase = o.stage === 'wheel' ? 'cleared' : 'ready';
     return g;
@@ -395,6 +418,8 @@
     this.rounds = this.is('onetake') ? 1 : Math.max(2, 3 + this.lv('encore') - (this.is('high') ? 1 : 0) - (this.heat >= 6 ? 1 : 0) + this.epMods.rounds);
     this.roundsLeft = this.rounds;
     this.tokenOut = this.rand() < 0.5;        // a wheel token only turns up in about half the episodes
+    this.gig = null; this.gigN = 0; this.gigDone = false;
+    if (this.ep >= 2 && !this.endless && this.rand() < 0.35) { const pool = GIGS.filter(q => !(q.id === 'hype' && this.is('cashonly'))); this.gig = pool[this.pick(pool.length)]; }
     this.boss = this.isFinale() ? byId(BOSSES, this.bossOrder[(this.act() - 1) % this.bossOrder.length]) : null;
     this.wager = this.nextWager || 0; this.nextWager = 0; this.wagerResult = null;
     if (this.boss && this.special === 'rival') this.special = 'bonus';
@@ -404,7 +429,7 @@
 
   P.startRound = function () {
     this.reseed('r' + this.ep + '.' + (this.rounds - this.roundsLeft));
-    this.n = N + this.lv('stage');
+    this.n = N + this.lv('stage') + (this.sets.stage ? 1 : 0);
     this.strip = [];
     for (let i = 0; i < this.n; i++) this.strip.push({ kind: 'cash', val: 10, state: 'up' });
     this.jackOut = false;
@@ -421,10 +446,10 @@
     const tvs = this.strip.filter(q => q.kind === 'dead').length;
     const first = this.roundsLeft === this.rounds;
     this.pot = { cash: 10 * this.toasters + (this.ch('fanmail') ? 20 : 0) + Math.min(400 * this.lv('residual'), Math.floor(this.prevScore * 0.05 * this.lv('residual'))),
-      hype: 1 + 0.5 * this.perk('warm') + this.mods.hype + (this.ch('lozenge') ? 0.5 : 0) + (this.dealIs('tvs') ? 2 : 0) + (this.is('high') ? 2 : 0) + (this.lv('static') ? tvs : 0), xm: 1, next2: false };
-    this.buzzes = 0; this.bleeps = this.lv('bleep') + this.perk('censor') + this.mods.bleep + (this.is('censors') ? 1 : 0) + (this.ch('pass') && this.ep <= ACT ? 1 : 0);
+      hype: 1 + 0.5 * this.perk('warm') + this.mods.hype + (this.sets.crowd ? 1 : 0) + (this.ch('lozenge') ? 0.5 : 0) + (this.dealIs('tvs') ? 2 : 0) + (this.is('high') ? 2 : 0) + (this.lv('static') ? tvs : 0), xm: 1, next2: false };
+    this.buzzes = 0; this.bleeps = this.lv('bleep') + (this.sets.safety ? 1 : 0) + this.perk('censor') + this.mods.bleep + (this.is('censors') ? 1 : 0) + (this.ch('pass') && this.ep <= ACT ? 1 : 0);
     this.slowLeft = 1 + this.lv('slowmo') + this.mods.slow + (this.ch('battery') ? 1 : 0); this.slowT = 0;
-    this.clockMax = Math.max(6, (this.is('onetake') ? 40 : ROUND_TIME) + 4 * this.lv('clock') + this.perk('time') - (this.dealIs('time') ? 5 : 0) +
+    this.clockMax = Math.max(6, (this.is('onetake') ? 40 : ROUND_TIME) + 4 * this.lv('clock') + (this.sets.timing ? 3 : 0) + this.perk('time') - (this.dealIs('time') ? 5 : 0) +
       (this.ch('watch') ? 2 : 0) + (this.ch('script') && first ? 4 : 0) + (this.lv('telethon') ? 8 : 0) +
       this.epMods.clock - (this.heat >= 2 ? 2 : 0) - (this.heat >= 9 ? 2 : 0));
     this.clock = this.clockMax; this.timeAdded = 0; this.shrinkT = 4; this.shrinkSide = 0; this.jitT = 1.2;
@@ -450,7 +475,7 @@
     if (!this.is('cashonly')) take(Math.min(2, list.length - 1), 'hype');
     if (!this.tokenOut && list.length > 3) { take(1, 'spin'); this.tokenOut = true; }
     if (this.lv('jack') && !this.jackOut && list.length > 3) { take(1, 'jack'); this.jackOut = true; }   // one diamond a round
-    take(this.lv('gold') + (this.is('goldnight') ? 3 : 0) + (this.ch('tooth') ? 1 : 0), 'gold');
+    take(this.lv('gold') + (this.sets.money ? 1 : 0) + (this.is('goldnight') ? 3 : 0) + (this.ch('tooth') ? 1 : 0), 'gold');
     // Oddities: a mystery box, a firework crate, a x2 card or a restock crate.
     while (this.rareLeft && this.rareLeft.length && k < list.length - 1) take(1, this.rareLeft.pop());   // a showcase car, the jackpot
     while (this.specialsLeft > 0 && k < list.length - 1) { const pool = SPECIALS.concat(XPRIZES.map(x => x.id).filter(id => this.unlocked.has(id))); take(1, pool[this.pick(pool.length)]); this.specialsLeft--; }
@@ -585,6 +610,8 @@
     const voted = this.voteKind === 'cash' ? (p.kind === 'cash' || p.kind === 'gold') : this.voteKind === 'hype' && p.kind === 'hype';
     if (voted) mult *= 2;
     const money = p.kind === 'cash' || p.kind === 'gold';
+    if (p.kind === 'gold') this.gigTick('gold'); else if (p.kind === 'hype') this.gigTick('hype');
+    if (money && via !== 'main' && this.sets.fx) mult *= 1.5;
     if (money && (i === 0 || i === this.n - 1)) mult *= 1 + this.lv('edges');
     if (money && (i === Math.floor((this.n - 1) / 2) || i === Math.ceil((this.n - 1) / 2))) mult *= 1 + this.lv('center');
     if (p.kind === 'cash') { val = this.cashVal(p) * mult; pot.cash += val; }
@@ -640,7 +667,7 @@
     if (this.upList().length) return;
     this.dress(this.strip.filter(p => !(p.kind === 'dead' && p.state === 'up')));
     this.tossLeft = this.lv('crowd') ? 3 : 0;       // a fresh stage, a fresh armful for the crowd
-    if (bonus) this.pot.hype += 2 + this.lv('ovation');
+    if (bonus) { this.pot.hype += 2 + this.lv('ovation'); this.gigTick('clear'); }
     if (bonus && this.evo.cannon) for (let k = 0; k < 2; k++) this.later(0.5 + 0.18 * k, () => {
       const up = this.upList(); if (!up.length || this.phase === 'tally') return;
       const j = up[this.pick(up.length)]; this.emit({ t: 'cannon', i: j, left: k === 0 }); this.win(j, 'cannon', 1);
@@ -657,6 +684,7 @@
     const i = Math.floor(pos), frac = pos - i, p = this.strip[i];
     const perfect = Math.abs(frac - 0.5) < this.perfectZone();
     this.emit({ t: 'buzz', i, perfect, hit: this.isUp(i) });
+    if (perfect && this.isUp(i)) this.gigTick('perfect');
     if (this.bonus) { this.endBonus(this.isUp(i), i); return true; }
 
     this.inBuzz = true;
@@ -718,7 +746,7 @@
     for (let d = 1; d <= (perfect ? this.lv('pyro') : this.evo.pyro ? 2 : 0); d++) {
       add(0.09, () => { this.emit({ t: 'pyro', a: i - d, b: i + d }); this.win(i - d, 'pyro', 1); this.win(i + d, 'pyro', 1); });
     }
-    for (let k = 0; k < this.lv('mirror'); k++) {
+    for (let k = 0; k < this.lv('mirror') + (perfect && this.sets.lights ? 1 : 0); k++) {
       add(0.1, () => { const up = this.upList(); if (!up.length) return; const j = up[this.pick(up.length)]; this.emit({ t: 'ray', i: j }); this.win(j, 'mirror', 1); });
     }
     if (this.lv('wire')) {
@@ -837,7 +865,7 @@
   // Bonus round: one buzz at four wheel tokens among eight dead air. Nothing to lose.
   P.startBonus = function () {
     this.reseed('b' + this.ep);
-    this.n = N + this.lv('stage');
+    this.n = N + this.lv('stage') + (this.sets.stage ? 1 : 0);
     this.strip = [];
     for (let i = 0; i < this.n; i++) this.strip.push({ kind: 'dead', val: 10, state: 'up' });
     this.shuffle(this.strip.slice()).slice(0, 4).forEach(p => { p.kind = 'spin'; });
@@ -929,6 +957,10 @@
     return out;
   };
   P.setWager = function (stake) { this.nextWager = WAGERS.includes(stake) && !this.code && !this.endless && this.ep < this.episodes ? stake : 0; return this.nextWager; };
+  P.gigTick = function (id) {
+    if (!this.gig || this.gig.id !== id || this.gigDone || this.bonus) return;
+    if (++this.gigN >= this.gig.n) { this.gigDone = true; this.emit({ t: 'gig', pay: GIG_PAY * this.ep }); }
+  };
   P.canReach = function (lane) { return Math.abs(lane - this.lane) <= 1; };
 
   // Spins spent: now choose your next booking.
@@ -984,7 +1016,7 @@
   // Crate price: starts modest and climbs with every crate opened.
   const cratePrice = opened => 60000 + 10000 * opened;
 
-  const api = { EVOS, BOSSES, WAGERS, UNLOCKS, CHARMS, LOOKS, LOOK_PRICE, XPRIZES, HEAT, HEAT_PAY, BACKSTAGE, cratePrice, Game, N, EPISODES, PILOT, ACT, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, EVENTS, byId };
+  const api = { SETS, GIGS, GIG_PAY, EVOS, BOSSES, WAGERS, UNLOCKS, CHARMS, LOOKS, LOOK_PRICE, XPRIZES, HEAT, HEAT_PAY, BACKSTAGE, cratePrice, Game, N, EPISODES, PILOT, ACT, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, EVENTS, byId };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DeadAir = api;
 })(typeof window !== 'undefined' ? window : globalThis);

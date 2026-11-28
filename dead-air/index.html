@@ -128,6 +128,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 #ovDump{background:#1a1238;justify-content:flex-start;}
 .row3{display:flex;gap:6px;width:100%;max-width:380px;margin:8px auto 0;}
 .row3 .big-btn{flex:1;margin:0;font-size:15px;letter-spacing:.06em;padding:11px 2px 9px;line-height:1.1;}
+#toast{position:absolute;left:50%;top:118px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:8px;white-space:nowrap;pointer-events:none;
+  font-family:var(--fmono);font-size:11px;letter-spacing:.08em;color:#07070a;background:#ffd24a;border:3px solid #150f24;border-radius:6px;padding:5px 12px 5px 6px;box-shadow:4px 4px 0 #150f24;animation:toastIn .35s cubic-bezier(.2,1.6,.4,1);}
+#toast img{width:30px;height:30px;}
+#toast b{font-family:var(--fdisp);font-weight:400;font-size:15px;display:block;line-height:1.1;}
+@keyframes toastIn{from{transform:translateX(-50%) translateY(-30px) scale(.7);opacity:0;}}
 .grid4{flex-wrap:wrap;}
 .grid4 .big-btn{flex:1 1 46%;}
 .opts{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:10px;}
@@ -257,6 +262,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       <div class="opts" id="pickBet" style="margin-top:6px"></div>
     </div>
 
+    <div id="toast" hidden><img alt="" id="toastPic"><span id="toastText"></span></div>
+
     <div class="ov" id="ovCard" hidden>
       <span class="onair" id="cardKick">TONIGHT ONLY</span>
       <img alt="" id="cardIcon" style="width:96px;height:96px;margin:10px 0 2px">
@@ -368,7 +375,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 
   // ── Saved stats ────────────────────────────────────────────────
   const KEY = 'deadair.stats';
-  let stats = { runs: 0, wins: 0, bestEp: 0, bestBank: 0, sound: true, who: 'rookie', money: 0, perks: {}, jackpot: 5000, unlocked: [], opened: 0, equip: {}, seen: {}, heat: 0, codes: {} };
+  let stats = { runs: 0, wins: 0, bestEp: 0, bestBank: 0, sound: true, who: 'rookie', money: 0, perks: {}, jackpot: 5000, unlocked: [], opened: 0, equip: {}, seen: {}, heat: 0, codes: {}, trophies: {}, gigs: 0 };
   try { Object.assign(stats, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   const has = id => stats.unlocked.indexOf(id) >= 0;
   // Logbook: a gimmick or headliner is discovered the first time you get it, and stays discovered.
@@ -646,6 +653,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         break;
       }
       case 'jump': sfx.tick(1200); break;
+      case 'gig':
+        if (live) { stats.money = (stats.money || 0) + ev.pay; runMoney += ev.pay; stats.gigs = (stats.gigs || 0) + 1; save(); if (stats.gigs >= 5) trophy('gigs'); }
+        toast('e_ad', '<b>SIDE GIG DONE</b>+$' + fmt(ev.pay)); sfx.chime(4); confetti(W / 2, 200, 30, 120, 200);
+        break;
       case 'bossmove':
         [ev.a, ev.b].forEach(i => { podFx[i] = 0; staticBurst(podX(i), podY(i) - 16, 10); });
         bolt(BOSS.x - 10, BOSS.y - 20, podX(ev.a), podY(ev.a) - 16, '#e8203a');
@@ -741,13 +752,14 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     G.next();
     if (!live) { if (G.phase === 'ask') G.answer(false); else if (G.phase !== 'sweep') startDemo(); return; }
     if (G.best > stats.bestBank) stats.bestBank = G.best;
+    if (G.best >= 100000) trophy('bank100k'); if (G.best >= 1000000) trophy('bank1m');
     if (G.last && G.last.score > 0 && !G.endless) {      // endless is for glory: no prize money
       const pay = Math.round(G.last.score * (1 + 0.2 * (stats.perks.agent || 0)) * (1 + D.HEAT_PAY * G.heat) * (G.lv('charity') ? 1.5 : 1) * (G.ch('agent') ? 1.15 : 1));
       stats.money = (stats.money || 0) + pay; runMoney += pay;
     }
     if (G.wagerResult) {
       const w = G.wagerResult; G.wagerResult = null;
-      if (w.won) { stats.money += 2 * w.stake; runMoney += w.stake; }
+      if (w.won) { stats.money += 2 * w.stake; runMoney += w.stake; trophy('bet'); }
       setTimeout(() => { if (!G || !live) return; float(DESK.x, DESK.y - 150, w.won ? 'SIDE BET WON +$' + fmt(w.stake) : 'SIDE BET LOST -$' + fmt(w.stake), w.won ? C.gold : '#8a8aa0', 26); if (w.won) sfx.fanfare(); else sfx.trombone(); }, 700);
     }
     save();
@@ -768,6 +780,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     stats.bestEp = Math.max(stats.bestEp, G.ep);
     if (G.phase === 'won') { stats.wins++; if (!G.code) stats.heatBest = Math.max(stats.heatBest, G.heat); if (G.episodes === D.EPISODES) { stats.lastTime = Math.round(G.elapsed); stats.bestTime = Math.min(stats.bestTime || 1e9, stats.lastTime); } }
     save();
+    if (G.boss) trophy('b_' + G.boss.id);
+    if (G.endless && G.ep >= 20) trophy('ep20');
+    if (G.phase === 'won') {
+      trophy('win'); if (G.heat >= 1) trophy('heat1'); if (G.heat >= 5) trophy('heat5'); if (G.heat >= 10) trophy('heat10');
+      if (G.episodes === D.EPISODES && G.elapsed < 900) trophy('fast');
+      if (G.code && /^D\d{8}$/.test(G.code)) trophy('daily');
+    }
     shout(G.phase === 'won' ? 'SEASON WRAPPED!' : 'EPISODE CLEARED!', C.lime, 60, 1.6);
     for (let i = 0; i < 4; i++) confetti(rnd(60, 480), 160, 45, 60, 260);
     sfx.cheer(true); sfx.fanfare(); excite = 1.6;
@@ -961,6 +980,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     syncPads();
     const sp = G.special && D.byId(D.EVENTS, G.special);
     const boss = G.boss;
+    if (G.gig && live) toast('e_ad', '<b>SIDE GIG</b>' + G.gig.name + ' · $' + fmt(D.GIG_PAY * G.ep));
     const spCard = () => { if (sp && live) showCard({ icon: 'e_' + sp.id, title: sp.name, text: sp.desc, color: sp.color, yes: 'ON WITH THE SHOW' }); };
     if (boss && live) showCard({ icon: 'b_' + boss.id, kick: 'THE NETWORK SENDS', title: boss.name, text: boss.desc, color: boss.color, yes: 'BRING IT ON', onYes: spCard });
     else spCard();
@@ -1200,7 +1220,15 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       const items = all.filter(f);
       return `<div class="dsec">${label} · ${items.filter(g => stats.seen[g.id]).length}/${items.length}</div><div class="dgrid">` + items.map(g =>
         stats.seen[g.id] ? `<button data-g="${g.id}" class="${pick === g.id ? 'sel' : ''}"><img alt="${g.name}" src="${iconURL(g.id)}"></button>` : '<button class="lock" disabled>?</button>').join('') + '</div>';
-    }).join('');
+    }).join('') +
+      `<div class="dsec">TROPHIES · ${TROPHIES.filter(t => stats.trophies[t.id]).length}/${TROPHIES.length}</div><div class="dgrid">` +
+      TROPHIES.map(t => `<button data-g="t:${t.id}" class="${stats.trophies[t.id] ? '' : 'shop'}${pick === 't:' + t.id ? ' sel' : ''}"><img alt="${t.name}" src="${iconURL('trophy')}"></button>`).join('') + '</div>';
+    if (pick && pick.startsWith('t:')) {
+      const t = D.byId(TROPHIES, pick.slice(2));
+      $('logPic').hidden = false; $('logPic').src = iconURL('trophy');
+      $('logInfo').innerHTML = `<b>${t.name}</b>${t.how}<br><i>${stats.trophies[t.id] ? 'WON' : '$' + fmt(t.pay)}</i>`;
+      return;
+    }
     const g = pick && D.byId(all, pick), e = g && stats.seen[g.id];
     $('logPic').hidden = !g; if (g) $('logPic').src = iconURL(g.id);
     $('logInfo').innerHTML = g ? `<b>${g.name}</b>${g.d(1)}<br><i>${g.rare ? 'BOOKED' : 'WON'} ${e.n}×${g.rare ? '' : ' · BEST LEVEL ' + e.lv}</i>` : 'TAP AN ITEM';
@@ -1210,6 +1238,35 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   $('logBtn').onclick = () => openLog(false);
   $('logBtn2').onclick = () => openLog(true);
   $('logClose').onclick = () => { $('ovLog').hidden = true; };
+
+  // ── Trophies: long-term goals that pay prize money once ────────
+  const TROPHIES = [
+    { id: 'win',     pay: 50000,   name: 'IT\'S A WRAP',       how: 'Win a season.' },
+    { id: 'fast',    pay: 150000,  name: 'SPEED RUN',          how: 'Win a full season in under 15 minutes.' },
+    { id: 'heat1',   pay: 100000,  name: 'WARMING UP',         how: 'Win at heat 1.' },
+    { id: 'heat5',   pay: 500000,  name: 'TOO HOT FOR TV',     how: 'Win at heat 5.' },
+    { id: 'heat10',  pay: 2000000, name: 'MELTDOWN',           how: 'Win at heat 10.' },
+    { id: 'daily',   pay: 100000,  name: 'APPOINTMENT VIEWING', how: 'Win a daily show.' },
+    { id: 'b_censor',     pay: 40000, name: 'UNCENSORED',      how: 'Beat The Censor.' },
+    { id: 'b_accountant', pay: 40000, name: 'BALANCED BOOKS',  how: 'Beat The Accountant.' },
+    { id: 'b_critic',     pay: 40000, name: 'FIVE STARS',      how: 'Beat The Critic.' },
+    { id: 'bank100k', pay: 50000,  name: 'BIG SPENDER',        how: 'Bank 100,000 in one round.' },
+    { id: 'bank1m',  pay: 200000,  name: 'SWEEPS WEEK',        how: 'Bank 1,000,000 in one round.' },
+    { id: 'evo',     pay: 50000,   name: 'GLOW UP',            how: 'Evolve a gimmick.' },
+    { id: 'evo3',    pay: 250000,  name: 'FINAL FORM',         how: 'Three evolutions in one season.' },
+    { id: 'set',     pay: 40000,   name: 'DEPARTMENT HEAD',    how: 'Complete a set.' },
+    { id: 'bet',     pay: 30000,   name: 'HIGH ROLLER',        how: 'Win a side bet.' },
+    { id: 'gigs',    pay: 50000,   name: 'MOONLIGHTER',        how: 'Finish 5 side gigs.' },
+    { id: 'ep20',    pay: 150000,  name: 'SYNDICATION',        how: 'Reach episode 20 in endless.' },
+  ];
+  const toasts = []; let toastT = 0;
+  function toast(icon, html) { toasts.push([icon, html]); }
+  function trophy(id) {
+    if (!live || stats.trophies[id]) return;
+    const t = D.byId(TROPHIES, id); if (!t) return;
+    stats.trophies[id] = 1; stats.money = (stats.money || 0) + t.pay; save();
+    toast('trophy', '<b>' + t.name + '</b>TROPHY · +$' + fmt(t.pay)); sfx.fanfare();
+  }
 
   // ── Dressing room: buy wardrobe, choose your charm ─────────────
   const SLOTS = [['theme', 'SETS'], ['outfit', 'OUTFITS'], ['host', 'HOST JACKETS'], ['buzzer', 'BUZZERS'], ['confetti', 'CONFETTI']];
@@ -1352,6 +1409,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     const own = D.GIMMICKS.filter(g => G.lv(g.id));
     $('kitList').innerHTML = (own.length ? own.map(g => `<div style="--c:${g.color}"><img alt="" src="${iconURL(g.id)}"><span class="chip"${G.evo[g.id] ? ' style="background:#ffd24a;color:#07070a;border-color:#ffd24a"' : ''}>${G.evo[g.id] ? 'EVOLVED' : 'LEVEL ' + G.lv(g.id)}</span><p><b>${G.evo[g.id] ? D.byId(D.EVOS, g.id).name : g.name}</b><span>${g.d(G.lv(g.id))}${G.evo[g.id] ? ' ' + D.byId(D.EVOS, g.id).desc : ''}</span></p></div>`).join('')
       : '<div><span>Nothing yet.</span></div>') +
+      D.SETS.map(t => { const have = t.of.filter(id => G.lv(id)); return have.length < 2 ? '' :
+        `<div style="--c:${t.color}"><img alt="" src="${iconURL(have[0])}"><span class="chip"${G.sets[t.id] ? ` style="background:${t.color};color:#07070a"` : ''}>${G.sets[t.id] ? 'SET' : have.length + '/3'}</span><p><b>${t.name}</b><span>${t.desc}</span></p></div>`; }).join('') +
       (G.toasters ? `<div style="--c:#8a8aa0"><img alt="" src="${iconURL('junk')}"><span class="chip">×${G.toasters}</span><p><b>TOASTERS</b><span>Start every round with $${10 * G.toasters} in the pot.</span></p></div>` : '');
     $('ovKit').hidden = false; pausedUI = true;
   };
@@ -1454,6 +1513,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
       ctx.fillStyle = 'rgba(7,7,10,.8)'; ctx.strokeStyle = note[1]; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.roundRect(40, 154, w3, 19, 4); ctx.fill(); ctx.stroke();
       text(note[0], 40 + w3 / 2, 164, note[1], 'center');
+    }
+    if (G.gig && !G.bonus) {
+      font(11, 'mono'); ctx.textBaseline = 'middle';
+      const lbl = G.gigDone ? 'SIDE GIG DONE' : 'SIDE GIG: ' + G.gig.name + '  ' + G.gigN + '/' + G.gig.n, w4 = ctx.measureText(lbl).width + 16, col = G.gigDone ? C.lime : '#ffd24a';
+      ctx.fillStyle = 'rgba(7,7,10,.8)'; ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(40, note ? 177 : 154, w4, 17, 4); ctx.fill(); ctx.stroke();
+      text(lbl, 40 + w4 / 2, (note ? 177 : 154) + 9, col, 'center');
     }
     if (G.format && G.format.id !== 'classic') {
       font(15); ctx.textBaseline = 'middle';
@@ -2220,6 +2286,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         box(-13, -18, 26, 36, 3, '#d8d8e0'); box(-9, -14, 18, 9, 1, '#150f24'); for (let k = 0; k < 9; k++) box(-9 + (k % 3) * 7, -1 + Math.floor(k / 3) * 6, 4.5, 4, 1, k === 8 ? '#e8203a' : '#5fe08a'); break;
       case 'b_critic':  // one star out of three
         for (let n = 0; n < 3; n++) { c.fillStyle = n === 0 ? '#ffd24a' : '#3a2f6a'; c.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 3.4 : 8, a = -Math.PI / 2 + k * Math.PI / 5; c.lineTo((n - 1) * 15 + Math.cos(a) * r, Math.sin(a) * r); } c.closePath(); c.fill(); c.strokeStyle = '#150f24'; c.lineWidth = 2; c.stroke(); } break;
+      case 'trophy':    // a gold cup
+        c.strokeStyle = '#150f24'; c.lineWidth = 2.4; c.lineJoin = 'round';
+        c.fillStyle = '#ffd24a'; c.beginPath(); c.moveTo(-11, -16); c.lineTo(11, -16); c.quadraticCurveTo(11, 4, 0, 6); c.quadraticCurveTo(-11, 4, -11, -16); c.closePath(); c.fill(); c.stroke();
+        c.beginPath(); c.arc(-12, -9, 5, Math.PI * 0.5, Math.PI * 1.5); c.stroke(); c.beginPath(); c.arc(12, -9, 5, Math.PI * 1.5, Math.PI * 0.5); c.stroke();
+        box(-2.5, 6, 5, 7, 0, '#e0a92e'); c.strokeRect(-2.5, 6, 5, 7); box(-9, 13, 18, 5, 1, '#8a5524'); c.strokeRect(-9, 13, 18, 5);
+        c.fillStyle = '#fff4c2'; c.fillRect(-6, -12, 3, 9); break;
       case 'e_event':   // a stage door
         box(-13, -18, 26, 36, 2, '#8a5524'); box(-10, -15, 20, 30, 1, '#b9783a'); circ(6, 2, 2.5, '#ffd24a'); c.fillStyle = '#ffd24a'; c.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 3 : 7, a = -Math.PI / 2 + k * Math.PI / 5; c.lineTo(Math.cos(a) * r, -6 + Math.sin(a) * r); } c.fill(); break;
       case 'f_classic': // ticket
@@ -2348,8 +2420,16 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     if (crateShow) { drawCrateShow(dt); return; }
     if (live) G.elapsed = (G.elapsed || 0) + dt;
     const onWheel = G.phase === 'load' || G.phase === 'wheel' || G.phase === 'pick' || G.phase === 'ready';
-    if (live && G.newEvos && G.newEvos.length && !pausedUI && !spinAnim && $('ovCard').hidden) {
+    if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').hidden = true; }
+    else if (toasts.length) { const t = toasts.shift(); $('toastPic').src = iconURL(t[0]); $('toastText').innerHTML = t[1]; $('toast').hidden = false; toastT = 2.6; }
+    if (live && G.newEvos && G.newEvos.length && !pausedUI && !spinAnim && $('ovCard').hidden && G.newEvos[0].set) {
+      const st = G.newEvos.shift();
+      sfx.fanfare(); sfx.cheer(true); excite = 1.4; trophy('set');
+      for (let k = 0; k < 2; k++) confetti(rnd(80, 460), 220, 45, 60, 300);
+      showCard({ icon: st.of.find(id => G.lv(id)), kick: 'SET COMPLETE', title: st.name, text: st.desc, color: st.color, yes: 'OK' });
+    } else if (live && G.newEvos && G.newEvos.length && !pausedUI && !spinAnim && $('ovCard').hidden) {
       const ev = G.newEvos.shift();
+      trophy('evo'); if (Object.keys(G.evo).length >= 3) trophy('evo3');
       badgeFx.set(ev.id, 0); sfx.fanfare(); sfx.cheer(true); excite = 1.6; flashA = 0.35; flashC = ev.color;
       for (let k = 0; k < 4; k++) confetti(rnd(80, 460), 220, 45, 60, 300);
       showCard({ icon: ev.id, kick: D.byId(D.GIMMICKS, ev.id).name + ' EVOLVED', title: ev.name, text: ev.desc, color: ev.color, yes: 'OK' });
@@ -2431,6 +2511,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   if (!stats.equip) stats.equip = {};
   if (!stats.seen) stats.seen = {};
   if (!stats.codes) stats.codes = {};
+  if (!stats.trophies) stats.trophies = {};
   if (stats.heatBest == null) stats.heatBest = stats.wins > 0 ? 0 : -1;
   if ((stats.v || 0) < 2) {       // the vault no longer sells wardrobe: price it by the gameplay unlocks actually owned
     stats.opened = D.UNLOCKS.filter(u => has(u.id)).length; stats.v = 2; save();
