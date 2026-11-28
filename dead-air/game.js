@@ -283,7 +283,7 @@
     { id: 'critic',     color: '#9d8cff', name: 'THE CRITIC',     desc: 'Only PERFECT pays in full.' },
   ];
   const WAGERS = [0, 10000, 50000, 200000];   // side bet: clear the episode in round one
-  const WAGER_PAYS = 4;         // what a won bet returns, stake included (round-one clears are rare)
+  const WAGER_PAYS = 3;         // what a won bet returns, stake included (round-one clears are rare)
 
   function mulberry(seed) {
     let a = seed >>> 0;
@@ -500,7 +500,7 @@
   P.isUp = function (i) { const p = this.strip[i]; return !!p && p.state === 'up' && p.kind !== 'dead'; };
   P.upList = function () { const o = []; for (let i = 0; i < this.n; i++) if (this.isUp(i)) o.push(i); return o; };
   P.speed = function () {                                   // podiums per second
-    return (3.6 + 0.24 * Math.min(this.ep, 18)) * (1 + (this.heat >= 1 ? 0.1 : 0) + (this.heat >= 7 ? 0.1 : 0)) * (this.lv('slowburn') ? 0.5 : 1) * (1 + (this.lv('steady') ? 0 : (this.lv('slowburn') ? 0.18 : 0.09) * this.buzzes)) *
+    return (3.6 + 0.24 * Math.min(this.ep, 18)) * (1 + (this.heat >= 1 ? 0.1 : 0) + (this.heat >= 7 ? 0.1 : 0)) * (this.lv('slowburn') ? 0.5 : 1) * (1 + (this.lv('steady') ? 0 : Math.min(this.lv('slowburn') ? 1.4 : 0.7, (this.lv('slowburn') ? 0.14 : 0.07) * this.buzzes))) *
       (this.ch('coffee') ? 0.92 : 1) * (this.lv('telethon') ? 1.1 : 1) * (this.is('turbo') ? 1.35 : 1) * (this.dealIs('fast') ? 1.25 : 1) * (this.slowT > 0 ? 0.35 : 1);
   };
   // Slow-motion: a couple of seconds of a much slower light. A few uses per round.
@@ -970,7 +970,12 @@
   P.bookings = function (ep) {
     const keep = this.rand;
     if (this.seed != null) this.reseed('m' + ep); else this.rand = mulberry((this.mapSalt = this.mapSalt || (Math.random() * 1e9) | 0) + ep * 7919);
-    const formats = this.shuffle(FORMATS.filter(f => this.open(f))).slice(0, 3);
+    let formats = this.shuffle(FORMATS.filter(f => this.open(f)));
+    if (ep <= 3) {                                 // the first few schedules carry at most one tough show
+      let tough = 0;
+      formats = formats.filter(f => !f.spins || tough++ < 1);
+    }
+    formats = this.shuffle(formats.slice(0, 3));
     const extras = ['rival', 'vote', 'offer', 'ad', 'bonus', 'event', 'event'];
     const chance = 0.3 * (this.ch('mints') ? 2 : 1);
     const out = formats.map(f => ({ format: f.id, extra: ep >= 2 && this.rand() < chance ? extras[this.pick(extras.length)] : null }));

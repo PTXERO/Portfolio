@@ -105,7 +105,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
 .big-btn{border:3px solid #150f24;box-shadow:5px 5px 0 #150f24;border-radius:6px;}
 .big-btn.alt{border-color:var(--acc);box-shadow:5px 5px 0 #150f24;}
 .pad button{border:3px solid #150f24;}
-#buzz{box-shadow:0 6px 0 #150f24;}#bank{box-shadow:0 6px 0 #150f24;}#slow{box-shadow:0 6px 0 #150f24;}#spin{box-shadow:0 6px 0 #150f24;}
+#buzz{box-shadow:0 6px 0 #150f24;}#bank{box-shadow:0 6px 0 #150f24;}
+#bank.clr,#bank.x2{background:#ffd24a;animation:bankGo .5s ease-in-out infinite alternate;}
+#bank.x2{background:#fff;}
+#bank.clr small,#bank.x2 small{color:#07070a;font-weight:700;opacity:1;}
+@keyframes bankGo{to{transform:scale(1.06);box-shadow:0 6px 0 #150f24,0 0 26px #ffd24a;}}
+#slow{box-shadow:0 6px 0 #150f24;}#spin{box-shadow:0 6px 0 #150f24;}
 .card{border:3px solid #150f24;border-top:3px solid #150f24;border-radius:8px;background:#241848;box-shadow:5px 5px 0 var(--c);}
 .card:nth-child(odd){transform:rotate(-1.2deg);}.card:nth-child(even){transform:rotate(1deg);}
 .card:hover{transform:translateY(-5px) rotate(0);border-color:#150f24;}
@@ -445,7 +450,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   </div>
 </div>
 
-<script src="game.js?v=1795837834"></script>
+<script src="game.js?v=1795839648"></script>
 <script>
 (function(){
   const D = DeadAir, $ = id => document.getElementById(id);
@@ -2767,6 +2772,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         }
       }
     }
+    if (live && G.phase !== 'wheel') {
+      // BANK says so when banking right now would clear the episode, or double the target
+      const need = G.target(G.ep) - G.total, pot = G.phase === 'sweep' || G.phase === 'resolve' ? G.score() : 0, canBank = G.buzzes > 0 && !G.bonus && !(G.lv('allin') && G.clock > 0);
+      const st = !canBank || pot <= 0 ? '' : G.total + pot >= 2 * G.target(G.ep) ? 'x2' : pot >= need ? 'clr' : '';
+      const bk = $('bank'), lbl = st === 'x2' ? 'TARGET ×2!' : st === 'clr' ? 'CLEARS IT!' : 'KEEP · B';
+      if (bk.dataset.st !== st) { bk.dataset.st = st; bk.className = st; $('bankSub').textContent = lbl; if (st && live) { sfx.chime(st === 'x2' ? 5 : 3); } }
+    }
     if (live && G.phase !== 'wheel') { const sl = $('slow'), can = G.phase === 'sweep' && G.slowLeft > 0 && !(G.slowT > 0); if (sl.disabled === can) sl.disabled = !can; const t = '×' + (G.slowLeft || 0) + ' · S'; if ($('slowSub').textContent !== t) $('slowSub').textContent = t; }
     if (wantBank && G.phase !== 'resolve') { wantBank = false; if (live && G.phase === 'sweep' && G.bank()) sfx.chime(2); }
     if (live && G.phase !== 'wheel') { const b = $('bank'); const can = (G.phase === 'sweep' || G.phase === 'resolve') && G.buzzes > 0 && !wantBank && !G.lv('allin'); if (b.disabled === can) b.disabled = !can; const bz = $('buzz'), cb = G.phase === 'sweep' || !!tally; if (bz.disabled === cb) bz.disabled = !cb; }
@@ -2841,7 +2853,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   applyLooks();
   // Pick up a newer build without the player having to know about browser caches.
   // Only ever checked from the title screen, so a run in progress is never interrupted.
-  const BUILD = '1795837834';
+  const BUILD = '1795839648';
   let buildChecked = 0;
   function checkBuild() {
     if (live || !/^https?:$/.test(location.protocol) || Date.now() - buildChecked < 60000) return;
