@@ -9,8 +9,9 @@
   const PILOT = 5;              // the short game: act one only
   const ACT = 5;
   const ROUND_TIME = 16;        // seconds of moving light per round
-  // Act one is gentle; from act two the targets assume the player has built something ridiculous.
-  const TARGETS = [2000, 2300, 2700, 3200, 4200, 7000, 10000, 14000, 20000, 28000, 42000, 62000, 90000, 130000, 200000];
+  // Act one asks for about three full sets of prizes across the episode (one cleared stage a round is worth
+  // roughly 1,300-1,700 early on); from act two the targets assume the player has built something ridiculous.
+  const TARGETS = [4000, 4500, 5000, 5500, 6000, 8000, 10000, 14000, 20000, 28000, 42000, 62000, 90000, 130000, 200000];
 
   // Every gimmick is something you can see on the set. d(lv) = what it does at that level.
   const GIMMICKS = [

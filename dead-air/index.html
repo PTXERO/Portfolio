@@ -453,7 +453,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   </div>
 </div>
 
-<script src="game.js?v=1795888286"></script>
+<script src="game.js?v=1795888495"></script>
 <script>
 (function(){
   const D = DeadAir, $ = id => document.getElementById(id);
@@ -3001,7 +3001,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   applyLooks();
   // Pick up a newer build without the player having to know about browser caches.
   // Only ever checked from the title screen, so a run in progress is never interrupted.
-  const BUILD = '1795888286';
+  const BUILD = '1795888495';
   let buildChecked = 0;
   function checkBuild() {
     if (live || !/^https?:$/.test(location.protocol) || Date.now() - buildChecked < 60000) return;
