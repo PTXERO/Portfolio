@@ -445,7 +445,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   </div>
 </div>
 
-<script src="game.js?v=1795837586"></script>
+<script src="game.js?v=1795837834"></script>
 <script>
 (function(){
   const D = DeadAir, $ = id => document.getElementById(id);
@@ -699,7 +699,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   // ── Run tracker (debug): a compact log of every round, for studying pacing ──
   // Off by default. Logs live in localStorage; COPY RUN LOG puts the recent ones on the clipboard.
   const TRACK_KEY = 'deadair.track';
-  let trk = null, trkEp = null, trkRd = null, trkWall = 0;
+  let trk = null, trkEp = null, trkRd = null, trkWall = 0, trkMoved = -9, trkF = { n: 0, t: 0, slow: 0 };
   const r1 = v => Math.round(v * 10) / 10;
   function trackLoad() { try { return JSON.parse(localStorage.getItem(TRACK_KEY)) || []; } catch (e) { return []; } }
   function trackSave() {
@@ -710,7 +710,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     trk = trkEp = trkRd = null;
     if (!stats.debug) return;
     trk = { id: Date.now(), build: typeof BUILD === 'string' ? BUILD : '', date: new Date().toISOString().slice(0, 16), who: G.who, heat: G.heat, code: G.code || '', of: G.episodes,
-      perks: stats.perks, charm: G.charm || '', view: Math.round(innerWidth) + 'x' + Math.round(innerHeight), eps: [], end: null };
+      perks: stats.perks, charm: G.charm || '', runs: stats.runs, wins: stats.wins, bank: stats.money || 0, dpr: window.devicePixelRatio || 1, touch: 'ontouchstart' in window ? 1 : 0, view: Math.round(innerWidth) + 'x' + Math.round(innerHeight), eps: [], end: null };
     trackSave();
   }
   function trackKit() { const o = {}; Object.keys(G.levels).forEach(id => { o[id] = G.evo[id] ? G.levels[id] + '*' : G.levels[id]; }); return o; }
@@ -724,23 +724,47 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
         trk.eps.push(trkEp);
         break;
       case 'round':       // (an episode's first round is announced just before the episode itself)
-        trkRd = { bz: 0, pf: 0, miss: 0, bl: 0, sl: 0, clr: 0, lost: 0, gaps: [], t0: G.elapsed, last: G.elapsed, bonus: !!G.bonus };
+        trkRd = { bz: 0, pf: 0, miss: 0, bl: 0, sl: 0, clr: 0, lost: 0, gaps: [], t0: G.elapsed, last: G.elapsed, bonus: !!G.bonus, errs: [], misses: [], via: {}, hy: {}, how: 'bank', peak: 0 };
         break;
       case 'buzz':
         if (!trkRd) break;
         trkRd.bz++; if (ev.perfect && ev.hit) trkRd.pf++; if (!ev.hit) trkRd.miss++;
         trkRd.gaps.push(r1(G.elapsed - trkRd.last)); trkRd.last = G.elapsed;
+        {
+          // how far from the middle of the podium the light stopped, as time: negative is early, positive late
+          const pos = Math.min(G.n - 0.001, G.beams()[0]), off = pos - Math.floor(pos) - 0.5, ms = Math.round(off / G.speed() * 1000);
+          if (ev.hit) trkRd.errs.push(ms);
+          else {
+            const q = G.strip[ev.i] || {}, nb = d => G.isUp(ev.i + d) ? 1 : 0;
+            trkRd.misses.push({ n: trkRd.bz, at: r1(G.elapsed - trkRd.t0), on: q.kind === 'dead' ? 'tv' : 'empty', ms, edge: r1(0.5 - Math.abs(off)), l: nb(-1), r: nb(1),
+              spd: r1(G.speed()), slow: G.slowT > 0 ? 1 : 0, moved: G.elapsed - trkMoved < 0.4 ? 1 : 0, dark: G.n - G.upList().length, pot: G.score() });
+          }
+        }
+        trkRd.peak = Math.max(trkRd.peak, G.score());
         break;
+      case 'win':
+        if (!trkRd) break;
+        if (ev.val) trkRd.via[ev.via] = (trkRd.via[ev.via] || 0) + Math.round(ev.val);
+        if (ev.gain && ev.kind !== 'jack') trkRd.hy[ev.via] = r1((trkRd.hy[ev.via] || 0) + ev.gain);
+        trkRd.peak = Math.max(trkRd.peak, G.score());
+        break;
+      case 'shift': case 'shuffled': case 'jump': trkMoved = G.elapsed; break;
+      case 'timeup': if (trkRd) trkRd.how = 'time'; break;
+      case 'bust': if (trkRd) { trkRd.how = 'bust'; trkRd.lostPot = ev.lost; } break;
       case 'bleep': if (trkRd) trkRd.bl++; break;
       case 'slow': if (trkRd) trkRd.sl++; break;
       case 'refill': if (trkRd && ev.bonus) trkRd.clr++; break;
-      case 'storm': case 'rival': case 'bossmove': if (trkRd) trkRd.lost++; break;
+      case 'storm': case 'rival': case 'bossmove': if (trkRd) trkRd.lost++; if (ev.t === 'bossmove') trkMoved = G.elapsed; break;
       case 'gig': if (trkEp) trkEp.gigDone = 1; break;
       case 'revive': if (trkEp) trkEp.revived = 1; break;
       case 'roundEnd':
         if (!trkEp || !trkRd) break;
         trkEp.rounds.push({ s: ev.score, cash: Math.round(ev.cash), hype: r1(ev.hype), xm: r1(ev.xm), bust: ev.bust ? 1 : 0, bz: trkRd.bz, pf: trkRd.pf, miss: trkRd.miss, bl: trkRd.bl, sl: trkRd.sl,
-          clr: trkRd.clr, lost: trkRd.lost, secs: r1(G.elapsed - trkRd.t0), left: r1(G.clock), gap: trkRd.gaps.length ? r1(trkRd.gaps.reduce((a, b) => a + b, 0) / trkRd.gaps.length) : 0 });
+          clr: trkRd.clr, lost: trkRd.lost, secs: r1(G.elapsed - trkRd.t0), left: r1(G.clock), gap: trkRd.gaps.length ? r1(trkRd.gaps.reduce((a, b) => a + b, 0) / trkRd.gaps.length) : 0,
+          how: trkRd.how, peak: trkRd.peak, lostPot: trkRd.lostPot || 0, dark: G.n - G.upList().length,
+          aim: trkRd.errs.length ? Math.round(trkRd.errs.reduce((a, b) => a + Math.abs(b), 0) / trkRd.errs.length) : 0,
+          bias: trkRd.errs.length ? Math.round(trkRd.errs.reduce((a, b) => a + b, 0) / trkRd.errs.length) : 0,
+          via: trkRd.via, hy: trkRd.hy, misses: trkRd.misses });
         trkRd = null;
         break;
     }
@@ -750,6 +774,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
     if (!trk || !trkEp) return;
     trkEp.total = G.total;
     if (G.phase === 'cleared' || G.phase === 'won' || G.phase === 'over') {
+      trkEp.fps = trkF.t ? Math.round(trkF.n / trkF.t) : 0; trkEp.slowFrames = trkF.slow; trkF = { n: 0, t: 0, slow: 0 };
       trkEp.res = G.phase; trkEp.earned = (G.earned || []).reduce((a, e) => a + e[1], 0); trkEp.dur = Math.round(G.elapsed) - trkEp.at;
       if (G.booked) trkEp.booked = G.booked.id;
       trkWall = Date.now(); trackSave();
@@ -1201,6 +1226,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   function toTitle() {
     ['ovEnd', 'ovLoad', 'ovKit', 'ovPick', 'ovCard', 'ovDress', 'ovCode'].forEach(id => { $(id).hidden = true; });
     $('quit').hidden = true; $('kitBtn').hidden = true; pausedUI = false;
+    if (trk && !trk.end) { trk.end = { quit: 1, ep: G ? G.ep : 0, t: G ? Math.round(G.elapsed) : 0 }; trackSave(); }
+    trk = trkEp = trkRd = null;
     paintTitle(); $('ovTitle').hidden = false;
     startDemo();
     setTimeout(checkBuild, 50);
@@ -2704,12 +2731,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   let prev = performance.now(), acc = 0, demoT = 1;
   function frame(now) {
     requestAnimationFrame(frame);
-    const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
+    const rawDt = (now - prev) / 1000, dt = Math.min(0.05, rawDt); prev = now;
     if (!G) return;
     time += dt;
     N = G.n || D.N;
     if (crateShow) { drawCrateShow(dt); return; }
     if (live) G.elapsed = (G.elapsed || 0) + dt;
+    if (trk && live && (G.phase === 'sweep' || G.phase === 'resolve')) { trkF.n++; trkF.t += rawDt; if (rawDt > 0.034) trkF.slow++; }
     const onWheel = G.phase === 'load' || G.phase === 'wheel' || G.phase === 'pick' || G.phase === 'ready';
     if (live && G.toasters >= 5 && !G._club) { G._club = true; trophy('toast'); toast('junk', '<b>BREAKFAST CLUB</b>TOASTERS NOW $50 EACH'); }
     if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').hidden = true; }
@@ -2813,7 +2841,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;}
   applyLooks();
   // Pick up a newer build without the player having to know about browser caches.
   // Only ever checked from the title screen, so a run in progress is never interrupted.
-  const BUILD = '1795837586';
+  const BUILD = '1795837834';
   let buildChecked = 0;
   function checkBuild() {
     if (live || !/^https?:$/.test(location.protocol) || Date.now() - buildChecked < 60000) return;
