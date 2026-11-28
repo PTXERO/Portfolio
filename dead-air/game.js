@@ -276,6 +276,15 @@
   ];
   const GIG_PAY = 3000;         // per episode number
 
+  // Stage machinery: as the season goes on the set itself gains moving parts, and they stay.
+  const FIXTURES = [
+    { id: 'screen', ep: 3,  color: '#ffd24a', name: 'THE BIG SCREEN',  desc: 'The prize on screen pays x3.' },
+    { id: 'trap',   ep: 5,  color: '#ff9a2e', name: 'TRAPDOORS',       desc: 'Two podiums take turns dropping out of sight.' },
+    { id: 'turn',   ep: 8,  color: '#42d4f5', name: 'THE TURNTABLE',   desc: 'The whole stage turns.' },
+    { id: 'rogue',  ep: 11, color: '#f542a8', name: 'THE ROGUE LIGHT', desc: 'Buzz where the two lights cross: x3.' },
+    { id: 'black',  ep: 13, color: '#9d8cff', name: 'POWER CUTS',      desc: 'The house lights keep cutting out.' },
+  ];
+
   // Act finales: the network sends someone down to the studio floor.
   const BOSSES = [
     { id: 'censor',     color: '#e8203a', name: 'THE CENSOR',     desc: 'The dead air moves.' },
@@ -344,6 +353,9 @@
   };
   P.lv = function (id) { return this.levels[id] || 0; };
   P.tr = function (id) { return this.who === id; };          // contestant trait
+  P.fix = function (id) { return this.ep >= byId(FIXTURES, id).ep; };          // is this piece of stage machinery running yet
+  P.fixtures = function () { return FIXTURES.filter(f => this.ep >= f.ep); };
+  P.down = function (i) { return !!this.traps && this.traps.length > 0 && this.traps[this.trapOn] === i; };     // a podium below the stage right now
   P.perk = function (id) { return this.perks[id] || 0; };
   // Restart the random stream for one named part of the season (only when the season has a seed).
   P.reseed = function (tag) {
@@ -429,6 +441,7 @@
     this.roundsLeft = this.rounds;
     this.tokenOut = this.rand() < 0.5;        // a wheel token only turns up in about half the episodes
     this.gig = null; this.gigN = 0; this.gigDone = false;
+    this.newFix = this.endless ? null : FIXTURES.find(f => f.ep === this.ep) || null;
     if (this.ep >= 2 && !this.endless && this.rand() < 0.35) { const gold = this.lv('gold') || this.sets.money || this.evo.gold || this.is('goldnight') || this.ch('tooth');
       const pool = GIGS.filter(q => !(q.id === 'hype' && this.is('cashonly')) && !(q.id === 'gold' && !gold)); this.gig = pool[this.pick(pool.length)]; }
     this.boss = this.isFinale() ? byId(BOSSES, this.bossOrder[(this.act() - 1) % this.bossOrder.length]) : null;
@@ -468,7 +481,11 @@
     this.streak = 0; this.inBuzz = false;
     this.tossLeft = this.lv('crowd') ? 3 : 0;
     this.convT = 1.4; this.strobeT = 0.6;
-    this.u = this.rand() * 2 * this.n;
+    // stage machinery for this round
+    this.feat = -1; this.featT = 1.2; this.turnT = 2.6; this.blackT = 5; this.black = 0;
+    this.traps = []; this.trapOn = 0; this.trapT = 2.5;
+    if (this.fix('trap')) { const a = this.pick(this.n); this.traps = [a, (a + 3 + this.pick(this.n - 5)) % this.n]; }
+    this.u = this.rand() * 2 * this.n; this.v = this.rand() * 2 * this.n;
     this.droneT = [];
     for (let i = 0; i < this.lv('drone'); i++) this.droneT.push(2 + i * 1.1);
     this.q = [];
@@ -497,7 +514,7 @@
     return Math.round((p.val + (p.val === 10 ? 15 * this.lv('thrift') : 0) + 10 * this.lv('budget') + 5 * this.perk('budget') + (this.ch('penny') ? 5 : 0) + (this.tr('shopping') ? 5 : 0)) *
       (this.is('turbo') ? 2 : 1) * (this.is('cashonly') ? 2 : 1) * (this.dealIs('fast') ? 1.5 : 1));
   };
-  P.isUp = function (i) { const p = this.strip[i]; return !!p && p.state === 'up' && p.kind !== 'dead'; };
+  P.isUp = function (i) { const p = this.strip[i]; return !!p && p.state === 'up' && p.kind !== 'dead' && !this.down(i); };
   P.upList = function () { const o = []; for (let i = 0; i < this.n; i++) if (this.isUp(i)) o.push(i); return o; };
   P.speed = function () {                                   // podiums per second
     return (3.6 + 0.24 * Math.min(this.ep, 18)) * (1 + (this.heat >= 1 ? 0.1 : 0) + (this.heat >= 7 ? 0.1 : 0)) * (this.lv('slowburn') ? 0.5 : 1) * (1 + (this.lv('steady') ? 0 : Math.min(this.lv('slowburn') ? 1.4 : 0.7, (this.lv('slowburn') ? 0.14 : 0.07) * this.buzzes))) *
@@ -561,6 +578,30 @@
         }
       }
     }
+    if (!this.bonus) {
+      if (this.fix('screen')) {                     // THE BIG SCREEN: one prize at a time is on screen
+        this.featT -= dt * slow;
+        if (this.featT <= 0 || (this.feat >= 0 && !this.isUp(this.feat))) {
+          const up = this.upList().filter(i => this.strip[i].kind === 'cash' || this.strip[i].kind === 'gold');
+          const was = this.feat;
+          this.feat = up.length ? up[this.pick(up.length)] : -1; this.featT = 3.5;
+          if (this.feat >= 0 && this.feat !== was) this.emit({ t: 'feat', i: this.feat });
+        }
+      }
+      if (this.traps.length) {                      // TRAPDOORS: the two take turns
+        this.trapT -= dt * slow;
+        if (this.trapT <= 0) { this.trapT = 2.5; this.emit({ t: 'trap', up: this.traps[this.trapOn], i: this.traps[1 - this.trapOn] }); this.trapOn = 1 - this.trapOn; }
+      }
+      if (this.fix('turn') && !this.is('conveyor')) {     // THE TURNTABLE
+        this.turnT -= dt * slow;
+        if (this.turnT <= 0) { this.turnT = 2.6; this.strip.unshift(this.strip.pop()); if (this.feat >= 0) this.feat = (this.feat + 1) % this.n; this.emit({ t: 'shift' }); }
+      }
+      if (this.fix('rogue')) this.v -= this.speed() * 0.6 * dt;       // THE ROGUE LIGHT sweeps the other way
+      if (this.fix('black')) {                      // POWER CUTS
+        if (this.black > 0) this.black -= dt;
+        else { this.blackT -= dt; if (this.blackT <= 0) { this.blackT = 6; this.black = 1.2; this.emit({ t: 'black' }); } }
+      }
+    }
     if (this.tr('exacct') && !this.bonus) {
       this.intT -= dt * slow;
       if (this.intT <= 0) { this.intT = 4; const add = Math.floor(this.pot.cash * 0.03); if (add > 0) { this.pot.cash += add; this.emit({ t: 'interest', add }); } }
@@ -603,7 +644,7 @@
     }
     if (this.is('conveyor')) {
       this.convT -= dt * slow;
-      if (this.convT <= 0) { this.convT = 1.3; this.strip.unshift(this.strip.pop()); this.emit({ t: 'shift' }); }
+      if (this.convT <= 0) { this.convT = 1.3; this.strip.unshift(this.strip.pop()); if (this.feat >= 0) this.feat = (this.feat + 1) % this.n; this.emit({ t: 'shift' }); }
     }
     for (let k = 0; k < this.droneT.length; k++) {
       this.droneT[k] -= dt;
@@ -627,6 +668,8 @@
     const money = p.kind === 'cash' || p.kind === 'gold';
     if (p.kind === 'gold') this.gigTick('gold'); else if (p.kind === 'hype') this.gigTick('hype');
     this.gigTick('prizes');
+    const onScreen = money && i === this.feat && this.fix('screen') && !this.bonus;
+    if (onScreen) { mult *= 3; this.feat = -1; this.featT = 0.8; }
     if (money && via !== 'main' && this.sets.fx) mult *= 1.5;
     if (money && via !== 'main' && this.tr('nerd')) mult *= 1.25;
     if (money && (i === 0 || i === this.n - 1)) mult *= 1 + this.lv('edges');
@@ -675,7 +718,7 @@
     let combo = false;
     if (this.inBuzz && via !== 'main' && this.lv('combo')) { pot.hype += 0.5; combo = true; }
     p.state = stays ? 'up' : 'burnt';
-    this.emit({ t: 'win', i, kind: p.kind, val, gain, via, mult, note, doubled, combo, stays });
+    this.emit({ t: 'win', i, kind: p.kind, val, gain, via, mult, note, doubled, combo, stays, onScreen });
     return true;
   };
 
@@ -705,6 +748,12 @@
     if (this.bonus) { this.endBonus(this.isUp(i), i); return true; }
 
     this.inBuzz = true;
+    if (this.down(i)) {                             // the podium is under the stage: nothing happens
+      this.streak = 0;
+      this.emit({ t: 'whiff', i, trap: true });
+      this.later(0.3, () => { this.inBuzz = false; this.phase = 'sweep'; });
+      return true;
+    }
     if (!this.isUp(i)) {
       this.streak = 0;
       if (p.kind !== 'dead' && this.lv('ghost')) {
@@ -741,7 +790,9 @@
     const add = (dt, fn) => { at += dt; this.later(at, fn); };
     const kind = p.kind;
     this.streak = perfect ? this.streak + 1 : 0;
-    this.win(i, 'main', (perfect ? (this.lv('streak') ? 1 + this.streak : 2) * (this.tr('stunt') ? 1.25 : this.tr('excritic') ? 1.5 : 1) : (this.boss && this.boss.id === 'critic') || this.tr('excritic') ? 0.5 : 1) * (this.buzzes === 1 ? 1 + this.lv('opener') : 1));
+    const cross = this.fix('rogue') && Math.floor(Math.min(this.n - 0.001, this.fold(this.v))) === i;      // both lights on the same podium
+    if (cross) this.emit({ t: 'cross', i });
+    this.win(i, 'main', (cross ? 3 : 1) * (perfect ? (this.lv('streak') ? 1 + this.streak : 2) * (this.tr('stunt') ? 1.25 : this.tr('excritic') ? 1.5 : 1) : (this.boss && this.boss.id === 'critic') || this.tr('excritic') ? 0.5 : 1) * (this.buzzes === 1 ? 1 + this.lv('opener') : 1));
     if (perfect && this.lv('sparks')) this.pot.hype += 0.25 * this.lv('sparks');
     if (perfect && this.streak >= 2 && this.tr('quizchamp')) { this.pot.hype += 0.25; this.emit({ t: 'roll', i }); }
     if (perfect && this.lv('stoppage')) this.addTime(0.5 * this.lv('stoppage'));
@@ -1042,7 +1093,7 @@
   // Crate price: starts modest and climbs with every crate opened.
   const cratePrice = opened => 60000 + 10000 * opened;
 
-  const api = { WAGER_PAYS, SETS, GIGS, GIG_PAY, EVOS, BOSSES, WAGERS, UNLOCKS, CHARMS, LOOKS, LOOK_PRICE, XPRIZES, HEAT, HEAT_PAY, BACKSTAGE, cratePrice, Game, N, EPISODES, PILOT, ACT, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, EVENTS, byId };
+  const api = { FIXTURES, WAGER_PAYS, SETS, GIGS, GIG_PAY, EVOS, BOSSES, WAGERS, UNLOCKS, CHARMS, LOOKS, LOOK_PRICE, XPRIZES, HEAT, HEAT_PAY, BACKSTAGE, cratePrice, Game, N, EPISODES, PILOT, ACT, TARGETS, GIMMICKS, WHEEL_UPS, CONTESTANTS, FORMATS, PERKS, EVENTS, byId };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DeadAir = api;
 })(typeof window !== 'undefined' ? window : globalThis);
